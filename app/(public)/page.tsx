@@ -119,12 +119,12 @@ export default async function HomePage() {
               <span className="block">Real-World STEM</span>
               {/* Line 2 is 33 characters — it needs its own size ramp so it stays
                   on one line at every width. Lines 1 and 3 keep the h1 sizes. */}
-              <span className="block text-brand-blue text-lg sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl">
+              <span className="block text-hero-dim text-lg sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl">
                 Competitions | Community | Careers
               </span>
               <span className="block">Begin Here</span>
             </h1>
-            <p className="mt-6 text-lg sm:text-xl text-content-faint max-w-2xl">
+            <p className="mt-6 text-lg sm:text-xl text-hero-lead max-w-2xl">
               A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
@@ -142,7 +142,7 @@ export default async function HomePage() {
       {/* ── Role Selector ────────────────────────────────────────────── */}
       <section className="bg-brand-grey-light section-padding">
         <div className="container-max">
-          <p className="text-center text-sm font-semibold uppercase tracking-widest text-brand-grey-mid mb-8">
+          <p className="text-center text-sm font-semibold uppercase tracking-widest text-content-muted mb-8">
             I am a…
           </p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

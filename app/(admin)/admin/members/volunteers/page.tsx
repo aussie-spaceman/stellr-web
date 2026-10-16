@@ -105,7 +105,7 @@ export default async function VolunteersAdminPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Volunteers</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Volunteers</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Everyone in the volunteer program: agreement, background check, mandatory training, and
           event assignments. Assign a volunteer to one or more events when adding them, or with the

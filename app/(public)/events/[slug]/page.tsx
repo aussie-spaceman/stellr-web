@@ -10,7 +10,6 @@ import type { PortableTextBlock } from '@portabletext/types'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { EventHeroCtas, EventNotifyButton } from '@/components/sections/EventCtas'
 import { EventFlyers } from '@/components/sections/EventFlyers'
-import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 import { CardPills } from '@/components/ui/CardPills'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
@@ -22,6 +21,14 @@ import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const revalidate = 3600
+
+// No paths are built ahead (no build-time Sanity or Stripe calls): each page is
+// rendered on its first visit and then served from the cache, refreshed on the
+// window above or at once by a Sanity publish (/api/webhooks/sanity). Without
+// this the page renders on every request.
+export function generateStaticParams(): { slug: string }[] {
+  return []
+}
 
 interface EventData extends StellarEvent {
   description?: PortableTextBlock[]
@@ -231,7 +238,8 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   // Campaigns render a dedicated, membership-aware detail view (no ticketing).
   if (event.activityType === 'campaign') {
-    const ctx = await getMemberCampaignContext()
+    // Registered state and the membership note fill in in the browser
+    // (CampaignMemberAware), so this page can be cached.
     return (
       <>
         <script
@@ -260,8 +268,8 @@ export default async function EventDetailPage({ params }: PageProps) {
         />
         <CampaignDetail
           campaign={event}
-          membership={ctx.membership}
-          registered={ctx.registeredSlugs.has(slug)}
+          membership={null}
+          registered={false}
         />
       </>
     )
@@ -312,21 +320,26 @@ export default async function EventDetailPage({ params }: PageProps) {
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative bg-brand-blue-dark text-white">
+        {/* The photo is the 21:9 crop it's cut to, capped at 40% of the screen,
+            and left out on a phone held sideways, so the title and the Register
+            buttons are on the first screen. It's the page's LCP image. */}
         {event.image && (
-          <div className="relative h-72 sm:h-96">
+          <div className="relative aspect-[21/9] max-h-[40svh] w-full sm:aspect-auto sm:h-96 short:hidden">
             <Image
               src={wmSrc(urlFor(event.image).width(1400).height(600).url())}
               alt={event.title}
               fill
+              sizes="100vw"
               className="object-cover opacity-40"
               priority
+              fetchPriority="high"
             />
           </div>
         )}
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8 short:pb-6 short:pt-4">
           {/* Standardised three-pill row (Event · Grade · Theme) + status */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-4 short:mb-2">
             <CardPills kind="event" gradeLevel={gradeBand(event).label} type={event.type} size="md" />
             {lifecycle && (
               <span
@@ -340,23 +353,23 @@ export default async function EventDetailPage({ params }: PageProps) {
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3 short:text-2xl short:mb-2">
             {event.title}
           </h1>
 
           {event.date && (
-            <p className="text-blue-300 text-lg mb-1">
+            <p className="text-blue-300 text-lg mb-1 short:text-sm short:mb-0">
               📅 {formatDateRange(event.date, event.endDate)}
             </p>
           )}
 
           {(event.venue || event.city) && (
-            <p className="text-blue-300 text-lg mb-1">
+            <p className="text-blue-300 text-lg mb-1 short:text-sm short:mb-0">
               📍 {[event.venue, event.city && event.state ? `${event.city}, ${event.state}` : event.city].filter(Boolean).join(' · ')}
             </p>
           )}
 
-          {priceLabel && <p className="text-blue-300 text-lg">🎟️ {priceLabel}</p>}
+          {priceLabel && <p className="text-blue-300 text-lg short:text-sm">🎟️ {priceLabel}</p>}
 
           {/* Hero CTAs — Individual + Group registration; when registration
               isn't open both buttons open the subscriber modal instead. */}
@@ -411,12 +424,12 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="space-y-3">
                     {event.schedule.map((item, i) => (
                       <div key={i} className="flex gap-4 text-sm">
-                        <span className="font-mono text-brand-grey-mid w-40 shrink-0">{item.time}</span>
+                        <span className="font-mono text-content-muted w-40 shrink-0">{item.time}</span>
                         <span className="text-brand-grey-dark">{item.label}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-xs text-brand-grey-mid italic">Schedule is indicative — full timetable released 2 weeks before event.</p>
+                  <p className="mt-3 text-xs text-content-muted italic">Schedule is indicative — full timetable released 2 weeks before event.</p>
                 </div>
               )}
 
@@ -456,7 +469,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                     <details key={faq.q} className="group border border-line rounded-lg">
                       <summary className="flex items-center justify-between p-4 cursor-pointer font-medium text-brand-blue-dark list-none">
                         {faq.q}
-                        <span className="ml-4 shrink-0 text-brand-grey-mid group-open:rotate-180 transition-transform">▾</span>
+                        <span className="ml-4 shrink-0 text-content-muted group-open:rotate-180 transition-transform">▾</span>
                       </summary>
                       <p className="px-4 pb-4 text-sm text-brand-grey-dark">{faq.a}</p>
                     </details>
@@ -565,7 +578,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               {/* Side CTA */}
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 text-center">
                 <p className="font-bold text-lg mb-2">Ready to compete?</p>
-                <p className="text-sm text-content-faint mb-4">
+                <p className="text-sm text-hero-lead mb-4">
                   {status === 'open'
                     ? 'Registration is open. Secure your spot now.'
                     : status === 'coming-soon'
@@ -583,7 +596,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                 {status === 'coming-soon' && (
                   <EventNotifyButton slug={slug} title={event.title} status={status} />
                 )}
-                <Link href="/events" className="block mt-3 text-xs text-content-faint hover:text-white transition-colors">
+                <Link href="/events" className="block mt-3 text-xs text-hero-lead hover:text-white transition-colors">
                   ← Back to all events
                 </Link>
               </div>

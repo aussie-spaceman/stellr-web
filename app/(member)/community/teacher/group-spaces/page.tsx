@@ -34,7 +34,7 @@ export default async function GroupSpacesPage({
         <p className="eyebrow flex items-center gap-2" style={{ color: '#7C5CFC' }}>
           <span className="h-2 w-2 rounded-full" style={{ background: '#7C5CFC' }} /> Teacher Tools
         </p>
-        <h1 className="mt-1 font-heading text-title text-brand-blue-dark">Spaces my group can access</h1>
+        <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Spaces my group can access</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Access is automatic by each student&apos;s membership tier. This view is read-only.
         </p>

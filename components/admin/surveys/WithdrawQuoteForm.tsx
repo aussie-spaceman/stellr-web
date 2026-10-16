@@ -19,7 +19,7 @@ export function WithdrawQuoteForm() {
         onChange={(e) => setId(e.target.value)}
         placeholder="Response ID"
         aria-label="Response ID"
-        className="w-80 rounded-lg border border-brand-border px-2 py-1.5"
+        className="w-80 rounded-lg border border-line-strong px-2 py-1.5"
       />
       <button
         type="button"

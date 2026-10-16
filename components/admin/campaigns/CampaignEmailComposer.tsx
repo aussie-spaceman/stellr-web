@@ -81,7 +81,7 @@ export function CampaignEmailComposer({ slug, campaignTitle, recipientCount }: P
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full rounded-control border border-line px-3 py-2.5 text-sm text-content outline-none focus:border-primary"
+              className="w-full rounded-control border border-line-strong px-3 py-2.5 text-input mouse:text-sm text-content outline-none focus:border-primary"
             />
           </label>
           <label className="block">
@@ -90,7 +90,7 @@ export function CampaignEmailComposer({ slug, campaignTitle, recipientCount }: P
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={7}
-              className="w-full rounded-control border border-line px-3 py-2.5 text-sm text-content outline-none focus:border-primary"
+              className="w-full rounded-control border border-line-strong px-3 py-2.5 text-input mouse:text-sm text-content outline-none focus:border-primary"
             />
           </label>
           {error && <p className="text-sm text-danger">{error}</p>}

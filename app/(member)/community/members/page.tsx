@@ -110,7 +110,7 @@ export default async function MemberDirectoryPage({
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Member Directory</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Member Directory</h1>
           <p className="mt-1 text-sm text-brand-muted-soft">
             {rows.length} member{rows.length !== 1 ? 's' : ''} visible ·{' '}
             <Link href="/account" className="underline hover:text-brand-muted">
@@ -174,7 +174,7 @@ export default async function MemberDirectoryPage({
               <div className="min-w-0">
                 <p className="font-subheading font-semibold text-brand-blue-dark">{name}</p>
                 {m.event_role && (
-                  <span className="mt-1 inline-block rounded-full bg-brand-blue/10 px-2 py-0.5 text-[11px] font-subheading font-semibold text-brand-blue">
+                  <span className="mt-1 inline-block rounded-full bg-brand-blue/10 px-2 py-0.5 text-xs font-subheading font-semibold text-brand-blue">
                     {formatRole(m.event_role)}
                   </span>
                 )}

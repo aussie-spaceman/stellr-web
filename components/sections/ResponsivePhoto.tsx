@@ -81,7 +81,7 @@ export function ResponsivePhoto({
   return (
     <figure className={wrapperClassName}>
       {picture}
-      <figcaption className="mt-2 text-[11.5px] leading-snug text-content-faint">
+      <figcaption className="mt-2 text-xs leading-snug text-content-faint">
         {photo.credit}
       </figcaption>
     </figure>

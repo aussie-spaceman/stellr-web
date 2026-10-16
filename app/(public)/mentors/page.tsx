@@ -62,21 +62,21 @@ export default function MentorsPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8">
         <div className="max-w-7xl mx-auto">
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → For Volunteers &amp; Mentors
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Share what you know. Shape what&rsquo;s next.
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
             Our volunteers and mentors are STEM professionals who give their time to impart lessons
             and share their unique perspectives. Whatever stage of your career you&rsquo;re at,
             there&rsquo;s a way for you to contribute.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Become a Mentor
             </a>
             <Link href="/academy#mentoring" className="btn-outline-white">
@@ -159,12 +159,12 @@ export default function MentorsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Ready to make an impact?</h2>
-          <p className="text-content-faint leading-relaxed mb-8">
+          <p className="text-hero-lead leading-relaxed mb-8">
             Join free, tell us about your experience, and we&rsquo;ll help you find the right way to
             contribute.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Become a Mentor
             </a>
             <Link href="/contact" className="btn-outline-white">

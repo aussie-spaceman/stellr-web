@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Field, Input } from '@stellr/web-ui'
 import { RequestDeletionButton } from '@/components/member/RequestDeletionButton'
 // Type only: lib/survey/history reaches the Sanity client through the schedule rules.
 import type { SurveyChip } from '@/lib/survey/history'
@@ -111,49 +112,47 @@ export function EventHistory({ participations: initialParticipations, editable =
       {adding && (
         <div className="mb-4 p-4 bg-brand-canvas rounded-lg border border-brand-border space-y-3">
           <h3 className="text-sm font-medium text-brand-muted">New event activity</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Event Year</label>
-              <input
+          {/* About an event, not the member: no autofill (it offered their home city). */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Event Year">
+              <Input
                 type="number"
+                inputMode="numeric"
                 min={2000}
                 max={CURRENT_YEAR + 1}
                 placeholder={String(CURRENT_YEAR)}
+                autoComplete="off"
                 value={form.event_year}
                 onChange={(e) => setForm((f) => ({ ...f, event_year: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Event Location</label>
-              <input
+            </Field>
+            <Field label="Event Location">
+              <Input
                 type="text"
                 placeholder="City, State"
+                autoComplete="off"
                 value={form.event_location}
                 onChange={(e) => setForm((f) => ({ ...f, event_location: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Team</label>
-              <input
+            </Field>
+            <Field label="Team">
+              <Input
                 type="text"
                 placeholder="Team / company name"
+                autoComplete="off"
                 value={form.team_name}
                 onChange={(e) => setForm((f) => ({ ...f, team_name: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Awards</label>
-              <input
+            </Field>
+            <Field label="Awards">
+              <Input
                 type="text"
                 placeholder="e.g. 1st Place"
+                autoComplete="off"
                 value={form.award}
                 onChange={(e) => setForm((f) => ({ ...f, award: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
+            </Field>
           </div>
           <div className="flex gap-2 pt-1">
             <button

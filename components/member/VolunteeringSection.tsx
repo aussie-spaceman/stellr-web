@@ -29,7 +29,7 @@ function Pill({ tone, label }: { tone: 'green' | 'amber' | 'red' | 'grey'; label
     grey: 'bg-brand-hairline text-brand-muted-soft',
   }[tone]
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${cls}`}>
       {label}
     </span>
   )
@@ -69,7 +69,7 @@ export function VolunteeringSection({ assignments, interests, status, training }
         )}
       </div>
 
-      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-brand-muted">
+      <h3 className="mb-1.5 text-xs font-semibold text-brand-muted">
         Assigned events
       </h3>
       {assignments.length === 0 ? (
@@ -100,7 +100,7 @@ export function VolunteeringSection({ assignments, interests, status, training }
 
       {interests.length > 0 && (
         <>
-          <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-brand-muted">
+          <h3 className="mb-1.5 text-xs font-semibold text-brand-muted">
             Open offers
           </h3>
           <ul className="space-y-1.5">

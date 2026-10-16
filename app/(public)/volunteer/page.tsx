@@ -67,28 +67,28 @@ export default function VolunteerPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8">
         <div className="max-w-7xl mx-auto">
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → Volunteer with Stellr
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Lend a hand where the future is being built.
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
             Stellr volunteers keep our events and campaigns running — from check-in desks to
             competition floors. No STEM background required: just your time, energy, and a
             commitment to our students.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href={SIGNUP_HREF} className="btn-primary bg-brand-orange hover:bg-amber-500">
+          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
+            <a href={SIGNUP_HREF} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Become a Volunteer
             </a>
             <Link href="/mentors" className="btn-outline-white">
               Prefer to mentor students?
             </Link>
           </div>
-          <p className="mt-6 text-sm text-content-faint">
+          <p className="mt-6 text-sm text-hero-lead">
             Volunteers must be 18 or older. All volunteers complete a background check.
           </p>
         </div>
@@ -151,11 +151,11 @@ export default function VolunteerPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Ready to help?</h2>
-          <p className="text-content-faint leading-relaxed mb-8">
+          <p className="text-hero-lead leading-relaxed mb-8">
             Create your free volunteer account and tell us which upcoming events you can support.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href={SIGNUP_HREF} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={SIGNUP_HREF} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Become a Volunteer
             </a>
             <Link href="/contact" className="btn-outline-white">

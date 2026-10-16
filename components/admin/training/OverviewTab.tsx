@@ -18,15 +18,15 @@ export function OverviewTab({ data }: { data: AdminOverview }) {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-brand-border bg-white p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Published courses</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Published courses</p>
           <p className="mt-2 text-3xl font-bold text-brand-blue-dark">{data.publishedCourses}</p>
         </div>
         <div className="rounded-2xl border border-brand-border bg-white p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Enrolled members</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Enrolled members</p>
           <p className="mt-2 text-3xl font-bold text-brand-blue-dark">{data.enrolledMembers}</p>
         </div>
         <div className="rounded-2xl border border-brand-border bg-white p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Avg completion</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Avg completion</p>
           <p className="mt-2 text-3xl font-bold text-[#158463]">{data.avgCompletion}%</p>
         </div>
         {/* Needs attention — clickable, jumps to tracking with outstanding filter. */}
@@ -35,7 +35,7 @@ export function OverviewTab({ data }: { data: AdminOverview }) {
           className="group rounded-2xl border p-5 transition"
           style={{ borderColor: '#F3C9C0', background: '#FFF8F7' }}
         >
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#C0392B]">Needs attention</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#C0392B]">Needs attention</p>
           <p className="mt-2 text-3xl font-bold text-[#C0392B]">
             {data.needsAttention} <span className="text-xl font-semibold">{data.needsAttention === 1 ? 'event' : 'events'}</span>
           </p>
@@ -102,7 +102,7 @@ export function OverviewTab({ data }: { data: AdminOverview }) {
                   </p>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
                     c.isPublished ? 'bg-[#E7F7F1] text-[#158463]' : 'bg-brand-hairline text-brand-muted-soft'
                   }`}
                 >

@@ -186,7 +186,7 @@ export default function ImpactPage() {
       <section className="relative overflow-hidden bg-midnight text-white pt-[54px] pb-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(130%_120%_at_20%_-10%,#2A2150_0%,#161B40_42%,#0C1024_100%)]">
         <div className="container-max">
           <Eyebrow className="text-[#A99CF0]">About → Impact</Eyebrow>
-          <h1 className="mt-4 font-display text-4xl sm:text-5xl lg:text-[66px] font-bold tracking-[-0.03em] leading-[1.02] lg:leading-none">
+          <h1 className="mt-4 font-display text-4xl sm:text-5xl lg:text-[66px] font-bold leading-[1.02] lg:leading-none">
             We don&rsquo;t just teach STEM.
             <br />
             We change the trajectory.
@@ -217,7 +217,7 @@ export default function ImpactPage() {
       <section className="bg-surface border-b border-line py-14 px-4 sm:px-6 lg:px-8">
         <div className="container-max">
           <Eyebrow>2026 participation data</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl sm:text-display font-bold text-ink leading-tight max-w-2xl">
+          <h2 className="mt-3 font-display text-3xl sm:text-ds-h2 font-bold text-ink leading-tight max-w-2xl">
             Who competes with Stellr
           </h2>
           <p className="mt-5 text-lg text-content-body leading-relaxed max-w-[720px]">
@@ -248,7 +248,7 @@ export default function ImpactPage() {
       <section className="section-padding bg-white">
         <div className="container-max">
           <Eyebrow>Career trajectory</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl sm:text-display font-bold text-ink leading-tight max-w-2xl">
+          <h2 className="mt-3 font-display text-3xl sm:text-ds-h2 font-bold text-ink leading-tight max-w-2xl">
             Setting young professionals on a STEM path
           </h2>
           <p className="mt-5 text-lg text-content-body leading-relaxed max-w-[720px]">
@@ -294,7 +294,7 @@ export default function ImpactPage() {
                     className={`block rounded-full mx-auto ${c.node} ${c.featured ? 'w-4 h-4' : 'w-3 h-3'}`}
                   />
                   <span
-                    className={`inline-flex mt-4 px-3 py-1 rounded-full text-[10.5px] font-display font-bold uppercase tracking-[0.1em] ${c.pillClass}`}
+                    className={`inline-flex mt-4 px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.1em] ${c.pillClass}`}
                   >
                     {c.pill}
                   </span>
@@ -323,19 +323,22 @@ export default function ImpactPage() {
 
           <div>
             {skills.map((s, i) => (
+              // Phones: number beside the title, the text underneath. From sm, the
+              // three columns. (The fixed 170px title column left the text 48px
+              // wide at 320px.)
               <div
                 key={s.n}
-                className={`flex gap-5 sm:gap-[22px] py-[22px] border-t border-line ${
+                className={`grid grid-cols-[30px_minmax(0,1fr)] gap-x-5 gap-y-2 py-[22px] border-t border-line sm:grid-cols-[30px_170px_minmax(0,1fr)] sm:gap-x-[22px] ${
                   i === skills.length - 1 ? 'border-b' : ''
                 }`}
               >
-                <span className="w-[30px] shrink-0 font-display text-lg font-bold text-space-violet">
+                <span className="font-display text-lg font-bold text-space-violet">
                   {s.n}
                 </span>
-                <h4 className="w-[170px] shrink-0 font-display text-[17px] font-bold text-ink leading-snug">
+                <h4 className="font-display text-[17px] font-bold text-ink leading-snug">
                   {s.title}
                 </h4>
-                <p className="text-content-secondary leading-relaxed">{s.body}</p>
+                <p className="col-start-2 text-content-secondary leading-relaxed sm:col-start-3 sm:row-start-1">{s.body}</p>
               </div>
             ))}
           </div>
@@ -389,7 +392,7 @@ export default function ImpactPage() {
         <div className="container-max">
           <div className="bg-white rounded-panel shadow-card-lift p-8 sm:p-10 grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-11 items-center">
             <div>
-              <span className="inline-flex px-3 py-1 rounded-full bg-[#FBEFDD] text-[#9A6418] text-[10.5px] font-display font-bold uppercase tracking-[0.1em]">
+              <span className="inline-flex px-3 py-1 rounded-full bg-[#FBEFDD] text-[#9A6418] text-xs font-display font-bold uppercase tracking-[0.1em]">
                 White paper · 2026
               </span>
               <h2 className="mt-4 font-display text-3xl font-bold text-ink leading-tight">{PAPER_TITLE}</h2>
@@ -412,7 +415,7 @@ export default function ImpactPage() {
 
             {/* Mock PDF cover */}
             <div className="hidden lg:flex flex-col justify-end aspect-[3/4] rounded-panel p-6 bg-[linear-gradient(160deg,#20264F,#0E1330)] border border-white/10">
-              <p className="text-[10.5px] font-display font-bold uppercase tracking-[0.13em] text-[#A6AFD8]">
+              <p className="text-xs font-display font-bold uppercase tracking-[0.13em] text-[#A6AFD8]">
                 Stellr · 2026 report
               </p>
               <p className="mt-2 font-display text-[19px] font-bold text-white leading-tight">{PAPER_TITLE}</p>
@@ -423,10 +426,10 @@ export default function ImpactPage() {
       </section>
 
       {/* ── 7. A note on AI ───────────────────────────────────────────── */}
-      <section id="AI" className="relative overflow-hidden bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8 scroll-mt-24 bg-[radial-gradient(130%_120%_at_80%_-10%,#20274F_0%,#11163A_50%,#0B0F28_100%)]">
+      <section id="AI" className="relative overflow-hidden bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(130%_120%_at_80%_-10%,#20274F_0%,#11163A_50%,#0B0F28_100%)]">
         <div className="container-max">
           <Eyebrow className="text-[#9FB0FF]">A note on AI</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl sm:text-[44px] font-bold tracking-[-0.03em] leading-[1.05] max-w-3xl">
+          <h2 className="mt-3 font-display text-3xl sm:text-[44px] font-bold leading-[1.05] max-w-3xl">
             AI is eating education.
             <br />
             So we set the table.
@@ -468,11 +471,11 @@ export default function ImpactPage() {
       {/* ── 8. Financial transparency ─────────────────────────────────── */}
       <section
         id="funding"
-        className="section-padding bg-surface border-t border-line-light scroll-mt-24"
+        className="section-padding bg-surface border-t border-line-light"
       >
         <div className="container-max">
           <Eyebrow>Financial transparency</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl sm:text-[40px] font-bold tracking-[-0.028em] leading-[1.08] text-ink max-w-3xl">
+          <h2 className="mt-3 font-display text-3xl sm:text-[40px] font-bold leading-[1.08] text-ink max-w-3xl">
             How Stellr is funded, and where the money goes
           </h2>
           <p className="mt-5 text-content-secondary leading-relaxed max-w-3xl">

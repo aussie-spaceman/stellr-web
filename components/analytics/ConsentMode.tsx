@@ -1,4 +1,4 @@
-import { CONSENT_STORAGE_KEY, STRICT_REGIONS } from '@/lib/consent'
+import { CONSENT_NEEDED_ATTR, CONSENT_STORAGE_KEY, STRICT_REGIONS } from '@/lib/consent'
 import { APP_HOST } from '@/lib/env'
 import { noAdsScript } from '@/lib/no-ads'
 
@@ -67,6 +67,11 @@ export function ConsentMode() {
   // Replays a stored "Accept all" — except where advertising is off for
   // students, which wins whatever was stored. Storage blocked → denied default.
   ${noAdsScript(APP_HOST)}
+
+  // No choice stored yet: flag <html> so the cookie banner (in the server
+  // HTML, hidden by CSS) shows at first paint instead of after hydration.
+  try { if (!localStorage.getItem(CONSENT_KEY)) document.documentElement.setAttribute(${JSON.stringify(CONSENT_NEEDED_ATTR)}, ''); }
+  catch (e) { document.documentElement.setAttribute(${JSON.stringify(CONSENT_NEEDED_ATTR)}, ''); }
 })();
 `.trim()
 

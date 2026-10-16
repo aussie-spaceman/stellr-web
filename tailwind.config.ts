@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import plugin from 'tailwindcss/plugin'
 import { tokens } from './lib/tokens'
 
 /* Design System V2 (Claude Design) — generated tokens are the single source of
@@ -23,6 +24,7 @@ const config: Config = {
         midnight:     { DEFAULT: c.midnight, deep: c.midnightDeep },
         'hero-lead':  c.heroLead,
         'hero-dim':   c.heroDim,
+        'hero-muted': c.heroMuted, // secondary text on midnight (footer legal row)
         ink:          c.ink,
         'utility-navy': c.utilityNavy,
         surface:      c.surface,
@@ -35,10 +37,15 @@ const config: Config = {
         'enviro-green': { DEFAULT: c.enviroGreen, bg: t.enviroBg, chip: t.enviroChip, text: t.enviroText },
         'pathway-amber': { DEFAULT: c.pathwayAmber, deep: c.pathwayAmberDeep, bg: t.amberSoftBg },
         'donate-gold': c.donateGold,
+        'gold-ink':    c.goldInk,    // gold/amber as TEXT on white; fills carry ink text
         'star-gold':   c.starGold,
         'avatar-teal': c.avatarTeal,
+        // The adults bracket's teal (design/tokens.json bracket.adult*): `deep` passes
+        // as text on white and under white text; the base is for fills and icons.
+        'adult-teal': { DEFAULT: tokens.bracket.adult, deep: tokens.bracket.adultDeep },
         line:        c.border,
         'line-light': c.borderLight,
+        'line-strong': c.borderStrong, // form-control borders (≥3:1)
         danger:      c.danger,
         content: {
           DEFAULT:   c.text.primary,
@@ -58,7 +65,7 @@ const config: Config = {
           orange:       c.donateGold,   // Academy gold
           'orange-alt': c.pathwayAmber, // Competitions / energy → amber
           'orange-deep':'#C2722A',      // amber gradient end (handoff)
-          'gold-ink':   '#C2722A',      // contrast-safe gold text on white
+          'gold-ink':   c.goldInk,      // gold text on white (A1: #C2722A was 3.7:1)
           white:        c.white,
           'white-text': c.white,
           grey:         c.text.faint,
@@ -73,25 +80,20 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display:     [tokens.font.display, 'system-ui', 'sans-serif'], // Space Grotesk
-        heading:     [tokens.font.display, 'system-ui', 'sans-serif'], // was Norwester
-        subheading:  [tokens.font.body, 'system-ui', 'sans-serif'],    // UI / eyebrows / buttons → Hanken
-        sans:        [tokens.font.body, 'system-ui', 'sans-serif'],    // was Aileron
+        /* next/font variables first (lib/fonts.ts), then the token family name */
+        display:     ['var(--font-space-grotesk)', tokens.font.display, 'system-ui', 'sans-serif'], // Space Grotesk
+        heading:     ['var(--font-space-grotesk)', tokens.font.display, 'system-ui', 'sans-serif'], // was Norwester
+        subheading:  ['var(--font-hanken-grotesk)', tokens.font.body, 'system-ui', 'sans-serif'],   // UI / eyebrows / buttons → Hanken
+        sans:        ['var(--font-hanken-grotesk)', tokens.font.body, 'system-ui', 'sans-serif'],   // was Aileron
         /* Competition print/slide materials only */
         competition:      [tokens.font.competitionDisplay, 'system-ui', 'sans-serif'], // Norwester
         'competition-body':[tokens.font.competitionBody, 'system-ui', 'sans-serif'],   // Aileron
       },
       fontSize: {
-        /* Existing app scale retained to avoid disturbing member-app layout */
-        'hero':    ['56px', { lineHeight: '1.0', letterSpacing: '-0.025em' }],
-        'display': ['34px', { lineHeight: '1.05', letterSpacing: '-0.02em' }],
-        'title':   ['30px', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
-        'h1':      ['32pt', { lineHeight: '1.2' }],
-        'h2':      ['24pt', { lineHeight: '1.3' }],
-        'h3':      ['16pt', { lineHeight: '1.4' }],
-        'body':    ['12pt', { lineHeight: '1.6' }],
-        'caption': ['9pt',  { lineHeight: '1.4' }],
-        /* V2 handoff scale (px) — prefer these on rebuilt pages */
+        /* V2 type scale. h1, h2 and lead are fluid (clamp, design/tokens.json);
+           Tailwind's text-xs…text-5xl cover the rest. The legacy point scale
+           (hero/display/title/h1/h2/h3/body/caption) is retired; nothing is set
+           under 12px (scripts/ds-lint.mjs). */
         'ds-h1':      [tokens.fontSize.h1, { lineHeight: '1.05', letterSpacing: tokens.letterSpacing.display }],
         'ds-h2':      [tokens.fontSize.h2, { lineHeight: '1.1', letterSpacing: tokens.letterSpacing.heading }],
         'ds-h3':      [tokens.fontSize.h3, { lineHeight: '1.3' }],
@@ -99,6 +101,8 @@ const config: Config = {
         'ds-lead':    [tokens.fontSize.lead, { lineHeight: '1.5' }],
         'ds-body':    [tokens.fontSize.body, { lineHeight: '1.6' }],
         'ds-meta':    [tokens.fontSize.meta, { lineHeight: '1.4' }],
+        /* Form fields below lg: anything smaller makes iOS Safari zoom in */
+        'input':      [tokens.fontSize.input, { lineHeight: '1.5' }],
       },
       letterSpacing: {
         display: tokens.letterSpacing.display,
@@ -131,7 +135,26 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  /* Touch screens keep :hover after a tap (a "stuck" lifted card or a pill
+     that looks selected). Only apply hover styles where hover exists. */
+  future: { hoverOnlyWhenSupported: true },
+  plugins: [
+    /* Two media variants that are not widths. They are plugin variants, not
+       `screens`: a raw screen switches off Tailwind's min-[…]/max-[…]
+       variants for the whole project. Plugin variants are emitted BEFORE the
+       width breakpoints, so `short:` adds `:root` to outrank sm:/md:/lg: on
+       the same property (a sideways phone is wider than sm). */
+    plugin(({ addVariant }) => {
+      /* Short screens: a phone held sideways is 340–415px tall but wide
+         enough for the sm/md layouts. `short:` lets chrome and heroes shrink
+         on height, which the width breakpoints can't see. */
+      addVariant('short', '@media (max-height: 500px) { :root & }')
+      /* Devices whose main pointer is a mouse or trackpad. Form fields drop
+         to 14px only here: on touch screens (phones, iPads at any width)
+         they stay at 16px so iOS doesn't zoom in on focus. */
+      addVariant('mouse', '@media (pointer: fine)')
+    }),
+  ],
 }
 
 export default config

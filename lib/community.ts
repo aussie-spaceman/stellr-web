@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
@@ -94,8 +95,14 @@ export interface CommunityMember {
  * Returns null when unauthenticated, no member row exists, or the member is inactive.
  */
 export async function getCurrentMember(): Promise<CommunityMember | null> {
-  return resolveMember(true)
+  return resolveMemberOnce(true)
 }
+
+// One lookup per request. A member page renders its layout, nested layouts and
+// page, and each asked for the member again: 46 call sites, each a Clerk auth()
+// plus a Supabase round trip. React's cache() shares the result within a
+// server render (and is a plain call elsewhere, such as route handlers).
+const resolveMemberOnce = cache((allowImpersonation: boolean) => resolveMember(allowImpersonation))
 
 /**
  * The REAL signed-in member, never the impersonated one.
@@ -106,7 +113,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
  * person they were looking at.
  */
 export async function getSignedInMember(): Promise<CommunityMember | null> {
-  return resolveMember(false)
+  return resolveMemberOnce(false)
 }
 
 async function resolveMember(allowImpersonation: boolean): Promise<CommunityMember | null> {

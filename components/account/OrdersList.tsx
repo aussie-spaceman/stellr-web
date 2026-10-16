@@ -95,7 +95,7 @@ export function OrdersList() {
                   <span className="font-medium text-brand-blue-dark">
                     {isEvent ? 'Event merch' : 'Store order'} · {formatDateShort(o.created_at)}
                   </span>
-                  <span className={'rounded px-1.5 py-0.5 text-[11px] ' + (STATUS_BADGE[o.status] ?? STATUS_BADGE.pending)}>
+                  <span className={'rounded px-1.5 py-0.5 text-xs ' + (STATUS_BADGE[o.status] ?? STATUS_BADGE.pending)}>
                     {o.status}
                   </span>
                 </div>

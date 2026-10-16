@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Plus, Trash2, Power, Pencil } from 'lucide-react'
+import { Choice, Dialog, Field, Input, Select } from '@stellr/web-ui'
 
 export interface RuleRow {
   id: string
@@ -293,210 +294,228 @@ function RuleForm({
   const set = (patch: Partial<RuleRow>) => onChange({ ...draft, ...patch })
   const setCond = (patch: Partial<RuleRow['conditions']>) =>
     onChange({ ...draft, conditions: { ...draft.conditions, ...patch } })
+  const sourceTiersLabelId = useId()
+
+  const grantKind = draft.grant_kind ?? 'tier'
+  const canSubmit =
+    !!draft.name &&
+    (grantKind === 'credits'
+      ? (draft.grant_quantity ?? 0) > 0
+      : grantKind === 'attach_object' || grantKind === 'roster_add'
+        ? !!draft.grant_object_type && (!!draft.grant_object_ref || !!draft.is_dynamic)
+        : !!draft.grant_tier_id)
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl p-5 w-full max-w-lg space-y-3 max-h-[90vh] overflow-y-auto">
-        <h2 className="font-semibold text-brand-blue-dark">{draft.id ? 'Edit rule' : 'New grant rule'}</h2>
-
-        <Field label="Rule name">
-          <input
-            value={draft.name}
-            onChange={(e) => set({ name: e.target.value })}
-            placeholder="e.g. Award winner → Scholar (1yr)"
-            className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5"
-          />
-        </Field>
-
-        <Field label="When (trigger)">
-          <select value={draft.trigger_type} onChange={(e) => set({ trigger_type: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-            {/* Include the current value even if it's a legacy trigger no longer offered. */}
-            {(TRIGGER_OPTIONS.includes(draft.trigger_type) ? TRIGGER_OPTIONS : [draft.trigger_type, ...TRIGGER_OPTIONS]).map((v) => (
-              <option key={v} value={v}>{TRIGGERS[v] ?? v}</option>
-            ))}
-          </select>
-        </Field>
-
-        {draft.trigger_type === 'object_created' && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="…of type">
-                <select value={draft.object_type ?? ''} onChange={(e) => set({ object_type: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-                  <option value="">choose a type…</option>
-                  {OBJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label="…minimum tier (optional)">
-                <select value={draft.tier_min ?? ''} onChange={(e) => set({ tier_min: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-                  <option value="">any tier</option>
-                  {TIER_MIN_NAMES.map((t) => <option key={t} value={t}>{t}+</option>)}
-                </select>
-              </Field>
-            </div>
-            <Field label="For one specific object (optional — leave empty for every new object of the type)">
-              <select value={draft.object_anchor_ref ?? ''} onChange={(e) => set({ object_anchor_ref: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-                <option value="">any {draft.object_type || 'object'}</option>
-                {objects.filter((o) => !draft.object_type || o.objectType === draft.object_type).map((o) => (
-                  <option key={o.ref} value={o.ref}>{o.label}</option>
-                ))}
-              </select>
-            </Field>
-          </>
-        )}
-
-        {draft.trigger_type === 'tier_purchased' && (
-          <Field label="…and the tier they got is one of (leave empty = any paid tier)">
-            <div className="flex flex-wrap gap-1.5">
-              {tiers.filter((t) => !t.is_free).map((t) => {
-                const sel = draft.conditions.source_tier_ids ?? []
-                const on = sel.includes(t.id)
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setCond({ source_tier_ids: on ? sel.filter((x) => x !== t.id) : [...sel, t.id] })}
-                    className={'px-2 py-1 rounded-md text-xs border ' + (on ? 'bg-brand-blue text-white border-brand-blue' : 'border-brand-border text-brand-muted')}
-                  >
-                    {t.name}
-                  </button>
-                )
-              })}
-            </div>
-          </Field>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="…and role is (optional)">
-            <select value={draft.conditions.event_role ?? ''} onChange={(e) => setCond({ event_role: e.target.value || undefined })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-              {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-          </Field>
-          <Field label="…and bracket is (optional)">
-            <select value={draft.conditions.age_bracket ?? ''} onChange={(e) => setCond({ age_bracket: e.target.value || undefined })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-              {BRACKETS.map((b) => <option key={b} value={b}>{b || 'any bracket'}</option>)}
-            </select>
-          </Field>
-        </div>
-
-        {draft.trigger_type === 'event_award' && (
-          <Field label="…and award text contains (optional)">
-            <input value={draft.conditions.award_contains ?? ''} onChange={(e) => setCond({ award_contains: e.target.value || undefined })} placeholder="e.g. winner" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
-          </Field>
-        )}
-
-        <Field label="Grant">
-          <select value={draft.grant_kind ?? 'tier'} onChange={(e) => set({ grant_kind: e.target.value as RuleRow['grant_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-            <option value="tier">A membership tier</option>
-            <option value="credits">Wallet credits (cohort / workshop)</option>
-            <option value="attach_object">Attach an object</option>
-            <option value="roster_add">Add to a roster</option>
-          </select>
-        </Field>
-
-        {(draft.grant_kind ?? 'tier') === 'credits' ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Credit type">
-              <select value={draft.grant_credit_type ?? 'workshop'} onChange={(e) => set({ grant_credit_type: e.target.value as RuleRow['grant_credit_type'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-                <option value="workshop">Workshop credits</option>
-                <option value="mentoring">Cohort credits</option>
-              </select>
-            </Field>
-            <Field label="Quantity">
-              <input value={draft.grant_quantity ?? ''} onChange={(e) => set({ grant_quantity: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} placeholder="e.g. 2" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
-            </Field>
-          </div>
-        ) : draft.grant_kind === 'attach_object' || draft.grant_kind === 'roster_add' ? (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={draft.grant_kind === 'attach_object' ? 'Object type to attach' : 'Roster object type'}>
-                <select value={draft.grant_object_type ?? ''} onChange={(e) => set({ grant_object_type: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-                  <option value="">choose a type…</option>
-                  {OBJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label={draft.grant_kind === 'attach_object' ? 'Object to attach' : 'Roster to add to'}>
-                <select value={draft.grant_object_ref ?? ''} onChange={(e) => set({ grant_object_ref: e.target.value || null })} disabled={!!draft.is_dynamic} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5 disabled:opacity-40">
-                  <option value="">choose an object…</option>
-                  {objects.filter((o) => !draft.grant_object_type || o.objectType === draft.grant_object_type).map((o) => (
-                    <option key={o.ref} value={o.ref}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            {draft.grant_kind === 'roster_add' && (
-              <Field label="…as role (optional)">
-                <input value={draft.grant_role ?? ''} onChange={(e) => set({ grant_role: e.target.value || null })} placeholder="e.g. volunteer" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
-              </Field>
-            )}
-            {draft.grant_kind === 'attach_object' && (
-              <label className="flex items-center gap-2 text-sm text-brand-muted">
-                <input type="checkbox" checked={!!draft.is_dynamic} onChange={(e) => set({ is_dynamic: e.target.checked, grant_object_ref: e.target.checked ? null : draft.grant_object_ref })} />
-                Choose the object at creation time (New Object wizard)
-              </label>
-            )}
-          </>
-        ) : (
-          <Field label="Grant tier">
-            <select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-              {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}{t.is_free ? ' (free)' : ''}</option>)}
-            </select>
-          </Field>
-        )}
-
-        <Field label="Grant to">
-          <select value={draft.grant_target} onChange={(e) => set({ grant_target: e.target.value as RuleRow['grant_target'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-            <option value="self">The member who triggered it</option>
-            <option value="registered_students">The students they registered (their cohort)</option>
-          </select>
-        </Field>
-
-        {(draft.grant_kind ?? 'tier') === 'tier' && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Duration">
-              <select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-                <option value="months">For N months</option>
-                <option value="until_grad_july1">Until July 1 of grad year</option>
-                <option value="lifetime">Lifetime</option>
-                <option value="match_source">Match the triggering membership</option>
-                <option value="until_date">Until a date</option>
-              </select>
-            </Field>
-            {draft.duration_kind === 'months' && (
-              <Field label="Months">
-                <input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
-              </Field>
-            )}
-            {draft.duration_kind === 'until_date' && (
-              <Field label="Until">
-                <input type="date" value={draft.duration_until ?? ''} onChange={(e) => set({ duration_until: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
-              </Field>
-            )}
-          </div>
-        )}
-
-        <label className="flex items-center gap-2 text-sm text-brand-muted">
-          <input type="checkbox" checked={draft.replaces_free} onChange={(e) => set({ replaces_free: e.target.checked })} />
-          Replace active free tier
-        </label>
-
-        <div className="flex gap-2 pt-2">
-          <button onClick={onSubmit} disabled={!draft.name || ((draft.grant_kind ?? 'tier') === 'credits' ? !((draft.grant_quantity ?? 0) > 0) : draft.grant_kind === 'attach_object' || draft.grant_kind === 'roster_add' ? !draft.grant_object_type || (!draft.grant_object_ref && !draft.is_dynamic) : !draft.grant_tier_id)} className="flex-1 text-sm bg-brand-blue text-white rounded-md py-2 hover:bg-brand-blue-dark disabled:opacity-40">
-            {draft.id ? 'Save changes' : 'Create rule'}
-          </button>
-          <button onClick={onCancel} className="flex-1 text-sm border border-brand-border rounded-md py-2 text-brand-muted hover:bg-brand-canvas">
+    <Dialog
+      open
+      onClose={onCancel}
+      title={draft.id ? 'Edit rule' : 'New grant rule'}
+      size="lg"
+      bodyClassName="space-y-3"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-control border border-line-strong px-4 text-sm text-content-secondary hover:bg-surface"
+          >
             Cancel
           </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            className="min-h-11 rounded-control bg-primary-deep px-4 text-sm font-semibold text-white hover:bg-ink disabled:opacity-40"
+          >
+            {draft.id ? 'Save changes' : 'Create rule'}
+          </button>
+        </>
+      }
+    >
+      <Field labelSize="small" label="Rule name">
+        <Input
+          value={draft.name}
+          onChange={(e) => set({ name: e.target.value })}
+          placeholder="e.g. Award winner → Scholar (1yr)"
+        />
+      </Field>
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs text-brand-muted-soft mb-1">{label}</label>
-      {children}
-    </div>
+      <Field labelSize="small" label="When (trigger)">
+        <Select value={draft.trigger_type} onChange={(e) => set({ trigger_type: e.target.value })}>
+          {/* Include the current value even if it's a legacy trigger no longer offered. */}
+          {(TRIGGER_OPTIONS.includes(draft.trigger_type) ? TRIGGER_OPTIONS : [draft.trigger_type, ...TRIGGER_OPTIONS]).map((v) => (
+            <option key={v} value={v}>{TRIGGERS[v] ?? v}</option>
+          ))}
+        </Select>
+      </Field>
+
+      {draft.trigger_type === 'object_created' && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field labelSize="small" label="…of type">
+              <Select value={draft.object_type ?? ''} onChange={(e) => set({ object_type: e.target.value || null })}>
+                <option value="">choose a type…</option>
+                {OBJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Select>
+            </Field>
+            <Field labelSize="small" label="…minimum tier (optional)">
+              <Select value={draft.tier_min ?? ''} onChange={(e) => set({ tier_min: e.target.value || null })}>
+                <option value="">any tier</option>
+                {TIER_MIN_NAMES.map((t) => <option key={t} value={t}>{t}+</option>)}
+              </Select>
+            </Field>
+          </div>
+          <Field labelSize="small" label="For one specific object (optional — leave empty for every new object of the type)">
+            <Select value={draft.object_anchor_ref ?? ''} onChange={(e) => set({ object_anchor_ref: e.target.value || null })}>
+              <option value="">any {draft.object_type || 'object'}</option>
+              {objects.filter((o) => !draft.object_type || o.objectType === draft.object_type).map((o) => (
+                <option key={o.ref} value={o.ref}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+        </>
+      )}
+
+      {draft.trigger_type === 'tier_purchased' && (
+        <div role="group" aria-labelledby={sourceTiersLabelId} className="space-y-1.5">
+          <p id={sourceTiersLabelId} className="font-subheading text-xs font-medium text-content-muted">
+            …and the tier they got is one of (leave empty = any paid tier)
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {tiers.filter((t) => !t.is_free).map((t) => {
+              const sel = draft.conditions.source_tier_ids ?? []
+              const on = sel.includes(t.id)
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setCond({ source_tier_ids: on ? sel.filter((x) => x !== t.id) : [...sel, t.id] })}
+                  className={'px-2 py-1 rounded-md text-xs border ' + (on ? 'bg-brand-blue text-white border-brand-blue' : 'border-line-strong text-brand-muted')}
+                >
+                  {t.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field labelSize="small" label="…and role is (optional)">
+          <Select value={draft.conditions.event_role ?? ''} onChange={(e) => setCond({ event_role: e.target.value || undefined })}>
+            {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </Select>
+        </Field>
+        <Field labelSize="small" label="…and bracket is (optional)">
+          <Select value={draft.conditions.age_bracket ?? ''} onChange={(e) => setCond({ age_bracket: e.target.value || undefined })}>
+            {BRACKETS.map((b) => <option key={b} value={b}>{b || 'any bracket'}</option>)}
+          </Select>
+        </Field>
+      </div>
+
+      {draft.trigger_type === 'event_award' && (
+        <Field labelSize="small" label="…and award text contains (optional)">
+          <Input value={draft.conditions.award_contains ?? ''} onChange={(e) => setCond({ award_contains: e.target.value || undefined })} placeholder="e.g. winner" />
+        </Field>
+      )}
+
+      <Field labelSize="small" label="Grant">
+        <Select value={draft.grant_kind ?? 'tier'} onChange={(e) => set({ grant_kind: e.target.value as RuleRow['grant_kind'] })}>
+          <option value="tier">A membership tier</option>
+          <option value="credits">Wallet credits (cohort / workshop)</option>
+          <option value="attach_object">Attach an object</option>
+          <option value="roster_add">Add to a roster</option>
+        </Select>
+      </Field>
+
+      {(draft.grant_kind ?? 'tier') === 'credits' ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field labelSize="small" label="Credit type">
+            <Select value={draft.grant_credit_type ?? 'workshop'} onChange={(e) => set({ grant_credit_type: e.target.value as RuleRow['grant_credit_type'] })}>
+              <option value="workshop">Workshop credits</option>
+              <option value="mentoring">Cohort credits</option>
+            </Select>
+          </Field>
+          <Field labelSize="small" label="Quantity">
+            <Input value={draft.grant_quantity ?? ''} onChange={(e) => set({ grant_quantity: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} placeholder="e.g. 2" />
+          </Field>
+        </div>
+      ) : draft.grant_kind === 'attach_object' || draft.grant_kind === 'roster_add' ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field labelSize="small" label={draft.grant_kind === 'attach_object' ? 'Object type to attach' : 'Roster object type'}>
+              <Select value={draft.grant_object_type ?? ''} onChange={(e) => set({ grant_object_type: e.target.value || null })}>
+                <option value="">choose a type…</option>
+                {OBJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Select>
+            </Field>
+            <Field labelSize="small" label={draft.grant_kind === 'attach_object' ? 'Object to attach' : 'Roster to add to'}>
+              <Select value={draft.grant_object_ref ?? ''} onChange={(e) => set({ grant_object_ref: e.target.value || null })} disabled={!!draft.is_dynamic}>
+                <option value="">choose an object…</option>
+                {objects.filter((o) => !draft.grant_object_type || o.objectType === draft.grant_object_type).map((o) => (
+                  <option key={o.ref} value={o.ref}>{o.label}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          {draft.grant_kind === 'roster_add' && (
+            <Field labelSize="small" label="…as role (optional)">
+              <Input value={draft.grant_role ?? ''} onChange={(e) => set({ grant_role: e.target.value || null })} placeholder="e.g. volunteer" />
+            </Field>
+          )}
+          {draft.grant_kind === 'attach_object' && (
+            <Choice
+              checked={!!draft.is_dynamic}
+              onChange={(e) => set({ is_dynamic: e.target.checked, grant_object_ref: e.target.checked ? null : draft.grant_object_ref })}
+              label="Choose the object at creation time (New Object wizard)"
+            />
+          )}
+        </>
+      ) : (
+        <Field labelSize="small" label="Grant tier">
+          <Select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })}>
+            {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}{t.is_free ? ' (free)' : ''}</option>)}
+          </Select>
+        </Field>
+      )}
+
+      <Field labelSize="small" label="Grant to">
+        <Select value={draft.grant_target} onChange={(e) => set({ grant_target: e.target.value as RuleRow['grant_target'] })}>
+          <option value="self">The member who triggered it</option>
+          <option value="registered_students">The students they registered (their cohort)</option>
+        </Select>
+      </Field>
+
+      {(draft.grant_kind ?? 'tier') === 'tier' && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field labelSize="small" label="Duration">
+            <Select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })}>
+              <option value="months">For N months</option>
+              <option value="until_grad_july1">Until July 1 of grad year</option>
+              <option value="lifetime">Lifetime</option>
+              <option value="match_source">Match the triggering membership</option>
+              <option value="until_date">Until a date</option>
+            </Select>
+          </Field>
+          {draft.duration_kind === 'months' && (
+            <Field labelSize="small" label="Months">
+              <Input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} />
+            </Field>
+          )}
+          {draft.duration_kind === 'until_date' && (
+            <Field labelSize="small" label="Until">
+              <Input type="date" value={draft.duration_until ?? ''} onChange={(e) => set({ duration_until: e.target.value || null })} />
+            </Field>
+          )}
+        </div>
+      )}
+
+      <Choice
+        checked={draft.replaces_free}
+        onChange={(e) => set({ replaces_free: e.target.checked })}
+        label="Replace active free tier"
+      />
+    </Dialog>
   )
 }

@@ -5,8 +5,9 @@
 //
 // Scope: app/** (excluding app/api — server/email/PDF code legitimately uses
 // raw hex), components/**, packages/**. Generated files are never scanned.
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { classTokens, countArbitrary, countBrand, generatedBaseClasses, smallFormText, smallText, unknownColourClasses, weakControlBorder } from './ds-lint-classes.mjs'
 
 const ROOTS = ['app', 'components', 'packages']
 const SKIP = ['app/api', 'node_modules', '.next', 'storybook-static']
@@ -33,12 +34,47 @@ function walk(dir, out = []) {
 }
 
 const errors = []
-for (const root of ROOTS) {
-  for (const file of walk(root)) {
-    const src = readFileSync(file, 'utf8')
-    for (const m of src.matchAll(OLD_HEX)) errors.push(`${file}: pre-V2 brand hex ${m[0]} — use a token utility instead`)
-    for (const m of src.matchAll(OLD_FONT)) errors.push(`${file}: old font "${m[0]}" in UI code — use font-sans/font-display (or font-competition for materials)`)
+const files = ROOTS.flatMap((root) => walk(root))
+for (const file of files) {
+  const src = readFileSync(file, 'utf8')
+  for (const m of src.matchAll(OLD_HEX)) errors.push(`${file}: pre-V2 brand hex ${m[0]} — use a token utility instead`)
+  for (const m of src.matchAll(OLD_FONT)) errors.push(`${file}: old font "${m[0]}" in UI code — use font-sans/font-display (or font-competition for materials)`)
+}
+
+// Class checks (scripts/ds-lint-classes.mjs). Stories and tests are skipped:
+// they render fixtures, not product UI.
+const uiFiles = files.filter((f) => f.endsWith('.tsx') && !/\.(test|stories)\.tsx$/.test(f))
+const generated = await generatedBaseClasses(uiFiles)
+const counts = { smallFormText: 0, weakControlBorder: 0, arbitraryValues: 0, brandAliases: 0 }
+for (const file of uiFiles) {
+  const src = readFileSync(file, 'utf8')
+  for (const cls of unknownColourClasses(classTokens(src), generated)) {
+    errors.push(`${file}: \`${cls}\` is not a class Tailwind generates, so it styles nothing — use a token utility (tailwind.config.ts)`)
   }
+  for (const cls of smallText(src)) errors.push(`${file}: \`${cls}\` is under the 12px type floor — use text-xs or larger`)
+  counts.smallFormText += smallFormText(src)
+  counts.weakControlBorder += weakControlBorder(src)
+  counts.arbitraryValues += countArbitrary(src)
+  counts.brandAliases += countBrand(src)
+}
+
+// Ratchets: may only go down. `node scripts/ds-lint.mjs --update-baseline`
+// records lower counts after a clean-up.
+const BASELINE = 'scripts/ds-lint-baseline.json'
+const baseline = JSON.parse(readFileSync(BASELINE, 'utf8'))
+const WHY = {
+  smallFormText: 'text fields set below 16px (iOS zooms on focus): use fieldControlClass / text-input mouse:text-sm',
+  weakControlBorder: 'text fields with a divider-weight border (needs 3:1): use border-line-strong',
+  arbitraryValues: 'arbitrary-value classes (text-[13px], bg-[#…]): use the token scale',
+  brandAliases: 'legacy brand-* aliases: use the semantic token names',
+}
+if (process.argv.includes('--update-baseline')) {
+  writeFileSync(BASELINE, JSON.stringify(counts, null, 2) + '\n')
+  console.log(`✓ ds-lint baseline updated: ${JSON.stringify(counts)}`)
+}
+for (const [key, n] of Object.entries(counts)) {
+  if (n > baseline[key]) errors.push(`${n} ${WHY[key]} — the baseline is ${baseline[key]} (${BASELINE}); this change adds ${n - baseline[key]}`)
+  else if (n < baseline[key]) console.log(`↓ ${key}: ${n} (baseline ${baseline[key]}) — run with --update-baseline to lock it in`)
 }
 
 if (errors.length) {

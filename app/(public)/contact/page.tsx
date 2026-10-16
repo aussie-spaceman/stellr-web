@@ -8,17 +8,8 @@ export const metadata: Metadata = {
   description: 'Get in touch with the Stellr Education team.',
 }
 
-interface PageProps {
-  searchParams: Promise<{ type?: string }>
-}
-
-export default async function ContactPage({ searchParams }: PageProps) {
-  const { type } = await searchParams
-  const prefillType = type === 'mentor'
-    ? 'Volunteer / Mentor'
-    : type === 'sponsorship'
-    ? 'Sponsorship / Donation'
-    : undefined
+// Static: the `?type=` deep link is read by ContactForm in the browser.
+export default function ContactPage() {
 
   return (
     <>
@@ -26,7 +17,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
       <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-3">Get in Touch</h1>
-          <p className="text-lg text-content-faint max-w-xl">
+          <p className="text-lg text-hero-lead max-w-xl">
             Questions about events, sponsorship, mentoring, or anything else — we&apos;d love to hear from you.
           </p>
         </div>
@@ -39,7 +30,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
 
             {/* Form */}
             <div className="lg:col-span-2">
-              <ContactForm prefillType={prefillType} />
+              <ContactForm />
             </div>
 
             {/* Sidebar */}
@@ -53,7 +44,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
                     <p className="text-sm font-semibold text-brand-blue-dark">Email</p>
                     <a
                       href="mailto:hello@stellreducation.org"
-                      className="text-sm text-brand-blue hover:underline"
+                      className="text-sm text-brand-blue underline underline-offset-2 hover:no-underline"
                     >
                       hello@stellreducation.org
                     </a>
@@ -64,7 +55,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
                   <Phone size={18} className="text-brand-blue mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-brand-blue-dark">Phone</p>
-                    <a href="tel:+18018105848" className="text-sm text-brand-blue hover:underline">
+                    <a href="tel:+18018105848" className="text-sm text-brand-blue underline underline-offset-2 hover:no-underline">
                       +1 (801) 810-5848
                     </a>
                   </div>
@@ -81,10 +72,10 @@ export default async function ContactPage({ searchParams }: PageProps) {
 
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 space-y-3">
                 <h2 className="font-bold text-lg">Response time</h2>
-                <p className="text-sm text-content-faint">
+                <p className="text-sm text-hero-lead">
                   We aim to respond to all inquiries within 2 business days.
                 </p>
-                <p className="text-sm text-content-faint">
+                <p className="text-sm text-hero-lead">
                   For urgent event-related questions, include your event name in the subject.
                 </p>
               </div>
@@ -96,7 +87,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
                 </p>
                 <a
                   href="?type=mentor"
-                  className="text-sm font-semibold text-brand-blue hover:underline"
+                  className="text-sm font-semibold text-brand-blue underline underline-offset-2 hover:no-underline"
                 >
                   Select &ldquo;Volunteer / Mentor&rdquo; in the form →
                 </a>

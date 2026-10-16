@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import { CarouselControls } from './CarouselControls'
+import { useAutoRotate } from './useAutoRotate'
 
 export interface StudentWorkSlide {
   src: string
@@ -12,9 +15,13 @@ export interface StudentWorkSlide {
  * images (lib/media-manifest STUDENT_WORK); with six or fewer it shows them
  * all, in order, and auto-cycles. Larger pools would pick a random six after
  * hydration so each visit shows a different mix without a mismatch.
+ *
+ * The slides are PNGs on the media host (up to ~600 KB each); next/image
+ * serves them as AVIF/WebP at the width the frame needs. Rotation pauses on
+ * hover, focus, a tap, the pause button, reduced motion, and off-screen.
  */
 const SHOW = 6
-const INTERVAL_MS = 4000
+const INTERVAL_MS = 5000
 
 function pickRandom<T>(pool: T[], n: number) {
   const a = [...pool]
@@ -27,58 +34,48 @@ function pickRandom<T>(pool: T[], n: number) {
 
 export function StudentWorkHero({ images, className = '' }: { images: StudentWorkSlide[]; className?: string }) {
   const [slides, setSlides] = useState<StudentWorkSlide[]>(() => (images.length <= SHOW ? images : []))
-  const [idx, setIdx] = useState(0)
+  const rotate = useAutoRotate(slides.length, INTERVAL_MS)
 
   useEffect(() => {
     if (images.length > SHOW) setSlides(pickRandom(images, SHOW))
   }, [images])
 
-  useEffect(() => {
-    if (slides.length < 2) return
-    const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), INTERVAL_MS)
-    return () => clearInterval(t)
-  }, [slides])
-
   if (slides.length === 0) {
-    return (
-      <div
-        className={`aspect-[16/9] w-full rounded-2xl border border-line bg-surface animate-pulse ${className}`}
-      />
-    )
+    return <div className={`aspect-[16/9] w-full rounded-2xl border border-line bg-surface animate-pulse ${className}`} />
   }
 
   return (
-    <div
-      className={`relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-line bg-[#0E1330] shadow-card-lift ${className}`}
-    >
-      {slides.map((s, i) => (
-        // eslint-disable-next-line @next/next/no-img-element -- media-host image; the slides are already sized for the frame
-        <img
-          key={s.src}
-          src={s.src}
-          alt={s.alt}
-          loading={i === 0 ? 'eager' : 'lazy'}
-          decoding="async"
-          className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ${i === idx ? 'opacity-100' : 'opacity-0'}`}
-          aria-hidden={i !== idx}
-        />
-      ))}
-      {slides.length > 1 && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              aria-label={`Show student work ${i + 1}`}
-              aria-current={i === idx}
-              onClick={() => setIdx(i)}
-              className={`h-1.5 rounded-full transition-all ${
-                i === idx ? 'w-5 bg-white' : 'w-1.5 bg-white/45 hover:bg-white/70'
-              }`}
-            />
-          ))}
-        </div>
-      )}
+    <div className={className}>
+      <div
+        {...rotate.bind}
+        role="group"
+        aria-roledescription="carousel"
+        aria-label="Previous student work"
+        className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-line bg-midnight shadow-card-lift"
+      >
+        {slides.map((s, i) => (
+          <Image
+            key={s.src}
+            src={s.src}
+            alt={s.alt}
+            fill
+            sizes="(min-width: 1024px) 540px, 100vw"
+            className={`object-contain transition-opacity duration-700 motion-reduce:transition-none ${i === rotate.index ? 'opacity-100' : 'opacity-0'}`}
+            aria-hidden={i !== rotate.index}
+          />
+        ))}
+      </div>
+      <CarouselControls
+        className="mt-2"
+        tone="light"
+        count={slides.length}
+        index={rotate.index}
+        onShow={rotate.show}
+        label="Show student work"
+        canRotate={rotate.canRotate}
+        paused={rotate.userPaused}
+        onTogglePause={rotate.togglePause}
+      />
     </div>
   )
 }

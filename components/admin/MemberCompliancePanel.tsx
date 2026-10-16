@@ -88,7 +88,7 @@ export function MemberCompliancePanel({
   return (
     <div className="bg-white rounded-xl border border-brand-border p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide">Background Check</h2>
+        <h2 className="text-sm font-semibold text-brand-muted-soft">Background Check</h2>
         <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
       </div>
 
@@ -218,7 +218,7 @@ export function MemberCompliancePanel({
                         onChange={(e) => setNotes(e.target.value)}
                         rows={3}
                         placeholder="What was found, and why it does or does not disqualify them."
-                        className="w-full text-xs rounded-lg border border-brand-border px-2 py-1.5"
+                        className="w-full text-input mouse:text-xs rounded-lg border border-line-strong px-2 py-1.5"
                       />
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -256,7 +256,7 @@ export function MemberCompliancePanel({
                           Cancel
                         </button>
                       </div>
-                      <p className="text-[11px] text-brand-muted-soft">
+                      <p className="text-xs text-brand-muted-soft">
                         Clearing someone requires a short rationale. Adverse action itself is run from the
                         Checkr dashboard.
                       </p>

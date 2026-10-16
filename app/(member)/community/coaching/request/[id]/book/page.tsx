@@ -46,10 +46,10 @@ export default async function CoachingBookPage({ params }: { params: Promise<{ i
       </Link>
 
       <header>
-        <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-[#0E8C99]">
+        <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-adult-teal-deep">
           Academy · Coaching
         </p>
-        <h1 className="mt-1 font-display text-[30px] font-bold leading-tight tracking-[-0.02em] text-ink">
+        <h1 className="mt-1 font-display text-[30px] font-bold leading-tight text-ink">
           Book your session
         </h1>
         <p className="mt-1.5 text-[15px] text-content-secondary">

@@ -3,7 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 // The map's "running now" pins: an event that has already run must not get one,
 // whatever its CMS flags say.
 const fetch = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/sanity', () => ({ client: { fetch } }))
+vi.mock('@/lib/sanity', () => ({ client: { fetch }, PUBLISHED_CACHE: { next: { revalidate: 3600, tags: ['sanity'] } } }))
 
 const { getMapLocations } = await import('./locations')
 

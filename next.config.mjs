@@ -1,3 +1,14 @@
+// Routes that mount a Jitsi video room: session rooms (VideoRoom,
+// CohortLiveRoom), live training lessons (LessonMedia) and the admin course
+// builder's RecordSession. Exported for next-config.test.ts.
+export const VIDEO_ROUTES = [
+  '/community/sessions/:id/room',
+  '/community/training/:path*',
+  '/admin/academy/training/:path*',
+]
+const VIDEO_ORIGINS = '"https://8x8.vc" "https://meet.jit.si"'
+export const VIDEO_PERMISSIONS_POLICY = `camera=(self ${VIDEO_ORIGINS}), microphone=(self ${VIDEO_ORIGINS}), geolocation=(), payment=(self)`
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
@@ -80,6 +91,15 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(self)' },
         ],
       },
+      // Video rooms embed Jitsi (8x8.vc in production, meet.jit.si as the dev
+      // fallback — lib/video-provider.ts). An empty camera/microphone allowlist
+      // on the page also denies every frame inside it, so these routes name the
+      // video origins. A later rule overrides the same header key, so the strict
+      // baseline still applies everywhere else.
+      ...VIDEO_ROUTES.map((source) => ({
+        source,
+        headers: [{ key: 'Permissions-Policy', value: VIDEO_PERMISSIONS_POLICY }],
+      })),
       { source: '/sign', headers: privateLink },
       { source: '/sign/:path*', headers: privateLink },
       { source: '/register/:slug/pay/:path*', headers: privateLink },
@@ -92,6 +112,12 @@ const nextConfig = {
       { source: '/api/survey/:path*', headers: privateLink },
       { source: '/team-profile/:path*', headers: privateLink },
       { source: '/api/team-profile/:path*', headers: privateLink },
+      // Event check-in, reached from the door QR code. The link carries the
+      // event's check-in token and attendees (mostly minors) enter a name and
+      // date of birth, so it gets the private-link treatment.
+      { source: '/check-in', headers: privateLink },
+      { source: '/check-in/:path*', headers: privateLink },
+      { source: '/api/check-in', headers: privateLink },
       // deep review MP-12 / MPREG-N2: credential pages carry a (possibly minor's)
       // name opened from a private `?k=` family link, and the page is the MP-1
       // private route at runtime. Give it the same HTTP backstop as the other
@@ -183,10 +209,16 @@ const nextConfig = {
     ]
   },
   images: {
+    // AVIF first: about 20–30% smaller than WebP for photos, and every phone
+    // browser in use decodes it. Browsers that don't get WebP.
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       { protocol: 'https', hostname: 'cdn.sanity.io' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'img.clerk.com' },
+      // The media host (lib/media-manifest mediaUrl): lets large PNG/JPEG
+      // assets such as the student-work slides go through the optimizer.
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
     ],
     // Next's default local pattern is `{ pathname: '/**', search: '' }`, which
     // forbids query strings on local images. Our watermark serve-route emits

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { CatalogueRow, ResourceKind, CatalogueSort } from '@/lib/resources-catalogue'
 import { ResourceFlagModal } from '@/components/community/resources/ResourceFlagModal'
+import { openPendingTab } from '@/lib/open-in-new-tab'
 
 // Source object colour-code (handover §6). Not in the named token set — kept as a
 // small local map so the dot/border can tint by origin object type.
@@ -50,7 +51,7 @@ function KindIcon({ kind, className }: { kind: ResourceKind; className?: string 
 function VisibilityBadge({ visibility }: { visibility: CatalogueRow['provenance']['visibility'] }) {
   const label = visibility.charAt(0).toUpperCase() + visibility.slice(1)
   return (
-    <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-[11px] font-medium capitalize text-brand-blue-dark">
+    <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-xs font-medium capitalize text-brand-blue-dark">
       {label}
     </span>
   )
@@ -65,26 +66,40 @@ function actionLabel(kind: ResourceKind): string {
 /**
  * Open a catalogue attachment via the container-gated route (re-checks the gate).
  * Files download; links/recordings open in a new tab.
+ *
+ * Call it straight from the click: the tab for a link opens before the fetch,
+ * while the tap still counts (iOS Safari drops a window opened after an await).
  */
 async function openAttachment(row: CatalogueRow, name: string): Promise<string | null> {
   const endpoint =
     row.source === 'training'
       ? `/api/community/resources/training-open?ref=${encodeURIComponent(row.attachmentId)}`
       : `/api/community/resources/attachment/${row.attachmentId}/download`
-  const res = await fetch(endpoint)
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) return json.error ?? 'Could not open this resource'
-  if (row.kind === 'file') {
-    const a = document.createElement('a')
-    a.href = json.url
-    a.download = name
-    a.rel = 'noopener noreferrer'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  } else {
-    window.open(json.url, '_blank', 'noopener,noreferrer')
+  const tab = row.kind === 'file' ? null : openPendingTab()
+  let res: Response
+  let json: { url?: string; error?: string }
+  try {
+    res = await fetch(endpoint)
+    json = await res.json().catch(() => ({}))
+  } catch {
+    tab?.close()
+    return 'Could not open this resource'
   }
+  if (!res.ok || !json.url) {
+    tab?.close()
+    return json.error ?? 'Could not open this resource'
+  }
+  if (tab) {
+    tab.go(json.url)
+    return null
+  }
+  const a = document.createElement('a')
+  a.href = json.url
+  a.download = name
+  a.rel = 'noopener noreferrer'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
   return null
 }
 
@@ -160,7 +175,7 @@ function NameWithRename({
           onChange={(e) => setValue(e.target.value)}
           maxLength={200}
           autoFocus
-          className="min-w-0 flex-1 rounded border border-brand-border px-2 py-1 text-sm focus:border-brand-blue-dark focus:outline-none"
+          className="min-w-0 flex-1 rounded border border-line-strong px-2 py-1 text-input mouse:text-sm focus:border-brand-blue-dark focus:outline-none"
         />
         <button
           onClick={save}
@@ -277,7 +292,7 @@ export function ResourcesCatalogue({ rows: initialRows }: { rows: CatalogueRow[]
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search resources…"
-            className="w-full rounded-md border border-brand-border py-2 pl-9 pr-3 text-sm focus:border-brand-blue-dark focus:outline-none"
+            className="w-full rounded-md border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-blue-dark focus:outline-none"
           />
         </div>
 
@@ -298,7 +313,7 @@ export function ResourcesCatalogue({ rows: initialRows }: { rows: CatalogueRow[]
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as CatalogueSort)}
-          className="rounded-md border border-brand-border px-2.5 py-1.5 text-xs text-brand-muted focus:border-brand-blue-dark focus:outline-none"
+          className="rounded-md border border-line-strong px-2.5 py-1.5 text-input mouse:text-xs text-brand-muted focus:border-brand-blue-dark focus:outline-none"
         >
           {SORTS.map((s) => (
             <option key={s.key} value={s.key}>

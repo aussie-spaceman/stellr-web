@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Input } from '@stellr/web-ui'
 
 export interface CompanyRow {
   id: string
@@ -21,6 +22,7 @@ export default function EventCompanies({
 }) {
   const router = useRouter()
   const [count, setCount] = useState(companies.length || 2)
+  const countId = useId()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -55,18 +57,23 @@ export default function EventCompanies({
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Companies</h3>
+        <h3 className="text-sm font-semibold text-brand-muted">Companies</h3>
         <span className="text-xs text-brand-muted-soft">{studentCount} students to assign</span>
-        <div className="ml-auto flex items-center gap-2">
-          <label className="text-sm text-brand-muted">Number of companies</label>
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
-            className="w-16 border border-brand-border rounded-lg px-2 py-1.5 text-sm"
-          />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <label htmlFor={countId} className="text-sm text-brand-muted">
+            Number of companies
+          </label>
+          <div className="w-20">
+            <Input
+              id={countId}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={10}
+              value={count}
+              onChange={(e) => setCount(Number(e.target.value))}
+            />
+          </div>
           <button
             onClick={() => call({ method: 'PUT', body: JSON.stringify({ count }) })}
             disabled={busy || count < 1 || count > 10}
@@ -106,9 +113,10 @@ export default function EventCompanies({
                 <span className="text-xs font-semibold text-brand-muted-soft uppercase">Company {c.number}</span>
                 <span className="text-sm font-bold text-brand-blue-dark tabular-nums">{c.count}</span>
               </div>
-              <input
+              <Input
                 type="text"
                 placeholder="Optional name"
+                aria-label={`Company ${c.number} name`}
                 value={names[c.id] ?? ''}
                 onChange={(e) => setNames((n) => ({ ...n, [c.id]: e.target.value }))}
                 onBlur={() => {
@@ -116,7 +124,6 @@ export default function EventCompanies({
                     call({ method: 'POST', body: JSON.stringify({ action: 'rename', companyId: c.id, name: names[c.id] }) })
                   }
                 }}
-                className="w-full border border-brand-border rounded px-2 py-1 text-sm"
               />
             </div>
           ))}

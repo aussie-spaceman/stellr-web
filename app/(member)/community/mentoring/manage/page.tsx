@@ -27,7 +27,7 @@ export default async function MentorDashboardPage() {
           <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-space-violet">
             Mentor workspace
           </p>
-          <h1 className="mt-1 font-display text-[34px] font-bold leading-tight tracking-[-0.02em] text-ink">Your cohorts</h1>
+          <h1 className="mt-1 font-display text-[34px] font-bold leading-tight text-ink">Your cohorts</h1>
         </div>
         <Link
           href="/community/mentoring/new"
@@ -84,7 +84,7 @@ export default async function MentorDashboardPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-display text-[20px] font-bold text-ink">{c.name}</h3>
-                    <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-bold tracking-[0.04em] ${tile.chip}`}>{tile.label}</span>
+                    <span className={`rounded-pill px-2.5 py-0.5 text-xs font-bold tracking-[0.04em] ${tile.chip}`}>{tile.label}</span>
                   </div>
                   <p className="mt-1 text-[13.5px] text-content-secondary">
                     {c.memberCount} member{c.memberCount === 1 ? '' : 's'} · {c.plannedSessions} sessions
@@ -101,7 +101,7 @@ export default async function MentorDashboardPage() {
 
       {completed.length > 0 && (
         <section>
-          <h2 className="mb-2 font-subheading text-[12px] font-semibold uppercase tracking-[0.1em] text-content-faint">Completed</h2>
+          <h2 className="mb-2 font-subheading text-[12px] font-semibold text-content-faint">Completed</h2>
           <ul className="divide-y divide-line-light rounded-card border border-line bg-white">
             {completed.map((c) => (
               <li key={c.id} className="flex items-center justify-between px-5 py-3.5">
@@ -117,7 +117,7 @@ export default async function MentorDashboardPage() {
 }
 
 function StatCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: 'violet' | 'amber' | 'plain' }) {
-  const toneCls = tone === 'violet' ? 'text-space-violet' : tone === 'amber' ? 'text-pathway-amber' : 'text-content-secondary'
+  const toneCls = tone === 'violet' ? 'text-space-violet' : tone === 'amber' ? 'text-gold-ink' : 'text-content-secondary'
   return (
     <div className="rounded-card border border-line bg-white p-5">
       <p className={`flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] ${toneCls}`}>

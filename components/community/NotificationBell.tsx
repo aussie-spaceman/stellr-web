@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useId, type CSSProperties } from 'react'
 import { Bell } from 'lucide-react'
 import Link from 'next/link'
 import { timeAgo } from '@/lib/utils'
@@ -39,7 +39,10 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
+  const [sheetTop, setSheetTop] = useState(60)
   const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const panelId = useId()
 
   const fetchCount = useCallback(async () => {
     try {
@@ -51,23 +54,50 @@ export function NotificationBell() {
     } catch { /* silent — non-critical */ }
   }, [])
 
-  // Poll every 30 s (stays within Supabase Realtime-free budget).
+  // Poll every 30 s (stays within Supabase Realtime-free budget), but only
+  // while the tab is in view: a phone with the app open in a background tab
+  // kept waking the radio every 30 s. Coming back refreshes at once.
   useEffect(() => {
     fetchCount()
-    const id = setInterval(fetchCount, 30_000)
-    return () => clearInterval(id)
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchCount()
+    }, 30_000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchCount()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [fetchCount])
 
-  // Close dropdown when clicking outside.
+  // Close on a tap or click outside, or on Escape (focus back on the bell).
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    if (!open) return
+    const onPointer = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      buttonRef.current?.focus()
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   const openDropdown = async () => {
+    // On a phone the panel is a sheet hung from the bottom of the top bar
+    // (which sits lower while a banner is above it), so measure where that is.
+    if (!open) {
+      const bar = ref.current?.closest('header')
+      if (bar) setSheetTop(Math.round(bar.getBoundingClientRect().bottom))
+    }
     setOpen((o) => !o)
     if (!open) {
       setLoading(true)
@@ -89,24 +119,45 @@ export function NotificationBell() {
   return (
     <div ref={ref} className="relative">
       <button
+        ref={buttonRef}
+        type="button"
         onClick={openDropdown}
-        className="relative rounded-md p-1.5 text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-muted"
-        aria-label="Notifications"
+        className="relative inline-flex h-11 w-11 items-center justify-center rounded-md text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-muted"
+        // The count is in the name: the badge is drawn, not read.
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="h-5 w-5" aria-hidden="true" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+          <span
+            aria-hidden="true"
+            className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white"
+          >
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-brand-border bg-white shadow-lg">
-          <div className="border-b border-brand-hairline px-4 py-2.5">
+        <div
+          id={panelId}
+          role="region"
+          aria-label="Notifications"
+          style={{ '--sheet-top': `${sheetTop}px` } as CSSProperties}
+          className={[
+            // Phone: a full-width sheet under the top bar, never taller than
+            // the screen above the tab bar (dvh: the browser's toolbars count).
+            'fixed inset-x-0 top-[var(--sheet-top)] z-20 flex max-h-[calc(100dvh_-_var(--sheet-top)_-_6rem)] flex-col',
+            'rounded-b-ds-card border-b border-line bg-white shadow-panel',
+            // From sm: the popover anchored to the bell.
+            'sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-none sm:w-80 sm:rounded-xl sm:border sm:border-brand-border sm:shadow-lg',
+          ].join(' ')}
+        >
+          <div className="shrink-0 border-b border-brand-hairline px-4 py-2.5">
             <p className="text-sm font-semibold text-brand-blue-dark">Notifications</p>
           </div>
-          <ul className="max-h-80 divide-y divide-brand-hairline overflow-y-auto">
+          <ul className="min-h-0 divide-y divide-brand-hairline overflow-y-auto overscroll-contain sm:max-h-80">
             {loading && (
               <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">Loading…</li>
             )}
@@ -122,7 +173,7 @@ export function NotificationBell() {
                       {actorName(n.actor)} invited you to a mentoring cohort
                     </p>
                     {n.body && <p className="mt-0.5 text-xs text-brand-muted-soft">{n.body}</p>}
-                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <Link
                         href={`/community/mentoring/${n.reference_id}/invite`}
@@ -156,7 +207,7 @@ export function NotificationBell() {
                       {actorName(n.actor)} invited you to a coaching workshop
                     </p>
                     {n.body && <p className="mt-0.5 text-xs text-brand-muted-soft">{n.body}</p>}
-                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <Link
                         href={`/community/coaching/${n.reference_id}/invite`}
@@ -197,7 +248,7 @@ export function NotificationBell() {
                     <p className="text-sm font-medium text-brand-blue-dark">
                       {n.body ?? `${actorName(n.actor)} invited you to a space`}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         onClick={() => respond('accept')}
@@ -241,7 +292,7 @@ export function NotificationBell() {
               )
             })}
           </ul>
-          <div className="border-t border-brand-hairline px-4 py-2">
+          <div className="shrink-0 border-t border-brand-hairline px-4 py-2">
             <Link
               href="/community"
               onClick={() => setOpen(false)}

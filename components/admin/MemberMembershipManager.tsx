@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, X, Check } from 'lucide-react'
+import { Choice, Field, Input, Select } from '@stellr/web-ui'
 
 export interface Membership {
   id: string
@@ -52,6 +53,8 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
   const [tierId, setTierId] = useState(tiers[0]?.id ?? '')
   const [duration, setDuration] = useState('12') // '12' | '24' | 'lifetime' | 'custom'
   const [customDate, setCustomDate] = useState('')
+  const [customDateError, setCustomDateError] = useState('')
+  const customDateId = `${useId()}-custom-date`
   const [complimentary, setComplimentary] = useState(true)
   const [replacesFree, setReplacesFree] = useState(true)
 
@@ -84,7 +87,12 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
     const body: Record<string, unknown> = { tierId, complimentary, replacesFree }
     if (duration === 'lifetime') body.months = null
     else if (duration === 'custom') {
-      if (!customDate) { setError('Pick an expiry date.'); return }
+      if (!customDate) {
+        // Said under the date field, with focus on it.
+        setCustomDateError('Pick an expiry date.')
+        requestAnimationFrame(() => document.getElementById(customDateId)?.focus())
+        return
+      }
       body.expiresAt = customDate
     } else body.months = Number(duration)
 
@@ -124,7 +132,7 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
   return (
     <div className="bg-white rounded-xl border border-brand-border p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide">Membership</h2>
+        <h2 className="text-sm font-semibold text-brand-muted-soft">Membership</h2>
         <button
           onClick={() => setShowAssign((s) => !s)}
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-blue"
@@ -142,50 +150,47 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
         )}
       </div>
 
-      {error && <p className="mb-3 text-xs text-red-600 bg-red-50 rounded-md px-2.5 py-1.5">{error}</p>}
+      {error && <p role="alert" className="mb-3 text-xs text-red-600 bg-red-50 rounded-md px-2.5 py-1.5">{error}</p>}
 
       {/* Assign form */}
       {showAssign && (
         <div className="mb-4 rounded-lg border border-brand-blue bg-brand-blue/5/40 p-3 space-y-2.5">
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">Tier</label>
-            <select
-              value={tierId}
-              onChange={(e) => setTierId(e.target.value)}
-              className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
-            >
+          <Field label="Tier" labelSize="small">
+            <Select value={tierId} onChange={(e) => setTierId(e.target.value)}>
               {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">Duration</label>
-            <select
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
-            >
+            </Select>
+          </Field>
+          <Field label="Duration" labelSize="small">
+            <Select value={duration} onChange={(e) => setDuration(e.target.value)}>
               <option value="12">1 year</option>
               <option value="24">2 years</option>
               <option value="lifetime">No expiry (lifetime)</option>
               <option value="custom">Custom date…</option>
-            </select>
-          </div>
+            </Select>
+          </Field>
           {duration === 'custom' && (
-            <input
-              type="date"
-              value={customDate}
-              onChange={(e) => setCustomDate(e.target.value)}
-              className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
-            />
+            <Field label="Expiry date" labelSize="small" error={customDateError}>
+              <Input
+                id={customDateId}
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  setCustomDate(e.target.value)
+                  setCustomDateError('')
+                }}
+              />
+            </Field>
           )}
-          <label className="flex items-center gap-2 text-sm text-brand-muted">
-            <input type="checkbox" checked={complimentary} onChange={(e) => setComplimentary(e.target.checked)} className="rounded border-brand-border" />
-            Complimentary (no charge)
-          </label>
-          <label className="flex items-center gap-2 text-sm text-brand-muted">
-            <input type="checkbox" checked={replacesFree} onChange={(e) => setReplacesFree(e.target.checked)} className="rounded border-brand-border" />
-            Replace existing free membership
-          </label>
+          <Choice
+            checked={complimentary}
+            onChange={(e) => setComplimentary(e.target.checked)}
+            label="Complimentary (no charge)"
+          />
+          <Choice
+            checked={replacesFree}
+            onChange={(e) => setReplacesFree(e.target.checked)}
+            label="Replace existing free membership"
+          />
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleAssign}
@@ -211,22 +216,15 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
               {editingId === m.id ? (
                 <div className="space-y-2">
                   <div className="font-semibold text-sm text-brand-blue-dark">{tierName(m)}</div>
-                  <div>
-                    <label className="block text-xs text-brand-muted-soft mb-1">Expiry</label>
-                    <input type="date" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)}
-                      className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-brand-muted-soft mb-1">Status</label>
-                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}
-                      className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                  <Field label="Expiry" labelSize="small">
+                    <Input type="date" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)} />
+                  </Field>
+                  <Field label="Status" labelSize="small">
+                    <Select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
                       {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm text-brand-muted">
-                    <input type="checkbox" checked={editComp} onChange={(e) => setEditComp(e.target.checked)} className="rounded border-brand-border" />
-                    Complimentary
-                  </label>
+                    </Select>
+                  </Field>
+                  <Choice checked={editComp} onChange={(e) => setEditComp(e.target.checked)} label="Complimentary" />
                   <div className="flex gap-2 pt-0.5">
                     <button onClick={() => saveEdit(m.id)} disabled={busy}
                       className="inline-flex items-center gap-1 bg-brand-blue text-white px-2.5 py-1 rounded-md text-xs font-medium hover:bg-brand-blue-dark disabled:opacity-50">
@@ -243,14 +241,14 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-brand-blue-dark">{tierName(m)}</span>
-                      <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_CLS[m.renewal_status] ?? 'bg-brand-hairline text-brand-muted-soft'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${STATUS_CLS[m.renewal_status] ?? 'bg-brand-hairline text-brand-muted-soft'}`}>
                         {m.renewal_status}
                       </span>
                     </div>
                     <p className="text-xs text-brand-muted-soft mt-0.5">
                       {fmt(m.started_at)} → {fmt(m.expires_at)}
                     </p>
-                    <p className="text-[11px] text-brand-muted-soft mt-0.5">
+                    <p className="text-xs text-brand-muted-soft mt-0.5">
                       {SOURCE_LABEL[m.source ?? ''] ?? m.source ?? '—'}
                       {m.is_complimentary ? ' · Complimentary' : ''}
                     </p>

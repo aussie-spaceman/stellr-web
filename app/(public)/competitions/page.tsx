@@ -173,6 +173,10 @@ const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
   innovator: { badge: 'Best Value', featured: true },
 }
 
+// Static, refreshed hourly. Tier prices come from a cache that a Stripe price
+// edit can bust (lib/tier-pricing.ts), which refreshes this page with it.
+export const revalidate = 3600
+
 export default async function CompetitionsPage() {
   // The series nodes describe themselves from the events that make them up —
   // dates, venues and the real fee range — so `EventSeries`, which Google
@@ -253,7 +257,7 @@ export default async function CompetitionsPage() {
             <span className="font-subheading font-semibold uppercase tracking-[0.06em] text-xs text-brand-orange shrink-0">
               The output
             </span>
-            <span className="text-base text-hero-lead leading-relaxed flex-1 min-w-[280px]">
+            <span className="text-base text-hero-lead leading-relaxed flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[280px]">
               Every team produces a <strong className="text-white">deliverable</strong> — a written
               proposal or a live presentation — assessed against an industry-style marking rubric.
             </span>
@@ -264,7 +268,7 @@ export default async function CompetitionsPage() {
             <span className="font-subheading font-semibold uppercase tracking-[0.06em] text-xs text-primary shrink-0">
               STEM Power Skills
             </span>
-            <span className="text-base text-content-secondary leading-relaxed flex-1 min-w-[280px]">
+            <span className="text-base text-content-secondary leading-relaxed flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[280px]">
               Beyond the engineering, students build the{' '}
               <strong className="text-ink">soft skills industry hires for</strong> — communication,
               teamwork, project management and presenting under pressure.
@@ -366,7 +370,7 @@ export default async function CompetitionsPage() {
       {/* ── Step 3 — See what's included ──────────────────────────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <SectionHeading step="STEP 3" stepClassName="text-enviro-green" title={<>See what&rsquo;s included</>} className="mb-2" />
+          <SectionHeading step="STEP 3" stepClassName="text-enviro-green-text" title={<>See what&rsquo;s included</>} className="mb-2" />
           <p className="text-lg text-content-secondary max-w-3xl leading-relaxed">
             Core material is, and always will be, <strong className="text-ink">free</strong>. Unlock your
             membership — by participating in a competition — to gather the tools and resources to succeed.

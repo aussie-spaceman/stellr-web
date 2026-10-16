@@ -63,15 +63,17 @@ const socialLinks = [
 function CopyrightBar() {
   return (
     <div className="border-t border-white/[0.08]">
-      <div className="mx-auto max-w-chrome px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-[#5A6490] font-sans">
+      <div className="mx-auto max-w-chrome px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-hero-muted font-sans">
         <span>
           2026 © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3) · EIN {STELLR_EIN}&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe
         </span>
-        <span className="flex items-center gap-5">
-          <Link href="/privacy" className="hover:text-hero-lead transition-colors">Privacy Policy</Link>
-          <Link href="/terms" className="hover:text-hero-lead transition-colors">Terms of Use</Link>
-          <CookieSettingsLink className="hover:text-hero-lead transition-colors" />
-          <a href="mailto:hello@stellreducation.org" className="hover:text-hero-lead transition-colors">
+        {/* Wraps on narrow phones: unwrapped, this row was ~363px wide and made
+            every page scroll sideways at 320px. */}
+        <span className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 sm:justify-end">
+          <Link href="/privacy" className="inline-flex min-h-6 items-center hover:text-hero-lead transition-colors">Privacy Policy</Link>
+          <Link href="/terms" className="inline-flex min-h-6 items-center hover:text-hero-lead transition-colors">Terms of Use</Link>
+          <CookieSettingsLink className="inline-flex min-h-6 items-center hover:text-hero-lead transition-colors" />
+          <a href="mailto:hello@stellreducation.org" className="inline-flex min-h-6 items-center break-all hover:text-hero-lead transition-colors">
             hello@stellreducation.org
           </a>
         </span>
@@ -116,10 +118,11 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <div className="inline-block mb-5 bg-white rounded-[14px] p-[18px_22px]">
               <Image
-                src="/images/logo-horiz-tight.svg"
+                src="/images/logo-horiz.png"
                 alt="Stellr Education"
-                width={120}
-                height={40}
+                width={960}
+                height={318}
+                sizes="103px"
                 className="h-[34px] w-auto block"
               />
             </div>
@@ -129,7 +132,8 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
               professionals with the skills, relationships, and career pathways they need.
             </p>
 
-            <div className="flex gap-4 text-[#5A6490]">
+            {/* 44px hit areas around 18px icons (they were 18×18 targets). */}
+            <div className="-mx-3 flex gap-1 text-hero-muted">
               {socialLinks.map(({ icon: Icon, label, href }) => (
                 <a
                   key={label}
@@ -137,9 +141,9 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
                   aria-label={label}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#5A6490] inline-flex transition-colors hover:text-hero-dim"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-hero-muted transition-colors hover:text-hero-dim"
                 >
-                  <Icon size={18} />
+                  <Icon size={18} aria-hidden />
                 </a>
               ))}
             </div>

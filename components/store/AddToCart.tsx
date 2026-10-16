@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import Link from 'next/link'
 import { ShoppingCart, Check } from 'lucide-react'
+import { Field, Input, Select } from '@stellr/web-ui'
 import { addToCart } from '@/lib/store/cart-client'
 
 interface Variant {
@@ -27,6 +28,7 @@ export function AddToCart({
   const [variantId, setVariantId] = useState(active[0]?.id ?? '')
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
+  const qtyId = useId()
 
   const selected = active.find((v) => v.id === variantId) ?? active[0]
 
@@ -56,31 +58,31 @@ export function AddToCart({
       </div>
 
       {active.length > 1 && (
-        <div>
-          <label className="mb-1 block text-sm font-medium text-content-body">Option</label>
-          <select
-            value={variantId}
-            onChange={(e) => setVariantId(e.target.value)}
-            className="w-full rounded-md border border-line px-3 py-2 text-sm"
-          >
+        <Field label="Option">
+          <Select value={variantId} onChange={(e) => setVariantId(e.target.value)}>
             {active.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.label ?? 'Default'} — ${(v.market_price_cents / 100).toFixed(2)}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
       )}
 
       <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-content-body">Qty</label>
-        <input
-          type="number"
-          min={1}
-          value={qty}
-          onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-          className="w-20 rounded-md border border-line px-3 py-2 text-sm"
-        />
+        <label htmlFor={qtyId} className="font-subheading text-sm font-medium text-content-body">
+          Qty
+        </label>
+        <div className="w-20">
+          <Input
+            id={qtyId}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={qty}
+            onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
+import { Select } from '@stellr/web-ui'
 
 export interface ModuleRef {
   id: string
@@ -31,6 +32,7 @@ export default function GatesManager({
   // rather than listing every module at once. Other modules remain available as
   // prerequisite options in the picker below.
   const [selectedId, setSelectedId] = useState(modules[0]?.id ?? '')
+  const courseSelectId = useId()
   const titleOf = (id: string) => modules.find((m) => m.id === id)?.title ?? id
 
   async function addPrereq(targetRef: string, requiresRef: string) {
@@ -81,35 +83,34 @@ export default function GatesManager({
       {/* Per-course scope banner — mirrors the Reminders tab selector. */}
       <div className="rounded-2xl border p-4" style={{ borderColor: '#CFE0FB', background: '#EFF3FE' }}>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm font-semibold text-brand-blue-bright">Prerequisites for course</label>
-          <select
-            value={selected.id}
-            onChange={(e) => setSelectedId(e.target.value)}
-            className="rounded-lg border border-brand-border bg-white px-3 py-2 text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
-          >
-            {modules.map((m) => (
-              <option key={m.id} value={m.id}>{m.title}</option>
-            ))}
-          </select>
+          <label htmlFor={courseSelectId} className="text-sm font-semibold text-brand-blue-bright">Prerequisites for course</label>
+          <div className="w-72 max-w-full">
+            <Select id={courseSelectId} value={selected.id} onChange={(e) => setSelectedId(e.target.value)} className="font-medium">
+              {modules.map((m) => (
+                <option key={m.id} value={m.id}>{m.title}</option>
+              ))}
+            </Select>
+          </div>
           {busy && <span className="text-xs text-brand-muted-soft">Saving…</span>}
         </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
         <div className="px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm font-medium text-brand-blue-dark">{selected.title}</span>
             <label className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
               On archive:
-              <select
-                value={persistence[selected.id] ?? 're_gate'}
-                onChange={(e) => setPersistence(selected.id, e.target.value)}
-                disabled={busy}
-                className="rounded border border-brand-border px-1.5 py-0.5 text-xs"
-              >
-                <option value="re_gate">re-gate</option>
-                <option value="keep_open">keep open</option>
-              </select>
+              <span className="w-36">
+                <Select
+                  value={persistence[selected.id] ?? 're_gate'}
+                  onChange={(e) => setPersistence(selected.id, e.target.value)}
+                  disabled={busy}
+                >
+                  <option value="re_gate">re-gate</option>
+                  <option value="keep_open">keep open</option>
+                </Select>
+              </span>
             </label>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -131,21 +132,23 @@ export default function GatesManager({
                 </button>
               </span>
             ))}
-            <select
-              value=""
-              onChange={(e) => addPrereq(selected.id, e.target.value)}
-              disabled={busy}
-              className="rounded border border-brand-border px-1.5 py-0.5 text-xs text-brand-muted"
-            >
-              <option value="">+ add prerequisite…</option>
-              {modules
-                .filter((o) => o.id !== selected.id && !mine.some((p) => p.requires_target_ref === o.id))
-                .map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.title}
-                  </option>
-                ))}
-            </select>
+            <div className="w-56 max-w-full">
+              <Select
+                value=""
+                onChange={(e) => addPrereq(selected.id, e.target.value)}
+                disabled={busy}
+                aria-label={`Add a prerequisite for ${selected.title}`}
+              >
+                <option value="">+ add prerequisite…</option>
+                {modules
+                  .filter((o) => o.id !== selected.id && !mine.some((p) => p.requires_target_ref === o.id))
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title}
+                    </option>
+                  ))}
+              </Select>
+            </div>
           </div>
         </div>
       </div>

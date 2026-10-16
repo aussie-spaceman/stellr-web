@@ -92,7 +92,7 @@ export default function MemberPicker({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full rounded-md border border-brand-border px-3 py-1.5 text-sm disabled:opacity-50"
+        className="w-full rounded-md border border-line-strong px-3 py-1.5 text-input mouse:text-sm disabled:opacity-50"
       />
       {open && (
         <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-brand-border bg-white py-1 shadow-lg">

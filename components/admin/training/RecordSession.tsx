@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Radio, X, AlertCircle, Play, Download } from 'lucide-react'
+import { Dialog } from '@stellr/web-ui'
 import { VideoRoom } from '@/components/video/VideoRoom'
 
 // Launches the JaaS/Jitsi recording room for a 'live' (Record) lesson, as host.
@@ -17,10 +18,10 @@ interface RoomConfig {
   configured: boolean
 }
 
-const STATUS_COPY: Record<string, { label: string; color: string }> = {
-  available: { label: 'Recording saved to this lesson', color: '#158463' },
-  pending: { label: 'Recording is processing…', color: '#B07A1E' },
-  none: { label: 'No recording yet', color: '#8A91AB' },
+const STATUS_COPY: Record<string, { label: string; className: string }> = {
+  available: { label: 'Recording saved to this lesson', className: 'text-enviro-green-text' },
+  pending: { label: 'Recording is processing…', className: 'text-gold-ink' },
+  none: { label: 'No recording yet', className: 'text-content-faint' },
 }
 
 export function RecordSession({
@@ -90,7 +91,7 @@ export function RecordSession({
         >
           <Radio className="h-4 w-4" /> {loading ? 'Starting…' : 'Launch recording session'}
         </button>
-        <span className="text-xs font-medium" style={{ color: status.color }}>
+        <span className={`text-xs font-medium ${status.className}`}>
           {status.label}
         </span>
         {recordingStatus === 'available' && recordingUrl && (
@@ -118,39 +119,47 @@ export function RecordSession({
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
-      {open && config && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/80 p-4">
-          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-2xl bg-[#0E1330]">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-              <div className="flex items-center gap-2 text-white">
-                <Radio className="h-4 w-4" />
-                <span className="text-sm font-semibold">Recording session (host)</span>
-                {!config.configured && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-medium text-amber-200">
-                    <AlertCircle className="h-3 w-3" /> Dev room — recording capture needs JaaS configured
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
-              >
-                <X className="h-4 w-4" />{' '}End &amp; close
-              </button>
-            </div>
-            <VideoRoom
-              scriptSrc={config.scriptSrc}
-              domain={config.domain}
-              roomName={config.roomName}
-              jwt={config.jwt}
-              displayName={config.displayName}
-              isHost
-              autoRecord={config.configured}
-              className="w-full flex-1 bg-black"
-            />
-          </div>
-        </div>
-      )}
+      {/* Not dismissible: Escape or a stray tap on the scrim would drop the host
+          out of a recording. "End & close" is the one way out. The panel takes
+          the full height so the room gets as much of the screen as it can. */}
+      <Dialog
+        open={open && config !== null}
+        onClose={() => setOpen(false)}
+        title="Recording session (host)"
+        description={
+          config && !config.configured ? (
+            <span className="inline-flex items-center gap-1 font-medium text-gold-ink">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Dev room — recording capture needs JaaS configured
+            </span>
+          ) : undefined
+        }
+        size="3xl"
+        dismissible={false}
+        className="h-[calc(100dvh-1rem)] sm:h-[calc(100dvh-2rem)]"
+        bodyClassName="flex flex-col"
+        footer={
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-control bg-ink px-4 text-sm font-semibold text-white hover:bg-midnight"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />{' '}End &amp; close
+          </button>
+        }
+      >
+        {config && (
+          <VideoRoom
+            scriptSrc={config.scriptSrc}
+            domain={config.domain}
+            roomName={config.roomName}
+            jwt={config.jwt}
+            displayName={config.displayName}
+            isHost
+            autoRecord={config.configured}
+            className="min-h-0 w-full flex-1 overflow-hidden rounded-control bg-black"
+          />
+        )}
+      </Dialog>
     </div>
   )
 }

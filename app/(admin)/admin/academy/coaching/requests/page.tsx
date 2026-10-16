@@ -17,11 +17,11 @@ export default async function AdminCoachingRequestsPage() {
   const suggestions = await suggestEligibilities(requests.filter((r) => r.status === 'pending').map((r) => r.memberId))
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminCoachingNav />
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Coaching requests</h1>
+          <h1 className="font-display text-[28px] font-bold text-ink">Coaching requests</h1>
           <span className="inline-flex items-center gap-2 rounded-pill bg-[#FDEFD6] px-3.5 py-1.5 text-[13px] font-bold text-brand-gold-ink">
             {pending} pending
           </span>

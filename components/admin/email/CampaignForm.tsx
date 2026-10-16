@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Choice, Field, Fieldset, Input, Select } from '@stellr/web-ui'
 import type { EmailTemplate, Tier, AudienceFilter } from './types'
 
 // Common lifecycle hooks app code can fire via fireCampaignEvent(eventKey, …).
@@ -78,8 +79,6 @@ export function CampaignForm({ templates, tiers }: { templates: EmailTemplate[];
     }
   }
 
-  const input = 'w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none'
-
   return (
     <form onSubmit={submit} className="rounded-xl border border-brand-border bg-white p-6 space-y-4">
       <h2 className="text-base font-semibold text-brand-blue-dark">New campaign</h2>
@@ -90,99 +89,101 @@ export function CampaignForm({ templates, tiers }: { templates: EmailTemplate[];
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} placeholder="June alumni welcome" className={input} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Template</label>
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} required className={input}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Name" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} placeholder="June alumni welcome" />
+        </Field>
+        <Field label="Template" required>
+          <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        </div>
+          </Select>
+        </Field>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-brand-muted mb-1">Trigger</label>
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" checked={triggerType === 'scheduled'} onChange={() => setTriggerType('scheduled')} /> Scheduled (one-time)
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" checked={triggerType === 'event'} onChange={() => setTriggerType('event')} /> Event-triggered
-          </label>
+      <Fieldset legend="Trigger">
+        <div className="flex flex-wrap gap-x-6">
+          <Choice
+            type="radio"
+            name="campaign-trigger"
+            label="Scheduled (one-time)"
+            checked={triggerType === 'scheduled'}
+            onChange={() => setTriggerType('scheduled')}
+          />
+          <Choice
+            type="radio"
+            name="campaign-trigger"
+            label="Event-triggered"
+            checked={triggerType === 'event'}
+            onChange={() => setTriggerType('event')}
+          />
         </div>
-      </div>
+      </Fieldset>
 
       {triggerType === 'scheduled' ? (
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Send at</label>
-          <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className={input} />
-          <p className="mt-1 text-xs text-brand-muted-soft">Dispatched on the next hourly cron tick after this time.</p>
-        </div>
+        <Field label="Send at" hint="Dispatched on the next hourly cron tick after this time.">
+          <Input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+        </Field>
       ) : (
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Event</label>
-          <select value={eventKey} onChange={(e) => setEventKey(e.target.value)} className={input}>
-            {EVENT_KEYS.map((k) => <option key={k.key} value={k.key}>{k.label} — {k.key}</option>)}
-          </select>
-          <p className="mt-1 text-xs text-brand-muted-soft">Sends to a member when app code fires this event (still filtered by the audience below).</p>
+        <div className="space-y-4">
+          <Field label="Event" hint="Sends to a member when app code fires this event (still filtered by the audience below).">
+            <Select value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
+              {EVENT_KEYS.map((k) => <option key={k.key} value={k.key}>{k.label} — {k.key}</option>)}
+            </Select>
+          </Field>
 
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Send after</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number" min={0} max={365} value={delayDays}
-                  onChange={(e) => setDelayDays(Math.max(0, Math.min(365, Number(e.target.value) || 0)))}
-                  className={`${input} w-24`}
-                />
-                <span className="text-sm text-brand-muted">days</span>
-              </div>
-              <p className="mt-1 text-xs text-brand-muted-soft">
-                {delayDays === 0
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field
+              label={<>Send after <span className="font-normal text-content-muted">(days)</span></>}
+              hint={
+                delayDays === 0
                   ? 'Sends immediately when the event fires.'
-                  : `Queued and sent ${delayDays} day${delayDays === 1 ? '' : 's'} later. Consent is re-checked at send time.`}
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Sequence <span className="font-normal text-brand-muted-soft">(optional)</span></label>
-              <input
-                value={sequenceKey} onChange={(e) => setSequenceKey(e.target.value)}
-                maxLength={100} placeholder="teacher-welcome" className={input}
+                  : `Queued and sent ${delayDays} day${delayDays === 1 ? '' : 's'} later. Consent is re-checked at send time.`
+              }
+            >
+              <Input
+                type="number" inputMode="numeric" min={0} max={365} value={delayDays}
+                onChange={(e) => setDelayDays(Math.max(0, Math.min(365, Number(e.target.value) || 0)))}
               />
-              <p className="mt-1 text-xs text-brand-muted-soft">Groups the emails of one drip together in the list.</p>
-            </div>
+            </Field>
+            <Field
+              label={<>Sequence <span className="font-normal text-content-muted">(optional)</span></>}
+              hint="Groups the emails of one drip together in the list."
+            >
+              <Input
+                value={sequenceKey} onChange={(e) => setSequenceKey(e.target.value)}
+                maxLength={100} placeholder="teacher-welcome"
+              />
+            </Field>
           </div>
         </div>
       )}
 
-      <div className="rounded-lg border border-brand-hairline bg-brand-canvas p-4 space-y-3">
-        <p className="text-sm font-medium text-brand-muted">Audience</p>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} /> Active members only
-        </label>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={excludeMinors} onChange={(e) => setExcludeMinors(e.target.checked)} /> Exclude minors (school students)
-        </label>
-        <div>
-          <p className="text-xs text-brand-muted-soft mb-1.5">Tiers (none selected = all tiers)</p>
-          <div className="flex flex-wrap gap-2">
-            {tiers.map((t) => (
-              <label key={t.id} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs cursor-pointer ${tierIds.includes(t.id) ? 'border-brand-border bg-brand-blue-dark text-white' : 'border-brand-border text-brand-muted'}`}>
-                <input type="checkbox" className="hidden" checked={tierIds.includes(t.id)} onChange={() => toggleTier(t.id)} />
-                {t.name}
-              </label>
-            ))}
+      {/* The box is a div, not the fieldset itself: a bordered fieldset draws its legend through the border. */}
+      <div className="rounded-lg border border-brand-hairline bg-brand-canvas p-4">
+        <Fieldset legend="Audience">
+          <Choice label="Active members only" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} />
+          <Choice label="Exclude minors (school students)" checked={excludeMinors} onChange={(e) => setExcludeMinors(e.target.checked)} />
+          <Fieldset legend="Tiers" hint="None selected = all tiers." className="pt-2">
+            <div className="flex flex-wrap gap-2">
+              {tiers.map((t) => (
+                <label
+                  key={t.id}
+                  className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3 py-1 text-xs cursor-pointer focus-within:ring-2 focus-within:ring-primary-deep/30 ${tierIds.includes(t.id) ? 'border-brand-border bg-brand-blue-dark text-white' : 'border-brand-border text-brand-muted'}`}
+                >
+                  {/* Visually hidden, not display:none, so the chip stays reachable by keyboard. */}
+                  <input type="checkbox" className="sr-only" checked={tierIds.includes(t.id)} onChange={() => toggleTier(t.id)} />
+                  {t.name}
+                </label>
+              ))}
+            </div>
+          </Fieldset>
+          <div className="flex items-center gap-3 pt-2">
+            <button type="button" onClick={previewCount} disabled={previewing} className="rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-muted hover:bg-white disabled:opacity-50">
+              {previewing ? 'Counting…' : 'Preview recipients'}
+            </button>
+            {count !== null && <span className="text-sm text-brand-muted"><strong>{count}</strong> member{count === 1 ? '' : 's'} (after consent suppression)</span>}
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={previewCount} disabled={previewing} className="rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-muted hover:bg-white disabled:opacity-50">
-            {previewing ? 'Counting…' : 'Preview recipients'}
-          </button>
-          {count !== null && <span className="text-sm text-brand-muted"><strong>{count}</strong> member{count === 1 ? '' : 's'} (after consent suppression)</span>}
-        </div>
+        </Fieldset>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

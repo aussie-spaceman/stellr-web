@@ -3,6 +3,7 @@ import type { LessonMedia as LessonMediaType } from '@/lib/training'
 import { VideoRoom } from '@/components/video/VideoRoom'
 import { FlagResourceButton } from '@/components/training/FlagResourceButton'
 import { InteractiveLessonHost } from '@/components/training/InteractiveLessonHost'
+import { PdfViewer } from '@/components/esign/PdfViewer'
 import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
 
 // Renders the featured media for a lesson inside the course-detail player surface.
@@ -78,8 +79,14 @@ export function LessonMedia({
   }
 
   if (media.type === 'document') {
-    // PDFs render natively in an iframe; Office documents (docx/pptx/xlsx) do not,
-    // so route those through the Google Docs viewer instead of showing a blank frame.
+    // A PDF in an iframe shows only page 1 on iOS and nothing at all on Android,
+    // so PDFs are drawn with pdf.js (the e-sign viewer), with its own "Open it
+    // as a PDF" link underneath as the fallback.
+    if (/\.pdf(\?|#|$)/i.test(media.url)) {
+      return <PdfViewer src={media.url} title={title} />
+    }
+    // Office documents (docx/pptx/xlsx) don't render in a frame either, so they
+    // go through the Google Docs viewer instead of showing a blank frame.
     const isOffice = /\.(docx?|pptx?|xlsx?)(\?|#|$)/i.test(media.url)
     const frameSrc = isOffice
       ? `https://docs.google.com/viewer?url=${encodeURIComponent(media.url)}&embedded=true`

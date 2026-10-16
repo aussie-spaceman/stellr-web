@@ -19,7 +19,7 @@ export default async function HostingPage() {
   if (!caps.canCoach && !caps.canMentor) {
     return (
       <div className="mx-auto max-w-lg text-center">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Hosting</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Hosting</h1>
         <p className="mt-2 text-sm text-brand-muted-soft">
           This area is for approved coaches and mentors.{' '}
           <a
@@ -52,7 +52,7 @@ export default async function HostingPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Hosting</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Hosting</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           {[caps.canCoach && 'Coach', caps.canMentor && 'Mentor'].filter(Boolean).join(' · ')} ·{' '}
           {completed} completed · {upcoming} upcoming
@@ -60,13 +60,13 @@ export default async function HostingPage() {
       </div>
 
       <section>
-        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Availability</h2>
+        <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">Availability</h2>
         <AvailabilityEditor windows={windows as Window[]} />
       </section>
 
       {caps.canMentor && (cohortRows ?? []).length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+          <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">
             Schedule a mentoring session
           </h2>
           <ScheduleMentoringForm cohorts={cohortRows ?? []} />
@@ -74,7 +74,7 @@ export default async function HostingPage() {
       )}
 
       <section>
-        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Your sessions</h2>
+        <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">Your sessions</h2>
         {sessions.length === 0 ? (
           <p className="text-sm text-brand-muted-soft">No sessions yet.</p>
         ) : (
@@ -115,7 +115,7 @@ export default async function HostingPage() {
         if (noted.length === 0) return null
         return (
           <section>
-            <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Session notes</h2>
+            <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">Session notes</h2>
             <ul className="space-y-2">
               {noted.map((s) => (
                 <li key={s.id} className="rounded-lg border border-brand-border bg-white p-3">

@@ -95,7 +95,7 @@ const VIEWER_ROLE_LABEL: Record<NonNullable<TeamRegistration['viewerRole']>, str
 
 function RoleBadge({ role }: { role: NonNullable<TeamRegistration['viewerRole']> }) {
   return (
-    <span className="inline-flex text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-brand-blue/5 text-brand-blue border border-brand-blue">
+    <span className="inline-flex text-xs uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-brand-blue/5 text-brand-blue border border-brand-blue">
       {VIEWER_ROLE_LABEL[role]}
     </span>
   )
@@ -743,7 +743,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
       {/* Teams joined as a participant */}
       {participations.length > 0 && (
         <div className="mt-8">
-          <h3 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">Teams I&apos;ve Joined</h3>
+          <h3 className="text-sm font-semibold text-brand-muted-soft mb-3">Teams I&apos;ve Joined</h3>
           <JoinedTeamsView
             participations={participations}
             onLeft={(pid) => setParticipations(prev => prev.filter(p => p.id !== pid))}

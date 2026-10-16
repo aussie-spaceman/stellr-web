@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Choice, Field, Fieldset, Input, Select } from '@stellr/web-ui'
 import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -273,12 +274,13 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/admin/members" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
+      {/* Stacks on phones: the action buttons in one row were about 460px wide. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <Link href="/admin/members" className="mb-1 inline-flex min-h-11 items-center text-sm text-brand-muted-soft hover:text-brand-muted">
             ← All members
           </Link>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">
+          <h1 className="break-words font-heading text-ds-h2 text-brand-blue-dark">
             {member.first_name} {member.last_name}
           </h1>
           {member.member_code && (
@@ -294,7 +296,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             </p>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {profileIncomplete && (
             <button
               onClick={handleSendInvite}
@@ -354,71 +356,56 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">{error}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Identity */}
+          {/* Identity — someone else's details, so autofill (the admin's own) is off throughout. */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Identity</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'First name', field: 'first_name' },
-                { label: 'Last name', field: 'last_name' },
-                { label: 'Email', field: 'email' },
-                { label: 'Phone', field: 'phone' },
-                { label: 'Discord handle', field: 'discord_handle' },
-                { label: 'T-shirt size', field: 'tshirt_size' },
-              ].map(({ label: lbl, field }) => (
-                <div key={field}>
-                  <label className="block text-xs text-brand-muted-soft mb-1">{lbl}</label>
-                  <input
-                    type="text"
-                    value={(form as Record<string, unknown>)[field] as string}
-                    onChange={(e) => set(field, e.target.value)}
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                  />
-                </div>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="First name">
+                <Input type="text" autoComplete="off" value={form.first_name} onChange={(e) => set('first_name', e.target.value)} />
+              </Field>
+              <Field label="Last name">
+                <Input type="text" autoComplete="off" value={form.last_name} onChange={(e) => set('last_name', e.target.value)} />
+              </Field>
+              <Field label="Email">
+                <Input type="email" autoComplete="off" value={form.email} onChange={(e) => set('email', e.target.value)} />
+              </Field>
+              <Field label="Phone">
+                <Input type="tel" autoComplete="off" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+              </Field>
+              <Field label="Discord handle">
+                <Input type="text" autoComplete="off" value={form.discord_handle} onChange={(e) => set('discord_handle', e.target.value)} />
+              </Field>
+              <Field label="T-shirt size">
+                <Input type="text" autoComplete="off" value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)} />
+              </Field>
             </div>
           </div>
 
           {/* Classification */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Classification</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Age bracket</label>
-                <select
-                  value={form.age_bracket}
-                  onChange={(e) => handleBracketChange(e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Age bracket">
+                <Select value={form.age_bracket} onChange={(e) => handleBracketChange(e.target.value)}>
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Event role</label>
-                <select
+                </Select>
+              </Field>
+              <Field label="Event role" hint={eligibleRoles.length <= 1 ? 'Auto-set by age bracket' : undefined}>
+                <Select
                   value={form.event_role}
                   onChange={(e) => set('event_role', e.target.value)}
                   disabled={eligibleRoles.length <= 1}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-brand-canvas disabled:text-brand-muted-soft"
                 >
                   {eligibleRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
-                </select>
-                {eligibleRoles.length <= 1 && (
-                  <p className="text-xs text-brand-muted-soft mt-1">Auto-set by age bracket</p>
-                )}
-              </div>
+                </Select>
+              </Field>
               {showGrade && (
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
-                  <select
-                    value={form.grade}
-                    onChange={(e) => set('grade', e.target.value)}
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                  >
+                <Field label="Grade / Year">
+                  <Select value={form.grade} onChange={(e) => set('grade', e.target.value)}>
                     <option value="">Select…</option>
                     {GRADES.filter((g) =>
                       form.age_bracket === 'high_school'
@@ -427,21 +414,16 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                     ).map((g) => (
                       <option key={g.value} value={g.value}>{g.label}</option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
               )}
-              <div className={`flex items-center gap-2 ${showGrade ? 'pt-5' : 'pt-1'}`}>
-                <input
-                  type="checkbox"
-                  id="auto_promote"
-                  checked={form.grade_auto_promote}
-                  onChange={(e) => set('grade_auto_promote', e.target.checked)}
-                  className="rounded border-brand-border"
-                />
-                <label htmlFor="auto_promote" className="text-sm text-brand-muted">
-                  Auto-promote grade annually
-                </label>
-              </div>
+              {/* Sits on the grade select's baseline when the two share a row. */}
+              <Choice
+                className={showGrade ? 'sm:self-end' : undefined}
+                checked={form.grade_auto_promote}
+                onChange={(e) => set('grade_auto_promote', e.target.checked)}
+                label="Auto-promote grade annually"
+              />
             </div>
 
             {/* Eligible membership tiers for this bracket/role */}
@@ -479,81 +461,62 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             <h2 className="text-base font-semibold text-brand-blue-dark">Ethnicity & Dietary</h2>
 
             {ethnicityOptions.length > 0 && (
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-2">
-                  Ethnicity <span className="text-brand-muted-soft">(select all that apply)</span>
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
+              <Fieldset legend={<>Ethnicity <span className="text-content-muted">(select all that apply)</span></>}>
+                <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                   {ethnicityOptions.map((opt) => (
-                    <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedEthnicities.includes(opt.id)}
-                        onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
-                        className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
-                      />
-                      {opt.name}
-                    </label>
+                    <Choice
+                      key={opt.id}
+                      checked={selectedEthnicities.includes(opt.id)}
+                      onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
+                      label={opt.name}
+                    />
                   ))}
                 </div>
-              </div>
+              </Fieldset>
             )}
 
             {allergyOptions.length > 0 && (
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-2">
-                  Dietary requirements / Allergies <span className="text-brand-muted-soft">(select all that apply)</span>
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
+              <Fieldset
+                legend={<>Dietary requirements / Allergies <span className="text-content-muted">(select all that apply)</span></>}
+              >
+                <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                   {allergyOptions.map((opt) => (
-                    <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedAllergies.includes(opt.id)}
-                        onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
-                        className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
-                      />
-                      {opt.name}
-                    </label>
+                    <Choice
+                      key={opt.id}
+                      checked={selectedAllergies.includes(opt.id)}
+                      onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
+                      label={opt.name}
+                    />
                   ))}
                 </div>
-              </div>
+              </Fieldset>
             )}
           </div>
 
           {/* Emergency contact */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'First name', field: 'ec_first_name' },
-                { label: 'Last name', field: 'ec_last_name' },
-                { label: 'Email', field: 'ec_email' },
-                { label: 'Phone', field: 'ec_phone' },
-              ].map(({ label: lbl, field }) => (
-                <div key={field}>
-                  <label className="block text-xs text-brand-muted-soft mb-1">{lbl}</label>
-                  <input
-                    type="text"
-                    value={(form as Record<string, unknown>)[field] as string}
-                    onChange={(e) => set(field, e.target.value)}
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                  />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
-                <select
-                  value={form.ec_relationship}
-                  onChange={(e) => set('ec_relationship', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="First name">
+                <Input type="text" autoComplete="off" value={form.ec_first_name} onChange={(e) => set('ec_first_name', e.target.value)} />
+              </Field>
+              <Field label="Last name">
+                <Input type="text" autoComplete="off" value={form.ec_last_name} onChange={(e) => set('ec_last_name', e.target.value)} />
+              </Field>
+              <Field label="Email">
+                <Input type="email" autoComplete="off" value={form.ec_email} onChange={(e) => set('ec_email', e.target.value)} />
+              </Field>
+              <Field label="Phone">
+                <Input type="tel" autoComplete="off" value={form.ec_phone} onChange={(e) => set('ec_phone', e.target.value)} />
+              </Field>
+              <Field label="Relationship to participant">
+                <Select value={form.ec_relationship} onChange={(e) => set('ec_relationship', e.target.value)}>
                   <option value="">Select…</option>
                   {['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher'].map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
           </div>
 
@@ -695,7 +658,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           </div>
 
           <div className="bg-white rounded-xl border border-brand-border p-5">
-            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">
+            <h2 className="text-sm font-semibold text-brand-muted-soft mb-3">
               School
             </h2>
             {currentSchool ? (
@@ -718,7 +681,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           </div>
 
           <div className="bg-white rounded-xl border border-brand-border p-5">
-            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">
+            <h2 className="text-sm font-semibold text-brand-muted-soft mb-3">
               Account
             </h2>
             <dl className="text-sm space-y-1.5">

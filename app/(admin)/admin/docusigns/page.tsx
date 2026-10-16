@@ -50,7 +50,7 @@ export default async function AdminDocusignsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Consent Forms</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Consent Forms</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
             Signed agreements for event participants, volunteers and members, from DocuSign and Stellr signing.
           </p>

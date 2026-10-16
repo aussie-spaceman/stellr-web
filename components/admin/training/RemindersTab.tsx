@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Bell, Mail, MessageSquare } from 'lucide-react'
+import { Select } from '@stellr/web-ui'
 
 // Per-course reminder & escalation settings with a live preview. Settings are
 // stored on the Course (training_modules); the selector scopes them to one course.
@@ -90,6 +91,7 @@ export function RemindersTab({ courses }: { courses: ReminderCourse[] }) {
     }
   )
   const [saving, setSaving] = useState(false)
+  const courseSelectId = useId()
 
   const selectCourse = (id: string) => {
     setCourseId(id)
@@ -141,16 +143,14 @@ export function RemindersTab({ courses }: { courses: ReminderCourse[] }) {
       {/* Per-course scope banner */}
       <div className="rounded-2xl border p-5" style={{ borderColor: '#CFE0FB', background: '#EFF3FE' }}>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm font-semibold text-brand-blue-bright">Settings for course</label>
-          <select
-            value={courseId}
-            onChange={(e) => selectCourse(e.target.value)}
-            className="rounded-lg border border-brand-border bg-white px-3 py-2 text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
-          >
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>{c.title}</option>
-            ))}
-          </select>
+          <label htmlFor={courseSelectId} className="text-sm font-semibold text-brand-blue-bright">Settings for course</label>
+          <div className="w-72 max-w-full">
+            <Select id={courseSelectId} value={courseId} onChange={(e) => selectCourse(e.target.value)} className="font-medium">
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </Select>
+          </div>
           {saving && <span className="text-xs text-brand-muted-soft">Saving…</span>}
         </div>
         <p className="mt-2 text-sm text-brand-muted-soft">Each course carries its own reminder &amp; escalation rules.</p>
@@ -195,7 +195,7 @@ export function RemindersTab({ courses }: { courses: ReminderCourse[] }) {
 
         {/* Live preview */}
         <div className="lg:sticky lg:top-20 lg:self-start">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Preview</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Preview</p>
           <div className="overflow-hidden rounded-2xl border border-brand-border bg-white">
             <div className="bg-gradient-to-br from-[#13183A] to-[#0E1330] px-5 py-4">
               <span className="font-heading text-sm font-bold tracking-wide text-white">STELLR</span>

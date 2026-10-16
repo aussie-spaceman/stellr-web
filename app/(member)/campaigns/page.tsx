@@ -47,7 +47,7 @@ export default async function MyCampaignsPage() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-xs font-bold uppercase tracking-[0.05em] text-pathway-amber">
+                  <span className="rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-xs font-bold uppercase tracking-[0.05em] text-gold-ink">
                     ✦ Campaign
                   </span>
                   <span className={`rounded-pill px-2 py-0.5 text-xs font-semibold ${meta.chip}`}>{meta.label}</span>

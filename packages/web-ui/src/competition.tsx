@@ -135,6 +135,9 @@ export type TierCardProps = {
   /** Solid CTA button (select mode). Colour defaults to the tier's contrast-safe fill. */
   cta?: { label: string; href?: string; onClick?: () => void; color?: string }
 }
+/** Feature rows shown before "Show more" on a phone. */
+const TIER_ITEMS_SHOWN = 5
+
 function SelectBody({
   role, roleColor, name, price, priceNote, resolvedShade,
 }: { role?: string; roleColor?: string; name: string; price: string; priceNote?: string; resolvedShade?: string }) {
@@ -142,7 +145,7 @@ function SelectBody({
     <>
       {role && (
         <p
-          className={cn('text-[11px] font-bold uppercase tracking-[0.08em] leading-[1.3] min-h-[14px] mb-[7px]', !roleColor && 'text-content-faint')}
+          className={cn('text-xs font-bold uppercase tracking-[0.08em] leading-[1.3] min-h-[14px] mb-[7px]', !roleColor && 'text-content-faint')}
           style={roleColor ? { color: roleColor } : undefined}
         >
           {role}
@@ -178,6 +181,9 @@ export function TierCard({
   const Wrapper = (!isSelect && onSelect != null ? 'button' : 'div') as React.ElementType
   const rootClickable = !isSelect && onSelect != null
   const ctaColor = cta?.color ?? (tier ? tierButtonColor(tier) : resolvedShade)
+  // The price is text (22px semibold is not "large" in WCAG terms), so it
+  // takes the tier's contrast-safe tone; the strip keeps the true shade.
+  const priceColor = shade ?? (tier ? tierButtonColor(tier) : undefined)
   const CtaTag = (cta?.href ? 'a' : 'button') as React.ElementType
 
   return (
@@ -203,7 +209,7 @@ export function TierCard({
       )}
 
       {badge && !isSelect && (
-        <div className="bg-primary text-white text-center text-[10.5px] font-bold uppercase tracking-[0.06em] py-1.5">{badge}</div>
+        <div className="bg-primary text-white text-center text-xs font-bold uppercase tracking-[0.06em] py-1.5">{badge}</div>
       )}
 
       {isSelect ? (
@@ -215,11 +221,11 @@ export function TierCard({
               aria-pressed={selected}
               className="text-left cursor-pointer px-[18px] pt-[21px] pb-[15px]"
             >
-              <SelectBody role={role} roleColor={roleColor} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
+              <SelectBody role={role} roleColor={roleColor} name={name} price={price} priceNote={priceNote} resolvedShade={priceColor} />
             </button>
           ) : (
             <div className="px-[18px] pt-[21px] pb-[15px]">
-              <SelectBody role={role} roleColor={roleColor} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
+              <SelectBody role={role} roleColor={roleColor} name={name} price={price} priceNote={priceNote} resolvedShade={priceColor} />
             </div>
           )}
           {cta && (
@@ -242,8 +248,8 @@ export function TierCard({
             <div className="flex justify-between items-baseline gap-2">
               <p className="font-bold text-ink">{name}</p>
               <p
-                className={cn('font-bold text-sm', !resolvedShade && (price === 'Free' ? 'text-enviro-green' : 'text-ink'))}
-                style={resolvedShade ? { color: resolvedShade } : undefined}
+                className={cn('font-bold text-sm', !priceColor && (price === 'Free' ? 'text-enviro-green-text' : 'text-ink'))}
+                style={priceColor ? { color: priceColor } : undefined}
               >
                 {price}
               </p>
@@ -252,11 +258,33 @@ export function TierCard({
           </div>
           <div className="px-5 pt-3.5 pb-5 flex flex-col gap-2.5">
             {inheritsFrom && (
-              <p className="text-[11.5px] font-bold uppercase tracking-wide text-content-faint">Everything in {inheritsFrom}, plus</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-content-faint">Everything in {inheritsFrom}, plus</p>
             )}
-            {(items ?? []).map((item) => (
+            {(items ?? []).slice(0, TIER_ITEMS_SHOWN).map((item) => (
               <p key={item} className="text-sm text-content-secondary leading-snug">{item}</p>
             ))}
+            {items && items.length > TIER_ITEMS_SHOWN && (
+              <>
+                {/* The rest: in the list from md, behind "Show more" on a phone
+                    (each tier's list ran to a screen of its own). */}
+                <div className="hidden md:contents">
+                  {items.slice(TIER_ITEMS_SHOWN).map((item) => (
+                    <p key={item} className="text-sm text-content-secondary leading-snug">{item}</p>
+                  ))}
+                </div>
+                <details className="group md:hidden">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm font-semibold text-primary-deep [&::-webkit-details-marker]:hidden">
+                    <span className="group-open:hidden">Show {items.length - TIER_ITEMS_SHOWN} more</span>
+                    <span className="hidden group-open:inline">Show fewer</span>
+                  </summary>
+                  <div className="flex flex-col gap-2.5">
+                    {items.slice(TIER_ITEMS_SHOWN).map((item) => (
+                      <p key={item} className="text-sm text-content-secondary leading-snug">{item}</p>
+                    ))}
+                  </div>
+                </details>
+              </>
+            )}
           </div>
           {cta && (
             <div className="px-5 pb-5 mt-auto">
@@ -288,23 +316,27 @@ export function ProgressionGraphic({ heading, note, nodes }: { heading: string; 
           <span className="text-xs font-bold uppercase tracking-[0.05em] text-brand-gold-ink bg-pathway-amber-bg rounded-full px-3 py-1">{note}</span>
         )}
       </div>
-      <div className="flex flex-wrap items-stretch gap-3">
+      {/* A column with down arrows on phones and small tablets, a row from md.
+          (Wrapping a row left arrows dangling at the ends of lines.) */}
+      <ol className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
         {nodes.map((node, i) => (
           <React.Fragment key={node.title}>
-            <div className={cn('flex-1 min-w-[160px] rounded-ds-card p-4', node.cardClass ?? 'bg-white border border-line')}>
+            <li className={cn('rounded-ds-card p-4 md:min-w-0 md:flex-1', node.cardClass ?? 'bg-white border border-line')}>
               <p className={cn('text-xs font-bold uppercase tracking-wide mb-1 flex items-center gap-1.5', node.labelClass)}>
                 {node.star && <Star />} {node.label}
               </p>
               <p className={cn('text-sm font-bold', node.titleClass ?? 'text-ink')}>{node.title}</p>
-            </div>
+            </li>
             {i < nodes.length - 1 && (
-              <div className="flex items-center text-content-faint">
-                <Arrow size={22} />
-              </div>
+              <li aria-hidden="true" className="flex items-center justify-center text-content-faint">
+                <span className="rotate-90 md:rotate-0">
+                  <Arrow size={22} />
+                </span>
+              </li>
             )}
           </React.Fragment>
         ))}
-      </div>
+      </ol>
     </div>
   )
 }

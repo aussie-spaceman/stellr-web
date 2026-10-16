@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { FieldValues, UseFormReset } from 'react-hook-form'
+import { hasSessionHint } from '@/lib/session-hint'
 
 export interface MemberPrefill {
   firstName: string
@@ -29,6 +30,9 @@ type PrefillGlobal = typeof globalThis & { [CACHE_KEY]?: Promise<PrefillResponse
 
 function loadPrefill(): Promise<PrefillResponse> {
   const g = globalThis as PrefillGlobal
+  // Anonymous visitors — most of the public site — have nothing to prefill, so
+  // they don't make the request at all.
+  if (!hasSessionHint()) return Promise.resolve({})
   if (!g[CACHE_KEY]) {
     g[CACHE_KEY] = fetch('/api/members/me/prefill', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : {}))

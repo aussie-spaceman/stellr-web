@@ -57,7 +57,7 @@ export default function PdCertificateArtwork({ theme }: { theme: 'space' | 'envi
   return (
     <div className="border-t border-brand-hairline pt-4 space-y-3">
       <div>
-        <h4 className="text-xs font-semibold text-brand-muted uppercase tracking-wide">
+        <h4 className="text-xs font-semibold text-brand-muted">
           Certificate artwork — {theme === 'environmental' ? 'Environmental' : 'Space'} events
         </h4>
         <p className="text-xs text-brand-muted-soft mt-1">
@@ -169,7 +169,7 @@ function FieldPositioner({ theme, initial, onSaved, onError }: {
           <label className="block text-xs text-brand-muted-soft space-y-1">
             <span>Sample name</span>
             <input
-              className="w-full rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark"
+              className="w-full rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm text-brand-blue-dark"
               value={sample}
               onChange={(e) => setSample(e.target.value)}
             />

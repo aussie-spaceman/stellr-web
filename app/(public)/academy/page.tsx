@@ -108,7 +108,7 @@ const formats = [
   },
   {
     Icon: Award,
-    headerBg: 'bg-[#E3F6F8]',
+    headerBg: 'bg-adult-teal/10',
     tileColor: 'text-avatar-teal',
     name: 'Coaching',
     featured: false,
@@ -117,8 +117,8 @@ const formats = [
     format: 'Private 1:1 sessions',
     guidance: 'One-on-one, tailored',
     accessLabel: 'Request, earn or buy',
-    accessText: 'text-[#0E8C99]',
-    accessBg: 'bg-[#E3F6F8]',
+    accessText: 'text-adult-teal-deep',
+    accessBg: 'bg-adult-teal/10',
     button: { label: 'Request a coaching session', href: '/academy/coaching/request', variant: 'softBlue' as const },
   },
 ]
@@ -303,7 +303,7 @@ export default function AcademyPage() {
             </div>
             {/* Earn it — featured */}
             <div className="relative flex flex-col rounded-panel bg-[#1B2454] border-[1.5px] border-space-violet p-7 shadow-[0_0_0_4px_rgba(124,92,252,0.12)]">
-              <span className="absolute -top-3 left-6 rounded-full bg-space-violet text-white text-[10.5px] font-bold uppercase tracking-wide px-3 py-1">
+              <span className="absolute -top-3 left-6 rounded-full bg-space-violet text-white text-xs font-bold uppercase tracking-wide px-3 py-1">
                 The big one
               </span>
               <p className="text-xs font-subheading font-bold uppercase tracking-[0.12em] text-[#C3B6FF]">Earn it</p>
@@ -347,7 +347,7 @@ export default function AcademyPage() {
                   </span>
                   <span className="font-bold text-ink text-lg flex-1">{f.name}</span>
                   {f.badge && (
-                    <span className="rounded-full bg-space-violet text-white text-[10.5px] font-bold uppercase tracking-wide px-2.5 py-1">
+                    <span className="rounded-full bg-space-violet text-white text-xs font-bold uppercase tracking-wide px-2.5 py-1">
                       {f.badge}
                     </span>
                   )}
@@ -391,7 +391,7 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Training deep-dive ────────────────────────────────────────── */}
-      <section id="training" className="section-padding bg-surface border-t border-line-light scroll-mt-24">
+      <section id="training" className="section-padding bg-surface border-t border-line-light">
         <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-16 items-start">
           <div>
             <Eyebrow>Training</Eyebrow>
@@ -429,7 +429,7 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Mentoring deep-dive ───────────────────────────────────────── */}
-      <section id="mentoring" className="section-padding bg-white scroll-mt-24">
+      <section id="mentoring" className="section-padding bg-white">
         <div className="container-max">
           <div className="max-w-3xl">
             <Eyebrow className="text-space-violet">Mentoring</Eyebrow>
@@ -460,10 +460,10 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Coaching deep-dive ────────────────────────────────────────── */}
-      <section id="coaching" className="section-padding bg-surface border-t border-line-light scroll-mt-24">
+      <section id="coaching" className="section-padding bg-surface border-t border-line-light">
         <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-16 items-start">
           <div>
-            <Eyebrow className="text-[#0E8C99]">Coaching</Eyebrow>
+            <Eyebrow className="text-adult-teal-deep">Coaching</Eyebrow>
             <h2 className="text-3xl font-bold text-ink mt-3">One-on-one, tailored to you</h2>
             <p className="text-content-secondary mt-4 leading-relaxed">
               Coaching is private and personal — a professional matched to your goals, working with you

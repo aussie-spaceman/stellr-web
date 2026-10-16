@@ -85,7 +85,7 @@ export function AvatarStack({
         ))}
       </div>
       {!!extra && extra > 0 && (
-        <span className="ml-2 text-[11.5px] text-brand-muted-soft">
+        <span className="ml-2 text-xs text-brand-muted-soft">
           +{extra} {label}
         </span>
       )}

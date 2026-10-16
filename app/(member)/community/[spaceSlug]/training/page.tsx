@@ -122,7 +122,7 @@ export default async function SpaceTrainingPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="font-heading text-[16px] text-brand-blue-dark">{c.title}</h2>
                         <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-[0.05em]"
+                          className="rounded-full px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-[0.05em]"
                           style={
                             c.mandatory
                               ? { background: '#FBEAEA', color: '#C0392B' }
@@ -133,14 +133,14 @@ export default async function SpaceTrainingPage({
                         </span>
                         {c.mandatory && c.dueAt && (
                           <span
-                            className="rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-[0.05em]"
+                            className="rounded-full px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-[0.05em]"
                             style={{ background: '#FFF4E0', color: '#B4740A' }}
                           >
                             Due {formatDateShort(c.dueAt)}
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-[11px] font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">{tierNote}</p>
+                      <p className="mt-1 text-xs font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">{tierNote}</p>
                       {c.description && <p className="mt-1 text-sm text-brand-muted">{c.description}</p>}
                     </div>
                     <span className="shrink-0 text-xs font-subheading font-semibold" style={{ color: statusColor }}>

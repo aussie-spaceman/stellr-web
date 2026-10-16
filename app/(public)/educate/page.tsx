@@ -74,7 +74,7 @@ export default function EducatePage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             STEM Skills for a Better Future
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed">
             Stellr educates the critical, so-called &ldquo;soft skills&rdquo; that the STEM fields
             desperately require — for students building careers, and for industries solving
             tomorrow&rsquo;s biggest challenges.

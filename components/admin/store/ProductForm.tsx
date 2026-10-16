@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Plus, Trash2, Download, Loader2 } from 'lucide-react'
+import { Choice, Field, Input, Select, Textarea } from '@stellr/web-ui'
 import type { ProductType, StoreProductWithVariants, StoreVariant } from '@/lib/store/types'
 
 const TYPES: ProductType[] = ['apparel', 'merch', 'sticker', 'digital']
@@ -47,23 +48,20 @@ function CreateForm() {
 
   return (
     <div className="max-w-md rounded-xl border border-brand-border bg-white p-5">
-      <label className="mb-1 block text-sm font-medium text-brand-muted">Name</label>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="mb-4 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
-        placeholder="e.g. Stellr 2026 Event Tee"
-      />
-      <label className="mb-1 block text-sm font-medium text-brand-muted">Type</label>
-      <select
-        value={type}
-        onChange={(e) => setType(e.target.value as ProductType)}
-        className="mb-4 w-full rounded-md border border-brand-border px-3 py-2 text-sm capitalize"
-      >
-        {TYPES.map((t) => (
-          <option key={t} value={t}>{t}</option>
-        ))}
-      </select>
+      <Field label="Name" className="mb-4">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Stellr 2026 Event Tee"
+        />
+      </Field>
+      <Field label="Type" className="mb-4">
+        <Select value={type} onChange={(e) => setType(e.target.value as ProductType)} className="capitalize">
+          {TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </Select>
+      </Field>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       <button
         onClick={create}
@@ -111,64 +109,49 @@ function EditForm({ product, printfulEnabled }: { product: StoreProductWithVaria
       {/* Details */}
       <section className="rounded-xl border border-brand-border bg-white p-5">
         <h2 className="mb-3 text-sm font-semibold text-brand-blue-dark">Details</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs text-brand-muted-soft">Name</label>
-            <input
-              value={details.name}
-              onChange={(e) => setDetails({ ...details, name: e.target.value })}
-              className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs text-brand-muted-soft">Description</label>
-            <textarea
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Name" labelSize="small" className="sm:col-span-2">
+            <Input value={details.name} onChange={(e) => setDetails({ ...details, name: e.target.value })} />
+          </Field>
+          <Field label="Description" labelSize="small" className="sm:col-span-2">
+            <Textarea
               value={details.description}
               onChange={(e) => setDetails({ ...details, description: e.target.value })}
               rows={3}
-              className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-brand-muted-soft">Type</label>
-            <select
+          </Field>
+          <Field label="Type" labelSize="small">
+            <Select
               value={details.product_type}
               onChange={(e) => setDetails({ ...details, product_type: e.target.value as ProductType })}
-              className="w-full rounded-md border border-brand-border px-3 py-2 text-sm capitalize"
+              className="capitalize"
             >
               {TYPES.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-brand-muted-soft">Status</label>
-            <select
+            </Select>
+          </Field>
+          <Field label="Status" labelSize="small">
+            <Select
               value={details.status}
               onChange={(e) => setDetails({ ...details, status: e.target.value as typeof details.status })}
-              className="w-full rounded-md border border-brand-border px-3 py-2 text-sm capitalize"
+              className="capitalize"
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-brand-muted">
-            <input
-              type="checkbox"
-              checked={details.is_event_shirt}
-              onChange={(e) => setDetails({ ...details, is_event_shirt: e.target.checked })}
-            />
-            Eligible as an event&apos;s included shirt
-          </label>
-          <label className="flex items-center gap-2 text-sm text-brand-muted">
-            <input
-              type="checkbox"
-              checked={details.featured}
-              onChange={(e) => setDetails({ ...details, featured: e.target.checked })}
-            />
-            Featured in storefront
-          </label>
+            </Select>
+          </Field>
+          <Choice
+            label="Eligible as an event's included shirt"
+            checked={details.is_event_shirt}
+            onChange={(e) => setDetails({ ...details, is_event_shirt: e.target.checked })}
+          />
+          <Choice
+            label="Featured in storefront"
+            checked={details.featured}
+            onChange={(e) => setDetails({ ...details, featured: e.target.checked })}
+          />
         </div>
         <button
           onClick={saveDetails}
@@ -248,30 +231,37 @@ function VariantsSection({
     <section className="rounded-xl border border-brand-border bg-white p-5">
       <h2 className="mb-3 text-sm font-semibold text-brand-blue-dark">Variants</h2>
       <div className="space-y-2">
-        {variants.map((v) => (
+        {/* A row of compact fields: each one is named by aria-label, numbered by row. */}
+        {variants.map((v, i) => (
           <div key={v.id} className="flex flex-wrap items-center gap-2">
-            <input
-              value={v.sku}
-              onChange={(e) => patch(v.id, { sku: e.target.value })}
-              className="w-40 rounded-md border border-brand-border px-2 py-1 text-sm"
-              placeholder="SKU"
-            />
-            <input
-              value={v.label ?? ''}
-              onChange={(e) => patch(v.id, { label: e.target.value })}
-              className="w-40 rounded-md border border-brand-border px-2 py-1 text-sm"
-              placeholder="Label (e.g. Black / L)"
-            />
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-brand-muted-soft">$</span>
-              <input
-                value={dollars(v.market_price_cents)}
-                onChange={(e) => patch(v.id, { market_price_cents: toCents(e.target.value) })}
-                className="w-24 rounded-md border border-brand-border px-2 py-1 text-sm"
-                inputMode="decimal"
+            <div className="w-40">
+              <Input
+                value={v.sku}
+                onChange={(e) => patch(v.id, { sku: e.target.value })}
+                placeholder="SKU"
+                aria-label={`Variant ${i + 1} SKU`}
               />
             </div>
-            {v.pod_sync_variant_id && <span className="text-[11px] text-brand-blue">Printful</span>}
+            <div className="w-40">
+              <Input
+                value={v.label ?? ''}
+                onChange={(e) => patch(v.id, { label: e.target.value })}
+                placeholder="Label (e.g. Black / L)"
+                aria-label={`Variant ${i + 1} label`}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-brand-muted-soft" aria-hidden="true">$</span>
+              <div className="w-24">
+                <Input
+                  value={dollars(v.market_price_cents)}
+                  onChange={(e) => patch(v.id, { market_price_cents: toCents(e.target.value) })}
+                  inputMode="decimal"
+                  aria-label={`Variant ${i + 1} price in dollars`}
+                />
+              </div>
+            </div>
+            {v.pod_sync_variant_id && <span className="text-xs text-brand-blue">Printful</span>}
             <button
               onClick={() => saveVariant(v)}
               className="rounded-md border border-brand-border px-2 py-1 text-xs text-brand-muted hover:bg-brand-canvas"
@@ -287,11 +277,17 @@ function VariantsSection({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-brand-hairline pt-4">
-        <input value={newSku} onChange={(e) => setNewSku(e.target.value)} placeholder="New SKU" className="w-40 rounded-md border border-brand-border px-2 py-1 text-sm" />
-        <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Label" className="w-40 rounded-md border border-brand-border px-2 py-1 text-sm" />
+        <div className="w-40">
+          <Input value={newSku} onChange={(e) => setNewSku(e.target.value)} placeholder="New SKU" aria-label="New variant SKU" />
+        </div>
+        <div className="w-40">
+          <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Label" aria-label="New variant label" />
+        </div>
         <div className="flex items-center gap-1">
-          <span className="text-sm text-brand-muted-soft">$</span>
-          <input value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="0.00" inputMode="decimal" className="w-24 rounded-md border border-brand-border px-2 py-1 text-sm" />
+          <span className="text-sm text-brand-muted-soft" aria-hidden="true">$</span>
+          <div className="w-24">
+            <Input value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="0.00" inputMode="decimal" aria-label="New variant price in dollars" />
+          </div>
         </div>
         <button
           onClick={addVariant}
@@ -371,18 +367,16 @@ function PrintfulSection({
         </button>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="rounded-md border border-brand-border px-3 py-1.5 text-sm"
-          >
-            <option value="">Select a Printful product…</option>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} ({o.variants})
-              </option>
-            ))}
-          </select>
+          <div className="w-full sm:w-72">
+            <Select value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Printful product">
+              <option value="">Select a Printful product…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} ({o.variants})
+                </option>
+              ))}
+            </Select>
+          </div>
           <button
             onClick={importVariants}
             disabled={busy || !selected}

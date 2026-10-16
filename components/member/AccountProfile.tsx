@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { Choice, Field, Fieldset, Input, Select, Textarea } from '@stellr/web-ui'
 import { EMERGENCY_RELATIONSHIPS } from '@/lib/registration-constants'
 
 interface Member {
@@ -119,7 +120,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-6">
+    <div className="bg-white rounded-xl border border-brand-border p-4 sm:p-6">
       <div className="flex items-center gap-4 mb-6">
         {(clerkUser?.imageUrl || member.profile_photo_url) && (
           <Image
@@ -127,10 +128,12 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
             alt={member.first_name}
             width={56}
             height={56}
-            className="rounded-full object-cover"
+            className="shrink-0 rounded-full object-cover"
           />
         )}
-        <div>
+        {/* min-w-0 + anywhere-wrapping: an email has no break points and
+            pushed /account sideways on a 320px phone. */}
+        <div className="min-w-0 [overflow-wrap:anywhere]">
           <h2 className="text-lg font-semibold text-brand-blue-dark">
             {member.first_name} {member.last_name}
             {member.nickname && (
@@ -141,7 +144,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm mb-6">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm mb-6 min-[400px]:grid-cols-2">
         <div>
           <dt className="text-brand-muted-soft">Role</dt>
           <dd className="font-medium text-brand-blue-dark capitalize">
@@ -171,129 +174,89 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
       <div className="space-y-5 border-t border-brand-hairline pt-5">
         <h3 className="text-sm font-medium text-brand-muted">Editable details</h3>
 
-        <div>
-          <label className="block text-xs text-brand-muted-soft mb-1">Nickname</label>
-          <input
+        {/* The member's own details: autocomplete tokens let the browser fill them (WCAG 1.3.5). */}
+        <Field label="Nickname">
+          <Input
             type="text"
+            autoComplete="nickname"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             placeholder="What you'd like to be called"
-            className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
-        </div>
+        </Field>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
-            <input
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Phone">
+            <Input
               type="tel"
+              autoComplete="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">Discord handle</label>
-            <input
+          </Field>
+          <Field label="Discord handle">
+            <Input
               type="text"
+              autoComplete="off"
               value={discord}
               onChange={(e) => setDiscord(e.target.value)}
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
-          </div>
+          </Field>
         </div>
 
         {/* Ethnicity */}
         {ethnicityOptions.length > 0 && (
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-2">
-              Ethnicity <span className="text-brand-muted-soft">(select all that apply)</span>
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
+          <Fieldset legend={<>Ethnicity <span className="text-content-muted">(select all that apply)</span></>}>
+            <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
               {ethnicityOptions.map((opt) => (
-                <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedEthnicities.includes(opt.id)}
-                    onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
-                    className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
-                  />
-                  {opt.name}
-                </label>
+                <Choice
+                  key={opt.id}
+                  checked={selectedEthnicities.includes(opt.id)}
+                  onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
+                  label={opt.name}
+                />
               ))}
             </div>
-          </div>
+          </Fieldset>
         )}
 
         {/* Allergies / Dietary */}
         {allergyOptions.length > 0 && (
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-2">
-              Dietary requirements / Allergies <span className="text-brand-muted-soft">(select all that apply)</span>
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
+          <Fieldset
+            legend={<>Dietary requirements / Allergies <span className="text-content-muted">(select all that apply)</span></>}
+          >
+            <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
               {allergyOptions.map((opt) => (
-                <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedAllergies.includes(opt.id)}
-                    onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
-                    className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
-                  />
-                  {opt.name}
-                </label>
+                <Choice
+                  key={opt.id}
+                  checked={selectedAllergies.includes(opt.id)}
+                  onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
+                  label={opt.name}
+                />
               ))}
             </div>
-          </div>
+          </Fieldset>
         )}
 
-        {/* Emergency contact — captured at registration, shown/editable here */}
+        {/* Emergency contact — captured at registration, shown/editable here.
+            Someone else's details, so no autofill of the member's own. */}
         <div className="border-t border-brand-hairline pt-5 space-y-4">
           <h3 className="text-sm font-medium text-brand-muted">Emergency contact</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">First name</label>
-              <input
-                type="text"
-                value={ecFirst}
-                onChange={(e) => setEcFirst(e.target.value)}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Last name</label>
-              <input
-                type="text"
-                value={ecLast}
-                onChange={(e) => setEcLast(e.target.value)}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Email</label>
-              <input
-                type="email"
-                value={ecEmail}
-                onChange={(e) => setEcEmail(e.target.value)}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
-              <input
-                type="tel"
-                value={ecPhone}
-                onChange={(e) => setEcPhone(e.target.value)}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Relationship to you</label>
-              <select
-                value={ecRelationship}
-                onChange={(e) => setEcRelationship(e.target.value)}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="First name">
+              <Input type="text" autoComplete="off" value={ecFirst} onChange={(e) => setEcFirst(e.target.value)} />
+            </Field>
+            <Field label="Last name">
+              <Input type="text" autoComplete="off" value={ecLast} onChange={(e) => setEcLast(e.target.value)} />
+            </Field>
+            <Field label="Email">
+              <Input type="email" autoComplete="off" value={ecEmail} onChange={(e) => setEcEmail(e.target.value)} />
+            </Field>
+            <Field label="Phone">
+              <Input type="tel" autoComplete="off" value={ecPhone} onChange={(e) => setEcPhone(e.target.value)} />
+            </Field>
+            <Field label="Relationship to you">
+              <Select value={ecRelationship} onChange={(e) => setEcRelationship(e.target.value)}>
                 <option value="">Select…</option>
                 {/* Keep a legacy/free-text value selectable even if it's not a current option */}
                 {(EMERGENCY_RELATIONSHIPS.includes(ecRelationship) || !ecRelationship
@@ -302,21 +265,19 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
                 ).map((rel) => (
                   <option key={rel} value={rel}>{rel}</option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
         </div>
 
         {/* Health conditions — captured at registration, shown/editable here */}
-        <div>
-          <label className="block text-xs text-brand-muted-soft mb-1">Health conditions</label>
-          <textarea
+        <Field label="Health conditions">
+          <Textarea
             value={healthConditions}
             onChange={(e) => setHealthConditions(e.target.value)}
             rows={2}
-            className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
-        </div>
+        </Field>
 
         {!readOnly && (
           <div className="flex items-center gap-3">

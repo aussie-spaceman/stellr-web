@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Field, Textarea } from '@stellr/web-ui'
 
 // Post-session controls for a coach/mentor (FR-COM-11/12): mark complete/cancel,
 // save notes, and set close-out actions for a member.
@@ -59,13 +60,9 @@ export function HostSessionControls({
       </div>
 
       <div>
-        <label className="text-xs font-medium text-brand-muted-soft">Session notes</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          className="mt-1 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
-        />
+        <Field label="Session notes" labelSize="small">
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </Field>
         <button
           onClick={() => call({ action: 'notes', sessionId, notes })}
           disabled={busy}
@@ -77,16 +74,14 @@ export function HostSessionControls({
 
       {memberId && (
         <div>
-          <label className="text-xs font-medium text-brand-muted-soft">
-            Set actions (one per line)
-          </label>
-          <textarea
-            value={actionsText}
-            onChange={(e) => setActionsText(e.target.value)}
-            rows={2}
-            placeholder="Watch the recording&#10;Draft your project brief"
-            className="mt-1 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
-          />
+          <Field label="Set actions (one per line)" labelSize="small">
+            <Textarea
+              value={actionsText}
+              onChange={(e) => setActionsText(e.target.value)}
+              rows={2}
+              placeholder="Watch the recording&#10;Draft your project brief"
+            />
+          </Field>
           <button
             onClick={() => {
               const titles = actionsText.split('\n').map((t) => t.trim()).filter(Boolean)

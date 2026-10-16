@@ -137,7 +137,7 @@ function Avatar({
   }
   return (
     <div
-      className={`${dim} mx-auto rounded-full bg-brand-grey-light flex items-center justify-center font-bold text-brand-grey-mid`}
+      className={`${dim} mx-auto rounded-full bg-brand-grey-light flex items-center justify-center font-bold text-content-muted`}
     >
       {name.charAt(0)}
     </div>
@@ -162,7 +162,7 @@ export default function AboutPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="About sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
+        className="sticky top-[var(--header-h)] z-30 bg-white border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {[
@@ -187,7 +187,7 @@ export default function AboutPage() {
       </nav>
 
       {/* ── #mission ─────────────────────────────────────────────────── */}
-      <section id="mission" className="section-padding bg-white scroll-mt-36">
+      <section id="mission" className="section-padding bg-white scroll-mt-14">
         <div className="container-max max-w-5xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">
             Our Mission
@@ -242,7 +242,7 @@ export default function AboutPage() {
               Our Vision
             </p>
             <h2 className="text-2xl sm:text-3xl font-bold mb-6">The Engineering Education Network</h2>
-            <ul className="space-y-3 text-content-faint leading-relaxed">
+            <ul className="space-y-3 text-hero-lead leading-relaxed">
               {[
                 'Develop careers through industry simulation competitions and events.',
                 'Provide future leaders the skills and tools they’ll need to solve tomorrow’s problems.',
@@ -273,7 +273,7 @@ export default function AboutPage() {
       </section>
 
       {/* ── #team ────────────────────────────────────────────────────── */}
-      <section id="team" className="section-padding bg-brand-grey-light scroll-mt-36">
+      <section id="team" className="section-padding bg-brand-grey-light scroll-mt-14">
         <div className="container-max text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Team and Board</p>
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>
@@ -287,8 +287,8 @@ export default function AboutPage() {
             />
             <div className="text-center mt-4">
               <h3 className="font-bold text-brand-blue-dark text-lg">{founder.name}</h3>
-              <p className="text-sm text-brand-grey-mid mt-0.5">{founder.role}</p>
-              <p className="text-sm text-brand-grey-mid mt-0.5">{founder.location}</p>
+              <p className="text-sm text-content-muted mt-0.5">{founder.role}</p>
+              <p className="text-sm text-content-muted mt-0.5">{founder.location}</p>
               <a
                 href={founder.linkedIn}
                 target="_blank"
@@ -319,7 +319,7 @@ export default function AboutPage() {
                   size="sm"
                 />
                 <h4 className="font-bold text-brand-blue-dark mt-4">{member.name}</h4>
-                <p className="text-xs text-brand-grey-mid mt-0.5">{member.location}</p>
+                <p className="text-xs text-content-muted mt-0.5">{member.location}</p>
                 {member.bio && (
                   <p className="text-xs text-brand-grey-dark mt-2 leading-relaxed text-left">
                     {member.bio}

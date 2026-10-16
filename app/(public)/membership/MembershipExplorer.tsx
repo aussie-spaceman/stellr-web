@@ -84,7 +84,7 @@ export default function MembershipExplorer({
       >
         <div className="max-w-[1180px] mx-auto">
           <p className="font-bold text-[13px] tracking-[.13em] uppercase text-star-gold mb-4">Membership</p>
-          <h1 className="font-display font-semibold text-[46px] leading-[1.05] tracking-[-0.025em] max-w-[720px] mb-3.5">
+          <h1 className="font-display font-semibold text-[46px] leading-[1.05] max-w-[720px] mb-3.5">
             You don&rsquo;t have to figure it out alone.
           </h1>
           <p className="text-[18px] leading-[1.55] text-[#B9C0D9] max-w-[640px] mb-[26px]">
@@ -103,7 +103,7 @@ export default function MembershipExplorer({
       <section className="bg-white" style={{ padding: '54px 24px' }}>
         <div className="max-w-[1180px] mx-auto">
           <p className="font-bold text-[13px] tracking-[.13em] uppercase mb-2.5" style={{ color: pal.base }}>What you get</p>
-          <h2 className="font-display font-semibold text-[30px] tracking-[-0.02em] text-ink mb-[26px] max-w-[640px]">
+          <h2 className="font-display font-semibold text-[30px] text-ink mb-[26px] max-w-[640px]">
             Your Stellr Membership gets you access to all the tools you need to kickstart your career
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -140,9 +140,11 @@ export default function MembershipExplorer({
                     onClick={() => selectAudience(id)}
                     aria-pressed={active}
                     className="cursor-pointer rounded-full px-[18px] py-2.5 text-[13.5px] font-semibold transition-colors"
+                    // The deep tone, not the base: the adults teal base is 2.5:1
+                    // under white text and on its own tint.
                     style={active
-                      ? { background: ap.base, color: '#fff', border: '1px solid transparent' }
-                      : { background: ap.tint, color: ap.base, border: '1px solid transparent' }}
+                      ? { background: ap.deep, color: '#fff', border: '1px solid transparent' }
+                      : { background: ap.tint, color: ap.deep, border: '1px solid transparent' }}
                   >
                     {AUDIENCES[id].switchLabel}
                   </button>
@@ -173,7 +175,7 @@ export default function MembershipExplorer({
               {/* educator: compact selectable cards feed the content waterfall */}
               <div className="flex flex-wrap gap-[13px]">
                 {audience.tiers.map((t) => (
-                  <div key={t.id} id={t.id} className="flex-1 basis-[200px] scroll-mt-24">
+                  <div key={t.id} id={t.id} className="flex-1 basis-[200px]">
                     <TierCard
                       tier={t.id}
                       role={t.role}
@@ -194,7 +196,7 @@ export default function MembershipExplorer({
                   </div>
                 ))}
               </div>
-              <div ref={detailRef} className="scroll-mt-24">
+              <div ref={detailRef}>
                 <Waterfall selIdx={selIdx} priceOf={priceOf} />
               </div>
             </>
@@ -202,7 +204,7 @@ export default function MembershipExplorer({
             /* school / college: every tier is a full perk-clarity card (Academy → Community → Store) */
             <div className="flex flex-wrap items-start gap-4">
               {audience.tiers.map((t, i) => (
-                <div key={t.id} id={t.id} className="flex-1 basis-[360px] max-w-[440px] scroll-mt-24">
+                <div key={t.id} id={t.id} className="flex-1 basis-[360px] max-w-[440px]">
                   <MembershipTierCard
                     tier={t}
                     audienceName={audience.name}
@@ -260,7 +262,7 @@ export default function MembershipExplorer({
       <section className="bg-surface" style={{ padding: '54px 24px' }}>
         <div className="max-w-[860px] mx-auto">
           <p className="font-bold text-[13px] tracking-[.13em] uppercase text-space-violet mb-2.5">FAQ</p>
-          <h2 className="font-display font-semibold text-[30px] tracking-[-0.02em] text-ink mb-6">Common questions</h2>
+          <h2 className="font-display font-semibold text-[30px] text-ink mb-6">Common questions</h2>
           <div className="flex flex-col gap-2.5">
             {FAQS.map((f, i) => {
               const open = openFaq === i
@@ -301,7 +303,7 @@ export default function MembershipExplorer({
         style={{ background: 'radial-gradient(120% 160% at 20% 120%, #1C2552 0%, #0E1330 60%)', padding: '64px 24px' }}
       >
         <div className="max-w-[860px] mx-auto">
-          <h2 className="font-display font-semibold text-[36px] leading-[1.1] tracking-[-0.025em] mb-3">Every level has a free tier. Start anywhere.</h2>
+          <h2 className="font-display font-semibold text-[36px] leading-[1.1] mb-3">Every level has a free tier. Start anywhere.</h2>
           <p className="text-[17px] leading-[1.55] text-[#B9C0D9] max-w-[600px] mx-auto mb-7">
             Explorer, Alumni and Educator are — and always will be — free. No credit card, no trial period.
             Upgrade when it makes sense for you.
@@ -349,7 +351,7 @@ function PerkBlock({
           {badge && <span className={`shrink-0 font-bold text-[12px] rounded-full px-[9px] py-[3px] ${badgeCls}`}>{badge}</span>}
         </div>
         {included && (
-          <span className="inline-block mt-[7px] font-bold text-[11px] tracking-[.05em] uppercase text-enviro-green-text bg-enviro-green-chip rounded-full px-2 py-[3px]">
+          <span className="inline-block mt-[7px] font-bold text-xs tracking-[.05em] uppercase text-enviro-green-text bg-enviro-green-chip rounded-full px-2 py-[3px]">
             Included
           </span>
         )}
@@ -409,8 +411,8 @@ function MembershipTierCard({
       {/* header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <span className="inline-block font-bold text-[11px] tracking-[.08em] uppercase rounded-full px-[11px] py-[6px]" style={{ color: accent, background: accentTint }}>{audienceName}</span>
-          <h3 className="font-display font-bold text-[30px] tracking-[-0.02em] text-ink mt-[14px]">{tier.name}</h3>
+          <span className="inline-block font-bold text-xs tracking-[.08em] uppercase rounded-full px-[11px] py-[6px]" style={{ color: accent, background: accentTint }}>{audienceName}</span>
+          <h3 className="font-display font-bold text-[30px] text-ink mt-[14px]">{tier.name}</h3>
         </div>
         <div className="text-right shrink-0">
           <p className="font-display font-bold text-[26px] text-primary leading-none">{price}</p>
@@ -423,7 +425,7 @@ function MembershipTierCard({
       <div className="flex flex-col gap-[9px]">
         {tier.get.map((gp) => (
           <div key={gp.text} className="flex gap-2.5 items-start">
-            <span className={`shrink-0 font-bold text-[11px] tracking-[.05em] uppercase rounded-control px-[9px] py-[5px] ${GET_CHIP[gp.kind].cls}`}>{GET_CHIP[gp.kind].label}</span>
+            <span className={`shrink-0 font-bold text-xs tracking-[.05em] uppercase rounded-control px-[9px] py-[5px] ${GET_CHIP[gp.kind].cls}`}>{GET_CHIP[gp.kind].label}</span>
             <span className="text-[14px] leading-[1.45] text-content-body pt-[3px]">{gp.text}</span>
           </div>
         ))}
@@ -455,10 +457,10 @@ function MembershipTierCard({
 
         <PerkBlock
           icon={<Award size={22} />}
-          tileCls="bg-pathway-amber-bg text-donate-gold"
+          tileCls="bg-pathway-amber-bg text-gold-ink"
           name="Store"
           badge={`${tier.store} off`}
-          badgeCls="text-donate-gold bg-pathway-amber-bg"
+          badgeCls="text-gold-ink bg-pathway-amber-bg"
         >
           {`${tier.store} off everything in the Stellr store, for as long as you're at this membership tier.`}
         </PerkBlock>
@@ -509,10 +511,10 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
       <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
         <div>
           <p className="font-bold text-[12px] tracking-[.1em] uppercase mb-[7px]" style={{ color: '#0E8C99' }}>Teacher content waterfall</p>
-          <h3 className="font-display font-semibold text-[24px] tracking-[-0.02em] text-ink mb-1">Each tier is everything before it — plus more</h3>
+          <h3 className="font-display font-semibold text-[24px] text-ink mb-1">Each tier is everything before it — plus more</h3>
         </div>
         <div className="rounded-xl px-4 py-3 text-right" style={{ background: '#E4F7F9', border: '1px solid #C2EBEF' }}>
-          <p className="font-bold text-[11px] tracking-[.06em] uppercase mb-1" style={{ color: '#0E7480' }}>Unlocked at {selName}</p>
+          <p className="font-bold text-xs tracking-[.06em] uppercase mb-1" style={{ color: '#0E7480' }}>Unlocked at {selName}</p>
           <p className="font-display font-bold text-[26px] text-ink leading-none">{wfTotal} <span className="text-[14px] font-semibold" style={{ color: '#2A8A94' }}>of {WATERFALL_TOTAL} benefits</span></p>
         </div>
       </div>
@@ -533,7 +535,7 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
               <div>
                 <div className="flex items-center gap-[9px] mb-[3px]">
                   <span className="font-display font-semibold text-[20px] text-ink">{row.name}</span>
-                  {row.isSelected && <span className="font-bold text-[9px] tracking-[.08em] uppercase text-white rounded px-[7px] py-1" style={{ background: shade }}>Viewing</span>}
+                  {row.isSelected && <span className="font-bold text-xs tracking-[.08em] uppercase text-white rounded px-[7px] py-1" style={{ background: shade }}>Viewing</span>}
                 </div>
                 <div className="flex items-baseline gap-1.5 mb-[13px]">
                   <span className="font-display font-bold text-[20px] text-ink">{priceOf(row.id)}</span>
@@ -560,7 +562,7 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
                     <div key={g.name}>
                       <div className="flex items-center gap-[7px] mb-[7px]">
                         <span className="w-[9px] h-[9px] rounded-[3px]" style={{ background: g.color }} />
-                        <span className="font-bold text-[11px] tracking-[.07em] uppercase text-content-secondary whitespace-nowrap">{g.name}</span>
+                        <span className="font-bold text-xs tracking-[.07em] uppercase text-content-secondary whitespace-nowrap">{g.name}</span>
                       </div>
                       <div className="flex flex-wrap gap-[7px]">
                         {g.items.map((it) => (

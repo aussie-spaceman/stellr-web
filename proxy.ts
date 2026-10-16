@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextFetchEvent, type NextRequest } from 'next/server'
 import { APP_HOST, SITE_URL } from '@/lib/env'
+import { STRICT_REGION_COOKIE, isStrictRegion } from '@/lib/consent'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
@@ -49,7 +50,72 @@ const WWW = SITE_URL
 // Production is unaffected: its two hosts differ, so this is false there.
 const IS_SINGLE_HOST = APP_HOST === new URL(WWW).host
 
-export default clerkMiddleware(async (auth, req, event) => {
+// Marketing pages on www that never read a session: no auth(), no Clerk
+// components. Clerk's middleware is skipped for them, so a signed-in visitor
+// browsing them doesn't pay for Clerk's session check or "handshake" redirect,
+// and the pages stay plain cacheable documents. Everything else — the app
+// host, the API, sign-in, the member area, registration and every private
+// link — goes through Clerk as before. A page added here must not call auth().
+// (/grant is left out on purpose: it pre-fills the application from the
+// signed-in teacher's full record, which is read on the server.)
+const isMarketingRoute = createRouteMatcher([
+  '/',
+  '/about',
+  '/academy',
+  '/competitions',
+  '/contact',
+  '/curriculum(.*)',
+  '/donate',
+  '/educate',
+  '/educators',
+  '/events',
+  '/events/:slug',
+  '/guides/(.*)',
+  '/host-an-event',
+  '/impact',
+  '/lp/(.*)',
+  '/membership',
+  '/mentors',
+  '/network',
+  '/news',
+  '/news/:slug',
+  '/privacy',
+  '/scholarship',
+  '/school-data-terms',
+  '/students',
+  '/terms',
+  '/volunteer',
+  '/why-stellr',
+])
+
+/** Tell browser code whether this visitor is in a strict-consent region (see lib/consent). */
+function withRegionCookie(req: NextRequest, res: Response): Response {
+  const strict = isStrictRegion(req.headers.get('x-vercel-ip-country'))
+  const current = req.cookies.get(STRICT_REGION_COOKIE)?.value
+  if (strict && current !== '1') {
+    res.headers.append('Set-Cookie', `${STRICT_REGION_COOKIE}=1; Path=/; Max-Age=2592000; SameSite=Lax; Secure`)
+  } else if (!strict && current) {
+    res.headers.append('Set-Cookie', `${STRICT_REGION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; Secure`)
+  }
+  return res
+}
+
+export default async function proxy(req: NextRequest, event: NextFetchEvent) {
+  const host = req.headers.get('host') ?? ''
+  const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
+  if (!isAppSubdomain && isMarketingRoute(req)) {
+    // AEO measurement (see below), without Clerk.
+    if (req.method === 'GET') {
+      const bot = matchCrawler(req.headers.get('user-agent'))
+      if (bot) event.waitUntil(recordCrawlerHit(bot, req.nextUrl.pathname))
+    }
+    return withRegionCookie(req, NextResponse.next())
+  }
+  // Clerk returns nothing when it has nothing to add; that means carry on.
+  return withRegionCookie(req, (await clerkHandler(req, event)) || NextResponse.next())
+}
+
+const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   const host = req.headers.get('host') ?? ''
   const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
   const url = new URL(req.url)

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2 } from 'lucide-react'
+import { Dialog } from '@stellr/web-ui'
 
 // Binary-level edit + delete for the central resource index (handover §4.6).
 // Delete cascades to every attachment behind a confirm that names each object the
@@ -59,7 +60,7 @@ export function AdminBinaryActions({
           onChange={(e) => setValue(e.target.value)}
           maxLength={200}
           autoFocus
-          className="w-44 rounded border border-brand-border px-2 py-1 text-xs focus:border-brand-blue-dark focus:outline-none"
+          className="w-44 rounded border border-line-strong px-2 py-1 text-input mouse:text-xs focus:border-brand-blue-dark focus:outline-none"
         />
         <button onClick={rename} disabled={busy} className="rounded bg-brand-blue-dark px-2 py-1 text-xs font-medium text-white disabled:opacity-50">
           Save
@@ -71,41 +72,74 @@ export function AdminBinaryActions({
     )
   }
 
+  const iconButton =
+    'inline-flex min-h-11 min-w-11 items-center justify-center rounded-control text-brand-muted-soft hover:bg-surface'
+
   return (
-    <div className="flex items-center justify-end gap-2">
-      <button onClick={() => setEditing(true)} title="Rename" className="text-brand-muted-soft hover:text-brand-blue-dark">
-        <Pencil className="h-4 w-4" />
+    <div className="flex items-center justify-end gap-1">
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        title="Rename"
+        aria-label={`Rename ${title}`}
+        className={`${iconButton} hover:text-brand-blue-dark`}
+      >
+        <Pencil className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button onClick={() => setConfirming(true)} title="Delete" className="text-brand-muted-soft hover:text-red-600">
-        <Trash2 className="h-4 w-4" />
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        title="Delete"
+        aria-label={`Delete ${title}`}
+        className={`${iconButton} hover:text-danger`}
+      >
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
       </button>
 
-      {confirming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6">
-            <h3 className="font-heading text-lg text-brand-blue-dark">Delete this resource?</h3>
-            <p className="mt-2 text-sm text-brand-muted">
-              “{title}” will be permanently deleted, including its stored file. It will disappear from
-              {attachedObjects.length === 0 ? ' (no objects — not attached anywhere)' : ':'}
-            </p>
-            {attachedObjects.length > 0 && (
-              <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5 text-sm text-brand-muted">
-                {attachedObjects.map((o, i) => (
-                  <li key={i}>{o}</li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-5 flex items-center justify-end gap-3">
-              <button onClick={() => setConfirming(false)} className="text-sm font-medium text-brand-muted-soft hover:text-brand-muted">
-                Cancel
-              </button>
-              <button onClick={del} disabled={busy} className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
-                {busy ? 'Deleting…' : 'Delete everywhere'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Not ConfirmDialog: its description is a single paragraph, and this one
+          lists every object the file disappears from. */}
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="Delete this resource?"
+        description={
+          <>
+            “{title}” will be permanently deleted, including its stored file. It will disappear from
+            {attachedObjects.length === 0 ? ' (no objects — not attached anywhere)' : ':'}
+          </>
+        }
+        role="alertdialog"
+        size="md"
+        dismissible={!busy}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              disabled={busy}
+              className="min-h-11 rounded-control px-4 text-sm font-semibold text-content-secondary hover:bg-surface disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={del}
+              disabled={busy}
+              className="min-h-11 rounded-control bg-danger px-4 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? 'Deleting…' : 'Delete everywhere'}
+            </button>
+          </>
+        }
+      >
+        {attachedObjects.length > 0 && (
+          <ul className="list-disc space-y-0.5 pl-5 text-sm text-brand-muted">
+            {attachedObjects.map((o, i) => (
+              <li key={i}>{o}</li>
+            ))}
+          </ul>
+        )}
+      </Dialog>
     </div>
   )
 }

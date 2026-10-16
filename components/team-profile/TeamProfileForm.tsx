@@ -185,7 +185,7 @@ export function TeamProfileForm({
                 maxLength={MAX_OTHER_CHARS}
                 value={a.competitionsOther}
                 onChange={(e) => set('competitionsOther', e.target.value)}
-                className="mt-1 w-full rounded-control border border-line px-3 py-2 text-ink"
+                className="mt-1 w-full rounded-control border border-line-strong px-3 py-2 text-ink"
               />
             </label>
           )}
@@ -206,7 +206,7 @@ export function TeamProfileForm({
                   next[i] = e.target.value
                   set('teammates', next)
                 }}
-                className="w-full rounded-control border border-line px-3 py-2 text-ink"
+                className="min-h-11 w-full rounded-control border border-line-strong px-3 py-2 text-input text-ink mouse:text-sm"
               />
             ))}
           </div>
@@ -215,10 +215,11 @@ export function TeamProfileForm({
         <Question id="q-notes" n={10} label="Anything else that would help us put you in a company where you’ll do your best work?" optional>
           <textarea
             rows={3}
+            aria-labelledby="q-notes-label"
             maxLength={MAX_NOTES_CHARS}
             value={a.notes}
             onChange={(e) => set('notes', e.target.value)}
-            className="w-full rounded-control border border-line px-3 py-2 text-ink"
+            className="min-h-11 w-full rounded-control border border-line-strong px-3 py-2 text-input text-ink mouse:text-sm"
           />
           <p className="mt-1 text-xs text-content-muted">Only Stellr staff and your event managers see this.</p>
         </Question>
@@ -258,7 +259,7 @@ function Question({
   return (
     <fieldset id={id} aria-describedby={error ? `${id}-error` : undefined}>
       <legend className="flex flex-wrap items-baseline gap-2">
-        <span className="font-semibold text-ink">
+        <span id={`${id}-label`} className="font-semibold text-ink">
           {n}. {label}
         </span>
         {optional && <span className="text-xs font-semibold text-content-muted">Optional</span>}
@@ -320,7 +321,9 @@ function Checks({
 function Choice({ name, checked, label, onSelect, compact }: { name: string; checked: boolean; label: string; onSelect: () => void; compact?: boolean }) {
   return (
     <label
-      className={`flex cursor-pointer items-center gap-3 rounded-control border ${compact ? 'justify-center px-3 py-2 text-sm' : 'px-3 py-3'} ${
+      // Compact choices sit three to a row; on a 375px phone each is about 88px,
+      // so "Intermediate" needs the smaller type and tight padding to fit.
+      className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-control border has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-deep ${compact ? 'min-w-0 justify-center px-1.5 py-2 text-center text-xs sm:px-3 sm:text-sm' : 'px-3 py-3'} ${
         checked ? 'border-primary-deep bg-primary-soft font-semibold text-primary-deep' : 'border-line bg-white text-ink'
       }`}
     >

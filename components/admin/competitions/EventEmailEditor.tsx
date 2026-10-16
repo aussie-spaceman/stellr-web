@@ -326,7 +326,7 @@ export function EventEmailEditor({
             min={0}
             max={365}
             placeholder="—"
-            className="w-20 rounded-md border border-brand-border px-2 py-1.5 text-sm disabled:bg-surface"
+            className="w-20 rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm disabled:bg-surface"
             value={daysBefore}
             disabled={!editable || email.status === 'scheduled'}
             onChange={(e) => { setDaysBefore(e.target.value.replace(/[^0-9]/g, '')); touch() }}

@@ -17,10 +17,12 @@ export default function NotFound() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-surface px-4 py-16">
       <Link href="/" aria-label="Stellr Education home">
         <Image
-          src="/images/logo-horiz-tight.svg"
+          src="/images/logo-horiz.png"
           alt="Stellr Education"
-          width={180}
-          height={48}
+          width={960}
+          height={318}
+          sizes="180px"
+          className="h-[60px] w-auto"
           priority
         />
       </Link>

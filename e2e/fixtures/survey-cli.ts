@@ -14,11 +14,40 @@
  *         school state CO, so photo/media is off by default (NY/CO 13–17)
  * Opening it sends no email: the Resend key is dropped for this process.
  */
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 
 const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 const ADA = '00000000-0000-4000-a000-000000000001'
+
+/** Every row an e2e survey event created, by slug. */
+async function removeEvent(db: SupabaseClient, slug: string) {
+  await db.from('credentials').delete().eq('event_slug', slug).like('number', 'STL-2099-E2%')
+  const { data: regs } = await db.from('registrations').select('id').eq('event_slug', slug)
+  const regIds = (regs ?? []).map((r) => r.id as string)
+  const { data: parts } = regIds.length ? await db.from('participants').select('id').in('registration_id', regIds) : { data: [] }
+  const pids = (parts ?? []).map((p) => p.id as string)
+  const { data: d } = await db.from('survey_distributions').select('id').eq('event_slug', slug).maybeSingle()
+  if (d) {
+    const { data: invs } = await db.from('survey_invitations').select('participant_id, member_id, email').eq('distribution_id', d.id)
+    await db.rpc('survey_purge_person', { p_member_id: null, p_participant_ids: [...pids, ...(invs ?? []).map((i) => i.participant_id).filter(Boolean)], p_emails: (invs ?? []).filter((i) => !i.member_id).map((i) => i.email), p_actor: 'e2e' })
+    // Ada's invitation is keyed by member; remove this event's rows only.
+    await db.from('survey_invitations').delete().eq('distribution_id', d.id)
+    await db.from('survey_distributions').delete().eq('id', d.id)
+  }
+  // Ada's activity history: the invited / submitted entries for this event.
+  await db.from('member_activity_log').delete().eq('category', 'survey').eq('metadata->>event_slug', slug)
+  if (pids.length) {
+    const { data: ags } = await db.from('agreements').select('id').in('participant_id', pids)
+    const agIds = (ags ?? []).map((a) => a.id as string)
+    if (agIds.length) {
+      await db.from('agreement_recipients').delete().in('envelope_row', agIds)
+      await db.from('agreements').delete().in('id', agIds)
+    }
+    await db.from('participants').delete().in('id', pids)
+  }
+  if (regIds.length) await db.from('registrations').delete().in('id', regIds)
+}
 
 async function main() {
   delete process.env.RESEND_API_KEY
@@ -29,45 +58,63 @@ async function main() {
 
   if (command === 'create') {
     const slug = `e2e-survey-${randomBytes(4).toString('hex')}`
-    const title = `E2E Survey ${slug.slice(-8)}`
-    // The current minors template (optional link; the survey reads agreement_version).
-    const { data: tpl } = await db.from('esign_templates').select('id').eq('key', 'minor').eq('active', true).maybeSingle()
-    const { data: reg, error: regErr } = await db
-      .from('registrations')
-      .insert({ event_slug: slug, event_title: title, type: 'group', status: 'confirmed', school_address_state: 'CO', adult_count: 0 })
-      .select('id')
-      .single()
-    if (regErr) throw new Error(regErr.message)
-    const base = { registration_id: reg.id, phone: '5550000000', gender: '', t_shirt_size: 'M', school_name: 'E2E High', event_role: 'participant' }
-    const { data: parts, error: pErr } = await db
-      .from('participants')
-      .insert([
-        { ...base, first_name: 'Sam', last_name: 'Tester', email: `sam.${slug}@example.com`, date_of_birth: '2004-02-02', age_bracket: 'college', grade: 'college_junior' },
-        { ...base, first_name: 'Ada', last_name: 'Student', email: 'ada.student+clerk_test@example.com', date_of_birth: '2010-01-01', age_bracket: 'high_school', grade: 'grade_11', member_id: ADA, emergency_contact_email: `guardian.${slug}@example.com` },
-      ])
-      .select('id, first_name')
-    if (pErr) throw new Error(pErr.message)
-    const ada = parts!.find((p) => p.first_name === 'Ada')!.id
-    const { data: ag, error: agErr } = await db
-      .from('agreements')
-      .insert({ participant_id: ada, member_id: ADA, event_slug: slug, event_title: title, envelope_id: `e2e-${slug}`, envelope_type: 'minor', status: 'completed', provider: 'native', signer_name: 'Guardian', signer_email: `guardian.${slug}@example.com`, minor_name: 'Ada Student', completed_at: new Date().toISOString(), template_id: tpl?.id ?? null, agreement_version: '2.3' })
-      .select('id')
-      .single()
-    if (agErr) throw new Error(agErr.message)
-    await db.from('agreement_recipients').insert({ envelope_row: ag.id, recipient_id: '1', role_name: 'Guardian', name: 'Guardian', email: `guardian.${slug}@example.com`, status: 'completed', signer_values: { DigitalCommsOptOut: 'false', QuoteOptOut: 'false', MediaOptOut: 'false' } })
+    try {
+      const title = `E2E Survey ${slug.slice(-8)}`
+      // The current minors template (optional link; the survey reads agreement_version).
+      const { data: tpl } = await db.from('esign_templates').select('id').eq('key', 'minor').eq('active', true).maybeSingle()
+      const { data: reg, error: regErr } = await db
+        .from('registrations')
+        .insert({ event_slug: slug, event_title: title, type: 'group', status: 'confirmed', school_address_state: 'CO', adult_count: 0 })
+        .select('id')
+        .single()
+      if (regErr) throw new Error(regErr.message)
+      const base = { registration_id: reg.id, phone: '5550000000', gender: '', t_shirt_size: 'M', school_name: 'E2E High', event_role: 'participant' }
+      const { data: parts, error: pErr } = await db
+        .from('participants')
+        .insert([
+          { ...base, first_name: 'Sam', last_name: 'Tester', email: `sam.${slug}@example.com`, date_of_birth: '2004-02-02', age_bracket: 'college', grade: 'college_junior' },
+          { ...base, first_name: 'Ada', last_name: 'Student', email: 'ada.student+clerk_test@example.com', date_of_birth: '2010-01-01', age_bracket: 'high_school', grade: 'grade_11', member_id: ADA, emergency_contact_email: `guardian.${slug}@example.com` },
+        ])
+        .select('id, first_name')
+      if (pErr) throw new Error(pErr.message)
+      const ada = parts!.find((p) => p.first_name === 'Ada')!.id
+      // Keyed to this event's participant row ONLY, not to Ada's member id. The
+      // survey finds it either way (it looks up by member and by participant),
+      // but a member-keyed COMPLETED minor agreement would also satisfy the
+      // consent check on Ada's seed credential (STL-2026-E2EADA01, matched by
+      // member). credentials.spec.ts asserts that one can't be published, and
+      // the suite runs on 2 workers, so while this event existed it could be:
+      // the publish went through and every later Ada test failed until the row
+      // was reset by hand (seen 15 Oct 2026).
+      const { data: ag, error: agErr } = await db
+        .from('agreements')
+        .insert({ participant_id: ada, member_id: null, event_slug: slug, event_title: title, envelope_id: `e2e-${slug}`, envelope_type: 'minor', status: 'completed', provider: 'native', signer_name: 'Guardian', signer_email: `guardian.${slug}@example.com`, minor_name: 'Ada Student', completed_at: new Date().toISOString(), template_id: tpl?.id ?? null, agreement_version: '2.3' })
+        .select('id')
+        .single()
+      if (agErr) throw new Error(agErr.message)
+      await db.from('agreement_recipients').insert({ envelope_row: ag.id, recipient_id: '1', role_name: 'Guardian', name: 'Guardian', email: `guardian.${slug}@example.com`, status: 'completed', signer_values: { DigitalCommsOptOut: 'false', QuoteOptOut: 'false', MediaOptOut: 'false' } })
 
-    const { ensureDistribution, setEarlierGoLive } = await import('../../lib/survey/distributions')
-    const { localDate } = await import('../../lib/survey/timezone')
-    const lastDay = localDate(new Date(Date.now() + 5 * 86_400_000), 'America/Denver')
-    const r = await ensureDistribution(db, { slug, title, date: lastDay, endDate: null, lastDay, timeZone: 'America/Denver', state: 'CO', cancelled: false, isCampaign: false })
-    if (r.action === 'skipped') throw new Error(`distribution skipped: ${r.reason}`)
-    if (args.includes('--open')) {
-      const opened = await setEarlierGoLive(db, r.distribution, 'now', { memberId: null, label: 'e2e' })
-      if (!opened.ok) throw new Error(opened.error)
-      const { runOne } = await import('../../lib/survey/run')
-      await runOne(db, r.distribution.id)
+      const { ensureDistribution, setEarlierGoLive } = await import('../../lib/survey/distributions')
+      const { localDate } = await import('../../lib/survey/timezone')
+      const lastDay = localDate(new Date(Date.now() + 5 * 86_400_000), 'America/Denver')
+      const r = await ensureDistribution(db, { slug, title, date: lastDay, endDate: null, lastDay, timeZone: 'America/Denver', state: 'CO', cancelled: false, isCampaign: false })
+      if (r.action === 'skipped') throw new Error(`distribution skipped: ${r.reason}`)
+      if (args.includes('--open')) {
+        const opened = await setEarlierGoLive(db, r.distribution, 'now', { memberId: null, label: 'e2e' })
+        if (!opened.ok) throw new Error(opened.error)
+        const { runOne } = await import('../../lib/survey/run')
+        await runOne(db, r.distribution.id)
+      }
+      return { slug, distributionId: r.distribution.id }
+    } catch (err) {
+      // Rows are already in (registration, participants, the agreement,
+      // perhaps the distribution) when a later step fails — a missing secret,
+      // opening the distribution — and the spec never learns the slug, so its
+      // afterEach can't remove them. Do it here: a leaked COMPLETED agreement
+      // for Ada's participant row outlives the run (15 Oct 2026: one did).
+      await removeEvent(db, slug).catch(() => {})
+      throw err
     }
-    return { slug, distributionId: r.distribution.id }
   }
 
   if (command === 'link') {
@@ -99,31 +146,7 @@ async function main() {
   if (command === 'remove') {
     const [slug] = args
     if (!slug?.startsWith('e2e-survey-')) throw new Error('refusing to remove a non-e2e event')
-    await db.from('credentials').delete().eq('event_slug', slug).like('number', 'STL-2099-E2%')
-    const { data: regs } = await db.from('registrations').select('id').eq('event_slug', slug)
-    const regIds = (regs ?? []).map((r) => r.id as string)
-    const { data: parts } = regIds.length ? await db.from('participants').select('id').in('registration_id', regIds) : { data: [] }
-    const pids = (parts ?? []).map((p) => p.id as string)
-    const { data: d } = await db.from('survey_distributions').select('id').eq('event_slug', slug).maybeSingle()
-    if (d) {
-      const { data: invs } = await db.from('survey_invitations').select('participant_id, member_id, email').eq('distribution_id', d.id)
-      await db.rpc('survey_purge_person', { p_member_id: null, p_participant_ids: [...pids, ...(invs ?? []).map((i) => i.participant_id).filter(Boolean)], p_emails: (invs ?? []).filter((i) => !i.member_id).map((i) => i.email), p_actor: 'e2e' })
-      // Ada's invitation is keyed by member; remove this event's rows only.
-      await db.from('survey_invitations').delete().eq('distribution_id', d.id)
-      await db.from('survey_distributions').delete().eq('id', d.id)
-    }
-    // Ada's activity history: the invited / submitted entries for this event.
-    await db.from('member_activity_log').delete().eq('category', 'survey').eq('metadata->>event_slug', slug)
-    if (pids.length) {
-      const { data: ags } = await db.from('agreements').select('id').in('participant_id', pids)
-      const agIds = (ags ?? []).map((a) => a.id as string)
-      if (agIds.length) {
-        await db.from('agreement_recipients').delete().in('envelope_row', agIds)
-        await db.from('agreements').delete().in('id', agIds)
-      }
-      await db.from('participants').delete().in('id', pids)
-    }
-    if (regIds.length) await db.from('registrations').delete().in('id', regIds)
+    await removeEvent(db, slug)
     return true
   }
   throw new Error(`unknown command ${command}`)

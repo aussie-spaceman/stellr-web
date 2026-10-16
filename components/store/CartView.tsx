@@ -63,22 +63,30 @@ export function CartView() {
     <div className="space-y-4">
       <div className="divide-y divide-line-light rounded-xl border border-line">
         {items.map((i) => (
-          <div key={i.variantId} className="flex items-center gap-4 p-4">
-            <div className="flex-1">
-              <div className="font-medium text-ink">{i.name}</div>
+          // Name on its own line on a phone, then quantity, total and remove
+          // (side by side, the name got about 48px at 320px).
+          <div key={i.variantId} className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
+            <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
+              <div className="font-medium text-ink [overflow-wrap:anywhere]">{i.name}</div>
               {i.label && <div className="text-sm text-content-muted">{i.label}</div>}
               <div className="text-sm text-content-muted">${(i.unitCents / 100).toFixed(2)} each</div>
             </div>
             <input
               type="number"
+              inputMode="numeric"
               min={1}
               value={i.qty}
+              aria-label={`Quantity of ${i.name}`}
               onChange={(e) => setQty(i.variantId, Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-              className="w-16 rounded-md border border-line px-2 py-1 text-sm"
+              className="min-h-11 w-20 rounded-md border border-line-strong px-2 text-input mouse:text-sm"
             />
-            <div className="w-20 text-right font-medium text-ink">${((i.unitCents * i.qty) / 100).toFixed(2)}</div>
-            <button onClick={() => removeFromCart(i.variantId)} className="text-content-faint hover:text-red-600" aria-label="Remove">
-              <Trash2 className="h-4 w-4" />
+            <div className="ml-auto w-20 text-right font-medium text-ink sm:ml-0">${((i.unitCents * i.qty) / 100).toFixed(2)}</div>
+            <button
+              onClick={() => removeFromCart(i.variantId)}
+              className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center text-content-muted hover:text-danger"
+              aria-label={`Remove ${i.name}`}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -89,7 +97,7 @@ export function CartView() {
         <span className="text-lg font-semibold text-ink">${(subtotal / 100).toFixed(2)}</span>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger" role="alert">{error}</p>}
 
       <button
         onClick={checkout}

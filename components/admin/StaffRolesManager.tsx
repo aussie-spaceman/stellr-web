@@ -130,7 +130,7 @@ export default function StaffRolesManager({
                 {r.scopes.map((s) => (
                   <span
                     key={s}
-                    className="rounded bg-brand-hairline px-1.5 py-0.5 text-[11px] font-medium capitalize text-brand-muted"
+                    className="rounded bg-brand-hairline px-1.5 py-0.5 text-xs font-medium capitalize text-brand-muted"
                   >
                     {s}
                   </span>

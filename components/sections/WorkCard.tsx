@@ -35,7 +35,7 @@ export function WorkCard({ asset, eyebrow: eyebrowOverride, className = '' }: { 
 
       {/* Body */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <p className="text-[10.5px] font-display font-bold uppercase tracking-[0.13em] text-primary">{eyebrow}</p>
+        <p className="text-xs font-display font-bold uppercase tracking-[0.13em] text-primary">{eyebrow}</p>
         <h3 className="mt-1 font-display text-[16px] font-bold leading-tight text-ink">{asset.title}</h3>
         <p className="mt-1 text-[13px] text-content-faint">
           {asset.pages ? `${asset.pages}-page PDF` : 'PDF'}

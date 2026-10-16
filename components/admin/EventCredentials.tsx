@@ -140,7 +140,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Participation credentials</h3>
+          <h3 className="text-sm font-semibold text-brand-muted">Participation credentials</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
             A verifiable record per person with its own page, which they can make public and add to LinkedIn (16+).
             {audience === 'students'
@@ -197,7 +197,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
         {audience === 'students' ? (
           <label className="text-xs text-brand-muted-soft flex items-center gap-2">
             <span>Issue to</span>
-            <select className="rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark" value={mode}
+            <select className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm text-brand-blue-dark" value={mode}
               onChange={(e) => setMode(e.target.value as 'checked_in' | 'all')}>
               <option value="checked_in">Checked-in participants{data ? ` (${data.checkedInCount})` : ''}</option>
               <option value="all">All registered participants</option>
@@ -246,7 +246,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
                       {c.status === 'issued' && !c.tombstoned_at && (
                         revoking?.id === c.id ? (
                           <span className="inline-flex items-center gap-2">
-                            <input className="rounded-md border border-brand-border px-2 py-1 text-xs" placeholder="Reason" value={revoking.reason}
+                            <input className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs" placeholder="Reason" value={revoking.reason}
                               onChange={(e) => setRevoking({ id: c.id, reason: e.target.value })} />
                             <button onClick={() => revoke(c.id, revoking.reason)} disabled={!revoking.reason.trim() || busy === c.id}
                               className="text-red-600 font-medium disabled:opacity-50">{busy === c.id ? 'Revoking…' : 'Confirm'}</button>

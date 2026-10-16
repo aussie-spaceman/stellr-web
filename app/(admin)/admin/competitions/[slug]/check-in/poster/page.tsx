@@ -33,7 +33,7 @@ export default async function CheckInPosterPage({ params }: { params: Promise<{ 
         <Link href={`/admin/competitions/${slug}/check-in`} className="text-sm text-primary">
           ← Check-in
         </Link>
-        <h1 className="mt-1 font-heading text-title uppercase text-ink">Door poster — {event.title}</h1>
+        <h1 className="mt-1 font-heading text-ds-h2 text-ink">Door poster — {event.title}</h1>
       </div>
       {url ? (
         <CheckInPoster url={url} title={event.title} dateLabel={event.date ? formatDate(event.date) : null} />

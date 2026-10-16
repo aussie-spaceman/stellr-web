@@ -60,7 +60,7 @@ export function SubmitProposalForm({ slug, title, deadlineLabel, groupName, init
       <div className="space-y-6">
         <div className="rounded-panel border border-line bg-white p-8 text-center shadow-card-lift">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-enviro-green-bg">
-            <svg viewBox="0 0 24 24" className="h-7 w-7 text-enviro-green" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className="h-7 w-7 text-enviro-green-text" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 6 9 17l-5-5" />
             </svg>
           </div>
@@ -106,7 +106,7 @@ export function SubmitProposalForm({ slug, title, deadlineLabel, groupName, init
       </Link>
 
       <div className="overflow-hidden rounded-panel border border-line border-t-4 border-t-pathway-amber bg-white p-6 shadow-card-lift">
-        <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-pathway-amber">
+        <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-gold-ink">
           ✦ Campaign proposal
         </span>
         <h1 className="mt-4 font-heading text-ds-h2 font-bold text-ink">Submit your proposal</h1>
@@ -155,7 +155,7 @@ export function SubmitProposalForm({ slug, title, deadlineLabel, groupName, init
             onChange={(e) => setNotes(e.target.value)}
             rows={4}
             placeholder="Anything you want the judges to know — assumptions, what you'd do with more time…"
-            className="w-full rounded-control border border-line px-3 py-2.5 text-sm text-content outline-none focus:border-primary"
+            className="w-full rounded-control border border-line-strong px-3 py-2.5 text-input mouse:text-sm text-content outline-none focus:border-primary"
           />
         </label>
 

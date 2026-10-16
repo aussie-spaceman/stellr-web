@@ -22,7 +22,7 @@ const pathways = [
     id: 'industry',
     Icon: Event,
     tileBg: 'bg-pathway-amber-bg',
-    iconColor: 'text-pathway-amber',
+    iconColor: 'text-gold-ink',
     accentText: 'text-brand-gold-ink',
     hoverBorder: 'hover:border-pathway-amber',
     eyebrow: 'Industry Partners',
@@ -33,7 +33,7 @@ const pathways = [
     id: 'university',
     Icon: Certificate,
     tileBg: 'bg-enviro-green-bg',
-    iconColor: 'text-enviro-green',
+    iconColor: 'text-enviro-green-text',
     accentText: 'text-enviro-green-text',
     hoverBorder: 'hover:border-enviro-green',
     eyebrow: 'University Partners',
@@ -74,7 +74,7 @@ const details: Detail[] = [
     tinted: true,
     eyebrow: 'Industry Partners',
     eyebrowColor: 'text-brand-gold-ink',
-    checkColor: 'text-pathway-amber',
+    checkColor: 'text-gold-ink',
     headline: 'For STEM education & service providers',
     who: [
       "If you're doing great things with STEM education, we want to hear from you — whether you run events, sell curriculum packages, or train educators, at any level from pre-K to college.",
@@ -104,7 +104,7 @@ const details: Detail[] = [
     tinted: false,
     eyebrow: 'University Partners',
     eyebrowColor: 'text-enviro-green-text',
-    checkColor: 'text-enviro-green',
+    checkColor: 'text-enviro-green-text',
     headline: 'For colleges & universities',
     who: [
       'College is a pivotal step in a student’s career. We partner with universities and colleges worldwide so our members can see their options clearly — and choose the right next move. We can help you grow your high school recruitment pipeline, showcase your engineering programs, and connect future students with your existing engineering students.',
@@ -196,7 +196,7 @@ export default function NetworkPage() {
       </Hero>
 
       {/* ── Three ways to partner ─────────────────────────────────────── */}
-      <section id="three" className="section-padding bg-white scroll-mt-24">
+      <section id="three" className="section-padding bg-white">
         <div className="container-max">
           <div className="max-w-2xl">
             <Eyebrow>Better together</Eyebrow>
@@ -238,7 +238,7 @@ export default function NetworkPage() {
         <Fragment key={d.id}>
         <section
           id={d.id}
-          className={`section-padding scroll-mt-24 ${d.tinted ? 'bg-surface border-t border-line-light' : 'bg-white'}`}
+          className={`section-padding ${d.tinted ? 'bg-surface border-t border-line-light' : 'bg-white'}`}
         >
           <div className="container-max grid grid-cols-1 lg:grid-cols-2 gap-14 items-start">
             {/* Left — who it's for */}
@@ -317,7 +317,7 @@ export default function NetworkPage() {
       {/* ── Join form ─────────────────────────────────────────────────── */}
       <section
         id="join"
-        className="relative overflow-hidden bg-midnight text-white py-20 px-4 sm:px-6 lg:px-8 scroll-mt-24 bg-[radial-gradient(120%_130%_at_15%_0%,#1B2550_0%,#0E1330_55%,#09102C_100%)]"
+        className="relative overflow-hidden bg-midnight text-white py-20 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_15%_0%,#1B2550_0%,#0E1330_55%,#09102C_100%)]"
       >
         <div className="container-max grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-14 items-start">
           {/* Left — pitch */}

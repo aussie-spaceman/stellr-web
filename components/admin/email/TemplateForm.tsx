@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { JSONContent } from '@tiptap/react'
+import { Field, Fieldset, Input } from '@stellr/web-ui'
 import { RichTextEditor } from '@/components/community/RichTextEditor'
 import { MERGE_FIELDS } from '@/lib/email-vars'
 
@@ -42,35 +43,29 @@ export function TemplateForm() {
     <form onSubmit={submit} className="rounded-xl border border-brand-border bg-white p-6 space-y-4">
       <h2 className="text-base font-semibold text-brand-blue-dark">New template</h2>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Name</label>
-          <input
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Name" required>
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            required
             maxLength={200}
             placeholder="Welcome — Alumni"
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Subject</label>
-          <input
+        </Field>
+        <Field label="Subject" required>
+          <Input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            required
             maxLength={300}
             placeholder="Welcome to Alumni, {{firstName}}"
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           />
-        </div>
+        </Field>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-brand-muted mb-1">Body</label>
+      {/* The editor takes no id, so the group's legend names it. */}
+      <Fieldset legend="Body">
         <RichTextEditor value={bodyJson} onChange={(doc) => setBodyJson(doc)} placeholder="Write the email…" />
-      </div>
+      </Fieldset>
 
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-brand-muted-soft mr-1">Merge fields:</span>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import '../styles/tokens.css'
 import '../styles/globals.css'
 
 // deep review PUB-9: last-resort boundary for an error thrown by the ROOT layout

@@ -39,7 +39,7 @@ export function FlagButton({ contentType, contentId }: Props) {
           placeholder="Optional: describe the issue"
           rows={2}
           maxLength={500}
-          className="w-full rounded-md border border-brand-border px-2 py-1.5 text-xs focus:border-brand-border focus:outline-none"
+          className="w-full rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-xs focus:border-brand-border focus:outline-none"
         />
         <div className="flex items-center gap-2">
           <button

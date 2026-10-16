@@ -80,7 +80,7 @@ export function CohortLiveRoom({
 
         {/* Right panel */}
         <aside className="hidden w-[260px] shrink-0 flex-col rounded-[14px] p-4 text-white lg:flex" style={{ background: '#13183A' }}>
-          <p className="font-subheading text-[11px] font-semibold uppercase tracking-[0.13em] text-hero-dim">Session agenda</p>
+          <p className="font-subheading text-xs font-semibold uppercase tracking-[0.13em] text-hero-dim">Session agenda</p>
           <ul className="mt-3 flex-1 space-y-2.5">
             {agenda.length === 0 ? (
               <li className="text-[13px] text-hero-dim">No agenda set.</li>

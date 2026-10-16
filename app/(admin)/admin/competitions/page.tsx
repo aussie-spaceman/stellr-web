@@ -23,6 +23,14 @@ function formatDate(date?: string) {
   return date ? formatEventDate(date) : '—'
 }
 
+// On a phone each table scrolls sideways inside its card instead of being
+// clipped, with the event (the link into it) held at the left edge. The table
+// is border-separate because a sticky cell in a collapsed table leaves its
+// borders behind when it moves; row lines therefore live on the cells.
+const TH = 'whitespace-nowrap border-b border-line-light px-4 py-3 font-medium text-content-muted text-xs uppercase tracking-wide'
+const TD = 'border-b border-line-light px-4 py-3 group-last:border-b-0'
+const STICKY = 'sticky left-0 z-10 border-r border-line-light'
+
 // Registration pill state.
 //   • Campaigns  → campaignStatus(), the same resolver the public pages and the
 //                  member portal use. This used to be an inline `registrationOpen
@@ -100,19 +108,19 @@ export default async function AdminEventsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="eyebrow flex items-center gap-2 text-brand-orange-alt">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="eyebrow flex items-center gap-2 text-gold-ink">
             <span className="h-2 w-2 rounded-full bg-brand-orange-alt" /> Competitions
           </p>
-          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Events</h1>
+          <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Events</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
             {access.isAdmin
               ? 'All events and campaigns from the CMS'
               : 'Events you are assigned to manage'}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
           <Link
             href="/admin/competitions/check-in-banner"
             className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"
@@ -129,7 +137,7 @@ export default async function AdminEventsPage() {
 
       {sections.map(({ label, items, isCampaign }) => (
         <section key={label} className="space-y-3">
-          <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">{label}</h2>
+          <h2 className="text-sm font-semibold text-brand-muted">{label}</h2>
           {items.length === 0 ? (
             <p className="text-sm text-brand-muted-soft bg-white rounded-xl border border-brand-border px-4 py-6">
               {access.isAdmin
@@ -137,46 +145,49 @@ export default async function AdminEventsPage() {
                 : `No assigned ${label.toLowerCase()}. Ask an administrator to assign you.`}
             </p>
           ) : (
-            <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
-                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Event</th>
-                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">
-                      {isCampaign ? 'Season' : 'Date'}
-                    </th>
-                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Location</th>
-                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Registration</th>
-                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide text-right">Participants</th>
+            <div
+              role="region"
+              aria-label={label}
+              tabIndex={0}
+              className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            >
+              <table className="min-w-full border-separate border-spacing-0 text-sm">
+                <thead className="bg-surface">
+                  <tr className="text-left">
+                    <th scope="col" className={`${TH} ${STICKY} bg-surface`}>Event</th>
+                    <th scope="col" className={TH}>{isCampaign ? 'Season' : 'Date'}</th>
+                    <th scope="col" className={TH}>Location</th>
+                    <th scope="col" className={TH}>Registration</th>
+                    <th scope="col" className={`${TH} text-right`}>Participants</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-brand-hairline">
+                <tbody>
                   {items.map((event) => {
                     const slug = event.slug.current
                     const campaign = event as unknown as CampaignEvent
                     return (
-                      <tr key={event._id} className="hover:bg-brand-canvas">
-                        <td className="px-4 py-3 font-medium text-brand-blue-dark">
-                          <Link href={`/admin/competitions/${slug}`} className="text-brand-blue hover:text-brand-blue">
+                      <tr key={event._id} className="group hover:bg-surface">
+                        <td className={`${TD} ${STICKY} min-w-40 bg-white font-medium group-hover:bg-surface`}>
+                          <Link href={`/admin/competitions/${slug}`} className="text-primary hover:underline">
                             {event.title}
                           </Link>
                           <span
-                            className={`ml-2 inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
-                              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-brand-blue/10 text-brand-blue'
+                            className={`ml-2 inline-flex whitespace-nowrap text-xs px-2 py-0.5 rounded-full font-medium ${
+                              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-primary/10 text-primary'
                             }`}
                           >
                             {isCampaign ? 'Campaign' : 'Live Event'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-brand-muted">
+                        <td className={`${TD} whitespace-nowrap text-content-body`}>
                           {isCampaign
                             ? seasonLabel(campaign.season, campaign.campaignYear) || '—'
                             : formatDate(event.date)}
                         </td>
-                        <td className="px-4 py-3 text-brand-muted">
+                        <td className={`${TD} min-w-48 text-content-body`}>
                           {[event.venue, event.city, event.state].filter(Boolean).join(', ') || '—'}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className={`${TD} whitespace-nowrap`}>
                           {(() => {
                             const pill = registrationPill(event, isCampaign)
                             return (
@@ -186,7 +197,7 @@ export default async function AdminEventsPage() {
                             )
                           })()}
                         </td>
-                        <td className="px-4 py-3 text-right text-brand-blue-dark font-medium tabular-nums">
+                        <td className={`${TD} text-right text-ink font-medium tabular-nums`}>
                           {counts.get(slug) ?? 0}
                         </td>
                       </tr>

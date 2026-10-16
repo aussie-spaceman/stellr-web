@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@stellr/web-ui'
+import { openPendingTab } from '@/lib/open-in-new-tab'
 import { FIELD_SOURCES, FIELD_TYPES, ROLES, type Role, type TemplateField } from '@/lib/esign/native/template'
 
 // Admin → Consent forms → Agreement documents → Edit fields.
@@ -64,7 +65,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
   const [selected, setSelected] = useState<number | null>(null)
   const [placing, setPlacing] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<{ text: string; error?: boolean; issues?: string[]; saved?: string } | null>(null)
+  const [status, setStatus] = useState<{ text: string; error?: boolean; issues?: string[]; saved?: string; previewUrl?: string } | null>(null)
   const drag = useRef<{ index: number; startX: number; startY: number; fieldX: number; fieldY: number; scale: number; pageW: number; pageH: number } | null>(null)
 
   // Draw the document's pages with pdf.js.
@@ -170,16 +171,29 @@ export function TemplateEditor(props: TemplateEditorProps) {
 
   async function preview() {
     if (!pdfPath) return
+    // The tab opens now, inside the click: Safari drops a window opened after
+    // the fetch below. If there is no tab, the status offers a link rather than
+    // leaving this page and its unsaved field placements.
+    const tab = openPendingTab()
     setBusy(true); setStatus(null)
-    const res = await fetch('/api/admin/esign/templates/preview', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdfPath, fieldMap }),
-    })
+    let res: Response
+    try {
+      res = await fetch('/api/admin/esign/templates/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdfPath, fieldMap }),
+      })
+    } catch {
+      tab.close(); setBusy(false)
+      return setStatus({ text: 'Preview failed. Check the connection and try again.', error: true })
+    }
     setBusy(false)
     if (!res.ok) {
+      tab.close()
       const data = await res.json().catch(() => ({}))
       return setStatus({ text: data.error ?? 'Preview failed.', error: true, issues: data.issues })
     }
-    window.open(URL.createObjectURL(await res.blob()), '_blank', 'noopener')
+    const url = URL.createObjectURL(await res.blob())
+    if (tab.open) tab.go(url)
+    else setStatus({ text: 'The preview is ready.', previewUrl: url })
   }
 
   async function save() {
@@ -202,13 +216,13 @@ export function TemplateEditor(props: TemplateEditorProps) {
       <div className="flex flex-wrap items-end gap-4 rounded-xl border border-line bg-white p-4">
         <label className="text-sm text-ink">
           <span className="block font-semibold">Document</span>
-          <select className="mt-1 rounded-control border border-line px-2 py-1.5" value={documentKey} onChange={(e) => setDocumentKey(e.target.value)} disabled={!!props.fromVersion}>
+          <select className="mt-1 rounded-control border border-line-strong px-2 py-1.5" value={documentKey} onChange={(e) => setDocumentKey(e.target.value)} disabled={!!props.fromVersion}>
             {props.keys.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </label>
         <label className="min-w-64 flex-1 text-sm text-ink">
           <span className="block font-semibold">Title signers see</span>
-          <input className="mt-1 w-full rounded-control border border-line px-2 py-1.5" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className="mt-1 w-full rounded-control border border-line-strong px-2 py-1.5" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
         <label className="text-sm text-ink">
           <span className="block font-semibold">{pdfPath ? 'Replace the PDF' : 'Upload the PDF'}</span>
@@ -222,6 +236,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
           <p>{status.text}</p>
           {status.issues?.length ? <ul className="mt-2 list-disc pl-5">{status.issues.map((i) => <li key={i}>{i}</li>)}</ul> : null}
           {status.saved && <p className="mt-2"><Link className="text-primary-deep underline" href={`/admin/docusigns/templates?v=${status.saved}`}>Review and approve it</Link></p>}
+          {status.previewUrl && <p className="mt-2"><a className="text-primary-deep underline" href={status.previewUrl} target="_blank" rel="noopener">Open the preview</a></p>}
         </div>
       )}
 
@@ -244,7 +259,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
                     type="button"
                     aria-label={`${fl.label} (${fl.role}, ${fl.type}), page ${fl.page} at ${fl.x}, ${fl.y}. Arrow keys move it.`}
                     aria-pressed={selected === i}
-                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-sm border px-0.5 text-left text-[9px] leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
+                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-sm border px-0.5 text-left text-xs leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
                     style={{ left: `${(fl.x / page.width) * 100}%`, top: `${(fl.y / page.height) * 100}%`, width: `${(w / page.width) * 100}%`, height: `${(h / page.height) * 100}%`, minHeight: 10, minWidth: 10 }}
                     onPointerDown={(e) => startDrag(e, i)}
                     onPointerMove={moveDrag}
@@ -331,7 +346,7 @@ function Text({ label, value, onChange }: { label: string; value: string; onChan
   return (
     <label className="block text-sm text-ink">
       <span className="block font-semibold">{label}</span>
-      <input className="mt-1 w-full rounded-control border border-line px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)} />
+      <input className="mt-1 w-full rounded-control border border-line-strong px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   )
 }
@@ -340,7 +355,7 @@ function Select({ label, value, options, onChange }: { label: string; value: str
   return (
     <label className="block text-sm text-ink">
       <span className="block font-semibold">{label}</span>
-      <select className="mt-1 w-full rounded-control border border-line px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select className="mt-1 w-full rounded-control border border-line-strong px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => <option key={o} value={o}>{o.replace('_', ' ')}</option>)}
       </select>
     </label>
@@ -351,7 +366,7 @@ function Num({ label, value, onChange, min = 0, max, hideLabel }: { label: strin
   return (
     <label className="block text-sm text-ink">
       <span className={hideLabel ? 'sr-only' : 'block font-semibold'}>{label}</span>
-      <input type="number" step={0.5} min={min} max={max} className="mt-1 w-full rounded-control border border-line px-2 py-1"
+      <input type="number" step={0.5} min={min} max={max} className="mt-1 w-full rounded-control border border-line-strong px-2 py-1"
         value={value} onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) onChange(n) }} />
     </label>
   )

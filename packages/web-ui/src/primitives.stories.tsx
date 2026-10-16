@@ -26,7 +26,7 @@ export const Eyebrows: StoryObj = {
     <div className="p-8 flex flex-col gap-3">
       <Eyebrow>Start here</Eyebrow>
       <Eyebrow className="text-space-violet">Theme</Eyebrow>
-      <Eyebrow className="text-enviro-green">Included</Eyebrow>
+      <Eyebrow className="text-enviro-green-text">Included</Eyebrow>
     </div>
   ),
 }
@@ -47,7 +47,7 @@ export const Headings: StoryObj = {
       <SectionHeading eyebrow="Start here" title="What's a Design Competition?" />
       <SectionHeading step="STEP 1" title="Choose how you take part" />
       <SectionHeading step="STEP 2" stepClassName="text-space-violet" title="Pick a theme" />
-      <SectionHeading step="STEP 3" stepClassName="text-enviro-green" title="See what's included" />
+      <SectionHeading step="STEP 3" stepClassName="text-enviro-green-text" title="See what's included" />
     </div>
   ),
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Orbit, Environment } from '@stellr/icons'
-import { Button } from '@stellr/web-ui'
+import { CampaignCardAction } from './CampaignMemberAware'
 import { CardPills } from '@/components/ui/CardPills'
 import type { CampaignCardData } from '@/lib/campaigns'
 
@@ -19,7 +19,7 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
       {/* Image header — same footprint as EventCard */}
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {campaign.imageUrl ? (
-          <Image src={campaign.imageUrl} alt={campaign.title} fill className="object-cover" />
+          <Image src={campaign.imageUrl} alt={campaign.title} fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover" />
         ) : (
           <ThemeIcon className="h-10 w-10 text-blue-300 opacity-60" />
         )}
@@ -36,11 +36,11 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
 
         <h3 className="font-bold text-brand-blue-dark mb-1 leading-snug">{campaign.title}</h3>
 
-        <p className="text-sm text-brand-grey-mid">
+        <p className="text-sm text-content-muted">
           {[campaign.seasonLabel, 'Async — runs at your school'].filter(Boolean).join(' · ')}
         </p>
         {campaign.deadlineLabel && (
-          <p className="text-sm text-brand-grey-mid">Proposal due {campaign.deadlineLabel}</p>
+          <p className="text-sm text-content-muted">Proposal due {campaign.deadlineLabel}</p>
         )}
 
         {campaign.tagline && (
@@ -54,15 +54,8 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
           >
             View details
           </Link>
-          {campaign.registered ? (
-            <span className="rounded-pill bg-enviro-green-bg px-3 py-1 text-xs font-semibold text-enviro-green-text">
-              Registered
-            </span>
-          ) : (
-            <Button href={`/register/${campaign.slug}/group`} variant="primary" className="!px-4 !py-2 text-sm">
-              Register group →
-            </Button>
-          )}
+          {/* Registered state fills in in the browser, so /events can be cached. */}
+          <CampaignCardAction slug={campaign.slug} registered={campaign.registered} />
         </div>
       </div>
     </article>

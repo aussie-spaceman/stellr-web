@@ -43,14 +43,14 @@ export default async function AdminScholarshipsPage({ searchParams }: { searchPa
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Scholarships</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Scholarships</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
             Applications from /scholarship. Offering one registers the student and sends their emails.
           </p>
         </div>
         <div className="flex gap-5 text-sm text-right">
           <div>
-            <p className="text-2xl font-bold text-pathway-amber-deep">{toReview}</p>
+            <p className="text-2xl font-bold text-gold-ink">{toReview}</p>
             <p className="text-xs text-brand-muted-soft">To review</p>
           </div>
           <div>
@@ -58,7 +58,7 @@ export default async function AdminScholarshipsPage({ searchParams }: { searchPa
             <p className="text-xs text-brand-muted-soft">Offered</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-enviro-green">{accepted}</p>
+            <p className="text-2xl font-bold text-enviro-green-text">{accepted}</p>
             <p className="text-xs text-brand-muted-soft">Accepted</p>
           </div>
         </div>

@@ -53,8 +53,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <ArrowLeft className="h-4 w-4" /> Store
         </Link>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          <div className="flex h-80 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-blue-dark to-blue-900 lg:h-[28rem]">
+        {/* Side by side from sm, so a sideways phone sees the title and Add to
+            cart next to the photo rather than under 320px of it. */}
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+          <div className="flex h-80 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-blue-dark to-blue-900 short:h-56 lg:h-[28rem]">
             {img ? (
               // eslint-disable-next-line @next/next/no-img-element -- Printful CDN URL; host is not in images.remotePatterns
               <img src={img} alt={product.name} className="h-full w-full object-cover" />

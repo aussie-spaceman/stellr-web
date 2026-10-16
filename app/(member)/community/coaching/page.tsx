@@ -46,7 +46,7 @@ export default async function CoachingPage() {
           <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-space-violet">
             Academy · Coaching
           </p>
-          <h1 className="mt-1 font-display text-[34px] font-bold leading-tight tracking-[-0.02em] text-ink">
+          <h1 className="mt-1 font-display text-[34px] font-bold leading-tight text-ink">
             Your coaching
           </h1>
           <p className="mt-1.5 max-w-xl text-[15px] text-content-secondary">
@@ -125,7 +125,7 @@ export default async function CoachingPage() {
       {/* Completed */}
       {completed.length > 0 && (
         <section>
-          <h2 className="mb-2 font-subheading text-[12px] font-semibold uppercase tracking-[0.1em] text-content-faint">
+          <h2 className="mb-2 font-subheading text-[12px] font-semibold text-content-faint">
             Completed
           </h2>
           <ul className="divide-y divide-line-light rounded-[14px] border border-line bg-white">
@@ -175,11 +175,11 @@ function WorkshopCard({ c }: { c: WorkshopCardData }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-display text-[20px] font-bold text-ink">{c.name}</h3>
-            <span className="inline-flex items-center rounded-pill bg-space-violet-chip px-2.5 py-0.5 text-[11px] font-bold tracking-[0.04em] text-space-violet-text">
+            <span className="inline-flex items-center rounded-pill bg-space-violet-chip px-2.5 py-0.5 text-xs font-bold tracking-[0.04em] text-space-violet-text">
               SPACE
             </span>
             {c.isCoach && (
-              <span className="inline-flex items-center rounded-pill bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold text-primary">
+              <span className="inline-flex items-center rounded-pill bg-primary-soft px-2.5 py-0.5 text-xs font-bold text-primary">
                 COACH
               </span>
             )}
@@ -256,11 +256,11 @@ function ActiveRequestCard({ req }: { req: CoachingRequest }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <cfg.Icon className="h-4 w-4 text-[#0E8C99]" />
-            <p className="font-subheading text-[12px] font-semibold uppercase tracking-[0.1em] text-[#0E8C99]">
+            <cfg.Icon className="h-4 w-4 text-adult-teal-deep" />
+            <p className="font-subheading text-[12px] font-semibold uppercase tracking-[0.1em] text-adult-teal-deep">
               Coaching request
             </p>
-            <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[11px] font-bold ${cfg.chipClass}`}>
+            <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-bold ${cfg.chipClass}`}>
               {cfg.chip}
             </span>
           </div>

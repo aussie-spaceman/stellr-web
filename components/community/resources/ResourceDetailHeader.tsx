@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Download, Pencil, Flag, ExternalLink, PlayCircle } from 'lucide-react'
 import type { ResourceKind } from '@/lib/resources-catalogue'
+import { openPendingTab } from '@/lib/open-in-new-tab'
 
 interface Props {
   attachmentId: string
@@ -46,12 +47,16 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, canRenam
   }
 
   const primary = async () => {
+    // Links and videos open in a new tab, opened now while the tap still
+    // counts: iOS Safari drops a window.open made after the fetch.
+    const tab = kind === 'file' ? null : openPendingTab()
     setBusy(true)
     setErr(null)
-    const res = await fetch(`/api/community/resources/attachment/${attachmentId}/download`)
-    const json = await res.json().catch(() => ({}))
+    const res = await fetch(`/api/community/resources/attachment/${attachmentId}/download`).catch(() => null)
+    const json = res ? await res.json().catch(() => ({})) : {}
     setBusy(false)
-    if (!res.ok) {
+    if (!res || !res.ok) {
+      tab?.close()
       setErr(json.error ?? 'Could not open this resource')
       return
     }
@@ -63,8 +68,8 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, canRenam
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-    } else {
-      window.open(json.url, '_blank', 'noopener,noreferrer')
+    } else if (tab) {
+      tab.go(json.url)
     }
   }
 
@@ -80,7 +85,7 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, canRenam
             onChange={(e) => setValue(e.target.value)}
             maxLength={200}
             autoFocus
-            className="min-w-0 flex-1 rounded border border-brand-border px-2 py-1 text-lg font-semibold focus:border-brand-blue-dark focus:outline-none"
+            className="min-w-0 flex-1 rounded border border-line-strong px-2 py-1 text-lg font-semibold focus:border-brand-blue-dark focus:outline-none"
           />
           <button
             onClick={rename}

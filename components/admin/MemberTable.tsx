@@ -54,6 +54,15 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+// On a phone the table scrolls sideways inside its card instead of being
+// clipped, and the name column stays put: it is the link to the member, so a
+// row can always be opened without scrolling to the end. The table is
+// border-separate because a sticky cell in a collapsed table leaves its
+// borders behind when it moves; row lines therefore live on the cells.
+const TH = 'whitespace-nowrap border-b border-line px-4 py-3 text-left font-medium text-content-body'
+const TD = 'border-b border-line-light px-4 py-3 group-last:border-b-0'
+const STICKY = 'sticky left-0 z-10 border-r border-line-light'
+
 export function MemberTable({ members, tiers, total, page, pageSize, filters }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -89,12 +98,12 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && pushFilter({ q: search, page: 1 })}
-          className="border border-brand-border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm w-64 focus:outline-none focus:ring-2 focus:ring-brand-blue"
         />
         <select
           value={filters.bracket}
           onChange={(e) => pushFilter({ bracket: e.target.value, page: 1 })}
-          className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
         >
           <option value="">All brackets</option>
           {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
@@ -102,7 +111,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
         <select
           value={filters.role}
           onChange={(e) => pushFilter({ role: e.target.value, page: 1 })}
-          className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
         >
           <option value="">All roles</option>
           {ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}
@@ -110,23 +119,30 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-brand-canvas border-b border-brand-border">
+      <div
+        role="region"
+        aria-label="Members"
+        tabIndex={0}
+        className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+      >
+        <table className="min-w-full border-separate border-spacing-0 text-sm">
+          <thead className="bg-surface">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-brand-muted">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-brand-muted">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-brand-muted">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-brand-muted">Membership</th>
-              <th className="text-left px-4 py-3 font-medium text-brand-muted">School</th>
-              <th className="text-left px-4 py-3 font-medium text-brand-muted">Joined</th>
-              <th />
+              <th scope="col" className={`${TH} ${STICKY} bg-surface`}>Name</th>
+              <th scope="col" className={TH}>Email</th>
+              <th scope="col" className={TH}>Role</th>
+              <th scope="col" className={TH}>Membership</th>
+              <th scope="col" className={TH}>School</th>
+              <th scope="col" className={TH}>Joined</th>
+              <th scope="col" className={TH}>
+                <span className="sr-only">Open</span>
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-brand-hairline">
+          <tbody>
             {members.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-brand-muted-soft">
+                <td colSpan={7} className="px-4 py-8 text-center text-content-muted">
                   No members found.
                 </td>
               </tr>
@@ -138,40 +154,51 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
               const school = m.member_schools?.find((s) => s.is_current)?.schools?.name
 
               return (
-                <tr key={m.id} className="hover:bg-brand-canvas">
-                  <td className="px-4 py-3 font-medium text-brand-blue-dark">
-                    <span className="flex items-center gap-2.5">
-                      <Avatar id={m.id} name={`${m.first_name} ${m.last_name}`} size="sm" ring={false} />
+                <tr key={m.id} className="group hover:bg-surface">
+                  <td className={`${TD} ${STICKY} bg-white group-hover:bg-surface`}>
+                    <Link
+                      href={`/admin/members/${m.id}`}
+                      className="flex items-center gap-2.5 font-medium text-primary hover:underline"
+                    >
+                      {/* aria-hidden: the avatar is labelled with the name, which
+                          the link would otherwise announce twice. */}
+                      <span aria-hidden className="flex shrink-0">
+                        <Avatar id={m.id} name={`${m.first_name} ${m.last_name}`} size="sm" ring={false} />
+                      </span>
                       <span>
                         {m.first_name} {m.last_name}
+                        {/* The space keeps the code a separate word in the link's name. */}
                         {m.member_code && (
-                          <span className="ml-1.5 text-xs text-brand-muted-soft">{m.member_code}</span>
+                          <>
+                            {' '}
+                            <span className="ml-0.5 text-xs font-normal text-content-muted">{m.member_code}</span>
+                          </>
                         )}
                       </span>
-                    </span>
+                    </Link>
                   </td>
-                  <td className="px-4 py-3 text-brand-muted">{m.email}</td>
-                  <td className="px-4 py-3 text-brand-muted">{label(m.event_role)}</td>
-                  <td className="px-4 py-3">
+                  <td className={`${TD} whitespace-nowrap text-content-body`}>{m.email}</td>
+                  <td className={`${TD} whitespace-nowrap text-content-body`}>{label(m.event_role)}</td>
+                  <td className={`${TD} whitespace-nowrap`}>
                     {activeTier ? (
                       <span
-                        className="text-xs bg-brand-blue/5 text-brand-blue px-2 py-0.5 rounded-full"
+                        className="text-xs bg-primary/5 text-primary px-2 py-0.5 rounded-full"
                         title={TIER_TOOLTIPS[activeTier] ?? `Active membership tier: ${activeTier}`}
                       >
                         {activeTier}
                       </span>
                     ) : (
-                      <span className="text-xs text-brand-muted-soft">—</span>
+                      <span className="text-xs text-content-muted">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-brand-muted">{school ?? '—'}</td>
-                  <td className="px-4 py-3 text-brand-muted-soft">
+                  <td className={`${TD} min-w-40 text-content-body`}>{school ?? '—'}</td>
+                  <td className={`${TD} whitespace-nowrap text-content-muted`}>
                     {formatDateShort(m.created_at)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={TD}>
                     <Link
                       href={`/admin/members/${m.id}`}
-                      className="text-brand-blue hover:underline text-xs font-medium"
+                      className="text-primary hover:underline text-xs font-medium"
                     >
                       View
                     </Link>

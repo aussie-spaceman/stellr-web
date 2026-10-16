@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, useId, type RefObject } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
-import FieldError from '@/components/forms/FieldError'
+import { Field, Fieldset, Choice, Input, Select, Textarea } from '@stellr/web-ui'
 import { SchoolSearchInput, SchoolSelection, schoolSelectionState } from '@/components/member/SchoolSearchInput'
 import { COLLEGE_GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, registrantTypeToAgeBracket, type RegistrantType } from '@/lib/registration-constants'
 import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
@@ -58,6 +58,54 @@ function schoolSelectionIsValid(sel: SchoolSelection | null): boolean {
   if (!sel) return false
   if (sel.type === 'existing') return !!sel.id
   return sel.data.name.trim().length > 0
+}
+
+// The first control marked invalid, in on-screen order. Field sets aria-invalid
+// on its control (the school search included); a checkbox group marks its
+// wrapper with data-invalid instead.
+const FIRST_INVALID = '[aria-invalid="true"], [data-invalid="true"] input'
+
+/**
+ * Returns a function that moves focus to the first invalid field once the
+ * errors it follows have rendered — so a failed Continue or Submit lands the
+ * user (and their screen reader) on the field to fix, which reads its error.
+ */
+function useFocusFirstInvalid(root: RefObject<HTMLElement | null>) {
+  const [request, setRequest] = useState(0)
+  useEffect(() => {
+    if (request) root.current?.querySelector<HTMLElement>(FIRST_INVALID)?.focus()
+  }, [request, root])
+  return useCallback(() => setRequest((n) => n + 1), [])
+}
+
+/** Visible asterisk for a legend; the words are for screen readers. */
+function RequiredMark() {
+  return (
+    <>
+      <span className="text-danger" aria-hidden>
+        {' '}*
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  )
+}
+
+/** A required "select all that apply" group of checkboxes. */
+function CheckboxGroup({ legend, options, selected, onToggle, error }: {
+  legend: string; options: readonly string[]; selected: string[]
+  onToggle: (value: string) => void; error?: string
+}) {
+  return (
+    <div data-invalid={error ? 'true' : undefined}>
+      <Fieldset legend={<>{legend}<RequiredMark /></>} hint="Select all that apply" error={error}>
+        <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+          {options.map((opt) => (
+            <Choice key={opt} label={opt} checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
+          ))}
+        </div>
+      </Fieldset>
+    </div>
+  )
 }
 
 
@@ -115,6 +163,9 @@ export default function IndividualRegistrationForm({
     prefill?.school ? { type: 'existing', id: prefill.school.id, name: prefill.school.name } : null
   )
   const [schoolError, setSchoolError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const focusFirstInvalid = useFocusFirstInvalid(formRef)
+  const merchIdPrefix = useId()
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
@@ -203,13 +254,17 @@ export default function IndividualRegistrationForm({
     if (!isAdult && !getValues('grade')) {
       setFieldError('grade', { type: 'manual', message: 'Required' })
       valid = false
+    } else {
+      clearErrors('grade')
     }
     if (!schoolSelectionIsValid(schoolSelection)) {
       setSchoolError('Please select your school')
-      return
+      valid = false
+    } else {
+      setSchoolError(null)
     }
-    setSchoolError(null)
     if (valid) setStep((s) => s + 1)
+    else focusFirstInvalid()
   }
 
   async function onSubmit(data: FormData) {
@@ -218,6 +273,7 @@ export default function IndividualRegistrationForm({
     if (!schoolSelectionIsValid(schoolSelection)) {
       setSchoolError('Please select your school')
       setStep(1)
+      focusFirstInvalid()
       return
     }
     setSubmitting(true)
@@ -305,7 +361,16 @@ export default function IndividualRegistrationForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    // noValidate: the fields carry `required` for screen readers, but
+    // react-hook-form owns validation — the browser's own bubbles would
+    // pre-empt it and skip the focus-the-first-error behaviour below.
+    // Enter in a step-1 field means Continue, not submit-the-whole-form.
+    <form
+      ref={formRef}
+      noValidate
+      onSubmit={step === 1 ? (e) => { e.preventDefault(); void nextStep() } : handleSubmit(onSubmit, focusFirstInvalid)}
+      className="space-y-6"
+    >
       {scholarship && (
         <div className="rounded-ds-card border border-line bg-primary-soft px-4 py-3 text-sm text-ink">
           <p className="font-semibold">Your {scholarship.percent}% scholarship is applied to this registration.</p>
@@ -334,127 +399,112 @@ export default function IndividualRegistrationForm({
 
           <div className="bg-white rounded-xl border border-line p-6 space-y-5">
             {!isAdultMember && (
-              <div>
-                <label className="label-text">I am registering as *</label>
-                <div className="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+              <Fieldset legend={<>I am registering as<RequiredMark /></>}>
+                <div className="flex flex-wrap gap-x-6">
                   {([
                     { value: 'high_school', label: studentTypeLabel },
                     { value: 'college', label: 'College' },
                     { value: 'adult', label: 'Adult (not a student)' },
                   ] as { value: RegistrantType; label: string }[]).map((opt) => (
-                    <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="radio"
-                        name="registrant_type"
-                        checked={registrantType === opt.value}
-                        onChange={() => chooseRegistrantType(opt.value)}
-                        className="border-line text-brand-blue"
-                      />
-                      {opt.label}
-                    </label>
+                    <Choice
+                      key={opt.value}
+                      type="radio"
+                      name="registrant_type"
+                      label={opt.label}
+                      checked={registrantType === opt.value}
+                      onChange={() => chooseRegistrantType(opt.value)}
+                    />
                   ))}
                 </div>
-              </div>
+              </Fieldset>
             )}
 
+            {/* The registrant's own details: standard autocomplete tokens so a
+                browser can fill them from their profile (WCAG 1.3.5). */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label-text">First Name *</label>
-                <input {...register('first_name')} className="input-field" placeholder="Jane" />
-                <FieldError message={errors.first_name?.message} />
-              </div>
-              <div>
-                <label className="label-text">Last Name *</label>
-                <input {...register('last_name')} className="input-field" placeholder="Smith" />
-                <FieldError message={errors.last_name?.message} />
-              </div>
+              <Field label="First Name" required error={errors.first_name?.message}>
+                <Input {...register('first_name')} autoComplete="given-name" placeholder="Jane" />
+              </Field>
+              <Field label="Last Name" required error={errors.last_name?.message}>
+                <Input {...register('last_name')} autoComplete="family-name" placeholder="Smith" />
+              </Field>
             </div>
 
-            <div>
-              <label className="label-text">Preferred Name / Nickname</label>
-              <input {...register('nickname')} className="input-field" placeholder="Optional" />
-            </div>
+            <Field label="Preferred Name / Nickname">
+              <Input {...register('nickname')} autoComplete="nickname" placeholder="Optional" />
+            </Field>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label-text">Email Address *</label>
-                <input
+              <Field
+                label="Email Address"
+                required
+                hint={emailLocked ? 'Linked to your Stellr account.' : undefined}
+                error={emailLocked ? undefined : errors.email?.message}
+              >
+                <Input
                   {...register('email')}
                   type="email"
-                  className="input-field"
+                  autoComplete="email"
                   placeholder="jane@example.com"
                   readOnly={emailLocked}
                   aria-readonly={emailLocked}
                 />
-                {emailLocked ? (
-                  <p className="mt-1 text-xs text-content-faint">Linked to your Stellr account.</p>
-                ) : (
-                  <FieldError message={errors.email?.message} />
-                )}
-              </div>
-              <div>
-                <label className="label-text">Phone Number *</label>
-                <input {...register('phone')} type="tel" className="input-field" placeholder="+1 555 000 0000" />
-                <FieldError message={errors.phone?.message} />
-              </div>
+              </Field>
+              <Field label="Phone Number" required error={errors.phone?.message}>
+                <Input {...register('phone')} type="tel" autoComplete="tel" placeholder="+1 555 000 0000" />
+              </Field>
             </div>
 
             {/* School is captured before DOB/Grade so its State can drive the
                 entry cutoff used to pre-fill the Grade field. */}
-            <div>
-              <label className="label-text">School *</label>
+            <Field
+              label="School"
+              required
+              hint={registrantType === 'high_school'
+                ? "Your school's state sets the grade cutoff we use to pre-fill your grade below."
+                : undefined}
+              error={schoolError ?? undefined}
+            >
               <SchoolSearchInput
                 initialSchool={prefill?.school}
                 onChange={(sel) => { setSchoolSelection(sel); setSchoolError(null) }}
               />
-              {registrantType === 'high_school' && (
-                <p className="mt-1 text-xs text-content-faint">
-                  Your school&apos;s state sets the grade cutoff we use to pre-fill your grade below.
-                </p>
-              )}
-              {schoolError && <FieldError message={schoolError} />}
-            </div>
+            </Field>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label-text">Date of Birth *</label>
-                <input {...register('date_of_birth')} type="date" className="input-field" />
-                <FieldError message={errors.date_of_birth?.message} />
-              </div>
+              <Field label="Date of Birth" required error={errors.date_of_birth?.message}>
+                <Input {...register('date_of_birth')} type="date" autoComplete="bday" />
+              </Field>
               {!isAdult && (
-                <div>
-                  <label className="label-text">{registrantType === 'college' ? 'Year Level *' : 'Grade *'}</label>
-                  <select {...register('grade')} className="input-field">
+                <Field
+                  label={registrantType === 'college' ? 'Year Level' : 'Grade'}
+                  required
+                  hint={registrantType === 'high_school' ? 'Auto-filled from your date of birth — change it if needed.' : undefined}
+                  error={errors.grade?.message}
+                >
+                  <Select {...register('grade')}>
                     <option value="">Select…</option>
                     {(registrantType === 'college' ? COLLEGE_GRADES : studentGrades).map((g) => (
                       <option key={g} value={g}>{registrantType === 'college' ? g : `Grade ${g}`}</option>
                     ))}
-                  </select>
-                  {registrantType === 'high_school' && (
-                    <p className="mt-1 text-xs text-content-faint">Auto-filled from your date of birth — change it if needed.</p>
-                  )}
-                  <FieldError message={errors.grade?.message} />
-                </div>
+                  </Select>
+                </Field>
               )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label-text">Gender *</label>
-                <select {...register('gender')} className="input-field">
+              <Field label="Gender" required error={errors.gender?.message}>
+                <Select {...register('gender')} autoComplete="sex">
                   <option value="">Select…</option>
                   {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
-                <FieldError message={errors.gender?.message} />
-              </div>
-              <div>
-                <label className="label-text">T-Shirt Size *</label>
-                <select {...register('t_shirt_size')} className="input-field">
+                </Select>
+              </Field>
+              <Field label="T-Shirt Size" required error={errors.t_shirt_size?.message}>
+                <Select {...register('t_shirt_size')}>
                   <option value="">Select…</option>
                   {T_SHIRT_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <FieldError message={errors.t_shirt_size?.message} />
-              </div>
+                </Select>
+              </Field>
             </div>
           </div>
 
@@ -472,112 +522,96 @@ export default function IndividualRegistrationForm({
             <p className="text-sm text-content-body">Step 2 of 2 — Required for all participants</p>
           </div>
 
-          <div className="bg-white rounded-xl border border-line p-6 space-y-5">
-            <h3 className="font-semibold text-brand-blue-dark">Emergency Contact</h3>
+          {/* A fieldset, so "First Name" here is announced as the emergency
+              contact's, not the registrant's. Its own autofill section keeps a
+              browser from filling the registrant's details into it. */}
+          <div className="bg-white rounded-xl border border-line p-6">
+            <fieldset className="min-w-0 space-y-5">
+              <legend>
+                <h3 className="font-semibold text-brand-blue-dark">Emergency Contact</h3>
+              </legend>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label-text">First Name *</label>
-                <input {...register('emergency_contact_first_name')} className="input-field" />
-                <FieldError message={errors.emergency_contact_first_name?.message} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="First Name" required error={errors.emergency_contact_first_name?.message}>
+                  <Input {...register('emergency_contact_first_name')} autoComplete="section-emergency given-name" />
+                </Field>
+                <Field label="Last Name" required error={errors.emergency_contact_last_name?.message}>
+                  <Input {...register('emergency_contact_last_name')} autoComplete="section-emergency family-name" />
+                </Field>
               </div>
-              <div>
-                <label className="label-text">Last Name *</label>
-                <input {...register('emergency_contact_last_name')} className="input-field" />
-                <FieldError message={errors.emergency_contact_last_name?.message} />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label-text">Email *</label>
-                <input {...register('emergency_contact_email')} type="email" className="input-field" />
-                <FieldError message={errors.emergency_contact_email?.message} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Email" required error={errors.emergency_contact_email?.message}>
+                  <Input {...register('emergency_contact_email')} type="email" autoComplete="section-emergency email" />
+                </Field>
+                <Field label="Phone" required error={errors.emergency_contact_phone?.message}>
+                  <Input {...register('emergency_contact_phone')} type="tel" autoComplete="section-emergency tel" />
+                </Field>
               </div>
-              <div>
-                <label className="label-text">Phone *</label>
-                <input {...register('emergency_contact_phone')} type="tel" className="input-field" />
-                <FieldError message={errors.emergency_contact_phone?.message} />
-              </div>
-            </div>
 
-            <div>
-              <label className="label-text">Relationship To Participant *</label>
-              <select {...register('emergency_contact_relationship')} className="input-field">
-                <option value="">Select…</option>
-                {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <FieldError message={errors.emergency_contact_relationship?.message} />
-            </div>
+              <Field label="Relationship To Participant" required error={errors.emergency_contact_relationship?.message}>
+                <Select {...register('emergency_contact_relationship')}>
+                  <option value="">Select…</option>
+                  {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </Select>
+              </Field>
+            </fieldset>
           </div>
 
           <div className="bg-white rounded-xl border border-line p-6 space-y-5">
-            <h3 className="font-semibold text-brand-blue-dark">Ethnicity *</h3>
-            <p className="text-xs text-content-faint -mt-3">Select all that apply</p>
-            <div className="grid grid-cols-2 gap-2">
-              {ETHNICITIES.map((e) => (
-                <label key={e} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={ethnicity.includes(e)}
-                    onChange={() => toggleMulti('ethnicity', e)}
-                    className="rounded border-line text-brand-blue"
-                  />
-                  {e}
-                </label>
-              ))}
-            </div>
-            <FieldError message={errors.ethnicity?.message} />
+            <CheckboxGroup
+              legend="Ethnicity"
+              options={ETHNICITIES}
+              selected={ethnicity}
+              onToggle={(v) => toggleMulti('ethnicity', v)}
+              error={errors.ethnicity?.message}
+            />
 
-            <h3 className="font-semibold text-brand-blue-dark pt-2">Dietary Requirements *</h3>
-            <p className="text-xs text-content-faint -mt-3">Select all that apply</p>
-            <div className="grid grid-cols-2 gap-2">
-              {DIETARY.map((d) => (
-                <label key={d} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={dietary.includes(d)}
-                    onChange={() => toggleMulti('dietary_requirements', d)}
-                    className="rounded border-line text-brand-blue"
-                  />
-                  {d}
-                </label>
-              ))}
-            </div>
-            <FieldError message={errors.dietary_requirements?.message} />
+            <CheckboxGroup
+              legend="Dietary Requirements"
+              options={DIETARY}
+              selected={dietary}
+              onToggle={(v) => toggleMulti('dietary_requirements', v)}
+              error={errors.dietary_requirements?.message}
+            />
 
-            <div>
-              <label className="label-text">Health Conditions / Allergies</label>
-              <textarea
+            <Field label="Health Conditions / Allergies">
+              <Textarea
                 {...register('health_conditions')}
-                className="input-field resize-none"
+                className="resize-none"
                 rows={3}
                 placeholder="List any physical or health conditions we should be aware of, or leave blank if none."
               />
-            </div>
+            </Field>
           </div>
 
           {addons.length > 0 && (
             <div className="bg-white rounded-xl border border-line p-6 space-y-4">
               <h3 className="font-semibold text-brand-blue-dark">Add Merchandise (optional)</h3>
               <p className="text-xs text-content-faint -mt-2">Collect these in person when you check in at the event.</p>
-              {addons.map((a) => (
-                <div key={a.variantId} className="flex items-center justify-between gap-3">
-                  <div className="text-sm">
-                    <span className="text-ink">{a.name}</span>
-                    <span className="text-content-muted"> — ${(a.unitCents / 100).toFixed(2)}</span>
+              {addons.map((a) => {
+                const qtyId = `${merchIdPrefix}-${a.variantId}`
+                return (
+                  <div key={a.variantId} className="flex items-center justify-between gap-3">
+                    <label htmlFor={qtyId} className="text-sm">
+                      <span className="text-ink">{a.name}</span>
+                      <span className="text-content-muted"> — ${(a.unitCents / 100).toFixed(2)}</span>
+                    </label>
+                    <div className="w-20 shrink-0">
+                      <Input
+                        id={qtyId}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={merchQty[a.variantId] ?? 0}
+                        onChange={(e) =>
+                          setMerchQty((m) => ({ ...m, [a.variantId]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))
+                        }
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="number"
-                    min={0}
-                    value={merchQty[a.variantId] ?? 0}
-                    onChange={(e) =>
-                      setMerchQty((m) => ({ ...m, [a.variantId]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))
-                    }
-                    className="input-field w-20"
-                  />
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

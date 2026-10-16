@@ -53,7 +53,7 @@ export default async function AdminCampaignPage({ params }: PageProps) {
             <Link href="/admin/competitions" className="hover:text-content">Admin</Link> / Campaigns
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-pathway-amber">
+            <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-gold-ink">
               ✦ Campaign · Async
             </span>
             <span className={`inline-flex items-center rounded-pill px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] ${meta.chip}`}>
@@ -72,7 +72,7 @@ export default async function AdminCampaignPage({ params }: PageProps) {
       {/* Stat cards */}
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
         <StatCard value={rows.length} label="Registered groups" />
-        <StatCard value={submittedCount} label="Proposals submitted" valueClassName="text-enviro-green" />
+        <StatCard value={submittedCount} label="Proposals submitted" valueClassName="text-enviro-green-text" />
         <StatCard value={dl?.daysLeft ?? 0} label="Days to deadline" valueClassName="text-danger" />
         <StatCard value={studentTotal} label="Students" />
       </div>

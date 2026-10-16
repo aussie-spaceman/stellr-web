@@ -5,7 +5,9 @@ const config: StorybookConfig = {
     '../packages/web-ui/src/**/*.stories.@(ts|tsx)',
     '../components/**/*.stories.@(ts|tsx)',
   ],
-  addons: [],
+  // a11y: axe in the Accessibility panel while reviewing a story. CI runs the
+  // same checks on every story with the test runner (.storybook/test-runner.ts).
+  addons: ['@storybook/addon-a11y'],
   framework: { name: '@storybook/nextjs', options: {} },
   staticDirs: ['../public'],
 }

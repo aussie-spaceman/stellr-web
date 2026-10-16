@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Calendar, UserPlus, ShieldCheck, Trash2 } from 'lucide-react'
+import { Field, Fieldset, Input, Select } from '@stellr/web-ui'
 import { ChatPanel } from '@/components/community/ChatPanel'
 import { JoinButton } from '@/components/community/JoinButton'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
 import { MemberSearchField, type PickedPerson } from '@/components/community/mentoring/MemberSearchField'
-import { ModalShell, ModalField, inputCls, ScheduleAllModal, ScheduleOneModal } from '@/components/community/mentoring/ScheduleModals'
+import { ModalShell, ModalField, ScheduleAllModal, ScheduleOneModal } from '@/components/community/mentoring/ScheduleModals'
 import { formatSessionTime, themeTile, type CohortTheme } from '@/lib/mentoring-format'
 import type { RosterMember } from '@/lib/mentoring'
 import Link from 'next/link'
@@ -78,7 +79,7 @@ export function AdminManageCohort(props: {
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] font-display text-sm font-bold text-white" style={{ background: tile.gradient }}>{cohort.name.charAt(0)}</span>
-            <h1 className="font-display text-[26px] font-bold tracking-[-0.02em]">{cohort.name}</h1>
+            <h1 className="font-display text-[26px] font-bold">{cohort.name}</h1>
           </div>
           <button onClick={() => setTab('settings')} className="rounded-[9px] border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Settings</button>
         </div>
@@ -87,7 +88,7 @@ export function AdminManageCohort(props: {
             const active = tab === t.key
             return (
               <button key={t.key} onClick={() => setTab(t.key)} className={`relative -mb-px pb-3 text-sm transition-colors ${active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'}`}>
-                {t.label}{t.count ? <span className="ml-1.5 text-[11px] text-star-gold">{t.count}</span> : null}
+                {t.label}{t.count ? <span className="ml-1.5 text-xs text-star-gold">{t.count}</span> : null}
                 {active && <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t bg-star-gold" />}
               </button>
             )
@@ -113,7 +114,7 @@ export function AdminManageCohort(props: {
                     <p className="text-sm font-medium text-ink">{m.name}</p>
                     <p className="text-[12.5px] text-content-muted">{m.email}</p>
                   </div>
-                  <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${m.status === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-[#C2722A]'}`}>{m.status === 'active' ? 'Active' : 'Invited'}</span>
+                  <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${m.status === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>{m.status === 'active' ? 'Active' : 'Invited'}</span>
                   <div className="flex items-center gap-2">
                     {m.status === 'invited' ? (
                       <button onClick={() => admin({ action: 'resendInvites', cohortId: cohort.id })} className="text-[13px] font-medium text-primary hover:underline">Resend invite</button>
@@ -143,7 +144,7 @@ export function AdminManageCohort(props: {
               return (
                 <li key={s.id} className="flex items-center justify-between gap-3 py-3.5 first:pt-0">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 flex-col items-center justify-center rounded-[10px] bg-surface"><span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span><span className="text-[10px] uppercase text-content-muted">{t.month}</span></div>
+                    <div className="flex h-11 w-11 flex-col items-center justify-center rounded-[10px] bg-surface"><span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span><span className="text-xs uppercase text-content-muted">{t.month}</span></div>
                     <div><p className="font-medium text-ink">{s.title ?? 'Mentoring session'}</p><p className="text-[13px] text-content-secondary">{t.timeLine}</p></div>
                   </div>
                   {s.recordingStatus === 'available' ? <MaterialDownloadButton endpoint={`/api/community/sessions/${s.id}/recording`} title="recording" label="Recording" /> : !isPast ? <JoinButton sessionId={s.id} scheduledStart={s.start} isHost /> : <span className="text-[13px] text-content-faint">—</span>}
@@ -197,13 +198,15 @@ function AdminResources({ resources, modules, tz, manage }: { resources: Resourc
   const available = modules.filter((m) => !linked.has(m.id))
   return (
     <Card>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-[16px] font-bold text-ink">Resources</h2>
-        <div className="flex items-center gap-2">
-          <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="rounded-[9px] border border-line bg-white px-3 py-2 text-sm">
-            <option value="">Add a course…</option>
-            {available.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
-          </select>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="min-w-0 flex-1 sm:w-56 sm:flex-none">
+            <Select value={moduleId} onChange={(e) => setModuleId(e.target.value)} aria-label="Add a course">
+              <option value="">Add a course…</option>
+              {available.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+            </Select>
+          </div>
           <button onClick={async () => { if (moduleId && (await manage({ action: 'linkTraining', moduleId, mandatory: false }))) setModuleId('') }} disabled={!moduleId} className="rounded-[9px] bg-space-violet px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Add</button>
         </div>
       </div>
@@ -215,8 +218,8 @@ function AdminResources({ resources, modules, tz, manage }: { resources: Resourc
             <li key={r.moduleId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
               <span className="flex items-center gap-2 font-medium text-ink">
                 {r.title}
-                <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>{r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}</span>
-                {r.isMandatory && r.dueAt && <span className="rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-[10px] font-bold text-[#C2722A]">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(r.dueAt))}</span>}
+                <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>{r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}</span>
+                {r.isMandatory && r.dueAt && <span className="rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-xs font-bold text-gold-ink">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(r.dueAt))}</span>}
               </span>
               <div className="flex items-center gap-3">
                 <button onClick={() => manage({ action: 'linkTraining', moduleId: r.moduleId, mandatory: !r.isMandatory, dueAt: r.dueAt })} className="text-[13px] font-medium text-space-violet hover:underline">{r.isMandatory ? 'Make optional' : 'Make mandatory'}</button>
@@ -242,17 +245,17 @@ function AdminSettings({ cohort, tiers, admin }: { cohort: CohortMeta; tiers: { 
       <Card>
         <h2 className="font-display text-[16px] font-bold text-ink">Cohort settings</h2>
         <div className="mt-4 space-y-4">
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Cohort name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Mentor</label>
-            <p className="mb-1.5 text-[12.5px] text-content-muted">Current: {cohort.mentorName ?? 'none'}. Choose a new mentor to reassign (gains full management access).</p>
+          <Field label="Cohort name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Fieldset
+            legend="Mentor"
+            hint={`Current: ${cohort.mentorName ?? 'none'}. Choose a new mentor to reassign (gains full management access).`}
+          >
             <MemberSearchField endpoint={ADMIN_SEARCH} selected={mentor} onChange={(n) => setMentor(n.slice(-1))} placeholder="Search for a mentor…" />
-          </div>
+          </Fieldset>
           <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Access</label>
+            <p className="mb-1.5 font-subheading text-sm font-medium text-content-body">Access</p>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-pill bg-enviro-green-bg px-2.5 py-1 text-[12.5px] font-medium text-enviro-green-text">
                 <ShieldCheck className="h-3.5 w-3.5" /> {freeTierNames.length ? `Free · ${freeTierNames.join(', ')}` : 'No free tiers'}
@@ -284,13 +287,21 @@ function AdminSettings({ cohort, tiers, admin }: { cohort: CohortMeta; tiers: { 
               <p className="font-semibold text-ink">Archive cohort</p>
               <p className="text-[13px] text-content-muted">Closes the chat and all video calls. Recordings, files and chat history stay available.</p>
             </div>
-            <button onClick={() => admin({ action: 'archive', cohortId: cohort.id })} className="rounded-[9px] border border-pathway-amber px-4 py-2 text-sm font-semibold text-[#C2722A] hover:bg-pathway-amber-bg">Archive cohort</button>
+            <button onClick={() => admin({ action: 'archive', cohortId: cohort.id })} className="rounded-[9px] border border-pathway-amber px-4 py-2 text-sm font-semibold text-gold-ink hover:bg-pathway-amber-bg">Archive cohort</button>
           </div>
           <div className="rounded-[12px] border border-danger/30 bg-danger/5 p-4">
             <p className="font-semibold text-danger">Delete cohort</p>
             <p className="text-[13px] text-content-muted">Permanently removes the cohort and all associated data — recordings, uploaded files and chat history. Cannot be undone.</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`Type "${cohort.name}" to confirm`} className="flex-1 rounded-[9px] border border-line px-3 py-2 text-sm outline-none focus:border-danger" />
+              <div className="min-w-0 flex-1">
+                <Input
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder={`Type "${cohort.name}" to confirm`}
+                  aria-label="Type the cohort name to confirm deletion"
+                  autoComplete="off"
+                />
+              </div>
               <button
                 onClick={async () => { if ((await admin({ action: 'delete', cohortId: cohort.id }))) router.push('/admin/academy/mentoring') }}
                 disabled={confirm !== cohort.name}

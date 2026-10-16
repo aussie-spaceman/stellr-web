@@ -94,7 +94,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Surveys</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Surveys</h1>
         <p className="mt-0.5 text-sm text-brand-muted-soft">
           Post-event surveys for every event. Numbers below are app responses only; legacy Google Forms imports are in the exports under their own keys.
         </p>
@@ -106,7 +106,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
       <form className="flex flex-wrap items-end gap-3 text-sm" method="get">
         <label className="text-brand-muted">
           <span className="block text-xs">Event</span>
-          <select name="event" defaultValue={eventSlug ?? ''} className="mt-1 rounded-lg border border-brand-border bg-white px-2 py-1.5">
+          <select name="event" defaultValue={eventSlug ?? ''} className="mt-1 rounded-lg border border-line-strong bg-white px-2 py-1.5">
             <option value="">All events</option>
             {distributions.map((d) => (
               <option key={d.id} value={d.event_slug}>
@@ -117,7 +117,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
         </label>
         <label className="text-brand-muted">
           <span className="block text-xs">Year</span>
-          <select name="year" defaultValue={year ?? ''} className="mt-1 rounded-lg border border-brand-border bg-white px-2 py-1.5">
+          <select name="year" defaultValue={year ?? ''} className="mt-1 rounded-lg border border-line-strong bg-white px-2 py-1.5">
             <option value="">All years</option>
             {years.map((y) => (
               <option key={y} value={y}>
@@ -164,7 +164,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
       <p className="text-xs text-brand-muted-soft">Title I breakdown needs NCES school IDs on schools — a follow-up (not yet collected).</p>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Event surveys</h2>
+        <h2 className="text-sm font-semibold text-brand-muted">Event surveys</h2>
         <div className="overflow-x-auto rounded-xl border border-brand-border bg-white">
           <table className="min-w-full text-sm">
             <thead className="bg-surface text-left text-xs uppercase tracking-wide text-brand-muted-soft">
@@ -209,7 +209,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Withdraw a quote</h2>
+        <h2 className="text-sm font-semibold text-brand-muted">Withdraw a quote</h2>
         <p className="text-sm text-brand-muted-soft">
           On a request from a student, parent or school: paste the response ID from the quotable-answers export. The quote is excluded from every later export. This can’t be undone, and it is logged.
         </p>
@@ -232,7 +232,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 function Table({ title, rows }: { title: string; rows: [string, string][] }) {
   return (
     <div className="rounded-xl border border-brand-border bg-white p-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-brand-muted">{title}</h3>
+      <h3 className="text-xs font-semibold text-brand-muted">{title}</h3>
       {rows.length ? (
         <dl className="mt-2 divide-y divide-brand-hairline text-sm">
           {rows.map(([k, v]) => (

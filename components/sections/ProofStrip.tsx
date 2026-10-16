@@ -87,10 +87,13 @@ export function ProofStrip({
     <div className={className}>
       {heading && <h3 className="mb-4 font-display text-lg font-bold text-ink">{heading}</h3>}
 
-      {/* Strip: scroll-snap row on mobile, responsive grid ≥sm */}
+      {/* Strip: scroll-snap row on mobile, responsive grid ≥sm. `relative` makes
+          the list the containing block for the photos' absolutely positioned
+          (sr-only) credits; without it they escaped the scroller and widened
+          /network to 867px on every phone. */}
       <ul className={single
-        ? 'mx-auto max-w-2xl'
-        : `-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
+        ? 'relative mx-auto max-w-2xl'
+        : `relative -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
         {photos.map((p, i) => (
           <li key={p.id} className={single ? 'w-full' : 'w-[78%] shrink-0 snap-start sm:w-auto'}>
             <button
@@ -108,7 +111,7 @@ export function ProofStrip({
                 <>
                   <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.caption ?? p.alt}</p>
                   {p.credit && (
-                    <p className="text-[11px] text-content-faint">{p.credit}</p>
+                    <p className="text-xs text-content-faint">{p.credit}</p>
                   )}
                 </>
               )}
@@ -129,25 +132,26 @@ export function ProofStrip({
           onClick={(e) => {
             if (e.target === e.currentTarget) close()
           }}
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 outline-none"
-          style={{ background: 'rgba(8,12,28,.82)' }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-midnight-deep/90 px-2 py-4 outline-none sm:p-4"
         >
           <button
             type="button"
             onClick={close}
             aria-label="Close"
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 sm:right-4 sm:top-4"
           >
             <X className="h-5 w-5" />
           </button>
 
-          <div className="flex w-full max-w-5xl items-center gap-3" onClick={(e) => e.stopPropagation()}>
+          {/* On a phone the arrows sit over the photo, so it can use the full
+              width (beside it, they shrank photos to about 230px). */}
+          <div className="relative flex w-full max-w-5xl items-center gap-3" onClick={(e) => e.stopPropagation()}>
             {photos.length > 1 && (
               <button
                 type="button"
                 onClick={() => step(-1)}
                 aria-label="Previous photo"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                className="absolute left-1 top-1/2 z-10 flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-midnight-deep/60 text-white transition-colors hover:bg-white/20 sm:static sm:translate-y-0 sm:bg-white/10"
               >
                 <ChevronLeft className="h-6 w-6" />
               </button>
@@ -155,9 +159,9 @@ export function ProofStrip({
             <figure className="min-w-0 flex-1">
               <ResponsivePhoto
                 photo={active}
-                sizes="(max-width: 1024px) 90vw, 960px"
+                sizes="(max-width: 1024px) 100vw, 960px"
                 priority
-                className="max-h-[78vh] bg-black"
+                className="max-h-[78svh] bg-black"
                 imgClassName="object-contain"
               />
               <figcaption className="mt-3 text-center text-sm text-white/90">
@@ -175,7 +179,7 @@ export function ProofStrip({
                 type="button"
                 onClick={() => step(1)}
                 aria-label="Next photo"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                className="absolute right-1 top-1/2 z-10 flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-midnight-deep/60 text-white transition-colors hover:bg-white/20 sm:static sm:translate-y-0 sm:bg-white/10"
               >
                 <ChevronRight className="h-6 w-6" />
               </button>

@@ -97,21 +97,21 @@ export default function EducatorsPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8">
         <div className="max-w-7xl mx-auto">
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → For Educators &amp; Schools
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Bring real-world STEM to your students
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
             Educators are at the heart of how Stellr reaches students. We give you the curriculum,
             the training, and the support to deliver industry-grade STEM experiences — without
             adding to your workload.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Register as an Educator
             </a>
             <Link href="/curriculum" className="btn-outline-white">
@@ -124,7 +124,7 @@ export default function EducatorsPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Educator sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
+        className="sticky top-[var(--header-h)] z-30 bg-white border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {sections.map((s) => (
@@ -147,7 +147,7 @@ export default function EducatorsPage() {
       </section>
 
       {/* ── #educators ────────────────────────────────────────────────── */}
-      <section id="educators" className="section-padding bg-white scroll-mt-36">
+      <section id="educators" className="section-padding bg-white scroll-mt-14">
         <div className="container-max">
           <div className="max-w-2xl mb-10">
             <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">
@@ -205,7 +205,7 @@ export default function EducatorsPage() {
           schema) and the application form — lives once, at /grant. Two pages
           carrying the same copy would compete for the same search terms and
           double every future edit. */}
-      <section id="grant" className="section-padding bg-brand-grey-light scroll-mt-36">
+      <section id="grant" className="section-padding bg-brand-grey-light scroll-mt-14">
         <div className="container-max">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-4">
@@ -240,7 +240,7 @@ export default function EducatorsPage() {
       </section>
 
       {/* ── #schools ──────────────────────────────────────────────────── */}
-      <section id="schools" className="section-padding bg-white scroll-mt-36">
+      <section id="schools" className="section-padding bg-white scroll-mt-14">
         <div className="container-max">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
             <div>
@@ -312,12 +312,12 @@ export default function EducatorsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Ready to bring Stellr to your students?</h2>
-          <p className="text-content-faint leading-relaxed mb-8">
+          <p className="text-hero-lead leading-relaxed mb-8">
             Register as an Educator to unlock Baseline curriculum, or talk to our team about a
             school-wide partnership.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Register as an Educator
             </a>
             <Link href="/contact" className="btn-outline-white">

@@ -137,7 +137,7 @@ export function ContainerTraining({
             <select
               value={moduleId}
               onChange={(e) => { setModuleId(e.target.value); setSaved(false) }}
-              className="rounded-md border border-brand-border px-3 py-2 text-sm"
+              className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
             >
               {available.map((m) => (
                 <option key={m.id} value={m.id}>{m.title}</option>
@@ -149,7 +149,7 @@ export function ContainerTraining({
                 type="date"
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
-                className="rounded-md border border-brand-border px-3 py-2 text-sm text-brand-muted"
+                className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm text-brand-muted"
               />
             </label>
           </div>

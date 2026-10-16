@@ -23,7 +23,7 @@ export default async function SurveyAnswersPage({ params }: { params: Promise<{ 
   return (
     <div>
       <Link href="/community/surveys" className="text-sm text-primary hover:underline">← My surveys</Link>
-      <h1 className="mt-2 font-heading uppercase text-title text-brand-blue-dark">{item.eventTitle}</h1>
+      <h1 className="mt-2 font-heading text-ds-h2 text-brand-blue-dark">{item.eventTitle}</h1>
       <p className="mt-1 text-sm text-brand-muted-soft">Submitted {formatDateShort(item.submittedAt)}. Submitted answers can’t be changed.</p>
 
       <div className="mt-6">

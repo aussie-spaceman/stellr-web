@@ -85,7 +85,7 @@ export function CohortSpace(props: {
     <div className="mx-auto max-w-content space-y-6">
       {/* ── Mini-hero ── */}
       <div
-        className="relative overflow-hidden rounded-panel px-7 pt-6 text-white"
+        className="relative overflow-hidden rounded-panel px-4 pt-6 sm:px-7 text-white"
         style={{ background: 'radial-gradient(130% 150% at 88% -30%, #36306F, #181D44 48%, #0E1330)' }}
       >
         <StarDots />
@@ -96,8 +96,8 @@ export function CohortSpace(props: {
             <span className="text-hero-lead">{cohort.name}</span>
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-[30px] font-bold tracking-[-0.02em]">{cohort.name}</h1>
-            <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[11px] font-bold tracking-[0.04em] ${tile.chip}`}>
+            <h1 className="font-display text-[30px] font-bold">{cohort.name}</h1>
+            <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-bold tracking-[0.04em] ${tile.chip}`}>
               {tile.label}
             </span>
           </div>
@@ -110,7 +110,7 @@ export function CohortSpace(props: {
                   <Avatar key={i} name={r.name} bg="#3C6DF6" ring />
                 ))}
                 {cohort.memberCount > 3 && (
-                  <span className="z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-[11px] font-semibold ring-2 ring-[#181D44]">
+                  <span className="z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-xs font-semibold ring-2 ring-[#181D44]">
                     +{cohort.memberCount - 3}
                   </span>
                 )}
@@ -125,19 +125,21 @@ export function CohortSpace(props: {
           </div>
 
           {/* Tab bar */}
-          <nav className="mt-5 flex gap-6 border-b border-white/10">
+          <nav role="tablist" className="mt-5 flex gap-6 overflow-x-auto border-b border-white/10 [scrollbar-width:none]">
             {TABS.map((t) => {
               const active = tab === t.key
               return (
                 <button
                   key={t.key}
+                  role="tab"
+                  aria-selected={active}
                   onClick={() => setTab(t.key)}
-                  className={`relative -mb-px pb-3 text-sm transition-colors ${
+                  className={`relative -mb-px min-h-11 shrink-0 whitespace-nowrap pt-2 pb-3 text-sm transition-colors ${
                     active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'
                   }`}
                 >
                   {t.label}
-                  {t.count ? <span className="ml-1.5 text-[11px] text-star-gold">{t.count}</span> : null}
+                  {t.count ? <span className="ml-1.5 text-xs text-star-gold">{t.count}</span> : null}
                   {active && <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t bg-star-gold" />}
                 </button>
               )
@@ -184,7 +186,7 @@ function OverviewPane(props: React.ComponentProps<typeof CohortSpace>) {
         {/* Next live session */}
         {next && nextSession ? (
           <div className="overflow-hidden rounded-card border-2 border-space-violet bg-white">
-            <div className="bg-space-violet px-5 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
+            <div className="bg-space-violet px-5 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-white">
               Next live session
             </div>
             <div className="p-5">
@@ -221,7 +223,7 @@ function OverviewPane(props: React.ComponentProps<typeof CohortSpace>) {
               {mandatory.map((r) => (
                 <li key={r.moduleId} className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm text-content-body">
-                    <span className="inline-flex items-center rounded-pill bg-space-violet-chip px-2 py-0.5 text-[10px] font-bold text-space-violet-text">DUE SOON</span>
+                    <span className="inline-flex items-center rounded-pill bg-space-violet-chip px-2 py-0.5 text-xs font-bold text-space-violet-text">DUE SOON</span>
                     {r.title}
                   </span>
                 </li>
@@ -321,7 +323,7 @@ function SessionsPane({ sessions, tz, isMentor, cohortId }: { sessions: SessionR
                 <div>
                   <p className="flex items-center gap-2 font-medium text-ink">
                     {s.title ?? 'Mentoring session'}
-                    <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold tracking-[0.04em] ${badge.cls}`}>{badge.text}</span>
+                    <span className={`rounded-pill px-2 py-0.5 text-xs font-bold tracking-[0.04em] ${badge.cls}`}>{badge.text}</span>
                   </p>
                   <p className="text-[13px] text-content-secondary">{t.dateShort} · {t.timeLine}</p>
                 </div>
@@ -367,7 +369,7 @@ function ResourcesPane({
               <div>
                 <p className="flex items-center gap-2 font-medium text-ink">
                   {r.title}
-                  <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
+                  <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
                     {r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}
                   </span>
                 </p>
@@ -397,7 +399,7 @@ function ResourcesPane({
               <div>
                 <p className="flex items-center gap-2 font-medium text-ink">
                   {r.title}
-                  <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
+                  <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
                     {r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}
                   </span>
                 </p>
@@ -418,7 +420,7 @@ function ResourcesPane({
             <div>
               <p className="flex items-center gap-2 font-medium text-ink">
                 {s.title ?? 'Session recording'}
-                <span className="rounded-pill bg-surface px-2 py-0.5 text-[10px] font-bold text-content-muted">RECORDING</span>
+                <span className="rounded-pill bg-surface px-2 py-0.5 text-xs font-bold text-content-muted">RECORDING</span>
               </p>
               <p className="text-[12.5px] text-content-muted">
                 Recording · {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(s.start))}
@@ -453,7 +455,7 @@ function ActionsPane({ actions, tz, mentorName }: { actions: ActionRow[]; tz: st
   return (
     <Card>
       <div className="mb-3 flex gap-4 text-[13px] font-semibold">
-        <span className="text-pathway-amber">{todo} to do</span>
+        <span className="text-gold-ink">{todo} to do</span>
         <span className="text-enviro-green-text">{done} done</span>
       </div>
       <ul className="divide-y divide-line-light">
@@ -469,7 +471,7 @@ function ActionsPane({ actions, tz, mentorName }: { actions: ActionRow[]; tz: st
             <div className="min-w-0 flex-1">
               <p className={`flex flex-wrap items-center gap-2 font-medium ${a.isDone ? 'text-content-faint line-through' : 'text-ink'}`}>
                 {a.title}
-                <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${a.kind === 'training' ? 'bg-space-violet-chip text-space-violet-text' : 'bg-primary-soft text-primary'}`}>
+                <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${a.kind === 'training' ? 'bg-space-violet-chip text-space-violet-text' : 'bg-primary-soft text-primary'}`}>
                   {a.kind === 'training' ? 'TRAINING' : 'TASK'}
                 </span>
               </p>
@@ -480,7 +482,7 @@ function ActionsPane({ actions, tz, mentorName }: { actions: ActionRow[]; tz: st
                 {mentorName && <span>from {mentorName}</span>}
               </p>
             </div>
-            <span className={`shrink-0 rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${a.isDone ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-[#C2722A]'}`}>
+            <span className={`shrink-0 rounded-pill px-2.5 py-0.5 text-xs font-semibold ${a.isDone ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>
               {a.isDone ? 'Done' : 'To do'}
             </span>
           </li>

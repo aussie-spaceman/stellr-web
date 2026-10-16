@@ -31,7 +31,7 @@ export default async function CommunityHomePage() {
         <p className="eyebrow flex items-center gap-2 text-brand-blue">
           <span className="h-2 w-2 rounded-full bg-brand-blue" /> Community
         </p>
-        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Spaces</h1>
+        <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Spaces</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Join the conversation — discuss, share resources, and learn together across the Stellr community.
         </p>
@@ -107,14 +107,17 @@ function Section({
   return (
     <section className="mb-8">
       <div className="mb-3 flex items-baseline gap-2">
-        <h2 className="text-sm font-subheading font-semibold uppercase tracking-[0.08em] text-brand-muted">
+        <h2 className="text-sm font-subheading font-semibold text-brand-muted">
           {title}
         </h2>
         <span className="text-xs text-brand-muted-soft">{hint}</span>
       </div>
-      <ul className="grid gap-3 sm:grid-cols-2">
+      {/* grid-cols-1 (minmax(0,1fr)), not an implicit column: an implicit
+          column grows to the longest truncated space name and pushed the page
+          sideways on phones. */}
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {spaces.map((s) => (
-          <li key={s.id}>
+          <li key={s.id} className="min-w-0">
             <SpaceCard
               space={s}
               restricted={restricted}

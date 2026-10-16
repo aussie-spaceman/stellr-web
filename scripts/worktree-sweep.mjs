@@ -39,11 +39,21 @@ import { realpathSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** `git worktree list --porcelain` → [{ path, head, branch, detached, locked, prunable }]; the main worktree first. */
+/**
+ * @typedef {{ path: string, head?: string, branch?: string, detached?: boolean, locked?: string, prunable?: string | true }} Worktree
+ */
+
+/**
+ * `git worktree list --porcelain` → one entry per worktree, the main one first.
+ * @param {string} text
+ * @returns {Worktree[]}
+ */
 export function parsePorcelain(text) {
+  /** @type {Worktree[]} */
   const out = []
   for (const block of text.split(/\n\s*\n/)) {
-    const wt = {}
+    /** @type {Worktree} */
+    const wt = { path: '' }
     for (const line of block.split('\n')) {
       const [key, ...rest] = line.split(' ')
       const value = rest.join(' ')

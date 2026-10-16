@@ -110,11 +110,17 @@ names the branch, the handover file, the tracker file and the row IDs
 ```bash
 git fetch origin
 npm run worktrees -- --apply     # from the main checkout: clear what earlier sessions left
+# docs PRs that earlier sessions opened and never merged
+gh pr list --state open --base dev --json number,title --jq '.[] | select(.title | test("^(Close-out|Promotion record)")) | "#\(.number) \(.title)"'
 git worktree add -b docs/close-out-<slug> ../stellr-web-close-out-<slug> origin/dev
 ```
 Never use the main checkout, and never reuse the session's merged feature
 branch (ship rule 4). No `npm ci` is needed for a docs-only change.
 `npm run worktrees` is the cleanup check described under ship Phase 5.
+The `gh pr list` line is the stranded-PR check described under ship Phase 0.
+Tell the user about each PR it lists, and do not merge one without their
+say-so: it is another session's. If one is this session's own earlier
+close-out, finish that PR instead of opening a second.
 
 ### 4. Write exactly these files, and nothing else under `docs/handovers/`
 - `docs/handovers/HANDOVER-<slug>-YYYY-MM-DD.md` is the package for a future
@@ -153,17 +159,25 @@ belong to.
 git add docs/handovers && git commit -m "Close-out <slug>: handover + tracker"
 git push -u origin HEAD
 gh pr create --base dev --title "Close-out <slug>: handover + tracker" --body-file <file>
-gh pr checks <n> --watch      # docs-only: verify runs, e2e reports "skipped"
+gh pr checks <n> --watch      # in a terminal; docs-only: verify runs, e2e reports "skipped"
 git status --porcelain        # must print nothing: all committed and pushed
 cd ../stellr-web              # merge from the MAIN checkout, not the worktree
 gh pr merge <n> --squash --delete-branch
 npm run worktrees -- --apply  # the close-out worktree must not be listed as kept
 ```
-- **Asking for a close-out is the go-ahead to merge its own docs PR.** Wait on
-  `gh pr checks --watch`, check each step's outcome, and merge. Do not end the
-  turn on "merge #n once verify passes?". On 15 Oct #425 waited behind that
-  question, nobody answered it, and the check-in-banner handover never reached
-  `dev`.
+- **Asking for a close-out is the go-ahead to merge its own docs PR.** Wait for
+  CI, check each step's outcome, and merge. In a terminal, wait on
+  `gh pr checks --watch`. In the desktop app, which forbids polling CI, read
+  the checks once. If they are pending, end the turn on the one "CI finished"
+  button (ship Phase 3), with the message "CI finished on #n. Check each
+  step's outcome and merge #n with --squash --delete-branch from the main
+  checkout". The click resumes the merge.
+- **What is ruled out is a yes/no merge question**, such as "merge #n once
+  verify passes?". The button is how the app waits; the question asks for a
+  decision the close-out request already made. WHY (15 Oct 2026): #425 waited
+  behind that question, nobody answered it, and the check-in-banner handover
+  never reached `dev`. If a button goes unclicked too, the stranded-PR check
+  at the start of the next ship, promote or close-out lists the PR (step 3).
 - A docs-only PR needs only `verify`, so it runs in parallel with other
   sessions and never waits behind their e2e.
 - If `e2e` actually *runs*, you touched something outside `docs/`, `.claude/`

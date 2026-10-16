@@ -51,6 +51,7 @@ Skip only if already in a dedicated worktree for this work.
 
 ```bash
 git fetch origin
+npm run worktrees -- --apply             # from the main checkout: clear what earlier sessions left
 git worktree add -b <type>/<slug> ../stellr-web-<name> origin/dev
 cd ../stellr-web-<name>
 npm ci                                   # worktrees do NOT share node_modules
@@ -150,7 +151,7 @@ Neither substitutes for the other.
 git status --porcelain        # must print nothing: all committed and pushed
 cd ../stellr-web              # merge from the MAIN checkout, not the worktree
 gh pr merge <n> --squash --delete-branch
-git worktree list             # the session worktree should be gone
+npm run worktrees -- --apply  # the session worktree must not be listed as kept
 ```
 
 If GitHub reports `BEHIND` (protection is strict), update rather than rebase:
@@ -163,12 +164,28 @@ Cleaning up is not housekeeping. It is what stops the branch being reused
 after its squash. When the merge runs from the main checkout, `--delete-branch`
 removes the session worktree (unforced), runs `git branch -D` and deletes the
 remote branch. Run from inside the worktree, it deletes only the remote
-branch. The full rules are in close-out step 6. Ignored files such as
-`node_modules`, `.next` and `.env.local` do not block the removal. Untracked
-and modified files do, and then gh leaves the worktree with a warning. If it is
-still listed, look at what is there. Then, from the main checkout, run
-`git worktree remove ../stellr-web-<name>` and `git branch -D <type>/<slug>`,
-after checking the branch tip equals the PR's `headRefOid`.
+branch. The full rules are in close-out step 6.
+
+**`npm run worktrees` checks the outcome, not the command.** It removes every
+worktree whose branch tip is a merged PR's head, and that is clean and not in
+use by a running process. For every other one it says why it stayed. So it
+also catches a merge without `--delete-branch`, one made from inside the
+worktree or on GitHub, and an untracked file that blocked gh. If your worktree
+is listed as kept, the reason says what to do: an untracked or modified file,
+commits made after the merge, or an open PR. Never `--force`. Without
+`--apply` it only reports. It leaves `.claude/worktrees/` alone, because those
+belong to Claude app sessions.
+
+**In a worktree-isolated session** (the harness refuses `cd ../stellr-web` and
+`git -C`), merge from inside the worktree and run `npm run worktrees` without
+`--apply`. `--apply` refuses to run from a linked worktree. Tell the user the
+worktree stays until the next ship, promote or close-out run from the main
+checkout, which sweeps it first.
+
+WHY (16 Oct 2026): three days after the merges moved to the main checkout,
+four more worktrees were found beside the repo. Three were merged from the
+main checkout but without `--delete-branch`. The fourth was a worktree-isolated
+session's, and that session's close-out PR was never merged.
 
 **More work on the same subject starts a NEW branch from `dev`.** Reusing the
 merged one produces `add/add` conflicts on every file it touched, because the

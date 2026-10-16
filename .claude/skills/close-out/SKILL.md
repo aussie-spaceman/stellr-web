@@ -109,10 +109,12 @@ names the branch, the handover file, the tracker file and the row IDs
 ### 3. Work in a fresh worktree from `origin/dev`
 ```bash
 git fetch origin
+npm run worktrees -- --apply     # from the main checkout: clear what earlier sessions left
 git worktree add -b docs/close-out-<slug> ../stellr-web-close-out-<slug> origin/dev
 ```
 Never use the main checkout, and never reuse the session's merged feature
 branch (ship rule 4). No `npm ci` is needed for a docs-only change.
+`npm run worktrees` is the cleanup check described under ship Phase 5.
 
 ### 4. Write exactly these files, and nothing else under `docs/handovers/`
 - `docs/handovers/HANDOVER-<slug>-YYYY-MM-DD.md` is the package for a future
@@ -155,8 +157,13 @@ gh pr checks <n> --watch      # docs-only: verify runs, e2e reports "skipped"
 git status --porcelain        # must print nothing: all committed and pushed
 cd ../stellr-web              # merge from the MAIN checkout, not the worktree
 gh pr merge <n> --squash --delete-branch
-git worktree list             # the close-out worktree should be gone
+npm run worktrees -- --apply  # the close-out worktree must not be listed as kept
 ```
+- **Asking for a close-out is the go-ahead to merge its own docs PR.** Wait on
+  `gh pr checks --watch`, check each step's outcome, and merge. Do not end the
+  turn on "merge #n once verify passes?". On 15 Oct #425 waited behind that
+  question, nobody answered it, and the check-in-banner handover never reached
+  `dev`.
 - A docs-only PR needs only `verify`, so it runs in parallel with other
   sessions and never waits behind their e2e.
 - If `e2e` actually *runs*, you touched something outside `docs/`, `.claude/`
@@ -171,12 +178,15 @@ git worktree list             # the close-out worktree should be gone
 - gh does not force the removal. If the worktree still holds untracked or
   modified files, gh warns "Could not remove worktree" and leaves both. That is
   the safety net, so look at what is there; do not reach for `--force`.
-- If the worktree is still listed, remove it by hand from the main checkout:
-  `git worktree remove ../stellr-web-close-out-<slug>`, then
-  `git branch -D docs/close-out-<slug>`. Use `-D` because a squash-merged
-  branch is never an ancestor of `dev`. First check that `git rev-parse
-  docs/close-out-<slug>` equals `gh pr view <n> --json headRefOid --jq
-  .headRefOid`.
+- `npm run worktrees -- --apply` removes the worktree whenever gh did not: a
+  missing `--delete-branch`, a merge made from inside the worktree, or one made
+  on GitHub. It checks that the branch tip equals the merged PR's
+  `headRefOid`, then runs `git branch -D`. If it keeps the worktree, its reason
+  says what is in the way.
+- **In a worktree-isolated session** you cannot reach the main checkout. Merge
+  from inside the worktree, run `npm run worktrees` without `--apply`, and tell
+  the user the worktree stays until the next sweep from the main checkout
+  (ship Phase 5).
 - Check `gh pr view <n> --json state` says `MERGED`, and
   `gh pr list --state open --search "close-out"` shows none of yours. A
   handover that is not on `dev` does not exist for the next session.
@@ -185,7 +195,8 @@ WHY (13 Oct 2026): this step merged from inside the worktree and said
 `--delete-branch` removed it. Run from there, gh deletes only the remote branch.
 Eight close-out and promotion-record worktrees had piled up beside the repo.
 One of them still held the 7 Oct credential-family-link handover, written but
-never committed, so it had never reached `dev`.
+never committed, so it had never reached `dev`. By 16 Oct, four more had
+collected (see ship Phase 5), so the cleanup is now checked by its outcome.
 
 ### 7. Memory
 - Write this session's facts as their own memory file(s). Update an existing

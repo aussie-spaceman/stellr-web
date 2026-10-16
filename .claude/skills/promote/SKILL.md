@@ -25,9 +25,14 @@ sometimes a dashboard step someone else has to take.
 
 ```bash
 git fetch origin
+npm run worktrees -- --apply     # from the main checkout: clear what earlier sessions left
 git log --oneline origin/main..origin/dev
 git diff --stat origin/main...origin/dev
 ```
+
+`npm run worktrees` is the cleanup check described under ship Phase 5. It
+removes only worktrees whose work has provably landed, and it says why it kept
+each other one.
 
 If `dev` is **behind** `main`, sync before anything else, or the promotion will
 carry a stale tree. Since Step 8 merges `main` into `dev`, this should only
@@ -203,7 +208,7 @@ gh pr checks <m> --watch      # docs-only against dev: verify runs, e2e skips
 git status --porcelain        # must print nothing
 cd ../stellr-web              # merge from the MAIN checkout, so gh removes the worktree
 gh pr merge <m> --merge --delete-branch
-git worktree list             # the record worktree should be gone
+npm run worktrees -- --apply  # the record worktree must not be listed as kept
 ```
 
 - **`--merge`, not `--squash`, for this one PR.** It is the exception to
@@ -226,15 +231,14 @@ with the output. Never round a partial success up to done.
 gh cleans up only when the merge runs from the main checkout. Then it removes
 the record worktree (unforced), runs `git branch -D` and deletes the remote
 branch. Run from inside the worktree, it deletes only the remote branch. The
-full rules are in close-out step 6. If the worktree is still listed, remove it
-by hand from the main checkout, after checking the branch tip equals the PR's
-`headRefOid`:
-`git worktree remove ../stellr-web-promote-<YYYY-MM-DD>-record`, then
-`git branch -D docs/promote-<YYYY-MM-DD>-record`. If the removal refuses,
-something untracked is still in there. Look at it before using `--force`.
+full rules are in close-out step 6. `npm run worktrees -- --apply` removes the
+record worktree whenever gh did not. If it keeps it, the reason says why.
+Never `--force`.
 
 WHY (13 Oct 2026): the merge used to run from inside the record worktree, at a
 fixed path, so every worktree was left behind. The 6 Oct one was never
 removed, so 13 Oct's record had to go to `../stellr-web-promote-record-1013`.
 The date in the path stops that collision, and merging from the main checkout
-stops the pile-up.
+stops the pile-up. On 15 Oct the record PR #424 was merged from the main
+checkout, but without `--delete-branch`, and the worktree stayed until the
+16 Oct sweep. The sweep line is there for that case.

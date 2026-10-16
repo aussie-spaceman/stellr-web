@@ -1,13 +1,16 @@
 # Skills: CI waits in the desktop app — 2026-10-16
 
-Slug: `skills-ci-waits`. Handover: none; the PR #440 body is the record. Doc snapshot: none.
-PR #440 → `dev`. Migration: none.
+Slug: `skills-ci-waits`. Handover: `HANDOVER-skills-ci-waits-2026-10-16.md`. Doc snapshot: `1xzbUdEmEY8NwNdUSQenqkPwd1mikw6XQIPVAwii29DM`.
+PR #440 → `dev` as `77f04c45`; in promotion #441 (open at close-out). Migration: none.
 
 ship, promote and close-out now say how to wait on CI in the Claude desktop app's Code tab, which forbids polling. Read the checks once; if they are pending, end the turn on one "CI finished" button whose message carries the next command (ship Phase 3, promote Steps 5 and 8, close-out step 6). Each skill also starts with a stranded-PR check that lists the close-out and promotion-record PRs still open against `dev` (ship Phase 0, promote Step 1, close-out step 3).
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| skills-ci-waits.1 | The "CI finished" wait, followed from a skill | New text. This PR's own wait followed it from the brief that asked for it, not from a loaded skill. Skills load from the main checkout, so the text applies once that checkout is fast-forwarded past this PR | On the next ship, promote or close-out in the app, check the session read the checks once, ended on the one button, and read every step's outcome before merging | ☐ |
+| skills-ci-waits.1 | The "CI finished" wait, followed from a skill | #440's own wait followed the rule from the brief that asked for it: one read, one button, every step read on the click, then the merge. The main checkout was fast-forwarded to `77f04c45` on 16 Oct, so this session's close-out is the first run of the text loaded as a skill | Check that this close-out's PR, or the next ship, promote or close-out, read the checks once, ended on one button and read every step before merging | ☐ |
+| skills-ci-waits.2 | #440 not yet promoted | It rides in #441 (`dev` → `main`), opened at 21:54 UTC on 16 Oct by another session, e2e running at close-out. Skills load from the main checkout on `dev`, so the promotion changes no behaviour | None from this session: #441's promoter merges it | ☐ |
+| skills-ci-waits.3 | This session's app worktree | `.claude/worktrees/busy-meitner-4bda1f` stays: the sweep leaves app-managed worktrees alone | Archive this session in the Claude app once the close-out has merged | ☐ |
+| skills-ci-waits.4 | Merging into `dev` restarts an open promotion's CI | `ci.yml` has `concurrency: ci-${{ github.ref }}`, `cancel-in-progress: true`. A merge into `dev` moves an open promotion PR's head, so its running checks, e2e included, are cancelled and start again. The skills don't say so. This close-out waited for #441 for that reason | Add a line to close-out step 6 and ship Phase 5: if `gh pr list --base main --head dev --state open` shows a promotion, merge after it | ☐ |
 
 ## Closes
 

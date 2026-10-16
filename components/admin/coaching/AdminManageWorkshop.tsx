@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Calendar, UserPlus, ShieldCheck, Trash2 } from 'lucide-react'
+import { Field, Fieldset, Input, Select } from '@stellr/web-ui'
 import { ChatPanel } from '@/components/community/ChatPanel'
 import { JoinButton } from '@/components/community/JoinButton'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
@@ -86,7 +87,7 @@ export function AdminManageWorkshop(props: {
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] font-display text-sm font-bold text-white" style={{ background: 'linear-gradient(150deg,#7C5CFC,#5B3FE0)' }}>{workshop.name.charAt(0)}</span>
-            <h1 className="font-display text-[26px] font-bold tracking-[-0.02em]">{workshop.name}</h1>
+            <h1 className="font-display text-[26px] font-bold">{workshop.name}</h1>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setModal('reassignCoach')} className="rounded-[9px] border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Reassign coach</button>
@@ -98,7 +99,7 @@ export function AdminManageWorkshop(props: {
             const active = tab === t.key
             return (
               <button key={t.key} onClick={() => setTab(t.key)} className={`relative -mb-px pb-3 text-sm transition-colors ${active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'}`}>
-                {t.label}{t.count ? <span className="ml-1.5 text-[11px] text-star-gold">{t.count}</span> : null}
+                {t.label}{t.count ? <span className="ml-1.5 text-xs text-star-gold">{t.count}</span> : null}
                 {active && <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t bg-star-gold" />}
               </button>
             )
@@ -124,7 +125,7 @@ export function AdminManageWorkshop(props: {
                 <p className="text-sm font-medium text-ink">{workshop.memberName}</p>
                 <p className="text-[12.5px] text-content-muted">{workshop.memberEmail}</p>
               </div>
-              <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${workshop.memberStatus === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-[#C2722A]'}`}>{workshop.memberStatus === 'active' ? 'Active' : 'Invited'}</span>
+              <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${workshop.memberStatus === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>{workshop.memberStatus === 'active' ? 'Active' : 'Invited'}</span>
               <button onClick={() => admin({ action: 'removeMember', workshopId: workshop.id, memberId: workshop.memberId })} className="text-[13px] font-medium text-danger hover:underline">Remove</button>
             </div>
           )}
@@ -145,7 +146,7 @@ export function AdminManageWorkshop(props: {
               return (
                 <li key={s.id} className="flex items-center justify-between gap-3 py-3.5 first:pt-0">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 flex-col items-center justify-center rounded-[10px] bg-surface"><span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span><span className="text-[10px] uppercase text-content-muted">{t.month}</span></div>
+                    <div className="flex h-11 w-11 flex-col items-center justify-center rounded-[10px] bg-surface"><span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span><span className="text-xs uppercase text-content-muted">{t.month}</span></div>
                     <div><p className="font-medium text-ink">{s.title ?? 'Coaching session'}</p><p className="text-[13px] text-content-secondary">{t.timeLine}</p></div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -216,7 +217,7 @@ function RecordingsList({ recordings, tz }: { recordings: { id: string; title: s
             <li key={s.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
               <span className="flex items-center gap-2 font-medium text-ink">
                 {s.title ?? 'Session recording'}
-                <span className="rounded-pill bg-surface px-2 py-0.5 text-[10px] font-bold text-content-muted">AUTO</span>
+                <span className="rounded-pill bg-surface px-2 py-0.5 text-xs font-bold text-content-muted">AUTO</span>
               </span>
               <div className="flex items-center gap-3">
                 <span className="text-[12.5px] text-content-muted">{new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(s.start))}</span>
@@ -253,13 +254,15 @@ function AdminResources({ resources, modules, tz, manage }: { resources: Resourc
   const available = modules.filter((m) => !linked.has(m.id))
   return (
     <Card>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-[16px] font-bold text-ink">Resources</h2>
-        <div className="flex items-center gap-2">
-          <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="rounded-[9px] border border-line bg-white px-3 py-2 text-sm">
-            <option value="">Add a course…</option>
-            {available.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
-          </select>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="min-w-0 flex-1 sm:w-56 sm:flex-none">
+            <Select value={moduleId} onChange={(e) => setModuleId(e.target.value)} aria-label="Add a course">
+              <option value="">Add a course…</option>
+              {available.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+            </Select>
+          </div>
           <button onClick={async () => { if (moduleId && (await manage({ action: 'linkTraining', moduleId, mandatory: false }))) setModuleId('') }} disabled={!moduleId} className="rounded-[9px] bg-space-violet px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Add</button>
         </div>
       </div>
@@ -271,8 +274,8 @@ function AdminResources({ resources, modules, tz, manage }: { resources: Resourc
             <li key={r.moduleId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
               <span className="flex items-center gap-2 font-medium text-ink">
                 {r.title}
-                <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>{r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}</span>
-                {r.isMandatory && r.dueAt && <span className="rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-[10px] font-bold text-[#C2722A]">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(r.dueAt))}</span>}
+                <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>{r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}</span>
+                {r.isMandatory && r.dueAt && <span className="rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-xs font-bold text-gold-ink">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(r.dueAt))}</span>}
               </span>
               <div className="flex items-center gap-3">
                 <button onClick={() => manage({ action: 'linkTraining', moduleId: r.moduleId, mandatory: !r.isMandatory, dueAt: r.dueAt })} className="text-[13px] font-medium text-space-violet hover:underline">{r.isMandatory ? 'Make optional' : 'Make mandatory'}</button>
@@ -300,24 +303,22 @@ function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tie
       <Card>
         <h2 className="font-display text-[16px] font-bold text-ink">Workshop settings</h2>
         <div className="mt-4 space-y-4">
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Workshop name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-[9px] border border-line px-3.5 py-2.5 text-sm outline-none focus:border-space-violet" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Coach</label>
-            <p className="mb-1.5 text-[12.5px] text-content-muted">Current: {workshop.coachName ?? 'none'}. Choose a new coach to reassign (gains full management access).</p>
+          <Field label="Workshop name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Fieldset
+            legend="Coach"
+            hint={`Current: ${workshop.coachName ?? 'none'}. Choose a new coach to reassign (gains full management access).`}
+          >
             <MemberSearchField endpoint={ADMIN_SEARCH} selected={coach} onChange={(n) => setCoach(n.slice(-1))} placeholder="Search for a coach…" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Time zone</label>
-            <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-full rounded-[9px] border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-space-violet">
+          </Fieldset>
+          <Field label="Time zone" hint="Shown on every session time; applies to new sessions you schedule.">
+            <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
               {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <p className="mt-1 text-[12px] text-content-faint">Shown on every session time; applies to new sessions you schedule.</p>
-          </div>
+            </Select>
+          </Field>
           <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Access</label>
+            <p className="mb-1.5 font-subheading text-sm font-medium text-content-body">Access</p>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-pill bg-enviro-green-bg px-2.5 py-1 text-[12.5px] font-medium text-enviro-green-text">
                 <ShieldCheck className="h-3.5 w-3.5" /> {freeTierNames.length ? `Free · ${freeTierNames.join(', ')}` : 'Eligible tiers'}
@@ -349,13 +350,21 @@ function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tie
               <p className="font-semibold text-ink">Archive workshop</p>
               <p className="text-[13px] text-content-muted">Closes the chat and all video calls. Recordings, files and chat history stay available.</p>
             </div>
-            <button onClick={() => admin({ action: 'archive', workshopId: workshop.id })} className="rounded-[9px] border border-pathway-amber px-4 py-2 text-sm font-semibold text-[#C2722A] hover:bg-pathway-amber-bg">Archive workshop</button>
+            <button onClick={() => admin({ action: 'archive', workshopId: workshop.id })} className="rounded-[9px] border border-pathway-amber px-4 py-2 text-sm font-semibold text-gold-ink hover:bg-pathway-amber-bg">Archive workshop</button>
           </div>
           <div className="rounded-[12px] border border-danger/30 bg-danger/5 p-4">
             <p className="font-semibold text-danger">Delete workshop</p>
             <p className="text-[13px] text-content-muted">Permanently removes the workshop and all associated data — recordings, uploaded files and chat history. Cannot be undone.</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`Type "${workshop.name}" to confirm`} className="flex-1 rounded-[9px] border border-line px-3 py-2 text-sm outline-none focus:border-danger" />
+              <div className="min-w-0 flex-1">
+                <Input
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder={`Type "${workshop.name}" to confirm`}
+                  aria-label="Type the workshop name to confirm deletion"
+                  autoComplete="off"
+                />
+              </div>
               <button
                 onClick={async () => { if ((await admin({ action: 'delete', workshopId: workshop.id }))) router.push('/admin/academy/coaching') }}
                 disabled={confirm !== workshop.name}

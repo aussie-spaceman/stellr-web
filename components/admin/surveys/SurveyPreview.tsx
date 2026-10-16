@@ -60,7 +60,7 @@ export function SurveyPreview({ definition, runtimeOptions, initialRole }: { def
         <legend className="px-1 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Previewing as</legend>
         <label className="text-brand-muted">
           <span className="block text-xs">Respondent</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as RespondentRole)} className="mt-1 rounded-lg border border-brand-border bg-white px-2 py-1.5 text-ink">
+          <select value={role} onChange={(e) => setRole(e.target.value as RespondentRole)} className="mt-1 rounded-lg border border-line-strong bg-white px-2 py-1.5 text-ink">
             {(Object.keys(ROLE_LABEL) as RespondentRole[]).map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
@@ -77,7 +77,7 @@ export function SurveyPreview({ definition, runtimeOptions, initialRole }: { def
         {role === 'adult' && (
           <label className="text-brand-muted">
             <span className="block text-xs">Known from the invitation</span>
-            <select value={relationship} onChange={(e) => setRelationship(e.target.value as AdultRelationship | '')} className="mt-1 rounded-lg border border-brand-border bg-white px-2 py-1.5 text-ink">
+            <select value={relationship} onChange={(e) => setRelationship(e.target.value as AdultRelationship | '')} className="mt-1 rounded-lg border border-line-strong bg-white px-2 py-1.5 text-ink">
               <option value="">Not known (they’re asked)</option>
               <option value="teacher">Teacher</option>
               <option value="parent">Parent</option>

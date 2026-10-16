@@ -296,7 +296,7 @@ function CheckedIn({
       <div className="text-center">
         {status && (
           <div className="mx-auto mb-3 inline-flex h-14 w-14 items-center justify-center rounded-full bg-enviro-green-bg">
-            <Check className="h-7 w-7 text-enviro-green" strokeWidth={3} aria-hidden />
+            <Check className="h-7 w-7 text-enviro-green-text" strokeWidth={3} aria-hidden />
           </div>
         )}
         {status && (

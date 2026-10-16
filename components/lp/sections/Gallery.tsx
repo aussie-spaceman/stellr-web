@@ -62,7 +62,7 @@ export function Gallery({ config }: { config: LandingPageConfig }) {
           })}
         </ul>
 
-        <p className="mt-4 text-[11.5px] leading-snug text-content-faint">{DEFAULT_PHOTO_CREDIT}</p>
+        <p className="mt-4 text-xs leading-snug text-content-faint">{DEFAULT_PHOTO_CREDIT}</p>
       </div>
     </section>
   )

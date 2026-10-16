@@ -41,7 +41,7 @@ export default async function CheckInBannerAdminPage() {
         <Link href="/admin/competitions" className="text-sm text-primary">
           ← Competitions
         </Link>
-        <h1 className="mt-1 font-heading text-title uppercase text-ink">Check-in banner</h1>
+        <h1 className="mt-1 font-heading text-ds-h2 text-ink">Check-in banner</h1>
         <p className="mt-2 text-content-body">
           One QR code for every in-person event. A scan goes to whichever event has check-in open, so the same banner
           works at every event. Open check-in from the event’s Check-in page when the doors open.
@@ -56,7 +56,7 @@ export default async function CheckInBannerAdminPage() {
       )}
 
       <section className="rounded-ds-card border border-line bg-white p-5">
-        <h2 className="font-subheading text-sm font-semibold uppercase tracking-wide text-content-muted">Right now</h2>
+        <h2 className="font-subheading text-sm font-semibold text-content-muted">Right now</h2>
         {target ? (
           <p className="mt-2 text-content-body">
             A scan opens check-in for{' '}

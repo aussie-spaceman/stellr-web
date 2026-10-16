@@ -125,7 +125,7 @@ export function ResourceFlagModal({ binaryId, containerRef }: { binaryId: string
           </>
         ) : (
           <p role="status" className="flex items-center gap-2 py-2 text-sm text-content-body">
-            <CheckCircle2 className="h-4 w-4 text-enviro-green" aria-hidden="true" />
+            <CheckCircle2 className="h-4 w-4 text-enviro-green-text" aria-hidden="true" />
             {state === 'duplicate' ? 'You’ve already reported this.' : 'Reported — thank you.'}
           </p>
         )}

@@ -30,7 +30,7 @@ export function PrivacyRequestActions({ id, status }: { id: string; status: stri
     <div className="space-y-2">
       <label className="block text-sm text-ink">
         <span className="block font-semibold">What was done, or why not</span>
-        <textarea rows={3} maxLength={2000} className="mt-1 w-full rounded-control border border-line px-3 py-2" value={note} onChange={(e) => setNote(e.target.value)} />
+        <textarea rows={3} maxLength={2000} className="mt-1 w-full rounded-control border border-line-strong px-3 py-2" value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
       <div className="flex flex-wrap gap-2">
         {status === 'verified' && <Button variant="secondaryStrong" disabled={busy} onClick={() => update('in_progress')}>Mark in progress</Button>}

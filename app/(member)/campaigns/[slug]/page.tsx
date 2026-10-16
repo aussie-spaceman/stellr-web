@@ -46,7 +46,7 @@ export default async function RegisteredCampaignPage({ params }: PageProps) {
       {/* Header card */}
       <section className="overflow-hidden rounded-panel border border-line border-t-4 border-t-pathway-amber bg-white p-6 shadow-card-lift">
         <div className="flex flex-wrap gap-2">
-          <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-pathway-amber">
+          <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-gold-ink">
             ✦ Campaign · Async
           </span>
           <span className={`inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] ${meta.chip}`}>
@@ -63,7 +63,7 @@ export default async function RegisteredCampaignPage({ params }: PageProps) {
             <Document className="h-5 w-5" />
           </span>
           <div className="flex-1">
-            <p className="text-ds-eyebrow uppercase tracking-widest text-pathway-amber">
+            <p className="text-ds-eyebrow uppercase tracking-widest text-gold-ink">
               Proposal deadline
             </p>
             <p className="font-heading text-lg font-bold text-ink">

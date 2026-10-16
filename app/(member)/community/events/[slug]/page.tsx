@@ -44,7 +44,7 @@ export default async function EventPortalPage({
         </Link>
         <div className="rounded-card-lg border border-brand-border bg-white p-8 text-center">
           <Lock className="mx-auto h-8 w-8 text-brand-gold-ink" />
-          <h1 className="mt-3 font-heading text-[22px] uppercase text-brand-blue-dark">{event.title}</h1>
+          <h1 className="mt-3 font-heading text-[22px] text-brand-blue-dark">{event.title}</h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-brand-muted">
             Your spot is reserved, but access to this {isCampaign ? 'campaign' : 'event'} unlocks once you{' '}
             {missing.join(' and ')}.
@@ -86,10 +86,10 @@ export default async function EventPortalPage({
           className="pointer-events-none absolute -bottom-10 -right-8 opacity-[0.12] brightness-0 invert"
         />
         <div className="relative">
-          <span className="eyebrow rounded-full bg-white/20 px-2.5 py-1 text-[11px]">
+          <span className="eyebrow rounded-full bg-white/20 px-2.5 py-1 text-xs">
             {isCampaign ? 'Campaign' : 'Live Event'}
           </span>
-          <h1 className="mt-2 font-heading text-[27px] uppercase">{event.title}</h1>
+          <h1 className="mt-2 font-heading text-[27px]">{event.title}</h1>
           {event.date && (
             <p className="mt-1 text-[13.5px] text-orange-100">
               {new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -105,7 +105,7 @@ export default async function EventPortalPage({
 
       {spaces.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+          <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">
             Spaces
           </h2>
           <ul className="space-y-3">
@@ -140,7 +140,7 @@ export default async function EventPortalPage({
       )}
 
       <section className="mt-6">
-        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+        <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">
           Materials
         </h2>
         {materials.length === 0 ? (
@@ -185,7 +185,7 @@ export default async function EventPortalPage({
 
       {training.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+          <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">
             Training
           </h2>
           <ul className="space-y-3">

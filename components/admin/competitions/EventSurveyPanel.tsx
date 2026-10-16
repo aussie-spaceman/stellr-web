@@ -99,7 +99,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
     const invitable = acceptOlder ? late.invitable : late.invitable - late.olderAgreements
     return (
       <section className="space-y-3 rounded-xl border border-brand-border bg-white p-4" aria-labelledby="survey-late-heading">
-        <h2 id="survey-late-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Post-event survey</h2>
+        <h2 id="survey-late-heading"className="text-sm font-semibold text-brand-muted">Post-event survey</h2>
         <p className="text-sm text-ink">
           This event ended on {formatDateInZone(zonedTimeToUtc(late.lastDay, lateTz, 12), lateTz)} without a survey. You can open one until <strong>{when(late.deadline, lateTz)}</strong>. It stays open for 30 days from when you open it.
         </p>
@@ -165,7 +165,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       {/* Schedule */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Post-event survey</h2>
+          <h2 className="text-sm font-semibold text-brand-muted">Post-event survey</h2>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.className}`}>{pill.label}</span>
           {view.definition && (
             <a className="text-xs text-brand-muted-soft underline hover:text-primary" href={`/admin/surveys/questions?id=${d.definition_id}`}>
@@ -215,7 +215,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
                 <span className="block text-xs">Earlier go-live (your local time)</span>
                 <input
                   type="datetime-local"
-                  className="mt-1 rounded-lg border border-brand-border px-2 py-1 text-sm"
+                  className="mt-1 rounded-lg border border-line-strong px-2 py-1 text-input mouse:text-sm"
                   value={goLive}
                   max={auto ? new Date(auto.getTime() - auto.getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : undefined}
                   onChange={(e) => setGoLive(e.target.value)}
@@ -281,7 +281,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       {/* D1 certificate gate — admins only, default off */}
       {view.isAdmin && (
         <section className="space-y-2" aria-labelledby="survey-gate-heading">
-          <h2 id="survey-gate-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Certificate gate</h2>
+          <h2 id="survey-gate-heading"className="text-sm font-semibold text-brand-muted">Certificate gate</h2>
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -317,7 +317,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       {/* Pre-V2.3 minor agreements — admins only, per event (David, 6 Oct 2026) */}
       {view.isAdmin && (d.minor_agreement_override || (view.preview?.awaitingConsent.some((a) => a.reason === 'older_version') ?? false)) && (
         <section className="space-y-2" aria-labelledby="survey-override-heading">
-          <h2 id="survey-override-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Minors’ agreements</h2>
+          <h2 id="survey-override-heading"className="text-sm font-semibold text-brand-muted">Minors’ agreements</h2>
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -353,7 +353,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       {/* Audiences + preview */}
       {view.preview && (
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Who it reaches</h2>
+          <h2 className="text-sm font-semibold text-brand-muted">Who it reaches</h2>
           <div className="flex flex-wrap gap-4 text-sm">
             {(['student', 'mentor', 'adult'] as const).map((a) => (
               <label key={a} className="flex items-center gap-2 text-ink">
@@ -410,7 +410,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
 
       {/* Completion */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Responses</h2>
+        <h2 className="text-sm font-semibold text-brand-muted">Responses</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {(
             [
@@ -455,7 +455,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       {/* Exports + QR */}
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Exports</h2>
+          <h2 className="text-sm font-semibold text-brand-muted">Exports</h2>
           {view.isAdmin ? (
             <div className="flex flex-wrap gap-2 text-sm">
               <a className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-brand-muted" href={`/api/admin/surveys/export?format=long&event=${eventSlug}`}>Answers CSV (long)</a>
@@ -468,7 +468,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           <p className="text-xs text-brand-muted-soft">Downloads are logged. Quotable answers apply each person’s current quoting permissions.</p>
         </div>
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Event-day QR code</h2>
+          <h2 className="text-sm font-semibold text-brand-muted">Event-day QR code</h2>
           <p className="text-xs text-brand-muted-soft">Signed-in members go straight to their survey. Everyone else enters their email and gets their own link. Never a shared survey.</p>
           {qr && (
             <a href={qr} download={`survey-qr-${eventSlug}.png`} className="inline-block">

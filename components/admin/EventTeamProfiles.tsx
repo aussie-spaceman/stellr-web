@@ -97,7 +97,7 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Team profiles</h3>
+        <h3 className="text-sm font-semibold text-brand-muted">Team profiles</h3>
         <span className="text-xs text-brand-muted-soft">
           {counts.submitted} submitted · {counts.sent} sent · {counts.not_sent} not sent · {counts.waiting} waiting on forms
         </span>
@@ -105,7 +105,7 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as typeof filter)}
-            className="border border-brand-border rounded-lg px-2 py-1.5 text-sm text-brand-muted bg-white"
+            className="border border-line-strong rounded-lg px-2 py-1.5 text-input mouse:text-sm text-brand-muted bg-white"
             aria-label="Filter students"
           >
             <option value="all">All students</option>

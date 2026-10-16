@@ -17,7 +17,7 @@ export const ACCESS_META: Record<
 export function AccessBadge({ type, size = 'md' }: { type: SpaceAccessType; size?: 'sm' | 'md' }) {
   const m = ACCESS_META[type]
   const Icon = m.icon
-  const pad = size === 'sm' ? 'px-2 py-0.5 text-[10.5px]' : 'px-2.5 py-1 text-[11.5px]'
+  const pad = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs'
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full font-subheading font-semibold uppercase tracking-[0.05em] ${pad}`}
@@ -68,7 +68,7 @@ export function TierPill({ name }: { name: string }) {
   const c = group ? TIER_GROUP_COLOR[group] : { fg: '#5C637E', bg: '#EEF0F6' }
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-subheading font-semibold"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-subheading font-semibold"
       style={{ color: c.fg, background: c.bg }}
     >
       {name}
@@ -89,7 +89,7 @@ export function RolePill({ role }: { role: SpaceRole }) {
   if (!m) return null
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-subheading font-semibold uppercase tracking-[0.05em]"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-[0.05em]"
       style={{ color: m.fg, background: m.bg }}
     >
       {m.label}

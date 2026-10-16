@@ -132,7 +132,7 @@ export function NotificationBell() {
         {unread > 0 && (
           <span
             aria-hidden="true"
-            className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white"
+            className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white"
           >
             {unread > 9 ? '9+' : unread}
           </span>
@@ -173,7 +173,7 @@ export function NotificationBell() {
                       {actorName(n.actor)} invited you to a mentoring cohort
                     </p>
                     {n.body && <p className="mt-0.5 text-xs text-brand-muted-soft">{n.body}</p>}
-                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <Link
                         href={`/community/mentoring/${n.reference_id}/invite`}
@@ -207,7 +207,7 @@ export function NotificationBell() {
                       {actorName(n.actor)} invited you to a coaching workshop
                     </p>
                     {n.body && <p className="mt-0.5 text-xs text-brand-muted-soft">{n.body}</p>}
-                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <Link
                         href={`/community/coaching/${n.reference_id}/invite`}
@@ -248,7 +248,7 @@ export function NotificationBell() {
                     <p className="text-sm font-medium text-brand-blue-dark">
                       {n.body ?? `${actorName(n.actor)} invited you to a space`}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         onClick={() => respond('accept')}

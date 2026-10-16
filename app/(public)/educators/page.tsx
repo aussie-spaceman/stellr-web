@@ -105,13 +105,13 @@ export default function EducatorsPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Bring real-world STEM to your students
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed short:text-base short:leading-snug">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
             Educators are at the heart of how Stellr reaches students. We give you the curriculum,
             the training, and the support to deliver industry-grade STEM experiences — without
             adding to your workload.
           </p>
           <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Register as an Educator
             </a>
             <Link href="/curriculum" className="btn-outline-white">
@@ -312,12 +312,12 @@ export default function EducatorsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Ready to bring Stellr to your students?</h2>
-          <p className="text-content-faint leading-relaxed mb-8">
+          <p className="text-hero-lead leading-relaxed mb-8">
             Register as an Educator to unlock Baseline curriculum, or talk to our team about a
             school-wide partnership.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Register as an Educator
             </a>
             <Link href="/contact" className="btn-outline-white">

@@ -110,10 +110,10 @@ export default async function AdminEventsPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="eyebrow flex items-center gap-2 text-brand-orange-alt">
+          <p className="eyebrow flex items-center gap-2 text-gold-ink">
             <span className="h-2 w-2 rounded-full bg-brand-orange-alt" /> Competitions
           </p>
-          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Events</h1>
+          <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Events</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
             {access.isAdmin
               ? 'All events and campaigns from the CMS'
@@ -137,7 +137,7 @@ export default async function AdminEventsPage() {
 
       {sections.map(({ label, items, isCampaign }) => (
         <section key={label} className="space-y-3">
-          <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">{label}</h2>
+          <h2 className="text-sm font-semibold text-brand-muted">{label}</h2>
           {items.length === 0 ? (
             <p className="text-sm text-brand-muted-soft bg-white rounded-xl border border-brand-border px-4 py-6">
               {access.isAdmin

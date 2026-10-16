@@ -35,7 +35,7 @@ export function ApproveTemplateVersion({ id, label }: { id: string; label: strin
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm text-ink">
           <span className="sr-only">{`Type ${label} to confirm`}</span>
-          <input className="rounded-control border border-line px-2 py-1.5" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={label} />
+          <input className="rounded-control border border-line-strong px-2 py-1.5" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={label} />
         </label>
         <Button type="submit" variant="primaryStrong" disabled={busy || confirm.trim() !== label}>
           {busy ? 'Checking…' : 'Approve and put in use'}

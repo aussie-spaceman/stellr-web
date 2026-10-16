@@ -75,7 +75,7 @@ export function ProductTable({ products }: { products: StoreProductWithVariants[
               <td className={`${TD} whitespace-nowrap text-content-body`}>{p.variants?.length ?? 0}</td>
               <td className={`${TD} whitespace-nowrap text-content-body`}>{priceRange(p)}</td>
               <td className={`${TD} whitespace-nowrap`}>
-                <span className={'rounded-md px-2 py-0.5 text-[11px] ' + (STATUS_BADGE[p.status] ?? STATUS_BADGE.draft)}>
+                <span className={'rounded-md px-2 py-0.5 text-xs ' + (STATUS_BADGE[p.status] ?? STATUS_BADGE.draft)}>
                   {p.status}
                 </span>
               </td>

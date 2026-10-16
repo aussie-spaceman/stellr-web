@@ -198,7 +198,7 @@ export default function WhyStellrPage() {
                 className={`flex gap-3.5 px-6 py-5 ${i < arr.length - 1 ? 'border-b border-line-light' : ''}`}
               >
                 <span className="shrink-0 w-6 h-6 rounded-full bg-enviro-green-bg flex items-center justify-center mt-0.5">
-                  <Check size={14} strokeWidth={2.6} className="text-enviro-green" />
+                  <Check size={14} strokeWidth={2.6} className="text-enviro-green-text" />
                 </span>
                 <p className="text-[15px] text-content-body leading-relaxed">{item}</p>
               </div>
@@ -275,7 +275,7 @@ export default function WhyStellrPage() {
             <SectionHead
               Icon={Award}
               tileBg="bg-avatar-teal"
-              eyebrowColor="text-[#0E8A95]"
+              eyebrowColor="text-adult-teal-deep"
               eyebrow="Mentors"
             />
             <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
@@ -298,7 +298,7 @@ export default function WhyStellrPage() {
 
           {/* Dark callout card */}
           <div className="relative overflow-hidden bg-midnight rounded-panel p-[30px] text-white">
-            <p className="text-[11px] font-display font-bold uppercase tracking-[0.13em] text-[#5BD6E2]">
+            <p className="text-xs font-display font-bold uppercase tracking-[0.13em] text-[#5BD6E2]">
               Alumni upgrade
             </p>
             <h3 className="font-display text-[21px] font-bold mt-2 leading-tight">
@@ -320,7 +320,7 @@ export default function WhyStellrPage() {
             <SectionHead
               Icon={Global}
               tileBg="bg-donate-gold"
-              eyebrowColor="text-[#B5791E]"
+              eyebrowColor="text-gold-ink"
               eyebrow="Donors"
             />
             <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
@@ -374,7 +374,7 @@ export default function WhyStellrPage() {
             />
             <a
               href={`${WWW}/donate`}
-              className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-white bg-donate-gold hover:bg-[#C9892C] transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-ink bg-donate-gold hover:bg-pathway-amber transition-colors"
             >
               Make a donation
             </a>

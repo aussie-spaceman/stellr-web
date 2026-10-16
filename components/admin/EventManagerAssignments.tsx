@@ -53,7 +53,7 @@ export default function EventManagerAssignments({
 
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Event Managers</h3>
+      <h3 className="text-sm font-semibold text-brand-muted">Event Managers</h3>
       {initialAssignments.length === 0 ? (
         <p className="text-sm text-brand-muted-soft">No event managers assigned to this event.</p>
       ) : (
@@ -78,7 +78,7 @@ export default function EventManagerAssignments({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="manager@email.com"
-          className="flex-1 border border-brand-border rounded-lg px-3 py-1.5 text-sm"
+          className="flex-1 border border-line-strong rounded-lg px-3 py-1.5 text-input mouse:text-sm"
         />
         <button
           onClick={add}

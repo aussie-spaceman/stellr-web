@@ -106,7 +106,7 @@ export function LessonResources({ itemId }: { itemId: string }) {
 
   return (
     <div className="rounded-xl border border-brand-border p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Attached resources</p>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Attached resources</p>
       <div className="space-y-1.5">
         {resources.map((r) => (
           <div key={r.id} className="flex items-center justify-between gap-2 rounded-md border border-brand-hairline px-3 py-2 text-sm">
@@ -134,7 +134,7 @@ export function LessonResources({ itemId }: { itemId: string }) {
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 rounded-md border border-brand-border px-2.5 py-1.5">
                 <Search className="h-3.5 w-3.5 text-brand-muted-soft" />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search existing resources…" autoFocus className="w-full text-sm focus:outline-none" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search existing resources…" autoFocus className="w-full text-input mouse:text-sm focus:outline-none" />
               </div>
               <div className="max-h-44 overflow-y-auto rounded-md border border-brand-hairline">
                 {searching && <p className="px-2.5 py-2 text-xs text-brand-muted-soft">Searching…</p>}
@@ -155,9 +155,9 @@ export function LessonResources({ itemId }: { itemId: string }) {
             </div>
           ) : (
             <>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm" />
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-md border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm" />
               {mode === 'link' ? (
-                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm" />
+                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="w-full rounded-md border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm" />
               ) : (
                 <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-brand-border px-2.5 py-1.5 text-sm text-brand-muted hover:bg-brand-canvas">
                   <Upload className="h-4 w-4" /> {file ? file.name : 'Choose file'}

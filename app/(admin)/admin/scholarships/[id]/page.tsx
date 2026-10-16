@@ -153,7 +153,7 @@ export default async function ScholarshipApplicationPage({ params }: { params: P
       <div>
         <Link href="/admin/scholarships" className="text-sm text-primary hover:text-primary-deep">← Scholarships</Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">{app.first_name} {app.last_name}</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">{app.first_name} {app.last_name}</h1>
           <ScholarshipStagePill stage={app.stage} percent={app.percent_off} />
         </div>
         <p className="text-sm text-brand-muted-soft mt-0.5">

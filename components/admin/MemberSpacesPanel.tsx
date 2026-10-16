@@ -48,7 +48,7 @@ export function MemberSpacesPanel({ memberId }: { memberId: string }) {
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-brand-muted-soft">
+      <h2 className="mb-3 text-sm font-semibold text-brand-muted-soft">
         Community spaces
       </h2>
 
@@ -69,7 +69,7 @@ export function MemberSpacesPanel({ memberId }: { memberId: string }) {
                   <p className={`truncate text-sm ${s.revoked ? 'text-brand-muted-soft line-through' : 'text-brand-blue-dark'}`}>
                     {s.name}
                   </p>
-                  <p className="truncate text-[11px] text-brand-muted-soft">
+                  <p className="truncate text-xs text-brand-muted-soft">
                     {REASON_LABEL[s.reason]}
                     {s.grantLabel && ` · ${s.grantLabel}`}
                   </p>
@@ -84,18 +84,18 @@ export function MemberSpacesPanel({ memberId }: { memberId: string }) {
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {s.role !== 'member' && (
-                  <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted">
+                  <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-xs uppercase text-brand-muted">
                     {s.role === 'admin' ? 'Stellr Admin' : 'Moderator'}
                   </span>
                 )}
                 {s.status === 'invited' && (
-                  <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">invited</span>
+                  <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-xs uppercase text-brand-muted-soft">invited</span>
                 )}
                 {s.postingSuspended && (
-                  <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] uppercase text-amber-700">suspended</span>
+                  <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-xs uppercase text-amber-700">suspended</span>
                 )}
                 {s.revoked && (
-                  <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] uppercase text-red-600">revoked</span>
+                  <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-xs uppercase text-red-600">revoked</span>
                 )}
               </div>
             </li>
@@ -103,7 +103,7 @@ export function MemberSpacesPanel({ memberId }: { memberId: string }) {
         </ul>
       )}
 
-      <p className="mt-2 text-[11px] text-brand-muted-soft">
+      <p className="mt-2 text-xs text-brand-muted-soft">
         Suspend or revoke from the space&rsquo;s Members tab.
       </p>
     </div>

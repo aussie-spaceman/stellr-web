@@ -20,7 +20,8 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'px-6 py-3 bg-primary text-white hover:bg-primary-deep focus:ring-primary',
   secondary: 'px-6 py-3 border-2 border-primary text-primary hover:bg-primary hover:text-white focus:ring-primary',
   outlineWhite: 'px-6 py-3 border-2 border-white text-white hover:bg-white hover:text-ink focus:ring-white',
-  energy: 'px-6 py-3 bg-pathway-amber text-white hover:bg-[#C2722A] focus:ring-pathway-amber',
+  // Ink on amber (6.8:1): white text on the amber fill was 2.5:1.
+  energy: 'px-6 py-3 bg-pathway-amber text-ink hover:bg-pathway-amber-deep focus:ring-pathway-amber',
   softBlue: 'px-4 py-3 bg-primary-soft text-primary hover:bg-primary/15',
   softAmber: 'px-4 py-3 bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15',
   // WCAG 2.1 AA for 14px text. White on `primary` is 4.45:1, just under the

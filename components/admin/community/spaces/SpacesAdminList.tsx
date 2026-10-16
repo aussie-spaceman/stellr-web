@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil } from 'lucide-react'
+import { Field, Fieldset, Input, Textarea } from '@stellr/web-ui'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { AccessBadge, ThemeDot, TierPill, ACCESS_META } from '@/components/community/spaces/badges'
@@ -206,41 +207,38 @@ function NewSpaceModal({
         </>
       }
     >
-      <label className="block text-sm font-subheading font-semibold text-brand-blue-dark">Name</label>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="e.g. Robotics Crew"
-        className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"
-      />
-      <label className="mt-3 block text-sm font-subheading font-semibold text-brand-blue-dark">Description</label>
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        rows={2}
-        placeholder="What is this space for?"
-        className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"
-      />
-      <p className="mt-3 mb-1 text-sm font-subheading font-semibold text-brand-blue-dark">Access</p>
-      <div className="space-y-2">
-        {(Object.keys(ACCESS_META) as SpaceAccessType[]).map((t) => {
-          const m = ACCESS_META[t]
-          const selected = access === t
-          return (
-            <label
-              key={t}
-              className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors"
-              style={selected ? { borderColor: m.color, background: m.tint } : { borderColor: '#E4E7F2' }}
-            >
-              <input type="radio" name="new-access" checked={selected} onChange={() => setAccess(t)} className="mt-0.5" />
-              <span>
-                <span className="font-subheading font-semibold text-brand-blue-dark">{m.label}</span>
-                <span className="block text-xs text-brand-muted-soft">{m.blurb}</span>
-              </span>
-            </label>
-          )
-        })}
-      </div>
+      <Field label="Name">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Robotics Crew" />
+      </Field>
+      <Field label="Description" className="mt-3">
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          placeholder="What is this space for?"
+        />
+      </Field>
+      <Fieldset legend="Access" className="mt-3">
+        <div className="space-y-2">
+          {(Object.keys(ACCESS_META) as SpaceAccessType[]).map((t) => {
+            const m = ACCESS_META[t]
+            const selected = access === t
+            return (
+              <label
+                key={t}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors"
+                style={selected ? { borderColor: m.color, background: m.tint } : { borderColor: '#E4E7F2' }}
+              >
+                <input type="radio" name="new-access" checked={selected} onChange={() => setAccess(t)} className="mt-0.5" />
+                <span>
+                  <span className="font-subheading font-semibold text-brand-blue-dark">{m.label}</span>
+                  <span className="block text-xs text-brand-muted-soft">{m.blurb}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </Fieldset>
       <div className="mt-4 rounded-lg bg-brand-canvas p-3">
         <p className="text-xs font-subheading font-semibold uppercase tracking-[0.05em] text-brand-muted-soft">After you create</p>
         <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-xs text-brand-muted">

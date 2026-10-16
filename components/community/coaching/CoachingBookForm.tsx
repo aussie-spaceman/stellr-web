@@ -144,7 +144,7 @@ export function CoachingBookForm({
                         onClick={() => pickSlot(s.iso)}
                         aria-pressed={active}
                         className={`rounded-[9px] border px-3.5 py-2 text-sm font-semibold transition-colors ${
-                          active ? 'border-[#0E8C99] bg-[#E3F6F8] text-[#0E8C99]' : 'border-line bg-white text-content-secondary hover:border-content-faint'
+                          active ? 'border-[#0E8C99] bg-adult-teal/10 text-adult-teal-deep' : 'border-line bg-white text-content-secondary hover:border-content-faint'
                         }`}
                       >
                         {s.timeLabel}
@@ -158,7 +158,7 @@ export function CoachingBookForm({
           <button
             type="button"
             onClick={() => setCustomOpen((v) => !v)}
-            className="mt-3 text-[13px] font-semibold text-[#0E8C99] hover:underline"
+            className="mt-3 text-[13px] font-semibold text-adult-teal-deep hover:underline"
           >
             {customOpen ? 'Hide custom time' : 'Prefer a different time?'}
           </button>
@@ -178,7 +178,7 @@ export function CoachingBookForm({
               setCustomStart(e.target.value)
               setSelectedIso('')
             }}
-            className="mt-2 w-full rounded-panel border border-line bg-white px-4 py-3 text-[15px] text-ink focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
+            className="mt-2 w-full rounded-panel border border-line-strong bg-white px-4 py-3 text-input mouse:text-sm text-ink focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
           />
           <p className="mt-1.5 text-[13px] text-content-muted">
             Pick a slot that fits your availability — your coach will confirm and share a join link.

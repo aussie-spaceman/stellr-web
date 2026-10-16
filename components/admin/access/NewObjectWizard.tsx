@@ -168,9 +168,9 @@ export function NewObjectWizard({ onCreated, onClose }: { onCreated: () => void;
             <ul className="space-y-1">
               {rules.map((r) => (
                 <li key={r.id} className="rounded-lg border border-brand-hairline px-3 py-1.5 text-sm text-brand-blue-dark">
-                  <span className="mr-1.5 rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] text-brand-muted">Suggested by rule</span>
+                  <span className="mr-1.5 rounded-full bg-brand-hairline px-2 py-0.5 text-xs text-brand-muted">Suggested by rule</span>
                   {r.name}
-                  {r.is_dynamic && <span className="ml-1 text-[10px] text-brand-muted-soft">(target chosen after creation)</span>}
+                  {r.is_dynamic && <span className="ml-1 text-xs text-brand-muted-soft">(target chosen after creation)</span>}
                 </li>
               ))}
             </ul>

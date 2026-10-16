@@ -90,7 +90,7 @@ export default async function HomePage() {
       {/* Header */}
       <header className="mb-6">
         <p className="font-subheading text-[15px] font-medium text-brand-muted-soft">Welcome back,</p>
-        <h1 className="font-display text-display text-brand-blue-dark">
+        <h1 className="font-display text-ds-h2 text-brand-blue-dark">
           {firstName} <span className="text-star-gold">✦</span>
         </h1>
       </header>
@@ -121,12 +121,12 @@ export default async function HomePage() {
           />
           <div className="relative">
             <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
-              <span className="eyebrow rounded-full bg-white/20 px-2.5 py-1 text-[11px]">
+              <span className="eyebrow rounded-full bg-white/20 px-2.5 py-1 text-xs">
                 Your next {nextEvt.activityType === 'campaign' ? 'campaign' : 'competition'}
               </span>
               <span className="font-subheading text-[12.5px] font-semibold">in {daysUntil(nextEvt.date!)} days</span>
             </div>
-            <h2 className="font-heading text-[27px] uppercase">{nextEvt.title}</h2>
+            <h2 className="font-heading text-[27px]">{nextEvt.title}</h2>
             <p className="mb-4 text-[13.5px] text-white/85">
               {fmtDate(nextEvt.date!)}
               {venue ? ` · ${venue}` : ''}
@@ -145,7 +145,7 @@ export default async function HomePage() {
               <Link
                 href={`/community/events/${nextEvt.slug}`}
                 className={`rounded-xl bg-white px-5 py-2.5 font-subheading text-sm font-semibold ${
-                  nextEvt.activityType === 'campaign' ? 'text-pathway-amber-deep' : 'text-primary-deep'
+                  nextEvt.activityType === 'campaign' ? 'text-gold-ink' : 'text-primary-deep'
                 }`}
               >
                 View event hub →
@@ -212,7 +212,7 @@ export default async function HomePage() {
                       <span className={`block font-heading text-[18px] leading-none ${academy ? 'text-brand-gold-ink' : 'text-brand-blue'}`}>
                         {dayNum(s.scheduled_start)}
                       </span>
-                      <span className={`block font-subheading text-[10px] font-semibold ${academy ? 'text-brand-gold-ink' : 'text-brand-blue'}`}>
+                      <span className={`block font-subheading text-xs font-semibold ${academy ? 'text-brand-gold-ink' : 'text-brand-blue'}`}>
                         {monShort(s.scheduled_start)}
                       </span>
                     </span>
@@ -250,13 +250,13 @@ export default async function HomePage() {
                 <Link href={`/community/${f.spaceSlug}/${f.id}`} className="min-w-0 flex-1">
                   <span className="block text-[14.5px] text-brand-blue-dark">
                     <strong>{f.authorName}</strong>
-                    {f.isMentor && <span className="font-semibold text-brand-orange-alt"> (Mentor)</span>} in{' '}
+                    {f.isMentor && <span className="font-semibold text-gold-ink"> (Mentor)</span>} in{' '}
                     <span className="font-semibold text-brand-blue">{f.spaceName}</span>
                   </span>
                   <span className="block truncate text-[12.5px] text-brand-muted-soft">{f.title}</span>
                 </Link>
                 {f.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-brand-orange-alt" aria-label="unread" />}
-                <span className="shrink-0 text-[11.5px] text-brand-muted-soft">{timeAgo(f.createdAt)}</span>
+                <span className="shrink-0 text-xs text-brand-muted-soft">{timeAgo(f.createdAt)}</span>
               </li>
             ))}
           </ul>

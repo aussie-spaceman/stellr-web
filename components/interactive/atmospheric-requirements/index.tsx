@@ -28,7 +28,7 @@ const COMPONENTS = [
   {
     name: 'Carbon dioxide',
     Icon: Leaf,
-    accent: 'text-enviro-green',
+    accent: 'text-enviro-green-text',
     chip: 'bg-enviro-green-bg text-enviro-green-text',
     points: [
       'People breathe it out. Too much is dangerous (hypercapnia); too little is also harmful (hypocapnia).',
@@ -228,7 +228,7 @@ export function AtmosphericRequirements() {
                       <td className="px-4 py-2 tabular-nums text-content-secondary">{r.ppo2}</td>
                       <td
                         className={`px-4 py-2 tabular-nums font-semibold ${
-                          r.pct <= 23 ? 'text-enviro-green' : r.pct <= 35 ? 'text-pathway-amber-deep' : 'text-danger'
+                          r.pct <= 23 ? 'text-enviro-green-text' : r.pct <= 35 ? 'text-gold-ink' : 'text-danger'
                         }`}
                       >
                         {r.pct}%

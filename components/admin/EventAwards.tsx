@@ -78,7 +78,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
   if (!data) {
     return (
       <div className="bg-white rounded-xl border border-brand-border p-4">
-        <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Judging &amp; awards</h3>
+        <h3 className="text-sm font-semibold text-brand-muted">Judging &amp; awards</h3>
         {msg ? <p className="text-xs text-red-600 mt-2">{msg.text}</p> : <p className="text-xs text-brand-muted-soft mt-2">Loading…</p>}
       </div>
     )
@@ -112,7 +112,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Judging &amp; awards</h3>
+          <h3 className="text-sm font-semibold text-brand-muted">Judging &amp; awards</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
             Record the judges&rsquo; decisions, print the certificates, then issue them. A student can win one
             specialist award per event.
@@ -143,7 +143,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
           <section className="space-y-2">
             <p className="font-medium text-brand-blue-dark text-sm">{EVENT_AWARDS.overall_champion.label}</p>
             <select
-              className="rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark"
+              className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm text-brand-blue-dark"
               value={championCompanyId ?? ''}
               disabled={busy || data.companies.length === 0}
               onChange={(e) => change({ action: 'set_champion', companyId: e.target.value || null })}
@@ -190,7 +190,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
                       return (
                         <td key={award} className="pr-4 py-2">
                           <select
-                            className="w-full min-w-[12rem] rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark"
+                            className="w-full min-w-[12rem] rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm text-brand-blue-dark"
                             value={current?.id ?? ''}
                             disabled={busy}
                             onChange={(e) => change({ action: 'set_specialist', awardType: award, companyId: g.id, participantId: e.target.value || null })}

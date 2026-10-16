@@ -64,7 +64,7 @@ export function RelationshipMatrix() {
                       disabled={self}
                       aria-label={`${from} may attach ${to}: ${allowed ? 'yes' : 'no'}`}
                       className={
-                        'h-7 w-10 rounded-md border text-[11px] font-medium ' +
+                        'h-7 w-10 rounded-md border text-xs font-medium ' +
                         (self
                           ? 'border-brand-hairline bg-brand-canvas text-brand-muted-soft cursor-default'
                           : allowed

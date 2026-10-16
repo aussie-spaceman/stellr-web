@@ -12,8 +12,8 @@ import type { CredentialTheme } from '@/lib/credentials-core'
 
 const THEME_TEXT: Record<CredentialTheme | 'none', string> = {
   space:         'text-space-violet',
-  environmental: 'text-enviro-green',
-  campaign:      'text-pathway-amber',
+  environmental: 'text-enviro-green', // drawn on the dark credential header: the fill, not the dark text green
+  campaign:      'text-pathway-amber', // on the dark header too
   none:          'text-primary',
 }
 

@@ -57,7 +57,7 @@ export default async function MediaDoNotUsePage({ searchParams }: { searchParams
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Media do-not-use</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Media do-not-use</h1>
         <p className="mt-0.5 max-w-prose text-sm text-brand-muted-soft">
           Check this before using anyone’s photo, video, name or work in promotion. It applies the “I do NOT consent” box on each signed agreement (ticked by the parent or guardian for a minor), students’ own photo/media switches, withdrawn consents and the NY/CO default for 13–17-year-olds. Opt-outs sent by email aren’t in the data: keep adding those to the list by hand.
         </p>
@@ -66,7 +66,7 @@ export default async function MediaDoNotUsePage({ searchParams }: { searchParams
       <form className="flex flex-wrap items-end gap-3 text-sm" method="get">
         <label className="text-brand-muted">
           <span className="block text-xs">Event</span>
-          <select name="event" defaultValue={eventSlug ?? ''} className="mt-1 rounded-lg border border-brand-border bg-white px-2 py-1.5">
+          <select name="event" defaultValue={eventSlug ?? ''} className="mt-1 rounded-lg border border-line-strong bg-white px-2 py-1.5">
             <option value="">All events</option>
             {[...events].map(([slug, title]) => (
               <option key={slug} value={slug}>
@@ -77,7 +77,7 @@ export default async function MediaDoNotUsePage({ searchParams }: { searchParams
         </label>
         <label className="text-brand-muted">
           <span className="block text-xs">Show</span>
-          <select name="show" defaultValue={includeOk ? 'all' : ''} className="mt-1 rounded-lg border border-brand-border bg-white px-2 py-1.5">
+          <select name="show" defaultValue={includeOk ? 'all' : ''} className="mt-1 rounded-lg border border-line-strong bg-white px-2 py-1.5">
             <option value="">Do not use and check</option>
             <option value="all">Everyone, with the reason</option>
           </select>

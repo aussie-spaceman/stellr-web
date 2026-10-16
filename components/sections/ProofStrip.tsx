@@ -111,7 +111,7 @@ export function ProofStrip({
                 <>
                   <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.caption ?? p.alt}</p>
                   {p.credit && (
-                    <p className="text-[11px] text-content-faint">{p.credit}</p>
+                    <p className="text-xs text-content-faint">{p.credit}</p>
                   )}
                 </>
               )}

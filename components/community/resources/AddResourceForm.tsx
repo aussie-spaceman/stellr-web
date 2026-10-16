@@ -149,7 +149,7 @@ export function AddResourceForm({
       </div>
 
       {/* Inherited-visibility banner (read-only) */}
-      <div className="mb-4 flex items-center gap-2 rounded-[10px] bg-space-violet/8 px-3 py-2 text-[13px] text-space-violet">
+      <div className="mb-4 flex items-center gap-2 rounded-[10px] bg-space-violet/10 px-3 py-2 text-[13px] text-space-violet">
         <Users className="h-4 w-4 shrink-0" />
         <span>
           Visibility is inherited from <strong>{objectName}</strong>
@@ -250,7 +250,7 @@ export function AddResourceForm({
           onClose={() => setDup(null)}
           title={
             <span className="inline-flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 shrink-0 text-pathway-amber" aria-hidden="true" />
+              <AlertTriangle className="h-5 w-5 shrink-0 text-gold-ink" aria-hidden="true" />
               This already exists
             </span>
           }

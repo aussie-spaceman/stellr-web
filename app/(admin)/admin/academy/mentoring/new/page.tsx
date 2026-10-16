@@ -24,7 +24,7 @@ export default async function AdminNewCohortPage() {
         <Link href="/admin/academy/mentoring" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-content-muted hover:text-primary">
           <ArrowLeft className="h-4 w-4" /> Cohorts
         </Link>
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Create a cohort</h1>
+        <h1 className="font-display text-[28px] font-bold text-ink">Create a cohort</h1>
         <CreateCohortForm
           modules={modules.map((m) => ({ id: m.id, title: m.title }))}
           isAdmin

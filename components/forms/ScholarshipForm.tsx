@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Check } from 'lucide-react'
-import FieldError from '@/components/forms/FieldError'
+import { Field, Input, Select, Textarea } from '@stellr/web-ui'
 import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
@@ -21,13 +21,8 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-const inputClass = (error: boolean) =>
-  `w-full px-3.5 py-[11px] rounded-control border text-[15px] text-ink bg-white placeholder:text-content-faint focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
-    error ? 'border-red-400' : 'border-line'
-  }`
-
-const labelClass = 'block text-[13.5px] font-semibold text-ink mb-1.5'
-const reqMark = <span className="text-primary">*</span>
+// Matches the asterisk the Field primitive puts on each required label.
+const reqMark = <span className="text-danger">*</span>
 
 export function ScholarshipForm({
   activities,
@@ -74,7 +69,7 @@ export function ScholarshipForm({
     return (
       <div className="flex flex-col items-center text-center py-6">
         <div className="w-16 h-16 rounded-full bg-enviro-green-bg flex items-center justify-center">
-          <Check size={30} strokeWidth={2.4} className="text-enviro-green" />
+          <Check size={30} strokeWidth={2.4} className="text-enviro-green-text" />
         </div>
         <h3 className="font-display text-2xl font-bold text-ink mt-5">Thanks for submitting!</h3>
         <p className="mt-3 text-[15px] text-content-secondary leading-relaxed max-w-[380px]">
@@ -98,6 +93,9 @@ export function ScholarshipForm({
   const hasActivities = activities.length > 0
 
   return (
+    // noValidate: the schema's messages show under each field instead of the
+    // browser's bubbles. On a failed submit react-hook-form focuses the first
+    // invalid field (shouldFocusError), and that field's error is read with it.
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <div>
         <h3 className="font-display text-[21px] font-bold text-ink">Scholarship application</h3>
@@ -107,76 +105,30 @@ export function ScholarshipForm({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="firstName" className={labelClass}>
-            First name {reqMark}
-          </label>
-          <input
-            id="firstName"
-            type="text"
-            autoComplete="given-name"
-            {...register('firstName')}
-            className={inputClass(!!errors.firstName)}
-          />
-          <FieldError message={errors.firstName?.message} />
-        </div>
-        <div>
-          <label htmlFor="lastName" className={labelClass}>
-            Last name {reqMark}
-          </label>
-          <input
-            id="lastName"
-            type="text"
-            autoComplete="family-name"
-            {...register('lastName')}
-            className={inputClass(!!errors.lastName)}
-          />
-          <FieldError message={errors.lastName?.message} />
-        </div>
+        <Field label="First name" required error={errors.firstName?.message}>
+          <Input id="firstName" type="text" autoComplete="given-name" {...register('firstName')} />
+        </Field>
+        <Field label="Last name" required error={errors.lastName?.message}>
+          <Input id="lastName" type="text" autoComplete="family-name" {...register('lastName')} />
+        </Field>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="email" className={labelClass}>
-            Email {reqMark}
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            {...register('email')}
-            className={inputClass(!!errors.email)}
-          />
-          <FieldError message={errors.email?.message} />
-        </div>
-        <div>
-          <label htmlFor="phone" className={labelClass}>
-            Phone
-          </label>
-          <input
-            id="phone"
-            type="tel"
-            autoComplete="tel"
-            {...register('phone')}
-            className={inputClass(false)}
-          />
-        </div>
+        <Field label="Email" required error={errors.email?.message}>
+          <Input id="email" type="email" inputMode="email" autoComplete="email" {...register('email')} />
+        </Field>
+        <Field label="Phone">
+          <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" {...register('phone')} />
+        </Field>
       </div>
 
-      <div>
-        <label htmlFor="activity" className={labelClass}>
-          Stellr activity {reqMark}
-        </label>
-        <select
-          id="activity"
-          defaultValue=""
-          {...register('activity')}
-          className={`${inputClass(!!errors.activity)} appearance-none bg-[length:18px] bg-[right_14px_center] bg-no-repeat pr-10`}
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%236A708C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",
-          }}
-        >
+      <Field
+        label="Stellr activity"
+        required
+        error={errors.activity?.message}
+        hint={usedFallback ? 'Showing the standard event list…' : undefined}
+      >
+        <Select id="activity" defaultValue="" {...register('activity')}>
           <option value="" disabled>
             {hasActivities ? 'Select an activity…' : 'Loading events…'}
           </option>
@@ -185,36 +137,28 @@ export function ScholarshipForm({
               {a}
             </option>
           ))}
-        </select>
-        <FieldError message={errors.activity?.message} />
-        {usedFallback && (
-          <p className="mt-1.5 text-xs text-content-faint">Showing the standard event list…</p>
-        )}
-      </div>
+        </Select>
+      </Field>
 
-      <div>
-        <label htmlFor="school" className={labelClass}>
-          School name
-        </label>
-        <input id="school" type="text" {...register('school')} className={inputClass(false)} />
-      </div>
+      <Field label="School name">
+        <Input id="school" type="text" autoComplete="organization" {...register('school')} />
+      </Field>
 
-      <div>
-        <label htmlFor="brief" className={labelClass}>
-          Application brief {reqMark}
-        </label>
-        <textarea
+      <Field label="Application brief" required error={errors.brief?.message}>
+        <Textarea
           id="brief"
           rows={5}
           {...register('brief')}
-          className={`${inputClass(!!errors.brief)} min-h-[130px] resize-y`}
+          className="resize-y"
           placeholder="Tell us a little about why you're applying. You don't need to share more than you're comfortable with."
         />
-        <FieldError message={errors.brief?.message} />
-      </div>
+      </Field>
 
       {(Object.keys(errors).length > 0 || status === 'error') && (
-        <p className="rounded-control bg-[#FBECEA] border border-[#EAC9C4] text-[#9A4A41] text-[13.5px] px-4 py-3">
+        <p
+          role={status === 'error' ? 'alert' : undefined}
+          className="rounded-control bg-danger/5 border border-danger/30 text-danger text-sm px-4 py-3"
+        >
           {status === 'error'
             ? 'Something went wrong sending your application. Please try again, or email hello@stellreducation.org directly.'
             : 'Please complete all required fields before submitting.'}

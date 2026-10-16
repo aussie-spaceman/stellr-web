@@ -186,32 +186,32 @@ export default async function CampaignsPage() {
       {/* ── Context breadcrumb ────────────────────────────────────────── */}
       <section className="bg-[#FBF0E3] border-b border-[#EDD9BE]">
         <div className="container-max px-4 sm:px-6 lg:px-8 py-6 flex flex-wrap items-center gap-5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand-gold-ink">
+          <span className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gold-ink">
             Two ways to compete
           </span>
           {/* Active — Campaigns */}
           <div className="bg-white border-[1.5px] border-pathway-amber rounded-[10px] px-4 py-2.5">
             <div className="flex items-center gap-2">
               <span className="font-subheading font-bold text-ink text-sm">Campaigns</span>
-              <span className="rounded-full bg-pathway-amber text-white text-[9.5px] font-bold uppercase tracking-wide px-2 py-0.5">
+              <span className="rounded-full bg-pathway-amber text-ink text-xs font-bold uppercase tracking-wide px-2 py-0.5">
                 You are here
               </span>
             </div>
             <p className="text-xs text-content-muted mt-0.5">Classroom · on your schedule</p>
           </div>
-          <span className="font-subheading font-bold text-[#C0A877]">or</span>
+          <span className="font-subheading font-bold text-gold-ink">or</span>
           {/* Events */}
           <Link
             href="/events"
             className="group bg-white border border-[#ECD9BC] rounded-[10px] px-4 py-2.5 flex items-center gap-3 transition-colors hover:border-pathway-amber"
           >
             <div>
-              <span className="font-subheading font-bold text-[#A98C5E] text-sm">Events</span>
+              <span className="font-subheading font-bold text-gold-ink text-sm">Events</span>
               <p className="text-xs text-content-muted mt-0.5">Live · in-person, fixed dates</p>
             </div>
             <ArrowRight size={16} className="text-primary" />
           </Link>
-          <p className="text-[13.5px] text-[#9A8453] max-w-[300px] leading-snug">
+          <p className="text-[13.5px] text-gold-ink max-w-[300px] leading-snug">
             Both are Stellr Competitions. Campaigns bring the same challenges into your classroom.
           </p>
         </div>
@@ -278,10 +278,10 @@ export default async function CampaignsPage() {
               <span className="absolute top-5 right-5 rounded-full bg-pathway-amber-bg text-brand-gold-ink text-xs font-bold uppercase tracking-wide px-3 py-1">
                 Optional
               </span>
-              <span className="w-[50px] h-[50px] rounded-[13px] bg-pathway-amber-bg text-pathway-amber flex items-center justify-center">
+              <span className="w-[50px] h-[50px] rounded-[13px] bg-pathway-amber-bg text-gold-ink flex items-center justify-center">
                 <Award size={26} />
               </span>
-              <p className="text-xs font-subheading font-semibold uppercase tracking-[0.1em] text-pathway-amber mt-5">
+              <p className="text-xs font-subheading font-semibold uppercase tracking-[0.1em] text-gold-ink mt-5">
                 Twice a year · Fall &amp; Spring
               </p>
               <h3 className="text-xl font-bold text-ink mt-1">Enter a Campaign</h3>
@@ -292,7 +292,7 @@ export default async function CampaignsPage() {
                   'Register in minutes — not required to use the material',
                 ].map((b) => (
                   <li key={b} className="flex gap-2.5 text-sm text-content-secondary leading-relaxed">
-                    <Check size={18} className="shrink-0 mt-0.5 text-pathway-amber" /> {b}
+                    <Check size={18} className="shrink-0 mt-0.5 text-gold-ink" /> {b}
                   </li>
                 ))}
               </ul>
@@ -307,7 +307,7 @@ export default async function CampaignsPage() {
       {/* ── See a real student RFP (gated download) ───────────────────── */}
       <section className="section-padding bg-gradient-to-b from-surface to-white border-y border-line">
         <div className="container-max max-w-2xl flex flex-col items-center text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-primary">
             Free resource
           </span>
           <h2 className="text-3xl font-bold text-ink mt-4">See Exactly What Students Work On</h2>
@@ -365,7 +365,7 @@ export default async function CampaignsPage() {
                 <h3 className="text-xl font-bold text-ink mt-4">{t.title}</h3>
                 <p className="text-content-secondary mt-2 leading-relaxed flex-1">{t.blurb}</p>
                 <div className="mt-5 bg-white rounded-[10px] border border-line px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-content-faint">Access</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.1em] text-content-faint">Access</p>
                   <p className="text-sm text-content-secondary mt-0.5">
                     Free account, then upgrade for the full material
                   </p>
@@ -411,7 +411,7 @@ export default async function CampaignsPage() {
           <div className="rounded-cta overflow-hidden bg-gradient-to-br from-[#1B2350] to-[#10153A] text-white">
             <div className="px-7 sm:px-11 pt-10">
               <Eyebrow className="text-[#F0B864]">Campaigns · optional</Eyebrow>
-              <h2 className="text-display font-bold mt-3 max-w-xl leading-tight">
+              <h2 className="text-ds-h2 font-bold mt-3 max-w-xl leading-tight">
                 Two Campaigns a year. A path to the International Summer Camp.
               </h2>
               <p className="text-hero-lead mt-4 max-w-2xl leading-relaxed">
@@ -494,7 +494,7 @@ export default async function CampaignsPage() {
               <div key={s.n} className="bg-white border border-line rounded-ds-card p-6">
                 <div
                   className={`w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold ${
-                    s.amber ? 'bg-pathway-amber-bg text-pathway-amber' : 'bg-primary-soft text-primary'
+                    s.amber ? 'bg-pathway-amber-bg text-gold-ink' : 'bg-primary-soft text-primary'
                   }`}
                 >
                   {s.n}
@@ -554,7 +554,7 @@ export default async function CampaignsPage() {
                 <ul className="space-y-3 flex-1">
                   {freeBullets.map((b) => (
                     <li key={b} className="flex gap-2.5 text-sm text-content-secondary leading-relaxed">
-                      <Check size={18} className="shrink-0 mt-0.5 text-enviro-green" /> {b}
+                      <Check size={18} className="shrink-0 mt-0.5 text-enviro-green-text" /> {b}
                     </li>
                   ))}
                 </ul>
@@ -600,7 +600,7 @@ export default async function CampaignsPage() {
       <section className="relative overflow-hidden text-white py-20 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_15%_0%,#1B2350_0%,#10153A_55%,#0E1330_100%)]">
         <div className="container-max text-center">
           <Eyebrow className="text-hero-dim">Ready to start?</Eyebrow>
-          <h2 className="text-display font-bold mt-3 max-w-2xl mx-auto leading-tight">
+          <h2 className="text-ds-h2 font-bold mt-3 max-w-2xl mx-auto leading-tight">
             Bring a real engineering challenge to your class.
           </h2>
           <p className="text-hero-lead mt-4 max-w-lg mx-auto leading-relaxed">

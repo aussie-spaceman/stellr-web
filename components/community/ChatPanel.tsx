@@ -220,7 +220,7 @@ export function ChatPanel({
               )}
               <div className="flex max-w-[75%] flex-col">
                 {!mine && (
-                  <span className="mb-0.5 ml-1 font-subheading text-[11px] font-medium text-brand-muted-soft">
+                  <span className="mb-0.5 ml-1 font-subheading text-xs font-medium text-brand-muted-soft">
                     {m.author_name}
                   </span>
                 )}
@@ -231,7 +231,7 @@ export function ChatPanel({
                 >
                   {m.body}
                   {m.flagged && (
-                    <span className="ml-2 align-middle text-[10px] font-medium text-brand-gold-ink">⚑ flagged</span>
+                    <span className="ml-2 align-middle text-xs font-medium text-brand-gold-ink">⚑ flagged</span>
                   )}
                 </div>
               </div>
@@ -264,7 +264,7 @@ export function ChatPanel({
           onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Message…"
           aria-label="Message"
-          className="min-w-0 flex-1 rounded-md border border-brand-border px-3 py-1.5 text-sm"
+          className="min-w-0 flex-1 rounded-md border border-line-strong px-3 py-1.5 text-input mouse:text-sm"
         />
         <button
           type="button"

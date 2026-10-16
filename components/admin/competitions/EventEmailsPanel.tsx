@@ -68,7 +68,7 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Emails</h2>
+            <h2 className="text-sm font-semibold text-brand-muted">Emails</h2>
             <p className="mt-0.5 text-xs text-brand-muted-soft">
               One email per person, filled in with their details. Schedule relative to the event date, or send now.
             </p>
@@ -77,7 +77,7 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
             value=""
             disabled={adding}
             onChange={(e) => void add(e.target.value)}
-            className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-sm text-brand-muted"
+            className="rounded-lg border border-line-strong bg-white px-3 py-1.5 text-input mouse:text-sm text-brand-muted"
             aria-label="Add an email"
           >
             <option value="">{adding ? 'Adding…' : '+ Add email…'}</option>
@@ -154,7 +154,7 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">History</h2>
+        <h2 className="text-sm font-semibold text-brand-muted">History</h2>
         <EventEmailHistory history={history} />
       </section>
     </div>

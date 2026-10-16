@@ -174,7 +174,7 @@ export function ScholarshipReview({
           id="sch-event"
           value={eventSlug}
           onChange={(e) => { setEventSlug(e.target.value); setConfirming(false) }}
-          className="w-full rounded-control border border-line bg-white px-3 py-2 text-sm text-ink"
+          className="w-full rounded-control border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm text-ink"
         >
           <option value="">Choose an event…</option>
           {events.map((e) => (
@@ -400,7 +400,7 @@ export function ScholarshipRetryRefundButton({ id }: { id: string }) {
       <select
         value={method}
         onChange={(e) => setMethod(e.target.value as 'cash' | 'credit')}
-        className="rounded-control border border-line bg-white px-2 py-1.5 text-sm text-ink"
+        className="rounded-control border border-line-strong bg-white px-2 py-1.5 text-input mouse:text-sm text-ink"
         aria-label="Reimburse as"
       >
         <option value="cash">Refund to card</option>

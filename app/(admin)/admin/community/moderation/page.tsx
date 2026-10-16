@@ -56,7 +56,7 @@ export default async function AdminModerationPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Content Moderation</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Content Moderation</h1>
           <p className="mt-0.5 text-sm text-brand-muted-soft">
             Review flagged posts, comments and resources (FR-COM-07)
           </p>

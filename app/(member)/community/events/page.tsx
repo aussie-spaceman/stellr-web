@@ -18,7 +18,7 @@ function StatusBadge({ status }: { status: CatalogEvent['status'] }) {
     closed: { label: 'Registration closed', cls: 'bg-brand-hairline text-brand-muted-soft' },
   }[status]
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-wide ${map.cls}`}>
+    <span className={`rounded-full px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-wide ${map.cls}`}>
       {map.label}
     </span>
   )
@@ -40,7 +40,7 @@ function EventCard({ e }: { e: CatalogEvent }) {
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-semibold text-brand-blue-dark">{e.title}</h3>
           <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-wide ${
+            className={`rounded-full px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-wide ${
               isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-brand-blue/10 text-brand-blue'
             }`}
           >
@@ -60,7 +60,7 @@ function EventCard({ e }: { e: CatalogEvent }) {
             </p>
           )}
           {e.registered ? (
-            <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-wide text-brand-blue">
+            <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-wide text-brand-blue">
               Registered
             </span>
           ) : (
@@ -107,14 +107,14 @@ export default async function EventsPortalPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Events &amp; Campaigns</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Events &amp; Campaigns</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Your registrations, plus everything coming up in the next 12 months.
         </p>
       </div>
 
       <section>
-        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+        <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">
           Your events &amp; campaigns
         </h2>
         {registered.length > 0 ? (
@@ -132,7 +132,7 @@ export default async function EventsPortalPage() {
 
       {available.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+          <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">
             Browse events &amp; campaigns
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">

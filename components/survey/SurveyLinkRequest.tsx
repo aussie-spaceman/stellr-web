@@ -25,7 +25,7 @@ export function SurveyLinkRequest({ slug }: { slug: string }) {
         autoComplete="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded-control border border-line px-3 py-2 text-ink"
+        className="w-full rounded-control border border-line-strong px-3 py-2 text-ink"
       />
       <Button variant="primaryStrong" type="submit" disabled={state === 'busy'}>
         {state === 'busy' ? 'Sending…' : 'Email me my link'}

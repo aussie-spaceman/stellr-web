@@ -184,7 +184,7 @@ export default function EventRoster({
       <Pill {...PAYMENT_PILLS[p.payment_pill]} />
       {/* Refunded in the Stripe dashboard. The pill stays "paid"
           because the money did arrive; this says it went back. */}
-      {p.refund_detail && <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.refund_detail}</p>}
+      {p.refund_detail && <p className="mt-1 text-xs leading-tight text-brand-grey-dark">{p.refund_detail}</p>}
     </>
   )
 
@@ -194,7 +194,7 @@ export default function EventRoster({
       {/* Names the outstanding signer. Without this, answering
           "we already signed it" meant querying the DB and then
           DocuSign — which is exactly what happened on 4 Sept 2026. */}
-      {p.docusign_detail && <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.docusign_detail}</p>}
+      {p.docusign_detail && <p className="mt-1 text-xs leading-tight text-brand-grey-dark">{p.docusign_detail}</p>}
     </>
   )
 
@@ -560,7 +560,7 @@ function CardField({ label, children }: { label: string; children: ReactNode }) 
 // "Scholarship · 50%" — marks a registration held under a scholarship.
 function ScholarshipBadge({ percent, refundCents }: { percent: number; refundCents?: number | null }) {
   return (
-    <span className="inline-flex items-center rounded-full bg-pathway-amber-bg px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-ink">
+    <span className="inline-flex items-center rounded-full bg-pathway-amber-bg px-2 py-0.5 text-xs font-semibold normal-case tracking-normal text-ink">
       Scholarship · {percent}%
       {refundCents ? ` · $${(refundCents / 100).toFixed(2)} reimbursed` : ''}
     </span>

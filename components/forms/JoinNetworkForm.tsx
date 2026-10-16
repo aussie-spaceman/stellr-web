@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import FieldError from '@/components/forms/FieldError'
+import { Choice, Field, Input, Select } from '@stellr/web-ui'
 import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
@@ -30,14 +30,8 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-const inputClass = (error: boolean) =>
-  `w-full px-4 py-3 rounded-control border text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary ${
-    error ? 'border-red-400' : 'border-line'
-  }`
-
 const legendClass =
   'text-xs font-subheading font-semibold text-content-body uppercase tracking-[0.12em] pb-2 border-b border-line-light w-full'
-const labelClass = 'block text-[13px] font-semibold text-content-body mb-1'
 
 export function JoinNetworkForm() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -86,69 +80,42 @@ export function JoinNetworkForm() {
   }
 
   return (
+    // noValidate: the schema's messages show under each field instead of the
+    // browser's bubbles. On a failed submit react-hook-form focuses the first
+    // invalid field (shouldFocusError), and that field's error is read with it.
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       {/* Personal */}
       <fieldset className="space-y-4">
         <legend className={legendClass}>Your Details</legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="firstName" className={labelClass}>
-              First Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="firstName"
-              type="text"
-              autoComplete="given-name"
-              {...register('firstName')}
-              className={inputClass(!!errors.firstName)}
-              placeholder="Jane"
-            />
-            <FieldError message={errors.firstName?.message} />
-          </div>
-          <div>
-            <label htmlFor="lastName" className={labelClass}>
-              Last Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="lastName"
-              type="text"
-              autoComplete="family-name"
-              {...register('lastName')}
-              className={inputClass(!!errors.lastName)}
-              placeholder="Smith"
-            />
-            <FieldError message={errors.lastName?.message} />
-          </div>
+          <Field label="First Name" required error={errors.firstName?.message}>
+            <Input id="firstName" type="text" autoComplete="given-name" {...register('firstName')} placeholder="Jane" />
+          </Field>
+          <Field label="Last Name" required error={errors.lastName?.message}>
+            <Input id="lastName" type="text" autoComplete="family-name" {...register('lastName')} placeholder="Smith" />
+          </Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="email" className={labelClass}>
-              Email <span className="text-red-500">*</span>
-            </label>
-            <input
+          <Field label="Email" required error={errors.email?.message}>
+            <Input
               id="email"
               type="email"
+              inputMode="email"
               autoComplete="email"
               {...register('email')}
-              className={inputClass(!!errors.email)}
               placeholder="jane@example.com"
             />
-            <FieldError message={errors.email?.message} />
-          </div>
-          <div>
-            <label htmlFor="phone" className={labelClass}>
-              Phone Number <span className="text-red-500">*</span>
-            </label>
-            <input
+          </Field>
+          <Field label="Phone Number" required error={errors.phone?.message}>
+            <Input
               id="phone"
               type="tel"
+              inputMode="tel"
               autoComplete="tel"
               {...register('phone')}
-              className={inputClass(!!errors.phone)}
               placeholder="+1 (555) 000-0000"
             />
-            <FieldError message={errors.phone?.message} />
-          </div>
+          </Field>
         </div>
       </fieldset>
 
@@ -156,60 +123,33 @@ export function JoinNetworkForm() {
       <fieldset className="space-y-4">
         <legend className={legendClass}>Business Details</legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="companyName" className={labelClass}>
-              Company Name <span className="text-red-500">*</span>
-            </label>
-            <input
+          <Field label="Company Name" required error={errors.companyName?.message}>
+            <Input
               id="companyName"
               type="text"
               autoComplete="organization"
               {...register('companyName')}
-              className={inputClass(!!errors.companyName)}
               placeholder="Acme STEM Labs"
             />
-            <FieldError message={errors.companyName?.message} />
-          </div>
-          <div>
-            <label htmlFor="address" className={labelClass}>
-              Address
-            </label>
-            <input
+          </Field>
+          <Field label="Address">
+            <Input
               id="address"
               type="text"
               autoComplete="street-address"
               {...register('address')}
-              className={inputClass(!!errors.address)}
               placeholder="City, State, Country"
             />
-          </div>
+          </Field>
         </div>
       </fieldset>
 
-      <div>
-        <label htmlFor="whatYouDo" className={labelClass}>
-          What do you do? <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="whatYouDo"
-          type="text"
-          {...register('whatYouDo')}
-          className={inputClass(!!errors.whatYouDo)}
-          placeholder="A sentence is plenty"
-        />
-        <FieldError message={errors.whatYouDo?.message} />
-      </div>
+      <Field label="What do you do?" required error={errors.whatYouDo?.message}>
+        <Input id="whatYouDo" type="text" {...register('whatYouDo')} placeholder="A sentence is plenty" />
+      </Field>
 
-      <div>
-        <label htmlFor="reason" className={labelClass}>
-          What kind of partner are you? <span className="text-red-500">*</span>
-        </label>
-        <select
-          id="reason"
-          defaultValue=""
-          {...register('reason')}
-          className={`${inputClass(!!errors.reason)} bg-white`}
-        >
+      <Field label="What kind of partner are you?" required error={errors.reason?.message}>
+        <Select id="reason" defaultValue="" {...register('reason')}>
           <option value="" disabled>
             Select an option…
           </option>
@@ -218,31 +158,34 @@ export function JoinNetworkForm() {
               {r}
             </option>
           ))}
-        </select>
-        <FieldError message={errors.reason?.message} />
-      </div>
+        </Select>
+      </Field>
 
       {/* Consent */}
-      <div>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            {...register('consent')}
-            className="mt-0.5 h-4 w-4 rounded border-line text-primary"
-          />
-          <span className="text-[13.5px] text-content-secondary leading-relaxed">
-            I agree to Stellr Education contacting me about this inquiry, as described in our{' '}
-            <a href="/privacy" className="font-semibold text-primary underline">
-              Privacy Policy
-            </a>
-            .
-          </span>
-        </label>
-        <FieldError message={errors.consent?.message} />
+      <div className="space-y-1.5">
+        <Choice
+          {...register('consent')}
+          aria-invalid={errors.consent ? true : undefined}
+          aria-describedby={errors.consent ? 'consent-error' : undefined}
+          label={
+            <span className="leading-relaxed text-content-secondary">
+              I agree to Stellr Education contacting me about this inquiry, as described in our{' '}
+              <a href="/privacy" className="font-semibold text-primary underline">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          }
+        />
+        {errors.consent?.message && (
+          <p id="consent-error" className="text-sm text-danger">
+            {errors.consent.message}
+          </p>
+        )}
       </div>
 
       {status === 'error' && (
-        <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <p role="alert" className="text-sm text-danger bg-danger/5 border border-danger/30 rounded-control px-4 py-3">
           Something went wrong sending your request. Please try again or email us directly at{' '}
           <a href="mailto:hello@stellreducation.org" className="underline">
             hello@stellreducation.org

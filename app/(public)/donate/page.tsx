@@ -54,7 +54,7 @@ export default async function DonatePage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6">
             Support the next generation of STEM leaders.
           </h1>
-          <p className="text-lg text-content-faint mb-8 max-w-2xl">
+          <p className="text-lg text-hero-lead mb-8 max-w-2xl">
             Stellr events are made possible by the generous support of donors and sponsors. Your contribution funds scholarships, resources, and access for students who would otherwise miss out.
           </p>
           {DONATION_URL ? (
@@ -68,10 +68,10 @@ export default async function DonatePage() {
             </a>
           ) : (
             <div className="inline-flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <span className="inline-block px-8 py-4 rounded-lg bg-white/10 text-content-faint text-base font-semibold cursor-not-allowed">
+              <span className="inline-block px-8 py-4 rounded-lg bg-white/10 text-hero-lead text-base font-semibold cursor-not-allowed">
                 Donation Portal Coming Soon
               </span>
-              <span className="text-sm text-content-faint">
+              <span className="text-sm text-hero-lead">
                 In the meantime, <a href="/contact?type=sponsorship" className="text-blue-300 hover:text-white underline">contact us</a> to discuss giving.
               </span>
             </div>
@@ -108,7 +108,7 @@ export default async function DonatePage() {
             ].map((item) => (
               <div key={item.stat}>
                 <p className="text-4xl font-bold">{item.stat}</p>
-                <p className="mt-2 text-blue-100 text-sm">{item.label}</p>
+                <p className="mt-2 text-white text-sm">{item.label}</p>
               </div>
             ))}
           </div>
@@ -143,7 +143,7 @@ export default async function DonatePage() {
           <p className="text-brand-grey-dark text-sm bg-brand-grey-light rounded-xl p-4 border border-line">
             <strong>Tax receipts:</strong> Donors receive an email receipt for tax purposes following their contribution.
             For questions about donation processing, contact{' '}
-            <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">
+            <a href="mailto:hello@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
               hello@stellreducation.org
             </a>.
           </p>

@@ -106,11 +106,11 @@ function RequestRow({ req, coaches, suggested }: { req: CoachingRequest; coaches
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-display text-[16px] font-bold text-ink">{req.memberName ?? 'Member'}</p>
-            <span className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-0.5 text-[11px] font-bold ${meta.className}`}>
+            <span className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-0.5 text-xs font-bold ${meta.className}`}>
               <meta.Icon className="h-3 w-3" /> {meta.label}
             </span>
             {req.eligibility && (
-              <span className="inline-flex items-center rounded-pill bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-content-secondary">
+              <span className="inline-flex items-center rounded-pill bg-surface px-2.5 py-0.5 text-xs font-semibold text-content-secondary">
                 {req.eligibility}
               </span>
             )}
@@ -142,7 +142,7 @@ function RequestRow({ req, coaches, suggested }: { req: CoachingRequest; coaches
             <select
               value={coachId}
               onChange={(e) => setCoachId(e.target.value)}
-              className="min-w-[160px] rounded-[8px] border border-line bg-white px-3 py-2 text-sm text-ink"
+              className="min-w-[160px] rounded-[8px] border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm text-ink"
             >
               <option value="">Select a coach…</option>
               {coaches.map((c) => (
@@ -157,7 +157,7 @@ function RequestRow({ req, coaches, suggested }: { req: CoachingRequest; coaches
             <select
               value={eligibility}
               onChange={(e) => setEligibility(e.target.value as CoachingEligibility)}
-              className="min-w-[200px] rounded-[8px] border border-line bg-white px-3 py-2 text-sm text-ink"
+              className="min-w-[200px] rounded-[8px] border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm text-ink"
             >
               <option value="">Select…</option>
               {ELIGIBILITY_OPTIONS.map((o) => (

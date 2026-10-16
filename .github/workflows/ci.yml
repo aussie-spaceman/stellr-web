@@ -130,6 +130,12 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      # ESLint (mobile review G3): accessibility (jsx-a11y), Next and hooks
+      # rules. All warnings, but --max-warnings in package.json is today's
+      # count, so the number can only go down: fix some, lower it.
+      - name: Lint (warnings ratchet)
+        run: npm run lint:ci
+
       - name: Build
         run: npm run build
 
@@ -277,6 +283,17 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      # Storybook (mobile review G5): every story renders at phone width with
+      # no page error and no serious/critical axe issue (e2e/storybook). Here,
+      # not in verify, because this job already has Chromium installed.
+      - if: steps.config.outputs.ready == 'true'
+        name: Storybook stories (render + axe)
+        run: |
+          npm run build-storybook -- --quiet
+          npx --yes http-server@14.1.1 storybook-static -p 6006 -a 127.0.0.1 -s &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:6006/index.json >/dev/null && break; sleep 1; done
+          npm run test:storybook
 
       # Lighthouse, mobile preset, on the production build this job already
       # made: the budgets in lighthouserc.json (LCP 2.5s, TBT 200ms, CLS 0.1,

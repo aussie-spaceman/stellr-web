@@ -424,12 +424,12 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="space-y-3">
                     {event.schedule.map((item, i) => (
                       <div key={i} className="flex gap-4 text-sm">
-                        <span className="font-mono text-brand-grey-mid w-40 shrink-0">{item.time}</span>
+                        <span className="font-mono text-content-muted w-40 shrink-0">{item.time}</span>
                         <span className="text-brand-grey-dark">{item.label}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-xs text-brand-grey-mid italic">Schedule is indicative — full timetable released 2 weeks before event.</p>
+                  <p className="mt-3 text-xs text-content-muted italic">Schedule is indicative — full timetable released 2 weeks before event.</p>
                 </div>
               )}
 
@@ -469,7 +469,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                     <details key={faq.q} className="group border border-line rounded-lg">
                       <summary className="flex items-center justify-between p-4 cursor-pointer font-medium text-brand-blue-dark list-none">
                         {faq.q}
-                        <span className="ml-4 shrink-0 text-brand-grey-mid group-open:rotate-180 transition-transform">▾</span>
+                        <span className="ml-4 shrink-0 text-content-muted group-open:rotate-180 transition-transform">▾</span>
                       </summary>
                       <p className="px-4 pb-4 text-sm text-brand-grey-dark">{faq.a}</p>
                     </details>
@@ -578,7 +578,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               {/* Side CTA */}
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 text-center">
                 <p className="font-bold text-lg mb-2">Ready to compete?</p>
-                <p className="text-sm text-content-faint mb-4">
+                <p className="text-sm text-hero-lead mb-4">
                   {status === 'open'
                     ? 'Registration is open. Secure your spot now.'
                     : status === 'coming-soon'
@@ -596,7 +596,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                 {status === 'coming-soon' && (
                   <EventNotifyButton slug={slug} title={event.title} status={status} />
                 )}
-                <Link href="/events" className="block mt-3 text-xs text-content-faint hover:text-white transition-colors">
+                <Link href="/events" className="block mt-3 text-xs text-hero-lead hover:text-white transition-colors">
                   ← Back to all events
                 </Link>
               </div>

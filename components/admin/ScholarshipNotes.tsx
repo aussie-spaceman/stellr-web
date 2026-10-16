@@ -31,7 +31,7 @@ export function ScholarshipNotes({ id, initial }: { id: string; initial: string 
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={save}
-        className="w-full rounded-control border border-line px-3 py-2 text-sm text-ink"
+        className="w-full rounded-control border border-line-strong px-3 py-2 text-input mouse:text-sm text-ink"
       />
       <p className="text-xs text-content-body h-4">
         {state === 'saving' ? 'Saving…' : state === 'error' ? 'Couldn’t save — try again.' : value !== saved ? 'Saves when you click away.' : ''}

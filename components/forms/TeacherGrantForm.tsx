@@ -1,20 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { useForm, type SubmitErrorHandler } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Button } from '@stellr/web-ui'
-import FieldError from '@/components/forms/FieldError'
+import { Button, Choice, Field, Fieldset, Input, Select, Textarea } from '@stellr/web-ui'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { GENDERS } from '@/lib/registration-constants'
 import { GRANT_PLACES, GRANT_PROGRAM_YEAR, GRANT_THRESHOLDS } from '@/lib/grant'
 
-const inputClass = (hasError: boolean) =>
-  `w-full px-4 py-3 rounded-control border text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary ${hasError ? 'border-danger' : 'border-line'}`
-
-const labelClass = 'block text-sm font-medium text-ink mb-1'
 const hintClass = 'mt-1 text-xs text-content-muted'
 const legendClass = 'font-display text-base font-semibold text-ink mb-4'
 
@@ -80,7 +75,6 @@ export default function TeacherGrantForm({
   const {
     register,
     handleSubmit,
-    setFocus,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -113,16 +107,6 @@ export default function TeacherGrantForm({
     }
   }
 
-  /**
-   * Move focus to the first field that failed. Without this the error messages
-   * appear somewhere up the page and a keyboard or screen-reader user is left
-   * at the submit button with no idea what happened.
-   */
-  const onInvalid: SubmitErrorHandler<FormData> = (found) => {
-    const first = Object.keys(found)[0] as keyof FormData | undefined
-    if (first) setFocus(first)
-  }
-
   if (status === 'success') {
     return (
       <div className="bg-enviro-green-bg border border-enviro-green/30 rounded-panel p-8 text-center">
@@ -139,12 +123,13 @@ export default function TeacherGrantForm({
     )
   }
 
+  // A failed submit moves focus to the first field that failed, in page order
+  // (react-hook-form's shouldFocusError, on by default; the primitives pass the
+  // ref through), and that field's error is read out with it. Without it the
+  // messages appear somewhere up the page and a keyboard or screen-reader user
+  // is left at the submit button with no idea what happened.
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit, onInvalid)}
-      className="space-y-8"
-      noValidate
-    >
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8" noValidate>
       {/* Honeypot. Positioned off-screen rather than display:none — better bots
           skip hidden fields precisely because they read as traps. */}
       <div aria-hidden="true" className="absolute left-[-9999px] w-px h-px overflow-hidden">
@@ -162,103 +147,47 @@ export default function TeacherGrantForm({
       <fieldset>
         <legend className={legendClass}>About you</legend>
         <div className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div>
-              <label htmlFor="firstName" className={labelClass}>
-                First name <span className="text-danger">*</span>
-              </label>
-              <input
-                id="firstName"
-                type="text"
-                autoComplete="given-name"
-                aria-invalid={!!errors.firstName}
-                aria-describedby={errors.firstName ? 'firstName-error' : undefined}
-                {...register('firstName')}
-                className={inputClass(!!errors.firstName)}
-              />
-              <FieldError id="firstName-error" message={errors.firstName?.message} />
-            </div>
-            <div>
-              <label htmlFor="lastName" className={labelClass}>
-                Last name <span className="text-danger">*</span>
-              </label>
-              <input
-                id="lastName"
-                type="text"
-                autoComplete="family-name"
-                aria-invalid={!!errors.lastName}
-                aria-describedby={errors.lastName ? 'lastName-error' : undefined}
-                {...register('lastName')}
-                className={inputClass(!!errors.lastName)}
-              />
-              <FieldError id="lastName-error" message={errors.lastName?.message} />
-            </div>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Field label="First name" required error={errors.firstName?.message}>
+              <Input id="firstName" type="text" autoComplete="given-name" {...register('firstName')} />
+            </Field>
+            <Field label="Last name" required error={errors.lastName?.message}>
+              <Input id="lastName" type="text" autoComplete="family-name" {...register('lastName')} />
+            </Field>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div>
-              <label htmlFor="email" className={labelClass}>
-                Email <span className="text-danger">*</span>
-              </label>
-              <input
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Field
+              label="Email"
+              required
+              error={errors.email?.message}
+              hint={
+                prefill?.email
+                  ? "You're signed in, so we'll use your Stellr account email."
+                  : 'Use your school address if you have one.'
+              }
+            >
+              <Input
                 id="email"
                 type="email"
+                inputMode="email"
                 autoComplete="email"
                 readOnly={Boolean(prefill?.email)}
-                aria-invalid={!!errors.email}
-                aria-describedby={errors.email ? 'email-error' : undefined}
                 {...register('email')}
-                className={`${inputClass(!!errors.email)} ${prefill?.email ? 'bg-surface text-content-secondary' : ''}`}
+                className="read-only:bg-surface read-only:text-content-secondary"
               />
-              <p className={hintClass}>
-                {prefill?.email
-                  ? "You're signed in, so we'll use your Stellr account email."
-                  : 'Use your school address if you have one.'}
-              </p>
-              <FieldError id="email-error" message={errors.email?.message} />
-            </div>
-            <div>
-              <label htmlFor="phone" className={labelClass}>
-                Phone
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                autoComplete="tel"
-                {...register('phone')}
-                className={inputClass(false)}
-              />
-              <p className={hintClass}>Optional.</p>
-            </div>
+            </Field>
+            <Field label="Phone" hint="Optional.">
+              <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" {...register('phone')} />
+            </Field>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-3">
-            <div>
-              <label htmlFor="dateOfBirth" className={labelClass}>
-                Date of birth <span className="text-danger">*</span>
-              </label>
-              <input
-                id="dateOfBirth"
-                type="date"
-                autoComplete="bday"
-                aria-invalid={!!errors.dateOfBirth}
-                aria-describedby={errors.dateOfBirth ? 'dateOfBirth-error' : undefined}
-                {...register('dateOfBirth')}
-                className={inputClass(!!errors.dateOfBirth)}
-              />
-              <FieldError id="dateOfBirth-error" message={errors.dateOfBirth?.message} />
-            </div>
-            <div>
-              <label htmlFor="gender" className={labelClass}>
-                Gender <span className="text-danger">*</span>
-              </label>
-              <select
-                id="gender"
-                aria-invalid={!!errors.gender}
-                aria-describedby={errors.gender ? 'gender-error' : undefined}
-                {...register('gender')}
-                className={`${inputClass(!!errors.gender)} bg-white`}
-              >
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            <Field label="Date of birth" required error={errors.dateOfBirth?.message}>
+              <Input id="dateOfBirth" type="date" autoComplete="bday" {...register('dateOfBirth')} />
+            </Field>
+            <Field label="Gender" required error={errors.gender?.message}>
+              <Select id="gender" {...register('gender')}>
                 <option value="" disabled>
                   Select…
                 </option>
@@ -267,22 +196,11 @@ export default function TeacherGrantForm({
                     {g}
                   </option>
                 ))}
-              </select>
-              <FieldError id="gender-error" message={errors.gender?.message} />
-            </div>
-            <div>
-              <label htmlFor="yearsTeaching" className={labelClass}>
-                Years teaching
-              </label>
-              <input
-                id="yearsTeaching"
-                type="text"
-                {...register('yearsTeaching')}
-                className={inputClass(false)}
-                placeholder="e.g. 8"
-              />
-              <p className={hintClass}>Optional.</p>
-            </div>
+              </Select>
+            </Field>
+            <Field label="Years teaching" hint="Optional.">
+              <Input id="yearsTeaching" type="text" inputMode="numeric" {...register('yearsTeaching')} placeholder="e.g. 8" />
+            </Field>
           </div>
           <p className={hintClass}>
             We ask for your date of birth and gender because they&rsquo;re required on your Stellr
@@ -295,51 +213,16 @@ export default function TeacherGrantForm({
       <fieldset>
         <legend className={legendClass}>Where you teach</legend>
         <div className="space-y-5">
-          <div>
-            <label htmlFor="schoolName" className={labelClass}>
-              High school <span className="text-danger">*</span>
-            </label>
-            <input
-              id="schoolName"
-              type="text"
-              autoComplete="organization"
-              aria-invalid={!!errors.schoolName}
-              aria-describedby={errors.schoolName ? 'schoolName-error' : undefined}
-              {...register('schoolName')}
-              className={inputClass(!!errors.schoolName)}
-            />
-            <FieldError id="schoolName-error" message={errors.schoolName?.message} />
-          </div>
+          <Field label="High school" required error={errors.schoolName?.message}>
+            <Input id="schoolName" type="text" autoComplete="organization" {...register('schoolName')} />
+          </Field>
 
-          <div className="grid gap-5 sm:grid-cols-3">
-            <div className="sm:col-span-2">
-              <label htmlFor="schoolCity" className={labelClass}>
-                City <span className="text-danger">*</span>
-              </label>
-              <input
-                id="schoolCity"
-                type="text"
-                autoComplete="address-level2"
-                aria-invalid={!!errors.schoolCity}
-                aria-describedby={errors.schoolCity ? 'schoolCity-error' : undefined}
-                {...register('schoolCity')}
-                className={inputClass(!!errors.schoolCity)}
-              />
-              <FieldError id="schoolCity-error" message={errors.schoolCity?.message} />
-            </div>
-            <div>
-              <label htmlFor="schoolState" className={labelClass}>
-                State <span className="text-danger">*</span>
-              </label>
-              <select
-                id="schoolState"
-                autoComplete="address-level1"
-                aria-invalid={!!errors.schoolState}
-                aria-describedby={errors.schoolState ? 'schoolState-error' : undefined}
-                {...register('schoolState')}
-                className={`${inputClass(!!errors.schoolState)} bg-white`}
-                defaultValue=""
-              >
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            <Field label="City" required error={errors.schoolCity?.message} className="sm:col-span-2">
+              <Input id="schoolCity" type="text" autoComplete="address-level2" {...register('schoolCity')} />
+            </Field>
+            <Field label="State" required error={errors.schoolState?.message}>
+              <Select id="schoolState" autoComplete="address-level1" {...register('schoolState')} defaultValue="">
                 <option value="" disabled>
                   Select…
                 </option>
@@ -348,32 +231,16 @@ export default function TeacherGrantForm({
                     {s}
                   </option>
                 ))}
-              </select>
-              <FieldError id="schoolState-error" message={errors.schoolState?.message} />
-            </div>
+              </Select>
+            </Field>
           </div>
           <p className={hintClass}>
             The {programYear} pilot is open to U.S. high school teachers only.
           </p>
 
-          <div>
-            <div>
-              <label htmlFor="subjects" className={labelClass}>
-                Subjects you teach <span className="text-danger">*</span>
-              </label>
-              <input
-                id="subjects"
-                type="text"
-                aria-invalid={!!errors.subjects}
-                aria-describedby={errors.subjects ? 'subjects-error' : undefined}
-                {...register('subjects')}
-                className={inputClass(!!errors.subjects)}
-                placeholder="e.g. Physics, Engineering"
-              />
-              <FieldError id="subjects-error" message={errors.subjects?.message} />
-            </div>
-
-          </div>
+          <Field label="Subjects you teach" required error={errors.subjects?.message}>
+            <Input id="subjects" type="text" {...register('subjects')} placeholder="e.g. Physics, Engineering" />
+          </Field>
         </div>
       </fieldset>
 
@@ -381,116 +248,76 @@ export default function TeacherGrantForm({
       <fieldset>
         <legend className={legendClass}>What you plan to run</legend>
         <div className="space-y-5">
-          <fieldset
-            aria-describedby={errors.plannedActivities ? 'plannedActivities-error' : undefined}
+          <Fieldset
+            legend={
+              <>
+                In {programYear}, you plan to <span className="text-danger" aria-hidden="true">*</span>
+                <span className="sr-only"> (required)</span>
+              </>
+            }
+            error={errors.plannedActivities?.message}
           >
-            <legend className={labelClass}>
-                In {programYear}, you plan to <span className="text-danger">*</span>
-            </legend>
-            <div className="space-y-2">
-              {[
-                {
-                  value: 'challenge',
-                  label: 'Bring a team to a live Challenge',
-                  hint: 'You travel to the venue with your students.',
-                },
-                {
-                  value: 'campaign',
-                  label: 'Run a Campaign at my school',
-                  hint: 'You run it remotely, in class or as a club.',
-                },
-                { value: 'both', label: 'Both', hint: 'The only route to the $500 maximum.' },
-              ].map((opt) => (
-                <label
-                  key={opt.value}
-                  className="flex items-start gap-3 text-sm text-content-secondary cursor-pointer"
-                >
-                  <input
-                    type="radio"
-                    value={opt.value}
-                    {...register('plannedActivities')}
-                    className="mt-1 h-4 w-4 border-line text-primary"
-                  />
-                  <span>
+            {[
+              {
+                value: 'challenge',
+                label: 'Bring a team to a live Challenge',
+                hint: 'You travel to the venue with your students.',
+              },
+              {
+                value: 'campaign',
+                label: 'Run a Campaign at my school',
+                hint: 'You run it remotely, in class or as a club.',
+              },
+              { value: 'both', label: 'Both', hint: 'The only route to the $500 maximum.' },
+            ].map((opt) => (
+              <Choice
+                key={opt.value}
+                type="radio"
+                value={opt.value}
+                {...register('plannedActivities')}
+                aria-invalid={errors.plannedActivities ? true : undefined}
+                label={
+                  <>
                     {opt.label}
                     <span className="block text-xs text-content-muted">{opt.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-            <FieldError
-              id="plannedActivities-error"
-              message={errors.plannedActivities?.message}
-            />
-          </fieldset>
-
-          <div className="sm:max-w-xs">
-            <div>
-              <label htmlFor="expectedStudents" className={labelClass}>
-                Students you expect to involve <span className="text-danger">*</span>
-              </label>
-              <input
-                id="expectedStudents"
-                type="text"
-                inputMode="numeric"
-                aria-invalid={!!errors.expectedStudents}
-                aria-describedby={errors.expectedStudents ? 'expectedStudents-error' : undefined}
-                {...register('expectedStudents')}
-                className={inputClass(!!errors.expectedStudents)}
+                  </>
+                }
               />
-              <p className={hintClass}>
-                {`A rough number is fine. A Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${GRANT_THRESHOLDS.campaignStudents} registered.`}
-              </p>
-              <FieldError id="expectedStudents-error" message={errors.expectedStudents?.message} />
-            </div>
-          </div>
+            ))}
+          </Fieldset>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div>
-              <label htmlFor="priorStellr" className={labelClass}>
-                Run a Stellr Challenge or Campaign before?
-              </label>
-              <select
-                id="priorStellr"
-                {...register('priorStellr')}
-                className={`${inputClass(false)} bg-white`}
-                defaultValue=""
-              >
+          <Field
+            label="Students you expect to involve"
+            required
+            error={errors.expectedStudents?.message}
+            hint={`A rough number is fine. A Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${GRANT_THRESHOLDS.campaignStudents} registered.`}
+            className="sm:max-w-xs"
+          >
+            <Input id="expectedStudents" type="text" inputMode="numeric" {...register('expectedStudents')} />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Field label="Run a Stellr Challenge or Campaign before?" hint="Optional. First-timers are welcome.">
+              <Select id="priorStellr" {...register('priorStellr')} defaultValue="">
                 <option value="">Select…</option>
                 <option value="yes">Yes</option>
                 <option value="no">No</option>
-              </select>
-              <p className={hintClass}>Optional. First-timers are welcome.</p>
-            </div>
-            <div>
-              <label htmlFor="referralSource" className={labelClass}>
-                How did you hear about the grant?
-              </label>
-              <input
-                id="referralSource"
-                type="text"
-                {...register('referralSource')}
-                className={inputClass(false)}
-              />
-              <p className={hintClass}>Optional.</p>
-            </div>
+              </Select>
+            </Field>
+            <Field label="How did you hear about the grant?" hint="Optional.">
+              <Input id="referralSource" type="text" {...register('referralSource')} />
+            </Field>
           </div>
 
-          <div>
-            <label htmlFor="motivation" className={labelClass}>
-              Why do you want to take part? <span className="text-danger">*</span>
-            </label>
-            <textarea
+          <Field label="Why do you want to take part?" required error={errors.motivation?.message}>
+            <Textarea
               id="motivation"
               rows={5}
-              aria-invalid={!!errors.motivation}
-              aria-describedby={errors.motivation ? 'motivation-error' : undefined}
               {...register('motivation')}
-              className={`${inputClass(!!errors.motivation)} resize-none`}
+              className="resize-none"
               placeholder="A couple of sentences on what you'd do with it and who it would reach."
             />
-            <FieldError id="motivation-error" message={errors.motivation?.message} />
-          </div>
+          </Field>
         </div>
       </fieldset>
 
@@ -504,44 +331,45 @@ export default function TeacherGrantForm({
             teachers. If you already have a Stellr account we&rsquo;ll match it by email address
             and update it rather than create a second one.
           </p>
-          <div>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                aria-invalid={!!errors.acknowledgePayment}
-                aria-describedby={errors.acknowledgePayment ? 'acknowledgePayment-error' : undefined}
-                {...register('acknowledgePayment')}
-                className="mt-0.5 h-4 w-4 rounded border-line text-primary"
-              />
-              <span className="text-sm text-content-secondary">
-                I understand payment comes as a single check posted on 31 May, covering
-                everything I completed since the last payout. <span className="text-danger">*</span>
-              </span>
-            </label>
-            <FieldError
-              id="acknowledgePayment-error"
-              message={errors.acknowledgePayment?.message}
+          <div className="space-y-1.5">
+            <Choice
+              {...register('acknowledgePayment')}
+              aria-invalid={errors.acknowledgePayment ? true : undefined}
+              aria-describedby={errors.acknowledgePayment ? 'acknowledgePayment-error' : undefined}
+              label={
+                <span className="text-content-secondary">
+                  I understand payment comes as a single check posted on 31 May, covering
+                  everything I completed since the last payout. <span className="text-danger">*</span>
+                </span>
+              }
             />
+            {errors.acknowledgePayment?.message && (
+              <p id="acknowledgePayment-error" className="text-sm text-danger">
+                {errors.acknowledgePayment.message}
+              </p>
+            )}
           </div>
 
-          <div>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                aria-invalid={!!errors.consent}
-                aria-describedby={errors.consent ? 'consent-error' : undefined}
-                {...register('consent')}
-                className="mt-0.5 h-4 w-4 rounded border-line text-primary"
-              />
-              <span className="text-sm text-content-secondary">
-                I agree to Stellr Education contacting me about my application. View our{' '}
-                <a href="/privacy" className="text-primary-deep underline">
-                  Privacy Policy
-                </a>
-                . <span className="text-danger">*</span>
-              </span>
-            </label>
-            <FieldError id="consent-error" message={errors.consent?.message} />
+          <div className="space-y-1.5">
+            <Choice
+              {...register('consent')}
+              aria-invalid={errors.consent ? true : undefined}
+              aria-describedby={errors.consent ? 'consent-error' : undefined}
+              label={
+                <span className="text-content-secondary">
+                  I agree to Stellr Education contacting me about my application. View our{' '}
+                  <a href="/privacy" className="text-primary-deep underline">
+                    Privacy Policy
+                  </a>
+                  . <span className="text-danger">*</span>
+                </span>
+              }
+            />
+            {errors.consent?.message && (
+              <p id="consent-error" className="text-sm text-danger">
+                {errors.consent.message}
+              </p>
+            )}
           </div>
         </div>
       </fieldset>

@@ -56,7 +56,7 @@ function StatusCell({ env }: { env: EnvelopeRow }) {
         {d.label}
       </span>
       {d.detail && (
-        <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark max-w-[220px]">{d.detail}</p>
+        <p className="mt-1 text-xs leading-tight text-brand-grey-dark max-w-[220px]">{d.detail}</p>
       )}
     </div>
   )

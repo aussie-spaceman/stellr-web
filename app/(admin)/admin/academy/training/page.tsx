@@ -148,7 +148,7 @@ export default async function AdminTrainingPage({
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold uppercase tracking-[0.13em] text-brand-blue">Academy · Training</span>
-            <span className="rounded-full bg-brand-blue-dark px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            <span className="rounded-full bg-brand-blue-dark px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
               Admin Console
             </span>
           </div>

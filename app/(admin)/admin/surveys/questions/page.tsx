@@ -62,7 +62,7 @@ export default async function SurveyQuestionsPage({ searchParams }: { searchPara
     <div className="space-y-8">
       <div>
         <Link href="/admin/surveys" className="text-sm text-primary hover:underline">← Surveys</Link>
-        <h1 className="mt-2 font-heading uppercase text-title text-brand-blue-dark">Survey questions</h1>
+        <h1 className="mt-2 font-heading text-ds-h2 text-brand-blue-dark">Survey questions</h1>
         <p className="mt-0.5 max-w-content text-sm text-brand-muted-soft">
           What each survey version asks, for each kind of respondent. Read-only. A published version never changes: new wording is published as a new version, and a survey that is already open keeps the version it started with.
         </p>
@@ -70,7 +70,7 @@ export default async function SurveyQuestionsPage({ searchParams }: { searchPara
 
       {/* Versions */}
       <section className="space-y-2" aria-labelledby="versions-heading">
-        <h2 id="versions-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Versions</h2>
+        <h2 id="versions-heading"className="text-sm font-semibold text-brand-muted">Versions</h2>
         {rows.length === 0 ? (
           <p className="text-sm text-brand-muted-soft">No survey definitions yet.</p>
         ) : (
@@ -156,7 +156,7 @@ function QuestionList({ def, role }: { def: SurveyDefinition; role: RespondentRo
     <div className="space-y-6">
       {def.branches[role].map((page, i) => (
         <section key={page.id} aria-labelledby={`page-${page.id}`} className="space-y-3">
-          <h2 id={`page-${page.id}`} className="text-sm font-semibold uppercase tracking-wide text-brand-muted">
+          <h2 id={`page-${page.id}`} className="text-sm font-semibold text-brand-muted">
             Page {i + 1}: {pageTitle(page.id)}
           </h2>
           <ol className="space-y-3">

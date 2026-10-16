@@ -87,7 +87,7 @@ export function AvailabilityEditor({ windows }: { windows: Window[] }) {
         <select
           value={weekday}
           onChange={(e) => setWeekday(Number(e.target.value))}
-          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
         >
           {DAYS.map((d, i) => (
             <option key={d} value={i}>
@@ -99,14 +99,14 @@ export function AvailabilityEditor({ windows }: { windows: Window[] }) {
           type="time"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
         />
         <span className="text-sm text-brand-muted-soft">to</span>
         <input
           type="time"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
         />
         <button
           onClick={add}

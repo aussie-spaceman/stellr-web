@@ -47,11 +47,14 @@ mechanism; this skill is the sequence.
 
 ## Phase 0 — Isolate the session
 
-Skip only if already in a dedicated worktree for this work.
+Skip only if already in a dedicated worktree for this work. Run the
+`gh pr list` line either way: it only reads.
 
 ```bash
 git fetch origin
 npm run worktrees -- --apply             # from the main checkout: clear what earlier sessions left
+# docs PRs that earlier sessions opened and never merged
+gh pr list --state open --base dev --json number,title --jq '.[] | select(.title | test("^(Close-out|Promotion record)")) | "#\(.number) \(.title)"'
 git worktree add -b <type>/<slug> ../stellr-web-<name> origin/dev
 cd ../stellr-web-<name>
 npm ci                                   # worktrees do NOT share node_modules
@@ -60,6 +63,15 @@ cp ../stellr-web/.env.local .env.local   # `npm run dev` then claims a free port
 
 `npm ci` is easy to forget and its failure is unrecognisable: `vitest`, `tsx`
 and `next` are simply absent, which reads as a broken repo.
+
+**The `gh pr list` line is the stranded-PR check.** It lists the close-out
+and promotion-record PRs still open against `dev`. Tell the user about each
+one, with its CI state. Do not merge it without their say-so: it is another
+session's PR, which that session may still be finishing. A handover that is
+not on `dev` does not exist for the next session, so a stranded one is worth
+a line in your first reply. WHY (16 Oct 2026): #425 sat open for a day behind
+an unanswered question. It was found only because a session went looking for
+leftover worktrees.
 
 Branch names follow the repo: `feat/`, `fix/`, `chore/`, `docs/`.
 
@@ -106,11 +118,44 @@ Push early and read `verify`:
 ```bash
 git push -u origin HEAD
 gh pr create --base dev --title "<title>" --body-file <file>
-gh pr checks <n> --watch
+gh pr checks <n> --watch      # in a terminal; the desktop app waits differently (below)
 ```
 
 `verify` runs the PII lint, typecheck, design-system lint, migration-name lint,
 the unit suite, and a full build.
+
+**Waiting on CI in the Claude desktop app.** The app's Code tab does not allow
+polling CI: no `--watch`, no `gh` loop, and no Monitor, ScheduleWakeup, cron
+or `/loop`. ship, promote and close-out all wait the same way there:
+
+1. Read the checks once: `gh pr checks <n>`.
+2. If any are still pending, end the turn on the next-step box (`wrap_up`)
+   with exactly one button, labelled "CI finished". The ask says what the
+   click means ("Tell me when CI on #n has finished"). The button's message
+   carries the next command, so the click resumes the sequence. Here it is
+   "CI finished on #n. Check each step's outcome, then carry on with ship
+   Phase 4." Each skill names its own message where it waits.
+3. When the user clicks it, read every step's outcome before anything else,
+   then do what the message says. If a check is still pending, end the turn
+   the same way again.
+
+```bash
+gh pr checks <n> --json name,state,link --jq '.[] | "\(.state)  \(.name)  \(.link)"'
+gh run view <run-id> --json jobs --jq '.jobs[] | .name as $j | .steps[] | "\(.conclusion)  \($j) / \(.name)"'
+```
+
+The run id is the number after `/actions/runs/` in the links. A job's badge is
+not its steps: in Sept 2026 `e2e` reported a pass three times while every test
+step was skipped.
+
+The button is a wait, not a question. Where the next step is already agreed
+("ship it", or asking for a close-out), do not turn it back into a yes/no such
+as "merge #n once verify passes?". That hands back a decision already made,
+and nothing makes anyone answer it (close-out step 6 has what happened).
+
+WHY (16 Oct 2026): close-out step 6 said to wait on `gh pr checks --watch`, but
+the app forbids it. The session that added that line had to end three turns on
+"has CI finished?", with nothing in the skills saying how to wait instead.
 
 For anything a browser can observe:
 

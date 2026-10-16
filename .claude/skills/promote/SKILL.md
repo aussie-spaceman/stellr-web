@@ -26,6 +26,8 @@ sometimes a dashboard step someone else has to take.
 ```bash
 git fetch origin
 npm run worktrees -- --apply     # from the main checkout: clear what earlier sessions left
+# docs PRs that earlier sessions opened and never merged
+gh pr list --state open --base dev --json number,title --jq '.[] | select(.title | test("^(Close-out|Promotion record)")) | "#\(.number) \(.title)"'
 git log --oneline origin/main..origin/dev
 git diff --stat origin/main...origin/dev
 ```
@@ -33,6 +35,11 @@ git diff --stat origin/main...origin/dev
 `npm run worktrees` is the cleanup check described under ship Phase 5. It
 removes only worktrees whose work has provably landed, and it says why it kept
 each other one.
+
+The `gh pr list` line is the stranded-PR check described under ship Phase 0.
+Tell the user about each PR it lists, and do not merge one without their
+say-so: it is another session's. A close-out still open here is a handover
+this promotion will not carry, so say so when you name what is shipping.
 
 If `dev` is **behind** `main`, sync before anything else, or the promotion will
 carry a stale tree. Since Step 8 merges `main` into `dev`, this should only
@@ -126,8 +133,14 @@ behaviour is unchanged — most promotions here are documentation and test
 infrastructure, and claiming risk that does not exist trains people to skim.
 
 ```bash
-gh pr checks <n> --watch
+gh pr checks <n> --watch      # in a terminal; in the desktop app, see ship Phase 3
 ```
+
+In the desktop app, wait as ship Phase 3 says, with the one "CI finished"
+button. Here its message is "CI finished on #n. Check each step's outcome and
+report, then ask me before Step 6". The click resumes the CI read, not the
+merge. Step 6's confirmation is still its own question, because a promotion's
+merge always gets its own yes (rule 1).
 
 `BEHIND` is common because protection is strict and `dev` moves. Update, never
 rebase:
@@ -204,12 +217,18 @@ cd ../stellr-web-promote-<YYYY-MM-DD>-record
 git add .claude/releases && git commit -m "Promotion record <date>: Promoted (#<n>, <sha>)"
 git push -u origin HEAD
 gh pr create --base dev --title "Promotion record <date>: Promoted (#<n>, <sha>)" --body-file <file>
-gh pr checks <m> --watch      # docs-only against dev: verify runs, e2e skips
+gh pr checks <m> --watch      # in a terminal; docs-only against dev: verify runs, e2e skips
 git status --porcelain        # must print nothing
 cd ../stellr-web              # merge from the MAIN checkout, so gh removes the worktree
 gh pr merge <m> --merge --delete-branch
 npm run worktrees -- --apply  # the record worktree must not be listed as kept
 ```
+
+- **In the desktop app, wait as ship Phase 3 says**, with the one "CI
+  finished" button. Here its message is "CI finished on #m. Check each step's
+  outcome and merge #m with --merge --delete-branch from the main checkout".
+  Step 8 has no ⛔: the record PR merges without a further question, so do
+  not ask "merge #m?".
 
 - **`--merge`, not `--squash`, for this one PR.** It is the exception to
   "feature branches squash". The branch starts at `main`'s merge commit, and a

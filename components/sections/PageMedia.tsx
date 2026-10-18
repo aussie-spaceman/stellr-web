@@ -63,7 +63,7 @@ export function PageMedia({
           <div className={`mt-10 grid grid-cols-1 gap-6 ${videoCols}`}>
             {videos.map((v) => (
               <figure key={v.id}>
-                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
+                <VideoTestimonial src={v.src} poster={v.poster} posterSrcSet={v.posterSrcSet} captionsSrc={v.captions} title={v.title} />
                 <figcaption className="mt-3 text-sm font-semibold text-ink">{v.title}</figcaption>
               </figure>
             ))}

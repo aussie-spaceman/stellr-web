@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { watermarkImageBuffer } from '@/lib/watermark/image'
+import { isSiteSanityImage, sanityAssetSize } from '@/lib/sanity-image-params'
 
 // On-the-fly watermarker for CMS/CDN images (Sanity). Fetches the source image,
 // bakes "© Stellr Education" into the bottom-right, and returns it with immutable
@@ -7,7 +8,8 @@ import { watermarkImageBuffer } from '@/lib/watermark/image'
 //
 // Locked to Stellr's own Sanity project so this can't be used as an open image
 // proxy. Sanity URLs already carry the asset hash + transform params, so they
-// cache cleanly.
+// cache cleanly. It serves only the widths and transforms the site's pages ask
+// for (lib/sanity-image-params), so each image has a few fixed URLs.
 
 export const runtime = 'nodejs'
 
@@ -40,11 +42,20 @@ export async function GET(req: Request) {
   const allowedPrefix = projectId ? `/images/${projectId}/${dataset}/` : null
   if (
     origin.protocol !== 'https:' ||
-    origin.hostname !== 'cdn.sanity.io' ||
+    origin.host !== 'cdn.sanity.io' ||
+    origin.username ||
+    origin.password ||
     !allowedPrefix ||
     !origin.pathname.startsWith(allowedPrefix)
   ) {
     return NextResponse.json({ error: 'host not allowed' }, { status: 400 })
+  }
+
+  // One asset file directly under the dataset, requested with exactly the
+  // transforms lib/sanity-image.ts emits: a preset width, webp, q75, cropped.
+  const asset = sanityAssetSize(origin.pathname.slice(allowedPrefix.length))
+  if (!asset || origin.hash || !isSiteSanityImage(origin.searchParams, asset)) {
+    return NextResponse.json({ error: 'image not allowed' }, { status: 400 })
   }
 
   // redirect: 'error' so a 3xx response can't smuggle in an off-allowlist origin.

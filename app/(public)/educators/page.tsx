@@ -192,7 +192,7 @@ export default function EducatorsPage() {
             <AudioTestimonial audio={AUDIO['testimonial-jeremiah-dibley']} />
             {[VIDEOS['testimonial-maureen-lancaster']].map((v) => (
               <figure key={v.id}>
-                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
+                <VideoTestimonial src={v.src} poster={v.poster} posterSrcSet={v.posterSrcSet} captionsSrc={v.captions} title={v.title} />
                 <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
               </figure>
             ))}

@@ -33,6 +33,14 @@ describe('planAwardIssue', () => {
     expect(plan.toRevoke.map((c) => c.participant_id)).toEqual(['p1'])
   })
 
+  it('issues each Norm Chaffee Finalist, and revokes one taken off', () => {
+    const first = planAwardIssue([assign('p1', 'norm_chaffee'), assign('p2', 'norm_chaffee')], [])
+    expect(first.toIssue.map((a) => a.participant_id)).toEqual(['p1', 'p2'])
+    const later = planAwardIssue([assign('p2', 'norm_chaffee')], [cred('p1', 'norm_chaffee'), cred('p2', 'norm_chaffee')])
+    expect(later.toIssue).toHaveLength(0)
+    expect(later.toRevoke.map((c) => c.participant_id)).toEqual(['p1'])
+  })
+
   it('re-issues an award given back after a revoke', () => {
     const plan = planAwardIssue([assign('p1', 'anita_gale')], [cred('p1', 'anita_gale', 'revoked')])
     expect(plan.toIssue).toHaveLength(1)

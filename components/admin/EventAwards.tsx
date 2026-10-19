@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react'
 import {
   EVENT_AWARDS,
+  INDIVIDUAL_AWARD_TYPES,
   SPECIALIST_AWARD_TYPES,
   type AssignedAwardType,
   type Assignment,
 } from '@/lib/event-awards'
 
-// Judging results → award certificates + credentials.
+// Judging results (and the mentors' Norm Chaffee nominations) → award
+// certificates + credentials.
 // Assigning is a draft: students see nothing until "Issue awards", which
 // issues a credential per award (and revokes any taken away since the last
 // issue). Rules live in lib/event-awards.ts and are enforced again server-side.
@@ -87,8 +89,9 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
   const companyById = new Map(data.companies.map((c) => [c.id, c]))
   const holds = (participantId: string, award: AssignedAwardType) =>
     data.assignments.some((a) => a.participantId === participantId && a.awardType === award)
-  const specialistOf = (participantId: string) =>
-    data.assignments.find((a) => a.participantId === participantId && SPECIALIST_AWARD_TYPES.includes(a.awardType))
+  // The one individual award a student may hold: a specialist award or finalist.
+  const individualOf = (participantId: string) =>
+    data.assignments.find((a) => a.participantId === participantId && INDIVIDUAL_AWARD_TYPES.includes(a.awardType))
 
   const champions = data.assignments.filter((a) => a.awardType === 'overall_champion')
   const championCompanyId = champions[0]?.companyId ?? null
@@ -96,6 +99,22 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
   const championMembers = data.students.filter(
     (s) => (championCompanyId && s.companyId === championCompanyId) || holds(s.id, 'overall_champion'),
   )
+  // Finalists come from the champions only; losing Champion clears the pick.
+  const champs = championMembers.filter((s) => holds(s.id, 'overall_champion'))
+  const finalistCount = data.assignments.filter((a) => a.awardType === 'norm_chaffee').length
+
+  function chooseChampion(companyId: string | null) {
+    const plural = finalistCount === 1 ? 'pick' : 'picks'
+    if (finalistCount > 0 && companyId !== championCompanyId &&
+      !window.confirm(`Changing the winning company clears ${finalistCount} ${EVENT_AWARDS.norm_chaffee.label} ${plural}.`)) return
+    void change({ action: 'set_champion', companyId })
+  }
+
+  function toggleChampion(s: Student, on: boolean) {
+    if (on && holds(s.id, 'norm_chaffee') &&
+      !window.confirm(`Removing ${s.name} from ${EVENT_AWARDS.overall_champion.label} also removes their ${EVENT_AWARDS.norm_chaffee.label} pick.`)) return
+    void change({ action: on ? 'remove' : 'add', awardType: 'overall_champion', participantId: s.id })
+  }
 
   // Company rows: every company, plus "No company" if any student is unplaced.
   const groups: { id: string | null; label: string; students: Student[] }[] = data.companies.map((c) => ({
@@ -111,11 +130,12 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-brand-muted">Judging &amp; awards</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
-            Record the judges&rsquo; decisions, print the certificates, then issue them. A student can win one
-            specialist award per event.
+            Record the judges&rsquo; decisions and the mentors&rsquo; nominations, print the certificates, then
+            issue them. A student can win one individual award per event: {EVENT_AWARDS.anita_gale.label},{' '}
+            {EVENT_AWARDS.dick_edwards.label} or {EVENT_AWARDS.norm_chaffee.label}.
           </p>
         </div>
         <div className="text-right space-y-1">
@@ -146,7 +166,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
               className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm text-brand-blue-dark"
               value={championCompanyId ?? ''}
               disabled={busy || data.companies.length === 0}
-              onChange={(e) => change({ action: 'set_champion', companyId: e.target.value || null })}
+              onChange={(e) => chooseChampion(e.target.value || null)}
               aria-label="Winning company"
             >
               <option value="">{data.companies.length ? 'No winner chosen' : 'Place students in companies first'}</option>
@@ -160,9 +180,40 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
                     <label key={s.id} className="flex items-center gap-1.5 text-sm text-brand-blue-dark">
                       <input
                         type="checkbox" checked={on} disabled={busy}
-                        onChange={() => change({ action: on ? 'remove' : 'add', awardType: 'overall_champion', participantId: s.id })}
+                        onChange={() => toggleChampion(s, on)}
                       />
                       <span className={on ? '' : 'text-brand-muted-soft line-through'}>{s.name}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* ── Norm Chaffee Finalists, any number of the champions ─────────── */}
+          <section className="space-y-2">
+            <div>
+              <p className="font-medium text-brand-blue-dark text-sm">{EVENT_AWARDS.norm_chaffee.label}</p>
+              <p className="text-xs text-brand-muted-soft mt-0.5">
+                Nominated by the volunteer mentors. Only students holding {EVENT_AWARDS.overall_champion.label} can
+                be finalists.
+              </p>
+            </div>
+            {champs.length === 0 ? (
+              <p className="text-sm text-brand-muted-soft">Choose the winning company first.</p>
+            ) : (
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {champs.map((s) => {
+                  const on = holds(s.id, 'norm_chaffee')
+                  const other = individualOf(s.id)
+                  const blocked = !!other && other.awardType !== 'norm_chaffee'
+                  return (
+                    <label key={s.id} className={`flex items-center gap-1.5 text-sm ${blocked ? 'text-brand-muted-soft' : 'text-brand-blue-dark'}`}>
+                      <input
+                        type="checkbox" checked={on} disabled={busy || blocked}
+                        onChange={() => change({ action: on ? 'remove' : 'add', awardType: 'norm_chaffee', participantId: s.id })}
+                      />
+                      <span>{s.name}{blocked && other ? ` — has the ${EVENT_AWARDS[other.awardType].label}` : ''}</span>
                     </label>
                   )
                 })}
@@ -198,11 +249,11 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
                           >
                             <option value="">No winner</option>
                             {g.students.map((s) => {
-                              const other = specialistOf(s.id)
+                              const other = individualOf(s.id)
                               const blocked = !!other && other.awardType !== award
                               return (
                                 <option key={s.id} value={s.id} disabled={blocked}>
-                                  {s.name}{blocked ? ' — has the other award' : ''}
+                                  {s.name}{blocked && other ? ` — ${EVENT_AWARDS[other.awardType].label}` : ''}
                                 </option>
                               )
                             })}

@@ -103,6 +103,11 @@ describe('signUpload — event-artwork', () => {
     expect(createSignedUploadUrl.mock.calls[0][0]).toMatch(/^event-artwork\/colorado\/certificate-anita_gale-\d+-art\.png$/)
   })
 
+  it('signs the Norm Chaffee Finalist artwork', async () => {
+    requireEventAccessMock.mockResolvedValue({ ok: true, userId: 'u1', isAdmin: false, assignedSlugs: ['colorado'] })
+    expect(await sign('certificate-norm_chaffee')).toEqual({ bucket: 'community-resources', path: 'p', token: 't' })
+  })
+
   it('refuses a manager of another event', async () => {
     requireEventAccessMock.mockResolvedValue({ ok: false, status: 403 })
     expect(await sign('certificate-participation')).toEqual({ error: 'Forbidden', status: 403 })

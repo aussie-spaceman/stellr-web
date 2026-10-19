@@ -18,8 +18,10 @@ const a = (awardType: Assignment['awardType'], participantId: string, companyId:
 })
 
 describe('award catalogue', () => {
-  it('has the five certificates with their current labels', () => {
-    expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'anita_gale', 'dick_edwards', 'mentor'])
+  it('has the six certificates with their current labels', () => {
+    expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'norm_chaffee', 'anita_gale', 'dick_edwards', 'mentor'])
+    expect(EVENT_AWARDS.norm_chaffee.label).toBe('Norm Chaffee Finalist')
+    expect(EVENT_AWARDS.norm_chaffee.description).toBe('For excellence at this event.')
     expect(EVENT_AWARDS.mentor.label).toBe('Certificate of Appreciation')
     expect(EVENT_AWARDS.overall_champion.label).toBe('Overall Champion')
     expect(EVENT_AWARDS.anita_gale.label).toBe('Award for Creative Vision')
@@ -31,6 +33,7 @@ describe('award catalogue', () => {
     expect(isAwardType('best_hat')).toBe(false)
     expect(isAssignedAwardType('participation')).toBe(false)
     expect(isAssignedAwardType('anita_gale')).toBe(true)
+    expect(isAssignedAwardType('norm_chaffee')).toBe(true)
     // The mentor certificate is never judged or assigned per student.
     expect(isAwardType('mentor')).toBe(true)
     expect(isAssignedAwardType('mentor')).toBe(false)
@@ -43,6 +46,8 @@ describe('award catalogue', () => {
   it('titles award credentials with the award then the event', () => {
     expect(awardCredentialTitle('anita_gale', 'Colorado Space Design Challenge'))
       .toBe('Award for Creative Vision — Colorado Space Design Challenge')
+    expect(awardCredentialTitle('norm_chaffee', 'Colorado Space Design Challenge'))
+      .toBe('Norm Chaffee Finalist — Colorado Space Design Challenge')
   })
 })
 
@@ -74,6 +79,7 @@ describe('relabelIssuedAward', () => {
     expect(artworkSupersededFor('anita_gale')).toBe(true)
     expect(artworkSupersededFor('dick_edwards')).toBe(true)
     expect(artworkSupersededFor('overall_champion')).toBe(false)
+    expect(artworkSupersededFor('norm_chaffee')).toBe(false)
     expect(artworkSupersededFor(null)).toBe(false)
   })
 })
@@ -84,7 +90,7 @@ describe('assignmentConflict', () => {
   })
 
   it('refuses a second specialist award for the same student', () => {
-    expect(assignmentConflict([a('anita_gale', 'p1')], a('dick_edwards', 'p1'))).toMatch(/one specialist award per event/)
+    expect(assignmentConflict([a('anita_gale', 'p1')], a('dick_edwards', 'p1'))).toMatch(/one individual award per event/)
   })
 
   it('treats re-picking the award already held as a no-op', () => {
@@ -93,6 +99,34 @@ describe('assignmentConflict', () => {
 
   it('lets each company have its own specialist winner', () => {
     expect(assignmentConflict([a('anita_gale', 'p1', 'co-1')], a('anita_gale', 'p2', 'co-2'))).toBeNull()
+  })
+})
+
+describe('assignmentConflict — Norm Chaffee Finalist', () => {
+  const champs = [a('overall_champion', 'p1'), a('overall_champion', 'p2')]
+
+  it('allows any number of champions as finalists', () => {
+    expect(assignmentConflict(champs, a('norm_chaffee', 'p1'))).toBeNull()
+    expect(assignmentConflict([...champs, a('norm_chaffee', 'p1')], a('norm_chaffee', 'p2'))).toBeNull()
+  })
+
+  it('refuses a student who does not hold Overall Champion', () => {
+    expect(assignmentConflict(champs, a('norm_chaffee', 'p3'))).toMatch(/Only students holding Overall Champion/)
+    expect(assignmentConflict([a('anita_gale', 'p1')], a('norm_chaffee', 'p1'))).toMatch(/Only students holding Overall Champion/)
+  })
+
+  it('refuses a finalist who already holds a specialist award', () => {
+    expect(assignmentConflict([...champs, a('dick_edwards', 'p1')], a('norm_chaffee', 'p1')))
+      .toMatch(/Already holds the Award for Quiet Leadership\. A student can win one individual award per event/)
+  })
+
+  it('refuses a specialist award for a finalist', () => {
+    expect(assignmentConflict([...champs, a('norm_chaffee', 'p1')], a('anita_gale', 'p1')))
+      .toMatch(/Is already a Norm Chaffee Finalist\. A student can win one individual award per event/)
+  })
+
+  it('is not one per company: finalists never replace each other', () => {
+    expect(replacedSpecialist([a('norm_chaffee', 'p1')], a('norm_chaffee', 'p2'))).toBeNull()
   })
 })
 

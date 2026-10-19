@@ -25,6 +25,7 @@ const DEFAULT_PLACEMENT: Placement = { name_y: 0.545, name_max_width: 0.5, name_
 const WHO: Record<AwardType, string> = {
   participation: 'Every student.',
   overall_champion: 'Every student in the winning company.',
+  norm_chaffee: 'The champions the volunteer mentors nominate.',
   anita_gale: 'One student per company.',
   dick_edwards: 'One student per company.',
   mentor: 'Every volunteer mentor assigned on the Volunteers panel.',

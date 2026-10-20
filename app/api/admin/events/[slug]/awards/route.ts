@@ -23,7 +23,10 @@ export const dynamic = 'force-dynamic'
 // Judging results for an event, as a draft. Nothing here reaches a student
 // until ./issue turns the assignments into credentials.
 // Rules (lib/event-awards.ts): champion = a whole company; each specialist
-// award = one student per company; one specialist award per student.
+// award = one student per company; Norm Chaffee Finalist = any number of the
+// champions; one individual award (specialist or finalist) per student.
+// Finalists follow the champions: a student who loses Overall Champion loses
+// the finalist pick with it.
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -79,12 +82,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
     assigned_by: access.userId,
   })
   const fail = (error: string, status = 400) => NextResponse.json({ error }, { status })
+  const duplicate = (error: { code?: string; message: string }) =>
+    error.code === '23505' ? fail('That student already holds an individual award.', 409) : fail(error.message, 500)
 
   switch (body.action) {
     case 'set_champion': {
       const companyId = typeof body.companyId === 'string' ? body.companyId : null
       const members = companyId ? students.filter((s) => s.company_id === companyId) : []
       if (companyId && members.length === 0) return fail('That company has no students.')
+      // Finalists first, so no finalist is ever left without the champion award.
+      const keep = new Set(members.map((m) => m.id))
+      const stale = assignments.filter((a) => a.awardType === 'norm_chaffee' && !keep.has(a.participantId))
+      if (stale.length) {
+        const { error } = await table()
+          .delete()
+          .eq('event_slug', slug)
+          .eq('award_type', 'norm_chaffee')
+          .in('participant_id', stale.map((a) => a.participantId))
+        if (error) return fail(error.message, 500)
+      }
       const { error: delError } = await table().delete().eq('event_slug', slug).eq('award_type', 'overall_champion')
       if (delError) return fail(delError.message, 500)
       if (members.length) {
@@ -98,16 +114,30 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
       if (!isAssignedAwardType(body.awardType) || typeof body.participantId !== 'string') return fail('awardType and participantId are required')
       if (!byId.has(body.participantId)) return fail('Not a student at this event.', 404)
       if (isSpecialist(body.awardType)) return fail('Use set_specialist for specialist awards.')
+      const conflict = assignmentConflict(assignments, {
+        awardType: body.awardType,
+        participantId: body.participantId,
+        companyId: byId.get(body.participantId)?.company_id ?? null,
+      })
+      if (conflict) return fail(conflict, 409)
       const { error } = await table().upsert(row(body.awardType, body.participantId), {
         onConflict: 'event_slug,participant_id,award_type',
         ignoreDuplicates: true,
       })
-      if (error) return fail(error.message, 500)
+      if (error) return duplicate(error)
       break
     }
 
     case 'remove': {
       if (!isAssignedAwardType(body.awardType) || typeof body.participantId !== 'string') return fail('awardType and participantId are required')
+      if (body.awardType === 'overall_champion') {
+        const { error } = await table()
+          .delete()
+          .eq('event_slug', slug)
+          .eq('award_type', 'norm_chaffee')
+          .eq('participant_id', body.participantId)
+        if (error) return fail(error.message, 500)
+      }
       const { error } = await table()
         .delete()
         .eq('event_slug', slug)
@@ -137,7 +167,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
       if (delError) return fail(delError.message, 500)
       if (participantId) {
         const { error } = await table().insert(row(awardType, participantId))
-        if (error) return fail(error.code === '23505' ? 'That student already holds a specialist award.' : error.message, error.code === '23505' ? 409 : 500)
+        if (error) return duplicate(error)
       }
       break
     }

@@ -16,6 +16,10 @@ import { Dialog } from '@stellr/web-ui'
 //
 // Event Managers (isAdmin=false) only see the Competitions section; middleware
 // already bounces them away from other /admin routes.
+//
+// prefetch={false} on every link: admin pages are dynamic, so prefetching the
+// rail rendered ~25 pages on the server each time it mounted, which is CPU
+// Vercel Hobby can't spare (21 Oct 2026). admin/loading.tsx covers the click.
 
 type Item = { href: string; label: string }
 /** `tone` is the section's icon colour, a token utility. */
@@ -95,7 +99,7 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
     <>
       {/* Desktop rail */}
       <aside className="hidden w-[228px] shrink-0 flex-col gap-0.5 bg-ink px-4 py-6 text-white lg:flex">
-        <Link href="/admin" className="mb-5 flex items-center gap-2.5 px-2">
+        <Link prefetch={false} href="/admin" className="mb-5 flex items-center gap-2.5 px-2">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white">
             <Image src="/images/logo-icon.svg" alt="Stellr" width={20} height={20} />
           </span>
@@ -131,6 +135,7 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
         </nav>
 
         <Link
+          prefetch={false}
           href="/home"
           className="mt-auto flex items-center gap-3 rounded-[10px] px-3 py-2 pt-6 font-subheading text-sm text-hero-lead hover:text-white"
         >
@@ -149,6 +154,7 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
           const active = items.some((i) => itemActive(i.href))
           return (
             <Link
+              prefetch={false}
               key={label}
               href={href}
               aria-current={active ? (pathname === href ? 'page' : 'true') : undefined}
@@ -187,6 +193,7 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
                   return (
                     <li key={item.href}>
                       <Link
+                        prefetch={false}
                         href={item.href}
                         onClick={() => setMoreOpen(false)}
                         aria-current={current(item.href)}
@@ -203,6 +210,7 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
             </div>
           ))}
           <Link
+            prefetch={false}
             href="/home"
             className="-mx-2 flex min-h-12 items-center gap-3 rounded-control border-t border-line px-2 pt-2 text-base font-semibold text-primary-deep"
           >
@@ -229,6 +237,7 @@ function RailLink({
 }: { href: string; label: string; icon: typeof Users; tone: string; active: boolean; current?: 'page' | 'true' }) {
   return (
     <Link
+      prefetch={false}
       href={href}
       aria-current={current}
       className={`mt-1.5 flex items-center gap-3 rounded-[10px] px-3 py-2 font-subheading text-[15px] font-medium transition-colors ${
@@ -244,6 +253,7 @@ function RailLink({
 function RailSubLink({ item, active, current }: { item: Item; active: boolean; current?: 'page' | 'true' }) {
   return (
     <Link
+      prefetch={false}
       href={item.href}
       aria-current={current}
       className={`rounded-lg px-3 py-1.5 font-subheading text-[13.5px] transition-colors ${

@@ -65,7 +65,9 @@ export function EventCard({ event, imageSizes = CARD_IMAGE_SIZES.eventsBoard }: 
           {status === 'open' ? (
             <>
               <div className="flex items-center gap-4">
-                <Link href={`/register/${event.slug.current}`} className="btn-energy !px-4 !py-2">
+                {/* No prefetch: /register is dynamic, so every card in view
+                    rendered it on the server (Vercel Hobby CPU, 21 Oct 2026). */}
+                <Link prefetch={false} href={`/register/${event.slug.current}`} className="btn-energy !px-4 !py-2">
                   Register Now
                 </Link>
                 <Link

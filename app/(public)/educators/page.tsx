@@ -228,7 +228,7 @@ export default function EducatorsPage() {
               {GRANT_PROGRAM_YEAR}.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/grant" className="btn-primary">
+              <Link href="/grant" prefetch={false} className="btn-primary">
                 See the Teacher Grant <ArrowRight size={16} />
               </Link>
               <Link href="/grant#apply" className="btn-outline">

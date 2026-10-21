@@ -12,10 +12,19 @@ import { stripeClient } from '@/lib/stripe'
 // membership_tiers cents columns (annual_cost_cents / monthly_cost_cents) are
 // kept only as a fallback for when Stripe is unavailable or unconfigured.
 //
-// Result is cached with a short (60s) self-revalidating window, so a Stripe
-// price edit reflects site-wide within ~a minute with no manual sync. The cache
-// is also tagged (MEMBERSHIP_PRICES_TAG) so an on-demand revalidateTag can bust
-// it instantly if we ever wire one up. Server-only.
+// Result is cached for an hour (PRICE_CACHE_SECONDS), so a Stripe price edit
+// reaches the site within about two hours with no manual sync. Display only:
+// checkout reads the tier row itself, so a cached figure is never what's
+// charged. The cache is also tagged (MEMBERSHIP_PRICES_TAG) so an on-demand
+// revalidateTag can bust it instantly if we ever wire one up. Server-only.
+//
+// Don't shorten the window. Inside an ISR page, unstable_cache's revalidate
+// becomes the PAGE's window too, and the old 60s made the homepage,
+// /competitions and /membership re-render every minute they were visited —
+// about half of the site's Vercel function CPU (21 Oct 2026).
+
+/** An hour: the same window as the ISR pages that show these prices. */
+export const PRICE_CACHE_SECONDS = 3600
 
 /** Cache tag for the resolved pricing (for optional on-demand revalidation). */
 const MEMBERSHIP_PRICES_TAG = 'membership-prices'
@@ -49,7 +58,7 @@ async function amountFromStripe(stripe: Stripe | null, id: string | null): Promi
 /**
  * Every tier's resolved price, keyed by tier name. Stripe is the source of
  * truth; the membership_tiers cents columns are the fallback. Cached across
- * requests (revalidate 300s) and tagged so a Stripe edit can bust it instantly.
+ * requests (PRICE_CACHE_SECONDS) and tagged so a Stripe edit can bust it instantly.
  */
 export const getResolvedTierPricing = unstable_cache(
   async (): Promise<Record<string, ResolvedTierPricing>> => {
@@ -89,7 +98,7 @@ export const getResolvedTierPricing = unstable_cache(
     return out
   },
   ['membership-tier-pricing'],
-  { revalidate: 60, tags: [MEMBERSHIP_PRICES_TAG] },
+  { revalidate: PRICE_CACHE_SECONDS, tags: [MEMBERSHIP_PRICES_TAG] },
 )
 
 /** name → price for every tier. Use with formatTierPrice() for display. */

@@ -32,6 +32,7 @@ vi.mock('stripe', () => ({
 }))
 
 import { getEventPrice, formatEventPrice, eventPriceLabel, collectsNothing } from '@/lib/event-pricing'
+import { EVENT_PRICES_TAG } from '@/lib/price-cache'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -45,6 +46,10 @@ describe('price cache window', () => {
   it('is at least the event page ISR window (an hour)', () => {
     expect(cacheOptions).toHaveLength(1)
     expect(cacheOptions[0].revalidate).toBeGreaterThanOrEqual(3600)
+  })
+
+  it('carries the tag the Stripe webhook refreshes on a price change', () => {
+    expect(cacheOptions[0].tags).toContain(EVENT_PRICES_TAG)
   })
 })
 

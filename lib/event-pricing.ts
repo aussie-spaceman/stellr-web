@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import Stripe from 'stripe'
 import { stripeClient } from '@/lib/stripe'
+import { EVENT_PRICES_TAG } from '@/lib/price-cache'
 
 // ─── Live event registration pricing (single source of truth) ────────────────
 //
@@ -30,15 +31,13 @@ import { stripeClient } from '@/lib/stripe'
 // off one is an amount nobody can actually be charged — showing it would put a
 // number on the page that no registration can ever match.
 //
-// Cached for an hour (PRICE_CACHE_SECONDS) and tagged. A new fee is a new
-// Stripe price ID on the Sanity event, which is a new cache key, so it shows as
-// soon as the Sanity publish revalidates the page; only a price switched
-// inactive in Stripe waits out the hour. Never shorten it: see the note in
-// tier-pricing.ts, since this cache's window becomes the event page's window.
-// Server-only.
-
-/** Cache tag for resolved event pricing (for optional on-demand revalidation). */
-const EVENT_PRICES_TAG = 'event-prices'
+// Cached for an hour (PRICE_CACHE_SECONDS) and tagged EVENT_PRICES_TAG, which
+// the Stripe webhook revalidates on any price or product change
+// (lib/price-cache), so a price switched inactive is hidden at once. A new fee
+// is a new price ID on the Sanity event, so it is a new cache key and shows as
+// soon as the Sanity publish revalidates the page. Never shorten the window:
+// see the note in tier-pricing.ts, since this cache's window becomes the event
+// page's window. Server-only.
 
 /** An hour: the event page's own ISR window. */
 export const PRICE_CACHE_SECONDS = 3600

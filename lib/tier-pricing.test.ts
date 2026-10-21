@@ -18,6 +18,7 @@ vi.mock('@/lib/supabase', () => ({ supabaseServer: vi.fn() }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: vi.fn(() => null) }))
 
 import { PRICE_CACHE_SECONDS, formatTierPrice } from '@/lib/tier-pricing'
+import { MEMBERSHIP_PRICES_TAG } from '@/lib/price-cache'
 
 describe('tier price cache window', () => {
   // unstable_cache's revalidate becomes the ISR window of every page that shows
@@ -27,6 +28,10 @@ describe('tier price cache window', () => {
     expect(cacheOptions).toHaveLength(1)
     expect(cacheOptions[0].revalidate).toBe(PRICE_CACHE_SECONDS)
     expect(PRICE_CACHE_SECONDS).toBeGreaterThanOrEqual(3600)
+  })
+
+  it('carries the tag the Stripe webhook refreshes on a price change', () => {
+    expect(cacheOptions[0].tags).toContain(MEMBERSHIP_PRICES_TAG)
   })
 })
 

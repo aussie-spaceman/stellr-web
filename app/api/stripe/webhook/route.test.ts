@@ -10,6 +10,10 @@ import type Stripe from 'stripe'
 //           nothing (delayed ACH-style payment not yet cleared).
 
 vi.mock('server-only', () => ({}))
+vi.mock('next/cache', () => ({
+  revalidateTag: (...args: unknown[]) => h.revalidateTag(...args),
+  unstable_cache: (fn: unknown) => fn,
+}))
 
 // Spies must be created in a hoisted block: vi.mock factories are hoisted above
 // normal top-level consts, and route.ts is imported (and its mock factories run)
@@ -39,6 +43,8 @@ const h = vi.hoisted(() => ({
   // can prove the money paths call it (the real guard only throws on a prod
   // deployment holding sandbox keys, which the test env is not).
   assertLiveCredentials: vi.fn(),
+  // Price events refresh the cached prices public pages show (lib/price-cache).
+  revalidateTag: vi.fn(),
 }))
 
 // ── A tiny in-memory Supabase stand-in: enough for select/eq/neq/maybeSingle +
@@ -448,5 +454,27 @@ describe('money-path write failure fails closed (PAY-5)', () => {
 
     expect((await res.json()) as unknown).toMatchObject({ duplicate: true })
     expect(h.confirmRegistration).not.toHaveBeenCalled()
+  })
+})
+
+describe('price changes refresh the cached prices', () => {
+  // The prices public pages show are cached for an hour (a shorter window made
+  // their ISR pages re-render every minute, 21 Oct 2026), so a change in Stripe
+  // has to drop the cache rather than wait the hour out.
+  it.each(['price.created', 'price.updated', 'price.deleted', 'product.updated'])(
+    '%s revalidates both price caches',
+    async (type) => {
+      current = makeDb({ stripe_webhook_events: [] })
+      const res = await post({ id: `evt_${type}`, type, data: { object: { id: 'price_1' } } } as unknown as Stripe.Event)
+      expect(res.status).toBe(200)
+      expect(h.revalidateTag).toHaveBeenCalledWith('membership-prices', { expire: 0 })
+      expect(h.revalidateTag).toHaveBeenCalledWith('event-prices', { expire: 0 })
+    },
+  )
+
+  it('leaves the caches alone for every other event', async () => {
+    current = makeDb({ stripe_webhook_events: [] })
+    await post({ id: 'evt_cust', type: 'customer.updated', data: { object: { id: 'cus_1' } } } as unknown as Stripe.Event)
+    expect(h.revalidateTag).not.toHaveBeenCalled()
   })
 })

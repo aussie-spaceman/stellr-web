@@ -15,6 +15,7 @@ import { requireStripe } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { confirmRegistration } from '@/lib/registration-confirm'
 import { notifyCommunityAdmins } from '@/lib/notify'
+import { PRICE_CHANGE_EVENTS, revalidatePriceCaches } from '@/lib/price-cache'
 
 // Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
 function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
@@ -795,6 +796,15 @@ export async function POST(req: NextRequest) {
       const charge = event.data.object as Stripe.Charge
       const res = await recordExternalChargeRefunds(supabaseServer(), stripe, charge)
       if (res.recorded > 0) console.log(`[stripe/webhook] recorded ${res.recorded} external refund(s) for ${charge.id}`)
+    }
+
+    // ── price.* / product.updated ────────────────────────────────────────────
+    // The prices public pages show are cached for an hour (lib/price-cache), so
+    // a price created, edited, archived or deleted in Stripe refreshes them here
+    // rather than waiting the hour out. Only marks the caches stale: the next
+    // visit to each page re-renders it once.
+    if (PRICE_CHANGE_EVENTS.has(event.type)) {
+      revalidatePriceCaches()
     }
   } catch (err) {
     console.error('[stripe/webhook] Handler error:', err)

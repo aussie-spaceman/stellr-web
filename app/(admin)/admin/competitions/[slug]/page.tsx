@@ -236,6 +236,7 @@ export default async function AdminEventDetailPage({
       <nav aria-label="Event sections" className="-mx-4 flex gap-1 overflow-x-auto border-b border-brand-border px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
         {visibleTabs.map((t) => (
           <Link
+            prefetch={false}
             key={t.id}
             href={`${baseHref}?tab=${t.id}`}
             aria-current={tab === t.id ? 'page' : undefined}

@@ -10,6 +10,10 @@ import {
 } from 'lucide-react'
 import { Dialog } from '@stellr/web-ui'
 
+// prefetch={false} on every link: member pages are dynamic, so prefetching the
+// rail rendered them on the server each time it mounted (Vercel Hobby CPU,
+// 21 Oct 2026). The (member) loading.tsx files cover the click.
+
 type NavItem = { label: string; href: string; icon: typeof Home }
 
 const TOP_ITEMS: NavItem[] = [
@@ -112,7 +116,7 @@ export function AppSidebar({
       {/* ── Desktop sidebar rail ── */}
       <aside className="hidden min-h-screen w-[210px] shrink-0 flex-col bg-midnight font-sans lg:flex">
         {/* Logo */}
-        <Link href="/home" className="block px-4 pb-4 pt-5">
+        <Link prefetch={false} href="/home" className="block px-4 pb-4 pt-5">
           <div className="inline-block rounded-control bg-white px-3 py-2">
             <Image
               src="/images/logo-horiz.png"
@@ -161,6 +165,7 @@ export function AppSidebar({
       >
         {tabs.map(({ item: { label, href, icon: Icon }, active }) => (
           <Link
+            prefetch={false}
             key={href}
             href={href}
             aria-current={active ? (pathname === href ? 'page' : 'true') : undefined}
@@ -195,6 +200,7 @@ export function AppSidebar({
                   return (
                     <li key={href}>
                       <Link
+                        prefetch={false}
                         href={href}
                         onClick={() => setMoreOpen(false)}
                         aria-current={active ? (pathname === href ? 'page' : 'true') : undefined}
@@ -229,6 +235,7 @@ function SidebarLink({ item, active, pathname }: { item: NavItem; active: boolea
   const { label, href, icon: Icon } = item
   return (
     <Link
+      prefetch={false}
       href={href}
       aria-current={active ? (pathname === href ? 'page' : 'true') : undefined}
       className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-sm leading-none transition-colors ${

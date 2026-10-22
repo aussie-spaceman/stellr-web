@@ -68,3 +68,28 @@ describe('INT-8: a sustained Apollo 429 fails after bounded retries, not forever
     vi.unstubAllGlobals()
   })
 })
+
+describe('fetchEngagedProspects returns a stable order', () => {
+  // The daily run resumes at an index into this list, so the order must not
+  // depend on how Apollo happens to page its results that day.
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('sorts by email, with replied outranking clicked for the same person', async () => {
+    const message = (email: string, replied = false) => ({ status: 'completed', replied, to_email: email, to_name: 'A Person' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        const body = JSON.parse(init.body) as { emailer_message_stats: string[] }
+        const msgs =
+          body.emailer_message_stats[0] === 'clicked'
+            ? [message('carol@school.org'), message('alex@school.org'), message('bea@school.org')]
+            : [message('bea@school.org', true)]
+        return { status: 200, ok: true, text: async () => JSON.stringify({ emailer_messages: msgs }) } as unknown as Response
+      }),
+    )
+
+    const found = await fetchEngagedProspects('apollo-key')
+    expect(found.map((p) => p.email)).toEqual(['alex@school.org', 'bea@school.org', 'carol@school.org'])
+    expect(found.find((p) => p.email === 'bea@school.org')?.engagement).toBe('replied')
+  })
+})

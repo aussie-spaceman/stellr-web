@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 /**
  * The reconciliation window.
@@ -49,10 +49,63 @@ describe('when everything fits', () => {
     expect(r.windowOffset).toBe(0)
   })
 
-  it('ignores the offset entirely — no needless rotation', async () => {
+  // This used to ignore the offset when everyone fitted. A run cut short by the
+  // deadline (below) must resume where it stopped, so the offset always applies;
+  // a run that finishes still covers everyone, only starting further along.
+  it('starts at the resume offset and still covers everyone', async () => {
     const r = await run(prospects(48), 200, 12_345)
-    expect(r.windowOffset).toBe(0)
+    expect(r.windowOffset).toBe(12_345 % 48)
     expect(r.considered).toBe(48)
+    expect(r.changes[0]?.email).toBe(`p${12_345 % 48}@example.com`)
+    expect(new Set(r.changes.map((c) => c.email)).size).toBe(48)
+    expect(r.nextOffset).toBe(12_345 % 48) // a full lap ends where it began
+  })
+})
+
+describe('when the deadline cuts a run short', () => {
+  // Every run from 13 to 21 Oct 2026 outlived the cron's 60 s and was killed
+  // part-way, so none finished and the same first prospects were re-checked
+  // daily. These pin the deadline: stop cleanly, report it, say where to resume.
+  afterEach(() => vi.restoreAllMocks())
+
+  /** A clock that advances 1 s every time it is read. */
+  function tickingClock() {
+    let now = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => (now += 1000))
+  }
+
+  const runUntil = (list: ReturnType<typeof prospects>, offset: number, deadline: number) =>
+    reconcileProspects(list, { apply: false, limit: 200, offset, deadline, paceMs: 0 })
+
+  it('stops starting prospects at the deadline and says where to resume', async () => {
+    tickingClock()
+    // Reads at 1 s … 5 s pass; the read at 6 s is past 5.5 s and stops the run.
+    const r = await runUntil(prospects(110), 40, 5_500)
+    expect(r.stoppedEarly).toBe(true)
+    expect(r.considered).toBe(5)
+    expect(r.changes.map((c) => c.email)).toEqual(['p40', 'p41', 'p42', 'p43', 'p44'].map((p) => `${p}@example.com`))
+    expect(r.nextOffset).toBe(45)
+  })
+
+  it('does nothing past an already-passed deadline, and keeps the cursor', async () => {
+    const r = await runUntil(prospects(110), 70, 0)
+    expect(r.stoppedEarly).toBe(true)
+    expect(r.considered).toBe(0)
+    expect(r.nextOffset).toBe(70)
+  })
+
+  it('reaches every prospect across runs by chaining nextOffset', async () => {
+    tickingClock()
+    const list = prospects(110)
+    const seen = new Set<string>()
+    let offset = 0
+    for (let day = 0; day < 4; day++) {
+      // ~30 prospects per run, as at the real cron's pace.
+      const r = await runUntil(list, offset, Date.now() + 30_500)
+      r.changes.forEach((c) => seen.add(c.email))
+      offset = r.nextOffset
+    }
+    expect(seen.size).toBe(110)
   })
 })
 

@@ -157,6 +157,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
                 <tr key={m.id} className="group hover:bg-surface">
                   <td className={`${TD} ${STICKY} bg-white group-hover:bg-surface`}>
                     <Link
+                      prefetch={false}
                       href={`/admin/members/${m.id}`}
                       className="flex items-center gap-2.5 font-medium text-primary hover:underline"
                     >
@@ -197,6 +198,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
                   </td>
                   <td className={TD}>
                     <Link
+                      prefetch={false}
                       href={`/admin/members/${m.id}`}
                       className="text-primary hover:underline text-xs font-medium"
                     >

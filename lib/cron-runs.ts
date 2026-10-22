@@ -12,6 +12,33 @@ export interface CronRun {
   finish(result: Record<string, unknown>): Promise<void>
 }
 
+/**
+ * The `result` of this job's most recent FINISHED run, or null when there is
+ * none or it can't be read. A run killed mid-way never finishes, so it is
+ * skipped rather than read as a result. Lets a job carry a cursor from one run
+ * to the next without a table of its own.
+ */
+export async function lastCronResult(db: SupabaseClient, job: string): Promise<Record<string, unknown> | null> {
+  try {
+    const { data, error } = await db
+      .from('cron_runs')
+      .select('result')
+      .eq('job', job)
+      .not('finished_at', 'is', null)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) {
+      console.error(`[cron-runs] last result ${job}:`, error)
+      return null
+    }
+    return (data?.result as Record<string, unknown> | undefined) ?? null
+  } catch (err) {
+    console.error(`[cron-runs] last result ${job} threw:`, err)
+    return null
+  }
+}
+
 export async function startCronRun(db: SupabaseClient, job: string): Promise<CronRun> {
   const errors: { where: string; message: string }[] = []
   let id: string | null = null

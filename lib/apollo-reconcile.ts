@@ -39,13 +39,18 @@ export interface Prospect {
 }
 
 export interface ReconcileResult {
+  /** Prospects this run actually worked through. */
   considered: number
   /** Engaged prospects Apollo returned, before any windowing. */
   total: number
   /** True when `total` exceeded the limit, so this run saw only part of them. */
   truncated: boolean
+  /** True when the deadline passed before the window was finished. */
+  stoppedEarly: boolean
   /** Index this run's window started at. Rotates so coverage completes. */
   windowOffset: number
+  /** Where the next run should start: just past the last prospect this one reached. */
+  nextOffset: number
   created: number
   advanced: number
   skipped: number
@@ -190,14 +195,18 @@ async function collect(
   }
 }
 
-/** Everyone in Apollo who has clicked or replied, one entry per person. */
+/**
+ * Everyone in Apollo who has clicked or replied, one entry per person, sorted
+ * by email. The order has to be stable from one day to the next: the daily run
+ * resumes at an index into this list (see reconcileProspects).
+ */
 export async function fetchEngagedProspects(apiKey: string): Promise<Prospect[]> {
   const found = new Map<string, Prospect>()
   await collect(apiKey, { emailer_message_stats: ['clicked'] }, 'clicked', found)
   // stats:["replied"] rather than emailer_message_reply_classes: the latter
   // returns only replies that have been *classified*, silently dropping the rest.
   await collect(apiKey, { emailer_message_stats: ['replied'] }, 'replied', found)
-  return [...found.values()]
+  return [...found.values()].sort((a, b) => (a.email < b.email ? -1 : a.email > b.email ? 1 : 0))
 }
 
 /* ── HubSpot ─────────────────────────────────────────────────────────────── */
@@ -213,6 +222,11 @@ export async function reconcileProspects(
      * prospect is eventually reached.
      */
     offset?: number
+    /**
+     * Epoch ms after which no new prospect is started. The one in flight
+     * finishes; the rest wait for the next run, which starts at `nextOffset`.
+     */
+    deadline?: number
     paceMs?: number
     onLog?: (line: string) => void
   },
@@ -227,20 +241,24 @@ export async function reconcileProspects(
   // prospect costs several HubSpot round-trips, so an unbounded run would both
   // exhaust the rate limit and outlive the function — but the window has to move.
   //
-  // Wrapping at the end means coverage completes in ceil(total / limit) runs.
+  // The offset applies even when everyone fits under the limit, because the
+  // deadline can still cut a run short: at ~1.3 s per prospect, 110 of them
+  // took longer than the cron's 60 s, so every run from 13 to 21 Oct 2026 was
+  // killed partway through the same first ~45 and never recorded. Resuming at
+  // `nextOffset` means coverage completes however many runs that takes.
   const total = prospects.length
   const limit = opts.limit && opts.limit > 0 ? opts.limit : total
   const truncated = total > limit
-  const offset = truncated ? ((opts.offset ?? 0) % total + total) % total : 0
-  const all = truncated
-    ? [...prospects.slice(offset), ...prospects.slice(0, offset)].slice(0, limit)
-    : prospects
+  const offset = total ? ((opts.offset ?? 0) % total + total) % total : 0
+  const all = [...prospects.slice(offset), ...prospects.slice(0, offset)].slice(0, limit)
 
   const r: ReconcileResult = {
-    considered: all.length,
+    considered: 0,
     total,
     truncated,
+    stoppedEarly: false,
     windowOffset: offset,
+    nextOffset: offset,
     created: 0,
     advanced: 0,
     skipped: 0,
@@ -250,6 +268,11 @@ export async function reconcileProspects(
   }
 
   for (const p of all) {
+    if (opts.deadline !== undefined && Date.now() >= opts.deadline) {
+      r.stoppedEarly = true
+      break
+    }
+    r.considered++
     try {
       let contact = await getContactByEmail(p.email, ['firstname', 'lastname'])
 
@@ -348,5 +371,6 @@ export async function reconcileProspects(
     if (opts.apply) await sleep(pace)
   }
 
+  r.nextOffset = total ? (offset + r.considered) % total : 0
   return r
 }

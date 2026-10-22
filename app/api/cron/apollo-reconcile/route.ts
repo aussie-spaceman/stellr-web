@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
-import { startCronRun } from '@/lib/cron-runs'
+import { lastCronResult, startCronRun } from '@/lib/cron-runs'
 import { sendEmail, staffAlertEmail } from '@/lib/email'
 import { fetchEngagedProspects, reconcileProspects } from '@/lib/apollo-reconcile'
 
@@ -51,9 +51,20 @@ export const maxDuration = 60
  */
 const MAX_PER_RUN = 200
 
+/**
+ * Stop starting prospects 40 s in, leaving 20 s of the 60 s for the one in
+ * flight (its HubSpot retries can take several seconds), the alert email and
+ * closing the cron_runs row. Without it, 110 prospects at ~1.3 s each ran past
+ * 60 s every day from 13 to 21 Oct 2026: Vercel killed the function, so no run
+ * was ever recorded as finished, no alert went out, and the same first ~45
+ * prospects were re-checked daily while the rest were never reached.
+ */
+const RUN_BUDGET_MS = 40_000
+
 export async function GET(req: NextRequest) {
   const blocked = guardCron(req)
   if (blocked) return blocked
+  const startedAt = Date.now()
 
   const apiKey = process.env.APOLLO_API_KEY
   if (!apiKey) {
@@ -64,20 +75,21 @@ export async function GET(req: NextRequest) {
   // deep review INT-9: record every run in cron_runs so a broken Apollo/HubSpot
   // integration is visible in the DB after Vercel's 1h log retention expires.
   const db = supabaseServer()
+  // Resume where the last finished run stopped (its result.nextOffset). The
+  // cursor lives in the cron_runs ledger, so it needs no state of its own; a
+  // run that is killed or fails before finishing leaves the cursor where it was.
+  const previous = await lastCronResult(db, 'apollo-reconcile')
+  const resumeAt = typeof previous?.nextOffset === 'number' ? previous.nextOffset : 0
   const run = await startCronRun(db, 'apollo-reconcile')
 
   try {
     const prospects = await fetchEngagedProspects(apiKey)
 
-    // Advance the window one page per day, so ceil(total / MAX_PER_RUN) days
-    // covers everyone. Derived from the date rather than stored, so it needs no
-    // new state and a missed run costs one day of coverage, not the sequence.
-    const dayIndex = Math.floor(Date.now() / 86_400_000)
-
     const result = await reconcileProspects(prospects, {
       apply: true,
       limit: MAX_PER_RUN,
-      offset: dayIndex * MAX_PER_RUN,
+      offset: resumeAt,
+      deadline: startedAt + RUN_BUDGET_MS,
       onLog: (line) => console.log('[apollo-reconcile]', line),
     })
 
@@ -86,8 +98,12 @@ export async function GET(req: NextRequest) {
     // Truncation is itself worth an alert. It means the reconciler can no longer
     // see everyone in a single run, so a webhook gap can now sit unrepaired for
     // up to `daysToCover` days — a change in behaviour nobody would otherwise
-    // notice, which is exactly how the original bug stayed invisible.
-    const daysToCover = Math.ceil(result.total / MAX_PER_RUN)
+    // notice, which is exactly how the original bug stayed invisible. A run cut
+    // short by the time budget is the same situation, but it is the normal case
+    // at today's size, so it is recorded (cron_runs) and named in any alert that
+    // goes out anyway, rather than mailed every day on its own.
+    const perRun = Math.max(result.considered, 1)
+    const daysToCover = Math.ceil(result.total / perRun)
 
     if (repaired > 0 || result.failed > 0 || result.truncated) {
       // A gap means the webhook did not do its job. Say so plainly, and name
@@ -109,7 +125,10 @@ export async function GET(req: NextRequest) {
           ? ` NOTE: there are now more than ${MAX_PER_RUN} engaged contacts, so each ` +
             `run sees only part of them and the window rotates — full coverage takes ` +
             `${daysToCover} days. Raise MAX_PER_RUN or paginate if that is too slow.`
-          : '')
+          : result.stoppedEarly
+            ? ` This run reached its time limit, so the next one resumes at index ` +
+              `${result.nextOffset}; at this pace full coverage takes about ${daysToCover} days.`
+            : '')
 
       await sendEmail({
         // deep review INT-8: staffAlertEmail() always resolves to a real
@@ -126,7 +145,8 @@ export async function GET(req: NextRequest) {
 
     console.log(
       `[apollo-reconcile] considered=${result.considered}/${result.total} ` +
-        `offset=${result.windowOffset} truncated=${result.truncated} ` +
+        `offset=${result.windowOffset} next=${result.nextOffset} ` +
+        `truncated=${result.truncated} stoppedEarly=${result.stoppedEarly} ` +
         `created=${result.created} advanced=${result.advanced} ` +
         `skipped=${result.skipped} failed=${result.failed}`,
     )
@@ -139,7 +159,8 @@ export async function GET(req: NextRequest) {
     // hang that Vercel kills.
     console.error('[apollo-reconcile] Run failed', err)
     run.fail('run', err)
-    await run.finish({})
+    // Carry the cursor forward, or the next run would read {} and restart at 0.
+    await run.finish({ nextOffset: resumeAt })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

@@ -74,9 +74,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
     return NextResponse.json({ error: 'Upload the artwork before positioning the name.' }, { status: 400 })
   }
 
-  const { error } = await db.from('event_certificate_templates').upsert(update, { onConflict: 'event_slug,award_type' })
+  // Postgres checks NOT NULL on the row an upsert would insert before it finds
+  // the conflict, so a placement-only save (no artwork_path) must be an update.
+  const { error } = existing
+    ? await db.from('event_certificate_templates').update(update).eq('event_slug', slug).eq('award_type', awardType)
+    : await db.from('event_certificate_templates').upsert(update, { onConflict: 'event_slug,award_type' })
   if (error) {
-    console.error('[certificate templates] upsert error:', error)
+    console.error('[certificate templates] save error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
   return NextResponse.json({ ok: true, template: await loadTemplate(db, slug, awardType) })

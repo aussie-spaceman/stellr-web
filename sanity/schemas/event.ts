@@ -4,19 +4,51 @@ import { getCampaignDates } from '../../lib/campaigns'
 // Validation runs in the Studio (a browser), so it can call the app's own API.
 // Returns `true` on anything unexpected: a guard that can't reach the server
 // must never block editing. scripts/audit-event-slugs.ts is the backstop.
+//
+// Sanity re-runs every validator on every edit to the document, so asking the
+// server each time cost a Vercel function run per keystroke in ANY field (115
+// calls in 26 minutes of editing, 21 Oct 2026). The server can only block a
+// slug that differs from the published one, so that comparison happens here
+// first through the Studio's own client, and each server answer is reused for
+// a minute.
 
 type SlugValidationResult = true | string | Promise<true | string>
 interface SlugValidationContext {
   document?: { _id?: string }
+  getClient?: (options: { apiVersion: string }) => {
+    withConfig: (config: { perspective: 'published' }) => {
+      fetch: <T>(query: string, params: Record<string, unknown>) => Promise<T>
+    }
+  }
 }
 
-async function checkSlugRenameIsSafe(
-  proposed: string,
-  context: SlugValidationContext,
-): Promise<true | string> {
-  if (typeof window === 'undefined') return true // not an interactive edit
-  const id = (context?.document?._id ?? '').replace(/^drafts\./, '')
-  if (!id) return true
+// Both caches expire, so a document published (or renamed) mid-session is
+// re-read within a minute rather than judged on what the Studio saw at first.
+const SLUG_ANSWER_TTL_MS = 60_000
+const publishedSlugs = new Map<string, { at: number; slug: Promise<string | null> }>()
+const slugAnswers = new Map<string, { at: number; answer: Promise<true | string> }>()
+
+/** The published slug (null = never published), or undefined when it can't be read. */
+async function publishedSlug(id: string, context: SlugValidationContext): Promise<string | null | undefined> {
+  // 'published' as on the server (lib/sanity): a drafts view would hand back the
+  // edited slug under the published id, and the guard would wave it through.
+  const client = context?.getClient?.({ apiVersion: '2024-01-01' })?.withConfig({ perspective: 'published' })
+  if (!client) return undefined
+  let cached = publishedSlugs.get(id)
+  if (!cached || Date.now() - cached.at >= SLUG_ANSWER_TTL_MS) {
+    const slug = client.fetch<string | null>('*[_id == $id][0].slug.current', { id }).then((s) => s ?? null)
+    cached = { at: Date.now(), slug }
+    publishedSlugs.set(id, cached)
+  }
+  try {
+    return await cached.slug
+  } catch {
+    publishedSlugs.delete(id)
+    return undefined
+  }
+}
+
+async function askServer(id: string, proposed: string): Promise<true | string> {
   try {
     const res = await fetch(
       `/api/admin/events/slug-guard?id=${encodeURIComponent(id)}&slug=${encodeURIComponent(proposed)}`,
@@ -28,6 +60,27 @@ async function checkSlugRenameIsSafe(
     return true
   }
   return true
+}
+
+export async function checkSlugRenameIsSafe(
+  proposed: string,
+  context: SlugValidationContext,
+): Promise<true | string> {
+  if (typeof window === 'undefined') return true // not an interactive edit
+  const id = (context?.document?._id ?? '').replace(/^drafts\./, '')
+  if (!id) return true
+
+  // Never published, or not changing: nothing can be orphaned (the server
+  // answers the same way, see app/api/admin/events/slug-guard).
+  const published = await publishedSlug(id, context)
+  if (published === null || published === proposed) return true
+
+  const key = `${id}\u0000${proposed}`
+  const cached = slugAnswers.get(key)
+  if (cached && Date.now() - cached.at < SLUG_ANSWER_TTL_MS) return cached.answer
+  const answer = askServer(id, proposed)
+  slugAnswers.set(key, { at: Date.now(), answer })
+  return answer
 }
 
 export const event = {

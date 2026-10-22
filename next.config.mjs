@@ -77,6 +77,10 @@ export function imagesConfig(env = process.env) {
   }
 }
 
+// The member app's host, from the variable lib/env reads for APP_HOST. A dev or
+// preview deployment has one host, and both URL variables point at it.
+const APP_HOST = new URL(process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org').host
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
@@ -275,6 +279,16 @@ const nextConfig = {
       // Gates folded into the Training console (Reminders & escalation tab).
       { source: '/admin/community/gates', destination: '/admin/academy/training?tab=reminders', permanent: false },
     ]
+  },
+  async rewrites() {
+    return {
+      // The member app's manifest (app/app.webmanifest), served at the same URL
+      // as the www one so the root layout's link needs no host check. Both are
+      // static files; beforeFiles so this wins over the www one on the app host.
+      beforeFiles: [
+        { source: '/manifest.webmanifest', has: [{ type: 'host', value: APP_HOST }], destination: '/app.webmanifest' },
+      ],
+    }
   },
   images: imagesConfig(),
 }

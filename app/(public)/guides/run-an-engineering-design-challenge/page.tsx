@@ -115,7 +115,7 @@ export default function RunADesignChallengePage() {
             <Button href="/curriculum/atmospheric-requirements" as={Link} variant="softBlue">
               A worked tutorial: atmospheric requirements <ArrowRight size={16} />
             </Button>
-            <Button href="/grant" as={Link} variant="softBlue">
+            <Button href="/grant" as={Link} prefetch={false} variant="softBlue">
               Teacher Grant Program <ArrowRight size={16} />
             </Button>
           </div>

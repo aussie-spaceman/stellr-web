@@ -168,7 +168,7 @@ export default async function AdminEventsPage() {
                     return (
                       <tr key={event._id} className="group hover:bg-surface">
                         <td className={`${TD} ${STICKY} min-w-40 bg-white font-medium group-hover:bg-surface`}>
-                          <Link href={`/admin/competitions/${slug}`} className="text-primary hover:underline">
+                          <Link prefetch={false} href={`/admin/competitions/${slug}`} className="text-primary hover:underline">
                             {event.title}
                           </Link>
                           <span

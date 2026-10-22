@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // vi.mock factories are hoisted above the file body, so the spies they close
 // over must be created inside vi.hoisted().
-const { retrieve } = vi.hoisted(() => ({
+const { retrieve, cacheOptions } = vi.hoisted(() => ({
+  cacheOptions: [] as Array<{ revalidate?: number | false; tags?: string[] }>,
   retrieve: vi.fn(
     async (_id: string): Promise<{ unit_amount: number | null; currency: string; active: boolean }> => ({
       unit_amount: 13500,
@@ -15,7 +16,14 @@ const { retrieve } = vi.hoisted(() => ({
 // unstable_cache memoises across calls in Next; here it's a pass-through so each
 // test sees its own Stripe stub rather than the first test's cached answer.
 vi.mock('next/cache', () => ({
-  unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
+  unstable_cache: (
+    fn: (...args: unknown[]) => unknown,
+    _keys: string[],
+    opts: { revalidate?: number | false; tags?: string[] },
+  ) => {
+    cacheOptions.push(opts)
+    return fn
+  },
 }))
 vi.mock('stripe', () => ({
   default: class {
@@ -24,11 +32,25 @@ vi.mock('stripe', () => ({
 }))
 
 import { getEventPrice, formatEventPrice, eventPriceLabel, collectsNothing } from '@/lib/event-pricing'
+import { EVENT_PRICES_TAG } from '@/lib/price-cache'
 
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.STRIPE_SECRET_KEY = 'sk_test_x'
   retrieve.mockResolvedValue({ unit_amount: 13500, currency: 'usd', active: true })
+})
+
+describe('price cache window', () => {
+  // unstable_cache's revalidate becomes the event page's ISR window. At 60s
+  // every event page re-rendered each minute it was visited (21 Oct 2026).
+  it('is at least the event page ISR window (an hour)', () => {
+    expect(cacheOptions).toHaveLength(1)
+    expect(cacheOptions[0].revalidate).toBeGreaterThanOrEqual(3600)
+  })
+
+  it('carries the tag the Stripe webhook refreshes on a price change', () => {
+    expect(cacheOptions[0].tags).toContain(EVENT_PRICES_TAG)
+  })
 })
 
 describe('getEventPrice', () => {

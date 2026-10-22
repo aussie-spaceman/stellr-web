@@ -1,31 +1,10 @@
 import type { MetadataRoute } from 'next'
-import { headers } from 'next/headers'
-import { tokens } from '@/lib/tokens'
-import { APP_HOST } from '@/lib/env'
+import { webManifest } from '@/lib/web-manifest'
 
 /**
- * Web app manifest, so "Add to Home Screen" gives a named Stellr icon instead
- * of a generic page shortcut. Saved from the member app it opens the member
- * home; saved from the public site it opens the home page. (One deployment
- * serves both hosts, hence the host check.)
+ * The public site's manifest, built once at deploy. The member app's variant is
+ * app/app.webmanifest; next.config serves it at this URL on the app host.
  */
-export default async function manifest(): Promise<MetadataRoute.Manifest> {
-  const host = (await headers()).get('host') ?? ''
-  const fromApp = host === APP_HOST
-
-  return {
-    name: fromApp ? 'My Stellr' : 'Stellr Education',
-    short_name: 'Stellr',
-    description: 'Design competitions, mentoring and training for middle and high school students.',
-    start_url: fromApp ? '/home' : '/',
-    scope: '/',
-    display: 'standalone',
-    background_color: tokens.color.white,
-    theme_color: tokens.color.midnight,
-    icons: [
-      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/icon.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-    ],
-  }
+export default function manifest(): MetadataRoute.Manifest {
+  return webManifest(false)
 }

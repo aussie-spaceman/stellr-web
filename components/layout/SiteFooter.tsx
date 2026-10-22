@@ -4,13 +4,15 @@ import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
 import { CookieSettingsLink } from '@/components/analytics/CookieSettingsLink'
 import { STELLR_EIN } from '@/lib/org'
 
-const FOOTER_COLS = [
+type FooterLink = { label: string; href: string; prefetch?: false }
+
+const FOOTER_COLS: { heading: string; links: FooterLink[] }[] = [
   {
     heading: 'Educate',
     links: [
       { label: 'Competitions', href: '/competitions' },
       { label: 'Curriculum', href: '/curriculum' },
-      { label: 'Teacher Grant', href: '/grant' },
+      { label: 'Teacher Grant', href: '/grant', prefetch: false }, // dynamic: a prefetch renders it on the server
       { label: 'Events & Campaigns', href: '/events' },
       { label: 'Host An Event', href: '/host-an-event' },
     ],
@@ -160,6 +162,7 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
                   <Link
                     key={link.href + link.label}
                     href={link.href}
+                    prefetch={link.prefetch}
                     className="text-[13.5px] text-[#8B98C8] no-underline leading-[1.4] transition-colors hover:text-hero-lead font-sans"
                   >
                     {link.label}

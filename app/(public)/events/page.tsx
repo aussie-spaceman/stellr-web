@@ -7,6 +7,7 @@ import { CampaignGridCard } from '@/components/campaigns/CampaignGridCard'
 import { EventCard } from '@/components/ui/EventCard'
 import { CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { EventsBoard, type BoardItem } from '@/components/sections/EventsBoard'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 import { matchesGradeFilter } from '@/lib/grade-band'
 
 export const metadata: Metadata = {
@@ -83,7 +84,12 @@ export default async function EventsPage() {
             Register Today!
           </>
         }
-      />
+      >
+        <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3">
+          <p className="text-hero-lead">Not sure which fits your students?</p>
+          <BookCallButton location="events_hero" variant="outlineWhite" />
+        </div>
+      </Hero>
 
       {/* Filter bar + unified card grid — every Event and Campaign is its own card */}
       <EventsBoard items={items.map((i) => i.filter)}>
@@ -95,6 +101,16 @@ export default async function EventsPage() {
           ),
         )}
       </EventsBoard>
+
+      <section aria-label="Talk to us" className="bg-white px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-content flex-col items-start gap-4 rounded-ds-card border border-line bg-surface px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-content-secondary">
+            <strong className="text-ink">Questions before you register?</strong> Talk them through with our
+            team in 15 minutes.
+          </p>
+          <BookCallButton location="events_board" className="shrink-0" />
+        </div>
+      </section>
     </>
   )
 }

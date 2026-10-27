@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Mail, MapPin, Phone } from 'lucide-react'
 import { ContactForm } from '@/components/forms/ContactForm'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/contact' },
@@ -35,6 +36,14 @@ export default function ContactPage() {
 
             {/* Sidebar */}
             <aside className="space-y-6">
+              <div className="rounded-ds-card border border-line bg-white p-6 shadow-card">
+                <h2 className="font-bold text-ink text-lg">Prefer to talk?</h2>
+                <p className="mt-1.5 text-sm text-content-secondary">
+                  Book 15 minutes with our team — for parents, educators and partners.
+                </p>
+                <BookCallButton location="contact_sidebar" className="mt-4 w-full" />
+              </div>
+
               <div className="bg-brand-grey-light rounded-xl p-6 space-y-4">
                 <h2 className="font-bold text-brand-blue-dark text-lg">Contact Details</h2>
 

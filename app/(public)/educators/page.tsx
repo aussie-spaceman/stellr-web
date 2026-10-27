@@ -23,6 +23,7 @@ import {
   grantAmount,
 } from '@/lib/grant'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 
 /* Rendered visibly and as FAQPage JSON-LD from the same strings. Grant
    figures come from lib/grant, the same source /grant renders. */
@@ -117,6 +118,7 @@ export default function EducatorsPage() {
             <Link href="/curriculum" className="btn-outline-white">
               Browse Curriculum
             </Link>
+            <BookCallButton location="educators_hero" variant="outlineWhite" />
           </div>
         </div>
       </section>
@@ -320,9 +322,7 @@ export default function EducatorsPage() {
             <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Register as an Educator
             </a>
-            <Link href="/contact" className="btn-outline-white">
-              Contact Us
-            </Link>
+            <BookCallButton location="educators_cta" variant="outlineWhite" />
           </div>
         </div>
       </section>

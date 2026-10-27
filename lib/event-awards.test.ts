@@ -23,12 +23,12 @@ const a = (awardType: Assignment['awardType'], participantId: string, companyId:
 describe('award catalogue', () => {
   it('has the six certificates with their current labels', () => {
     expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'norm_chaffee', 'anita_gale', 'dick_edwards', 'mentor'])
-    expect(EVENT_AWARDS.norm_chaffee.label).toBe('The Norm Chaffee Award for Engineering Excellence')
+    expect(EVENT_AWARDS.norm_chaffee.label).toBe('Norm Chaffee Award for Engineering Excellence')
     expect(EVENT_AWARDS.norm_chaffee.description).toBe('For excellence at this event.')
     expect(EVENT_AWARDS.mentor.label).toBe('Certificate of Appreciation')
-    expect(EVENT_AWARDS.overall_champion.label).toBe('Overall Champion')
-    expect(EVENT_AWARDS.anita_gale.label).toBe('Award for Creative Vision')
-    expect(EVENT_AWARDS.dick_edwards.label).toBe('Award for Quiet Leadership')
+    expect(EVENT_AWARDS.overall_champion.label).toBe('Overall Event Champions')
+    expect(EVENT_AWARDS.anita_gale.label).toBe('Anita Gale Award for Creative Vision')
+    expect(EVENT_AWARDS.dick_edwards.label).toBe('Dick Edwards Award for Quiet Leadership')
   })
 
   it('guards types', () => {
@@ -48,9 +48,9 @@ describe('award catalogue', () => {
 
   it('titles award credentials with the award then the event', () => {
     expect(awardCredentialTitle('anita_gale', 'Colorado Space Design Challenge'))
-      .toBe('Award for Creative Vision — Colorado Space Design Challenge')
+      .toBe('Anita Gale Award for Creative Vision — Colorado Space Design Challenge')
     expect(awardCredentialTitle('norm_chaffee', 'Colorado Space Design Challenge'))
-      .toBe('The Norm Chaffee Award for Engineering Excellence — Colorado Space Design Challenge')
+      .toBe('Norm Chaffee Award for Engineering Excellence — Colorado Space Design Challenge')
   })
 })
 
@@ -58,7 +58,7 @@ describe('PUBLIC_AWARDS', () => {
   it('explains the four decided awards, by their short names', () => {
     expect(PUBLIC_AWARDS.map((p) => p.type).sort()).toEqual([...ASSIGNED_AWARD_TYPES].sort())
     expect(PUBLIC_AWARDS.map((p) => p.name)).toEqual([
-      'Creative Vision', 'Quiet Leadership', 'Overall Champions', 'Engineering Excellence',
+      'Creative Vision Award', 'Quiet Leadership Award', 'Champions Award', 'Engineering Excellence Award',
     ])
   })
 
@@ -81,8 +81,8 @@ describe('relabelIssuedAward', () => {
 
   it('shows the current label in the award and in front of the event', () => {
     expect(relabelIssuedAward(issued)).toMatchObject({
-      award: 'Award for Quiet Leadership',
-      title: 'Award for Quiet Leadership — Colorado Space Design Challenge',
+      award: 'Dick Edwards Award for Quiet Leadership',
+      title: 'Dick Edwards Award for Quiet Leadership — Colorado Space Design Challenge',
     })
   })
 
@@ -91,9 +91,14 @@ describe('relabelIssuedAward', () => {
     expect(issued.award).toBe('Earlier Wording for Quiet Leadership')
   })
 
-  it('leaves every other credential exactly as stored', () => {
+  it('shows an Overall Champion credential by the full name, Overall Event Champions', () => {
     const champ = { award_type: 'overall_champion', award: 'Overall Champion', title: 'Overall Champion — Nevada' }
-    expect(relabelIssuedAward(champ)).toBe(champ)
+    expect(relabelIssuedAward(champ)).toMatchObject({ award: 'Overall Event Champions', title: 'Overall Event Champions — Nevada' })
+  })
+
+  it('leaves every other credential exactly as stored', () => {
+    const mentor = { award_type: 'mentor', award: 'Certificate of Appreciation', title: 'Nevada — Volunteer Mentor' }
+    expect(relabelIssuedAward(mentor)).toBe(mentor)
     const course = { award_type: null, award: null, title: 'STEM Power Skills' }
     expect(relabelIssuedAward(course)).toBe(course)
   })
@@ -101,14 +106,14 @@ describe('relabelIssuedAward', () => {
   it('shows a Norm Chaffee credential issued under its earlier label by its full name', () => {
     const finalist = { award_type: 'norm_chaffee', award: 'Norm Chaffee Finalist', title: 'Norm Chaffee Finalist — Colorado Space Design Challenge' }
     expect(relabelIssuedAward(finalist)).toMatchObject({
-      award: 'The Norm Chaffee Award for Engineering Excellence',
-      title: 'The Norm Chaffee Award for Engineering Excellence — Colorado Space Design Challenge',
+      award: 'Norm Chaffee Award for Engineering Excellence',
+      title: 'Norm Chaffee Award for Engineering Excellence — Colorado Space Design Challenge',
     })
   })
 
-  it('uses the default certificate design for the renamed awards only', () => {
-    expect(artworkSupersededFor('anita_gale')).toBe(true)
-    expect(artworkSupersededFor('dick_edwards')).toBe(true)
+  it('prints every award on its uploaded artwork again: the full names match it', () => {
+    expect(artworkSupersededFor('anita_gale')).toBe(false)
+    expect(artworkSupersededFor('dick_edwards')).toBe(false)
     expect(artworkSupersededFor('overall_champion')).toBe(false)
     expect(artworkSupersededFor('norm_chaffee')).toBe(false)
     expect(artworkSupersededFor(null)).toBe(false)
@@ -141,14 +146,14 @@ describe('assignmentConflict — Norm Chaffee Award', () => {
     expect(assignmentConflict([...champs, a('norm_chaffee', 'p1')], a('norm_chaffee', 'p2'))).toBeNull()
   })
 
-  it('refuses a student who does not hold Overall Champion', () => {
-    expect(assignmentConflict(champs, a('norm_chaffee', 'p3'))).toMatch(/Only students holding Overall Champion/)
-    expect(assignmentConflict([a('anita_gale', 'p1')], a('norm_chaffee', 'p1'))).toMatch(/Only students holding Overall Champion/)
+  it('refuses a student who is not in the winning company', () => {
+    expect(assignmentConflict(champs, a('norm_chaffee', 'p3'))).toMatch(/Only members of the winning company \(Overall Event Champions\)/)
+    expect(assignmentConflict([a('anita_gale', 'p1')], a('norm_chaffee', 'p1'))).toMatch(/Only members of the winning company \(Overall Event Champions\)/)
   })
 
   it('refuses a finalist who already holds a specialist award', () => {
     expect(assignmentConflict([...champs, a('dick_edwards', 'p1')], a('norm_chaffee', 'p1')))
-      .toMatch(/Already holds the Award for Quiet Leadership\. A student can win one individual award per event/)
+      .toMatch(/Already holds the Dick Edwards Award for Quiet Leadership\. A student can win one individual award per event/)
   })
 
   it('refuses a specialist award for a finalist', () => {

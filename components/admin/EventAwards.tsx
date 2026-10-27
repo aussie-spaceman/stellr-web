@@ -159,7 +159,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
         <p className="text-sm text-brand-muted-soft">No students are registered yet.</p>
       ) : (
         <>
-          {/* ── Overall Champion ───────────────────────────────────────────── */}
+          {/* ── Overall Event Champions ────────────────────────────────────── */}
           <section className="space-y-2">
             <p className="font-medium text-brand-blue-dark text-sm">{EVENT_AWARDS.overall_champion.label}</p>
             <select
@@ -195,8 +195,8 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
             <div>
               <p className="font-medium text-brand-blue-dark text-sm">{EVENT_AWARDS.norm_chaffee.label}</p>
               <p className="text-xs text-brand-muted-soft mt-0.5">
-                Nominated by the volunteer mentors. Only students holding {EVENT_AWARDS.overall_champion.label} can
-                receive it, and any number of them can.
+                Nominated by the volunteer mentors. Only students in the winning company can receive it, and
+                any number of them can.
               </p>
             </div>
             {champs.length === 0 ? (

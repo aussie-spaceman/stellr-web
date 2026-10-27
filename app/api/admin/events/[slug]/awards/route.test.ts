@@ -117,11 +117,11 @@ describe('PUT /api/admin/events/[slug]/awards — Norm Chaffee Award', () => {
     expect(writes).toEqual([expect.objectContaining({ op: 'upsert', payload: expect.objectContaining({ participant_id: 'p2', award_type: 'norm_chaffee' }) })])
   })
 
-  it('refuses a student who does not hold Overall Champion', async () => {
+  it('refuses a student who is not in the winning company', async () => {
     state.assignments = champions()
     const res = await put({ action: 'add', awardType: 'norm_chaffee', participantId: 'p3' })
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toMatch(/Only students holding Overall Champion/)
+    expect((await res.json()).error).toMatch(/Only members of the winning company \(Overall Event Champions\)/)
     expect(writes).toHaveLength(0)
   })
 

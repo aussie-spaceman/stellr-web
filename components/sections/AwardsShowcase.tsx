@@ -46,7 +46,7 @@ export function AwardsShowcase() {
       <Dialog
         open={open != null}
         onClose={() => setOpenType(null)}
-        title={open ? `The ${open.name} award` : ''}
+        title={open ? `The ${open.name}` : ''}
         description={open ? `${open.count} · ${DECIDED_BY[open.decidedBy].toLowerCase()}` : undefined}
         size="lg"
       >
@@ -85,7 +85,7 @@ export function AwardsShowcase() {
               ) : (
                 <p className="mt-1.5">
                   Being in the winning company doesn&rsquo;t carry an invitation on its own. Its standout
-                  engineers receive the Engineering Excellence award, which does.
+                  engineers receive the Engineering Excellence Award, which does.
                 </p>
               )}
             </section>

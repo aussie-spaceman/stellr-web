@@ -1,6 +1,6 @@
 // ── International Summer Camp ────────────────────────────────────────────────
-// Run by our partner Frontier Challenges. Creative Vision, Quiet Leadership and
-// Engineering Excellence winners from every Challenge and Campaign are invited
+// Run by our partner Frontier Challenges. Creative Vision Award, Quiet Leadership
+// Award and Engineering Excellence Award winners from every Challenge and Campaign are invited
 // (PUBLIC_AWARDS in lib/event-awards.ts says which); attendance carries a fee.
 // One place for the facts every page quotes.
 

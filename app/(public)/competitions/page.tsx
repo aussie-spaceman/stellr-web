@@ -58,7 +58,7 @@ const awardSteps = [
   {
     n: 2,
     title: 'Mentors choose the individuals',
-    body: 'The volunteer mentors who work with each company pick its Creative Vision and Quiet Leadership winners, and nominate Engineering Excellence winners from the champions.',
+    body: 'The volunteer mentors who work with each company pick its Creative Vision Award and Quiet Leadership Award winners, and nominate Engineering Excellence Award winners from the champions.',
   },
   {
     n: 3,
@@ -185,11 +185,11 @@ const COMPETITION_FAQS = [
   },
   {
     q: 'What awards can students win?',
-    a: 'Four. Creative Vision and Quiet Leadership go to one student in every company, chosen by the volunteer mentors who work with it. Overall Champions is the company the judges rank best. Engineering Excellence goes to standout engineers from that winning company, nominated by its mentors.',
+    a: 'Four. The Creative Vision Award and the Quiet Leadership Award go to one student in every company, chosen by the volunteer mentors who work with it. The Champions Award goes to every member of the company the judges rank best. The Engineering Excellence Award goes to standout engineers from that winning company, nominated by its mentors.',
   },
   {
     q: 'Can I progress to a future event by winning an event I attend?',
-    a: `Yes. Creative Vision, Quiet Leadership and Engineering Excellence winners from every Challenge and Campaign are invited to the ${SUMMER_CAMP.name}, held in ${SUMMER_CAMP.when} and run by our partner ${SUMMER_CAMP.partner}. Attendance carries a fee.`,
+    a: `Yes. Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every Challenge and Campaign are invited to the ${SUMMER_CAMP.name}, held in ${SUMMER_CAMP.when} and run by our partner ${SUMMER_CAMP.partner}. Attendance carries a fee.`,
   },
 ] as const
 
@@ -456,8 +456,8 @@ export default async function CompetitionsPage() {
               </p>
               <h3 className="mt-2 text-2xl font-bold text-ink">Win an individual award, earn an invitation</h3>
               <p className="mt-2 text-content-secondary leading-relaxed">
-                Creative Vision, Quiet Leadership and Engineering Excellence winners from every Challenge and
-                Campaign are invited to the {SUMMER_CAMP.name}, run by our partner {SUMMER_CAMP.partner}.
+                Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every
+                Challenge and Campaign are invited to the {SUMMER_CAMP.name}, run by our partner {SUMMER_CAMP.partner}.
                 Attendance carries a fee.
               </p>
             </div>

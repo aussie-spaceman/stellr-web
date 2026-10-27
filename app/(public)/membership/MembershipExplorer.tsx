@@ -10,6 +10,7 @@ import {
   tierBySlug, type AudienceId, type ValueIcon, type Tier,
 } from './tier-data'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 import type { VideoAsset } from '@/lib/media-helpers'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -221,6 +222,14 @@ export default function MembershipExplorer({
               ))}
             </div>
           )}
+
+          <div className="mt-8 flex flex-col items-start gap-4 rounded-ds-card border border-line bg-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-content-secondary">
+              <strong className="text-ink">Not sure which tier fits?</strong> Talk it through with our team in 15
+              minutes.
+            </p>
+            <BookCallButton location="membership_explorer" className="shrink-0" />
+          </div>
         </div>
       </section>
 

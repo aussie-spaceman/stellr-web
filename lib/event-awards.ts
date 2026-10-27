@@ -1,14 +1,15 @@
 // ── Event awards: the fixed, global catalogue ────────────────────────────────
 // Six certificates an event can give. Participation goes to every student;
 // mentor (the Certificate of Appreciation) to every volunteer mentor assigned
-// to the event; the other four are decided at the end of the event — three by
-// the judges, Norm Chaffee Finalist by the volunteer mentors — and assigned by
-// an admin or event manager (event_award_assignments), then issued as
-// credentials.
-// Labels match the certificate artwork word for word — one vocabulary on the
-// print, the credential page and LinkedIn — except for an award renamed after
-// its artwork was made (RELABELLED_AWARD_TYPES), which prints on the default
-// design until new artwork is uploaded.
+// to the event; the other four are decided at the end of the event — Overall
+// Champion by the judges, the other three by the volunteer mentors — and
+// assigned by an admin or event manager (event_award_assignments), then issued
+// as credentials.
+// Labels are the full names, matching the certificate artwork word for word —
+// one vocabulary on the print, the credential page and LinkedIn — except for an
+// award renamed after its artwork was made (ARTWORK_SUPERSEDED_AWARD_TYPES),
+// which prints on the default design until new artwork is uploaded. The public
+// site uses the short names in PUBLIC_AWARDS instead.
 //
 // Pure: imported by client components and route handlers alike.
 
@@ -43,33 +44,33 @@ export const EVENT_AWARDS: Record<AwardType, AwardDef> = {
   },
   overall_champion: {
     type: 'overall_champion',
-    label: 'Overall Champion',
+    label: 'Overall Event Champions',
     kind: 'team',
     description: 'Scientific knowledge, engineering prowess, and teamwork skills that resulted in the winning design.',
     criteria: 'A member of the company judged overall winner of the competition.',
   },
   norm_chaffee: {
     type: 'norm_chaffee',
-    label: 'Norm Chaffee Finalist',
+    label: 'Norm Chaffee Award for Engineering Excellence',
     kind: 'finalists',
     description: 'For excellence at this event.',
     criteria: 'Nominated by the volunteer mentors from the winning company for excellence at the competition.',
   },
   anita_gale: {
     type: 'anita_gale',
-    label: 'Award for Creative Vision',
+    label: 'Anita Gale Award for Creative Vision',
     kind: 'specialist',
     description:
       'Engineering Vision (with a capital V!) requires tenacity, communication, and attention to detail. Awarded for exhibiting all of these traits.',
-    criteria: "Chosen by the judges from their company for creative vision.",
+    criteria: 'Chosen by the volunteer mentors from their company for creative vision.',
   },
   dick_edwards: {
     type: 'dick_edwards',
-    label: 'Award for Quiet Leadership',
+    label: 'Dick Edwards Award for Quiet Leadership',
     kind: 'specialist',
     description:
       'Leadership comes in many guises; this award is for being the person in the room constantly pushing the team to excel without looking for any credit.',
-    criteria: 'Chosen by the judges from their company for quiet leadership.',
+    criteria: 'Chosen by the volunteer mentors from their company for quiet leadership.',
   },
   mentor: {
     type: 'mentor',
@@ -82,6 +83,76 @@ export const EVENT_AWARDS: Record<AwardType, AwardDef> = {
 
 export const ASSIGNED_AWARD_TYPES: AssignedAwardType[] = ['overall_champion', 'norm_chaffee', 'anita_gale', 'dick_edwards']
 
+// ── The public site ──────────────────────────────────────────────────────────
+// The four decided awards as /competitions explains them. Every award has two
+// names (David, 27 Oct 2026): the full `label` above, on the certificate, the
+// credential and at the closing ceremony; and the short `name` here, used on
+// the website — "Norm Chaffee Award for Engineering Excellence" is the
+// "Engineering Excellence Award". Being in the winning company carries no
+// Summer Camp invitation of its own — its standout engineers receive the
+// Engineering Excellence Award, which does.
+
+export interface PublicAward {
+  type: AssignedAwardType
+  name: string
+  decidedBy: 'judges' | 'mentors'
+  /** How many are given, as a short phrase. */
+  count: string
+  /** One sentence for the tile. */
+  summary: string
+  forWhat: string
+  howChosen: string
+  summerCamp: boolean
+}
+
+export const PUBLIC_AWARDS: PublicAward[] = [
+  {
+    type: 'anita_gale',
+    name: 'Creative Vision Award',
+    decidedBy: 'mentors',
+    count: 'One per company',
+    summary: 'For the student whose vision shaped their company’s design.',
+    forWhat: EVENT_AWARDS.anita_gale.description,
+    howChosen:
+      'The volunteer mentors who work alongside each company all event choose one of its students.',
+    summerCamp: true,
+  },
+  {
+    type: 'dick_edwards',
+    name: 'Quiet Leadership Award',
+    decidedBy: 'mentors',
+    count: 'One per company',
+    summary: 'For the student who kept their team pushing to excel, without looking for credit.',
+    forWhat: EVENT_AWARDS.dick_edwards.description,
+    howChosen:
+      'The volunteer mentors who work alongside each company all event choose one of its students.',
+    summerCamp: true,
+  },
+  {
+    type: 'overall_champion',
+    name: 'Champions Award',
+    decidedBy: 'judges',
+    count: 'One company',
+    summary: 'Every member of the company with the winning design.',
+    forWhat: EVENT_AWARDS.overall_champion.description,
+    howChosen:
+      'Industry judges score each company’s final presentation or written proposal against the brief, and choose one winner.',
+    summerCamp: false,
+  },
+  {
+    type: 'norm_chaffee',
+    name: 'Engineering Excellence Award',
+    decidedBy: 'mentors',
+    count: 'Several, from the winning company',
+    summary: 'For the standout engineers in the winning company.',
+    forWhat:
+      'For the members of the winning company whose engineering stood out, beyond its Creative Vision Award and Quiet Leadership Award winners.',
+    howChosen:
+      'The winning company’s mentors nominate any number of its students. Each student can win one individual award, so that company’s Creative Vision Award and Quiet Leadership Award winners are not eligible.',
+    summerCamp: true,
+  },
+]
+
 /**
  * Awards renamed after credentials carrying them were issued. A credential
  * stores its award label as text — `award`, and the prefix of `title`
@@ -90,13 +161,25 @@ export const ASSIGNED_AWARD_TYPES: AssignedAwardType[] = ['overall_champion', 'n
  * relabelIssuedAward(). The stored rows are never rewritten. The award type
  * keys themselves are internal and never shown.
  */
-export const RELABELLED_AWARD_TYPES: readonly AwardType[] = ['anita_gale', 'dick_edwards']
+export const RELABELLED_AWARD_TYPES: readonly AwardType[] = ['overall_champion', 'anita_gale', 'dick_edwards', 'norm_chaffee']
+
+/** Awards whose uploaded certificate artwork predates their current label.
+ *  Empty since the full names returned on 27 Oct 2026: the Creative Vision and
+ *  Quiet Leadership artwork was made with them, and the Norm Chaffee artwork
+ *  already carries its full name. Narrower than RELABELLED_AWARD_TYPES. */
+export const ARTWORK_SUPERSEDED_AWARD_TYPES: readonly AwardType[] = []
 
 /** An award whose uploaded certificate artwork predates its current label: its
  *  PDF uses the default design rather than the artwork, until new artwork is
  *  uploaded and this list is cleared. */
 export function artworkSupersededFor(t: string | null | undefined): boolean {
-  return isAwardType(t) && RELABELLED_AWARD_TYPES.includes(t)
+  return isAwardType(t) && ARTWORK_SUPERSEDED_AWARD_TYPES.includes(t)
+}
+
+/** "the <label>" for running text, without doubling a label that starts with "The". */
+export function theAward(t: AwardType): string {
+  const label = EVENT_AWARDS[t].label
+  return label.startsWith('The ') ? `the ${label.slice(4)}` : `the ${label}`
 }
 
 /**
@@ -112,7 +195,7 @@ export function relabelIssuedAward<T extends { award_type?: string | null; award
 }
 export const SPECIALIST_AWARD_TYPES: AssignedAwardType[] = ['anita_gale', 'dick_edwards']
 /** A student holds at most one of these per event: the two specialist awards
- *  and Norm Chaffee Finalist. */
+ *  and the Norm Chaffee Award. */
 export const INDIVIDUAL_AWARD_TYPES: AssignedAwardType[] = ['norm_chaffee', 'anita_gale', 'dick_edwards']
 
 export function isAwardType(v: unknown): v is AwardType {
@@ -165,7 +248,7 @@ export function assignmentConflict(existing: Assignment[], proposed: Assignment)
     EVENT_AWARDS[proposed.awardType].kind === 'finalists' &&
     !existing.some((a) => a.participantId === proposed.participantId && a.awardType === 'overall_champion')
   ) {
-    return `Only students holding ${EVENT_AWARDS.overall_champion.label} can be a ${EVENT_AWARDS[proposed.awardType].label}.`
+    return `Only members of the winning company (${EVENT_AWARDS.overall_champion.label}) can receive ${theAward(proposed.awardType)}.`
   }
   if (!isIndividual(proposed.awardType)) return null
 
@@ -173,9 +256,7 @@ export function assignmentConflict(existing: Assignment[], proposed: Assignment)
     (a) => a.participantId === proposed.participantId && isIndividual(a.awardType),
   )
   if (otherIndividual) {
-    const held = EVENT_AWARDS[otherIndividual.awardType]
-    const already = held.kind === 'finalists' ? `Is already a ${held.label}` : `Already holds the ${held.label}`
-    return `${already}. A student can win one individual award per event.`
+    return `Already holds ${theAward(otherIndividual.awardType)}. A student can win one individual award per event.`
   }
   return null
 }

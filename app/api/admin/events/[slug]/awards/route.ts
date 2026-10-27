@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic'
 // Judging results for an event, as a draft. Nothing here reaches a student
 // until ./issue turns the assignments into credentials.
 // Rules (lib/event-awards.ts): champion = a whole company; each specialist
-// award = one student per company; Norm Chaffee Finalist = any number of the
+// award = one student per company; Norm Chaffee Award = any number of the
 // champions; one individual award (specialist or finalist) per student.
 // Finalists follow the champions: a student who loses Overall Champion loses
 // the finalist pick with it.

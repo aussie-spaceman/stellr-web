@@ -105,7 +105,7 @@ describe('PUT /api/admin/events/[slug]/awards', () => {
   })
 })
 
-describe('PUT /api/admin/events/[slug]/awards — Norm Chaffee Finalist', () => {
+describe('PUT /api/admin/events/[slug]/awards — Norm Chaffee Award', () => {
   const held = (award_type: string, participant_id: string, company_id = 'co-1') =>
     ({ id: `${participant_id}-${award_type}`, award_type, participant_id, company_id, assigned_at: '' })
   const champions = () => [held('overall_champion', 'p1'), held('overall_champion', 'p2')]
@@ -117,11 +117,11 @@ describe('PUT /api/admin/events/[slug]/awards — Norm Chaffee Finalist', () => 
     expect(writes).toEqual([expect.objectContaining({ op: 'upsert', payload: expect.objectContaining({ participant_id: 'p2', award_type: 'norm_chaffee' }) })])
   })
 
-  it('refuses a student who does not hold Overall Champion', async () => {
+  it('refuses a student who is not in the winning company', async () => {
     state.assignments = champions()
     const res = await put({ action: 'add', awardType: 'norm_chaffee', participantId: 'p3' })
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toMatch(/Only students holding Overall Champion/)
+    expect((await res.json()).error).toMatch(/Only members of the winning company \(Overall Event Champions\)/)
     expect(writes).toHaveLength(0)
   })
 
@@ -136,7 +136,7 @@ describe('PUT /api/admin/events/[slug]/awards — Norm Chaffee Finalist', () => 
     state.assignments = [...champions(), held('norm_chaffee', 'p1')]
     const res = await put({ action: 'set_specialist', awardType: 'dick_edwards', companyId: 'co-1', participantId: 'p1' })
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toMatch(/Is already a Norm Chaffee Finalist/)
+    expect((await res.json()).error).toMatch(/Already holds the Norm Chaffee Award for Engineering Excellence/)
     expect(writes).toHaveLength(0)
   })
 

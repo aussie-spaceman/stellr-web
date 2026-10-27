@@ -44,6 +44,11 @@ export const PD_STANDARDS: readonly PdStandard[] = [
   { code: 'SL.11-12.5', framework: 'CCSS', group: ELA, label: 'Make strategic use of digital media in presentations' },
 ]
 
+/** PD hours a teacher receives for supporting a Challenge or Campaign — set per
+ *  event within this range (David, 27 Oct 2026). The Teacher Grant states its
+ *  own figure (GRANT_PD_HOURS in lib/grant.ts). */
+export const EVENT_PD_HOURS = '5–15'
+
 /** The codes snapshotted onto a new PD credential. */
 export function pdStandardCodes(): string[] {
   return PD_STANDARDS.map((s) => s.code)

@@ -8,7 +8,11 @@ import {
   Users,
   ShieldCheck,
   ArrowRight,
+  Check,
 } from 'lucide-react'
+import { Hero, Button, Eyebrow } from '@stellr/web-ui'
+import { PdCertificateSample } from '@/components/sections/PdCertificateSample'
+import { EVENT_PD_HOURS, PD_STANDARDS } from '@/lib/pd-standards'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { AudioTestimonial } from '@/components/sections/AudioTestimonial'
@@ -23,6 +27,7 @@ import {
   grantAmount,
 } from '@/lib/grant'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 
 /* Rendered visibly and as FAQPage JSON-LD from the same strings. Grant
    figures come from lib/grant, the same source /grant renders. */
@@ -37,7 +42,7 @@ const EDUCATOR_FAQS = [
   },
   {
     q: 'Do Stellr activities count toward PD or CTE hours?',
-    a: 'Stellr provides documented PD contact hours and a statement of the standards covered. Whether they count toward CTE or recertification is decided by your district or state.',
+    a: `Every educator who supports a Challenge or Campaign receives a PD certificate for ${EVENT_PD_HOURS} hours, depending on the event, with the Common Core standards covered mapped on the back. Whether they count toward CTE or recertification is decided by your district or state.`,
   },
   {
     q: 'Do I have to stay with students at a live Challenge?',
@@ -65,6 +70,7 @@ const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreduc
 
 const sections = [
   { id: 'educators', label: 'For Educators' },
+  { id: 'credentials', label: 'PD Certificates' },
   { id: 'grant', label: 'Teacher Grant' },
   { id: 'schools', label: 'For Schools' },
 ]
@@ -97,29 +103,22 @@ export default function EducatorsPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8">
-        <div className="max-w-7xl mx-auto">
-          <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
-            Community → For Educators &amp; Schools
-          </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
-            Bring real-world STEM to your students
-          </h1>
-          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
-            Educators are at the heart of how Stellr reaches students. We give you the curriculum,
-            the training, and the support to deliver industry-grade STEM experiences — without
-            adding to your workload.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
-              Register as an Educator
-            </a>
-            <Link href="/curriculum" className="btn-outline-white">
-              Browse Curriculum
-            </Link>
-          </div>
+      <Hero
+        breadcrumb="Community → For Educators & Schools"
+        title="Bring real-world STEM to your students"
+        lead="Educators are at the heart of how Stellr reaches students. We give you the curriculum, the training, and the support to deliver industry-grade STEM experiences — without adding to your workload."
+        pills={['Free to register', `${EVENT_PD_HOURS} PD hours per event`, 'Common Core aligned']}
+      >
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Button href={`${AUTH_URL}/sign-up`} variant="primary">
+            Register as an Educator
+          </Button>
+          <Button href="/curriculum" as={Link} variant="outlineWhite">
+            Browse Curriculum
+          </Button>
+          <BookCallButton location="educators_hero" variant="outlineWhite" />
         </div>
-      </section>
+      </Hero>
 
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
@@ -182,6 +181,78 @@ export default function EducatorsPage() {
               secure, and our group registration captures the agreements your school requires.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* ── #credentials — the PD certificate ─────────────────────────────
+          The sample is the real certificate (scripts/pd-certificate-sample.ts)
+          and the standards list is the one printed on its back, so the page
+          can't promise what the paper doesn't say. */}
+      <section id="credentials" className="section-padding bg-surface scroll-mt-14">
+        <div className="container-max">
+          <Eyebrow>Professional development</Eyebrow>
+          <h2 className="text-3xl font-bold text-ink mt-3 max-w-3xl">Earn PD hours for supporting your students</h2>
+          <p className="text-lg text-content-secondary mt-3 max-w-3xl leading-relaxed">
+            Every educator who supports a Challenge or Campaign receives a two-page certificate: your PD
+            hours on the front, and a map of the Common Core standards your students worked on, on the back.
+            Take it to your district for recertification or CTE hours.
+          </p>
+
+          <div className="mt-9">
+            <PdCertificateSample />
+          </div>
+
+          <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-start">
+            <div>
+              <h3 className="font-bold text-ink">What&rsquo;s on it</h3>
+              <ul className="mt-3 space-y-2.5">
+                {[
+                  'Your hours of effort, with the event, its date and location',
+                  'What your students produced, and the professional learning focus',
+                  `A standards alignment map: ${PD_STANDARDS.length} Common Core standards, marked against each stage of the event`,
+                  'A certificate number your district can verify online',
+                  'One click to add it to your LinkedIn profile',
+                ].map((item) => (
+                  <li key={item} className="flex gap-2.5 text-content-secondary leading-relaxed">
+                    <Check size={18} className="mt-0.5 shrink-0 text-enviro-green-text" aria-hidden="true" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-ink">How you earn hours</h3>
+              <dl className="mt-3 divide-y divide-line-light rounded-ds-card border border-line bg-white">
+                {[
+                  ['Bring a team to a live Challenge', `${EVENT_PD_HOURS} hours, depending on the event`],
+                  ['Run a Campaign with your students', `${EVENT_PD_HOURS} hours, depending on the Campaign`],
+                  ['Join the Teacher Grant Program', `${GRANT_PD_HOURS} documented contact hours`],
+                ].map(([how, hours]) => (
+                  <div key={how} className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="text-sm text-content-secondary">{how}</dt>
+                    <dd className="text-sm font-semibold text-ink sm:text-right">{hours}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 text-sm text-content-muted leading-relaxed">
+                Whether hours count toward recertification or CTE is decided by your district or state.
+              </p>
+            </div>
+          </div>
+
+          <details className="mt-8 rounded-ds-card border border-line bg-white px-5 py-4">
+            <summary className="cursor-pointer font-semibold text-ink">
+              The {PD_STANDARDS.length} standards on the certificate
+            </summary>
+            <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2">
+              {PD_STANDARDS.map((s) => (
+                <li key={s.code} className="text-sm text-content-secondary">
+                  <span className="font-semibold text-ink">{s.code}</span> — {s.label}
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       </section>
 
@@ -320,9 +391,7 @@ export default function EducatorsPage() {
             <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Register as an Educator
             </a>
-            <Link href="/contact" className="btn-outline-white">
-              Contact Us
-            </Link>
+            <BookCallButton location="educators_cta" variant="outlineWhite" />
           </div>
         </div>
       </section>

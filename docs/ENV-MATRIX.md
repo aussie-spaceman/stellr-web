@@ -100,7 +100,7 @@ dev writes to production.
 | `NEXT_PUBLIC_SANITY_*` | Same CMS content is fine in dev — it is read-mostly. `SANITY_API_TOKEN` (write) should be omitted from dev |
 | `NEXT_PUBLIC_GTM_ID` | **Omit on dev.** Otherwise dev traffic lands in GA4 |
 | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION`, `NEXT_PUBLIC_BING_SITE_VERIFICATION`, `INDEXNOW_KEY` | **Production only.** Search Console / Bing Webmaster ownership tokens and the IndexNow key (added 24 Sept 2026, AEO phase 1). On dev they would claim or ping the production property from a non-production host. Unset = no meta tag, `/indexnow-key.txt` 404s and `scripts/indexnow-submit.ts` refuses |
-| `NEXT_PUBLIC_BOOKING_URL`, `NEXT_PUBLIC_DONATION_URL` | Plain links, safe |
+| `NEXT_PUBLIC_BOOKING_URL`, `NEXT_PUBLIC_INTRO_CALL_URL`, `NEXT_PUBLIC_DONATION_URL` | Plain links, safe |
 | `LINKEDIN_ORGANIZATION_ID` | Numeric ID of Stellr's LinkedIn Page (from `linkedin.com/company/<id>/admin/`). Public knowledge, same value everywhere. `lib/linkedin.ts` falls back to `organizationName` when unset, so dev works without it; set on prod so profile entries link to the Page |
 | `NEXT_PUBLIC_MEDIA_BASE_URL` | **Same value everywhere, and required** (since 21 Sept 2026): `https://l3zabozgfpz3vahd.public.blob.vercel-storage.com`, the `stellr-media` public Blob store. Marketing media is not environment-specific; an empty value 404s every testimonial video, photo and gated PDF because they no longer ship in `/public`. Baked in at build time (`NEXT_PUBLIC_`), so set it before the build, not after. `BLOB_READ_WRITE_TOKEN` is local-only (`scripts/upload-media.ts`) and belongs on no deployment. See `docs/handovers/HANDOVER-vercel-deployment-storage-2026-09-21.md` |
 

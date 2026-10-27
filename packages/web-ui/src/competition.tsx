@@ -385,6 +385,50 @@ export function EraCycle({ items, currentLabel = 'This year' }: { items: EraCycl
   )
 }
 
+/* ── AwardTile ────────────────────────────────────────────────────────────────
+ * One award, as a button: the page opens a Dialog with the detail.
+ * `campInvite` marks the awards whose winners are invited to the
+ * International Summer Camp (gold — the support colour). */
+export type AwardTileProps = {
+  name: string
+  /** How many are given, e.g. "One per company". */
+  count: string
+  /** Who decides, e.g. "Chosen by mentors". */
+  decidedBy: string
+  summary: string
+  Icon: React.ElementType
+  campInvite?: boolean
+  onOpen: () => void
+}
+export function AwardTile({ name, count, decidedBy, summary, Icon, campInvite, onOpen }: AwardTileProps) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-haspopup="dialog"
+      className="group flex h-full w-full flex-col rounded-ds-card border border-line bg-white p-5 text-left shadow-card transition-shadow hover:shadow-card-lift focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+        <Icon size={22} />
+      </span>
+      <span className="mt-4 font-display text-xl font-bold text-ink">{name}</span>
+      <span className="mt-2 flex flex-wrap gap-1.5">
+        <span className="rounded-pill bg-surface px-2.5 py-1 text-xs font-semibold text-content-secondary">{count}</span>
+        <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-deep">{decidedBy}</span>
+      </span>
+      <span className="mt-3 flex-1 text-sm leading-relaxed text-content-secondary">{summary}</span>
+      {campInvite && (
+        <span className="mt-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.05em] text-gold-ink">
+          <Star /> Summer Camp invitation
+        </span>
+      )}
+      <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+        How it&rsquo;s awarded <Arrow />
+      </span>
+    </button>
+  )
+}
+
 function Star({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

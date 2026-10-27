@@ -341,6 +341,50 @@ export function ProgressionGraphic({ heading, note, nodes }: { heading: string; 
   )
 }
 
+/* ── EraCycle ──────────────────────────────────────────────────────────────────
+ * The space competitions' rotation through the solar system, one region per
+ * school year, with the current year marked (space-violet — the Space theme
+ * colour). Rendered in rotation order. */
+export type EraCycleItem = {
+  name: string
+  scope: string
+  /** How far ahead it is set, e.g. "+25 years". */
+  ahead: string
+  /** When it runs, e.g. "2027 school year · set in 2052". */
+  when: string
+  current?: boolean
+}
+export function EraCycle({ items, currentLabel = 'This year' }: { items: EraCycleItem[]; currentLabel?: string }) {
+  return (
+    <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map((it) => (
+        <li
+          key={it.name}
+          aria-current={it.current ? 'step' : undefined}
+          className={cn(
+            'flex flex-col rounded-ds-card border p-4',
+            it.current ? 'border-space-violet bg-space-violet-bg shadow-card-lift' : 'border-line bg-white',
+          )}
+        >
+          <span className="flex items-center justify-between gap-2">
+            <span className={cn('text-xs font-bold uppercase tracking-[0.06em]', it.current ? 'text-space-violet-text' : 'text-content-muted')}>
+              {it.ahead}
+            </span>
+            {it.current && (
+              <span className="rounded-pill bg-space-violet px-2.5 py-0.5 text-xs font-bold text-white">{currentLabel}</span>
+            )}
+          </span>
+          <span className="mt-2 font-display text-lg font-bold text-ink">{it.name}</span>
+          <span className="mt-1 text-sm text-content-secondary">{it.scope}</span>
+          <span className={cn('mt-3 text-xs font-semibold', it.current ? 'text-space-violet-text' : 'text-content-muted')}>
+            {it.when}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function Star({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

@@ -6,6 +6,10 @@
  *
  *   npx tsx scripts/pd-certificate-sample.ts                       # .env.local
  *   npx tsx scripts/pd-certificate-sample.ts --env-file .env.prod.local
+ *   npx tsx scripts/pd-certificate-sample.ts --front front.webp --back back.webp
+ *
+ * --front/--back use local artwork files (any format sharp reads) instead of
+ * the uploaded pages; the field positions still come from the saved layout.
  *
  * Writes public/images/educators/pd-certificate-sample-{front,back}.webp.
  * Needs `pdftoppm` (poppler) on the PATH. Re-run after new artwork is uploaded.
@@ -16,8 +20,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 
-const envAt = process.argv.indexOf('--env-file')
-dotenv.config({ path: envAt > -1 ? process.argv[envAt + 1] : '.env.local' })
+const arg = (name: string) => {
+  const at = process.argv.indexOf(name)
+  return at > -1 ? process.argv[at + 1] : undefined
+}
+dotenv.config({ path: arg('--env-file') ?? '.env.local' })
 
 const OUT_DIR = path.join(process.cwd(), 'public/images/educators')
 const WIDTH = 1200
@@ -31,8 +38,15 @@ async function main() {
   const sharp = (await import('sharp')).default
 
   const db = supabaseServer()
-  const [artwork, layout] = await Promise.all([loadPdArtwork(db, 'space'), loadPdLayout(db, 'space')])
-  if (!artwork.front || !artwork.back) throw new Error('Upload the Space front and back artwork first.')
+  const [uploaded, layout] = await Promise.all([loadPdArtwork(db, 'space'), loadPdLayout(db, 'space')])
+  // The renderer embeds PNG or JPEG only, so a local file is converted first.
+  const local = async (file: string | undefined) =>
+    file ? { bytes: new Uint8Array(await sharp(readFileSync(file)).png().toBuffer()), mime: 'image/png' } : null
+  const artwork = {
+    front: (await local(arg('--front'))) ?? uploaded.front,
+    back: (await local(arg('--back'))) ?? uploaded.back,
+  }
+  if (!artwork.front || !artwork.back) throw new Error('Upload the Space front and back artwork first, or pass --front and --back.')
 
   const pdf = await renderPdCertificatePdf(
     {

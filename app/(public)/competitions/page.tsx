@@ -26,6 +26,7 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 export const metadata: Metadata = {
   title: 'Competitions',
@@ -411,6 +412,8 @@ export default async function CompetitionsPage() {
                   View membership tiers <ArrowRight size={14} />
                 </Link>
               </div>
+
+              <MoneyBackGuarantee className="mt-6 max-w-2xl" />
             </>
           ) : (
             <div className="mt-8 border border-dashed border-line rounded-panel p-9 bg-surface text-center">

@@ -11,6 +11,7 @@ import {
 } from './tier-data'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import type { VideoAsset } from '@/lib/media-helpers'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -221,6 +222,8 @@ export default function MembershipExplorer({
               ))}
             </div>
           )}
+
+          <MoneyBackGuarantee className="mt-8 max-w-2xl" />
         </div>
       </section>
 

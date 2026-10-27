@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Dialog } from '@stellr/web-ui'
 import { accessLabel, formatUsd, themeTile, type AccessKind, type CohortTheme } from '@/lib/mentoring-format'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 export interface DiscoverCohort {
   id: string
@@ -205,6 +206,7 @@ function RegisterModal({
               sub="Secure payment via Stripe"
             />
           )}
+          {hasPaid && method === 'paid' && <MoneyBackGuarantee variant="compact" className="pt-1" />}
           {!canCredit && !hasPaid && (
             <p className="rounded-control bg-surface px-4 py-3 text-sm text-content-muted">
               This cohort uses {cohort.access.creditCost} session credit{cohort.access.creditCost === 1 ? '' : 's'} and

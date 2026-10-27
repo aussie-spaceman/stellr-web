@@ -1,20 +1,23 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { stripeClient } from '@/lib/stripe'
-import { resolvePolicy, applicableTier, computeRefundOptions, daysOut, type RefundOptions } from './policy'
+import { GUARANTEE_DAYS, daysSincePayment, guaranteeRefundOptions, type RefundOptions } from './policy'
 import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
 
 export interface RefundPreview {
   paid: boolean
   paidCents: number
   currency: string
-  daysOut: number | null
+  /** Whole days since the charge, or null when Stripe couldn't say. */
+  daysSincePayment: number | null
+  /** The guarantee window, for the dialog's wording. */
+  guaranteeDays: number
   options: RefundOptions
   hasPaymentRef: boolean // false => cash refund would need manual handling
   alreadyRefunded: boolean
   /**
    * A refund made in the Stripe dashboard, outside the app. When `full`, no
-   * cash/credit is offered and the delete records it; when partial, the
+   * refund is offered and the delete records it; when partial, the
    * options are already capped at what is left on the charge.
    */
   externalRefund: { refundedCents: number; currency: string; full: boolean } | null
@@ -24,7 +27,7 @@ export interface RefundPreview {
 // admin delete dialog. Mirrors executeRefund's resolution without mutating.
 export async function previewRefund(participantId: string): Promise<RefundPreview> {
   const db = supabaseServer()
-  const empty: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysOut: null, options: {}, hasPaymentRef: false, alreadyRefunded: false, externalRefund: null }
+  const empty: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysSincePayment: null, guaranteeDays: GUARANTEE_DAYS, options: {}, hasPaymentRef: false, alreadyRefunded: false, externalRefund: null }
 
   const { data: p } = await db
     .from('participants')
@@ -46,7 +49,7 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     .eq('participant_id', participantId)
     .in('refund_type', ['cash', 'credit'])
     // A scholarship reimbursement is not a cancellation refund: the student is
-    // still registered, and cancelling later still owes the policy refund on
+    // still registered, and cancelling later still owes the guarantee refund on
     // what remains (Stripe's remaining-refundable cap applies below).
     .eq('kind', 'cancellation')
     .limit(1)
@@ -62,7 +65,7 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
   const paid = p.individual_payment_status === 'paid' || !!paymentIntent
   if (!paid) return { ...empty, alreadyRefunded }
 
-  const event = await getEventBySlug(reg.event_slug as string) as { date?: string; stripePriceId?: string } | null
+  const event = await getEventBySlug(reg.event_slug as string) as { stripePriceId?: string } | null
   const stripe = stripeClient()
   let paidCents = 0
   let currency = 'usd'
@@ -75,8 +78,8 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
       /* leave 0 */
     }
   }
-  if (paidCents <= 0 || !event?.date) {
-    return { paid: true, paidCents: 0, currency, daysOut: null, options: {}, hasPaymentRef: !!paymentIntent, alreadyRefunded, externalRefund: null }
+  if (paidCents <= 0) {
+    return { ...empty, paid: true, currency, hasPaymentRef: !!paymentIntent, alreadyRefunded }
   }
 
   // Ask Stripe directly: a refund made in the dashboard never reaches our tables.
@@ -87,14 +90,16 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
   const left = remainingCents(stripeState)
   const refundBasis = left === null ? paidCents : Math.min(paidCents, left)
 
-  const tiers = await resolvePolicy(reg.event_slug as string)
-  const tier = applicableTier(tiers, event.date)
+  // The guarantee runs from the charge's date, which only Stripe knows: with no
+  // answer from Stripe nothing is offered, and the dialog says why.
+  const paidAt = stripeState?.paidAt ?? null
   return {
     paid: true,
     paidCents,
     currency,
-    daysOut: daysOut(event.date),
-    options: externalRefund?.full || alreadyRefunded ? {} : computeRefundOptions(tier, refundBasis),
+    daysSincePayment: paidAt ? daysSincePayment(paidAt) : null,
+    guaranteeDays: GUARANTEE_DAYS,
+    options: externalRefund?.full || alreadyRefunded ? {} : guaranteeRefundOptions(paidAt, refundBasis),
     hasPaymentRef: !!paymentIntent,
     alreadyRefunded,
     externalRefund,

@@ -9,8 +9,8 @@ import {
   type Assignment,
 } from '@/lib/event-awards'
 
-// Judging results (and the mentors' Norm Chaffee nominations) → award
-// certificates + credentials.
+// The judges' winning company and the mentors' picks for the other three
+// awards → award certificates + credentials.
 // Assigning is a draft: students see nothing until "Issue awards", which
 // issues a credential per award (and revokes any taken away since the last
 // issue). Rules live in lib/event-awards.ts and are enforced again server-side.
@@ -133,8 +133,8 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-brand-muted">Judging &amp; awards</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
-            Record the judges&rsquo; decisions and the mentors&rsquo; nominations, print the certificates, then
-            issue them. A student can win one individual award per event: {EVENT_AWARDS.anita_gale.label},{' '}
+            Record the judges&rsquo; pick of the winning company and the mentors&rsquo; choices for the other
+            awards, print the certificates, then issue them. A student can win one individual award per event: {EVENT_AWARDS.anita_gale.label},{' '}
             {EVENT_AWARDS.dick_edwards.label} or {EVENT_AWARDS.norm_chaffee.label}.
           </p>
         </div>
@@ -190,13 +190,13 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
             )}
           </section>
 
-          {/* ── Norm Chaffee Finalists, any number of the champions ─────────── */}
+          {/* ── Norm Chaffee Award, any number of the champions ──────────────── */}
           <section className="space-y-2">
             <div>
               <p className="font-medium text-brand-blue-dark text-sm">{EVENT_AWARDS.norm_chaffee.label}</p>
               <p className="text-xs text-brand-muted-soft mt-0.5">
                 Nominated by the volunteer mentors. Only students holding {EVENT_AWARDS.overall_champion.label} can
-                be finalists.
+                receive it, and any number of them can.
               </p>
             </div>
             {champs.length === 0 ? (

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ASSIGNED_AWARD_TYPES,
   AWARD_TYPES,
   EVENT_AWARDS,
+  INDIVIDUAL_AWARD_TYPES,
+  PUBLIC_AWARDS,
   assignmentConflict,
   awardCredentialTitle,
   isAssignedAwardType,
@@ -20,7 +23,7 @@ const a = (awardType: Assignment['awardType'], participantId: string, companyId:
 describe('award catalogue', () => {
   it('has the six certificates with their current labels', () => {
     expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'norm_chaffee', 'anita_gale', 'dick_edwards', 'mentor'])
-    expect(EVENT_AWARDS.norm_chaffee.label).toBe('Norm Chaffee Finalist')
+    expect(EVENT_AWARDS.norm_chaffee.label).toBe('The Norm Chaffee Award for Engineering Excellence')
     expect(EVENT_AWARDS.norm_chaffee.description).toBe('For excellence at this event.')
     expect(EVENT_AWARDS.mentor.label).toBe('Certificate of Appreciation')
     expect(EVENT_AWARDS.overall_champion.label).toBe('Overall Champion')
@@ -47,7 +50,27 @@ describe('award catalogue', () => {
     expect(awardCredentialTitle('anita_gale', 'Colorado Space Design Challenge'))
       .toBe('Award for Creative Vision — Colorado Space Design Challenge')
     expect(awardCredentialTitle('norm_chaffee', 'Colorado Space Design Challenge'))
-      .toBe('Norm Chaffee Finalist — Colorado Space Design Challenge')
+      .toBe('The Norm Chaffee Award for Engineering Excellence — Colorado Space Design Challenge')
+  })
+})
+
+describe('PUBLIC_AWARDS', () => {
+  it('explains the four decided awards, by their short names', () => {
+    expect(PUBLIC_AWARDS.map((p) => p.type).sort()).toEqual([...ASSIGNED_AWARD_TYPES].sort())
+    expect(PUBLIC_AWARDS.map((p) => p.name)).toEqual([
+      'Creative Vision', 'Quiet Leadership', 'Overall Champions', 'Engineering Excellence',
+    ])
+  })
+
+  it('has the judges pick the champions and the mentors pick the rest', () => {
+    for (const p of PUBLIC_AWARDS) {
+      expect(p.decidedBy).toBe(p.type === 'overall_champion' ? 'judges' : 'mentors')
+    }
+  })
+
+  it('invites every individual award winner to Summer Camp, but not the champion company as such', () => {
+    const invited = PUBLIC_AWARDS.filter((p) => p.summerCamp).map((p) => p.type).sort()
+    expect(invited).toEqual([...INDIVIDUAL_AWARD_TYPES].sort())
   })
 })
 
@@ -73,6 +96,14 @@ describe('relabelIssuedAward', () => {
     expect(relabelIssuedAward(champ)).toBe(champ)
     const course = { award_type: null, award: null, title: 'STEM Power Skills' }
     expect(relabelIssuedAward(course)).toBe(course)
+  })
+
+  it('shows a Norm Chaffee credential issued under its earlier label by its full name', () => {
+    const finalist = { award_type: 'norm_chaffee', award: 'Norm Chaffee Finalist', title: 'Norm Chaffee Finalist — Colorado Space Design Challenge' }
+    expect(relabelIssuedAward(finalist)).toMatchObject({
+      award: 'The Norm Chaffee Award for Engineering Excellence',
+      title: 'The Norm Chaffee Award for Engineering Excellence — Colorado Space Design Challenge',
+    })
   })
 
   it('uses the default certificate design for the renamed awards only', () => {
@@ -102,7 +133,7 @@ describe('assignmentConflict', () => {
   })
 })
 
-describe('assignmentConflict — Norm Chaffee Finalist', () => {
+describe('assignmentConflict — Norm Chaffee Award', () => {
   const champs = [a('overall_champion', 'p1'), a('overall_champion', 'p2')]
 
   it('allows any number of champions as finalists', () => {
@@ -122,7 +153,7 @@ describe('assignmentConflict — Norm Chaffee Finalist', () => {
 
   it('refuses a specialist award for a finalist', () => {
     expect(assignmentConflict([...champs, a('norm_chaffee', 'p1')], a('anita_gale', 'p1')))
-      .toMatch(/Is already a Norm Chaffee Finalist\. A student can win one individual award per event/)
+      .toMatch(/Already holds the Norm Chaffee Award for Engineering Excellence\. A student can win one individual award per event/)
   })
 
   it('is not one per company: finalists never replace each other', () => {

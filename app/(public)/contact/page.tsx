@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Mail, MapPin, Phone } from 'lucide-react'
+import { Hero } from '@stellr/web-ui'
 import { ContactForm } from '@/components/forms/ContactForm'
 import { BookCallButton } from '@/components/sections/BookCallButton'
 
@@ -15,14 +16,11 @@ export default function ContactPage() {
   return (
     <>
       {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-3">Get in Touch</h1>
-          <p className="text-lg text-hero-lead max-w-xl">
-            Questions about events, sponsorship, mentoring, or anything else — we&apos;d love to hear from you.
-          </p>
-        </div>
-      </section>
+      <Hero
+        breadcrumb="About → Contact"
+        title="Get in Touch"
+        lead="Questions about events, sponsorship, mentoring, or anything else — we’d love to hear from you."
+      />
 
       {/* ── Content ──────────────────────────────────────────────────── */}
       <section className="section-padding">

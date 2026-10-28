@@ -4,6 +4,7 @@ import { deriveCompliance, loadComplianceRecordsByEmails, loadComplianceRecordsB
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
+import { classifyAgreement } from '@/lib/docusign'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -159,8 +160,9 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .order('created_at', { ascending: true }),
     db
       .from('agreements')
-      .select('id, participant_id, status, signers_total, signers_completed, reused_from')
-      .eq('event_slug', eventSlug),
+      .select('id, participant_id, status, signers_total, signers_completed, reused_from, envelope_id, issue_error')
+      .eq('event_slug', eventSlug)
+      .order('created_at', { ascending: true }),
     db
       .from('scholarship_applications')
       .select('id, first_name, last_name, email, percent_off, registration_id, offered_at')
@@ -192,27 +194,36 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
     .not('submitted_at', 'is', null)
   const profileSubmitted = new Set((profileRows ?? []).map((r) => r.participant_id as string))
 
-  // Latest-wins per participant: completed beats anything else
+  // One row per participant, oldest first so the latest wins — except that a
+  // completed row beats anything, and a real envelope beats a "failed:" marker
+  // (a refused send). Without the ORDER BY the winner was whatever the database
+  // returned last.
   interface EnvelopeProgress {
     id: string
     status: string
     signers_total: number | null
     signers_completed: number | null
     reused_from: string | null
+    envelope_id: string | null
+    issue_error: string | null
   }
+  const isFailedMarker = (e: { envelope_id: string | null }) => !!e.envelope_id?.startsWith('failed:')
   const envelopeByParticipant = new Map<string, EnvelopeProgress>()
   for (const env of envelopes ?? []) {
     if (!env.participant_id) continue
-    const prev = envelopeByParticipant.get(env.participant_id)
-    if (prev?.status !== 'completed') {
-      envelopeByParticipant.set(env.participant_id, {
-        id: env.id as string,
-        status: env.status,
-        signers_total: (env.signers_total as number | null) ?? null,
-        signers_completed: (env.signers_completed as number | null) ?? null,
-        reused_from: (env.reused_from as string | null) ?? null,
-      })
+    const next: EnvelopeProgress = {
+      id: env.id as string,
+      status: env.status,
+      signers_total: (env.signers_total as number | null) ?? null,
+      signers_completed: (env.signers_completed as number | null) ?? null,
+      reused_from: (env.reused_from as string | null) ?? null,
+      envelope_id: (env.envelope_id as string | null) ?? null,
+      issue_error: (env.issue_error as string | null) ?? null,
     }
+    const prev = envelopeByParticipant.get(env.participant_id)
+    if (prev?.status === 'completed') continue
+    if (prev && !isFailedMarker(prev) && isFailedMarker(next)) continue
+    envelopeByParticipant.set(env.participant_id, next)
   }
 
   // Per-recipient state for those envelopes, so the roster can name the person
@@ -282,11 +293,17 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       })
 
       const minor = isMinor(p.date_of_birth as string | null, eventDate)
+      // An adult attendee (teacher, chaperone) gets the Adult agreement on their
+      // participant row too, so "no row" means not issued, not "not required".
+      // Mentors and volunteers sign member-level agreements this query can't
+      // see, so they keep the old reading.
+      const adultAgreementDue =
+        !minor && classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null) === 'adult'
       const env = envelopeByParticipant.get(p.id as string)
       let docusign: RosterParticipant['docusign']
       if (env?.status === 'completed') docusign = 'completed'
       else if (env) docusign = 'outstanding'
-      else if (minor) docusign = 'outstanding'
+      else if (minor || adultAgreementDue) docusign = 'outstanding'
       else docusign = 'not_required'
 
       // One shared derivation (lib/docusign-status) rather than this file's own.
@@ -294,7 +311,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       // behaviour of collapsing it into "Not Issued", but now says so explicitly.
       const description = env
         ? describeEnvelope(env, recipientsByEnvelope.get(env.id) ?? [])
-        : describeMissingEnvelope(minor)
+        : describeMissingEnvelope(minor || adultAgreementDue)
       const docusign_pill: DocusignPill = description.pill
 
       // Compliance pill: derive from the member's license/checks using the

@@ -8,6 +8,7 @@ import { memberManagesContainer } from '@/lib/resource-upload'
 import { requireEventAccess } from '@/lib/event-access'
 import { AWARD_TYPES } from '@/lib/event-awards'
 import { BADGE_FORMATS } from '@/lib/badge-layout'
+import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
 
 // Every file upload in the app, in one place.
 //
@@ -32,7 +33,7 @@ import { BADGE_FORMATS } from '@/lib/badge-layout'
 //           the buckets are private and nothing is served without a row.
 
 const PROPOSALS_BUCKET = 'campaign-proposals'
-const LICENSES_BUCKET = 'teacher-licenses'
+const LICENSES_BUCKET = TEACHER_LICENSE_BUCKET
 
 const MB = 1024 * 1024
 
@@ -50,6 +51,7 @@ export type UploadPurpose =
   | 'space-attachment'
   | 'container-contribution'
   | 'compliance-document'
+  | 'compliance-document-admin'
 
 export type UploadContext = Record<string, string | undefined>
 
@@ -107,9 +109,8 @@ const EVENT_ARTWORK_KINDS = [
 ]
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
-const LICENSE_TYPES = [
-  'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/heic', 'application/pdf',
-] as const
+const LICENSE_TYPES = LICENSE_DOCUMENT_TYPES
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   // ── Admin ────────────────────────────────────────────────────────────────
@@ -204,6 +205,29 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       const access = await requireEventAccess(ctx.slug)
       if (!access.ok) return deny('Forbidden', access.status)
       return { path: `event-email/${ctx.slug}/${Date.now()}-${safeName}` }
+    },
+  },
+
+  // A member's teaching license photo/scan, uploaded by an admin on their
+  // behalf (e.g. the teacher emailed a copy). Lands in the member's own folder
+  // in the private bucket, exactly where their self-upload would, so the claim
+  // route (/api/admin/members/[id]/license/document) can pin it to that prefix.
+  // The member id is a uuid or nothing: it becomes the first path segment.
+  'compliance-document-admin': {
+    bucket: LICENSES_BUCKET,
+    maxBytes: 10 * MB,
+    allowedTypes: LICENSE_TYPES,
+    async grant({ ctx, safeName }) {
+      const denied = await requireAdmin()
+      if (denied) return denied
+      if (!ctx.memberId || !UUID_RE.test(ctx.memberId)) return deny('memberId required', 400)
+      const { data: license } = await supabaseServer()
+        .from('member_teacher_licenses')
+        .select('id')
+        .eq('member_id', ctx.memberId)
+        .maybeSingle()
+      if (!license) return deny('Save the license details first, then attach the document.', 400)
+      return { path: `${ctx.memberId}/${Date.now()}-${safeName}` }
     },
   },
 

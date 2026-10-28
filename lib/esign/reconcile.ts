@@ -67,3 +67,69 @@ export async function retryFailedIssues(
   }
   return result
 }
+
+/** Participants this recent with no agreement row at all are retried. */
+const MISSING_WINDOW_DAYS = 3
+/**
+ * …but not the last few minutes: a registration's own post-response follow-up
+ * may still be issuing them, and two concurrent issues for one person both pass
+ * the in-flight check and send two envelopes.
+ */
+const MISSING_SETTLE_MS = 15 * 60_000
+
+/**
+ * The other half of second chances: a participant who never got a row at all,
+ * not even a "failed:" marker. That is what a cut-off registration leaves (on
+ * 28 Oct 2026 a group request was killed mid-loop and 7 students had nothing).
+ * The registration follow-up now stops at a deadline instead of being killed,
+ * and this picks up whatever it did not reach. reissueParticipantAgreement
+ * decides whether an agreement is needed at all, so a participant who needs
+ * none is skipped, not issued.
+ */
+export async function issueMissingAgreements(
+  db: SupabaseClient,
+  opts: { limit?: number; dryRun?: boolean; now?: Date } = {},
+): Promise<ReconcileResult> {
+  const now = opts.now ?? new Date()
+  const since = new Date(now.getTime() - MISSING_WINDOW_DAYS * 86_400_000).toISOString()
+  const settled = new Date(now.getTime() - MISSING_SETTLE_MS).toISOString()
+  const { data, error } = await db
+    .from('participants')
+    .select('id, registrations!inner(status)')
+    .gte('created_at', since)
+    .lte('created_at', settled)
+    .neq('registrations.status', 'withdrawn')
+    .order('created_at', { ascending: true })
+    .limit(500)
+  if (error) throw new Error(`Recent-participant query failed: ${error.message}`)
+  const ids = (data ?? []).map((p) => (p as { id: string }).id)
+
+  let missing: string[] = []
+  if (ids.length) {
+    const { data: rows, error: rowsError } = await db
+      .from('agreements')
+      .select('participant_id')
+      .in('participant_id', ids)
+    if (rowsError) throw new Error(`Agreement lookup failed: ${rowsError.message}`)
+    const covered = new Set((rows ?? []).map((r) => (r as { participant_id: string }).participant_id))
+    missing = ids.filter((id) => !covered.has(id)).slice(0, opts.limit ?? 20)
+  }
+
+  const result: ReconcileResult = { candidates: missing.length, retried: 0, outcomes: {} }
+  if (opts.dryRun) return result
+
+  const { reissueParticipantAgreement } = await import('@/lib/docusign-reissue')
+  for (const participantId of missing) {
+    let outcome = 'skipped'
+    try {
+      const r = await reissueParticipantAgreement(db, participantId, { allowNewEnvelope: true })
+      outcome = r.kind === 'reissued' ? r.outcome : r.kind
+    } catch (err) {
+      outcome = 'error'
+      console.error(`[esign-reconcile] missing-agreement issue for ${participantId} failed:`, err)
+    }
+    result.retried++
+    result.outcomes[outcome] = (result.outcomes[outcome] ?? 0) + 1
+  }
+  return result
+}

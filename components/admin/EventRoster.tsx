@@ -11,12 +11,16 @@ import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
 import { ReissueDocusignButton } from '@/components/admin/ReissueDocusignButton'
 import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
+import { FixGuardianEmailButton } from '@/components/admin/FixGuardianEmailButton'
+import { FinishSetupButton } from '@/components/admin/FinishSetupButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
 
 // Pills with paperwork still to chase. 'issued'/'partial' resend the live
 // envelope; the rest need a new one (the server confirms before spending quota).
-const REISSUABLE_PILLS = new Set<DocusignPill>(['not_issued', 'issued', 'partial', 'bounced', 'declined', 'voided'])
+const REISSUABLE_PILLS = new Set<DocusignPill>(['not_issued', 'issued', 'partial', 'bounced', 'declined', 'voided', 'failed'])
+// Nothing is out for signing, so a wrong guardian address is fixed on the record.
+const GUARDIAN_FIXABLE_PILLS = new Set<DocusignPill>(['not_issued', 'failed'])
 
 const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> = {
   invoice_issued: { label: 'Invoice Issued', className: 'bg-red-100 text-red-700' },
@@ -232,6 +236,15 @@ export default function EventRoster({
           className={card ? TAP : undefined}
         />
       )}
+      {p.minor && GUARDIAN_FIXABLE_PILLS.has(p.docusign_pill) && (
+        <FixGuardianEmailButton
+          eventSlug={eventSlug}
+          participantId={p.id}
+          studentName={`${p.first_name} ${p.last_name}`}
+          currentEmail={p.emergency_contact_email}
+          className={card ? TAP : undefined}
+        />
+      )}
       {REISSUABLE_PILLS.has(p.docusign_pill) && (
         <ReissueDocusignButton
           eventSlug={eventSlug}
@@ -414,6 +427,9 @@ export default function EventRoster({
                   )}
                   {group.type === 'group' && group.payLinkSendable && (
                     <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} className="normal-case" />
+                  )}
+                  {group.type === 'group' && (
+                    <FinishSetupButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
                   )}
                   {group.type === 'group' && (
                     <DeleteEntityButton

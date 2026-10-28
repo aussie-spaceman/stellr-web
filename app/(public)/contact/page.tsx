@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Mail, MapPin, Phone } from 'lucide-react'
+import { Hero } from '@stellr/web-ui'
 import { ContactForm } from '@/components/forms/ContactForm'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/contact' },
@@ -14,14 +16,11 @@ export default function ContactPage() {
   return (
     <>
       {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-3">Get in Touch</h1>
-          <p className="text-lg text-hero-lead max-w-xl">
-            Questions about events, sponsorship, mentoring, or anything else — we&apos;d love to hear from you.
-          </p>
-        </div>
-      </section>
+      <Hero
+        breadcrumb="About → Contact"
+        title="Get in Touch"
+        lead="Questions about events, sponsorship, mentoring, or anything else — we’d love to hear from you."
+      />
 
       {/* ── Content ──────────────────────────────────────────────────── */}
       <section className="section-padding">
@@ -35,6 +34,14 @@ export default function ContactPage() {
 
             {/* Sidebar */}
             <aside className="space-y-6">
+              <div className="rounded-ds-card border border-line bg-white p-6 shadow-card">
+                <h2 className="font-bold text-ink text-lg">Prefer to talk?</h2>
+                <p className="mt-1.5 text-sm text-content-secondary">
+                  Book 15 minutes with our team — for parents, educators and partners.
+                </p>
+                <BookCallButton location="contact_sidebar" className="mt-4 w-full" />
+              </div>
+
               <div className="bg-brand-grey-light rounded-xl p-6 space-y-4">
                 <h2 className="font-bold text-brand-blue-dark text-lg">Contact Details</h2>
 

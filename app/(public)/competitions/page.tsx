@@ -27,6 +27,8 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { FutureHistoryCycle } from '@/components/sections/FutureHistoryCycle'
+import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/lib/future-history'
 
 export const metadata: Metadata = {
   title: 'Competitions',
@@ -299,6 +301,26 @@ export default async function CompetitionsPage() {
             </span>
           </div>
 
+        </div>
+      </section>
+
+      {/* ── Future history teaser — the full story is /competitions/mission ─ */}
+      <section className="section-padding bg-white border-b border-line">
+        <div className="container-max">
+          <Eyebrow className="text-space-violet-text">Future history</Eyebrow>
+          <h2 className="text-3xl font-bold text-ink mt-3 max-w-3xl">
+            Set in the future — this year, {inSentence(eraForSchoolYear(CURRENT_SCHOOL_YEAR).name)} in{' '}
+            {storyYear(CURRENT_SCHOOL_YEAR)}
+          </h2>
+          <p className="text-lg text-content-secondary mt-3 mb-8 max-w-3xl leading-relaxed">
+            Every competition takes place in a forecast world 20 to 35 years ahead, with a client, three rival
+            companies and a contract to win. Space competitions move to a new part of the solar system each
+            year; Environmental competitions run alongside, on Earth.
+          </p>
+          <FutureHistoryCycle />
+          <Link href="/competitions/mission" className="mt-6 text-sm font-semibold text-primary inline-flex items-center gap-1">
+            Explore the future history <ArrowRight size={14} />
+          </Link>
         </div>
       </section>
 

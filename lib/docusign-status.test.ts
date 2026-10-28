@@ -101,6 +101,25 @@ describe('describeEnvelope', () => {
     expect(d.detail).toBe('Voided — re-issue required')
   })
 
+  // 28 Oct 2026: two refused sends (guardian "none" / "…@gmailcom") read
+  // "Voided" on the roster, and nobody could tell why.
+  it('tells a refused send apart from a void, and names the fix', () => {
+    const d = describeEnvelope({
+      status: 'voided',
+      signers_total: 0,
+      envelope_id: 'failed:65fbd000-0000-4000-8000-000000000000',
+      issue_error: 'DocuSign create envelope failed: {"errorCode":"INVALID_EMAIL_ADDRESS_FOR_RECIPIENT"}',
+    })
+    expect(d.pill).toBe('failed')
+    expect(d.label).toBe('Couldn’t Send')
+    expect(d.detail).toMatch(/email address on it is invalid/)
+  })
+
+  it('still reads a real voided envelope as voided', () => {
+    const d = describeEnvelope({ status: 'voided', envelope_id: '45bb31be-41cd-88d1-8149-1aea7356f0a2' })
+    expect(d.pill).toBe('voided')
+  })
+
   it('is complete when the envelope is complete', () => {
     const d = describeEnvelope(
       { status: 'completed', signers_total: 2, signers_completed: 2 },

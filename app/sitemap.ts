@@ -18,6 +18,7 @@ const staticPaths: { path: string; changeFrequency: MetadataRoute.Sitemap[number
   // Programs — the primary answer-engine surface.
   { path: '/events', changeFrequency: 'daily', priority: 0.9 },
   { path: '/competitions', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/competitions/mission', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/curriculum', changeFrequency: 'weekly', priority: 0.8 },
   { path: '/academy', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/membership', changeFrequency: 'monthly', priority: 0.8 },

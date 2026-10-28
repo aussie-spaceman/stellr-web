@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
-import { Launch, Environment } from '@stellr/icons'
-import { StepCard, PathwayCard, ThemeCard, TierCard, ProgressionGraphic } from './competition'
+import { Launch, Environment, Idea, Award } from '@stellr/icons'
+import { StepCard, PathwayCard, ThemeCard, TierCard, ProgressionGraphic, EraCycle, AwardTile } from './competition'
 
 const meta: Meta = { title: 'Competition', parameters: { backgrounds: { value: 'surface' } } }
 export default meta
@@ -93,6 +93,45 @@ export const Progression: StoryObj = {
           { label: 'Advance', labelClass: 'text-space-violet', title: 'Award Winners are invited to progress' },
           { label: 'Summer Camp', labelClass: 'text-brand-gold-ink', title: 'International Summer Camp (mid-July)', titleClass: 'text-brand-gold-ink', cardClass: 'bg-pathway-amber-bg border border-pathway-amber/30', star: true },
         ]}
+      />
+    </div>
+  ),
+}
+
+export const FutureHistoryCycle: StoryObj = {
+  render: () => (
+    <div className="p-8 max-w-content">
+      <EraCycle
+        items={[
+          { name: 'Cislunar space', scope: 'Earth orbit and the Moon', ahead: '+20 years', when: '2030 school year · set in 2050' },
+          { name: 'Mars', scope: 'Mars and its moons, Phobos and Deimos', ahead: '+25 years', when: '2027 school year · set in 2052', current: true },
+          { name: 'The inner solar system', scope: 'Mercury and Venus', ahead: '+30 years', when: '2028 school year · set in 2058' },
+          { name: 'The outer solar system', scope: 'The asteroid belt and the gas giants', ahead: '+35 years', when: '2029 school year · set in 2064' },
+        ]}
+      />
+    </div>
+  ),
+}
+
+export const AwardTiles: StoryObj = {
+  render: () => (
+    <div className="p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+      <AwardTile
+        name="Creative Vision Award"
+        count="One per company"
+        decidedBy="Chosen by mentors"
+        summary="For the student whose vision shaped their company’s design."
+        Icon={Idea}
+        campInvite
+        onOpen={() => {}}
+      />
+      <AwardTile
+        name="Champions Award"
+        count="One company"
+        decidedBy="Chosen by judges"
+        summary="Every member of the company with the winning design."
+        Icon={Award}
+        onOpen={() => {}}
       />
     </div>
   ),

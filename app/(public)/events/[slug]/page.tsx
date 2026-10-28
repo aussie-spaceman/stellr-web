@@ -20,6 +20,9 @@ import { gradeBand } from '@/lib/grade-band'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { themeFromType } from '@/lib/campaigns'
+import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/lib/future-history'
+import { EVENT_PD_HOURS } from '@/lib/pd-standards'
 
 export const revalidate = 3600
 
@@ -107,6 +110,7 @@ const INCLUDED: string[] = [
   `${SEASON_YEAR} limited edition Stellr Community t-shirt`,
   'All event materials and facility access',
   'Meals and snacks',
+  `A professional development certificate for teachers who bring a team (${EVENT_PD_HOURS} hours, by event)`,
   `Award winners are invited to our ${SEASON_YEAR} International Summer Camp (mid-July)`,
 ]
 
@@ -170,8 +174,19 @@ const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
   },
   {
     q: 'What are the expectations for teachers and chaperones?',
-    a: 'You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner!',
-    text: 'You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner!',
+    a: (
+      <>
+        You don’t need to be a specialist engineer or scientist to support students attending our events! If
+        you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate
+        if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a
+        corner! Afterwards you receive a{' '}
+        <Link href="/educators#credentials" className="text-primary-deep font-medium hover:underline">
+          professional development certificate
+        </Link>{' '}
+        for {EVENT_PD_HOURS} hours, depending on the event.
+      </>
+    ),
+    text: `You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner! Afterwards you receive a professional development certificate for ${EVENT_PD_HOURS} hours, depending on the event: https://www.stellreducation.org/educators#credentials`,
   },
   {
     q: 'How does transportation and event logistics work?',
@@ -457,6 +472,14 @@ export default async function EventDetailPage({ params }: PageProps) {
                     </li>
                   ))}
                 </ol>
+                <p className="mt-5 text-content-secondary">
+                  Every Challenge is set in our future history — this year,{' '}
+                  {themeFromType(event.type) === 'enviro' ? 'on Earth' : inSentence(eraForSchoolYear(CURRENT_SCHOOL_YEAR).name)},
+                  in {storyYear(CURRENT_SCHOOL_YEAR)}.{' '}
+                  <Link href="/competitions/mission" className="text-primary-deep font-medium hover:underline">
+                    Read the future history
+                  </Link>
+                </p>
               </div>
 
               {/* FAQ accordion */}

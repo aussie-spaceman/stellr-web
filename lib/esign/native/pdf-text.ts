@@ -42,11 +42,13 @@ function load(): Promise<PdfJs> {
 export async function extractPages(bytes: Uint8Array | ArrayBuffer): Promise<PageText[]> {
   const { getDocument } = await load()
   // pdf.js takes ownership of the buffer it is given, so it gets a copy.
-  const doc = await getDocument({
+  // Since pdf.js 6 the document is torn down through its loading task.
+  const task = getDocument({
     data: new Uint8Array(bytes).slice(),
     disableFontFace: true,
     standardFontDataUrl,
-  }).promise
+  })
+  const doc = await task.promise
   try {
     const pages: PageText[] = []
     for (let n = 1; n <= doc.numPages; n++) {
@@ -60,7 +62,7 @@ export async function extractPages(bytes: Uint8Array | ArrayBuffer): Promise<Pag
     }
     return pages
   } finally {
-    await doc.destroy()
+    await task.destroy()
   }
 }
 

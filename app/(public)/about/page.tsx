@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
+import { Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
+import { Linkedin } from '@stellr/icons'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { QUOTES } from '@/lib/media-manifest'
 

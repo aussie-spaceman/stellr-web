@@ -9,8 +9,8 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { runAfterResponse } from '@/lib/after-response'
 
 const createCommentSchema = z.object({
-  postId: z.string().uuid(),
-  parentCommentId: z.string().uuid().nullable().optional(),
+  postId: z.guid(),
+  parentCommentId: z.guid().nullable().optional(),
   bodyJson: z.unknown().optional(),
 })
 

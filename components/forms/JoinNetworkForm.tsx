@@ -22,9 +22,9 @@ const schema = z.object({
   companyName: z.string().min(1, 'Company name is required'),
   address: z.string().optional(),
   whatYouDo: z.string().min(1, 'Please tell us a little about what you do'),
-  reason: z.enum(PARTNER_TYPES, { errorMap: () => ({ message: 'Please choose an option' }) }),
+  reason: z.enum(PARTNER_TYPES, { error: 'Please choose an option' }),
   consent: z.literal(true, {
-    errorMap: () => ({ message: 'You must agree to be contacted' }),
+    error: 'You must agree to be contacted',
   }),
 })
 

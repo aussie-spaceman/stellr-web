@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Launch, Environment } from '@stellr/icons'
 import { StepCard, PathwayCard, ThemeCard, TierCard, ProgressionGraphic } from './competition'
 

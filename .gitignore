@@ -43,4 +43,6 @@ supabase/.temp/
 
 # Vitest coverage output (deep review TEST-10: `vitest run --coverage`)
 /coverage/
+# Vitest 5 reporter and attachment output
+/.vitest/
 /lhci-report/

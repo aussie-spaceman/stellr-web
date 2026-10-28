@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
+import { Linkedin, Instagram, Facebook, Twitter } from '@stellr/icons'
 import { CookieSettingsLink } from '@/components/analytics/CookieSettingsLink'
 import { STELLR_EIN } from '@/lib/org'
 

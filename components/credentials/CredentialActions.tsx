@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Linkedin, Share2, Copy, Check, FileDown, Eye, EyeOff, Info, ClipboardList } from 'lucide-react'
+import { Share2, Copy, Check, FileDown, Eye, EyeOff, Info, ClipboardList } from 'lucide-react'
+import { Linkedin } from '@stellr/icons'
 import { Button, Eyebrow } from '@stellr/web-ui'
 import { pushDataLayer } from '@/lib/analytics'
 import type { CredentialVisibility, ShareBlock, CredentialEventKind } from '@/lib/credentials-core'

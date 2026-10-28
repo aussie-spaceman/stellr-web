@@ -20,7 +20,7 @@ const schema = z.object({
   funding: z.string().optional(),
   facilityOverheads: z.string().optional(),
   consent: z.literal(true, {
-    errorMap: () => ({ message: 'You must agree to be contacted' }),
+    error: 'You must agree to be contacted',
   }),
 })
 

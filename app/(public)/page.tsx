@@ -117,7 +117,7 @@ export default async function HomePage() {
         {/* Dark hero, no photo, until a replacement photo is chosen. */}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36">
           <div className="max-w-5xl">
-            <h1 className="text-4xl sm:text-5xl xl:text-6xl font-bold leading-tight">
+            <h1 className="text-4xl sm:text-5xl sm:leading-none xl:text-6xl xl:leading-none font-bold leading-tight">
               <span className="block">Real-World STEM</span>
               {/* Line 2 is 33 characters — it needs its own size ramp so it stays
                   on one line at every width. Lines 1 and 3 keep the h1 sizes. */}
@@ -152,7 +152,7 @@ export default async function HomePage() {
               <Link
                 key={card.label}
                 href={card.href}
-                className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-line-light"
+                className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all border border-line-light"
               >
                 <card.icon size={32} className="text-brand-blue" strokeWidth={1.75} />
                 <span className="font-semibold text-brand-blue-dark">{card.label}</span>

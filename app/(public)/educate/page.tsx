@@ -132,7 +132,7 @@ export default function EducatePage() {
                 <Link
                   key={c.href}
                   href={c.href}
-                  className="bg-white rounded-xl p-6 flex flex-col gap-4 shadow-sm hover:shadow-md transition-shadow group"
+                  className="bg-white rounded-xl p-6 flex flex-col gap-4 shadow-xs hover:shadow-md transition-shadow group"
                 >
                   <div className="w-12 h-12 rounded-lg bg-brand-blue/10 flex items-center justify-center">
                     <Icon size={24} className="text-brand-blue" />

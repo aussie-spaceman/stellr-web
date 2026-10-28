@@ -263,7 +263,7 @@ function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, o
       <button type="button" onClick={onToggle} aria-expanded={expanded}
         className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left ${isPoC ? 'bg-amber-50 hover:bg-amber-100' : 'bg-surface hover:bg-surface'}`}>
         <span className={`font-medium text-sm ${isPoC ? 'text-amber-900' : 'text-brand-blue-dark'}`}>{label}</span>
-        <span className="flex items-center gap-2 flex-shrink-0">
+        <span className="flex items-center gap-2 shrink-0">
           <StatusPill status={status} />
           {expanded ? <ChevronUp size={16} className="text-content-faint" /> : <ChevronDown size={16} className="text-content-faint" />}
         </span>
@@ -348,7 +348,7 @@ function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUn
       <button type="button" onClick={onToggle} aria-expanded={expanded}
         className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-surface hover:bg-surface text-left">
         <span className="font-medium text-brand-blue-dark text-sm">{label}</span>
-        <span className="flex items-center gap-2 flex-shrink-0">
+        <span className="flex items-center gap-2 shrink-0">
           <StatusPill status={status} />
           {expanded ? <ChevronUp size={16} className="text-content-faint" /> : <ChevronDown size={16} className="text-content-faint" />}
         </span>

@@ -95,7 +95,7 @@ export function CookieConsent() {
       className="fixed inset-x-0 bottom-[var(--tabbar-h,0px)] z-50 max-h-[50svh] overflow-y-auto overscroll-contain border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-lg"
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-4 short:py-2">
-        <p className="text-xs leading-snug text-content-body sm:text-sm short:text-xs">
+        <p className="text-xs leading-snug text-content-body sm:text-sm sm:leading-5 short:text-xs short:leading-4">
           We use essential and analytics cookies to run this site. With your
           permission we&apos;d also use advertising cookies to measure our
           campaigns.{' '}

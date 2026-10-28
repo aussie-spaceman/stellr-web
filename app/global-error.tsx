@@ -41,7 +41,7 @@ export default function GlobalError({
           <button
             type="button"
             onClick={() => reset()}
-            className="mt-10 inline-flex items-center justify-center rounded-control bg-primary px-6 py-3 font-subheading text-sm font-semibold text-white transition-colors hover:bg-primary-deep focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            className="mt-10 inline-flex items-center justify-center rounded-control bg-primary px-6 py-3 font-subheading text-sm font-semibold text-white transition-colors hover:bg-primary-deep focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2"
           >
             Try again
           </button>

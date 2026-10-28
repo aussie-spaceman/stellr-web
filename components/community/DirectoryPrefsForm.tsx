@@ -83,7 +83,7 @@ export function DirectoryPrefsForm({ initial, readOnly = false }: Props) {
           onClick={() => toggle(setIsVisible, 'is_visible', !isVisible)}
           disabled={saving || readOnly}
           className={[
-            'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none',
+            'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-hidden',
             'focus-visible:ring-2 focus-visible:ring-primary-deep focus-visible:ring-offset-2',
             isVisible ? 'bg-brand-blue-dark' : 'bg-brand-border',
           ].join(' ')}

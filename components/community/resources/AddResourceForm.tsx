@@ -220,7 +220,7 @@ export function AddResourceForm({
               onChange={(e) => search(e.target.value)}
               placeholder="Search the resource library…"
               aria-label="Search the resource library"
-              className="min-w-0 flex-1 py-2 text-input outline-none mouse:text-sm"
+              className="min-w-0 flex-1 py-2 text-input outline-hidden mouse:text-sm"
             />
           </div>
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">

@@ -10,7 +10,7 @@ import { cn } from './primitives'
 /** Shared look for text inputs, selects and textareas. */
 export const fieldControlClass =
   'block w-full min-h-11 rounded-control border border-line-strong bg-white px-3 py-2 text-input text-ink ' +
-  'placeholder:text-content-muted focus:border-primary-deep focus:outline-none focus:ring-2 focus:ring-primary-deep/30 ' +
+  'placeholder:text-content-muted focus:border-primary-deep focus:outline-hidden focus:ring-2 focus:ring-primary-deep/30 ' +
   'disabled:cursor-not-allowed disabled:bg-surface disabled:text-content-muted aria-[invalid=true]:border-danger mouse:text-sm'
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(

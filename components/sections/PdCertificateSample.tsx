@@ -38,7 +38,7 @@ export function PdCertificateSample() {
               type="button"
               onClick={() => setOpen(p)}
               aria-haspopup="dialog"
-              className="group block w-full text-left focus:outline-none"
+              className="group block w-full text-left focus:outline-hidden"
             >
               <span className="relative block overflow-hidden rounded-ds-card border border-line bg-white shadow-card-lift transition-shadow group-hover:shadow-featured group-focus-visible:ring-2 group-focus-visible:ring-primary group-focus-visible:ring-offset-2">
                 {/* eslint-disable-next-line @next/next/no-img-element -- pre-sized WebP; see above */}

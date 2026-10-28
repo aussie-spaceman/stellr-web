@@ -82,7 +82,7 @@ export function ResourceAccessSelect({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as 'all' | 'paid')}
-        className="rounded-[7px] border border-line-strong px-2 py-1 text-input mouse:text-sm text-content focus:border-primary focus:outline-none disabled:opacity-50"
+        className="rounded-[7px] border border-line-strong px-2 py-1 text-input mouse:text-sm text-content focus:border-primary focus:outline-hidden disabled:opacity-50"
       >
         <option value="all">Everyone on roster</option>
         <option value="paid">Paid members only</option>

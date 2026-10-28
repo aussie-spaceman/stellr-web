@@ -156,7 +156,7 @@ function Input({
       <input
         value={value}
         onChange={onChange}
-        className="mt-1 w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
+        className="mt-1 w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-hidden"
       />
     </label>
   )

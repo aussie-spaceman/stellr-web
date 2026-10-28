@@ -144,7 +144,7 @@ export default async function AdminEventsPage() {
               role="region"
               aria-label={label}
               tabIndex={0}
-              className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+              className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
             >
               <table className="min-w-full border-separate border-spacing-0 text-sm">
                 <thead className="bg-surface">

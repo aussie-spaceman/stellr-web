@@ -475,7 +475,7 @@ export default function EventRoster({
                     : `Individual registration: ${group.participants.map((p) => `${p.first_name} ${p.last_name}`).join(', ')}`
                 }
                 tabIndex={0}
-                className="hidden relative overflow-x-auto bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary lg:block"
+                className="hidden relative overflow-x-auto bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary lg:block"
               >
                 <table className="w-full min-w-[theme(maxWidth.content)] table-fixed border-separate border-spacing-0 text-sm">
                   <colgroup>

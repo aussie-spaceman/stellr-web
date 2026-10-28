@@ -78,7 +78,7 @@ export function CohortResourceAttacher({
               value={q}
               onChange={(e) => search(e.target.value)}
               placeholder="Search the resource library…"
-              className="flex-1 text-input mouse:text-sm outline-none"
+              className="flex-1 text-input mouse:text-sm outline-hidden"
             />
           </div>
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">

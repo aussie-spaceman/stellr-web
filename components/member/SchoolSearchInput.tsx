@@ -271,7 +271,7 @@ export function SchoolSearchInput({
           type="text"
           readOnly
           value={selectedName}
-          className="min-h-11 min-w-0 flex-1 bg-transparent text-input font-medium text-brand-blue-dark focus:outline-none mouse:text-sm"
+          className="min-h-11 min-w-0 flex-1 bg-transparent text-input font-medium text-brand-blue-dark focus:outline-hidden mouse:text-sm"
         />
         <button
           type="button"

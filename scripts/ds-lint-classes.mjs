@@ -11,13 +11,13 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import postcss from 'postcss'
-import tailwind from 'tailwindcss'
-import loadConfig from 'tailwindcss/loadConfig.js'
+import { compile } from '@tailwindcss/node'
 
 // Utilities that take a colour (or a named token) after the prefix.
 const COLOUR_PREFIX = '(?:text|bg|border|border-[trblxy]|ring|ring-offset|from|to|via|fill|stroke|divide|placeholder|outline|decoration|accent|caret|shadow)'
 // A named, non-arbitrary class with that prefix, optional variants and opacity.
-const COLOUR_CLASS = new RegExp(`^(?:[a-z0-9-]+:)*!?-?${COLOUR_PREFIX}-[a-z][a-z0-9-]*(?:\\/\\d+)?$`)
+// Important is a `!` prefix (v3 style, still accepted) or suffix (v4 style).
+const COLOUR_CLASS = new RegExp(`^(?:[a-z0-9-]+:)*!?-?${COLOUR_PREFIX}-[a-z][a-z0-9-]*(?:\\/\\d+)?!?$`)
 
 /** Class-like tokens from string literals in a TS/TSX source. */
 export function classTokens(src) {
@@ -34,14 +34,23 @@ export function classTokens(src) {
   return out
 }
 
-/** Classes Tailwind actually generates for these files, without variants. */
+/**
+ * Classes Tailwind actually generates for these files, without variants.
+ * Tailwind 4 has no loadConfig/PostCSS-plugin route to this, so the real
+ * stylesheet (which loads tailwind.config.ts through @config) is compiled and
+ * asked to build every class-like token in the files: it emits CSS only for
+ * the ones it recognises.
+ */
 export async function generatedBaseClasses(files) {
-  const config = loadConfig(resolve('tailwind.config.ts'))
-  const css = await postcss([tailwind({ ...config, content: files })]).process(readFileSync('styles/globals.css', 'utf8'), {
-    from: 'styles/globals.css',
+  const candidates = new Set()
+  for (const file of files) for (const token of classTokens(readFileSync(file, 'utf8'))) candidates.add(token)
+  const compiler = await compile(readFileSync('styles/globals.css', 'utf8'), {
+    base: resolve('styles'),
+    from: resolve('styles/globals.css'),
+    onDependency: () => {},
   })
   const names = new Set()
-  css.root.walkRules((rule) => {
+  postcss.parse(compiler.build([...candidates])).walkRules((rule) => {
     for (const m of rule.selector.matchAll(/\.((?:\\.|[A-Za-z0-9_-])+)/g)) {
       const cls = m[1].replace(/\\(.)/g, '$1')
       names.add(baseOf(cls))
@@ -50,7 +59,7 @@ export async function generatedBaseClasses(files) {
   return names
 }
 
-/** `md:hover:!text-ink/80` → `text-ink/80`: the utility without variants or `!`. */
+/** `md:hover:!text-ink/80` or `md:text-ink/80!` → `text-ink/80`: the utility without variants or `!`. */
 export function baseOf(cls) {
   let depth = 0
   let last = 0
@@ -59,7 +68,7 @@ export function baseOf(cls) {
     else if (cls[i] === ']') depth--
     else if (cls[i] === ':' && depth === 0) last = i + 1
   }
-  return cls.slice(last).replace(/^!/, '')
+  return cls.slice(last).replace(/^!/, '').replace(/!$/, '')
 }
 
 export function unknownColourClasses(tokens, generated) {

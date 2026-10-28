@@ -580,7 +580,7 @@ export default function CheckInLive({
               onClick={() => setFilter(t.key)}
               className={cn(
                 'min-h-11 flex-1 rounded-control px-3 text-sm font-medium short:min-h-9',
-                filter === t.key ? 'bg-white text-ink shadow-sm' : 'text-content-muted'
+                filter === t.key ? 'bg-white text-ink shadow-xs' : 'text-content-muted'
               )}
             >
               {t.label} <span className="tabular-nums text-content-muted">{t.count}</span>

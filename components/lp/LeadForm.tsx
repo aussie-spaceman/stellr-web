@@ -104,7 +104,7 @@ const labelClass = 'block text-ds-meta font-semibold text-content'
 const inputClass = (error: boolean) =>
   // 16px is deliberate and not on the type scale by accident: anything smaller
   // makes iOS Safari zoom the whole page on focus.
-  `mt-1.5 w-full rounded-control border bg-white px-3.5 py-3 text-[16px] text-ink focus:border-primary focus:outline-none focus:outline-2 focus:outline-primary ${
+  `mt-1.5 w-full rounded-control border bg-white px-3.5 py-3 text-[16px] text-ink focus:border-primary focus:outline-hidden focus:outline-2 focus:outline-primary ${
     error ? 'border-danger' : 'border-line'
   }`
 
@@ -194,7 +194,7 @@ export function LeadForm({
         <h3
           ref={confirmHeading}
           tabIndex={-1}
-          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-none"
+          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-hidden"
         >
           {form.redirect.heading}
         </h3>
@@ -218,7 +218,7 @@ export function LeadForm({
         <h3
           ref={confirmHeading}
           tabIndex={-1}
-          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-none"
+          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-hidden"
         >
           {form.confirm.heading}
         </h3>

@@ -22,6 +22,8 @@ import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 import { GUARANTEE_DAYS } from '@/lib/guarantee'
+import { themeFromType } from '@/lib/campaigns'
+import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/lib/future-history'
 import { EVENT_PD_HOURS } from '@/lib/pd-standards'
 
 export const revalidate = 3600
@@ -473,6 +475,14 @@ export default async function EventDetailPage({ params }: PageProps) {
                     </li>
                   ))}
                 </ol>
+                <p className="mt-5 text-content-secondary">
+                  Every Challenge is set in our future history — this year,{' '}
+                  {themeFromType(event.type) === 'enviro' ? 'on Earth' : inSentence(eraForSchoolYear(CURRENT_SCHOOL_YEAR).name)},
+                  in {storyYear(CURRENT_SCHOOL_YEAR)}.{' '}
+                  <Link href="/competitions/mission" className="text-primary-deep font-medium hover:underline">
+                    Read the future history
+                  </Link>
+                </p>
               </div>
 
               {/* FAQ accordion */}

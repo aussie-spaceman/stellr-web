@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useId, type CSSProperties } f
 import { Bell } from 'lucide-react'
 import Link from 'next/link'
 import { timeAgo } from '@/lib/utils'
+import { CLEARANCE_PATH } from '@/lib/compliance-links'
 
 interface Notification {
   id: string
@@ -22,6 +23,8 @@ function actorName(actor: Notification['actor']): string {
 }
 
 function typeLabel(n: Notification): string {
+  // Clearance notices (lib/compliance-notify) carry the detail in the body.
+  if (n.reference_type === 'compliance') return 'Clearance needed'
   switch (n.type) {
     case 'reply': return `${actorName(n.actor)} replied to your post`
     case 'mention': return `${actorName(n.actor)} mentioned you`
@@ -273,7 +276,9 @@ export function NotificationBell() {
                     ? `/community/mentoring/${n.reference_id}`
                     : (n.reference_type === 'coaching' || n.reference_type === 'coaching_invite') && n.reference_id
                       ? `/community/coaching/${n.reference_id}`
-                      : '/community'
+                      : n.reference_type === 'compliance'
+                        ? CLEARANCE_PATH
+                        : '/community'
               return (
                 <li key={n.id}>
                   <Link

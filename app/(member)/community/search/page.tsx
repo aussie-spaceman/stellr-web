@@ -105,7 +105,7 @@ export default async function CommunitySearchPage({
             defaultValue={trimmedQ}
             placeholder="Search posts and resources…"
             autoFocus
-            className="w-full rounded-md border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-border focus:outline-none"
+            className="w-full rounded-md border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-border focus:outline-hidden"
           />
         </div>
         <button

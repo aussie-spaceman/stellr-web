@@ -44,7 +44,7 @@ export default async function NewsPage() {
       {/* ── Category Filter + Article Grid ───────────────────────────── */}
       <NewsBoard categories={allPosts.map((p) => p.category)}>
         {allPosts.map((post) => (
-          <article key={post._id} className="bg-white rounded-xl border border-line-light shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+          <article key={post._id} className="bg-white rounded-xl border border-line-light shadow-xs hover:shadow-md transition-shadow overflow-hidden flex flex-col">
             {/* Cover image */}
             <div className="relative h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900">
               {post.coverImage ? (

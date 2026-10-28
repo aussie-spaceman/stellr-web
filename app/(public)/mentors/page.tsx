@@ -127,7 +127,7 @@ export default function MentorsPage() {
             {ways.map((w) => {
               const Icon = w.icon
               return (
-                <div key={w.title} className="bg-white rounded-xl p-6 shadow-sm">
+                <div key={w.title} className="bg-white rounded-xl p-6 shadow-xs">
                   <div className="w-12 h-12 rounded-lg bg-brand-blue/10 flex items-center justify-center mb-4">
                     <Icon size={24} className="text-brand-blue" />
                   </div>

@@ -100,7 +100,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
               <span className="text-sm text-hero-lead">{formatDate(post.publishedAt)}</span>
             )}
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold leading-tight">{post.title}</h1>
+          <h1 className="text-3xl sm:text-4xl sm:leading-10 font-bold leading-tight">{post.title}</h1>
           {post.excerpt && (
             <p className="mt-4 text-lg text-hero-lead">{post.excerpt}</p>
           )}
@@ -127,7 +127,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
             <h2 className="text-2xl font-bold text-brand-blue-dark mb-8">Related Articles</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {related.map((rel: { _id: string; title: string; slug: { current: string }; publishedAt?: string; category?: string; excerpt?: string; coverImage?: { asset: { _ref: string } } }) => (
-                <article key={rel._id} className="bg-white rounded-xl border border-line-light shadow-sm overflow-hidden">
+                <article key={rel._id} className="bg-white rounded-xl border border-line-light shadow-xs overflow-hidden">
                   <div className="relative h-40 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {rel.coverImage && (
                       <CoverImage image={sanityImage(rel.coverImage, 'card', CARD_IMAGE_SIZES.threeUp)} alt={rel.title} />

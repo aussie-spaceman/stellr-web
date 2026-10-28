@@ -49,7 +49,7 @@ export default function WhyDesignCompetitionsPage() {
           <p className="text-sm font-bold uppercase tracking-widest text-brand-orange mb-4">
             Events
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
+          <h1 className="text-4xl sm:text-5xl sm:leading-none font-bold mb-6 leading-tight">
             Why Design Competitions?
           </h1>
           <p className="text-lg text-hero-lead max-w-2xl leading-relaxed">
@@ -101,7 +101,7 @@ export default function WhyDesignCompetitionsPage() {
       {/* ── Quote ────────────────────────────────────────────────────── */}
       <section className="bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8">
         <figure className="mx-auto max-w-3xl text-center">
-          <blockquote className="font-display text-2xl sm:text-3xl font-bold leading-snug">
+          <blockquote className="font-display text-2xl sm:text-3xl sm:leading-9 font-bold leading-snug">
             &ldquo;These events put project-based learning into practice. Teams are tasked with an
             unscripted problem, dig into the science to find engineering solutions, and develop teamwork
             and communication durable skills.&rdquo;
@@ -123,7 +123,7 @@ export default function WhyDesignCompetitionsPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {benefits.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="bg-white rounded-xl p-6 shadow-sm flex gap-4">
+              <div key={title} className="bg-white rounded-xl p-6 shadow-xs flex gap-4">
                 <div className="shrink-0 w-10 h-10 rounded-lg bg-brand-blue flex items-center justify-center">
                   <Icon size={20} className="text-white" />
                 </div>

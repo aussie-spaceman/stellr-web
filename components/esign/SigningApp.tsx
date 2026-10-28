@@ -389,7 +389,7 @@ type HeadingRef = React.RefObject<HTMLHeadingElement | null>
 
 function StepHeading({ headingRef, children }: { headingRef: HeadingRef; children: React.ReactNode }) {
   return (
-    <h2 ref={headingRef} tabIndex={-1} className="font-display text-xl font-bold text-ink outline-none">
+    <h2 ref={headingRef} tabIndex={-1} className="font-display text-xl font-bold text-ink outline-hidden">
       {children}
     </h2>
   )

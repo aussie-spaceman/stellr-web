@@ -85,7 +85,7 @@ export function ReactionBar({ targetType, targetId, initial }: Props) {
           + 😊
         </button>
         {picking && (
-          <div className="absolute z-10 mt-1 flex gap-1 rounded-lg border border-brand-border bg-white p-1.5 shadow-sm">
+          <div className="absolute z-10 mt-1 flex gap-1 rounded-lg border border-brand-border bg-white p-1.5 shadow-xs">
             {EMOJI_CHOICES.map((e) => (
               <button
                 key={e}

@@ -24,7 +24,7 @@ export function EventCard({ event, imageSizes = CARD_IMAGE_SIZES.eventsBoard }: 
   const { label, className } = statusConfig[status]
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-line-light overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+    <div className="bg-white rounded-xl shadow-xs border border-line-light overflow-hidden hover:shadow-md transition-shadow flex flex-col">
       {/* Image */}
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {event.image ? (

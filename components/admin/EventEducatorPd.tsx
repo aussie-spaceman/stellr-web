@@ -106,7 +106,7 @@ export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: strin
     } finally { setBusy(null) }
   }
 
-  const input = 'rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue'
+  const input = 'rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
   const newMemberHref = `/admin/members/new?return=${encodeURIComponent(`/admin/competitions/${eventSlug}?tab=settings`)}`
 
   return (
@@ -137,7 +137,7 @@ export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: strin
                 onChange={(e) => setQuery(e.target.value)} />
             )}
             {!picked && hits.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-full rounded-md border border-brand-border bg-white shadow-sm max-h-60 overflow-auto">
+              <ul className="absolute z-10 mt-1 w-full rounded-md border border-brand-border bg-white shadow-xs max-h-60 overflow-auto">
                 {hits.map((m) => (
                   <li key={m.id}>
                     <button type="button" onClick={() => { setPicked(m); setHits([]) }}

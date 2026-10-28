@@ -89,7 +89,7 @@ export function CreateCohortForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Lunar Habitat Cohort"
-          className="w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm outline-none focus:border-space-violet"
+          className="w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm outline-hidden focus:border-space-violet"
         />
       </Field>
 
@@ -129,7 +129,7 @@ export function CreateCohortForm({
           </div>
         </Field>
         <Field label="Time zone">
-          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-full rounded-[9px] border border-line-strong bg-white px-3.5 py-2.5 text-input mouse:text-sm outline-none focus:border-space-violet">
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-full rounded-[9px] border border-line-strong bg-white px-3.5 py-2.5 text-input mouse:text-sm outline-hidden focus:border-space-violet">
             {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </Field>
@@ -199,7 +199,7 @@ export function CreateCohortForm({
             <div className="mt-2 pl-6">
               <div className="inline-flex items-center gap-1.5 rounded-[9px] border border-line px-3 py-2">
                 <span className="text-sm text-content-muted">$</span>
-                <input value={priceUsd} onChange={(e) => setPriceUsd(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="40" inputMode="decimal" className="w-20 text-input mouse:text-sm outline-none" />
+                <input value={priceUsd} onChange={(e) => setPriceUsd(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="40" inputMode="decimal" className="w-20 text-input mouse:text-sm outline-hidden" />
               </div>
             </div>
           )}

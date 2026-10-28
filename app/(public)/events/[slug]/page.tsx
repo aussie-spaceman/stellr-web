@@ -351,7 +351,7 @@ export default async function EventDetailPage({ params }: PageProps) {
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3 short:text-2xl short:mb-2">
+          <h1 className="text-3xl sm:text-4xl sm:leading-10 lg:text-5xl lg:leading-none font-bold leading-tight mb-3 short:text-2xl short:leading-8 short:mb-2">
             {event.title}
           </h1>
 

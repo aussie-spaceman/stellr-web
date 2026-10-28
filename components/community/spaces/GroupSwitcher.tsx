@@ -19,7 +19,7 @@ export function GroupSwitcher({
       <select
         value={current}
         onChange={(e) => router.push(`/community/teacher/group-spaces?group=${e.target.value}`)}
-        className="rounded-lg border border-line-strong bg-white px-2 py-1 text-input mouse:text-sm text-brand-blue-dark focus:border-brand-blue focus:outline-none"
+        className="rounded-lg border border-line-strong bg-white px-2 py-1 text-input mouse:text-sm text-brand-blue-dark focus:border-brand-blue focus:outline-hidden"
       >
         {groups.map((g) => (
           <option key={g.id} value={g.id}>

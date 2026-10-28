@@ -175,7 +175,7 @@ function NameWithRename({
           onChange={(e) => setValue(e.target.value)}
           maxLength={200}
           autoFocus
-          className="min-w-0 flex-1 rounded border border-line-strong px-2 py-1 text-input mouse:text-sm focus:border-brand-blue-dark focus:outline-none"
+          className="min-w-0 flex-1 rounded border border-line-strong px-2 py-1 text-input mouse:text-sm focus:border-brand-blue-dark focus:outline-hidden"
         />
         <button
           onClick={save}
@@ -292,7 +292,7 @@ export function ResourcesCatalogue({ rows: initialRows }: { rows: CatalogueRow[]
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search resources…"
-            className="w-full rounded-md border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-blue-dark focus:outline-none"
+            className="w-full rounded-md border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-blue-dark focus:outline-hidden"
           />
         </div>
 
@@ -313,7 +313,7 @@ export function ResourcesCatalogue({ rows: initialRows }: { rows: CatalogueRow[]
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as CatalogueSort)}
-          className="rounded-md border border-line-strong px-2.5 py-1.5 text-input mouse:text-xs text-brand-muted focus:border-brand-blue-dark focus:outline-none"
+          className="rounded-md border border-line-strong px-2.5 py-1.5 text-input mouse:text-xs text-brand-muted focus:border-brand-blue-dark focus:outline-hidden"
         >
           {SORTS.map((s) => (
             <option key={s.key} value={s.key}>

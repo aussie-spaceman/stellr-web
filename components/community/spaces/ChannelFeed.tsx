@@ -183,7 +183,7 @@ export function ChannelFeed({
                 placeholder="Add a title (optional)"
                 maxLength={300}
                 aria-label="Post title (optional)"
-                className="w-full rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm font-medium focus:border-brand-blue focus:outline-none"
+                className="w-full rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm font-medium focus:border-brand-blue focus:outline-hidden"
               />
               <RichTextEditor
                 value={bodyJson}
@@ -401,7 +401,7 @@ function PostCard({
                 onChange={(e) => setReply(e.target.value)}
                 rows={1}
                 placeholder="Write a reply…"
-                className="min-h-[40px] flex-1 resize-none rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
+                className="min-h-[40px] flex-1 resize-none rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-hidden"
               />
               <button
                 onClick={sendReply}

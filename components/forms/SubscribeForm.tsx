@@ -47,7 +47,7 @@ export function SubscribeForm() {
         placeholder="your@email.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="flex-1 px-4 py-3 rounded-lg border border-line-strong text-input mouse:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+        className="flex-1 px-4 py-3 rounded-lg border border-line-strong text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
         disabled={status === 'loading'}
       />
       <button

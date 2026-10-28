@@ -44,7 +44,7 @@ export function QuoteRotator({ quotes, intervalMs = 7000 }: QuoteRotatorProps) {
             }`}
             aria-hidden={i !== rotate.index}
           >
-            <blockquote className="text-xl font-medium italic leading-relaxed text-white sm:text-2xl">
+            <blockquote className="text-xl font-medium italic leading-relaxed text-white sm:text-2xl sm:leading-8">
               &ldquo;{q.quote}&rdquo;
             </blockquote>
             <figcaption className="mt-4 font-semibold text-hero-dim">— {q.author}</figcaption>

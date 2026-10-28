@@ -135,9 +135,9 @@ export function LocationMap({
             // A planned site reads as an outline, a running one as a solid dot:
             // status is legible without relying on hue at all.
             return l.status === 'live' ? (
-              <circle key={l.id} cx={x} cy={y} r={7} fill={colour} stroke="var(--color-white)" strokeWidth={2} />
+              <circle key={l.id} cx={x} cy={y} r={7} fill={colour} stroke="var(--color-surface)" strokeWidth={2} />
             ) : (
-              <circle key={l.id} cx={x} cy={y} r={6} fill="var(--color-white)" stroke={colour} strokeWidth={2.5} strokeDasharray="3 2" />
+              <circle key={l.id} cx={x} cy={y} r={6} fill="var(--color-surface)" stroke={colour} strokeWidth={2.5} strokeDasharray="3 2" />
             )
           })}
         </g>

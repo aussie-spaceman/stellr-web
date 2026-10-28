@@ -245,7 +245,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
           {!pdfPath && <p className="rounded-xl border border-line bg-white p-6 text-sm text-content-muted">Upload the agreement PDF to start.</p>}
           {pdfPath && !pages.length && <p className="text-sm text-content-muted">Drawing the document…</p>}
           {pages.map((page, pi) => (
-            <div key={pi} className="relative w-full max-w-[680px] border border-line bg-white shadow-sm"
+            <div key={pi} className="relative w-full max-w-[680px] border border-line bg-white shadow-xs"
               style={{ aspectRatio: `${page.width} / ${page.height}`, cursor: placing ? 'crosshair' : 'default' }}
               onClick={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'IMG') onPageClick(e, pi) }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -259,7 +259,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
                     type="button"
                     aria-label={`${fl.label} (${fl.role}, ${fl.type}), page ${fl.page} at ${fl.x}, ${fl.y}. Arrow keys move it.`}
                     aria-pressed={selected === i}
-                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-sm border px-0.5 text-left text-xs leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
+                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-xs border px-0.5 text-left text-xs leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
                     style={{ left: `${(fl.x / page.width) * 100}%`, top: `${(fl.y / page.height) * 100}%`, width: `${(w / page.width) * 100}%`, height: `${(h / page.height) * 100}%`, minHeight: 10, minWidth: 10 }}
                     onPointerDown={(e) => startDrag(e, i)}
                     onPointerMove={moveDrag}

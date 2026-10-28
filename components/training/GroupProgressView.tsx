@@ -92,7 +92,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
             value={data.selectedRef ?? ''}
             onChange={(e) => setObject(e.target.value)}
             aria-label="Object filter"
-            className="rounded-xl border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
+            className="rounded-xl border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-hidden"
           >
             {data.objects.map((o) => (
               <option key={o.ref} value={o.ref}>{o.label}</option>
@@ -103,7 +103,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
               aria-label="Group filter"
-              className="rounded-xl border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
+              className="rounded-xl border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-hidden"
             >
               <option value="all">All groups</option>
               {data.groups.map((g) => (

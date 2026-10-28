@@ -219,7 +219,7 @@ export default function StudentsPage() {
             ].map((c) => {
               const Icon = c.icon
               return (
-                <div key={c.title} className="bg-white rounded-xl p-6 shadow-sm">
+                <div key={c.title} className="bg-white rounded-xl p-6 shadow-xs">
                   <div className="w-12 h-12 rounded-lg bg-brand-blue/10 flex items-center justify-center mb-4">
                     <Icon size={24} className="text-brand-blue" />
                   </div>
@@ -296,7 +296,7 @@ export default function StudentsPage() {
               {parentReasons.map((r) => {
                 const Icon = r.icon
                 return (
-                  <div key={r.title} className="bg-white rounded-xl p-6 flex gap-4 shadow-sm border border-line-light">
+                  <div key={r.title} className="bg-white rounded-xl p-6 flex gap-4 shadow-xs border border-line-light">
                     <div className="w-11 h-11 rounded-lg bg-brand-blue/10 flex items-center justify-center shrink-0">
                       <Icon size={22} className="text-brand-blue" />
                     </div>

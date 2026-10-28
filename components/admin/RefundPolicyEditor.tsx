@@ -62,7 +62,7 @@ export function RefundPolicyEditor({ scope, eventSlug, initialTiers, hasOverride
     if (res.ok) window.location.reload()
   }
 
-  const input = 'w-20 border border-brand-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
+  const input = 'w-20 border border-brand-border rounded px-2 py-1 text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
 
   return (
     <div className="space-y-3">

@@ -107,7 +107,7 @@ export default async function AdminSchoolDetailPage({
             role="region"
             aria-label={`Members of ${school.name}`}
             tabIndex={0}
-            className="relative overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            className="relative overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             <table className="min-w-full border-separate border-spacing-0 text-sm">
               <thead className="bg-surface">

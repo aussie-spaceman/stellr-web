@@ -85,7 +85,7 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, canRenam
             onChange={(e) => setValue(e.target.value)}
             maxLength={200}
             autoFocus
-            className="min-w-0 flex-1 rounded border border-line-strong px-2 py-1 text-lg font-semibold focus:border-brand-blue-dark focus:outline-none"
+            className="min-w-0 flex-1 rounded border border-line-strong px-2 py-1 text-lg font-semibold focus:border-brand-blue-dark focus:outline-hidden"
           />
           <button
             onClick={rename}

@@ -178,7 +178,7 @@ export function CoachingBookForm({
               setCustomStart(e.target.value)
               setSelectedIso('')
             }}
-            className="mt-2 w-full rounded-panel border border-line-strong bg-white px-4 py-3 text-input mouse:text-sm text-ink focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
+            className="mt-2 w-full rounded-panel border border-line-strong bg-white px-4 py-3 text-input mouse:text-sm text-ink focus:border-[#0E8C99] focus:outline-hidden focus:ring-2 focus:ring-[#0E8C99]/20"
           />
           <p className="mt-1.5 text-[13px] text-content-muted">
             Pick a slot that fits your availability — your coach will confirm and share a join link.

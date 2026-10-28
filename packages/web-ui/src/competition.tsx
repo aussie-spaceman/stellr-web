@@ -362,7 +362,7 @@ export function AwardTile({ name, count, decidedBy, summary, Icon, campInvite, o
       type="button"
       onClick={onOpen}
       aria-haspopup="dialog"
-      className="group flex h-full w-full flex-col rounded-ds-card border border-line bg-white p-5 text-left shadow-card transition-shadow hover:shadow-card-lift focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+      className="group flex h-full w-full flex-col rounded-ds-card border border-line bg-white p-5 text-left shadow-card transition-shadow hover:shadow-card-lift focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2"
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
         <Icon size={22} />

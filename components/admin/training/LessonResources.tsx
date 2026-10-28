@@ -134,7 +134,7 @@ export function LessonResources({ itemId }: { itemId: string }) {
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 rounded-md border border-brand-border px-2.5 py-1.5">
                 <Search className="h-3.5 w-3.5 text-brand-muted-soft" />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search existing resources…" autoFocus className="w-full text-input mouse:text-sm focus:outline-none" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search existing resources…" autoFocus className="w-full text-input mouse:text-sm focus:outline-hidden" />
               </div>
               <div className="max-h-44 overflow-y-auto rounded-md border border-brand-hairline">
                 {searching && <p className="px-2.5 py-2 text-xs text-brand-muted-soft">Searching…</p>}

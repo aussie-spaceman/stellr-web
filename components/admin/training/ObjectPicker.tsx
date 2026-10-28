@@ -64,7 +64,7 @@ export function ObjectPicker({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search Objects"
               aria-label="Search Objects"
-              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
+              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-blue focus:outline-hidden"
             />
           </div>
           <div className="max-h-[240px] overflow-y-auto p-1" role="listbox">

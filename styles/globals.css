@@ -6,9 +6,53 @@
    imported (app/layout.tsx, app/global-error.tsx, .storybook/preview.ts), not
    with a CSS @import: that made the tokens a second render-blocking request. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind 4. The theme still lives in tailwind.config.ts (built from
+   design/tokens.json via lib/tokens.ts), loaded with @config, so the token
+   pipeline is unchanged. source(none) turns off v4's whole-repo class scan:
+   the config's `content` list stays the only class source, as it was in v3. */
+@import 'tailwindcss' source(none);
+@config '../tailwind.config.ts';
+
+/* v3's default focus-ring colour (blue-500 at 50%). v4 defaults to
+   currentColor, which changed rings that set a width but no colour. */
+@theme {
+  --default-ring-color: color-mix(in oklab, var(--color-blue-500) 50%, transparent);
+}
+
+/* Other Tailwind 3 defaults that v4 changed, restored so the upgrade doesn't
+   change how anything looks: border colour (v4: currentColor), placeholder
+   colour (v4: text colour at 50%), pointer cursor on buttons (v4: default),
+   centred <dialog> (v4's preflight zeroes its margin) and white text fields
+   (v4's preflight makes them transparent; v3 left the browser's white). */
+@layer base {
+  input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit'], [type='reset'], [type='image'])),
+  textarea,
+  select {
+    background-color: var(--color-white);
+  }
+
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
+  }
+}
 
 /* Self-hosted fonts from /public/fonts/ — retained for COMPETITION print/slide
    materials only (font-competition / font-competition-body). Not the site UI. */
@@ -67,7 +111,8 @@
   --color-blue-dark:  var(--color-ink);
   --color-orange:     var(--color-donate-gold);
   --color-orange-alt: var(--color-pathway-amber);
-  --color-white:      var(--color-surface); /* backgrounds */
+  /* No --color-white here: Tailwind 4's bg-white/text-white read that
+     variable, so remapping it to the surface colour turned them off-white. */
   --color-white-text: #ffffff;              /* pure white for text/icons */
   --color-grey:       var(--color-text-faint);
 }
@@ -152,9 +197,16 @@
     display: block;
   }
 
+  /* Plain properties, not `@apply leading-tight tracking-heading`: in Tailwind
+     4 those utilities set --tw-leading/--tw-tracking, which every text-* size
+     utility reads first, so a base rule using them overrode each heading's own
+     size line-height and letter-spacing (text-3xl went 36px → 37.5px). As
+     plain declarations they are defaults a heading's utilities replace.
+     Inlined, because v4 only emits theme variables some utility uses. */
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
-    @apply leading-tight tracking-heading;
+    line-height: --theme(--leading-tight inline);
+    letter-spacing: --theme(--tracking-heading inline);
   }
 
   /* iOS Safari zooms the whole page into any focused field whose text is under
@@ -189,24 +241,21 @@
   .eyebrow {
     @apply font-subheading font-semibold uppercase tracking-[0.14em] text-xs;
   }
-  .screen-title {
-    @apply font-heading uppercase text-title text-brand-blue-dark;
-  }
   /* High-intent CTA (Register / Start) — orange energy variant of btn-primary. */
   .btn-energy {
-    @apply inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-orange-alt text-ink font-subheading font-medium text-sm transition-colors hover:bg-brand-orange-deep focus:outline-none focus:ring-2 focus:ring-brand-orange-alt focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-orange-alt text-ink font-subheading font-medium text-sm transition-colors hover:bg-brand-orange-deep focus:outline-hidden focus:ring-2 focus:ring-brand-orange-alt focus:ring-offset-2;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-brand-white-text focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-brand-white-text focus:outline-hidden focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
   }
 
   .btn-outline-white {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-white-text text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-white hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-white-text focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-white-text text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-white hover:text-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-white-text focus:ring-offset-2;
   }
 
   .section-padding {
@@ -220,7 +269,7 @@
   /* Same look as @stellr/web-ui's fieldControlClass: 16px on touch screens
      (iOS zooms into anything smaller), a ≥3:1 border, 44px tall. */
   .input-field {
-    @apply w-full min-h-11 rounded-lg border border-line-strong px-3 py-2.5 text-input text-brand-blue-dark bg-white focus:outline-none focus:ring-2 focus:ring-primary-deep/30 focus:border-primary-deep placeholder:text-content-muted mouse:text-sm;
+    @apply w-full min-h-11 rounded-lg border border-line-strong px-3 py-2.5 text-input text-brand-blue-dark bg-white focus:outline-hidden focus:ring-2 focus:ring-primary-deep/30 focus:border-primary-deep placeholder:text-content-muted mouse:text-sm;
   }
 
   .label-text {
@@ -228,7 +277,7 @@
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
   }
 }
 

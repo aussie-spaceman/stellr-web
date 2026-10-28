@@ -15,7 +15,7 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
   const ThemeIcon = campaign.theme === 'enviro' ? Environment : Orbit
 
   return (
-    <article className="bg-white rounded-xl shadow-sm border border-line-light overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+    <article className="bg-white rounded-xl shadow-xs border border-line-light overflow-hidden hover:shadow-md transition-shadow flex flex-col">
       {/* Image header — same footprint as EventCard */}
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {campaign.image ? (

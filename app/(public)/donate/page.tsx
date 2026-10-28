@@ -122,7 +122,7 @@ export default async function DonatePage() {
             <h2 className="text-2xl font-bold text-brand-blue-dark mb-8 text-center">From Our Donors</h2>
             <div className="space-y-6">
               {donorTestimonials.map((t) => (
-                <blockquote key={t._id} className="bg-white rounded-xl p-6 border border-line-light shadow-sm">
+                <blockquote key={t._id} className="bg-white rounded-xl p-6 border border-line-light shadow-xs">
                   <p className="text-brand-grey-dark italic">&ldquo;{t.quote}&rdquo;</p>
                   <footer className="mt-3 text-sm font-semibold text-brand-blue-dark">
                     — {t.author}{t.event ? `, ${t.event}` : ''}

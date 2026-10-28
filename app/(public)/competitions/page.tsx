@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { Launch, Environment } from '@stellr/icons'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 import { AUDIENCES, educatorTierHighlights } from '../membership/tier-data'
@@ -14,8 +14,9 @@ import {
   PathwayCard,
   ThemeCard,
   TierCard,
-  ProgressionGraphic,
 } from '@stellr/web-ui'
+import { AwardsShowcase } from '@/components/sections/AwardsShowcase'
+import { SUMMER_CAMP } from '@/lib/summer-camp'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
@@ -26,6 +27,8 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { FutureHistoryCycle } from '@/components/sections/FutureHistoryCycle'
+import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/lib/future-history'
 
 export const metadata: Metadata = {
   title: 'Competitions',
@@ -44,7 +47,26 @@ const studentSteps = [
   { n: 2, title: 'Form a team', body: 'Students work together like a professional firm.' },
   { n: 3, title: 'Design & decide', body: 'Research, prototype, weigh trade-offs, run the numbers.' },
   { n: 4, title: 'Build the deliverable', body: 'A written proposal or a presentation of the solution.' },
-  { n: 5, title: 'Pitch & be judged', body: 'Present to judges; award winners are invited to our International Summer Camp.' },
+  { n: 5, title: 'Pitch & be judged', body: 'Present to judges; individual award winners are invited to the International Summer Camp.' },
+]
+
+/* How the four awards are decided — the detail per award is in PUBLIC_AWARDS. */
+const awardSteps = [
+  {
+    n: 1,
+    title: 'Judges choose the champions',
+    body: 'Industry professionals score every company’s presentation or proposal and pick the winning design.',
+  },
+  {
+    n: 2,
+    title: 'Mentors choose the individuals',
+    body: 'The volunteer mentors who work with each company pick its Creative Vision Award and Quiet Leadership Award winners, and nominate Engineering Excellence Award winners from the champions.',
+  },
+  {
+    n: 3,
+    title: 'Winners are recognized',
+    body: 'Awards are announced at the closing ceremony, or with Campaign results. Each comes with a certificate and a digital credential to add to LinkedIn.',
+  },
 ]
 
 const pathways = [
@@ -164,8 +186,12 @@ const COMPETITION_FAQS = [
     a: 'Each team responds to a Request for Proposal with a written proposal (Campaigns) or a live presentation (Challenges). Work is judged by professionals from aerospace, engineering and science industries, and Campaign groups receive written feedback.',
   },
   {
+    q: 'What awards can students win?',
+    a: 'Four. The Creative Vision Award and the Quiet Leadership Award go to one student in every company, chosen by the volunteer mentors who work with it. The Champions Award goes to every member of the company the judges rank best. The Engineering Excellence Award goes to standout engineers from that winning company, nominated by its mentors.',
+  },
+  {
     q: 'Can I progress to a future event by winning an event I attend?',
-    a: 'Yes! Award winners from all our Challenges and Campaigns are invited to an annual International Summer Camp, held mid-July annually. We are currently finalizing a partnership with a new vendor and will be announcing details soon! Stay tuned!',
+    a: `Yes. Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every Challenge and Campaign are invited to the ${SUMMER_CAMP.name}, held in ${SUMMER_CAMP.when} and run by our partner ${SUMMER_CAMP.partner}. Attendance carries a fee.`,
   },
 ] as const
 
@@ -278,6 +304,26 @@ export default async function CompetitionsPage() {
         </div>
       </section>
 
+      {/* ── Future history teaser — the full story is /competitions/mission ─ */}
+      <section className="section-padding bg-white border-b border-line">
+        <div className="container-max">
+          <Eyebrow className="text-space-violet-text">Future history</Eyebrow>
+          <h2 className="text-3xl font-bold text-ink mt-3 max-w-3xl">
+            Set in the future — this year, {inSentence(eraForSchoolYear(CURRENT_SCHOOL_YEAR).name)} in{' '}
+            {storyYear(CURRENT_SCHOOL_YEAR)}
+          </h2>
+          <p className="text-lg text-content-secondary mt-3 mb-8 max-w-3xl leading-relaxed">
+            Every competition takes place in a forecast world 20 to 35 years ahead, with a client, three rival
+            companies and a contract to win. Space competitions move to a new part of the solar system each
+            year; Environmental competitions run alongside, on Earth.
+          </p>
+          <FutureHistoryCycle />
+          <Link href="/competitions/mission" className="mt-6 text-sm font-semibold text-primary inline-flex items-center gap-1">
+            Explore the future history <ArrowRight size={14} />
+          </Link>
+        </div>
+      </section>
+
       {/* ── Rotating showcase of previous student work ─────────────────── */}
       <section className="section-padding bg-white border-b border-line">
         <div className="container-max">
@@ -313,23 +359,6 @@ export default async function CompetitionsPage() {
               <PathwayCard key={p.name} {...p} linkAs={Link} />
             ))}
           </div>
-
-          <ProgressionGraphic
-            heading="Where it leads"
-            note="More info coming soon"
-            nodes={[
-              { label: 'Take part', labelClass: 'text-primary', title: 'Enter a Campaign or Event' },
-              { label: 'Advance', labelClass: 'text-space-violet', title: 'Award Winners are invited to progress' },
-              {
-                label: 'Summer Camp',
-                labelClass: 'text-brand-gold-ink',
-                title: 'International Summer Camp (mid-July)',
-                titleClass: 'text-brand-gold-ink',
-                cardClass: 'bg-pathway-amber-bg border border-pathway-amber/30',
-                star: true,
-              },
-            ]}
-          />
         </div>
       </section>
 
@@ -420,6 +449,50 @@ export default async function CompetitionsPage() {
               </p>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* ── Step 4 — Compete for awards ───────────────────────────────── */}
+      <section id="awards" className="section-padding bg-surface scroll-mt-14">
+        <div className="container-max">
+          <SectionHeading step="STEP 4" stepClassName="text-gold-ink" title="Compete for awards" className="mb-2" />
+          <p className="text-lg text-content-secondary mb-9 max-w-3xl leading-relaxed">
+            Every Challenge and Campaign ends with four awards. Judges choose the winning company; the
+            mentors who work alongside students choose the individuals. Select an award to see how it&rsquo;s
+            decided.
+          </p>
+
+          <AwardsShowcase />
+
+          <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {awardSteps.map((step) => (
+              <StepCard key={step.n} {...step} />
+            ))}
+          </div>
+
+          {/* ── The Summer Camp invitation ───────────────────────────────── */}
+          <div className="mt-6 flex flex-col gap-5 rounded-panel border border-pathway-amber/30 bg-pathway-amber-bg px-6 py-6 sm:px-8 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-2xl">
+              <p className="font-subheading text-xs font-bold uppercase tracking-[0.08em] text-gold-ink">
+                {SUMMER_CAMP.name} · {SUMMER_CAMP.when}
+              </p>
+              <h3 className="mt-2 text-2xl font-bold text-ink">Win an individual award, earn an invitation</h3>
+              <p className="mt-2 text-content-secondary leading-relaxed">
+                Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every
+                Challenge and Campaign are invited to the {SUMMER_CAMP.name}, run by our partner {SUMMER_CAMP.partner}.
+                Attendance carries a fee.
+              </p>
+            </div>
+            <Button
+              href={SUMMER_CAMP.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="energy"
+              className="shrink-0 self-start md:self-center"
+            >
+              About the Summer Camp <ArrowUpRight size={16} aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       </section>
 

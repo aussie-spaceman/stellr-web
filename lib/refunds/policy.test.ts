@@ -1,41 +1,43 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_TIERS, applicableTier, computeRefundOptions, daysOut } from './policy'
+import { GUARANTEE_DAYS, daysSincePayment, guaranteeRefundOptions, withinGuarantee } from './policy'
 
-// Pure-function checks for the refund compute logic (no DB/Stripe/network).
-// Ported from scripts/test-refund-policy.ts, which predated vitest.
-const now = new Date('2026-01-01T00:00:00Z')
-const eventAt = (days: number) => new Date(now.getTime() + days * 86_400_000).toISOString()
-const paid = 10000 // $100.00
+// The money-back guarantee: 100% within 45 days of payment, nothing after.
+const now = new Date('2026-11-01T12:00:00Z')
+const paidDaysAgo = (days: number) => new Date(now.getTime() - days * 86_400_000)
 
-describe('daysOut', () => {
-  it('floors to whole days', () => {
-    expect(daysOut(eventAt(120), now)).toBe(120)
-    expect(daysOut(eventAt(0), now)).toBe(0)
+describe('daysSincePayment', () => {
+  it('floors to whole days and never goes negative', () => {
+    expect(daysSincePayment(paidDaysAgo(10.9), now)).toBe(10)
+    expect(daysSincePayment(paidDaysAgo(-1), now)).toBe(0)
   })
 })
 
-describe('computeRefundOptions with DEFAULT_TIERS', () => {
-  it('120 days out → tier 90: 100% cash, no credit', () => {
-    const o = computeRefundOptions(applicableTier(DEFAULT_TIERS, eventAt(120), now), paid)
-    expect(o.cash).toMatchObject({ cents: 10000, pct: 100 })
-    expect(o.credit).toBeFalsy()
+describe('withinGuarantee', () => {
+  it('is 45 days', () => {
+    expect(GUARANTEE_DAYS).toBe(45)
   })
 
-  it('60 days out → tier 30: 50% cash or 75% credit valid 730 days', () => {
-    const o = computeRefundOptions(applicableTier(DEFAULT_TIERS, eventAt(60), now), paid)
-    expect(o.cash?.cents).toBe(5000)
-    expect(o.credit).toMatchObject({ cents: 7500, validityDays: 730 })
+  it('includes the 45th day and stops after it', () => {
+    expect(withinGuarantee(paidDaysAgo(0), now)).toBe(true)
+    expect(withinGuarantee(paidDaysAgo(45.5), now)).toBe(true)
+    expect(withinGuarantee(paidDaysAgo(46), now)).toBe(false)
   })
 
-  it('20 days out → tier 14: 33% cash or 50% credit', () => {
-    const o = computeRefundOptions(applicableTier(DEFAULT_TIERS, eventAt(20), now), paid)
-    expect(o.cash?.cents).toBe(3300)
-    expect(o.credit?.cents).toBe(5000)
+  it('treats an unknown payment date as outside — it cannot be checked', () => {
+    expect(withinGuarantee(null, now)).toBe(false)
+  })
+})
+
+describe('guaranteeRefundOptions', () => {
+  it('offers the whole amount as cash inside the window', () => {
+    expect(guaranteeRefundOptions(paidDaysAgo(30), 7500, now)).toEqual({ cash: { pct: 100, cents: 7500 } })
   })
 
-  it('5 days out → tier 0: 25% credit only, no cash', () => {
-    const o = computeRefundOptions(applicableTier(DEFAULT_TIERS, eventAt(5), now), paid)
-    expect(o.cash).toBeFalsy()
-    expect(o.credit?.cents).toBe(2500)
+  it('offers nothing after 45 days, even if the event has not happened', () => {
+    expect(guaranteeRefundOptions(paidDaysAgo(60), 7500, now)).toEqual({})
+  })
+
+  it('offers nothing when nothing is left to refund', () => {
+    expect(guaranteeRefundOptions(paidDaysAgo(3), 0, now)).toEqual({})
   })
 })

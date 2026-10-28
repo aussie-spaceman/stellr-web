@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Check, Plus, CreditCard } from 'lucide-react'
 import { Dialog, fieldControlClass } from '@stellr/web-ui'
 import { formatUsd, tzAbbr } from '@/lib/mentoring-format'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 export function AccessPanel({
   workshopId,
@@ -221,6 +222,7 @@ function BuyModal({ workshopId, sessionPriceCents, onClose }: { workshopId: stri
         {option(1, '1 session')}
         {option(3, '3 sessions', 'Save 10%')}
       </div>
+      <MoneyBackGuarantee variant="compact" className="mt-4" />
     </Dialog>
   )
 }

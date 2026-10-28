@@ -6,6 +6,7 @@ import { registrationIsOpen } from '@/lib/registration'
 import { maskEmail } from '@/lib/utils'
 import { findOfferForRegistration } from '@/lib/scholarships'
 import PayNowButton from './PayNowButton'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 // The durable "pay later" page for a registration created without payment.
 // Reached from the pay-link email, and from Stripe's cancel URL — so a parent
@@ -152,7 +153,8 @@ export default async function RegistrationPayPage({ params, searchParams }: Page
             )}
           </div>
           <PayNowButton token={token} amountLabel={amountLabel} />
-          <p className="text-xs text-content-body mt-6">
+          <MoneyBackGuarantee variant="compact" className="mt-5 justify-center text-left" />
+          <p className="text-xs text-content-body mt-4">
             Secure payment by Stripe. Your place is confirmed as soon as payment goes through, and a confirmation email follows.
           </p>
         </div>

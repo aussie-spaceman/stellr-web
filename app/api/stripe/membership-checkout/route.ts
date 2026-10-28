@@ -7,6 +7,7 @@ import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { requireStripe } from '@/lib/stripe'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -85,6 +86,8 @@ export async function POST(req: Request) {
     assertLiveCredentials('stripe')
 
     const session = await stripe.checkout.sessions.create({
+      // The money-back guarantee, on Stripe's page above the Pay button.
+      custom_text: GUARANTEE_CHECKOUT_TEXT,
       customer: customerId,
       mode: 'subscription',
       // Bill in the price's currency (USD). Disables Stripe Adaptive Pricing,

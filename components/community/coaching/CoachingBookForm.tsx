@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 const TEAL = '#0E8C99'
 
@@ -192,6 +193,8 @@ export function CoachingBookForm({
           {isPaid ? (priceLabel ?? 'Shown at checkout') : 'Included — no payment'}
         </span>
       </div>
+
+      {isPaid && <MoneyBackGuarantee variant="compact" />}
 
       {error && <p className="text-sm font-medium text-danger">{error}</p>}
 

@@ -8,6 +8,7 @@ import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 // Buy extra mentoring SESSION credits (top-up beyond the tier allowance). Mentoring
 // is accounted per session — a cohort enrollment draws its planned 4/6/8 sessions
@@ -47,6 +48,8 @@ export async function POST(req: Request) {
   // real prod (live keys); the price derivation above is deliberately not gated.
   assertLiveCredentials('stripe')
   const checkout = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     line_items: [
       {

@@ -329,7 +329,7 @@ export default async function AccountPage({
               </p>
             )}
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} adminDownload={!!viewAsId} />
-            <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
+            <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} readOnly={!!viewAsId} />
             <div className="rounded-xl border border-brand-border bg-white p-5">
               <AddressBook />
             </div>

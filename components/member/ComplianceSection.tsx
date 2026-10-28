@@ -28,7 +28,18 @@ const STATE_PILL: Record<ComplianceState, { label: string; cls: string }> = {
 
 const fmt = formatDateShort
 
-export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: string | null; eventRole?: string | null }) {
+// `readOnly` is set while an admin is viewing as this member: the write routes
+// refuse view-as (assertNotImpersonating), so the buttons would only 403. The
+// admin manages the license from the admin member page instead.
+export function ComplianceSection({
+  dateOfBirth,
+  eventRole,
+  readOnly = false,
+}: {
+  dateOfBirth?: string | null
+  eventRole?: string | null
+  readOnly?: boolean
+}) {
   const [data, setData] = useState<ComplianceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ license_number: '', licensing_state: '', expiry_date: '' })
@@ -58,6 +69,16 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
   useEffect(() => {
     load()
   }, [])
+
+  // Deep links (the clearance email and notification) point at #clearance, but
+  // this card renders only after its fetch — too late for the browser's own
+  // jump to the anchor. Scroll once it exists.
+  const visible = !loading && !!data?.required
+  useEffect(() => {
+    if (visible && window.location.hash === '#clearance') {
+      document.getElementById('clearance')?.scrollIntoView({ block: 'start' })
+    }
+  }, [visible])
 
   async function save() {
     setSaving(true)
@@ -123,7 +144,7 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
   const verified = !!license?.verified_at
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-6">
+    <div id="clearance" className="scroll-mt-24 bg-white rounded-xl border border-brand-border p-6">
       <div className="flex items-start justify-between gap-4 mb-1">
         <h2 className="text-base font-semibold text-brand-blue-dark">Background Check & License</h2>
         <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
@@ -132,6 +153,11 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
         As an adult taking part with Stellr, you must be cleared by either a verified teaching license or a
         background check. {data.detail ? <span className="text-brand-muted">{data.detail}.</span> : null}
       </p>
+      {readOnly && (
+        <p role="status" className="mb-4 rounded-lg border border-brand-hairline bg-brand-canvas px-4 py-3 text-xs text-brand-muted">
+          Read-only while viewing as this member. Add or verify their license from the admin member page.
+        </p>
+      )}
 
       {/* Background check status (read-only; Stellr orders these) */}
       {data.check && (
@@ -176,14 +202,16 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
                 </dd>
               </div>
             </dl>
-            <button
-              onClick={() => setEditing(true)}
-              className="text-xs font-medium text-brand-blue hover:text-brand-blue shrink-0"
-            >
-              Edit
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs font-medium text-brand-blue hover:text-brand-blue shrink-0"
+              >
+                Edit
+              </button>
+            )}
           </div>
-          {!verified && (
+          {!verified && !readOnly && (
             <p className="text-xs text-brand-gold-ink mt-2">
               Stellr will review your license. Editing it resets verification.
             </p>
@@ -203,26 +231,32 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
                 >
                   View uploaded license
                 </a>
-                {/* sr-only, not hidden: a display:none file input can't take
-                    keyboard focus, so the upload was mouse-only. */}
-                <label className="relative text-xs font-medium text-brand-blue hover:text-brand-blue-dark cursor-pointer focus-within:ring-2 focus-within:ring-primary-deep">
-                  Replace
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="sr-only"
-                    disabled={uploading}
-                    onChange={(e) => e.target.files?.[0] && uploadDocument(e.target.files[0])}
-                  />
-                </label>
-                <button
-                  onClick={deleteDocument}
-                  disabled={uploading}
-                  className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                >
-                  {uploading ? 'Working…' : 'Delete'}
-                </button>
+                {!readOnly && (
+                  <>
+                    {/* sr-only, not hidden: a display:none file input can't take
+                        keyboard focus, so the upload was mouse-only. */}
+                    <label className="relative text-xs font-medium text-brand-blue hover:text-brand-blue-dark cursor-pointer focus-within:ring-2 focus-within:ring-primary-deep">
+                      Replace
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="sr-only"
+                        disabled={uploading}
+                        onChange={(e) => e.target.files?.[0] && uploadDocument(e.target.files[0])}
+                      />
+                    </label>
+                    <button
+                      onClick={deleteDocument}
+                      disabled={uploading}
+                      className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      {uploading ? 'Working…' : 'Delete'}
+                    </button>
+                  </>
+                )}
               </div>
+            ) : readOnly ? (
+              <p className="text-xs text-brand-muted-soft">None uploaded.</p>
             ) : (
               <label className="relative inline-flex items-center gap-2 text-xs font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-3 py-1.5 cursor-pointer focus-within:ring-2 focus-within:ring-primary-deep focus-within:ring-offset-2">
                 {uploading ? 'Uploading…' : 'Upload license photo'}
@@ -238,6 +272,8 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
             {docError && <p className="text-xs text-red-600 mt-1">{docError}</p>}
           </div>
         </div>
+      ) : !editing && !license && readOnly ? (
+        <p className="text-sm text-brand-muted-soft">No teaching license on file.</p>
       ) : !editing && !license ? (
         <button
           onClick={() => setEditing(true)}

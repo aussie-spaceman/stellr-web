@@ -18,10 +18,12 @@ vi.mock('@/lib/campaign-registrations', () => ({ getMemberCampaignRegistration: 
 vi.mock('@/lib/resource-upload', () => ({ memberManagesContainer: vi.fn() }))
 const requireEventAccessMock = vi.fn()
 vi.mock('@/lib/event-access', () => ({ requireEventAccess: requireEventAccessMock }))
+// The license row the compliance purposes look up (null = none on file).
+const licenseRow: { current: { id: string } | null } = { current: null }
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     storage: { from: () => ({ createSignedUploadUrl, download, remove }) },
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) }),
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: licenseRow.current }) }) }) }),
   }),
 }))
 
@@ -29,6 +31,7 @@ const { signUpload, claimUpload, UPLOAD_PURPOSES, safeFileName } = await import(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  licenseRow.current = null
   assertNotImpersonatingMock.mockResolvedValue(null)
   createSignedUploadUrl.mockResolvedValue({ data: { path: 'p', token: 't' }, error: null })
 })
@@ -118,6 +121,51 @@ describe('signUpload — event-artwork', () => {
     requireEventAccessMock.mockResolvedValue({ ok: true, userId: 'u1', isAdmin: true, assignedSlugs: null })
     expect(await sign('certificate-best_hat')).toMatchObject({ status: 400 })
     expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+})
+
+// An admin attaching a teacher's emailed license: admin-only, into that
+// member's own folder, and only once the license details exist.
+describe('signUpload — compliance-document-admin', () => {
+  const MEMBER = '3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9d8e6f'
+  const sign = (ctx: Record<string, string>) =>
+    signUpload({ purpose: 'compliance-document-admin', ctx, fileName: 'licence scan.pdf', fileSize: 10, contentType: 'application/pdf' })
+
+  it("signs into the member's folder in the license bucket", async () => {
+    asAdmin()
+    licenseRow.current = { id: 'l1' }
+    expect(await sign({ memberId: MEMBER })).toEqual({ bucket: 'teacher-licenses', path: 'p', token: 't' })
+    expect(createSignedUploadUrl.mock.calls[0][0]).toMatch(new RegExp(`^${MEMBER}/\\d+-licence_scan\\.pdf$`))
+  })
+
+  it('refuses a non-admin', async () => {
+    asVisitor()
+    licenseRow.current = { id: 'l1' }
+    expect(await sign({ memberId: MEMBER })).toEqual({ error: 'Forbidden', status: 403 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it('refuses a member id that is not a uuid (it becomes the path prefix)', async () => {
+    asAdmin()
+    licenseRow.current = { id: 'l1' }
+    expect(await sign({ memberId: '../other' })).toMatchObject({ status: 400 })
+    expect(await sign({})).toMatchObject({ status: 400 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it('refuses before the license details are saved', async () => {
+    asAdmin()
+    expect(await sign({ memberId: MEMBER })).toMatchObject({ status: 400 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it('accepts only image and PDF types', async () => {
+    asAdmin()
+    licenseRow.current = { id: 'l1' }
+    const result = await signUpload({
+      purpose: 'compliance-document-admin', ctx: { memberId: MEMBER }, fileName: 'x.zip', fileSize: 10, contentType: 'application/zip',
+    })
+    expect(result).toMatchObject({ status: 415 })
   })
 })
 

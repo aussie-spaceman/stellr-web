@@ -45,6 +45,7 @@ const COMPLIANCE_PILLS: Record<ComplianceState, { label: string; className: stri
   flagged:       { label: 'Needs review', className: 'bg-red-100 text-red-700 ring-1 ring-red-300' },
   valid_license: { label: 'License',    className: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process', className: 'bg-orange-100 text-orange-700' },
+  awaiting_verification: { label: 'Waiting verification', className: 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' },
   cancelled:     { label: 'Cancelled',  className: 'bg-amber-100 text-amber-700' },
   expired:       { label: 'Expired',    className: 'bg-amber-100 text-amber-700' },
   invalid:       { label: 'Invalid',    className: 'bg-red-100 text-red-700' },
@@ -88,7 +89,7 @@ type DocusignFilter = 'all' | 'completed' | 'outstanding'
 type ComplianceFilter = 'all' | 'cleared' | 'outstanding'
 
 const CLEARED_STATES: ComplianceState[] = ['valid_bc', 'valid_license']
-const OUTSTANDING_STATES: ComplianceState[] = ['invalid', 'in_process', 'flagged']
+const OUTSTANDING_STATES: ComplianceState[] = ['invalid', 'in_process', 'awaiting_verification', 'flagged']
 
 function matches(
   p: RosterParticipant,

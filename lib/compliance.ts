@@ -34,7 +34,8 @@ export type ComplianceState =
   | 'not_required' // student, non-event role, or under 18 — no clearance needed
   | 'valid_bc' // a passed, non-expired background check is on file
   | 'valid_license' // a verified, non-expired teacher license is on file
-  | 'in_process' // a check is invited/running, or a license awaits verification
+  | 'in_process' // a background check is invited/running — nothing for Stellr to do yet
+  | 'awaiting_verification' // a license is on file and an admin needs to verify it — NOT cleared
   | 'flagged' // a Consider result nobody has adjudicated yet — NOT cleared
   | 'cancelled' // the check was canceled before completing — just needs re-ordering
   | 'expired' // the invitation expired without completion — just needs re-ordering
@@ -123,6 +124,10 @@ function licenseExpired(l: TeacherLicense, ref: Date): boolean {
  *
  * Precedence (user-confirmed): a valid license or passed BC (green) beats an
  * in-process item (orange), which beats nothing/expired (red "Invalid").
+ *
+ * A license waiting for an admin reads 'awaiting_verification', not
+ * 'in_process' (28 Oct 2026): it is the one orange state an admin can clear
+ * themselves, so it outranks a check that is still running.
  */
 export function deriveCompliance(
   license: TeacherLicense | null,
@@ -196,6 +201,14 @@ export function deriveCompliance(
       check,
     }
   }
+  if (licensePending) {
+    return {
+      state: 'awaiting_verification',
+      detail: license!.document_path ? 'License awaiting verification' : 'License awaiting verification — no photo uploaded yet',
+      license,
+      check,
+    }
+  }
   if (bcInProcess) {
     return {
       state: 'in_process',
@@ -211,9 +224,6 @@ export function deriveCompliance(
       license,
       check,
     }
-  }
-  if (licensePending) {
-    return { state: 'in_process', detail: 'License awaiting verification', license, check }
   }
 
   // Required, but not cleared. A canceled or expired check is an operational state

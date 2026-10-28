@@ -45,7 +45,9 @@ interface MemberRow {
 // Sort: things needing attention first, then cleared. A flagged check outranks
 // everything — somebody is waiting on a decision that only a human can make.
 const STATE_ORDER: Record<ComplianceState, number> = {
-  flagged: -1,
+  flagged: -2,
+  // A license an admin can verify right now (28 Oct 2026).
+  awaiting_verification: -1,
   invalid: 0,
   cancelled: 0,
   expired: 0,
@@ -64,8 +66,8 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
     .from('members')
     .select(`
       id, first_name, last_name, email, event_role, date_of_birth, is_active,
-      member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
-      member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
+      member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path, updated_at),
+      member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudicated_label, adjudication_outcome)
     `)
     .in('event_role', [...BC_REQUIRED_ROLES])
     .or('is_active.is.null,is_active.eq.true')
@@ -96,7 +98,7 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
   rows.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name))
 
   const counts: Record<ComplianceState, number> = {
-    not_required: 0, valid_bc: 0, valid_license: 0, in_process: 0, cancelled: 0, expired: 0, invalid: 0, flagged: 0,
+    not_required: 0, valid_bc: 0, valid_license: 0, in_process: 0, awaiting_verification: 0, cancelled: 0, expired: 0, invalid: 0, flagged: 0,
   }
   for (const r of rows) counts[r.state]++
 
@@ -104,7 +106,7 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
   // 22 Sept 2026 — a flagged background check. The queue used to be licences
   // only, so a Consider result appeared in no queue at all and was visible only
   // as a red pill somebody had to go looking for.
-  const reviewQueue = rows.filter((r) => (r.license && !r.license.verified_at) || r.state === 'flagged')
+  const reviewQueue = rows.filter((r) => r.state === 'awaiting_verification' || r.state === 'flagged')
 
   return { rows, counts, reviewQueue }
 }

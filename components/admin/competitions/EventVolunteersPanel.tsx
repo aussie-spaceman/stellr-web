@@ -51,6 +51,7 @@ const AGREEMENT_NOTICE: Record<string, string> = {
 function CompliancePill({ state, detail }: { state: string; detail: string | null }) {
   if (state === 'valid_bc' || state === 'valid_license') return <Pill tone="green" label="Cleared" title={detail ?? undefined} />
   if (state === 'in_process') return <Pill tone="amber" label="Check in progress" title={detail ?? undefined} />
+  if (state === 'awaiting_verification') return <Pill tone="amber" label="Waiting verification" title={detail ?? undefined} />
   if (state === 'not_required') return <Pill tone="green" label="No check needed" />
   return <Pill tone="red" label="Not cleared" title={detail ?? undefined} />
 }

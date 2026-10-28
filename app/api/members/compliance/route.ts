@@ -4,6 +4,7 @@ import { getCurrentMember } from '@/lib/community'
 import { loadComplianceForMember } from '@/lib/compliance'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { alertLicenseReview } from '@/lib/license-review'
 import { LICENSE_DOCUMENT_URL_TTL_SECONDS, TEACHER_LICENSE_BUCKET, teacherLicenseSchema } from '@/lib/teacher-license'
 
 // GET /api/members/compliance — the current member's clearance state (license +
@@ -87,7 +88,9 @@ export async function POST(req: Request) {
     },
     db,
   )
+  // Staff are told there is a license to verify (never throws).
+  await alertLicenseReview(db, member.id, 'details')
 
   const summary = await loadComplianceForMember(db, member.id)
-  return NextResponse.json({ ok: true, state: summary?.state ?? 'in_process', license: summary?.license ?? null })
+  return NextResponse.json({ ok: true, state: summary?.state ?? 'awaiting_verification', license: summary?.license ?? null })
 }

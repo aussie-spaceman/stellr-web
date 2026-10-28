@@ -3,6 +3,7 @@ import type { ShareBlock } from '@/lib/credentials-core'
 import { appEnv, isProd } from '@/lib/env'
 import { supabaseServer } from '@/lib/supabase'
 import { canSend, recordSend, type EmailKind } from '@/lib/email-budget'
+import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 
 // deep review PUB-2 / HTML-injection cluster: every user-supplied value that is
 // interpolated into an HTML email body is escaped with `esc` (the shared
@@ -248,9 +249,10 @@ export function individualConfirmationEmail({
           <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${esc(registrationId)}</td></tr>
         </table>
         <p style="color:#6b7280;font-size:14px">Keep your Membership ID handy — you'll use it to check in at the event.</p>
+        <p style="color:#6b7280;font-size:14px">${esc(GUARANTEE_RECEIPT_LINE)}</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
-  const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is confirmed.\n\nMembership ID: ${membershipId}\nReference #: ${registrationId}\n\nKeep your Membership ID for check-in.\n\n— Stellr Education`
+  const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is confirmed.\n\nMembership ID: ${membershipId}\nReference #: ${registrationId}\n\nKeep your Membership ID for check-in.\n\n${GUARANTEE_RECEIPT_LINE}\n\n— Stellr Education`
   return { subject, html, text }
 }
 
@@ -755,9 +757,10 @@ export function groupPaymentConfirmedEmail({
         <p>Hi ${esc(teacherFirstName)},</p>
         <p>We've received your payment for <strong>${esc(eventTitle)}</strong>. Your group registration is now confirmed.</p>
         <p style="color:#6b7280;font-size:14px">Reference #: <span style="font-family:monospace">${esc(registrationId)}</span></p>
-        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Each participant's agreement is sent for signature if one isn't already on record. A student's agreement covers every Stellr event while they're a Minor; an adult's stays valid for 3 years.</p>`,
+        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Each participant's agreement is sent for signature if one isn't already on record. A student's agreement covers every Stellr event while they're a Minor; an adult's stays valid for 3 years.</p>
+        <p style="color:#6b7280;font-size:14px">${esc(GUARANTEE_RECEIPT_LINE)}</p>`,
   })
-  const text = `Hi ${teacherFirstName},\n\nPayment received for ${eventTitle}. Your group registration is confirmed.\n\nReference #: ${registrationId}\n\n— Stellr Education`
+  const text = `Hi ${teacherFirstName},\n\nPayment received for ${eventTitle}. Your group registration is confirmed.\n\nReference #: ${registrationId}\n\n${GUARANTEE_RECEIPT_LINE}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

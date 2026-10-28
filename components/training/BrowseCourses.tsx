@@ -85,7 +85,7 @@ export function BrowseCourses({ modules }: { modules: TrainingModuleSummary[] })
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search all courses"
           aria-label="Search all courses"
-          className="w-full rounded-xl border border-line-strong bg-white py-2.5 pl-10 pr-4 text-input mouse:text-sm text-brand-blue-dark placeholder:text-brand-muted-soft focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="w-full rounded-xl border border-line-strong bg-white py-2.5 pl-10 pr-4 text-input mouse:text-sm text-brand-blue-dark placeholder:text-brand-muted-soft focus:border-brand-blue focus:outline-hidden focus:ring-2 focus:ring-brand-blue/20"
         />
       </div>
 

@@ -9,6 +9,7 @@ import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 // Self-register for an open mentoring cohort: free-with-membership, with a
 // mentoring credit, or via a one-off Stripe payment.
@@ -99,6 +100,8 @@ export async function POST(req: Request) {
   // real prod (live keys). Reads/pricing above are deliberately not gated.
   assertLiveCredentials('stripe')
   const checkout = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     line_items: [lineItem],
     customer: customerId,

@@ -196,7 +196,7 @@ export function EventEmailEditor({
   }
 
   const sendDate = eventDate && daysBefore !== '' ? scheduledSendDate(eventDate, Number(daysBefore)) : null
-  const input = 'w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-surface'
+  const input = 'w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-primary focus:outline-hidden disabled:bg-surface'
   const link = 'text-sm font-medium text-primary hover:text-primary-deep disabled:opacity-50'
 
   return (

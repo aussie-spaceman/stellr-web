@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
+import { Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
+import { Linkedin } from '@stellr/icons'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { QUOTES } from '@/lib/media-manifest'
 
@@ -279,7 +280,7 @@ export default function AboutPage() {
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>
 
           {/* Founder */}
-          <div className="bg-white rounded-2xl p-8 shadow-sm max-w-md mb-12 mx-auto text-left">
+          <div className="bg-white rounded-2xl p-8 shadow-xs max-w-md mb-12 mx-auto text-left">
             <Avatar
               name={founder.name}
               photo={founder.photo}
@@ -310,7 +311,7 @@ export default function AboutPage() {
             {advisoryBoard.map((member) => (
               <div
                 key={member.name}
-                className="bg-white rounded-xl p-6 text-center shadow-sm w-full sm:w-[calc(50%-1rem)] lg:w-[calc(33.333%-1.334rem)]"
+                className="bg-white rounded-xl p-6 text-center shadow-xs w-full sm:w-[calc(50%-1rem)] lg:w-[calc(33.333%-1.334rem)]"
               >
                 <Avatar
                   name={member.name}

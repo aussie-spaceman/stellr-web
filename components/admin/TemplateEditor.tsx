@@ -78,7 +78,8 @@ export function TemplateEditor(props: TemplateEditorProps) {
         pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
         const res = await fetch(`/api/admin/esign/templates/file?path=${encodeURIComponent(pdfPath)}`, { cache: 'no-store' })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const doc = await pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) }).promise
+        const task = pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) })
+        const doc = await task.promise
         const out: PageImage[] = []
         for (let n = 1; n <= doc.numPages; n++) {
           const page = await doc.getPage(n)
@@ -90,7 +91,8 @@ export function TemplateEditor(props: TemplateEditorProps) {
           await page.render({ canvas, canvasContext: canvas.getContext('2d') as CanvasRenderingContext2D, viewport }).promise
           out.push({ src: canvas.toDataURL('image/png'), width: base.width, height: base.height })
         }
-        await doc.destroy()
+        // pdf.js 6 tears a document down through its loading task.
+        await task.destroy()
         if (!cancelled) setPages(out)
       } catch (err) {
         console.error('[template-editor] could not draw the document:', err)
@@ -245,7 +247,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
           {!pdfPath && <p className="rounded-xl border border-line bg-white p-6 text-sm text-content-muted">Upload the agreement PDF to start.</p>}
           {pdfPath && !pages.length && <p className="text-sm text-content-muted">Drawing the document…</p>}
           {pages.map((page, pi) => (
-            <div key={pi} className="relative w-full max-w-[680px] border border-line bg-white shadow-sm"
+            <div key={pi} className="relative w-full max-w-[680px] border border-line bg-white shadow-xs"
               style={{ aspectRatio: `${page.width} / ${page.height}`, cursor: placing ? 'crosshair' : 'default' }}
               onClick={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'IMG') onPageClick(e, pi) }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -259,7 +261,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
                     type="button"
                     aria-label={`${fl.label} (${fl.role}, ${fl.type}), page ${fl.page} at ${fl.x}, ${fl.y}. Arrow keys move it.`}
                     aria-pressed={selected === i}
-                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-sm border px-0.5 text-left text-xs leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
+                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-xs border px-0.5 text-left text-xs leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
                     style={{ left: `${(fl.x / page.width) * 100}%`, top: `${(fl.y / page.height) * 100}%`, width: `${(w / page.width) * 100}%`, height: `${(h / page.height) * 100}%`, minHeight: 10, minWidth: 10 }}
                     onPointerDown={(e) => startDrag(e, i)}
                     onPointerMove={moveDrag}

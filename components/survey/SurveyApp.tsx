@@ -192,7 +192,7 @@ export function SurveyApp({ apiBase, view, signedIn, preview = false }: { apiBas
 
         {phase === 'page' && page && (
           <div className="space-y-5">
-            <h1 ref={headingRef} tabIndex={-1} className="font-display text-xl font-bold text-ink outline-none">
+            <h1 ref={headingRef} tabIndex={-1} className="font-display text-xl font-bold text-ink outline-hidden">
               {fillTemplate(def.intro.heading, ctx)}
             </h1>
             <Progress value={progress} label={`Page ${index + 1} of ${pages.length}`} />
@@ -234,7 +234,7 @@ export function SurveyApp({ apiBase, view, signedIn, preview = false }: { apiBas
         {phase === 'confirm' && (
           <section className="rounded-ds-card border border-line bg-white p-6 sm:p-8">
             <Progress value={100} label="Ready to submit" />
-            <h1 ref={headingRef} tabIndex={-1} className="mt-6 font-display text-2xl font-bold text-ink outline-none">
+            <h1 ref={headingRef} tabIndex={-1} className="mt-6 font-display text-2xl font-bold text-ink outline-hidden">
               Submit your answers?
             </h1>
             <p className="mt-3 text-content-body">Once you submit, your answers can’t be changed. Go back if you’d like to check anything first.</p>

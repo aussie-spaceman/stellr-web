@@ -152,7 +152,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 const postSchema = z.object({
-  ref: z.string().uuid(),
+  ref: z.guid(),
   /** container_contents.content_type, or 'space' to attach a Space. */
   contentType: z.enum(['training_module', 'resource', 'recording', 'announcement', 'product', 'space']),
   mandatory: z.boolean().optional(),
@@ -224,7 +224,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 const deleteSchema = z.object({
-  ref: z.string().uuid(),
+  ref: z.guid(),
   contentType: z.enum(['training_module', 'resource', 'recording', 'announcement', 'product', 'space']),
 })
 

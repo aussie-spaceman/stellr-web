@@ -50,11 +50,14 @@ export async function POST(req: Request) {
   let event: ClerkEvent
 
   try {
-    event = wh.verify(payload, {
+    // svix 2 only verifies; it no longer parses the payload. Parsing stays
+    // inside the try so a non-JSON body is still a 400.
+    wh.verify(payload, {
       'svix-id': svixId,
       'svix-timestamp': svixTimestamp,
       'svix-signature': svixSignature,
-    }) as ClerkEvent
+    })
+    event = JSON.parse(payload) as ClerkEvent
   } catch {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }

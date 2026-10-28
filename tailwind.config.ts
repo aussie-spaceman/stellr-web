@@ -136,14 +136,14 @@ const config: Config = {
     },
   },
   /* Touch screens keep :hover after a tap (a "stuck" lifted card or a pill
-     that looks selected). Only apply hover styles where hover exists. */
-  future: { hoverOnlyWhenSupported: true },
+     that looks selected). Tailwind 4's hover: already applies only where
+     hover exists, so v3's `future.hoverOnlyWhenSupported` flag is gone. */
   plugins: [
     /* Two media variants that are not widths. They are plugin variants, not
        `screens`: a raw screen switches off Tailwind's min-[…]/max-[…]
-       variants for the whole project. Plugin variants are emitted BEFORE the
-       width breakpoints, so `short:` adds `:root` to outrank sm:/md:/lg: on
-       the same property (a sideways phone is wider than sm). */
+       variants for the whole project. `short:` adds `:root` so it outranks
+       sm:/md:/lg: on the same property whatever order Tailwind emits the
+       variants in (a sideways phone is wider than sm). */
     plugin(({ addVariant }) => {
       /* Short screens: a phone held sideways is 340–415px tall but wide
          enough for the sm/md layouts. `short:` lets chrome and heroes shrink

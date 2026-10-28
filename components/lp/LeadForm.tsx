@@ -42,11 +42,14 @@ const schema = z.object({
   // must stay undefined rather than becoming 0 — HubSpot would store the zero.
   students: z.coerce.number().int().min(1, 'Enter 1 or more').optional(),
   consent: z.literal(true, {
-    errorMap: () => ({ message: 'You must agree to be contacted' }),
+    error: 'You must agree to be contacted',
   }),
 })
 
-type FormData = z.infer<typeof schema>
+// `students` is coerced, so what the form holds (input) differs from what
+// submit receives (output).
+type FormInput = z.input<typeof schema>
+type FormData = z.output<typeof schema>
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const
 const UTM_STORE = 'stellr_lp_utm'
@@ -101,7 +104,7 @@ const labelClass = 'block text-ds-meta font-semibold text-content'
 const inputClass = (error: boolean) =>
   // 16px is deliberate and not on the type scale by accident: anything smaller
   // makes iOS Safari zoom the whole page on focus.
-  `mt-1.5 w-full rounded-control border bg-white px-3.5 py-3 text-[16px] text-ink focus:border-primary focus:outline-none focus:outline-2 focus:outline-primary ${
+  `mt-1.5 w-full rounded-control border bg-white px-3.5 py-3 text-[16px] text-ink focus:border-primary focus:outline-hidden focus:outline-2 focus:outline-primary ${
     error ? 'border-danger' : 'border-line'
   }`
 
@@ -121,7 +124,7 @@ export function LeadForm({
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormData>({
+  } = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(schema),
     defaultValues: { role: form.defaultRole, students: form.defaultStudents },
   })
@@ -191,7 +194,7 @@ export function LeadForm({
         <h3
           ref={confirmHeading}
           tabIndex={-1}
-          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-none"
+          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-hidden"
         >
           {form.redirect.heading}
         </h3>
@@ -215,7 +218,7 @@ export function LeadForm({
         <h3
           ref={confirmHeading}
           tabIndex={-1}
-          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-none"
+          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-hidden"
         >
           {form.confirm.heading}
         </h3>

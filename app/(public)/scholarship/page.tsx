@@ -54,7 +54,7 @@ export default async function ScholarshipPage() {
       <section className="relative overflow-hidden bg-midnight text-white pt-16 pb-[70px] px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_85%_-10%,#28306B_0%,#141A3D_45%,#0E1330_100%)]">
         <div className="container-max">
           <Eyebrow className="text-[#9FB0FF]">Educate · Scholarships</Eyebrow>
-          <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-display leading-[1.05] max-w-[760px]">
+          <h1 className="mt-4 text-4xl sm:text-5xl sm:leading-none font-bold tracking-display leading-[1.05] max-w-[760px]">
             Cost should never be the reason you don&rsquo;t compete.
           </h1>
           <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[620px]">

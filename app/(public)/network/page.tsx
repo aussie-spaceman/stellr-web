@@ -6,6 +6,7 @@ import { Event, Certificate, Team } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { JoinNetworkForm } from '@/components/forms/JoinNetworkForm'
 import { AssetGate } from '@/components/sections/AssetGate'
+import { BookCallButton } from '@/components/sections/BookCallButton'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { PHOTOS, COMPETITION } from '@/lib/media-manifest'
 
@@ -180,6 +181,7 @@ export default function NetworkPage() {
           <Button href="#join" variant="primary">
             Join the Network
           </Button>
+          <BookCallButton location="network_hero" variant="outlineWhite" />
           <Button href="#three" variant="outlineWhite">
             See how partnering works <ArrowRight size={16} />
           </Button>

@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { ProductCard } from '@/components/ui/ProductCard'
 import type { StoreProductWithVariants } from '@/lib/store/types'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 export const metadata = {
   alternates: { canonical: '/store' },
@@ -24,7 +25,8 @@ export default async function StorePage() {
     <div className="section-padding">
       <div className="container-max">
         <h1 className="text-3xl font-bold text-brand-blue-dark">Store</h1>
-        <p className="mt-1 mb-8 text-brand-grey-dark">Official Stellr merchandise. Members get tier discounts at checkout.</p>
+        <p className="mt-1 text-brand-grey-dark">Official Stellr merchandise. Members get tier discounts at checkout.</p>
+        <MoneyBackGuarantee variant="compact" className="mt-2 mb-8" />
 
         {products.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line p-12 text-center text-content-muted">

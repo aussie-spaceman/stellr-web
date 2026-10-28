@@ -4,14 +4,17 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
+// Ids use z.guid() (any UUID-shaped string, as zod 3's uuid() was) across the
+// API: zod 4's z.uuid() also checks RFC version/variant bits, which the dev
+// seed's fixed ids (e.g. seed-commons, 00000000-0000-4000-f000-…) fail.
 const flagSchema = z.object({
   contentType: z.enum(['post', 'comment', 'resource']),
-  contentId: z.string().uuid(),
+  contentId: z.guid(),
   reason: z.string().trim().max(700).optional(),
   // Resource flags (handover §4.3): optional free-text note + the container the
   // resource was viewed in (the same binary can be fine in one object, not another).
   note: z.string().trim().max(700).optional(),
-  containerRef: z.string().uuid().optional(),
+  containerRef: z.guid().optional(),
 })
 
 // POST /api/community/flag — member or teacher flags a post, comment, or resource

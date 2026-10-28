@@ -19,7 +19,7 @@ export default async function CheckInBannerPage() {
 
   return (
     <div className="flex items-start justify-center bg-surface px-4 py-8">
-      <div className="w-full max-w-md space-y-3 rounded-ds-card border border-line bg-white p-6 text-center shadow-sm">
+      <div className="w-full max-w-md space-y-3 rounded-ds-card border border-line bg-white p-6 text-center shadow-xs">
         <Eyebrow>Event check-in</Eyebrow>
         <h1 className="font-display text-xl font-bold text-ink">Check-in isn’t open yet</h1>
         <p className="text-content-body">

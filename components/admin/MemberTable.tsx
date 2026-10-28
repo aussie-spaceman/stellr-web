@@ -98,12 +98,12 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && pushFilter({ q: search, page: 1 })}
-          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm w-64 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm w-64 focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
         />
         <select
           value={filters.bracket}
           onChange={(e) => pushFilter({ bracket: e.target.value, page: 1 })}
-          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
         >
           <option value="">All brackets</option>
           {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
@@ -111,7 +111,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
         <select
           value={filters.role}
           onChange={(e) => pushFilter({ role: e.target.value, page: 1 })}
-          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
         >
           <option value="">All roles</option>
           {ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}
@@ -123,7 +123,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
         role="region"
         aria-label="Members"
         tabIndex={0}
-        className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
       >
         <table className="min-w-full border-separate border-spacing-0 text-sm">
           <thead className="bg-surface">

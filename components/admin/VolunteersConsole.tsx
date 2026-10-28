@@ -61,7 +61,7 @@ function EventChecklist({
         onChange={(e) => setQ(e.target.value)}
         placeholder="Filter events & campaigns…"
         aria-label="Filter events and campaigns"
-        className="w-full rounded-t-lg border-b border-line-strong px-3 py-2 text-input focus:outline-none mouse:text-sm"
+        className="w-full rounded-t-lg border-b border-line-strong px-3 py-2 text-input focus:outline-hidden mouse:text-sm"
       />
       <div className="max-h-52 overflow-y-auto p-1">
         {filtered.length === 0 && (

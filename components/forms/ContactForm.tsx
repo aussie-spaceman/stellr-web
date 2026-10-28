@@ -13,7 +13,7 @@ const schema = z.object({
   email: z.string().email('Please enter a valid email address'),
   type: z.string().min(1, 'Please select an inquiry type'),
   message: z.string().min(10, 'Message must be at least 10 characters'),
-  consent: z.literal(true, { errorMap: () => ({ message: 'You must agree to be contacted' }) }),
+  consent: z.literal(true, { error: 'You must agree to be contacted' }),
 })
 
 type FormData = z.infer<typeof schema>

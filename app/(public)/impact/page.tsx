@@ -186,7 +186,7 @@ export default function ImpactPage() {
       <section className="relative overflow-hidden bg-midnight text-white pt-[54px] pb-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(130%_120%_at_20%_-10%,#2A2150_0%,#161B40_42%,#0C1024_100%)]">
         <div className="container-max">
           <Eyebrow className="text-[#A99CF0]">About → Impact</Eyebrow>
-          <h1 className="mt-4 font-display text-4xl sm:text-5xl lg:text-[66px] font-bold leading-[1.02] lg:leading-none">
+          <h1 className="mt-4 font-display text-4xl sm:text-5xl sm:leading-none lg:text-[66px] font-bold leading-[1.02] lg:leading-none">
             We don&rsquo;t just teach STEM.
             <br />
             We change the trajectory.
@@ -217,7 +217,7 @@ export default function ImpactPage() {
       <section className="bg-surface border-b border-line py-14 px-4 sm:px-6 lg:px-8">
         <div className="container-max">
           <Eyebrow>2026 participation data</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl sm:text-ds-h2 font-bold text-ink leading-tight max-w-2xl">
+          <h2 className="mt-3 font-display text-3xl sm:text-ds-h2 sm:leading-[1.1] font-bold text-ink leading-tight max-w-2xl">
             Who competes with Stellr
           </h2>
           <p className="mt-5 text-lg text-content-body leading-relaxed max-w-[720px]">
@@ -248,7 +248,7 @@ export default function ImpactPage() {
       <section className="section-padding bg-white">
         <div className="container-max">
           <Eyebrow>Career trajectory</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl sm:text-ds-h2 font-bold text-ink leading-tight max-w-2xl">
+          <h2 className="mt-3 font-display text-3xl sm:text-ds-h2 sm:leading-[1.1] font-bold text-ink leading-tight max-w-2xl">
             Setting young professionals on a STEM path
           </h2>
           <p className="mt-5 text-lg text-content-body leading-relaxed max-w-[720px]">

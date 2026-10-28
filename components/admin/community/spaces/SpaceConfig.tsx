@@ -403,7 +403,7 @@ function AccessTab({
             onChange={(e) => { setSrcQuery(e.target.value); void searchSources(srcType, e.target.value) }}
             onFocus={() => { if (srcOptions.length === 0) void searchSources(srcType, srcQuery) }}
             placeholder={`Search ${SOURCE_TYPES.find((t) => t.value === srcType)?.label.toLowerCase() ?? ''}…`}
-            className="flex-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
+            className="flex-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm focus:border-brand-blue focus:outline-hidden"
           />
         </div>
         {(srcSearching || srcOptions.length > 0) && (
@@ -636,7 +636,7 @@ function ResourcesTab({
                         value={renames[h.id] ?? ''}
                         onChange={(e) => setRenames((prev) => ({ ...prev, [h.id]: e.target.value }))}
                         placeholder="Rename for this space (optional)"
-                        className="mt-2 w-full rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs focus:border-brand-blue focus:outline-none"
+                        className="mt-2 w-full rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs focus:border-brand-blue focus:outline-hidden"
                       />
                     )}
                   </div>
@@ -1367,7 +1367,7 @@ function ModerationTab({ moderation, act }: { moderation: AdminSpaceConfig['mode
 }
 
 // ─── shared bits ──────────────────────────────────────────────────────────────
-const inputCls = 'w-full rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none'
+const inputCls = 'w-full rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-hidden'
 const btnPrimary = 'rounded-lg bg-brand-blue px-4 py-2 text-sm font-subheading font-semibold text-white hover:bg-brand-blue-dark disabled:opacity-50'
 const btnGhost = 'rounded-lg border border-brand-border px-4 py-2 text-sm font-subheading font-semibold text-brand-muted hover:bg-brand-canvas'
 const THEME_HEX: Record<SpaceTheme, string> = { space: '#7C5CFC', enviro: '#1FA97A', campaign: '#E0922F', college: '#16B6C4' }

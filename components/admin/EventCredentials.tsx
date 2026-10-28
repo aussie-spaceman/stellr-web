@@ -134,7 +134,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
     } finally { setBusy(null) }
   }
 
-  const input = 'w-full rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue'
+  const input = 'w-full rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
 
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">

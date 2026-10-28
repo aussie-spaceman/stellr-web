@@ -66,7 +66,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class: [
-          'prose prose-sm max-w-none focus:outline-none',
+          'prose prose-sm max-w-none focus:outline-hidden',
           compact ? 'min-h-[60px]' : 'min-h-[140px]',
           // Emails read as spaced paragraphs; match that while composing.
           isEmail ? '[&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li_p]:my-1' : '',

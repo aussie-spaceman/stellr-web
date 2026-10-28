@@ -52,7 +52,7 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
             {describeAssignedTiers(space.assignedTierIds, tierNames)} ·{' '}
             <Link
               href={membershipUpgradeHref(space.assignedTierIds.map((id) => tierNames[id]).filter(Boolean))}
-              className="relative z-10 -m-1 p-1 font-subheading font-semibold text-brand-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+              className="relative z-10 -m-1 p-1 font-subheading font-semibold text-brand-blue hover:underline focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-blue"
             >
               Upgrade
             </Link>
@@ -84,7 +84,7 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
         <Link
           href={`/community/${space.slug}`}
           aria-label={space.name}
-          className="absolute inset-0 z-0 rounded-[16px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+          className="absolute inset-0 z-0 rounded-[16px] focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-blue"
         />
         {body}
       </div>
@@ -95,7 +95,7 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
   return (
     <Link
       href={`/community/${space.slug}`}
-      className="block transition hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+      className="block transition hover:-translate-y-0.5 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-blue"
     >
       {body}
     </Link>

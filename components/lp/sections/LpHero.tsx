@@ -46,7 +46,7 @@ export function LpHero({
       )}
     >
       <div className="mt-5 grid gap-5 short:mt-3 short:gap-3">
-        <p className="text-[22px] font-semibold leading-[1.25] tracking-heading text-hero-dim short:text-lg">
+        <p className="text-[22px] font-semibold leading-[1.25] tracking-heading text-hero-dim short:text-lg short:leading-7">
           {hero.kicker}
         </p>
         <p className="max-w-[34em] text-lg leading-relaxed text-hero-lead [text-wrap:pretty] short:text-base short:leading-snug short:line-clamp-2">

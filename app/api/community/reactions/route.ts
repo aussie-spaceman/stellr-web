@@ -6,7 +6,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 
 const reactionSchema = z.object({
   targetType: z.enum(['post', 'comment']),
-  targetId: z.string().uuid(),
+  targetId: z.guid(),
   emoji: z.string().min(1).max(16),
 })
 

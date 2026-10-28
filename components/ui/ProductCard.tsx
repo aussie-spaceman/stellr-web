@@ -16,7 +16,7 @@ export function ProductCard({ product }: { product: StoreProductWithVariants }) 
   return (
     <Link
       href={`/store/${product.slug}`}
-      className="group flex flex-col overflow-hidden rounded-xl border border-line-light bg-white shadow-sm transition-shadow hover:shadow-md"
+      className="group flex flex-col overflow-hidden rounded-xl border border-line-light bg-white shadow-xs transition-shadow hover:shadow-md"
     >
       <div className="relative flex h-52 items-center justify-center bg-gradient-to-br from-brand-blue-dark to-blue-900">
         {img ? (

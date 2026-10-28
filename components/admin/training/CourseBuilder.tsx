@@ -180,7 +180,7 @@ function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: ()
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => title.trim() && title !== m.title && patch({ title: title.trim() })}
-            className="mt-1 w-full border-0 border-b border-transparent bg-transparent p-0 font-heading text-2xl font-bold text-brand-blue-dark focus:border-brand-border focus:outline-none"
+            className="mt-1 w-full border-0 border-b border-transparent bg-transparent p-0 font-heading text-2xl font-bold text-brand-blue-dark focus:border-brand-border focus:outline-hidden"
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <CertTemplate moduleId={m.id} hasTemplate={!!m.cert_template_path} onDone={onDone} />

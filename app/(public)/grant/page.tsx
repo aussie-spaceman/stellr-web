@@ -54,7 +54,7 @@ export default async function GrantPage() {
       <section className="relative overflow-hidden bg-midnight text-white pt-16 pb-[70px] short:pt-6 short:pb-8 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_85%_-10%,#28306B_0%,#141A3D_45%,#0E1330_100%)]">
         <div className="container-max">
           <Eyebrow className="text-hero-dim">Educate · Teacher Grant</Eyebrow>
-          <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-display leading-[1.05] max-w-[760px] short:mt-2 short:text-3xl">
+          <h1 className="mt-4 text-4xl sm:text-5xl sm:leading-none font-bold tracking-display leading-[1.05] max-w-[760px] short:mt-2 short:text-3xl short:leading-9">
             We support the teachers who want to offer Stellr activities to their students
           </h1>
           <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[640px] short:mt-3 short:text-base short:leading-snug short:line-clamp-3">

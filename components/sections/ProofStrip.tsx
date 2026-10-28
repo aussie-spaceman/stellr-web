@@ -99,8 +99,10 @@ export function ProofStrip({
             <button
               type="button"
               onClick={() => show(i)}
-              className="group block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-              aria-label={`Open photo: ${p.alt}`}
+              className="group block w-full text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              // The name must contain the visible caption and credit (WCAG 2.5.3,
+              // Label in Name), so a voice-control user can say what they see.
+              aria-label={`Open photo: ${captions ? [p.caption ?? p.alt, p.credit].filter(Boolean).join(', ') : p.alt}`}
             >
               <ResponsivePhoto
                 photo={p}
@@ -132,7 +134,7 @@ export function ProofStrip({
           onClick={(e) => {
             if (e.target === e.currentTarget) close()
           }}
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-midnight-deep/90 px-2 py-4 outline-none sm:p-4"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-midnight-deep/90 px-2 py-4 outline-hidden sm:p-4"
         >
           <button
             type="button"

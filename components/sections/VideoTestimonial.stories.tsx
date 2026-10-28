@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { VideoTestimonial } from './VideoTestimonial'
 import { mediaUrl, sizedSrcSet } from '@/lib/media-helpers'
 

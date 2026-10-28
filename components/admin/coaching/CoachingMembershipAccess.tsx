@@ -201,7 +201,7 @@ function EditAccessModal({ workshop, tiers, onClose, onSaved }: { workshop: Work
             placeholder="0"
             inputMode="decimal"
             aria-describedby={`${priceId}-hint`}
-            className="w-24 bg-transparent text-input outline-none mouse:text-sm"
+            className="w-24 bg-transparent text-input outline-hidden mouse:text-sm"
           />
         </div>
         <p id={`${priceId}-hint`} className="mt-1 text-xs text-content-faint">Set 0 for free; paid via Stripe.</p>

@@ -15,7 +15,7 @@ import type { CheckInView } from '@/lib/check-in-view'
 type Step = 'name' | 'email'
 
 const INPUT =
-  'mt-1.5 w-full rounded-control border border-line bg-white px-4 py-3.5 text-base text-ink placeholder:text-content-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30'
+  'mt-1.5 w-full rounded-control border border-line bg-white px-4 py-3.5 text-base text-ink placeholder:text-content-faint focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30'
 const LABEL = 'block font-subheading text-sm font-medium text-content-body'
 
 /** Month, day and year as typed; the API takes ISO YYYY-MM-DD. */
@@ -304,7 +304,7 @@ function CheckedIn({
             <Eyebrow className="text-enviro-green-text">{status}</Eyebrow>
           </div>
         )}
-        <h2 ref={headingRef} tabIndex={-1} className="mt-1 font-display text-3xl font-bold text-ink focus:outline-none">
+        <h2 ref={headingRef} tabIndex={-1} className="mt-1 font-display text-3xl font-bold text-ink focus:outline-hidden">
           {status && <span className="sr-only">{status}: </span>}
           {view.firstName} {view.lastName}
         </h2>
@@ -315,7 +315,7 @@ function CheckedIn({
           <div className="min-w-0 rounded-ds-card bg-midnight px-3 py-5 text-center text-white">
             <p className="font-subheading text-xs uppercase tracking-wide text-hero-dim">Company</p>
             {view.companyNumber != null ? (
-              <p className="mt-1 font-display text-5xl font-bold leading-none tabular-nums sm:text-6xl">{view.companyNumber}</p>
+              <p className="mt-1 font-display text-5xl font-bold leading-none tabular-nums sm:text-6xl sm:leading-none">{view.companyNumber}</p>
             ) : (
               <p className="mt-3 text-sm text-hero-lead">Ask at the desk</p>
             )}
@@ -323,7 +323,7 @@ function CheckedIn({
           <div className="min-w-0 rounded-ds-card border border-line bg-surface px-3 py-5 text-center">
             <p className="font-subheading text-xs uppercase tracking-wide text-content-muted">Shirt size</p>
             {view.shirtSize ? (
-              <p className="mt-1 break-words font-display text-4xl font-bold leading-none text-ink sm:text-5xl">
+              <p className="mt-1 break-words font-display text-4xl font-bold leading-none text-ink sm:text-5xl sm:leading-none">
                 {shortShirtSize(view.shirtSize)}
               </p>
             ) : (

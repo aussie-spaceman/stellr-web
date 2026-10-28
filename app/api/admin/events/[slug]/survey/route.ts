@@ -55,7 +55,7 @@ const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('resume') }),
   z.object({ action: z.literal('close') }),
   z.object({ action: z.literal('audiences'), audiences: z.array(z.enum(['student', 'mentor', 'adult'])).min(1) }),
-  z.object({ action: z.literal('resend'), invitationId: z.string().uuid() }),
+  z.object({ action: z.literal('resend'), invitationId: z.guid() }),
   z.object({ action: z.literal('gate_certificate'), on: z.boolean() }),
   z.object({ action: z.literal('open_after_event'), acceptOlderMinorAgreements: z.boolean() }),
   z.object({ action: z.literal('minor_agreement_override'), on: z.boolean() }),

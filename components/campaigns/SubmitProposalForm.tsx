@@ -155,7 +155,7 @@ export function SubmitProposalForm({ slug, title, deadlineLabel, groupName, init
             onChange={(e) => setNotes(e.target.value)}
             rows={4}
             placeholder="Anything you want the judges to know — assumptions, what you'd do with more time…"
-            className="w-full rounded-control border border-line-strong px-3 py-2.5 text-input mouse:text-sm text-content outline-none focus:border-primary"
+            className="w-full rounded-control border border-line-strong px-3 py-2.5 text-input mouse:text-sm text-content outline-hidden focus:border-primary"
           />
         </label>
 

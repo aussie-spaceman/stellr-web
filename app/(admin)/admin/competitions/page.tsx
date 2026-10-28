@@ -127,11 +127,6 @@ export default async function AdminEventsPage() {
           >
             Check-in banner
           </Link>
-          {access.isAdmin && (
-            <Link href="/admin/competitions/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
-              Refund Policy
-            </Link>
-          )}
         </div>
       </div>
 
@@ -149,7 +144,7 @@ export default async function AdminEventsPage() {
               role="region"
               aria-label={label}
               tabIndex={0}
-              className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+              className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
             >
               <table className="min-w-full border-separate border-spacing-0 text-sm">
                 <thead className="bg-surface">

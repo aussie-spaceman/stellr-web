@@ -11,7 +11,7 @@ function localParts(iso: string, tz: string): { date: string; time: string } {
   return { date, time }
 }
 
-export const inputCls = 'min-h-11 w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm outline-none focus:border-space-violet'
+export const inputCls = 'min-h-11 w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm outline-hidden focus:border-space-violet'
 
 // Every "ModalShell" in coaching and mentoring is the shared Dialog: a bottom
 // sheet on phones, capped to the screen, focus held inside.

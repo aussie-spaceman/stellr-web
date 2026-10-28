@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Choice, Field, Fieldset, Input, Select, Textarea } from './forms'
 
 const meta: Meta = { title: 'Forms/Primitives' }

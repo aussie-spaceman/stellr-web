@@ -20,6 +20,11 @@ import { gradeBand } from '@/lib/grade-band'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
+import { GUARANTEE_DAYS } from '@/lib/guarantee'
+import { themeFromType } from '@/lib/campaigns'
+import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/lib/future-history'
+import { EVENT_PD_HOURS } from '@/lib/pd-standards'
 
 export const revalidate = 3600
 
@@ -107,6 +112,7 @@ const INCLUDED: string[] = [
   `${SEASON_YEAR} limited edition Stellr Community t-shirt`,
   'All event materials and facility access',
   'Meals and snacks',
+  `A professional development certificate for teachers who bring a team (${EVENT_PD_HOURS} hours, by event)`,
   `Award winners are invited to our ${SEASON_YEAR} International Summer Camp (mid-July)`,
 ]
 
@@ -170,8 +176,19 @@ const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
   },
   {
     q: 'What are the expectations for teachers and chaperones?',
-    a: 'You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner!',
-    text: 'You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner!',
+    a: (
+      <>
+        You don’t need to be a specialist engineer or scientist to support students attending our events! If
+        you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate
+        if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a
+        corner! Afterwards you receive a{' '}
+        <Link href="/educators#credentials" className="text-primary-deep font-medium hover:underline">
+          professional development certificate
+        </Link>{' '}
+        for {EVENT_PD_HOURS} hours, depending on the event.
+      </>
+    ),
+    text: `You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner! Afterwards you receive a professional development certificate for ${EVENT_PD_HOURS} hours, depending on the event: https://www.stellreducation.org/educators#credentials`,
   },
   {
     q: 'How does transportation and event logistics work?',
@@ -207,14 +224,15 @@ const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
     q: 'What happens if I can’t attend after registering?',
     a: (
       <>
-        Please notify us as soon as possible. Review our{' '}
-        <Link href="/terms#refunds" className="text-primary-deep font-medium hover:underline">
-          Terms of Service
-        </Link>{' '}
-        for specifics.
+        Please let us know as soon as possible. Every registration is covered by our 100% money-back guarantee:
+        email us within {GUARANTEE_DAYS} days of paying and we refund you in full, no questions asked.{' '}
+        <Link href="/terms#guarantee" className="text-primary-deep font-medium hover:underline">
+          How the guarantee works
+        </Link>
+        .
       </>
     ),
-    text: 'Please notify us as soon as possible. Review our Terms of Service at https://www.stellreducation.org/terms#refunds for specifics.',
+    text: `Please let us know as soon as possible. Every registration is covered by our 100% money-back guarantee: email us within ${GUARANTEE_DAYS} days of paying and we refund you in full, no questions asked. Details: https://www.stellreducation.org/terms#guarantee`,
   },
 ]
 
@@ -351,7 +369,7 @@ export default async function EventDetailPage({ params }: PageProps) {
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3 short:text-2xl short:mb-2">
+          <h1 className="text-3xl sm:text-4xl sm:leading-10 lg:text-5xl lg:leading-none font-bold leading-tight mb-3 short:text-2xl short:leading-8 short:mb-2">
             {event.title}
           </h1>
 
@@ -457,6 +475,14 @@ export default async function EventDetailPage({ params }: PageProps) {
                     </li>
                   ))}
                 </ol>
+                <p className="mt-5 text-content-secondary">
+                  Every Challenge is set in our future history — this year,{' '}
+                  {themeFromType(event.type) === 'enviro' ? 'on Earth' : inSentence(eraForSchoolYear(CURRENT_SCHOOL_YEAR).name)},
+                  in {storyYear(CURRENT_SCHOOL_YEAR)}.{' '}
+                  <Link href="/competitions/mission" className="text-primary-deep font-medium hover:underline">
+                    Read the future history
+                  </Link>
+                </p>
               </div>
 
               {/* FAQ accordion */}
@@ -522,6 +548,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                           .
                         </p>
                       )}
+                      {price.kind === 'priced' && <MoneyBackGuarantee variant="compact" className="mt-2" />}
                     </div>
                   </div>
                 )}
@@ -590,6 +617,9 @@ export default async function EventDetailPage({ params }: PageProps) {
                   >
                     Register Now
                   </a>
+                )}
+                {status === 'open' && price.kind === 'priced' && (
+                  <MoneyBackGuarantee variant="compact" onDark className="mt-4 text-left" />
                 )}
                 {status === 'coming-soon' && (
                   <EventNotifyButton slug={slug} title={event.title} status={status} />

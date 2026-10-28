@@ -7,6 +7,7 @@ import { getEventPrice } from '@/lib/event-pricing'
 import GroupRegistrationForm from '@/components/forms/GroupRegistrationForm'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -66,6 +67,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
           gradeMin={band.min}
           gradeMax={band.max}
         />
+        {!isCampaign && !isFree && <MoneyBackGuarantee className="mt-8" />}
         <MissionFundingNote className="mt-10" />
       </div>
     </div>

@@ -223,7 +223,7 @@ export default async function CampaignsPage() {
         <div className="container-max">
           <div className="mx-auto max-w-3xl">
             <figure className="rounded-panel border border-line bg-surface px-8 py-9 shadow-card-lift">
-              <blockquote className="text-xl sm:text-2xl font-semibold text-ink leading-relaxed">
+              <blockquote className="text-xl sm:text-2xl sm:leading-8 font-semibold text-ink leading-relaxed">
                 &ldquo;These events put project-based learning into practice. Teams are tasked with an
                 unscripted problem, dig into the science to find engineering solutions, and develop teamwork
                 and communication durable skills.&rdquo;

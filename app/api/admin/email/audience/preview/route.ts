@@ -7,7 +7,7 @@ import { resolveAudience, type Audience } from '@/lib/email-campaigns'
 const schema = z.object({
   activeOnly: z.boolean().optional(),
   excludeMinors: z.boolean().optional(),
-  tierIds: z.array(z.string().uuid()).nullable().optional(),
+  tierIds: z.array(z.guid()).nullable().optional(),
 })
 
 // POST /api/admin/email/audience/preview — recipient count for a filter, with

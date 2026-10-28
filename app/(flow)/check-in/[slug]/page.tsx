@@ -36,7 +36,7 @@ export default async function CheckInPage({
 
   return (
     <div className="flex items-start justify-center bg-surface px-4 py-8">
-      <div className="w-full max-w-md space-y-6 rounded-ds-card border border-line bg-white p-6 shadow-sm">
+      <div className="w-full max-w-md space-y-6 rounded-ds-card border border-line bg-white p-6 shadow-xs">
         <div className="text-center">
           <Eyebrow>{isVirtual ? 'Confirm your attendance' : 'Event check-in'}</Eyebrow>
           <h1 className="mt-1 font-display text-xl font-bold text-ink">{event.title}</h1>

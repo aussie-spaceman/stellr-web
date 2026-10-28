@@ -102,7 +102,9 @@ test.describe('volunteer mentor credential', () => {
     await page.goto(`/credentials/${grace.number}`)
     await expect(page.getByRole('heading', { level: 1 })).toContainText('E2E Mentor Title')
     await page.goto('/community/credentials')
-    await expect(page.getByText('E2E Mentor Title')).toBeVisible()
+    // In <main>: the page streams, so a page-wide getByText can also match the
+    // hidden copy React parks outside <main> before moving it in.
+    await expect(page.getByRole('main').getByText('E2E Mentor Title')).toBeVisible()
     const pdf = await page.request.get(`/api/credentials/${grace.number}/pdf`)
     expect(pdf.status()).toBe(200)
     expect(pdf.headers()['content-type']).toBe('application/pdf')

@@ -43,7 +43,7 @@ export default function NotFound() {
           <Link
             key={link.href}
             href={link.href}
-            className="group flex flex-col gap-1 rounded-xl border border-line-light bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+            className="group flex flex-col gap-1 rounded-xl border border-line-light bg-white p-5 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md"
           >
             <span className="font-semibold text-brand-blue-dark flex items-center gap-1.5">
               {link.label}

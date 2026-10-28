@@ -83,7 +83,7 @@ export function MemberSearchField({
           onFocus={() => results.length && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder={placeholder}
-          className="w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm text-content outline-none focus:border-space-violet"
+          className="w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm text-content outline-hidden focus:border-space-violet"
         />
         {open && (
           <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-[12px] border border-line bg-white py-1 shadow-card-lift">

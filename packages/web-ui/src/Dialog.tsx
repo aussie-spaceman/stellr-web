@@ -187,7 +187,7 @@ export function Dialog({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative flex w-full flex-col bg-white shadow-panel outline-none',
+          'relative flex w-full flex-col bg-white shadow-panel outline-hidden',
           // Phone: a sheet from the bottom edge, clear of the home indicator.
           'max-h-[calc(100dvh-1rem)] rounded-t-ds-card pb-[env(safe-area-inset-bottom)]',
           'sm:max-h-[calc(100dvh-2rem)] sm:rounded-ds-card sm:pb-0',

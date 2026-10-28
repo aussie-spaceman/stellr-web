@@ -4,7 +4,8 @@ import { fakeDb, type FakeDb } from './fake-db.test-helper'
 // executeRefund, around the 23 Sept 2026 incident: a Colorado registration was
 // refunded in full by hand in Stripe, and deleting it would have issued a
 // second refund. These pin that a Stripe-side refund is detected, that "No
-// refund — remove only" issues nothing, and the smaller fixes that came with it.
+// refund — remove only" issues nothing, the money-back guarantee's 45 days
+// (27 Oct 2026), and the smaller fixes that came with them.
 
 let current: FakeDb
 const stripe = {
@@ -17,16 +18,11 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => current.db }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => stripe }))
 vi.mock('@/lib/sanity', () => ({
-  // 9 days out → default tier 0+: 25% credit only.
-  getEventBySlug: async () => ({ date: new Date(Date.now() + 9.5 * 86_400_000).toISOString(), stripePriceId: 'price_1' }),
+  getEventBySlug: async () => ({ stripePriceId: 'price_1' }),
 }))
 vi.mock('@/lib/notify', () => ({ notifyMember: vi.fn(async () => {}) }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: vi.fn(async () => {}) }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
-vi.mock('./policy', async (orig) => {
-  const actual = await orig<typeof import('./policy')>()
-  return { ...actual, resolvePolicy: async () => actual.DEFAULT_TIERS }
-})
 
 import { executeRefund } from './execute'
 
@@ -43,14 +39,18 @@ function seed(extra: Record<string, Record<string, unknown>[]> = {}) {
   })
 }
 
-const charge = (amount: number, refunded: number) => ({
-  amount_received: amount,
-  currency: 'usd',
-  latest_charge: { amount, amount_refunded: refunded, currency: 'usd' },
-})
+// `paidDaysAgo` places the charge relative to now: the guarantee runs 45 days.
+const charge = (amount: number, refunded: number, paidDaysAgo = 10) => {
+  const created = Math.floor((Date.now() - paidDaysAgo * 86_400_000) / 1000)
+  return {
+    amount_received: amount,
+    currency: 'usd',
+    created,
+    latest_charge: { amount, amount_refunded: refunded, currency: 'usd', created },
+  }
+}
 
 const refundRows = () => current.inserts.filter((i) => i.table === 'event_refunds').flatMap((i) => i.rows)
-const creditRows = () => current.inserts.filter((i) => i.table === 'account_credits').flatMap((i) => i.rows)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -59,15 +59,50 @@ beforeEach(() => {
   stripe.refunds.create.mockResolvedValue({ id: 're_app' })
 })
 
+describe('executeRefund — the money-back guarantee', () => {
+  it('refunds everything paid within 45 days, even after the event', async () => {
+    seed()
+    stripe.paymentIntents.retrieve.mockResolvedValue(charge(7500, 0, 44))
+
+    const r = await executeRefund('p1', 'cash', 'admin-1')
+
+    expect(r).toMatchObject({ type: 'cash', refundCents: 7500 })
+    expect(stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 7500 }), expect.anything())
+    expect(refundRows()[0]).toMatchObject({ refund_type: 'cash', refund_pct: 100, refund_cents: 7500, days_out: null })
+  })
+
+  it('refunds nothing after 45 days, and records why', async () => {
+    seed()
+    stripe.paymentIntents.retrieve.mockResolvedValue(charge(7500, 0, 50))
+
+    const r = await executeRefund('p1', 'cash', 'admin-1')
+
+    expect(r).toMatchObject({ type: 'none', refundCents: 0 })
+    expect(r.detail).toContain('outside the 45-day money-back guarantee')
+    expect(stripe.refunds.create).not.toHaveBeenCalled()
+    expect(refundRows()[0]).toMatchObject({ refund_type: 'none', note: expect.stringContaining('Paid 50 days ago') })
+  })
+
+  it('needs a person when Stripe cannot say when the payment was taken', async () => {
+    seed()
+    stripe.paymentIntents.retrieve.mockRejectedValue(new Error('No such payment_intent'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const r = await executeRefund('p1', 'cash', 'admin-1')
+
+    expect(r.type).toBe('manual_required')
+    expect(stripe.refunds.create).not.toHaveBeenCalled()
+  })
+})
+
 describe('executeRefund — refunded outside the app, in Stripe', () => {
   it('a full Stripe refund issues nothing further and records it as external', async () => {
     seed()
     stripe.paymentIntents.retrieve.mockResolvedValue(charge(7500, 7500))
 
-    const r = await executeRefund('p1', 'credit', 'admin-1')
+    const r = await executeRefund('p1', 'cash', 'admin-1')
 
     expect(r).toMatchObject({ type: 'none', external: true })
-    expect(creditRows()).toHaveLength(0)
     expect(stripe.refunds.create).not.toHaveBeenCalled()
     expect(refundRows()).toEqual([
       expect.objectContaining({ refund_type: 'none', source: 'stripe_external', refund_cents: 0, note: expect.stringContaining('75.00 USD in Stripe') }),
@@ -85,23 +120,12 @@ describe('executeRefund — refunded outside the app, in Stripe', () => {
 
   it('a partial Stripe refund caps what is left to give back', async () => {
     seed()
-    // 7000 of 7500 already refunded → 500 left; 25% credit of 500 = 125.
+    // 7000 of 7500 already refunded → 500 left.
     stripe.paymentIntents.retrieve.mockResolvedValue(charge(7500, 7000))
 
-    const r = await executeRefund('p1', 'credit', 'admin-1')
+    const r = await executeRefund('p1', 'cash', 'admin-1')
 
-    expect(r).toMatchObject({ type: 'credit', refundCents: 125 })
-    expect(creditRows()[0]).toMatchObject({ amount_cents: 125 })
-  })
-
-  it('falls back to the database when Stripe cannot be asked', async () => {
-    seed()
-    stripe.paymentIntents.retrieve.mockRejectedValue(new Error('No such payment_intent'))
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const r = await executeRefund('p1', 'credit', 'admin-1')
-
-    expect(r).toMatchObject({ type: 'credit', refundCents: 1875 })
+    expect(r).toMatchObject({ type: 'cash', refundCents: 500 })
   })
 })
 
@@ -113,7 +137,6 @@ describe("executeRefund — 'none' (No refund — remove only)", () => {
 
     expect(r).toMatchObject({ type: 'none', refundCents: 0 })
     expect(stripe.refunds.create).not.toHaveBeenCalled()
-    expect(creditRows()).toHaveLength(0)
     expect(refundRows()).toEqual([
       expect.objectContaining({
         refund_type: 'none', source: 'admin', note: 'Refunded in full in Stripe', paid_cents: 7500, decided_by: 'admin-1',
@@ -131,10 +154,10 @@ describe('executeRefund — fixes that came with it', () => {
       ],
     })
 
-    const r = await executeRefund('p1', 'credit', 'admin-1')
+    const r = await executeRefund('p1', 'cash', 'admin-1')
 
     expect(r).toMatchObject({ type: 'none', detail: 'Already refunded' })
-    expect(creditRows()).toHaveLength(0)
+    expect(stripe.refunds.create).not.toHaveBeenCalled()
   })
 
   it('a scholarship reimbursement does not count as already refunded on cancellation', async () => {
@@ -142,27 +165,13 @@ describe('executeRefund — fixes that came with it', () => {
       event_refunds: [{ id: 'e1', participant_id: 'p1', refund_type: 'cash', kind: 'scholarship' }],
     })
 
-    const r = await executeRefund('p1', 'credit', 'admin-1')
+    const r = await executeRefund('p1', 'cash', 'admin-1')
 
     expect(r.detail).not.toBe('Already refunded')
   })
 
-  it('a failed credit insert is reported as manual_required, not as issued', async () => {
-    seed()
-    current.failInsert('account_credits', 'insert denied')
-
-    const r = await executeRefund('p1', 'credit', 'admin-1')
-
-    expect(r.type).toBe('manual_required')
-    expect(r.detail).toContain('insert denied')
-    expect(refundRows()[0]).toMatchObject({ refund_type: 'manual_required' })
-  })
-
   it("tags the app's own Stripe refunds so the webhook can skip them", async () => {
     seed()
-    // 120 days out → 100% cash.
-    const sanity = await import('@/lib/sanity')
-    vi.spyOn(sanity, 'getEventBySlug').mockResolvedValueOnce({ date: new Date(Date.now() + 120.5 * 86_400_000).toISOString(), stripePriceId: 'price_1' } as never)
 
     const r = await executeRefund('p1', 'cash', 'admin-1')
 
@@ -178,8 +187,6 @@ describe('executeRefund — fixes that came with it', () => {
   // window. The DB unique index is the backstop.
   it('passes a per-participant idempotency key on the cancellation refund', async () => {
     seed()
-    const sanity = await import('@/lib/sanity')
-    vi.spyOn(sanity, 'getEventBySlug').mockResolvedValueOnce({ date: new Date(Date.now() + 120.5 * 86_400_000).toISOString(), stripePriceId: 'price_1' } as never)
 
     await executeRefund('p1', 'cash', 'admin-1')
 

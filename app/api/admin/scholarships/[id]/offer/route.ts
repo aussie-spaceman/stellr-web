@@ -12,7 +12,7 @@ import { isScholarshipPercent } from '@/lib/scholarships'
 const schema = z.object({
   percent: z.number().refine(isScholarshipPercent, 'Choose a scholarship level'),
   eventSlug: z.string().min(1, 'Choose an event'),
-  memberId: z.string().uuid().nullable().optional(),
+  memberId: z.guid().nullable().optional(),
   sendEmails: z.boolean().default(true),
   /** Already paid: card refund (default) or account credit. */
   refundMethod: z.enum(['cash', 'credit']).default('cash'),

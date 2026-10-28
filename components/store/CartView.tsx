@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Trash2, Loader2, ShoppingBag } from 'lucide-react'
 import { getCart, setQty, removeFromCart, type CartItem } from '@/lib/store/cart-client'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 export function CartView() {
   const [items, setItems] = useState<CartItem[]>([])
@@ -107,6 +108,7 @@ export function CartView() {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         Checkout
       </button>
+      <MoneyBackGuarantee variant="compact" />
     </div>
   )
 }

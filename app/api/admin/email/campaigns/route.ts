@@ -8,13 +8,13 @@ import { getSignedInMember } from '@/lib/community'
 const audienceSchema = z.object({
   activeOnly: z.boolean().optional(),
   excludeMinors: z.boolean().optional(),
-  tierIds: z.array(z.string().uuid()).nullable().optional(),
+  tierIds: z.array(z.guid()).nullable().optional(),
 })
 
 const createSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
-    templateId: z.string().uuid(),
+    templateId: z.guid(),
     triggerType: z.enum(['scheduled', 'event']),
     scheduledAt: z.string().datetime().optional(),
     eventKey: z.string().trim().min(1).max(100).optional(),

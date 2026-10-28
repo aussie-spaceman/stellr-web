@@ -6,6 +6,8 @@ export interface StripeRefundState {
   /** How much of it Stripe has already given back — by the app or by hand. */
   refundedCents: number
   currency: string
+  /** When the payment was taken: starts the 45-day guarantee (lib/refunds/policy.ts). */
+  paidAt: Date | null
 }
 
 // Asks Stripe what has already been refunded on a payment. The app's own
@@ -21,10 +23,11 @@ export async function stripeRefundState(paymentIntentId: string): Promise<Stripe
   try {
     const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] })
     const charge = pi.latest_charge
+    const at = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000) : null)
     if (!charge || typeof charge === 'string') {
-      return { amountCents: pi.amount_received ?? 0, refundedCents: 0, currency: pi.currency }
+      return { amountCents: pi.amount_received ?? 0, refundedCents: 0, currency: pi.currency, paidAt: at(pi.created) }
     }
-    return { amountCents: charge.amount, refundedCents: charge.amount_refunded ?? 0, currency: charge.currency }
+    return { amountCents: charge.amount, refundedCents: charge.amount_refunded ?? 0, currency: charge.currency, paidAt: at(charge.created ?? pi.created) }
   } catch (e) {
     console.error('[refunds] Stripe refund lookup failed:', e instanceof Error ? e.message : e)
     return null

@@ -10,6 +10,7 @@ import {
   isScholarshipPercent,
   resolveScholarshipCoupon,
 } from '@/lib/scholarships'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 // The one place that knows how to build a Stripe Checkout for a registration.
 //
@@ -221,6 +222,8 @@ export async function createRegistrationCheckout(
 
   const customerEmail = opts.customerEmail === undefined ? defaultEmail : opts.customerEmail
   const session = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     // Surfaces the "Add promotion code" field for codes set up in Stripe —
     // except on a scholarship checkout, which carries its coupon already.

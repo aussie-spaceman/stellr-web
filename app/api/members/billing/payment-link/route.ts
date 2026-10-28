@@ -6,6 +6,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { createRegistrationCheckout, RegistrationCheckoutError } from '@/lib/registration-checkout'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -106,6 +107,8 @@ export async function POST(req: NextRequest) {
   assertLiveCredentials('stripe')
 
   const session = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     // Surfaces the "Add promotion code" field for codes set up in Stripe.
     allow_promotion_codes: true,

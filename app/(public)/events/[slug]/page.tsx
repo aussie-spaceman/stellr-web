@@ -20,6 +20,8 @@ import { gradeBand } from '@/lib/grade-band'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
+import { GUARANTEE_DAYS } from '@/lib/guarantee'
 import { themeFromType } from '@/lib/campaigns'
 import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/lib/future-history'
 import { EVENT_PD_HOURS } from '@/lib/pd-standards'
@@ -222,14 +224,15 @@ const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
     q: 'What happens if I can’t attend after registering?',
     a: (
       <>
-        Please notify us as soon as possible. Review our{' '}
-        <Link href="/terms#refunds" className="text-primary-deep font-medium hover:underline">
-          Terms of Service
-        </Link>{' '}
-        for specifics.
+        Please let us know as soon as possible. Every registration is covered by our 100% money-back guarantee:
+        email us within {GUARANTEE_DAYS} days of paying and we refund you in full, no questions asked.{' '}
+        <Link href="/terms#guarantee" className="text-primary-deep font-medium hover:underline">
+          How the guarantee works
+        </Link>
+        .
       </>
     ),
-    text: 'Please notify us as soon as possible. Review our Terms of Service at https://www.stellreducation.org/terms#refunds for specifics.',
+    text: `Please let us know as soon as possible. Every registration is covered by our 100% money-back guarantee: email us within ${GUARANTEE_DAYS} days of paying and we refund you in full, no questions asked. Details: https://www.stellreducation.org/terms#guarantee`,
   },
 ]
 
@@ -545,6 +548,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                           .
                         </p>
                       )}
+                      {price.kind === 'priced' && <MoneyBackGuarantee variant="compact" className="mt-2" />}
                     </div>
                   </div>
                 )}
@@ -613,6 +617,9 @@ export default async function EventDetailPage({ params }: PageProps) {
                   >
                     Register Now
                   </a>
+                )}
+                {status === 'open' && price.kind === 'priced' && (
+                  <MoneyBackGuarantee variant="compact" onDark className="mt-4 text-left" />
                 )}
                 {status === 'coming-soon' && (
                   <EventNotifyButton slug={slug} title={event.title} status={status} />

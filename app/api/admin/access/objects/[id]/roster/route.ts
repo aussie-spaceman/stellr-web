@@ -53,7 +53,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 const postSchema = z.object({
-  memberId: z.string().uuid(),
+  memberId: z.guid(),
   /** Canonical member_roles value; defaults to the base roster role. */
   role: z.string().optional(),
 })
@@ -156,7 +156,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({ ok: true })
 }
 
-const deleteSchema = z.object({ memberId: z.string().uuid() })
+const deleteSchema = z.object({ memberId: z.guid() })
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()

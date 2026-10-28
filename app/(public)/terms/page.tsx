@@ -13,10 +13,16 @@ export default function TermsPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Terms of Use</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-content-muted italic">
-          Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Oct-2026
+          Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 27-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (09-Oct-2026):</strong>{' '}Section 5.1 now explains that the email
+          <strong>Recent update (27-Oct-2026):</strong>{' '}New Section 9.1 adds a{' '}
+          <strong>100% money-back guarantee</strong>: ask within 45 days of any payment and we refund it
+          in full. It replaces the refund and cancellation policies of individual events, and the
+          table in Section 9 now covers only what happens after the 45 days.
+        </p>
+        <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
+          <strong>Earlier update (09-Oct-2026):</strong>{' '}Section 5.1 now explains that the email
           we send when a credential is issued contains a link that opens the credential page while
           it is private (for a Minor, the email goes to their parent or legal guardian), and asks
           you not to forward it.
@@ -61,7 +67,8 @@ export default function TermsPage() {
               promote it.
             </li>
             <li>
-              Some memberships and events have fees. Read the billing and refund terms before you pay.
+              Some memberships and events have fees. Every purchase comes with a 100% money-back
+              guarantee: ask within 45 days of paying and we refund it in full.
             </li>
             <li>
               Our programs are educational — we can&rsquo;t guarantee specific outcomes, and there are
@@ -431,7 +438,52 @@ export default function TermsPage() {
         <h2 id="refunds" className="text-xl font-bold text-brand-blue-dark">
           9. Refunds &amp; Cancellations
         </h2>
-        <p>The following applies unless a specific competition, event, or membership states otherwise:</p>
+
+        {/* 9.1 — the guarantee (27-Oct-2026). Keep the window in step with
+            GUARANTEE_DAYS in lib/refunds/policy.ts, which the app enforces. */}
+        <h3 id="guarantee" className="text-lg font-semibold text-brand-blue-dark">
+          9.1 100% Money-Back Guarantee
+        </h3>
+        <p>
+          Every purchase from Stellr is covered by our 100% money-back guarantee. That includes
+          competition and event registrations, Campaign fees, memberships (each renewal included),
+          Academy coaching and mentoring, and Store merchandise.
+        </p>
+        <ul className="list-disc pl-6 space-y-2">
+          <li>
+            <strong>45 days, in full.</strong> Ask within 45 days of the date you paid and we refund
+            the full amount you paid. No questions asked. This applies whether or not the event has
+            taken place, and whether or not you have used what you bought. Physical merchandise does not
+            need to be returned.
+          </li>
+          <li>
+            <strong>How to ask.</strong> Email{' '}
+            <a href="mailto:hello@stellreducation.org" className="text-brand-blue underline">
+              hello@stellreducation.org
+            </a>{' '}
+            with your name, what you bought, and the email address you used to pay. If someone else paid
+            on your behalf, such as a school or a parent, the request should come from them.
+          </li>
+          <li>
+            <strong>How you are refunded.</strong> We refund the original payment method through our
+            payment processor. Your bank may take several business days to show it.
+          </li>
+          <li>
+            <strong>What a refund ends.</strong> A refunded registration releases its place, and any
+            membership included with it ends. A refunded membership ends when the refund is issued.
+          </li>
+          <li>
+            <strong>This replaces other policies.</strong> The guarantee overrides any refund or
+            cancellation policy stated for a specific event, product, invoice or earlier version of these
+            Terms.
+          </li>
+        </ul>
+        <p>
+          Donations are gifts, not purchases, so the guarantee does not cover them. See Section 15.
+        </p>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">9.2 After 45 Days</h3>
+        <p>Once the 45 days have passed:</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse border border-line">
             <thead>
@@ -442,10 +494,11 @@ export default function TermsPage() {
             </thead>
             <tbody>
               {[
-                ['Membership fees', 'You can cancel anytime to stop future renewals. Fees already paid are non-refundable except where required by law.'],
-                ['Competition / event fees', 'We endeavor to offer refunds or credits where possible. Individual events have differing deadlines and policies — contact the Event Manager for the specific policy and deadlines that apply to your event.'],
-                ['Competition / campaign fees', 'Non-refundable, except at our discretion or where required by law.'],
-                ['If Stellr cancels a competition', 'We will offer either a full credit toward a future competition, or as much of a partial refund as we can.'],
+                ['Membership fees', 'You can cancel anytime to stop future renewals. A renewal is a new payment, with its own 45 days. Fees already paid more than 45 days ago are non-refundable except where required by law.'],
+                ['Competition, event and Campaign fees', 'Non-refundable, except where required by law.'],
+                ['Academy coaching and mentoring', 'Non-refundable, except where required by law.'],
+                ['Store merchandise', 'Non-refundable, except where required by law. Contact us about an item that arrives faulty or damaged.'],
+                ['If Stellr cancels a competition', 'We will offer either a full credit toward a future competition, or as much of a refund as we can.'],
                 ['Donations', 'Donations are non-refundable, except at our discretion or where required by law. See Section 15.'],
               ].map(([item, policy]) => (
                 <tr key={item} className="even:bg-surface">
@@ -456,7 +509,6 @@ export default function TermsPage() {
             </tbody>
           </table>
         </div>
-        <p>Approved refunds are issued to the original payment method through our payment processor.</p>
 
         {/* 10. Acceptable Use */}
         <h2 id="acceptable" className="text-xl font-bold text-brand-blue-dark">

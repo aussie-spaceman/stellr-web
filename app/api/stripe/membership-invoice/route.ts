@@ -6,6 +6,7 @@ import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { requireStripe } from '@/lib/stripe'
+import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 
 // Pay-by-invoice is offered only on the educator / school-district tiers, where
 // purchase orders are normal. Student tiers are card-only.
@@ -146,6 +147,8 @@ export async function POST(req: Request) {
       days_until_due: 14,
       auto_advance: false,
       automatic_tax: { enabled: hasTaxAddress },
+      // The money-back guarantee, printed on the invoice.
+      footer: GUARANTEE_RECEIPT_LINE,
       description: `Stellr ${tier.name} membership (annual)`,
       metadata: {
         type: 'membership_invoice',

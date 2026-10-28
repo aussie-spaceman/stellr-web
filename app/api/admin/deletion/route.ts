@@ -4,7 +4,7 @@ import { isAdminClaims } from '@/lib/admin-auth'
 import { executeDeletion, DeletionBlockedError } from '@/lib/deletion/execute'
 import { memberIdForClerkUser } from '@/lib/deletion/actor'
 
-// DELETE /api/admin/deletion  { entity, id, mode: 'soft' | 'hard', refundChoice?: 'cash' | 'credit' | 'none', refundNote? }
+// DELETE /api/admin/deletion  { entity, id, mode: 'soft' | 'hard', refundChoice?: 'cash' | 'none', refundNote? }
 // Central admin delete. Blocks (409) with the dependent list when linked records
 // remain; otherwise runs external cleanup + soft/hard delete.
 export async function DELETE(req: Request) {
@@ -15,7 +15,7 @@ export async function DELETE(req: Request) {
   const entity = body?.entity as string | undefined
   const id = body?.id as string | undefined
   const mode = (body?.mode as string | undefined) === 'hard' ? 'hard' : 'soft'
-  const refundChoice = ['cash', 'credit', 'none'].includes(body?.refundChoice) ? body.refundChoice : undefined
+  const refundChoice = ['cash', 'none'].includes(body?.refundChoice) ? body.refundChoice : undefined
   const refundNote = typeof body?.refundNote === 'string' ? body.refundNote.trim().slice(0, 500) : ''
   if (!entity || !id) return NextResponse.json({ error: 'entity and id are required' }, { status: 400 })
   // "No refund — remove only" skips the refund policy, so it must say why.

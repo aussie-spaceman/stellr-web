@@ -1,7 +1,7 @@
 // deep review TEST-12: a MINIMAL, non-blocking ESLint config for the specific
 // classes the review cares about — nothing else. `tsc` cannot catch any of them.
 //
-// Deliberately NOT wired into `next build` (next.config: eslint.ignoreDuringBuilds)
+// Deliberately NOT part of `next build` (Next 16 no longer lints during builds)
 // nor the `verify`/`prebuild` gate, and every enabled rule is 'warn', so it never
 // fails CI. Run it on demand with `npm run lint`.
 //
@@ -36,6 +36,9 @@ export default tseslint.config(
     ignores: [
       '.next/**',
       'node_modules/**',
+      // ESLint 10 resolves config per file directory, so nested worktrees'
+      // own eslint.config.mjs files would otherwise be picked up by `eslint .`.
+      '.claude/**',
       'coverage/**',
       'storybook-static/**',
       '**/*.test.ts',

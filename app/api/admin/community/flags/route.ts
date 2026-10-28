@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 }
 
 const resolveSchema = z.object({
-  flagId: z.string().uuid(),
+  flagId: z.guid(),
   action: z.enum(['resolved', 'dismissed']),
   // When action=resolved, optionally hide the content too.
   hideContent: z.boolean().optional(),

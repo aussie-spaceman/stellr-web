@@ -187,9 +187,27 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
   },
 }
 
-// Apply the media host base to competition file URLs (kept relative above for
-// readability). Open files download; previews and covers open.
-for (const c of Object.values(COMPETITION)) {
+/* ─────────────────────────────────────────────────────────────────────────
+ * Organisation flyers. Always open: recruitment collateral a teacher should be
+ * able to forward without an email wall. Rendered with WorkCard, like the open
+ * competition files.
+ * ───────────────────────────────────────────────────────────────────────── */
+export const FLYERS: Record<string, CompetitionAsset> = {
+  'about-stellr-2027': {
+    id: 'about-stellr-2027',
+    title: 'About Stellr — 2027 Flyer',
+    pages: 2,
+    thumbnail: '/files/2026-10/about-stellr-2027.cover.jpg',
+    previewHref: '/files/2026-10/about-stellr-2027.pdf',
+    gated: false,
+    fileHref: '/files/2026-10/about-stellr-2027.pdf',
+    credit: 'US Letter',
+  },
+}
+
+// Apply the media host base to competition and flyer file URLs (kept relative
+// above for readability). Open files download; previews and covers open.
+for (const c of [...Object.values(COMPETITION), ...Object.values(FLYERS)]) {
   c.thumbnail = mediaUrl(c.thumbnail)
   if (c.previewHref) c.previewHref = mediaUrl(c.previewHref)
   if (c.fileHref) c.fileHref = mediaDownloadUrl(c.fileHref)

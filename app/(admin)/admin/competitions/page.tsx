@@ -127,11 +127,6 @@ export default async function AdminEventsPage() {
           >
             Check-in banner
           </Link>
-          {access.isAdmin && (
-            <Link href="/admin/competitions/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
-              Refund Policy
-            </Link>
-          )}
         </div>
       </div>
 

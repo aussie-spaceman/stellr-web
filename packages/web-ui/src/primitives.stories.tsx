@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Button, Eyebrow, Badge, SectionHeading } from './primitives'
 
 const meta: Meta = { title: 'Primitives' }

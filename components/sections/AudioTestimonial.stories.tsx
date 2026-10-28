@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { AudioTestimonial } from './AudioTestimonial'
 
 // Audio-only testimonial with a transcript download beneath. Fixture is inline

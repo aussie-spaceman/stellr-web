@@ -18,7 +18,6 @@ type PdfDoc = {
     getViewport: (o: { scale: number }) => { width: number; height: number }
     render: (o: { canvas: HTMLCanvasElement; canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> }
   }>
-  destroy: () => Promise<void>
 }
 
 const REDRAW_THRESHOLD_PX = 40
@@ -32,6 +31,8 @@ export function PdfViewer({ src, title, signRef }: { src: string; title: string;
   useEffect(() => {
     let cancelled = false
     let doc: PdfDoc | null = null
+    // pdf.js 6 tears a document down through its loading task, not the document.
+    let task: { destroy: () => Promise<void> } | null = null
     let drawnWidth = 0
     let drawId = 0
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -79,7 +80,9 @@ export function PdfViewer({ src, title, signRef }: { src: string; title: string;
           headers: signRef ? { 'x-sign-ref': signRef } : undefined,
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        doc = (await pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) }).promise) as unknown as PdfDoc
+        const loading = pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) })
+        task = loading
+        doc = (await loading.promise) as unknown as PdfDoc
         if (cancelled) return
         setPageCount(doc.numPages)
         const host = pagesRef.current
@@ -106,7 +109,7 @@ export function PdfViewer({ src, title, signRef }: { src: string; title: string;
       cancelled = true
       if (timer) clearTimeout(timer)
       observer?.disconnect()
-      void doc?.destroy()
+      void task?.destroy()
     }
   }, [src, signRef])
 

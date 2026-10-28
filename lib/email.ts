@@ -1083,3 +1083,32 @@ export function accountInviteEmail({
   const text = `Hi ${firstName},\n\nThe Stellr team has set up a member account for you. Before you can use it, we need a few details only you can give us — your date of birth, gender and phone number.\n\nComplete your account: ${url}\n\nUse ${email} to sign in — your account is already tied to that address.\n\nNot expecting this? Reply to this email and we'll sort it out.\n\n— Stellr Education`
   return { subject, html, text }
 }
+
+// Sent to each person a teacher registers as part of a group. Their member
+// record was built from what the teacher entered, so the one action is to sign
+// in and check it. Same passwordless login as accountInviteEmail: the caller
+// provisions it for this address first.
+export function groupAccountCreatedEmail({
+  firstName, email, eventTitle, organiserName, url,
+}: {
+  firstName: string
+  email: string
+  eventTitle: string
+  organiserName: string
+  url: string
+}) {
+  const subject = `Your Stellr account for ${eventTitle} is ready`
+  const html = emailLayout({
+    heading: 'Your Stellr account is ready',
+    preheader: `Sign in to check your details for ${eventTitle}.`,
+    bodyHtml: `
+        <p>Hi ${esc(firstName)},</p>
+        <p>${esc(organiserName)} has registered you for <strong>${esc(eventTitle)}</strong>, so we've created your Stellr member account using the details they gave us.</p>
+        <p>Sign in to check those details and add anything missing. Your account is also where you'll find your event space, team updates and resources before the day.</p>
+        <p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">Check my details</a></p>
+        <p style="color:#6b7280;font-size:14px">Use <strong>${esc(email)}</strong> to sign in — there's no password; we'll email you a code.</p>
+        <p style="color:#6b7280;font-size:14px">Not expecting this? Reply to this email and we'll sort it out.</p>`,
+  })
+  const text = `Hi ${firstName},\n\n${organiserName} has registered you for ${eventTitle}, so we've created your Stellr member account using the details they gave us.\n\nSign in to check those details and add anything missing. Your account is also where you'll find your event space, team updates and resources before the day.\n\nCheck my details: ${url}\n\nUse ${email} to sign in — there's no password; we'll email you a code.\n\nNot expecting this? Reply to this email and we'll sort it out.\n\n— Stellr Education`
+  return { subject, html, text }
+}

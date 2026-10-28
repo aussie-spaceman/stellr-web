@@ -15,6 +15,7 @@ import { T_SHIRT_SIZES, GENDERS, COLLEGE_GRADES, ETHNICITIES, DIETARY, EMERGENCY
 import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
 import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
+import { isValidEmail } from '@/lib/member-enums'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 import { StepBar as SharedStepBar } from '@/components/registration/StepBar'
@@ -202,6 +203,7 @@ function adultSlotErrors(a: AdultData): SlotErrors<AdultData> {
   if (a.linked || isEmptySlot(a)) return {}
   const e: SlotErrors<AdultData> = {}
   for (const f of ADULT_REQUIRED) if (!a[f]) e[f] = 'Required'
+  if (a.email && !isValidEmail(a.email)) e.email = 'Enter a valid email'
   if (a.ethnicity.length === 0) e.ethnicity = 'Select at least one'
   if (a.dietary_requirements.length === 0) e.dietary_requirements = 'Select at least one'
   return e
@@ -212,9 +214,14 @@ function studentSlotErrors(s: StudentData): SlotErrors<StudentData> {
   if (s.linked || isEmptySlot(s)) return {}
   const e: SlotErrors<StudentData> = {}
   for (const f of STUDENT_REQUIRED) if (!s[f]) e[f] = 'Required'
+  if (s.email && !isValidEmail(s.email)) e.email = 'Enter a valid email'
   if (s.ethnicity.length === 0) e.ethnicity = 'Select at least one'
   if (s.dietary_requirements.length === 0) e.dietary_requirements = 'Select at least one'
   for (const f of STUDENT_EC_REQUIRED) if (!s[f]) e[f] = 'Required'
+  // The consent form is emailed here — "none" or a typo means no agreement.
+  if (s.emergency_contact_email && !isValidEmail(s.emergency_contact_email)) {
+    e.emergency_contact_email = 'Enter a valid email — the consent form is sent here'
+  }
   return e
 }
 

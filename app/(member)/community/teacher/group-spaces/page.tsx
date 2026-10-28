@@ -36,7 +36,9 @@ export default async function GroupSpacesPage({
         </p>
         <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Spaces my group can access</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
-          Access is automatic by each student&apos;s membership tier. This view is read-only.
+          Access is automatic: an event&apos;s space opens to everyone registered for it, and other spaces follow
+          each student&apos;s membership. A student needs to sign in to their Stellr account to use them. This view
+          is read-only.
         </p>
       </header>
 
@@ -78,7 +80,7 @@ export default async function GroupSpacesPage({
                 <tr className="border-b border-brand-hairline text-xs uppercase tracking-[0.05em] text-brand-muted-soft">
                   <th className="px-4 py-3 font-subheading font-semibold">Space</th>
                   <th className="px-4 py-3 font-subheading font-semibold">Access</th>
-                  <th className="px-4 py-3 font-subheading font-semibold">Required tier</th>
+                  <th className="px-4 py-3 font-subheading font-semibold">Who can join</th>
                   <th className="px-4 py-3 font-subheading font-semibold">Group access</th>
                 </tr>
               </thead>

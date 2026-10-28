@@ -11,6 +11,8 @@ import { getHostCaps } from '@/lib/sessions'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { isStudentForAds } from '@/lib/no-ads'
 import { NoAdsStudentMarker } from '@/components/analytics/NoAdsStudentMarker'
+import { OutstandingBanner } from '@/components/member/OutstandingBanner'
+import { getOutstandingItems } from '@/lib/member-outstanding'
 
 export default async function MemberLayout({ children }: { children: React.ReactNode }) {
   const [{ sessionClaims }, member] = await Promise.all([auth(), getCurrentMember()])
@@ -20,9 +22,14 @@ export default async function MemberLayout({ children }: { children: React.React
   // member above, so `member` is who the portal is rendering — the banner just
   // has to say so, and name the admin behind it. Both reads need only the
   // member, so they run together rather than one after the other.
-  const [viewAs, caps] = await Promise.all([
+  const [viewAs, caps, outstanding] = await Promise.all([
     viewAsBannerProps(member),
     member ? getHostCaps(member.id) : Promise.resolve(null),
+    // A failure here must never take the portal down with it.
+    member ? getOutstandingItems(member.id).catch((err) => {
+      console.error('[member-layout] outstanding items failed:', err)
+      return []
+    }) : Promise.resolve([]),
   ])
   const showHosting = !!caps && (caps.canCoach || caps.canMentor)
   const isTeacher = member?.event_role === 'teacher'
@@ -36,6 +43,7 @@ export default async function MemberLayout({ children }: { children: React.React
     <div className="min-h-[100svh] bg-surface">
       {markStudent && <NoAdsStudentMarker />}
       {viewAs && <ImpersonationBanner {...viewAs} />}
+      <OutstandingBanner items={outstanding} />
       <div className="flex">
         <AppSidebar canHost={showHosting} isTeacher={isTeacher} />
 

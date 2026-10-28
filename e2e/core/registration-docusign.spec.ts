@@ -25,21 +25,41 @@ import { attachConsoleGuard } from '../fixtures/console-guard'
  * passes just as happily when the envelope is complete, when it is untouched,
  * and when the two roles are swapped. Every assertion below therefore targets
  * the STATUS cell, the only place the part-signed distinction is expressed.
+ *
+ * Which ROW matters too. Ada is the seed member, so other specs give her
+ * agreements of their own: `survey-cli.ts` creates a COMPLETED one per test
+ * event. A run cancelled mid-suite leaves it behind, newer than the fixture,
+ * and "the first row naming Ada" then read "Complete" (28 Oct 2026). The row
+ * is pinned to the fixture's event, and must be the only one.
  */
 
+const FIXTURE_EVENT = 'Seed Regional Challenge (fixture)'
 const ENVELOPE_ROW = 'Ada Student'
 const OUTSTANDING = 'Ada Student'
 const ALREADY_SIGNED = 'Grace Teacher'
 
+type Page = import('@playwright/test').Page
+
+// Inside <main> only. The page streams (admin loading.tsx): React first parks
+// the finished table in a hidden <div id="S:…"> outside <main>, then moves it
+// in, and for a moment both copies exist. A page-wide locator would match two
+// rows there and fail strict mode.
+const envelopeTable = (page: Page) =>
+  page.getByRole('main').locator('table', { has: page.locator('th', { hasText: /^Status$/i }) })
+
+/** The fixture's row and nothing else: its event and its participant. */
+const fixtureRow = (page: Page) =>
+  envelopeTable(page).locator('tbody tr').filter({ hasText: FIXTURE_EVENT }).filter({ hasText: ENVELOPE_ROW })
+
 /**
  * The status cell of the fixture's row, found by its column heading rather than
- * a fixed index (the Engine column, added for Stellr signing, moved it).
+ * a fixed index (the Engine column, added for Stellr signing, moved it). No
+ * `.first()`: a second matching row fails strict mode instead of being skipped.
  */
-const statusCell = async (page: import('@playwright/test').Page) => {
-  const table = page.locator('table', { has: page.locator('th', { hasText: /^Status$/i }) })
-  const headers = await table.locator('thead th').allInnerTexts()
+const statusCell = async (page: Page) => {
+  const headers = await envelopeTable(page).locator('thead th').allInnerTexts()
   const index = headers.findIndex((h) => /^status$/i.test(h.trim()))
-  return table.locator('tbody tr', { hasText: ENVELOPE_ROW }).first().locator('td').nth(index)
+  return fixtureRow(page).locator('td').nth(index)
 }
 
 test.describe('the admin consent-forms view', () => {
@@ -85,11 +105,10 @@ test.describe('the admin consent-forms view', () => {
     // with it — an envelope shown as awaiting while "Signed" counts it done.
     // Checked through the filters rather than exact counts: other specs add
     // agreements to the same dev database while this one runs.
-    const fixtureRow = page.locator('tbody tr', { hasText: ENVELOPE_ROW })
     await page.getByRole('button', { name: /^Completed \(\d+\)$/ }).click()
-    await expect(fixtureRow, 'the completed filter must not claim this envelope').toHaveCount(0)
+    await expect(fixtureRow(page), 'the completed filter must not claim this envelope').toHaveCount(0)
     await page.getByRole('button', { name: /^Delivered \(\d+\)$/ }).click()
-    await expect(fixtureRow.first(), 'it should sit under Delivered').toBeVisible()
+    await expect(fixtureRow(page), 'it should sit under Delivered, once').toHaveCount(1)
   })
 })
 

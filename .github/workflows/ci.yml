@@ -16,7 +16,12 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a PR's own newer push cancels its run. A push to dev or main runs to
+  # the end: cancelling dev's run mid-e2e stopped a test before its cleanup, and
+  # the event it left behind failed the next two runs (28 Oct 2026, TRACKER
+  # 13.5). A push that arrives meanwhile waits; GitHub keeps one pending run per
+  # group, so a third push replaces the waiting run, never the running one.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Nothing here writes back to GitHub (no comments, statuses or releases), so
 # the token is read-only.
@@ -162,10 +167,12 @@ jobs:
     # resetting Grace's credential in its hooks, one run could flip it private
     # halfway through the other's publish test (TRACKER 13.1).
     #
-    # cancel-in-progress: false, so a running suite is never killed halfway
-    # through, with rows left mutated. GitHub keeps only ONE pending job per
-    # group: if a third run queues while one runs and one waits, the waiting
-    # one is cancelled. Its e2e check then reads "cancelled"; re-run that job.
+    # cancel-in-progress: false, so another ref's run never kills this suite
+    # halfway through, with rows left mutated. The workflow-level group can
+    # still cancel it, but only for a newer push to the same PR. GitHub keeps
+    # only ONE pending job per group: if a third run queues while one runs and
+    # one waits, the waiting one is cancelled. Its e2e check then reads
+    # "cancelled"; re-run that job.
     concurrency:
       group: e2e-dev-supabase
       cancel-in-progress: false

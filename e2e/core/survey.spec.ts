@@ -165,7 +165,9 @@ test.describe('Post-event survey', () => {
       // A browser following the download link lands on Credentials with the reason and the survey link.
       await page.goto(pdf)
       await expect(page).toHaveURL(new RegExp(`/community/credentials\\?survey_first=${number}`))
-      await expect(page.getByText(/certificate is ready once your survey is in/)).toBeVisible()
+      // In <main>: the page streams, and a page-wide getByText also matches the
+      // hidden copy React parks outside <main> before moving it in (28 Oct 2026).
+      await expect(page.getByRole('main').getByText(/certificate is ready once your survey is in/)).toBeVisible()
       await expect(page.getByRole('link', { name: 'Open the survey' })).toHaveAttribute('href', surveyUrl)
       await expect(page.getByRole('link', { name: 'Finish the survey to download the certificate' })).toHaveAttribute('href', surveyUrl)
 

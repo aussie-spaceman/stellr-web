@@ -44,7 +44,7 @@ export async function getOrganisedGroups(memberId: string, eventSlug: string): P
     .select(`id, status, school_name, amount_due_cents, invoice_requested, invoice_paid_at, school_address_state,
       participants(id, member_id, first_name, last_name, event_role, date_of_birth)`)
     .eq('event_slug', eventSlug)
-    .eq('type', 'group')
+    .in('type', ['group', 'campaign'])
     .eq('teacher_member_id', memberId)
     .neq('status', 'withdrawn')
     .order('created_at', { ascending: true })

@@ -6,6 +6,7 @@ import { deriveCompliance, loadComplianceRecordsByMemberIds, requiresBackgroundC
 import { classifyAgreement } from '@/lib/docusign'
 import { eventLastDay, todayInAppZone } from '@/lib/utils'
 import { formatUsd } from '@/lib/mentoring-format'
+import { CLEARANCE_PATH } from '@/lib/compliance-links'
 
 // What a member still owes for their upcoming events — payment, paperwork,
 // clearance — and, for an organiser, how much of their group's paperwork is
@@ -28,6 +29,8 @@ export interface OutstandingItem {
 }
 
 const STUDENT_ROLES = new Set(['participant', 'school_student_manager'])
+// A teacher brings a team to a live event ('group') or to a campaign ('campaign').
+const ORGANISED_TYPES = new Set(['group', 'campaign'])
 
 type Reg = {
   id: string
@@ -90,7 +93,7 @@ export async function getOutstandingItems(
 
   // Latest agreement per participant (completed wins), for this member's rows
   // and, for an organiser, everyone in their groups.
-  const ownedRegIds = [...new Set(upcoming.filter(({ reg }) => reg.type === 'group' && reg.teacher_member_id === memberId).map(({ reg }) => reg.id))]
+  const ownedRegIds = [...new Set(upcoming.filter(({ reg }) => ORGANISED_TYPES.has(reg.type) && reg.teacher_member_id === memberId).map(({ reg }) => reg.id))]
   const { data: groupRows } = ownedRegIds.length
     ? await db.from('participants').select('id, event_role, registration_id').in('registration_id', ownedRegIds)
     : { data: [] }
@@ -121,7 +124,7 @@ export async function getOutstandingItems(
 
   for (const { p, reg } of upcoming) {
     const title = titleOf(reg)
-    const isOrganiser = reg.type === 'group' && reg.teacher_member_id === memberId
+    const isOrganiser = ORGANISED_TYPES.has(reg.type) && reg.teacher_member_id === memberId
     const isStudent = STUDENT_ROLES.has(p.event_role ?? '')
     const eventHref = `/community/events/${reg.event_slug}`
 
@@ -172,8 +175,8 @@ export async function getOutstandingItems(
         push({ kind: 'clearance', eventSlug: reg.event_slug, eventTitle: title,
           text: state === 'in_process'
             ? `Your clearance for ${title} is being reviewed.`
-            : `Upload your teaching licence or complete a background check before ${title}.`,
-          cta: state === 'in_process' ? 'View status' : 'Upload licence', href: '/account?tab=profile#clearance' })
+            : `Upload your teaching license or complete a background check before ${title}.`,
+          cta: state === 'in_process' ? 'View status' : 'Upload license', href: CLEARANCE_PATH })
       }
     }
 

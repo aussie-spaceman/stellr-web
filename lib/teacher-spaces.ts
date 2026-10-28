@@ -53,7 +53,7 @@ export async function getTeacherGroups(member: CommunityMember): Promise<Teacher
     .from('registrations')
     .select('id, event_slug, event_title, school_name, created_at, participants(id, member_id, first_name, last_name, event_role)')
     .or(ownerOr)
-    .eq('type', 'group')
+    .in('type', ['group', 'campaign'])
     .neq('status', 'withdrawn')
     .order('created_at', { ascending: false })
 

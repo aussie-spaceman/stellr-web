@@ -63,7 +63,9 @@ export function GroupStatusSection({ groups }: { groups: GroupStatus[] }) {
                 <h3 className="font-semibold text-ink">{g.name}</h3>
                 <p className="text-xs text-content-secondary">
                   {signed} of {students.length} consent forms signed · {active} of {students.length} students signed in ·{' '}
-                  {g.paid
+                  {!g.amountDueCents && !g.invoiceRequested
+                    ? 'No fee'
+                    : g.paid
                     ? 'Paid'
                     : g.invoiceRequested
                       ? `Invoice${g.amountDueCents ? ` ${formatUsd(g.amountDueCents)}` : ''} unpaid`

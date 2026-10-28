@@ -51,16 +51,16 @@ export function GroupStatusSection({ groups }: { groups: GroupStatus[] }) {
   if (groups.length === 0) return null
   return (
     <section id="group" className="mt-6 scroll-mt-24">
-      <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">Your group</h2>
+      <h2 className="mb-3 text-sm font-subheading font-semibold text-content-muted">Your group</h2>
       <div className="space-y-4">
         {groups.map((g) => {
           const students = g.people.filter((p) => p.isStudent)
           const signed = students.filter((p) => p.agreementPill === 'complete' || p.agreementPill === 'on_file').length
           const active = students.filter((p) => p.account === 'active').length
           return (
-            <div key={g.registrationId} className="rounded-lg border border-brand-border bg-white p-4">
+            <div key={g.registrationId} className="rounded-lg border border-line bg-white p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="font-semibold text-brand-blue-dark">{g.name}</h3>
+                <h3 className="font-semibold text-ink">{g.name}</h3>
                 <p className="text-xs text-content-secondary">
                   {signed} of {students.length} consent forms signed · {active} of {students.length} students signed in ·{' '}
                   {g.paid

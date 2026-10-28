@@ -9,19 +9,15 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => current.db }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => stripe }))
 vi.mock('@/lib/sanity', () => ({
-  // 40 days out → default tier 30+: 50% cash or 75% credit.
-  getEventBySlug: async () => ({ date: new Date(Date.now() + 40.5 * 86_400_000).toISOString(), stripePriceId: 'price_1' }),
+  getEventBySlug: async () => ({ stripePriceId: 'price_1' }),
 }))
-vi.mock('./policy', async (orig) => {
-  const actual = await orig<typeof import('./policy')>()
-  return { ...actual, resolvePolicy: async () => actual.DEFAULT_TIERS }
-})
 
 import { previewRefund } from './preview'
 
-const chargeState = (amount: number, refunded: number) => ({
-  amount_received: amount, currency: 'usd', latest_charge: { amount, amount_refunded: refunded, currency: 'usd' },
-})
+const chargeState = (amount: number, refunded: number, paidDaysAgo = 10) => {
+  const created = Math.floor((Date.now() - paidDaysAgo * 86_400_000) / 1000)
+  return { amount_received: amount, currency: 'usd', created, latest_charge: { amount, amount_refunded: refunded, currency: 'usd', created } }
+}
 
 beforeEach(() => {
   current = fakeDb({
@@ -33,12 +29,20 @@ beforeEach(() => {
 })
 
 describe('previewRefund', () => {
-  it('nothing refunded in Stripe: the policy options as before', async () => {
-    stripe.paymentIntents.retrieve.mockResolvedValue(chargeState(10000, 0))
+  it('within 45 days of payment: the full amount, as cash', async () => {
+    stripe.paymentIntents.retrieve.mockResolvedValue(chargeState(10000, 0, 12))
     const p = await previewRefund('p1')
     expect(p.externalRefund).toBeNull()
-    expect(p.options.cash).toMatchObject({ cents: 5000 })
-    expect(p.options.credit).toMatchObject({ cents: 7500 })
+    expect(p.daysSincePayment).toBe(12)
+    expect(p.guaranteeDays).toBe(45)
+    expect(p.options).toEqual({ cash: { pct: 100, cents: 10000 } })
+  })
+
+  it('after 45 days: nothing offered, and the dialog is told how long ago', async () => {
+    stripe.paymentIntents.retrieve.mockResolvedValue(chargeState(10000, 0, 60))
+    const p = await previewRefund('p1')
+    expect(p.daysSincePayment).toBe(60)
+    expect(p.options).toEqual({})
   })
 
   it('fully refunded in Stripe: flagged, and nothing offered', async () => {
@@ -52,8 +56,7 @@ describe('previewRefund', () => {
     stripe.paymentIntents.retrieve.mockResolvedValue(chargeState(10000, 6000))
     const p = await previewRefund('p1')
     expect(p.externalRefund).toMatchObject({ refundedCents: 6000, full: false })
-    // 4000 left → 50% cash = 2000, 75% credit = 3000.
-    expect(p.options.cash).toMatchObject({ cents: 2000 })
-    expect(p.options.credit).toMatchObject({ cents: 3000 })
+    // 4000 left → all of it.
+    expect(p.options).toEqual({ cash: { pct: 100, cents: 4000 } })
   })
 })

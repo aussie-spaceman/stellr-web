@@ -5,6 +5,7 @@ import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS } from '@/lib/store/order
 import { stripeClient } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { getEventBySlug } from '@/lib/sanity'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 export const dynamic = 'force-dynamic'
 
@@ -162,6 +163,8 @@ export async function POST(req: Request) {
   // No-op on real prod (live keys).
   assertLiveCredentials('stripe')
   const session = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     line_items: [
       {

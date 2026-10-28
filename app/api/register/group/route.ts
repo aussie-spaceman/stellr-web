@@ -39,6 +39,7 @@ import {
 } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -1138,6 +1139,8 @@ export async function POST(req: NextRequest) {
             days_until_due: 14,
             auto_advance: false,
             metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
+            // The money-back guarantee, printed on the invoice.
+            footer: GUARANTEE_RECEIPT_LINE,
           })
           await stripe.invoiceItems.create({
             customer: customerId,

@@ -9,6 +9,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { getActiveTierIdsByMember } from '@/lib/tiers-server'
 import { stripeClient } from '@/lib/stripe'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 // Storefront checkout. Re-derives every price server-side (tier discount applied
 // for logged-in members), creates a pending order, and returns a Stripe Checkout
@@ -110,6 +111,8 @@ export async function POST(req: Request) {
   // real prod (live keys). Reads/price derivation above are deliberately not gated.
   assertLiveCredentials('stripe')
   const session = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     line_items: stripeLineItems,
     ...(customerId ? { customer: customerId } : email ? { customer_email: email } : {}),

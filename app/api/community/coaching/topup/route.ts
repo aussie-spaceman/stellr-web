@@ -7,6 +7,7 @@ import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
+import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 
 const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 4000
 
@@ -51,6 +52,8 @@ export async function POST(req: Request) {
   assertLiveCredentials('stripe')
 
   const checkout = await stripe.checkout.sessions.create({
+    // The money-back guarantee, on Stripe's page above the Pay button.
+    custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
     line_items: [
       {

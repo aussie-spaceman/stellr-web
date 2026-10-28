@@ -6,6 +6,7 @@ import { registrationIsOpen } from '@/lib/registration'
 import { maskEmail } from '@/lib/utils'
 import { stripeClient } from '@/lib/stripe'
 import PayNowButton from '../../pay/[token]/PayNowButton'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 // The durable "pay your seat" page for a "members pay individually" participant
 // (deep review PAY-8). Reached from the per-seat payment email and Stripe's
@@ -147,7 +148,8 @@ export default async function SeatPayPage({ params, searchParams }: PageProps) {
             </div>
           )}
           <PayNowButton token={token} amountLabel={amountLabel} endpoint="/api/register/pay-seat" />
-          <p className="text-xs text-content-body mt-6">
+          <MoneyBackGuarantee variant="compact" className="mt-5 justify-center text-left" />
+          <p className="text-xs text-content-body mt-4">
             Secure payment by Stripe. Your place is confirmed as soon as payment goes through, and a confirmation email follows.
           </p>
         </div>

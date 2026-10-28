@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { tierButtonColor, type TierId } from '@stellr/web-ui'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 interface Props {
   tierSlug: TierId
@@ -112,7 +113,9 @@ export function JoinCheckout({ tierSlug, tierName, priceLabel, priceNote, billin
 
       {error && <p className="mt-4 text-[14px] text-danger">{error}</p>}
 
-      <p className="mt-5 text-[12.5px] leading-[1.55] text-content-faint">
+      <MoneyBackGuarantee variant="compact" className="mt-5" />
+
+      <p className="mt-4 text-[12.5px] leading-[1.55] text-content-faint">
         {invoiceEligible
           ? 'Card payments renew annually and can be canceled anytime. Invoices are billed once for 12 months — ideal for school or district purchase orders.'
           : `Your membership renews ${billingInterval === 'monthly' ? 'monthly' : 'annually'} and can be canceled anytime.`}

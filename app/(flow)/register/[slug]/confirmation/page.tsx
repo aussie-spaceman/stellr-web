@@ -3,6 +3,7 @@ import { CheckCircle, ExternalLink } from 'lucide-react'
 import { getEventBySlug } from '@/lib/sanity'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { JoinLinkButton } from '@/components/forms/JoinLinkButton'
+import { GUARANTEE_DAYS, REFUND_EMAIL } from '@/lib/guarantee'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -152,7 +153,10 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
             <ul className="space-y-2 text-sm text-content-body">
               <li className="flex items-start gap-2">
                 <span className="text-green-500 mt-0.5">✓</span>
-                Payment processed
+                <span>
+                  Payment processed — covered by our 100% money-back guarantee: email {REFUND_EMAIL} within{' '}
+                  {GUARANTEE_DAYS} days for a full refund.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>

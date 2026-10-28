@@ -11,6 +11,8 @@ import { stripeClient } from '@/lib/stripe'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
+import { getEventPrice } from '@/lib/event-pricing'
 import { StepBar } from '@/components/registration/StepBar'
 
 interface PageProps {
@@ -56,6 +58,7 @@ export default async function IndividualRegistrationPage({ params, searchParams 
   const addons = await listEventAddons(supabaseServer(), slug).catch(() => [])
   // Grade options follow the event's eligible range, not a fixed 9–12.
   const band = gradeBand(event)
+  const price = await getEventPrice(event.stripePriceId)
 
   return (
     <div className="bg-surface">
@@ -101,6 +104,7 @@ export default async function IndividualRegistrationPage({ params, searchParams 
           gradeMax={band.max}
           scholarship={scholarship}
         />
+        {price.kind === 'priced' && <MoneyBackGuarantee className="mt-8" />}
         <MissionFundingNote className="mt-10" />
       </div>
     </div>

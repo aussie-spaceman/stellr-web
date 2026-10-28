@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { Dialog } from '@stellr/web-ui'
 import { formatUsd, COHORT_SESSION_PACKS } from '@/lib/mentoring-format'
+import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 // "Buy more sessions" entry point + modal on the Discover screen. Mentoring is
 // accounted PER SESSION (a cohort enrollment draws its planned 4/6/8 sessions from
@@ -130,6 +131,7 @@ export function TopUpCredits({ unitPriceCents }: { unitPriceCents: number }) {
           <span className="text-content-muted">Total</span>
           <span className="font-display text-ds-h3 font-bold text-ink">{formatUsd(unitPriceCents * qty)}</span>
         </div>
+        <MoneyBackGuarantee variant="compact" className="mt-4" />
       </Dialog>
     </>
   )

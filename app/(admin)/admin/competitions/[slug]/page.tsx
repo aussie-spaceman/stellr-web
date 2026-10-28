@@ -21,10 +21,8 @@ import EventAwards from '@/components/admin/EventAwards'
 import EventCredentials from '@/components/admin/EventCredentials'
 import EventEducatorPd from '@/components/admin/EventEducatorPd'
 import { themeFromType } from '@/lib/campaigns'
-import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
-import { DEFAULT_TIERS, type RefundTier } from '@/lib/refunds/policy'
 import { ContainerTraining, type ContentRow, type ModuleOption } from '@/components/admin/containers/ContainerTraining'
 
 export const metadata = { title: 'Admin — Event' }
@@ -124,20 +122,6 @@ export default async function AdminEventDetailPage({
       const emailById = new Map(users.map((u) => [u.id, u.primaryEmailAddress?.emailAddress ?? null]))
       assignments = rows.map((r) => ({ ...r, email: emailById.get(r.clerk_user_id) ?? null }))
     }
-  }
-
-  // ── Settings (live events, settings tab) ──────────────────────────────────
-  // Badges and certificates load their own templates; this is the refund
-  // editor's, which only admins see.
-  let refundTiers: RefundTier[] = DEFAULT_TIERS
-  let hasRefundOverride = false
-  if (tab === 'settings' && !isCampaign && access.isAdmin) {
-    const [{ data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
-      db.from('refund_policies').select('tiers').eq('scope', 'global').maybeSingle(),
-      db.from('refund_policies').select('tiers').eq('scope', 'event').eq('event_slug', slug).maybeSingle(),
-    ])
-    hasRefundOverride = Boolean(eventPolicy)
-    refundTiers = (eventPolicy?.tiers as RefundTier[]) ?? (globalPolicy?.tiers as RefundTier[]) ?? DEFAULT_TIERS
   }
 
   // ── Training (training tab) ───────────────────────────────────────────────
@@ -354,25 +338,6 @@ export default async function AdminEventDetailPage({
       {/* ── Settings (live events only) ────────────────────────────────────── */}
       {tab === 'settings' && !isCampaign && (
         <div className="space-y-8">
-          {access.isAdmin && (
-            <section className="space-y-3">
-              <div>
-                <h2 className="text-sm font-semibold text-brand-muted">Refund Policy</h2>
-                <p className="text-xs text-brand-muted-soft mt-1">
-                  {hasRefundOverride ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
-                </p>
-              </div>
-              <div className="bg-white rounded-xl border border-brand-border p-5">
-                <RefundPolicyEditor
-                  scope="event"
-                  eventSlug={slug}
-                  initialTiers={refundTiers}
-                  hasOverride={hasRefundOverride}
-                />
-              </div>
-            </section>
-          )}
-
           <section className="space-y-3">
             <div>
               <h2 className="text-sm font-semibold text-brand-muted">Merchandise</h2>

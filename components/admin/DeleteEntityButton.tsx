@@ -14,25 +14,26 @@ interface Blocker {
 interface RefundOption {
   pct: number
   cents: number
-  validityDays?: number | null
 }
 
 interface RefundPreview {
   paid: boolean
   paidCents: number
   currency: string
-  daysOut: number | null
-  options: { cash?: RefundOption; credit?: RefundOption }
+  /** Whole days since the charge; null when Stripe couldn't say. */
+  daysSincePayment: number | null
+  guaranteeDays: number
+  options: { cash?: RefundOption }
   hasPaymentRef: boolean
   alreadyRefunded: boolean
   /** Refunded in the Stripe dashboard, outside the app. */
   externalRefund?: { refundedCents: number; currency: string; full: boolean } | null
 }
 
-type RefundChoice = 'cash' | 'credit' | 'none'
+type RefundChoice = 'cash' | 'none'
 
 interface RefundResult {
-  type: 'cash' | 'credit' | 'manual_required' | 'none'
+  type: 'cash' | 'manual_required' | 'none'
   detail: string
 }
 
@@ -107,7 +108,7 @@ export function DeleteEntityButton({
     setMode(softDeletable ? 'soft' : 'hard')
     setConfirmText('')
     setRefund(null)
-    // Nothing is pre-selected: the admin chooses cash, credit or no refund.
+    // Nothing is pre-selected: the admin chooses the refund or no refund.
     setRefundChoice(null)
     setRefundNote('')
     setLoading(true)
@@ -202,8 +203,8 @@ export function DeleteEntityButton({
   const hardConfirmed = mode === 'soft' || typedOk
   const showModeChoice = softDeletable && allowHardDelete
 
-  // Whenever a refund is on offer the admin must pick one: cash, credit, or no
-  // refund at all. A fully refunded-in-Stripe participant is already 'none'.
+  // Whenever a refund is on offer the admin must pick one: the guarantee's full
+  // refund, or none at all. A fully refunded-in-Stripe participant is already 'none'.
   const externalFull = !!refund?.externalRefund?.full && !refund.alreadyRefunded
   const needsRefundChoice =
     refundable &&
@@ -211,7 +212,7 @@ export function DeleteEntityButton({
       (entity === 'participant' &&
         !!refund?.paid &&
         !refund.alreadyRefunded &&
-        (externalFull || !!refund.options.cash || !!refund.options.credit)))
+        (externalFull || !!refund.options.cash)))
   const refundReady =
     !needsRefundChoice || (refundChoice !== null && (refundChoice !== 'none' || refundNote.trim().length > 0))
 
@@ -357,11 +358,11 @@ export function DeleteEntityButton({
               {/* Refund step */}
               {refundable && entity === 'registration' && (
                 <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
-                  <p className="text-brand-muted">Paid participants will be refunded per the event&apos;s refund policy. Anyone already refunded in Stripe gets nothing further. Where a tier offers a choice:</p>
-                  <div className="flex gap-4">
-                    <Choice type="radio" name={refundName} checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} label="Cash" />
-                    <Choice type="radio" name={refundName} checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} label="Credit" />
-                  </div>
+                  <p className="text-brand-muted">
+                    Under the money-back guarantee, anyone who paid in the last 45 days is refunded in full. Anyone who
+                    paid earlier, or was already refunded in Stripe, gets nothing further.
+                  </p>
+                  <Choice type="radio" name={refundName} checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} label="Refund under the guarantee" />
                   {noRefundOption}
                 </div>
               )}
@@ -379,12 +380,17 @@ export function DeleteEntityButton({
                       </p>
                       {reasonField}
                     </>
-                  ) : Object.keys(refund.options).length === 0 ? (
-                    <p className="text-brand-muted">No refund is due at this point ({refund.daysOut} days out).</p>
+                  ) : !refund.options.cash ? (
+                    <p className="text-brand-muted">
+                      {refund.daysSincePayment == null
+                        ? 'Stripe could not say when this was paid. Check the payment there and refund in Stripe if it is within the 45-day guarantee.'
+                        : `Paid ${refund.daysSincePayment} days ago — outside the ${refund.guaranteeDays}-day money-back guarantee. No refund is due.`}
+                    </p>
                   ) : (
                     <>
                       <p className="text-brand-muted">
-                        Paid {money(refund.paidCents, refund.currency)} · {refund.daysOut} days out. Refund:
+                        Paid {money(refund.paidCents, refund.currency)} · {refund.daysSincePayment} days ago, within the{' '}
+                        {refund.guaranteeDays}-day money-back guarantee. Refund:
                       </p>
                       {refund.externalRefund && (
                         <p className="text-amber-700 text-xs">
@@ -395,18 +401,9 @@ export function DeleteEntityButton({
                         <label className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-brand-muted">
                           <span className="flex items-center gap-3">
                             <input type="radio" name={refundName} checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} className="h-5 w-5 shrink-0 accent-primary-deep" />
-                            Cash ({refund.options.cash.pct}%)
+                            Full refund
                           </span>
                           <span className="font-medium">{money(refund.options.cash.cents, refund.currency)}</span>
-                        </label>
-                      )}
-                      {refund.options.credit && (
-                        <label className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-brand-muted">
-                          <span className="flex items-center gap-3">
-                            <input type="radio" name={refundName} checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} className="h-5 w-5 shrink-0 accent-primary-deep" />
-                            Credit ({refund.options.credit.pct}%{refund.options.credit.validityDays ? `, ${Math.round(refund.options.credit.validityDays / 365)}yr` : ''})
-                          </span>
-                          <span className="font-medium">{money(refund.options.credit.cents, refund.currency)}</span>
                         </label>
                       )}
                       {noRefundOption}

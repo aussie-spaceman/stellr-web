@@ -14,10 +14,10 @@ import { collectsNothing } from '@/lib/event-pricing'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
-import { dispatchAgreement } from '@/lib/docusign-agreements'
-import { batchInvites } from '@/lib/esign/outbox'
+import { runGroupRegistrationFollowUp, type FollowUpPerson } from '@/lib/group-registration-followup'
+import { runAfterResponse } from '@/lib/after-response'
 import { SCHOOL_DATA_TERMS_VERSION, schoolDataTermsSha256 } from '@/lib/school-data-terms'
-import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
+import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail, isValidEmail } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncObjectSpaceRoster, reconcileEventSpaceRoster } from '@/lib/space-inheritance'
@@ -39,7 +39,7 @@ import {
 } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
-import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
+import { createAndSendGroupInvoice } from '@/lib/group-invoice'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -86,15 +86,18 @@ interface TeacherPoC {
   first_name: string; last_name: string; email: string
 }
 
-// deep review QUAL-7: a group registration runs one agreement dispatch per
-// participant sequentially, then a Google Sheet, then Stripe — a 30-student team
-// does 30 sequential sends plus billing in one request. Pin the ceiling to the
-// plan maximum so a large team is not cut off by the lower platform default
-// mid-dispatch (which would leave envelopes issued and the invoice unsent). The
-// handler is still one large function; extracting it is flagged as a follow-up.
-export const maxDuration = 60
+// deep review QUAL-7 / 28 Oct 2026: the sheet, invoice and confirmation email
+// run in the request; agreements, logins and clearance notices run after the
+// response, inside the same invocation (runAfterResponse). 60 s was LOWER than
+// the Fluid default and killed an 18-student team mid-dispatch, so the ceiling
+// is the plan maximum, and the follow-up stops starting new work at
+// FOLLOW_UP_BUDGET_MS so it always finishes inside it. Anything left is picked
+// up by the daily sweeps.
+export const maxDuration = 300
+const FOLLOW_UP_BUDGET_MS = 250_000
 
 export async function POST(req: NextRequest) {
+  const requestStartedAt = Date.now()
   try {
     const body = await req.json()
     const {
@@ -253,6 +256,31 @@ export async function POST(req: NextRequest) {
           { error: `You've entered more additional adults (${(additional_adults ?? []).length}) than the ${expectedAdditionalAdultsIn} your group allows. Please adjust the group size or remove the extra entries.` },
           { status: 400 },
         )
+      }
+
+      // Every address typed on the form must be a real-looking email. The form
+      // only checked "not blank", so a guardian entered as "none" or "…@gmailcom"
+      // reached DocuSign, which refused that student's envelope outright. Linked
+      // (Member ID) slots are skipped: their details come from the stored record.
+      const badEmail = (p: ParticipantPayload, field: 'email' | 'emergency_contact_email') =>
+        !p.linked && !!p[field]?.trim() && !isValidEmail(p[field])
+      const describe = (p: ParticipantPayload) =>
+        [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || 'one person'
+      for (const p of [...(additional_adults ?? []), ...(students ?? [])] as ParticipantPayload[]) {
+        if (badEmail(p, 'email')) {
+          return NextResponse.json(
+            { error: `The email for ${describe(p)} doesn't look right. Please check it and try again.` },
+            { status: 400 },
+          )
+        }
+      }
+      for (const s of (students ?? []) as ParticipantPayload[]) {
+        if (badEmail(s, 'emergency_contact_email')) {
+          return NextResponse.json(
+            { error: `The parent or guardian email for ${describe(s)} doesn't look right. Their consent form is sent there, so please check it and try again.` },
+            { status: 400 },
+          )
+        }
       }
     }
 
@@ -912,12 +940,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
-    // ── DocuSign agreements for everyone entered now ──────────────────────────
+    // ── Agreements, logins and clearance notices: after the response ──────────
     // Each participant gets the right document by age/role: minors → parental
     // consent, adult attendees → Adult agreement, mentors → Mentor agreement.
-    // Sequential to avoid DocuSign rate limits; all calls are non-fatal.
-    // Stellr signing invitations go out together at the end, so a parent of
-    // siblings gets one email with a link for each child.
+    // These used to run here, inline and one by one, BEFORE the sheet, invoice
+    // and confirmation email. A team of 18 outran the request budget (~5 s per
+    // envelope) and the function was killed mid-loop: 9 students got nothing and
+    // the organiser never got an invoice or a confirmation (28 Oct 2026). They now
+    // run once the organiser has their answer (lib/group-registration-followup),
+    // and anything that doesn't fit is picked up by the daily sweeps.
     // Pair each inserted participant back to its source row by POSITION. A single
     // multi-row INSERT ... RETURNING preserves the VALUES order, so index i lines
     // up. Keying by email (the previous approach) collapsed siblings who share
@@ -932,29 +963,44 @@ export async function POST(req: NextRequest) {
       row,
       participantId: insertedParts?.[i]?.id as string | undefined,
     }))
-    await batchInvites(db, async () => { for (const { row, participantId } of participantsWithId) {
-      if (!participantId) continue
-      await dispatchAgreement(db, {
-        participantId,
-        memberId:          row.member_id,
-        eventSlug:         event_slug,
-        eventTitle:        event_title,
-        firstName:         row.first_name,
-        lastName:          row.last_name,
-        email:             row.email,
-        phone:             row.phone,
-        dateOfBirth:       row.date_of_birth,
-        eventRole:         row.event_role,
-        schoolName:        row.school_name,
-        schoolState:       teacher.school_address_state,
-        guardianFirstName: row.emergency_contact_first_name,
-        guardianLastName:  row.emergency_contact_last_name,
-        guardianEmail:     row.emergency_contact_email,
-        guardianPhone:     row.emergency_contact_phone,
-        relationship:      row.emergency_contact_relationship,
-        grade:             row.grade,
+    const followUpPeople: FollowUpPerson[] = participantsWithId.flatMap(({ row, participantId }) =>
+      participantId
+        ? [{
+            isRegistrant: row === registrantRow,
+            agreement: {
+              participantId,
+              memberId:          row.member_id,
+              eventSlug:         event_slug,
+              eventTitle:        event_title,
+              firstName:         row.first_name,
+              lastName:          row.last_name,
+              email:             row.email,
+              phone:             row.phone,
+              dateOfBirth:       row.date_of_birth,
+              eventRole:         row.event_role,
+              schoolName:        row.school_name,
+              schoolState:       teacher.school_address_state,
+              guardianFirstName: row.emergency_contact_first_name,
+              guardianLastName:  row.emergency_contact_last_name,
+              guardianEmail:     row.emergency_contact_email,
+              guardianPhone:     row.emergency_contact_phone,
+              relationship:      row.emergency_contact_relationship,
+              grade:             row.grade,
+            },
+          }]
+        : []
+    )
+    runAfterResponse('register/group', async () => {
+      const outcome = await runGroupRegistrationFollowUp(db, {
+        eventSlug: event_slug,
+        eventTitle: event_title,
+        eventDate: (eventForGate as { date?: string | null }).date ?? null,
+        organiserName: `${teacher.first_name} ${teacher.last_name}`.trim(),
+        people: followUpPeople,
+        deadline: requestStartedAt + FOLLOW_UP_BUDGET_MS,
       })
-    } })
+      console.log('[register/group] follow-up', { registrationId: regId, ...outcome })
+    })
 
     // ── Google Sheet (every group registration gets a linked sheet) ────────────
     // Created up front so the teacher/student-manager can always open it from the
@@ -1099,58 +1145,17 @@ export async function POST(req: NextRequest) {
             total_participants, invoiceAmountCents,
           })
         } else {
-          // Reuse the registrant's existing Stripe customer if they already have
-          // one (e.g. from a membership purchase). Creating a fresh customer and
-          // overwriting members.stripe_customer_id would strand their earlier
-          // invoices/receipts, since /account?tab=billing lists invoices for the
-          // single stored customer id.
-          let customerId: string | null = null
-          if (registrantMemberId) {
-            const { data: existingMember } = await db.from('members')
-              .select('stripe_customer_id').eq('id', registrantMemberId).maybeSingle()
-            customerId = (existingMember?.stripe_customer_id as string | null) ?? null
-          }
-          if (!customerId) {
-            const customer = await stripe.customers.create({
-              email: teacher.email,
-              name: `${teacher.first_name} ${teacher.last_name}`,
-              metadata: { registrationId: regId, eventSlug: event_slug },
-            })
-            customerId = customer.id
-            // Persist the new customer on the registrant's member row (so the
-            // invoice + receipt surface in the billing tab) — but only when the
-            // row has none yet, so a concurrent write is never clobbered.
-            if (registrantMemberId) {
-              await db.from('members').update({ stripe_customer_id: customerId })
-                .eq('id', registrantMemberId).is('stripe_customer_id', null)
-            }
-          }
-          // deep review PAY-1: create the invoice FIRST, then attach the line
-          // item to it explicitly with `invoice: invoice.id`. The old order
-          // created a *pending* invoice item and then an invoice with no
-          // `pending_invoice_items_behavior`; on the pinned SDK (2026-05-27.dahlia)
-          // that default EXCLUDES pending items, so the invoice finalised with no
-          // line — a $0 invoice that auto-sent (and, with the webhook, stamped the
-          // registration paid) for a paid event. Mirrors the known-good pattern in
-          // app/api/stripe/membership-invoice/route.ts.
-          const invoice = await stripe.invoices.create({
-            customer: customerId,
-            collection_method: 'send_invoice',
-            days_until_due: 14,
-            auto_advance: false,
-            metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
-            // The money-back guarantee, printed on the invoice.
-            footer: GUARANTEE_RECEIPT_LINE,
-          })
-          await stripe.invoiceItems.create({
-            customer: customerId,
-            invoice: invoice.id,
+          await createAndSendGroupInvoice(db, stripe, {
+            registrationId: regId,
+            eventSlug: event_slug,
+            eventTitle: event_title,
+            teacher: { email: teacher.email, firstName: teacher.first_name, lastName: teacher.last_name },
+            registrantMemberId: registrantMemberId ?? null,
+            amountCents: invoiceAmountCents,
+            perSeatCents,
             currency: priceObj.currency,
-            amount: invoiceAmountCents,
-            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
+            totalParticipants: total_participants,
           })
-          const finalized = await stripe.invoices.finalizeInvoice(invoice.id)
-          await stripe.invoices.sendInvoice(finalized.id)
         }
       } catch (invoiceErr) {
         console.error('Stripe invoice error (non-fatal):', invoiceErr)

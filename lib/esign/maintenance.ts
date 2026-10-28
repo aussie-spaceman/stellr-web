@@ -7,7 +7,8 @@ import { syncDocusignUsage } from '@/lib/esign/routing'
 import { drainOutbox } from '@/lib/esign/outbox'
 import { activateStrandedSigners, finaliseStalled } from '@/lib/esign/native/flow'
 import { sealPending } from '@/lib/esign/native/certificate-seal'
-import { retryFailedIssues } from '@/lib/esign/reconcile'
+import { issueMissingAgreements, retryFailedIssues } from '@/lib/esign/reconcile'
+import { sweepGroupAccountInvites } from '@/lib/group-account-invites'
 import { backupConfigured } from '@/lib/esign/backup-crypto'
 import { driveBackupStore, type BackupStore } from '@/lib/esign/backup-store'
 import { exportTables, replicatePending } from '@/lib/esign/replicate'
@@ -22,11 +23,11 @@ import { checkHeartbeat } from '@/lib/esign/heartbeat'
 // dev deployment.
 
 export type MaintenanceStep =
-  | 'usage' | 'finalise' | 'reconcile' | 'outbox' | 'archive' | 'seal'
+  | 'usage' | 'finalise' | 'reconcile' | 'missing' | 'accounts' | 'outbox' | 'archive' | 'seal'
   | 'replicate' | 'export' | 'integrity' | 'retention' | 'heartbeat'
 
 export const ALL_STEPS: MaintenanceStep[] = [
-  'usage', 'finalise', 'reconcile', 'outbox', 'archive', 'seal', 'replicate', 'export', 'integrity', 'retention', 'heartbeat',
+  'usage', 'finalise', 'reconcile', 'missing', 'accounts', 'outbox', 'archive', 'seal', 'replicate', 'export', 'integrity', 'retention', 'heartbeat',
 ]
 
 export interface MaintenanceOptions {
@@ -92,6 +93,15 @@ export async function runEsignMaintenance(
 
   // Agreements that could not be issued on any engine: try again.
   await step('reconcile', () => retryFailedIssues(db, { dryRun: opts.dryRun }))
+
+  // Recent participants who never got an agreement at all (a registration that
+  // ran out of time before reaching them).
+  await step('missing', () => issueMissingAgreements(db, { dryRun: opts.dryRun }))
+
+  // Group logins still owed: under-13s whose consent is now signed, and anyone
+  // a registration's follow-up didn't reach. Lives here because it waits on the
+  // agreements above.
+  await step('accounts', () => sweepGroupAccountInvites(db, { dryRun: opts.dryRun }))
 
   // Signing emails still waiting for the daily budget.
   await step('outbox', async () => (opts.dryRun ? { skipped: 'dry run' } : drainOutbox(db)))

@@ -4,26 +4,14 @@ import { getCurrentMember } from '@/lib/community'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload } from '@/lib/uploads'
+import {
+  LICENSE_DOCUMENT_URL_TTL_SECONDS,
+  TEACHER_LICENSE_BUCKET,
+  isLicenseDocumentType,
+  licenseDocumentMagicMatches,
+} from '@/lib/teacher-license'
 
-const BUCKET = 'teacher-licenses'
-const ALLOWED = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/heic', 'application/pdf']
-
-/** Confirm the file's leading bytes match a permitted type, so a mislabelled or
- *  blank Content-Type can't smuggle an arbitrary blob into the private bucket. */
-function magicMatches(b: Uint8Array): boolean {
-  // PNG
-  if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true
-  // JPEG
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return true
-  // PDF ("%PDF")
-  if (b.length >= 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return true
-  // WebP ("RIFF"…"WEBP")
-  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
-      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return true
-  // ISO-BMFF (HEIC/HEIF): bytes 4–7 = "ftyp"
-  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return true
-  return false
-}
+const BUCKET = TEACHER_LICENSE_BUCKET
 
 // POST — record a photo/scan of the teacher's license (private bucket) that the
 // browser uploaded straight to storage via /api/uploads/sign. Attaches to the
@@ -56,7 +44,7 @@ export async function POST(req: NextRequest) {
   const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
   const fileType = typeof b.fileType === 'string' ? b.fileType : ''
   if (!storagePath) return NextResponse.json({ error: 'Choose a file to upload.' }, { status: 400 })
-  if (!fileType || !ALLOWED.includes(fileType)) {
+  if (!fileType || !isLicenseDocumentType(fileType)) {
     return NextResponse.json({ error: 'Upload an image (PNG/JPG/WebP/HEIC) or PDF.' }, { status: 400 })
   }
   // Signed under this member's own prefix; refuse anything else outright.
@@ -69,7 +57,7 @@ export async function POST(req: NextRequest) {
   const claimed = await claimUpload({
     purpose: 'compliance-document',
     storagePath,
-    verify: magicMatches,
+    verify: licenseDocumentMagicMatches,
     verifyError: 'That file doesn’t look like a valid image or PDF.',
   })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
@@ -95,7 +83,7 @@ export async function POST(req: NextRequest) {
     db,
   )
 
-  const { data: signed } = await db.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 10)
+  const { data: signed } = await db.storage.from(BUCKET).createSignedUrl(storagePath, LICENSE_DOCUMENT_URL_TTL_SECONDS)
   return NextResponse.json({ ok: true, documentUrl: signed?.signedUrl ?? null })
 }
 

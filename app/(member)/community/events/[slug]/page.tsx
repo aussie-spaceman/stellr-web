@@ -7,6 +7,8 @@ import { memberIsParticipant, getEventMaterials, getEventSpaces } from '@/lib/ev
 import { reportEventAccessGates, accessGatesEnforced } from '@/lib/access-gates'
 import { listModules } from '@/lib/training'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
+import { GroupStatusSection } from '@/components/community/GroupStatusSection'
+import { getOrganisedGroups } from '@/lib/group-status'
 
 export const metadata = { title: 'Community · Event' }
 
@@ -21,14 +23,21 @@ export default async function EventPortalPage({
   if (!member) redirect('/sign-up')
 
   const { slug } = await params
-  const event = await memberIsParticipant(member, slug)
+  const [event, groups] = await Promise.all([
+    memberIsParticipant(member, slug),
+    getOrganisedGroups(member.id, slug),
+  ])
   if (!event) notFound() // not a participant → no access
+  // The teacher who registered a group always gets in, whatever is outstanding:
+  // they need to see their group to chase it (28 Oct 2026). What's still owed is
+  // in the banner across the top of the portal.
+  const isOrganiser = groups.length > 0
 
   // Access gates: always report (P2); deny only when enforcement is on (P4 flag).
   const gates = await reportEventAccessGates(member, slug)
   const isCampaign = event.activityType === 'campaign'
 
-  if (accessGatesEnforced() && !gates.unlocked) {
+  if (accessGatesEnforced() && !gates.unlocked && !isOrganiser) {
     const missing = [
       !gates.payment && 'complete payment',
       !gates.docusign && 'sign the required agreement(s)',
@@ -102,6 +111,8 @@ export default async function EventPortalPage({
           )}
         </div>
       </div>
+
+      <GroupStatusSection groups={groups} />
 
       {spaces.length > 0 && (
         <section className="mt-6">

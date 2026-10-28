@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { classifyAgreement } from './docusign'
-import { dispatchAgreement, type DispatchOutcome } from './docusign-agreements'
+import { dispatchAgreement, ISSUE_FAILED_PREFIX, type DispatchOutcome } from './docusign-agreements'
 import { remindEnvelopeRow, voidEnvelopeRow } from './esign/operations'
 import { maskEmail } from './utils'
 
@@ -120,6 +120,7 @@ export async function reissueParticipantAgreement(
     }
   }
 
+  const dispatchStartedAt = new Date().toISOString()
   const outcome = await dispatchAgreement(db, {
     participantId,
     memberId:          (p.member_id as string | null) ?? null,
@@ -140,5 +141,16 @@ export async function reissueParticipantAgreement(
     relationship:      p.emergency_contact_relationship as string | null,
     grade:             (p.grade as string | null) ?? null,
   })
+  // A refused send leaves a "failed:" placeholder (status voided, shown as
+  // "Couldn't send"). Once this attempt got through, the earlier placeholders
+  // are stale: drop them so they neither pile up nor get retried overnight.
+  if (outcome !== 'failed') {
+    await db
+      .from('agreements')
+      .delete()
+      .eq('participant_id', participantId)
+      .like('envelope_id', `${ISSUE_FAILED_PREFIX}%`)
+      .lt('created_at', dispatchStartedAt)
+  }
   return { kind: 'reissued', outcome }
 }

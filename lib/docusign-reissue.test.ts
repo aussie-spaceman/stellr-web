@@ -11,7 +11,7 @@ vi.mock('./docusign', async () => ({
   voidEnvelope,
   classifyAgreement: (role: string | null) => (role === 'participant' ? 'minor' : role ? 'adult' : null),
 }))
-vi.mock('./docusign-agreements', () => ({ dispatchAgreement }))
+vi.mock('./docusign-agreements', () => ({ dispatchAgreement, ISSUE_FAILED_PREFIX: 'failed:' }))
 
 const { reissueParticipantAgreement } = await import('./docusign-reissue')
 
@@ -23,15 +23,20 @@ function fakeDb(state: {
   bounced?: { email: string }[]
 }) {
   const updates: { table: string; values: Record<string, unknown> }[] = []
+  const deletes: { table: string; filters: unknown[][] }[] = []
   const db = {
     updates,
+    deletes,
     from(table: string) {
       const result =
         table === 'participants' ? state.participant ?? null
         : table === 'agreements' ? state.envelope ?? null
         : state.bounced ?? []
       const chain: Record<string, unknown> = {}
-      for (const m of ['select', 'eq', 'order', 'limit']) chain[m] = () => chain
+      const filters: unknown[][] = []
+      for (const m of ['select', 'order', 'limit']) chain[m] = () => chain
+      for (const m of ['eq', 'like', 'lt']) chain[m] = (...args: unknown[]) => { filters.push([m, ...args]); return chain }
+      chain.delete = () => { deletes.push({ table, filters }); return chain }
       chain.maybeSingle = async () => ({ data: result, error: null })
       chain.then = (resolve: (v: unknown) => void) => resolve({ data: result, error: null })
       chain.update = (values: Record<string, unknown>) => {
@@ -79,6 +84,19 @@ describe('reissueParticipantAgreement', () => {
     expect(dispatchAgreement).toHaveBeenCalledWith(db, expect.objectContaining({
       participantId: 'p-1', eventSlug: 'colorado', guardianEmail: 'parent@example.com',
     }))
+    // The earlier refused-send markers for this participant are cleared.
+    expect(db.deletes).toHaveLength(1)
+    expect(db.deletes[0].filters).toEqual(expect.arrayContaining([
+      ['eq', 'participant_id', 'p-1'],
+      ['like', 'envelope_id', 'failed:%'],
+    ]))
+  })
+
+  it('keeps the refused-send markers when the new attempt is refused too', async () => {
+    dispatchAgreement.mockResolvedValueOnce('failed' as never)
+    const db = fakeDb({ participant: PARTICIPANT, envelope: null })
+    await reissueParticipantAgreement(db as never, 'p-1', { allowNewEnvelope: true })
+    expect(db.deletes).toHaveLength(0)
   })
 
   it('voids a bounced envelope before re-issuing, only when confirmed', async () => {

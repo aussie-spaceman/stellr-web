@@ -1,24 +1,35 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { teacherLicenseSchema, type TeacherLicenseInput } from '@/lib/teacher-license'
 
 // POST /api/admin/members/[id]/license
 // Admin manually verifies (or un-verifies) the teacher license on file. This is
 // the "I have checked the documentation Stellr received" action from the PRD.
+//
+// action 'save' enters or replaces the license details on the member's behalf
+// (e.g. the teacher emailed a copy). Same validation as the member's own form
+// and, like it, it RESETS verification: entering details is not verifying them.
+// Mark verified stays a separate, deliberate click — which the admin can make
+// straight after, against the version this save produced.
 //
 // deep review BG-9: a verify must name the exact license version the admin
 // reviewed (licenseUpdatedAt). Between opening the panel and clicking "verify"
 // the member can replace the number/expiry or re-upload the image — which bumps
 // updated_at and already clears verified_at — so an unguarded verify would
 // rubber-stamp data the admin never saw, and that action IS the clearance.
-const bodySchema = z.object({
-  action: z.enum(['verify', 'unverify']),
-  /** The license's updated_at as rendered in the panel. Required to verify. */
-  licenseUpdatedAt: z.string().optional(),
-})
+const bodySchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.enum(['verify', 'unverify']),
+    /** The license's updated_at as rendered in the panel. Required to verify. */
+    licenseUpdatedAt: z.string().optional(),
+  }),
+  teacherLicenseSchema.extend({ action: z.literal('save') }),
+])
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
@@ -26,9 +37,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { id } = await params
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  if (!parsed.success) {
+    // Name the field for a save (the admin is typing into a form); keep the
+    // generic answer for verify/unverify, which only a button sends.
+    const issue = parsed.error.issues[0]
+    const fromForm = issue && issue.path[0] !== 'action' && issue.path[0] !== 'licenseUpdatedAt'
+    return NextResponse.json({ error: fromForm ? issue.message : 'Invalid request' }, { status: 400 })
+  }
 
   const db = supabaseServer()
+  if (parsed.data.action === 'save') return saveLicense(db, id, parsed.data)
+
   const { data: license } = await db
     .from('member_teacher_licenses')
     .select('id')
@@ -84,4 +103,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   )
 
   return NextResponse.json({ ok: true })
+}
+
+// Enter or replace the member's license as an admin. One row per member
+// (unique member_id), so this is the same upsert the member's own form does.
+async function saveLicense(db: SupabaseClient, memberId: string, input: TeacherLicenseInput) {
+  const { data: member } = await db.from('members').select('id').eq('id', memberId).maybeSingle()
+  if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+  const now = new Date().toISOString()
+  const { error } = await db.from('member_teacher_licenses').upsert(
+    {
+      member_id: memberId,
+      license_number: input.license_number,
+      licensing_state: input.licensing_state,
+      expiry_date: input.expiry_date,
+      verified_at: null,
+      verified_by: null,
+      verified_label: null,
+      updated_at: now,
+    },
+    { onConflict: 'member_id' },
+  )
+  if (error) {
+    console.error('[admin] license save error:', error)
+    return NextResponse.json({ error: 'Failed to save license' }, { status: 500 })
+  }
+
+  await logActivity(
+    {
+      memberId,
+      category: 'compliance',
+      action: 'license_submitted_by_admin',
+      summary: `Teacher license entered by admin (${input.licensing_state}) — awaiting verification`,
+      metadata: { licensing_state: input.licensing_state, expiry_date: input.expiry_date },
+      ...(await actorFromAuth()),
+    },
+    db,
+  )
+
+  return NextResponse.json({ ok: true, licenseUpdatedAt: now })
 }

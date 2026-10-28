@@ -20,6 +20,16 @@ export function normalizeEmail(email: unknown): string {
   return typeof email === 'string' ? email.trim().toLowerCase() : ''
 }
 
+// A syntactically plausible address: something@domain.tld with no spaces. Not a
+// deliverability check — it exists to stop placeholders and typos reaching
+// DocuSign, which refuses the whole envelope over one bad recipient (a guardian
+// typed as "none", or "@gmailcom", left two students with no agreement).
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$/
+
+export function isValidEmail(email: unknown): boolean {
+  return typeof email === 'string' && EMAIL_RE.test(email.trim())
+}
+
 const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
 // 'adult' and 'school_student_manager' require migration 016 to exist in the enum;

@@ -26,6 +26,9 @@ const h = vi.hoisted(() => ({
   // AUTH-N2: controllable rate-limit guard. Returns null (proceed) by default;
   // a test can make it return a 429 Response to assert the route bails first.
   rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
+  followUp: vi.fn(async (_db: unknown, _input: unknown) => ({})),
+  sendEmail: vi.fn(async () => {}),
+  afterTasks: [] as Array<() => Promise<unknown>>,
   // Captures every row passed to `.insert()`, keyed by table name.
   captures: {} as Record<string, unknown[]>,
 }))
@@ -85,9 +88,12 @@ vi.mock('@/lib/registration-duplicates', () => ({
 }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.ensureClerk }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
-vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: vi.fn(async () => {}) }))
-vi.mock('@/lib/esign/outbox', () => ({ batchInvites: async () => {} }))
-vi.mock('@/lib/email', () => ({ sendEmail: async () => {}, groupConfirmationEmail: () => ({ subject: '', html: '', text: '' }) }))
+vi.mock('@/lib/group-registration-followup', () => ({ runGroupRegistrationFollowUp: h.followUp }))
+// Hold post-response work so a test can assert what ran before the response.
+vi.mock('@/lib/after-response', () => ({
+  runAfterResponse: (_label: string, task: () => Promise<unknown>) => { h.afterTasks.push(task) },
+}))
+vi.mock('@/lib/email', () => ({ sendEmail: h.sendEmail, groupConfirmationEmail: () => ({ subject: '', html: '', text: '' }) }))
 vi.mock('@/lib/individual-payment', () => ({ ensureIndividualPayments: async () => {} }))
 vi.mock('@/lib/store/event-merch', () => ({ finalizeRegistrationMerch: async () => {} }))
 vi.mock('@/lib/google-sheets', () => ({ isGoogleSheetsConfigured: () => false, createGroupRegistrationSheet: async () => ({ url: '', spreadsheetId: '' }) }))
@@ -144,6 +150,7 @@ function post(b: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks()
   for (const k of Object.keys(h.captures)) delete h.captures[k]
+  h.afterTasks.length = 0
   h.getEventBySlug.mockResolvedValue({ title: 'Colorado Space Challenge', activityType: 'live_event', stripePriceId: 'price_x' })
   h.priceRetrieve.mockResolvedValue({ unit_amount: 13500, currency: 'usd' })
   h.getCurrentMember.mockResolvedValue(null)
@@ -274,6 +281,58 @@ describe('POST /api/register/group', () => {
     // sibling's member_id is null (its identity lives on the participant row).
     const bothLinkedToSameMember = !!alice!.member_id && alice!.member_id === bob!.member_id
     expect(bothLinkedToSameMember).toBe(false)
+  })
+
+  // ── 28 Oct 2026: bad guardian emails, and agreements after the response ────
+  it('rejects a guardian email that is a placeholder, before any insert', async () => {
+    const res = await post(body({
+      students: [
+        { ...STUDENT('s1@example.com'), emergency_contact_email: 'none' },
+        STUDENT('s2@example.com'),
+      ],
+    }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/guardian email/)
+    expect(h.captures.registrations).toBeUndefined()
+  })
+
+  it('rejects a guardian email missing the dot before the domain ending', async () => {
+    const res = await post(body({
+      students: [
+        STUDENT('s1@example.com'),
+        { ...STUDENT('s2@example.com'), emergency_contact_email: 'parent@gmailcom' },
+      ],
+    }))
+    expect(res.status).toBe(400)
+    expect(h.captures.registrations).toBeUndefined()
+  })
+
+  it('rejects a malformed participant email', async () => {
+    const res = await post(body({ students: [STUDENT('s1@example.com'), STUDENT('not-an-email')] }))
+    expect(res.status).toBe(400)
+    expect(h.captures.registrations).toBeUndefined()
+  })
+
+  it('sends the invoice and confirmation first; agreements and logins run after the response', async () => {
+    const res = await post(body({ payment_method: 'invoice' }))
+    expect(res.status).toBe(201)
+    // Billing and the confirmation email happened inside the request…
+    expect(h.invoicesSend).toHaveBeenCalledTimes(1)
+    expect(h.sendEmail).toHaveBeenCalled()
+    // …and the slow per-person work was only scheduled.
+    expect(h.followUp).not.toHaveBeenCalled()
+    expect(h.afterTasks).toHaveLength(1)
+
+    await h.afterTasks[0]()
+    expect(h.followUp).toHaveBeenCalledTimes(1)
+    const input = h.followUp.mock.calls[0][1] as {
+      people: Array<{ isRegistrant: boolean; agreement: { participantId: string; eventSlug: string } }>
+      deadline: number
+    }
+    expect(input.people).toHaveLength(3)
+    expect(input.people.filter((p) => p.isRegistrant)).toHaveLength(1)
+    expect(input.people.every((p) => p.agreement.eventSlug === 'colorado' && p.agreement.participantId)).toBe(true)
+    expect(input.deadline).toBeGreaterThan(Date.now())
   })
 
   // ── AUTH-N2 ────────────────────────────────────────────────────────────────

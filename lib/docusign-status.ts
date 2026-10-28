@@ -20,6 +20,7 @@ export type DocusignPill =
   | 'bounced'
   | 'declined'
   | 'voided'
+  | 'failed'
   | 'complete'
   | 'on_file'
 
@@ -29,6 +30,30 @@ export interface EnvelopeLike {
   signers_completed?: number | null
   /** Set when this row is coverage carried from previously signed paperwork. */
   reused_from?: string | null
+  /**
+   * "failed:<uuid>" marks a send the signing service refused: nothing was ever
+   * sent, so it is not a void. Pass it (and issue_error) to tell the two apart.
+   */
+  envelope_id?: string | null
+  issue_error?: string | null
+}
+
+const FAILED_PREFIX = 'failed:'
+
+/**
+ * Why a send was refused, in words an admin can act on. The raw provider error
+ * stays in agreements.issue_error; this only names the fix for the common cases.
+ */
+export function describeIssueError(error: string | null | undefined): string {
+  const e = error ?? ''
+  if (/INVALID_EMAIL_ADDRESS|invalid email|email address .* invalid/i.test(e)) {
+    return 'An email address on it is invalid (often the parent/guardian). Fix it on the participant, then Reissue'
+  }
+  if (/ENVELOPE_ALLOWANCE_EXCEEDED|allowance/i.test(e)) {
+    return 'DocuSign’s monthly allowance was used up. Reissue to send it through Stellr signing'
+  }
+  if (/missing guardian/i.test(e)) return 'No parent/guardian on the record. Add one, then Reissue'
+  return e ? `The signing service refused it: ${e.slice(0, 140)}` : 'The signing service refused it. Reissue to try again'
 }
 
 export interface RecipientLike {
@@ -78,6 +103,7 @@ const PILL_LABELS: Record<DocusignPill, string> = {
   bounced:      'Email Bounced',
   declined:     'Declined',
   voided:       'Voided',
+  failed:       'Couldn’t Send',
   complete:     'Complete',
   on_file:      'On File',
 }
@@ -92,6 +118,8 @@ export const PILL_CLASSES: Record<DocusignPill, string> = {
   bounced:      'bg-red-100 text-red-700',
   declined:     'bg-red-100 text-red-700',
   voided:       'bg-brand-hairline text-brand-muted-soft',
+  // Red: nobody has been asked to sign, and waiting will not change that.
+  failed:       'bg-red-100 text-red-700',
   complete:     'bg-green-100 text-green-700',
   on_file:      'bg-teal-100 text-teal-700',
 }
@@ -175,6 +203,9 @@ export function describeEnvelope(
       detail: who ? `Declined by ${describeSigner(who)}` : 'Declined',
       ...base,
     }
+  }
+  if (env.envelope_id?.startsWith(FAILED_PREFIX)) {
+    return { pill: 'failed', label: PILL_LABELS.failed, detail: describeIssueError(env.issue_error), ...base }
   }
   if (env.status === 'voided') {
     return { pill: 'voided', label: PILL_LABELS.voided, detail: 'Voided — re-issue required', ...base }

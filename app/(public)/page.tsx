@@ -6,7 +6,8 @@ import { EventCard } from '@/components/ui/EventCard'
 import { CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
 import { ProofStrip } from '@/components/sections/ProofStrip'
-import { PHOTOS } from '@/lib/media-manifest'
+import { WorkCard } from '@/components/sections/WorkCard'
+import { FLYERS, PHOTOS } from '@/lib/media-manifest'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
@@ -212,6 +213,23 @@ export default async function HomePage() {
             {events.map((event) => (
               <EventCard key={event._id} event={event} imageSizes={CARD_IMAGE_SIZES.threeUp} />
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── About Stellr flyer (open download, no email gate) ────────── */}
+      <section className="section-padding">
+        <div className="container-max">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+              <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">
+                Share Stellr with your school
+              </h2>
+              <p className="text-brand-grey-dark leading-relaxed">
+                Our two-page overview: how a competition works, the ways to take part, costs and scholarships, and the teacher grant. Print it, pin it up, or forward it to a colleague.
+              </p>
+            </div>
+            <WorkCard asset={FLYERS['about-stellr-2027']} />
           </div>
         </div>
       </section>

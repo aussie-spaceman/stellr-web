@@ -57,8 +57,14 @@ const fixtureRow = (page: Page) =>
  * `.first()`: a second matching row fails strict mode instead of being skipped.
  */
 const statusCell = async (page: Page) => {
-  const headers = await envelopeTable(page).locator('thead th').allInnerTexts()
+  const table = envelopeTable(page)
+  // allInnerTexts() does not wait. Read before the streamed table reaches
+  // <main>, it returns [], the index is -1, and nth(-1) is the last cell, the
+  // actions ("Re-send / Correct email", CI on 28 Oct 2026).
+  await table.waitFor()
+  const headers = await table.locator('thead th').allInnerTexts()
   const index = headers.findIndex((h) => /^status$/i.test(h.trim()))
+  if (index < 0) throw new Error(`no Status column among ${JSON.stringify(headers)}`)
   return fixtureRow(page).locator('td').nth(index)
 }
 

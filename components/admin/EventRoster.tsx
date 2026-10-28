@@ -12,6 +12,7 @@ import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
 import { ReissueDocusignButton } from '@/components/admin/ReissueDocusignButton'
 import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 import { FixGuardianEmailButton } from '@/components/admin/FixGuardianEmailButton'
+import { FinishSetupButton } from '@/components/admin/FinishSetupButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
 
@@ -426,6 +427,9 @@ export default function EventRoster({
                   )}
                   {group.type === 'group' && group.payLinkSendable && (
                     <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} className="normal-case" />
+                  )}
+                  {group.type === 'group' && (
+                    <FinishSetupButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
                   )}
                   {group.type === 'group' && (
                     <DeleteEntityButton

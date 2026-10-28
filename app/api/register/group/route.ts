@@ -39,7 +39,7 @@ import {
 } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
-import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
+import { createAndSendGroupInvoice } from '@/lib/group-invoice'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -1145,58 +1145,17 @@ export async function POST(req: NextRequest) {
             total_participants, invoiceAmountCents,
           })
         } else {
-          // Reuse the registrant's existing Stripe customer if they already have
-          // one (e.g. from a membership purchase). Creating a fresh customer and
-          // overwriting members.stripe_customer_id would strand their earlier
-          // invoices/receipts, since /account?tab=billing lists invoices for the
-          // single stored customer id.
-          let customerId: string | null = null
-          if (registrantMemberId) {
-            const { data: existingMember } = await db.from('members')
-              .select('stripe_customer_id').eq('id', registrantMemberId).maybeSingle()
-            customerId = (existingMember?.stripe_customer_id as string | null) ?? null
-          }
-          if (!customerId) {
-            const customer = await stripe.customers.create({
-              email: teacher.email,
-              name: `${teacher.first_name} ${teacher.last_name}`,
-              metadata: { registrationId: regId, eventSlug: event_slug },
-            })
-            customerId = customer.id
-            // Persist the new customer on the registrant's member row (so the
-            // invoice + receipt surface in the billing tab) — but only when the
-            // row has none yet, so a concurrent write is never clobbered.
-            if (registrantMemberId) {
-              await db.from('members').update({ stripe_customer_id: customerId })
-                .eq('id', registrantMemberId).is('stripe_customer_id', null)
-            }
-          }
-          // deep review PAY-1: create the invoice FIRST, then attach the line
-          // item to it explicitly with `invoice: invoice.id`. The old order
-          // created a *pending* invoice item and then an invoice with no
-          // `pending_invoice_items_behavior`; on the pinned SDK (2026-05-27.dahlia)
-          // that default EXCLUDES pending items, so the invoice finalised with no
-          // line — a $0 invoice that auto-sent (and, with the webhook, stamped the
-          // registration paid) for a paid event. Mirrors the known-good pattern in
-          // app/api/stripe/membership-invoice/route.ts.
-          const invoice = await stripe.invoices.create({
-            customer: customerId,
-            collection_method: 'send_invoice',
-            days_until_due: 14,
-            auto_advance: false,
-            metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
-            // The money-back guarantee, printed on the invoice.
-            footer: GUARANTEE_RECEIPT_LINE,
-          })
-          await stripe.invoiceItems.create({
-            customer: customerId,
-            invoice: invoice.id,
+          await createAndSendGroupInvoice(db, stripe, {
+            registrationId: regId,
+            eventSlug: event_slug,
+            eventTitle: event_title,
+            teacher: { email: teacher.email, firstName: teacher.first_name, lastName: teacher.last_name },
+            registrantMemberId: registrantMemberId ?? null,
+            amountCents: invoiceAmountCents,
+            perSeatCents,
             currency: priceObj.currency,
-            amount: invoiceAmountCents,
-            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
+            totalParticipants: total_participants,
           })
-          const finalized = await stripe.invoices.finalizeInvoice(invoice.id)
-          await stripe.invoices.sendInvoice(finalized.id)
         }
       } catch (invoiceErr) {
         console.error('Stripe invoice error (non-fatal):', invoiceErr)

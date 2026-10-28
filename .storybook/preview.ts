@@ -1,4 +1,4 @@
-import type { Preview } from '@storybook/nextjs'
+import type { Preview } from '@storybook/nextjs-vite'
 // Tailwind + generated design tokens — the same stylesheet the app uses, so
 // stories render in the real design system.
 import '../styles/tokens.css'

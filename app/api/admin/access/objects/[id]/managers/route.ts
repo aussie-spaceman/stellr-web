@@ -68,7 +68,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({ object, managers: structuralRow ? [structuralRow, ...managers] : managers })
 }
 
-const bodySchema = z.object({ memberId: z.string().uuid() })
+const bodySchema = z.object({ memberId: z.guid() })
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()

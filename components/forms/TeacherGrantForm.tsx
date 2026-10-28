@@ -41,7 +41,7 @@ const schema = z.object({
   schoolState: z.string().min(1, 'Select a state'),
   subjects: z.string().trim().min(1, 'Tell us what you teach'),
   plannedActivities: z.enum(['challenge', 'campaign', 'both'], {
-    errorMap: () => ({ message: 'Choose what you plan to run' }),
+    error: 'Choose what you plan to run',
   }),
   expectedStudents: z
     .string()
@@ -51,10 +51,10 @@ const schema = z.object({
   motivation: z.string().trim().min(40, 'A couple of sentences, please — at least 40 characters'),
   referralSource: z.string().trim().optional(),
   acknowledgePayment: z.literal(true, {
-    errorMap: () => ({ message: 'Please confirm you have read how payment works' }),
+    error: 'Please confirm you have read how payment works',
   }),
   consent: z.literal(true, {
-    errorMap: () => ({ message: 'We need your agreement to contact you' }),
+    error: 'We need your agreement to contact you',
   }),
   /** Honeypot — see the note in the route. Must stay empty. */
   website: z.string().optional(),

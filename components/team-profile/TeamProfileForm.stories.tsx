@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { TeamProfileForm } from './TeamProfileForm'
 import { EMPTY_ANSWERS, normaliseAnswers } from '@/lib/team-profile/questions'
 

@@ -24,8 +24,10 @@ export async function POST(req: Request) {
   if (payload.length > 64_000) return NextResponse.json({ error: 'Too large' }, { status: 413 })
   let event: ResendEvent
   try {
-    // Also rejects a timestamp more than five minutes off: no replays.
-    event = new Webhook(secret).verify(payload, { 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': signature }) as ResendEvent
+    // Also rejects a timestamp more than five minutes off: no replays. svix 2
+    // only verifies, so the payload is parsed here, still inside the try.
+    new Webhook(secret).verify(payload, { 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': signature })
+    event = JSON.parse(payload) as ResendEvent
   } catch {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }

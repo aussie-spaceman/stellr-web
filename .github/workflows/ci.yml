@@ -18,6 +18,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Nothing here writes back to GitHub (no comments, statuses or releases), so
+# the token is read-only.
+permissions:
+  contents: read
+
 jobs:
   # Does this change touch anything the app can run? Handover docs, the close-out
   # tracker and promotion records cannot break e2e (no code reads docs/ or
@@ -43,7 +48,7 @@ jobs:
       # (public/videos/, moved to Vercel Blob on 21 Sept); fetching them took
       # this job from ~20 s to past its 5-minute timeout on 5 Oct, and the
       # cancelled job silently skipped e2e. Blobless, the history is ~2 MB.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           filter: blob:none
@@ -99,12 +104,12 @@ jobs:
     steps:
       # Full history, no blobs (see `changes`), so the PII lint can find the
       # merge base with origin/dev. Only the blobs it diffs are fetched.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           filter: blob:none
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           # Matches the Vercel project's runtime (nodeVersion 24.x), which is
           # the thing this job exists to predict; .nvmrc and engines.node agree.
@@ -189,9 +194,9 @@ jobs:
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24.x
           cache: npm
@@ -248,16 +253,21 @@ jobs:
       # Cached by version: a browser download is ~90MB and does not change
       # between runs of the same Playwright release. WebKit is for the
       # mobile-safari project (e2e/mobile), the closest CI gets to an iPhone.
+      # The key carries the runner image OS too (ImageOS, e.g. ubuntu24): the
+      # browser builds are per OS release, so when ubuntu-latest moves to a new
+      # Ubuntu a cache from the old image must miss rather than restore.
       - if: steps.config.outputs.ready == 'true'
         id: pw-version
-        run: echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
       - if: steps.config.outputs.ready == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
 
       - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium webkit
@@ -278,7 +288,7 @@ jobs:
           CI: 'true'
 
       - if: always() && steps.config.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
@@ -306,7 +316,7 @@ jobs:
         run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.json
 
       - if: always() && steps.config.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lighthouse-report
           path: lhci-report/

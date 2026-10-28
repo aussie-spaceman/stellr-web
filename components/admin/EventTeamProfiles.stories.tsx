@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import EventTeamProfiles from './EventTeamProfiles'
 import type { CompanyPlan, PlanningStudent } from '@/lib/team-profile/assign'
 import { normaliseAnswers } from '@/lib/team-profile/questions'

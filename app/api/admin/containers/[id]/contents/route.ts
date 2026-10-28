@@ -45,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 const postSchema = z.object({
-  moduleId: z.string().uuid(),
+  moduleId: z.guid(),
   isMandatory: z.boolean().optional(),
   dueAt: z.string().nullable().optional(),
 })
@@ -91,7 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({ id: data.id })
 }
 
-const deleteSchema = z.object({ id: z.string().uuid() })
+const deleteSchema = z.object({ id: z.guid() })
 
 // DELETE /api/admin/containers/[id]/contents — remove an assignment
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {

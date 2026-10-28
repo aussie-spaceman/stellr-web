@@ -78,7 +78,8 @@ export function TemplateEditor(props: TemplateEditorProps) {
         pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
         const res = await fetch(`/api/admin/esign/templates/file?path=${encodeURIComponent(pdfPath)}`, { cache: 'no-store' })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const doc = await pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) }).promise
+        const task = pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) })
+        const doc = await task.promise
         const out: PageImage[] = []
         for (let n = 1; n <= doc.numPages; n++) {
           const page = await doc.getPage(n)
@@ -90,7 +91,8 @@ export function TemplateEditor(props: TemplateEditorProps) {
           await page.render({ canvas, canvasContext: canvas.getContext('2d') as CanvasRenderingContext2D, viewport }).promise
           out.push({ src: canvas.toDataURL('image/png'), width: base.width, height: base.height })
         }
-        await doc.destroy()
+        // pdf.js 6 tears a document down through its loading task.
+        await task.destroy()
         if (!cancelled) setPages(out)
       } catch (err) {
         console.error('[template-editor] could not draw the document:', err)

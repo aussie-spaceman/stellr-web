@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { ProofStrip } from './ProofStrip'
 import { DEFAULT_PHOTO_CREDIT, PHOTO_WIDTHS, mediaUrl, type PhotoAsset } from '@/lib/media-helpers'
 

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/nextjs'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { WorkCard } from './WorkCard'
 import { mediaUrl, mediaDownloadUrl, type CompetitionAsset } from '@/lib/media-helpers'
 

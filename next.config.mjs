@@ -87,9 +87,9 @@ const nextConfig = {
   transpilePackages: ['@stellr/web-ui', '@stellr/icons'],
   // deep review TEST-12: the repo's lint (eslint.config.mjs) is deliberately
   // non-blocking and run on its own via `npm run lint`, not during the build.
-  // Keep `next build` doing exactly what it did before the lint config existed,
-  // so the required `verify` check is unchanged by it.
-  eslint: { ignoreDuringBuilds: true },
+  // Next 16 no longer lints during `next build` at all, so the old
+  // `eslint: { ignoreDuringBuilds: true }` option is gone (Next rejected it as
+  // an unrecognised key).
   // Function Storage is metered on every retained deployment, so what each
   // function traces matters. Keys are route globs (picomatch, `contains`).
   outputFileTracingExcludes: {

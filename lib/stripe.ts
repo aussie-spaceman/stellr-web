@@ -9,7 +9,10 @@ import Stripe from 'stripe'
 //   requireStripe() → throws, for code that cannot proceed without Stripe
 //                     (checkout, the webhook).
 
-export const STRIPE_API_VERSION = '2026-05-27.dahlia' as const
+// Must match the version the installed stripe SDK pins (its types accept only
+// that one). This sets the version of API calls; webhook payload shapes follow
+// the Dashboard endpoint's own API version, which is changed separately.
+export const STRIPE_API_VERSION = '2026-09-30.endive' as const
 
 export function stripeClient(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY

@@ -1,5 +1,9 @@
+import { WithdrawRegistrationButton } from '@/components/member/WithdrawRegistrationButton'
+
 export interface MyRegistrationRow {
   id: string
+  /** The registration (not the participant) — what Withdraw acts on. */
+  registrationId?: string | null
   eventTitle: string
   status: string
   type: string
@@ -7,9 +11,11 @@ export interface MyRegistrationRow {
   company: { number: number; name: string | null } | null
 }
 
-// Read-only list of the member's current event registrations, including the
-// Company they've been assigned to once the Event Manager runs assignment.
-export function MyRegistrations({ registrations }: { registrations: MyRegistrationRow[] }) {
+// The member's current event registrations, including the Company they've been
+// assigned to once the Event Manager runs assignment. An individual
+// registration not yet checked in can be withdrawn (not when an admin is
+// viewing as the member: `readOnly`).
+export function MyRegistrations({ registrations, readOnly = false }: { registrations: MyRegistrationRow[]; readOnly?: boolean }) {
   if (registrations.length === 0) return null
 
   return (
@@ -38,6 +44,9 @@ export function MyRegistrations({ registrations }: { registrations: MyRegistrati
             >
               {r.checkedInAt ? 'Checked In' : r.status === 'confirmed' ? 'Registered' : 'Pending'}
             </span>
+            {!readOnly && r.type === 'individual' && r.registrationId && !r.checkedInAt && (
+              <WithdrawRegistrationButton registrationId={r.registrationId} eventTitle={r.eventTitle} />
+            )}
           </li>
         ))}
       </ul>

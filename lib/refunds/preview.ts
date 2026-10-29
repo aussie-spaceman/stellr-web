@@ -1,8 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_DAYS, daysSincePayment, guaranteeRefundOptions, type RefundOptions } from './policy'
 import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
+import { resolveRefundBasis } from './payment-basis'
 
 export interface RefundPreview {
   paid: boolean
@@ -36,13 +36,6 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     .maybeSingle()
   if (!p) return empty
 
-  const { data: reg } = await db
-    .from('registrations')
-    .select('event_slug, status, stripe_payment_intent_id')
-    .eq('id', p.registration_id)
-    .maybeSingle()
-  if (!reg) return empty
-
   const { data: prior } = await db
     .from('event_refunds')
     .select('id')
@@ -57,27 +50,16 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
   // the participant read as "not refunded".
   const alreadyRefunded = !!prior && prior.length > 0
 
-  // Only hard payment evidence counts: a webhook-recorded per-participant
-  // payment or a stored payment_intent. registrations.status='confirmed' is NOT
-  // proof of payment (test data / manual edits can confirm without money moving),
-  // and treating it as such produced phantom refund offers.
-  const paymentIntent = p.stripe_payment_intent_id ?? (reg.stripe_payment_intent_id as string | null)
-  const paid = p.individual_payment_status === 'paid' || !!paymentIntent
-  if (!paid) return { ...empty, alreadyRefunded }
-
-  const event = await getEventBySlug(reg.event_slug as string) as { stripePriceId?: string } | null
+  // Same resolution as executeRefund: which payment covered this place, and
+  // what the place actually cost after any discount (lib/refunds/payment-basis.ts).
   const stripe = stripeClient()
-  let paidCents = 0
-  let currency = 'usd'
-  if (event?.stripePriceId && stripe) {
-    try {
-      const price = await stripe.prices.retrieve(event.stripePriceId)
-      paidCents = price.unit_amount ?? 0
-      currency = price.currency ?? 'usd'
-    } catch {
-      /* leave 0 */
-    }
-  }
+  const basis = await resolveRefundBasis(db, stripe, p)
+  if (!basis) return empty
+  const paymentIntent = basis.paymentIntent
+  if (!basis.paid) return { ...empty, alreadyRefunded }
+
+  const paidCents = basis.perPlaceCents
+  const currency = basis.currency
   if (paidCents <= 0) {
     return { ...empty, paid: true, currency, hasPaymentRef: !!paymentIntent, alreadyRefunded }
   }

@@ -14,6 +14,7 @@ import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedL
 import { requireStripe } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { confirmRegistration } from '@/lib/registration-confirm'
+import { recordGroupInvoicePaid } from '@/lib/group-billing'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { PRICE_CHANGE_EVENTS, revalidatePriceCaches } from '@/lib/price-cache'
 
@@ -777,7 +778,12 @@ export async function POST(req: NextRequest) {
             { invoiceId: invoice.id, registrationId, amountPaid, isGroup },
           )
         } else if (registrationId) {
-          await confirmRegistration(registrationId, isGroup, { paidViaInvoice: true })
+          // Group invoices go in the group_invoices ledger with the payment
+          // intent a later refund needs (lib/group-billing.ts). An invoice for
+          // places added after the group paid covers only those places: the
+          // registration was confirmed by its main invoice, so nothing more.
+          const kind = isGroup ? await recordGroupInvoicePaid(supabaseServer(), stripe, invoice) : 'seats'
+          if (kind === 'seats') await confirmRegistration(registrationId, isGroup, { paidViaInvoice: true })
         }
       }
     }

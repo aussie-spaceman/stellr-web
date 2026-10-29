@@ -8,6 +8,8 @@ import { tombstoneCredentialsFor } from '@/lib/credentials'
 import { purgeSurveyDataFor } from '@/lib/survey/purge'
 import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refunds/execute'
+import { applyRosterChange, voidOpenGroupInvoices } from '@/lib/group-billing'
+import { stripeClient } from '@/lib/stripe'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
 type Db = ReturnType<typeof supabaseServer>
@@ -36,8 +38,15 @@ function resolveSoftSet(def: EntityDef): Record<string, unknown> {
 export async function executeDeletion(
   entity: string,
   id: string,
-  opts: { mode: DeleteMode; deletedBy?: string | null; refundChoice?: RefundChoice; refundNote?: string | null }
-): Promise<DeletionResult & { refunds: RefundResult[] }> {
+  opts: {
+    mode: DeleteMode
+    deletedBy?: string | null
+    refundChoice?: RefundChoice
+    refundNote?: string | null
+    /** A member withdrawing themselves, rather than an admin (default). */
+    actorType?: 'admin' | 'member'
+  }
+): Promise<DeletionResult & { refunds: RefundResult[]; billingMessage?: string | null }> {
   const def = getEntityDef(entity)
   if (!def) throw new Error(`Unknown deletable entity type: ${entity}`)
 
@@ -57,13 +66,21 @@ export async function executeDeletion(
   const refunds: RefundResult[] = []
   if (opts.refundChoice) {
     if (def.type === 'participant') {
-      refunds.push(await executeRefund(id, opts.refundChoice, opts.deletedBy ?? null, opts.refundNote))
+      refunds.push(await executeRefund(id, opts.refundChoice, opts.deletedBy ?? null, opts.refundNote, { actorType: opts.actorType }))
     } else if (def.type === 'registration') {
       const { data: parts } = await db.from('participants').select('id').eq('registration_id', id)
       for (const part of parts ?? []) {
-        refunds.push(await executeRefund((part as { id: string }).id, opts.refundChoice, opts.deletedBy ?? null, opts.refundNote))
+        refunds.push(await executeRefund((part as { id: string }).id, opts.refundChoice, opts.deletedBy ?? null, opts.refundNote, { actorType: opts.actorType }))
       }
     }
+  }
+
+  // A group's places and invoices follow its roster (lib/group-billing.ts).
+  // Capture the removed participant's group before the row goes; a withdrawn
+  // or deleted group has nothing left to pay for, so its unpaid invoices go.
+  const seat = def.type === 'participant' ? await groupSeatOf(db, id) : null
+  if (def.type === 'registration') {
+    await voidOpenGroupInvoices(db, stripeClient(), id, 'Cancelled: the group registration was withdrawn')
   }
 
   const externalResults = await runExternalCleanup(def, id, mode)
@@ -154,7 +171,35 @@ export async function executeDeletion(
     await removeEventParticipation(db, { memberId: l.memberId, eventSlug: l.eventSlug })
   }
 
-  return { entity, id, mode, deleted: true, externalResults, refunds }
+  // One fewer place in the group: an unpaid invoice is revised and re-sent.
+  // Never throws (a Stripe failure alerts staff); the delete has happened.
+  let billingMessage: string | null = null
+  if (seat) {
+    const outcome = await applyRosterChange(db, stripeClient(), {
+      registrationId: seat.registrationId,
+      change: { kind: 'removed' },
+      eventRole: seat.eventRole,
+      actor: { memberId: opts.deletedBy ?? null, label: 'admin' },
+    }).catch((err) => {
+      console.error('[deletion] group billing update failed:', err)
+      return null
+    })
+    billingMessage = outcome?.message ?? null
+  }
+
+  return { entity, id, mode, deleted: true, externalResults, refunds, billingMessage }
+}
+
+/** The group registration a participant holds a place in, or null for an individual. */
+async function groupSeatOf(db: Db, participantId: string): Promise<{ registrationId: string; eventRole: string | null } | null> {
+  const { data } = await db
+    .from('participants')
+    .select('registration_id, event_role, registrations!inner(type)')
+    .eq('id', participantId)
+    .maybeSingle()
+  const row = data as { registration_id: string; event_role: string | null; registrations: { type: string } | { type: string }[] } | null
+  const reg = Array.isArray(row?.registrations) ? row?.registrations[0] : row?.registrations
+  return row && reg?.type === 'group' ? { registrationId: row.registration_id, eventRole: row.event_role } : null
 }
 
 // deep review MP-2: tombstone every credential tied to the person(s) this

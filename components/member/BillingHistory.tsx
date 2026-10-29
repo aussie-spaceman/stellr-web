@@ -12,10 +12,25 @@ interface Invoice {
   status: string | null
   amount_due: number
   amount_paid: number
+  total?: number
   currency: string
   description: string | null
+  /** Why a group invoice was issued, e.g. "Updated to 18 participants after a participant was removed (was 19)". */
+  note?: string | null
+  /** A group invoice revised after a roster change or discount: the number of its replacement. */
+  replaced_by?: string | null
   pdf_url: string | null
   hosted_url: string | null
+}
+
+interface Refund {
+  id: string
+  created_at: string
+  amount: number
+  currency: string
+  event_title: string | null
+  /** Refunded to the organiser's group payment, not the member's own. */
+  for_group: boolean
 }
 
 interface ParticipationReg {
@@ -112,6 +127,7 @@ interface BillingHistoryProps {
 
 export function BillingHistory({ impersonateMemberId, readOnly = false }: BillingHistoryProps = {}) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [refunds, setRefunds] = useState<Refund[]>([])
   const [participations, setParticipations] = useState<Participation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -146,6 +162,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
       .then(data => {
         if (data.error) throw new Error(data.error)
         setInvoices(data.invoices ?? [])
+        setRefunds(data.refunds ?? [])
         setParticipations(data.participations ?? [])
       })
       .catch(err => setError(err.message))
@@ -272,7 +289,10 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
         <div className="bg-white rounded-xl border border-brand-border">
           <div className="p-6 border-b border-brand-hairline">
             <h2 className="text-base font-semibold text-brand-blue-dark">Invoices</h2>
-            <p className="text-sm text-brand-muted-soft mt-0.5">Invoices raised for group registrations you organized.</p>
+            <p className="text-sm text-content-muted mt-0.5">
+              Invoices raised for group registrations you organized. When your group changes, the invoice is updated and the
+              earlier one is marked replaced.
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -291,14 +311,20 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
                   <tr key={inv.id} className="hover:bg-brand-canvas">
                     <td className="px-6 py-4 text-brand-muted">{formatDate(inv.created)}</td>
                     <td className="px-6 py-4 font-mono text-brand-muted text-xs">{inv.number ?? '—'}</td>
-                    <td className="px-6 py-4 text-brand-muted max-w-xs truncate">{inv.description ?? '—'}</td>
-                    <td className="px-6 py-4 text-brand-blue-dark font-medium">
-                      {formatAmount(inv.amount_due, inv.currency)}
+                    <td className="px-6 py-4 text-content-body max-w-xs">
+                      <p className="truncate">{inv.description ?? '—'}</p>
+                      {inv.note && <p className="mt-0.5 text-xs text-content-muted">{inv.note}</p>}
+                    </td>
+                    <td className="px-6 py-4 text-ink font-medium">
+                      {formatAmount(inv.total ?? inv.amount_due, inv.currency)}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[inv.status ?? ''] ?? 'bg-brand-hairline text-brand-muted-soft'}`}>
-                        {inv.status}
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[inv.status ?? ''] ?? 'bg-line-light text-content-muted'}`}>
+                        {inv.status === 'void' && inv.replaced_by ? 'Replaced' : inv.status}
                       </span>
+                      {inv.status === 'void' && inv.replaced_by && (
+                        <p className="mt-0.5 text-xs text-content-muted">by {inv.replaced_by}</p>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right space-x-3">
                       {inv.pdf_url && (
@@ -317,6 +343,30 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ── Refunds ──────────────────────────────────────────────────────── */}
+      {refunds.length > 0 && (
+        <div className="bg-white rounded-xl border border-line">
+          <div className="p-6 border-b border-line-light">
+            <h2 className="text-base font-semibold text-ink">Refunds</h2>
+            <p className="text-sm text-content-muted mt-0.5">
+              Refunds for places that were cancelled. They go back to the card or account that paid, usually within 5–10 business days.
+            </p>
+          </div>
+          <ul className="divide-y divide-line-light text-sm">
+            {refunds.map(r => (
+              <li key={r.id} className="px-6 py-4 flex flex-wrap items-center gap-x-6 gap-y-1">
+                <span className="text-content-body">{formatDate(r.created_at)}</span>
+                <span className="flex-1 min-w-48 text-content-body">
+                  {r.event_title ?? 'Event registration'}
+                  {r.for_group && <span className="text-content-muted"> · one place on your group&rsquo;s payment</span>}
+                </span>
+                <span className="font-medium text-ink">{formatAmount(r.amount, r.currency)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

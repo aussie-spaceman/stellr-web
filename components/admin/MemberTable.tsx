@@ -3,8 +3,18 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { formatDateShort } from '@/lib/utils'
+import {
+  MEMBER_BRACKETS,
+  MEMBER_ROLES,
+  NO_TIER,
+  activeMemberFilterCount,
+  memberFilterParams,
+  type MemberFilters,
+  type MemberSort,
+} from '@/lib/admin-member-filters'
 
 export interface MemberRow {
   id: string
@@ -30,19 +40,16 @@ export interface MemberRow {
 
 interface Tier { id: string; name: string }
 
-interface Filters { q: string; bracket: string; role: string; tier: string }
-
 interface Props {
   members: MemberRow[]
   tiers: Tier[]
+  /** School names, offered as suggestions in the School filter. */
+  schools?: string[]
   total: number
   page: number
   pageSize: number
-  filters: Filters
+  filters: MemberFilters
 }
-
-const BRACKETS = ['high_school', 'college', 'adult']
-const ROLES = ['participant', 'mentor', 'teacher', 'donor', 'parent', 'subscriber']
 
 const TIER_TOOLTIPS: Record<string, string> = {
   'Explorer': 'Free tier — public content, competition listings, and basic community access.',
@@ -62,88 +69,230 @@ function label(val: string) {
 const TH = 'whitespace-nowrap border-b border-line px-4 py-3 text-left font-medium text-content-body'
 const TD = 'border-b border-line-light px-4 py-3 group-last:border-b-0'
 const STICKY = 'sticky left-0 z-10 border-r border-line-light'
+// The filter row sits under the headers and scrolls with its columns.
+const FILTER_TD = 'border-b border-line px-2 py-2 align-top font-normal'
+const CONTROL = 'border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
+// Tighter than CONTROL so the filter row doesn't widen the table past the screen.
+const FILTER_CONTROL = 'w-full min-w-24 rounded-lg border border-line-strong bg-white px-2 py-1.5 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
 
-export function MemberTable({ members, tiers, total, page, pageSize, filters }: Props) {
+// Newest first is the useful default for dates; A–Z for everything else.
+const FIRST_DIR: Record<MemberSort, 'asc' | 'desc'> = { name: 'asc', email: 'asc', role: 'asc', joined: 'desc' }
+
+/**
+ * A text filter that applies on Enter or when focus leaves it, rather than on
+ * every keystroke: each change is a server round-trip.
+ */
+function FilterText({
+  value,
+  onCommit,
+  ...input
+}: { value: string; onCommit: (v: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [draft, setDraft] = useState(value)
+  // Follow the URL when it changes underneath us (Clear filters, back button).
+  const [seen, setSeen] = useState(value)
+  if (value !== seen) {
+    setSeen(value)
+    setDraft(value)
+  }
+  const commit = () => {
+    if (draft.trim() !== value) onCommit(draft.trim())
+  }
+  return (
+    <input
+      {...input}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
+      onBlur={commit}
+    />
+  )
+}
+
+function SortHeader({
+  sort, children, filters, onSort, className = '',
+}: { sort: MemberSort; children: React.ReactNode; filters: MemberFilters; onSort: (s: MemberSort) => void; className?: string }) {
+  const active = filters.sort === sort
+  const Icon = !active ? ArrowUpDown : filters.dir === 'asc' ? ArrowUp : ArrowDown
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (filters.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`${TH} ${className}`}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sort)}
+        className="inline-flex items-center gap-1.5 rounded hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        {children}
+        <Icon className={`h-3.5 w-3.5 ${active ? 'text-primary' : 'text-content-faint'}`} aria-hidden="true" />
+      </button>
+    </th>
+  )
+}
+
+export function MemberTable({ members, tiers, schools = [], total, page, pageSize, filters }: Props) {
   const router = useRouter()
   const pathname = usePathname()
-  const [, startTransition] = useTransition()
-  const [search, setSearch] = useState(filters.q)
+  const [pending, startTransition] = useTransition()
 
-  function pushFilter(updates: Partial<Filters> & { page?: number }) {
-    const params = new URLSearchParams({
-      q: filters.q,
-      bracket: filters.bracket,
-      role: filters.role,
-      tier: filters.tier,
-      page: String(page),
-      ...Object.fromEntries(Object.entries(updates).map(([k, v]) => [k, String(v)])),
-    })
-    // Clear empty params
-    ;['q', 'bracket', 'role', 'tier'].forEach((k) => {
-      if (!params.get(k)) params.delete(k)
-    })
-    if (params.get('page') === '1') params.delete('page')
-    startTransition(() => router.push(`${pathname}?${params}`))
+  // Any filter change goes back to page 1; paging keeps the filters.
+  function go(next: Partial<MemberFilters>, nextPage = 1) {
+    const params = memberFilterParams({ ...filters, ...next }, nextPage > 1 ? { page: String(nextPage) } : {})
+    const qs = params.toString()
+    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname))
   }
 
+  function sortBy(sort: MemberSort) {
+    const dir = filters.sort === sort ? (filters.dir === 'asc' ? 'desc' : 'asc') : FIRST_DIR[sort]
+    go({ sort, dir })
+  }
+
+  const filterCount = activeMemberFilterCount(filters)
   const totalPages = Math.ceil(total / pageSize)
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-brand-border p-4 flex flex-wrap gap-3">
-        <input
+      {/* Search across name and email, plus the one filter with no column. */}
+      <div className="bg-white rounded-xl border border-brand-border p-4 flex flex-wrap items-center gap-3">
+        <FilterText
           type="search"
+          aria-label="Search name or email"
           placeholder="Search name or email…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && pushFilter({ q: search, page: 1 })}
-          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm w-64 focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
+          value={filters.q}
+          onCommit={(q) => go({ q })}
+          className={`${CONTROL} w-64`}
         />
         <select
+          aria-label="Age bracket"
           value={filters.bracket}
-          onChange={(e) => pushFilter({ bracket: e.target.value, page: 1 })}
-          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
+          onChange={(e) => go({ bracket: e.target.value })}
+          className={CONTROL}
         >
           <option value="">All brackets</option>
-          {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
+          {MEMBER_BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
         </select>
-        <select
-          value={filters.role}
-          onChange={(e) => pushFilter({ role: e.target.value, page: 1 })}
-          className="border border-line-strong rounded-lg px-3 py-2 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue"
-        >
-          <option value="">All roles</option>
-          {ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}
-        </select>
+        <p className="text-xs text-content-muted">Filter or sort any column in the table below.</p>
+        {filterCount > 0 && (
+          <button
+            type="button"
+            onClick={() => go({ q: '', bracket: '', role: '', tier: '', name: '', email: '', school: '', joinedFrom: '', joinedTo: '' })}
+            className="ml-auto inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-primary hover:bg-surface"
+          >
+            Clear {filterCount} filter{filterCount === 1 ? '' : 's'}
+          </button>
+        )}
       </div>
 
       {/* Table */}
       <div
         role="region"
         aria-label="Members"
+        aria-busy={pending}
         tabIndex={0}
-        className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        className={`relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${pending ? 'opacity-70' : ''}`}
       >
         <table className="min-w-full border-separate border-spacing-0 text-sm">
           <thead className="bg-surface">
             <tr>
-              <th scope="col" className={`${TH} ${STICKY} bg-surface`}>Name</th>
-              <th scope="col" className={TH}>Email</th>
-              <th scope="col" className={TH}>Role</th>
+              <SortHeader sort="name" filters={filters} onSort={sortBy} className={`${STICKY} bg-surface`}>Name</SortHeader>
+              <SortHeader sort="email" filters={filters} onSort={sortBy}>Email</SortHeader>
+              <SortHeader sort="role" filters={filters} onSort={sortBy}>Role</SortHeader>
               <th scope="col" className={TH}>Membership</th>
               <th scope="col" className={TH}>School</th>
-              <th scope="col" className={TH}>Joined</th>
+              <SortHeader sort="joined" filters={filters} onSort={sortBy}>Joined</SortHeader>
               <th scope="col" className={TH}>
                 <span className="sr-only">Open</span>
               </th>
+            </tr>
+            <tr>
+              <td className={`${FILTER_TD} ${STICKY} bg-surface`}>
+                <FilterText
+                  type="search"
+                  aria-label="Filter by name"
+                  placeholder="Any name"
+                  value={filters.name}
+                  onCommit={(name) => go({ name })}
+                  className={FILTER_CONTROL}
+                />
+              </td>
+              <td className={FILTER_TD}>
+                <FilterText
+                  type="search"
+                  aria-label="Filter by email"
+                  placeholder="Any email"
+                  value={filters.email}
+                  onCommit={(email) => go({ email })}
+                  className={FILTER_CONTROL}
+                />
+              </td>
+              <td className={FILTER_TD}>
+                <select
+                  aria-label="Filter by role"
+                  value={filters.role}
+                  onChange={(e) => go({ role: e.target.value })}
+                  className={FILTER_CONTROL}
+                >
+                  <option value="">Any role</option>
+                  {MEMBER_ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}
+                </select>
+              </td>
+              <td className={FILTER_TD}>
+                <select
+                  aria-label="Filter by membership"
+                  value={filters.tier}
+                  onChange={(e) => go({ tier: e.target.value })}
+                  className={`${FILTER_CONTROL} min-w-36`}
+                >
+                  <option value="">Any membership</option>
+                  <option value={NO_TIER}>No active membership</option>
+                  {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </td>
+              <td className={FILTER_TD}>
+                <FilterText
+                  type="search"
+                  aria-label="Filter by current school"
+                  placeholder="Any school"
+                  list="member-filter-schools"
+                  value={filters.school}
+                  onCommit={(school) => go({ school })}
+                  className={FILTER_CONTROL}
+                />
+                <datalist id="member-filter-schools">
+                  {schools.map((s) => <option key={s} value={s} />)}
+                </datalist>
+              </td>
+              <td className={FILTER_TD}>
+                <div className="flex flex-col gap-1.5">
+                  <input
+                    type="date"
+                    aria-label="Joined on or after"
+                    title="Joined on or after"
+                    value={filters.joinedFrom}
+                    max={filters.joinedTo || undefined}
+                    onChange={(e) => go({ joinedFrom: e.target.value })}
+                    className={FILTER_CONTROL}
+                  />
+                  <input
+                    type="date"
+                    aria-label="Joined on or before"
+                    title="Joined on or before"
+                    value={filters.joinedTo}
+                    min={filters.joinedFrom || undefined}
+                    onChange={(e) => go({ joinedTo: e.target.value })}
+                    className={FILTER_CONTROL}
+                  />
+                </div>
+              </td>
+              <td className={FILTER_TD} />
             </tr>
           </thead>
           <tbody>
             {members.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-content-muted">
-                  No members found.
+                  {filterCount > 0 ? 'No members match these filters.' : 'No members found.'}
                 </td>
               </tr>
             )}
@@ -178,7 +327,19 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
                       </span>
                     </Link>
                   </td>
-                  <td className={`${TD} whitespace-nowrap text-content-body`}>{m.email}</td>
+                  {/* A long address may break after the @, and only once the
+                      table runs out of room. */}
+                  <td className={`${TD} text-content-body`}>
+                    {m.email.includes('@') ? (
+                      <>
+                        {m.email.slice(0, m.email.lastIndexOf('@') + 1)}
+                        <wbr />
+                        {m.email.slice(m.email.lastIndexOf('@') + 1)}
+                      </>
+                    ) : (
+                      m.email
+                    )}
+                  </td>
                   <td className={`${TD} whitespace-nowrap text-content-body`}>{label(m.event_role)}</td>
                   <td className={`${TD} whitespace-nowrap`}>
                     {activeTier ? (
@@ -220,14 +381,14 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
           </span>
           <div className="flex gap-2">
             <button
-              onClick={() => pushFilter({ page: page - 1 })}
+              onClick={() => go({}, page - 1)}
               disabled={page <= 1}
               className="px-3 py-1.5 border border-brand-border rounded-lg hover:bg-brand-canvas disabled:opacity-40"
             >
               Previous
             </button>
             <button
-              onClick={() => pushFilter({ page: page + 1 })}
+              onClick={() => go({}, page + 1)}
               disabled={page >= totalPages}
               className="px-3 py-1.5 border border-brand-border rounded-lg hover:bg-brand-canvas disabled:opacity-40"
             >

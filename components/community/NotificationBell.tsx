@@ -25,6 +25,9 @@ function actorName(actor: Notification['actor']): string {
 function typeLabel(n: Notification): string {
   // Clearance notices (lib/compliance-notify) carry the detail in the body.
   if (n.reference_type === 'compliance') return 'Clearance needed'
+  // lib/license-review: a staff alert, and the teacher's "you're cleared".
+  if (n.reference_type === 'license_review') return 'License to verify'
+  if (n.reference_type === 'compliance_cleared') return 'License verified'
   switch (n.type) {
     case 'reply': return `${actorName(n.actor)} replied to your post`
     case 'mention': return `${actorName(n.actor)} mentioned you`
@@ -276,9 +279,11 @@ export function NotificationBell() {
                     ? `/community/mentoring/${n.reference_id}`
                     : (n.reference_type === 'coaching' || n.reference_type === 'coaching_invite') && n.reference_id
                       ? `/community/coaching/${n.reference_id}`
-                      : n.reference_type === 'compliance'
+                      : n.reference_type === 'compliance' || n.reference_type === 'compliance_cleared'
                         ? CLEARANCE_PATH
-                        : '/community'
+                        : n.reference_type === 'license_review' && n.reference_id
+                          ? `/admin/members/${n.reference_id}`
+                          : '/community'
               return (
                 <li key={n.id}>
                   <Link

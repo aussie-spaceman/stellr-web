@@ -10,9 +10,12 @@ import { displayEventRole } from '@/lib/member-enums'
 
 type Filter = 'attention' | 'all' | ComplianceState
 
+const ATTENTION_STATES = new Set<ComplianceState>(['invalid', 'in_process', 'awaiting_verification', 'flagged'])
+
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'attention', label: 'Needs attention' },
   { key: 'flagged', label: 'Needs review' },
+  { key: 'awaiting_verification', label: 'Waiting verification' },
   { key: 'invalid', label: 'Invalid' },
   { key: 'in_process', label: 'In Process' },
   { key: 'valid_bc', label: 'BC Passed' },
@@ -35,17 +38,15 @@ function fmt(iso: string) {
 export function ComplianceAuditTable({
   rows,
   counts,
-  reviewQueueCount,
 }: {
   rows: ComplianceAuditRow[]
   counts: Record<ComplianceState, number>
-  reviewQueueCount: number
 }) {
   const [filter, setFilter] = useState<Filter>('attention')
 
   const filtered = useMemo(() => {
     if (filter === 'all') return rows
-    if (filter === 'attention') return rows.filter((r) => r.state === 'invalid' || r.state === 'in_process' || r.state === 'flagged')
+    if (filter === 'attention') return rows.filter((r) => ATTENTION_STATES.has(r.state))
     return rows.filter((r) => r.state === filter)
   }, [rows, filter])
 
@@ -57,7 +58,7 @@ export function ComplianceAuditTable({
           { label: 'Invalid', value: counts.invalid, cls: 'text-red-700' },
           { label: 'In Process', value: counts.in_process, cls: 'text-orange-700' },
           { label: 'Cleared', value: counts.valid_bc + counts.valid_license, cls: 'text-emerald-700' },
-          { label: 'Awaiting license review', value: reviewQueueCount, cls: 'text-amber-700' },
+          { label: 'Waiting verification', value: counts.awaiting_verification, cls: 'text-amber-700' },
         ] as const).map((c) => (
           <div key={c.label} className="rounded-xl border border-brand-border bg-white px-4 py-3">
             <p className={`text-2xl font-bold ${c.cls}`}>{c.value}</p>

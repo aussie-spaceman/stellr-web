@@ -127,10 +127,19 @@ describe('deriveCompliance', () => {
     expect(deriveCompliance(null, [check({ status: 'passed', expires_at: inYears(-1) })], 'mentor', ADULT).state).toBe('invalid')
   })
 
-  it('verified unexpired license → valid_license; unverified → in_process; expired → invalid', () => {
+  it('verified unexpired license → valid_license; unverified → awaiting_verification; expired → invalid', () => {
     expect(deriveCompliance(license({ verified_at: '2026-01-01T00:00:00Z' }), [], 'teacher', ADULT).state).toBe('valid_license')
-    expect(deriveCompliance(license({}), [], 'teacher', ADULT).state).toBe('in_process')
+    expect(deriveCompliance(license({}), [], 'teacher', ADULT).state).toBe('awaiting_verification')
     expect(deriveCompliance(license({ verified_at: '2026-01-01T00:00:00Z', expiry_date: '2020-01-01' }), [], 'teacher', ADULT).state).toBe('invalid')
+  })
+
+  // 28 Oct 2026: a license an admin can verify is its own state, and it outranks
+  // a check that is still running — the admin can clear this person today.
+  it('an unverified license outranks a running check, and says when no photo is attached', () => {
+    const summary = deriveCompliance(license({ document_path: null }), [check({ status: 'in_progress' })], 'teacher', ADULT)
+    expect(summary.state).toBe('awaiting_verification')
+    expect(summary.detail).toMatch(/no photo uploaded yet/)
+    expect(deriveCompliance(license({ document_path: 'm/1.jpg' }), [], 'teacher', ADULT).detail).toBe('License awaiting verification')
   })
 
   it('invited / in_progress → in_process; referred → invalid; cancelled and expired are their own states', () => {

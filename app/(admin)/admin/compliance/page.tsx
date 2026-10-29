@@ -25,7 +25,6 @@ export default async function ComplianceAuditPage() {
       <ComplianceAuditTable
         rows={audit.rows}
         counts={audit.counts}
-        reviewQueueCount={audit.reviewQueue.length}
       />
     </div>
   )

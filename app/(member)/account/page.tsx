@@ -154,7 +154,7 @@ export default async function AccountPage({
     db
       .from('participants')
       .select(
-        'id, membership_id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
+        'id, membership_id, checked_in_at, event_companies(number, name), registrations(id, event_slug, event_title, status, type)'
       )
       .or(`member_id.eq.${member.id},email.eq.${member.email}`),
     db.from('registrations').select('id', { count: 'exact', head: true }).eq('type', 'group').or(groupOwnerOr),
@@ -168,6 +168,7 @@ export default async function AccountPage({
   const myRegistrations = (myParticipantRows ?? [])
     .map((p) => {
       const reg = p.registrations as unknown as {
+        id: string
         event_slug: string
         event_title: string
         status: string
@@ -177,6 +178,7 @@ export default async function AccountPage({
       return reg && reg.status !== 'withdrawn'
         ? {
             id: p.id as string,
+            registrationId: reg.id,
             eventTitle: reg.event_title,
             status: reg.status,
             type: reg.type,

@@ -1,6 +1,6 @@
 import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
+import { createGroupInvoice, loadRegistration, type GroupRegistration } from '@/lib/group-billing'
 
 // The Stripe invoice for a group that chose "pay by invoice". Shared by the
 // registration route and the admin "Finish registration setup" action, so a
@@ -50,34 +50,32 @@ export async function createAndSendGroupInvoice(
         .eq('id', input.registrantMemberId).is('stripe_customer_id', null)
     }
   }
-  // deep review PAY-1: create the invoice FIRST, then attach the line
-  // item to it explicitly with `invoice: invoice.id`. The old order
-  // created a *pending* invoice item and then an invoice with no
-  // `pending_invoice_items_behavior`; on the pinned SDK (2026-05-27.dahlia)
-  // that default EXCLUDES pending items, so the invoice finalised with no
-  // line — a $0 invoice that auto-sent (and, with the webhook, stamped the
-  // registration paid) for a paid event. Mirrors the known-good pattern in
-  // app/api/stripe/membership-invoice/route.ts.
-  const invoice = await stripe.invoices.create({
-    customer: customerId,
-    collection_method: 'send_invoice',
-    days_until_due: 14,
-    auto_advance: false,
-    metadata: { registrationId: input.registrationId, eventSlug: input.eventSlug, isGroup: 'true' },
-    // The money-back guarantee, printed on the invoice.
-    footer: GUARANTEE_RECEIPT_LINE,
-  })
-  const n = input.totalParticipants
-  await stripe.invoiceItems.create({
-    customer: customerId,
-    invoice: invoice.id as string,
+  // One per-place line (quantity × price), recorded in the group_invoices
+  // ledger so a later roster change can revise it (lib/group-billing.ts, which
+  // keeps the PAY-1 order: invoice first, then the line attached to it).
+  // amountCents is perSeatCents × totalParticipants by construction.
+  // The registration only adds a discount an admin set; if it can't be read
+  // (a blip, or the 20261029 columns not yet applied) the invoice still goes.
+  const reg: GroupRegistration = (await loadRegistration(db, input.registrationId)) ?? {
+    id: input.registrationId, type: 'group', event_slug: input.eventSlug, event_title: input.eventTitle,
+    status: 'pending', invoice_requested: true, invoice_paid_at: null, member_pays_individually: false,
+    stripe_payment_intent_id: null, amount_due_cents: input.amountCents, adult_count: null, student_count: null,
+    teacher_first_name: input.teacher.firstName, teacher_last_name: input.teacher.lastName,
+    teacher_email: input.teacher.email, teacher_member_id: input.registrantMemberId,
+    invoice_coupon_id: null, invoice_promotion_code: null,
+  }
+  const sent = await createGroupInvoice(db, stripe, {
+    reg,
+    customerId,
+    seats: input.totalParticipants,
+    perSeatCents: input.perSeatCents,
     currency: input.currency,
-    amount: input.amountCents,
-    description: `${input.eventTitle} — Group Registration (${n} participant${n !== 1 ? 's' : ''} × ${input.currency.toUpperCase()} ${(input.perSeatCents / 100).toFixed(2)} each)`,
+    reason: 'Group registration',
+    actor: { memberId: null, label: 'system' },
+    couponId: reg.invoice_coupon_id,
+    kind: 'seats',
   })
-  const finalized = await stripe.invoices.finalizeInvoice(invoice.id as string)
-  await stripe.invoices.sendInvoice(finalized.id as string)
-  return { invoiceId: finalized.id as string }
+  return { invoiceId: sent.id as string }
 }
 
 /**

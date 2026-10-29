@@ -4,6 +4,7 @@ import { getCurrentMember } from '@/lib/community'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload } from '@/lib/uploads'
+import { alertLicenseReview } from '@/lib/license-review'
 import {
   LICENSE_DOCUMENT_URL_TTL_SECONDS,
   TEACHER_LICENSE_BUCKET,
@@ -82,6 +83,8 @@ export async function POST(req: NextRequest) {
     { memberId: member.id, category: 'compliance', action: 'license_document_uploaded', summary: 'Teacher license image uploaded — awaiting verification', ...actor },
     db,
   )
+  // Staff are told there is a license to verify (never throws).
+  await alertLicenseReview(db, member.id, 'document')
 
   const { data: signed } = await db.storage.from(BUCKET).createSignedUrl(storagePath, LICENSE_DOCUMENT_URL_TTL_SECONDS)
   return NextResponse.json({ ok: true, documentUrl: signed?.signedUrl ?? null })

@@ -172,11 +172,14 @@ export async function getOutstandingItems(
     if (requiresBackgroundCheck(p.event_role, p.date_of_birth, dateOf(reg))) {
       const state = deriveCompliance(records?.license ?? null, records?.checks ?? [], p.event_role, p.date_of_birth, dateOf(reg)).state
       if (state !== 'valid_bc' && state !== 'valid_license') {
+        const waiting = state === 'in_process' || state === 'awaiting_verification' || state === 'flagged'
         push({ kind: 'clearance', eventSlug: reg.event_slug, eventTitle: title,
-          text: state === 'in_process'
-            ? `Your clearance for ${title} is being reviewed.`
-            : `Upload your teaching license or complete a background check before ${title}.`,
-          cta: state === 'in_process' ? 'View status' : 'Upload license', href: CLEARANCE_PATH })
+          text: state === 'awaiting_verification'
+            ? `Your teaching license is waiting for Stellr to verify it before ${title}.`
+            : waiting
+              ? `Your clearance for ${title} is being reviewed.`
+              : `Upload your teaching license or complete a background check before ${title}.`,
+          cta: waiting ? 'View status' : 'Upload license', href: CLEARANCE_PATH })
       }
     }
 

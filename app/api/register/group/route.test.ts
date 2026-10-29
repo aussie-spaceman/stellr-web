@@ -241,9 +241,12 @@ describe('POST /api/register/group', () => {
     // The invoice was created, then the line item attached to THAT invoice.
     expect(h.invoicesCreate).toHaveBeenCalledTimes(1)
     expect(h.invoiceItemsCreate).toHaveBeenCalledTimes(1)
+    // One per-place line (29 Oct 2026), so a later roster change can revise it.
     expect(h.invoiceItemsCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ invoice: 'in_1', amount: 13500 * 3 }),
+      expect.objectContaining({ invoice: 'in_1', quantity: 3 }),
     )
+    const [line] = h.invoiceItemsCreate.mock.calls[0] as unknown as [{ unit_amount_decimal: unknown }]
+    expect(String(line.unit_amount_decimal)).toBe('13500')
     // Ordering: invoices.create ran before invoiceItems.create (so the item is
     // never left as an unattached pending item that the invoice excludes).
     expect(h.invoicesCreate.mock.invocationCallOrder[0]).toBeLessThan(

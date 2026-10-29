@@ -140,7 +140,7 @@ function JoinedTeamsView({
   const [payError, setPayError] = useState<string | null>(null)
 
   async function handleLeave(participantId: string, registrationId: string) {
-    if (!confirm('Are you sure you want to leave this team? Your organizer will be notified.')) return
+    if (!confirm('Are you sure you want to leave this team? Your organizer will be notified, and if your place was paid for it is refunded under our 45-day money-back guarantee.')) return
     setLeaving(participantId)
     await fetch(`/api/members/teams/${registrationId}/participants/${participantId}`, { method: 'DELETE' })
     onLeft(participantId)
@@ -288,6 +288,8 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
   const [removing, setRemoving] = useState<string | null>(null)
   const [resendingConsent, setResendingConsent] = useState<string | null>(null)
   const [consentMsg, setConsentMsg] = useState<string | null>(null)
+  // What a roster change did to the group's invoice or payment.
+  const [billingMsg, setBillingMsg] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/members/teams${memberQuery}`)
@@ -327,9 +329,16 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
   }
 
   async function handleRemoveParticipant(registrationId: string, pid: string) {
-    if (!confirm('Remove this participant from the team?')) return
+    if (!confirm(
+      'Remove this participant from the team?\n\n' +
+      'Your group will have one fewer place. If you haven’t paid yet, we’ll email you an updated invoice. ' +
+      'If you have, the place is refunded under our 45-day money-back guarantee.'
+    )) return
     setRemoving(pid)
-    await fetch(`/api/members/teams/${registrationId}/participants/${pid}`, { method: 'DELETE' })
+    setBillingMsg(null)
+    const res = await fetch(`/api/members/teams/${registrationId}/participants/${pid}`, { method: 'DELETE' })
+    const out = await res.json().catch(() => ({})) as { error?: string; billing?: { message?: string | null } }
+    setBillingMsg(res.ok ? out.billing?.message ?? 'Participant removed.' : out.error ?? 'Could not remove the participant.')
     // Reload
     const r = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
     const d = await r.json()
@@ -337,7 +346,8 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
     setRemoving(null)
   }
 
-  function handleParticipantSaved() {
+  function handleParticipantSaved(message?: string | null) {
+    setBillingMsg(message ?? null)
     setAdding(false)
     setEditing(null)
     if (expanded) {
@@ -560,6 +570,9 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                 )}
                 {consentMsg && (
                   <p className="text-xs bg-brand-blue/5 border border-brand-blue/30 text-brand-blue rounded-lg px-3 py-2">{consentMsg}</p>
+                )}
+                {billingMsg && (
+                  <p role="status" className="text-xs text-ink bg-surface border border-line rounded-lg px-3 py-2">{billingMsg}</p>
                 )}
 
                 {/* Consent summary */}

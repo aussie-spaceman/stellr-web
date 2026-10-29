@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { teacherLicenseSchema, type TeacherLicenseInput } from '@/lib/teacher-license'
+import { notifyLicenseVerified } from '@/lib/license-review'
 
 // POST /api/admin/members/[id]/license
 // Admin manually verifies (or un-verifies) the teacher license on file. This is
@@ -50,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { data: license } = await db
     .from('member_teacher_licenses')
-    .select('id')
+    .select('id, expiry_date')
     .eq('member_id', id)
     .maybeSingle()
   if (!license) return NextResponse.json({ error: 'No license on file for this member' }, { status: 404 })
@@ -101,6 +102,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     },
     db,
   )
+  // Tell the teacher they're cleared (never throws).
+  if (verifying) await notifyLicenseVerified(db, id, license.expiry_date as string)
 
   return NextResponse.json({ ok: true })
 }

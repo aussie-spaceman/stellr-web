@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { ComplianceSection } from './ComplianceSection'
 
 // The member's "Background Check & License" card: the #clearance target the
@@ -35,7 +35,10 @@ describe('ComplianceSection', () => {
     Element.prototype.scrollIntoView = scroll
     render(<ComplianceSection />)
     await screen.findByRole('button', { name: 'Add teaching license' })
-    expect(scroll).toHaveBeenCalled()
+    // The scroll runs in an effect after the card renders, so on a slow CI
+    // runner the button can appear a moment before it fires (failed once in
+    // promotion #475). Wait for the call rather than asserting the same tick.
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: 'start' }))
   })
 
   it('is read-only during view-as: no add, edit, upload or delete', async () => {

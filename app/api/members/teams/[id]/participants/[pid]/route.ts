@@ -6,6 +6,9 @@ import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { removeEventParticipation } from '@/lib/event-participation-sync'
+import { stripeClient } from '@/lib/stripe'
+import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
+import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -157,6 +160,17 @@ export async function DELETE(
     )
   }
 
+  // A place that was paid for is refunded BEFORE the row goes (the refund reads
+  // the participant's payment). It follows the 45-day money-back guarantee and
+  // goes to whoever paid: the organiser for a group payment, the student for a
+  // seat they paid themselves. executeRefund never throws on a Stripe failure.
+  let refund: RefundResult | null = null
+  try {
+    refund = await executeRefund(pid, 'cash', member.id, isManager ? 'Removed by the group organiser' : 'Left the team', { actorType: 'member' })
+  } catch (err) {
+    console.error('[teams/participants/pid] refund error:', err)
+  }
+
   const { error } = await db
     .from('participants')
     .delete()
@@ -167,6 +181,18 @@ export async function DELETE(
     console.error('[teams/participants/pid] Delete error:', error)
     return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 })
   }
+
+  // The group now has one fewer place: an unpaid invoice is revised and
+  // re-sent (lib/group-billing.ts). Never throws; a failure alerts staff.
+  const billing = await applyRosterChange(db, stripeClient(), {
+    registrationId,
+    change: { kind: 'removed' },
+    eventRole: participant.event_role,
+    actor: { memberId: member.id, label: isManager ? 'organiser' : 'participant' },
+  }).catch((err) => {
+    console.error('[teams/participants/pid] billing update error:', err)
+    return null
+  })
 
   // deep review REG-10: removing the participant row alone leaves the member in
   // the event's community Space (which may be full of minors), and the next
@@ -194,5 +220,8 @@ export async function DELETE(
     })
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({
+    success: true,
+    billing: { message: describeRemoval(refund, billing), action: billing?.action ?? 'none', seats: billing?.seatsAfter ?? null },
+  })
 }

@@ -1,11 +1,11 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
-import { notifyMember } from '@/lib/notify'
+import { notifyMember, notifyCommunityAdmins } from '@/lib/notify'
 import { logActivity } from '@/lib/activity-log'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_DAYS, daysSincePayment, guaranteeRefundOptions } from './policy'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
+import { resolveRefundBasis } from './payment-basis'
 
 /**
  * 'cash' — the money-back guarantee's full refund, if the payment is within
@@ -54,8 +54,12 @@ export async function executeRefund(
   participantId: string,
   choice: RefundChoice,
   actorMemberId: string | null,
-  note?: string | null
+  note?: string | null,
+  // Who asked: an admin in the delete dialog (the default), or the member or
+  // organiser themselves (withdrawing, or removing a participant).
+  opts: { actorType?: 'admin' | 'member' } = {},
 ): Promise<RefundResult> {
+  const actorType = opts.actorType ?? 'admin'
   const db = supabaseServer()
 
   const { data: participant } = await db
@@ -68,19 +72,21 @@ export async function executeRefund(
 
   const { data: reg } = await db
     .from('registrations')
-    .select('event_slug, event_title, status, stripe_payment_intent_id')
+    .select('event_slug, event_title, status, teacher_member_id')
     .eq('id', p.registration_id)
     .maybeSingle()
   if (!reg) return { type: 'none', refundCents: 0, detail: 'Registration not found' }
 
   const eventSlug = reg.event_slug as string
-  // Only hard payment evidence counts: a webhook-recorded per-participant
-  // payment or a stored payment_intent. registrations.status='confirmed' is NOT
-  // proof of payment (test data / manual edits can confirm without money moving).
-  // Historical group payments with no stored intent fall through to "unpaid" —
-  // those are handled manually rather than risking a phantom refund.
-  const paymentIntent = p.stripe_payment_intent_id ?? (reg.stripe_payment_intent_id as string | null)
-  const isPaid = p.individual_payment_status === 'paid' || !!paymentIntent
+  const stripe = stripeClient()
+  // Which payment covered this place and what it actually cost (after any
+  // discount): lib/refunds/payment-basis.ts. Only hard payment evidence counts;
+  // registrations.status='confirmed' is NOT proof of payment.
+  const basis = await resolveRefundBasis(db, stripe, p)
+  const paymentIntent = basis?.paymentIntent ?? null
+  const isPaid = !!basis?.paid
+  // Who to tell: a group's organiser paid for their students' places.
+  const payerMemberId = basis?.payer === 'organiser' ? ((reg.teacher_member_id as string | null) ?? null) : p.member_id
 
   // Idempotency: never refund the same participant twice. limit(1), not
   // maybeSingle(): with two or more rows maybeSingle() errors, returns null,
@@ -103,22 +109,10 @@ export async function executeRefund(
     return { type: 'none', refundCents: 0, detail: 'Unpaid — nothing to refund' }
   }
 
-  // Resolve amount paid (per-student unit price) + currency from the event's
-  // Stripe Price. What is left on the charge caps it below, so a discounted
+  // What one place cost. What is left on the charge caps it below, so a
   // payment is never refunded more than it took.
-  const event = await getEventBySlug(eventSlug) as { stripePriceId?: string } | null
-  const stripe = stripeClient()
-  let paidCents = 0
-  let currency = 'usd'
-  if (event?.stripePriceId && stripe) {
-    try {
-      const price = await stripe.prices.retrieve(event.stripePriceId)
-      paidCents = price.unit_amount ?? 0
-      currency = price.currency ?? 'usd'
-    } catch {
-      /* fall through with 0 — treated as nothing to refund */
-    }
-  }
+  const paidCents = basis?.perPlaceCents ?? 0
+  const currency = basis?.currency ?? 'usd'
   if (paidCents <= 0) {
     await audit(db, p, eventSlug, { type: 'none', refundCents: 0, detail: 'No fee on record' }, actorMemberId, 0, undefined, { note })
     return { type: 'none', refundCents: 0, detail: 'No fee on record' }
@@ -150,7 +144,7 @@ export async function executeRefund(
         action: 'refund_waived',
         summary: `Registration removed without a refund${note ? ` — ${note}` : ''}`,
         metadata: { participantId: p.id, eventSlug, paidCents },
-        actorType: 'admin',
+        actorType,
         actorMemberId,
       }, db)
     }
@@ -165,9 +159,10 @@ export async function executeRefund(
     // Without Stripe's answer there is no payment date, so the guarantee can't
     // be checked — and no reference to refund against, or none we can read.
     const detail = !paymentIntent
-      ? 'No Stripe payment reference — check the payment date and refund manually in Stripe'
+      ? 'No Stripe payment reference (for example, an invoice paid by cheque) — check the payment date and refund by hand if within the guarantee'
       : 'Could not read the payment from Stripe — check its date and refund in Stripe if within the guarantee'
     await audit(db, p, eventSlug, { type: 'manual_required', refundCents: refundBasis, detail }, actorMemberId, paidCents, 100)
+    await alertStaffIfUnattended(actorType, p, reg.event_title as string, detail)
     return { type: 'manual_required', refundCents: refundBasis, detail }
   }
 
@@ -209,15 +204,18 @@ export async function executeRefund(
     )
     const result: RefundResult = { type: 'cash', refundCents: option.cents, stripeRefundId: refund.id, detail: `Refunded ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()}` }
     await audit(db, p, eventSlug, result, actorMemberId, paidCents, option.pct, { currency })
-    await notifyRefund(p, reg.event_title as string, result, currency)
-    if (p.member_id) {
+    // A place paid by a Stripe invoice gets a credit note on that invoice, so
+    // the organiser's records show the refund against what they paid.
+    if (basis?.stripeInvoiceId) await creditNoteForRefund(stripe, basis.stripeInvoiceId, refund.id, option.cents, p)
+    await notifyRefund(payerMemberId, p, reg.event_title as string, result, currency, basis?.payer ?? 'self')
+    if (payerMemberId) {
       await logActivity({
-        memberId: p.member_id,
+        memberId: payerMemberId,
         category: 'billing',
         action: 'refund_issued',
         summary: `Cash refund issued — ${result.detail}`,
         metadata: { kind: 'cash', participantId: p.id, eventSlug, refundCents: option.cents },
-        actorType: 'admin',
+        actorType,
         actorMemberId,
       }, db)
     }
@@ -225,8 +223,19 @@ export async function executeRefund(
   } catch (e) {
     const detail = e instanceof Error ? e.message : 'Stripe refund failed'
     await audit(db, p, eventSlug, { type: 'manual_required', refundCents: option.cents, detail }, actorMemberId, paidCents, option.pct)
+    await alertStaffIfUnattended(actorType, p, reg.event_title as string, detail)
     return { type: 'manual_required', refundCents: option.cents, detail }
   }
+}
+
+// An admin sees a refund that needs a hand in the delete dialog; a member or
+// organiser withdrawing on their own does not, so staff are told.
+async function alertStaffIfUnattended(actorType: 'admin' | 'member', p: ParticipantRow, eventTitle: string, detail: string) {
+  if (actorType === 'admin') return
+  await notifyCommunityAdmins({
+    type: 'action',
+    body: `A refund for ${p.first_name} ${p.last_name} (${eventTitle}) needs to be made by hand: ${detail}. See event_refunds for participant ${p.id}.`,
+  }).catch(() => {})
 }
 
 async function audit(
@@ -272,8 +281,43 @@ async function audit(
   }
 }
 
-async function notifyRefund(p: ParticipantRow, eventTitle: string, result: RefundResult, currency: string) {
-  if (!p.member_id) return
+async function notifyRefund(
+  payerMemberId: string | null,
+  p: ParticipantRow,
+  eventTitle: string,
+  result: RefundResult,
+  currency: string,
+  payer: 'self' | 'organiser',
+) {
+  if (!payerMemberId) return
   const amount = `${(result.refundCents / 100).toFixed(2)} ${currency.toUpperCase()}`
-  await notifyMember(p.member_id, { type: 'action', body: `A ${amount} refund was issued for your cancelled ${eventTitle} registration.` }).catch(() => {})
+  const body = payer === 'organiser'
+    ? `A ${amount} refund was issued to your group's payment for ${p.first_name} ${p.last_name}'s place at ${eventTitle}.`
+    : `A ${amount} refund was issued for your cancelled ${eventTitle} registration.`
+  await notifyMember(payerMemberId, { type: 'action', body }).catch(() => {})
+}
+
+// Best-effort: the refund has already been made, so a failed credit note only
+// costs the paper trail on the invoice. Linking the app's own refund (rather
+// than letting the credit note create one) keeps metadata.source on it, which
+// the charge.refunded webhook uses to tell app refunds from Dashboard ones.
+async function creditNoteForRefund(
+  stripe: ReturnType<typeof stripeClient>,
+  invoiceId: string,
+  refundId: string,
+  cents: number,
+  p: ParticipantRow,
+) {
+  if (!stripe) return
+  try {
+    await stripe.creditNotes.create({
+      invoice: invoiceId,
+      lines: [{ type: 'custom_line_item', description: 'Participant removed from the group', quantity: 1, unit_amount: cents }],
+      refunds: [{ refund: refundId, amount_refunded: cents }],
+      memo: 'Refund for one participant place under the money-back guarantee.',
+      metadata: { source: 'stellr_app', participant_id: p.id },
+    })
+  } catch (e) {
+    console.error('[refunds] credit note failed (refund already issued):', e instanceof Error ? e.message : e, { invoiceId, refundId })
+  }
 }

@@ -99,11 +99,14 @@ export function DeleteEntityButton({
   const [refundChoice, setRefundChoice] = useState<RefundChoice | null>(null)
   const [refundNote, setRefundNote] = useState('')
   const [deletedWithIssues, setDeletedWithIssues] = useState(false)
+  // What happened to a group's invoice after a participant was removed.
+  const [notice, setNotice] = useState<string | null>(null)
 
   async function openDialog() {
     setOpen(true)
     setError(null)
     setDeletedWithIssues(false)
+    setNotice(null)
     setBlockers(null)
     setMode(softDeletable ? 'soft' : 'hard')
     setConfirmText('')
@@ -180,7 +183,12 @@ export function DeleteEntityButton({
           manual.length > 0 && `the refund needs doing by hand in Stripe (${manual.join('; ')})`,
           failures.length > 0 && `external cleanup had issues (${failures.join('; ')})`,
         ].filter(Boolean)
-        setError(`Deleted, but ${parts.join(', and ')}.`)
+        setError(`Deleted, but ${parts.join(', and ')}.${data.billingMessage ? ` ${data.billingMessage}` : ''}`)
+        setDeletedWithIssues(true)
+        return
+      }
+      if (data.billingMessage) {
+        setNotice(`Deleted. ${data.billingMessage}`)
         setDeletedWithIssues(true)
         return
       }
@@ -293,7 +301,11 @@ export function DeleteEntityButton({
           <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
-        {hasBlockers ? (
+        {notice && (
+          <div role="status" className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink">{notice}</div>
+        )}
+
+        {deletedWithIssues ? null : hasBlockers ? (
           <div className="space-y-2">
             <p className="text-sm text-brand-muted">
               This can&apos;t be deleted yet. Remove the following linked items first:

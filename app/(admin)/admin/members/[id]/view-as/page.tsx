@@ -95,13 +95,14 @@ export default async function ViewAsMemberPage({
   const { data: myParticipantRows } = await db
     .from('participants')
     .select(
-      'id, membership_id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
+      'id, membership_id, checked_in_at, event_companies(number, name), registrations(id, event_slug, event_title, status, type)'
     )
     .or(`member_id.eq.${member.id},email.eq.${member.email}`)
 
   const myRegistrations = (myParticipantRows ?? [])
     .map((p) => {
       const reg = p.registrations as unknown as {
+        id: string
         event_slug: string
         event_title: string
         status: string
@@ -111,6 +112,7 @@ export default async function ViewAsMemberPage({
       return reg && reg.status !== 'withdrawn'
         ? {
             id: p.id as string,
+            registrationId: reg.id,
             eventTitle: reg.event_title,
             status: reg.status,
             type: reg.type,
@@ -207,7 +209,7 @@ export default async function ViewAsMemberPage({
                   readOnly
                 />
               </div>
-              <MyRegistrations registrations={myRegistrations} />
+              <MyRegistrations registrations={myRegistrations} readOnly />
               <EventHistory participations={member.event_participations ?? []} editable={false} />
               <DocusignsSection
                 initialEnvelopes={docusignRows}

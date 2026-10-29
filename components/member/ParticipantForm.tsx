@@ -79,7 +79,8 @@ function validate(form: ParticipantData, isStudent: boolean): FieldErrors {
 interface Props {
   registrationId: string
   initial?: ParticipantData
-  onSaved: () => void
+  /** `billingMessage`: what adding the participant did to the group's invoice, if anything. */
+  onSaved: (billingMessage?: string | null) => void
   onCancel: () => void
 }
 
@@ -159,7 +160,8 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
       return
     }
 
-    onSaved()
+    const data = await res.json().catch(() => ({}))
+    onSaved((data as { billing?: { message?: string | null } }).billing?.message ?? null)
   }
 
   return (

@@ -12,6 +12,7 @@ const stripe = {
   prices: { retrieve: vi.fn() },
   paymentIntents: { retrieve: vi.fn() },
   refunds: { create: vi.fn() },
+  creditNotes: { create: vi.fn(async () => ({ id: 'cn_1' })) },
 }
 
 vi.mock('server-only', () => ({}))
@@ -20,11 +21,12 @@ vi.mock('@/lib/stripe', () => ({ stripeClient: () => stripe }))
 vi.mock('@/lib/sanity', () => ({
   getEventBySlug: async () => ({ stripePriceId: 'price_1' }),
 }))
-vi.mock('@/lib/notify', () => ({ notifyMember: vi.fn(async () => {}) }))
+vi.mock('@/lib/notify', () => ({ notifyMember: vi.fn(async () => {}), notifyCommunityAdmins: vi.fn(async () => {}) }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: vi.fn(async () => {}) }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
 
 import { executeRefund } from './execute'
+import { notifyMember } from '@/lib/notify'
 
 function seed(extra: Record<string, Record<string, unknown>[]> = {}) {
   current = fakeDb({
@@ -194,5 +196,40 @@ describe('executeRefund — fixes that came with it', () => {
       expect.objectContaining({ payment_intent: 'pi_1' }),
       expect.objectContaining({ idempotencyKey: 'cancel-refund-p1' }),
     )
+  })
+})
+
+// 29 Oct 2026: a place on a group invoice. The refund is what the place cost
+// after the group's discount (not the list price), it gets a credit note on the
+// invoice, and the organiser who paid is told, not the student.
+describe('executeRefund — a place on a paid group invoice', () => {
+  it('refunds the discounted per-place amount, adds a credit note and tells the organiser', async () => {
+    seed({
+      participants: [{
+        id: 'p2', registration_id: 'r2', email: 'student@example.com', first_name: 'Sam', last_name: 'S',
+        member_id: 'm-student', individual_payment_status: null, stripe_payment_intent_id: null,
+      }],
+      registrations: [{
+        id: 'r2', type: 'group', event_slug: 'mn-edc', event_title: 'Minnesota EDC', status: 'confirmed',
+        invoice_requested: true, invoice_paid_at: '2026-10-29T00:00:00Z', member_pays_individually: false,
+        stripe_payment_intent_id: 'pi_grp', teacher_member_id: 'm-teacher', checkout_session_id: null,
+      }],
+      group_invoices: [{ stripe_invoice_id: 'in_grp', payment_intent_id: 'pi_grp', total_cents: 148_410, seats: 18, currency: 'usd', kind: 'seats' }],
+    })
+    stripe.prices.retrieve.mockResolvedValue({ unit_amount: 9700, currency: 'usd' })
+    stripe.paymentIntents.retrieve.mockResolvedValue(charge(148_410, 0, 5))
+
+    const r = await executeRefund('p2', 'cash', 'm-teacher', 'Removed by the group organiser', { actorType: 'member' })
+
+    expect(r).toMatchObject({ type: 'cash', refundCents: 8245 })
+    expect(stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: 'pi_grp', amount: 8245, metadata: { source: 'stellr_app', participant_id: 'p2' } }),
+      { idempotencyKey: 'cancel-refund-p2' },
+    )
+    expect(stripe.creditNotes.create).toHaveBeenCalledWith(expect.objectContaining({
+      invoice: 'in_grp', refunds: [{ refund: 're_app', amount_refunded: 8245 }],
+    }))
+    expect(notifyMember).toHaveBeenCalledWith('m-teacher', expect.objectContaining({ body: expect.stringMatching(/your group's payment for Sam S/) }))
+    expect(notifyMember).not.toHaveBeenCalledWith('m-student', expect.anything())
   })
 })

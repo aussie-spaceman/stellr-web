@@ -13,6 +13,7 @@ import { ReissueDocusignButton } from '@/components/admin/ReissueDocusignButton'
 import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 import { FixGuardianEmailButton } from '@/components/admin/FixGuardianEmailButton'
 import { FinishSetupButton } from '@/components/admin/FinishSetupButton'
+import { GroupInvoiceButton } from '@/components/admin/GroupInvoiceButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
 
@@ -431,6 +432,9 @@ export default function EventRoster({
                   )}
                   {group.type === 'group' && (
                     <FinishSetupButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
+                  )}
+                  {group.type === 'group' && group.invoiceRequested && (
+                    <GroupInvoiceButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
                   )}
                   {group.type === 'group' && (
                     <DeleteEntityButton

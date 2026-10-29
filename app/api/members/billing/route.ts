@@ -28,19 +28,39 @@ export async function GET(req: Request) {
         limit: 100,
         expand: ['data.charge'],
       })
-      invoices = invoiceList.data.map(inv => ({
-        id: inv.id,
-        number: inv.number,
-        created: inv.created,
-        due_date: inv.due_date,
-        status: inv.status,
-        amount_due: inv.amount_due,
-        amount_paid: inv.amount_paid,
-        currency: inv.currency,
-        description: inv.description ?? inv.lines.data[0]?.description ?? null,
-        pdf_url: inv.invoice_pdf,
-        hosted_url: inv.hosted_invoice_url,
-      }))
+      // Group invoices carry a reason and their revision chain in the
+      // group_invoices ledger (lib/group-billing.ts): "Updated to 18
+      // participants after a participant was removed", "Replaced by …".
+      const shown = invoiceList.data.filter(inv => inv.status !== 'draft') // an unsent revision isn't the organiser's yet
+      const ids = shown.map(inv => inv.id as string)
+      const { data: ledgerRows } = ids.length
+        ? await db.from('group_invoices')
+            .select('stripe_invoice_id, stripe_invoice_number, replaces_stripe_invoice_id, reason, kind')
+            .or(`stripe_invoice_id.in.(${ids.join(',')}),replaces_stripe_invoice_id.in.(${ids.join(',')})`)
+        : { data: [] }
+      type LedgerRow = { stripe_invoice_id: string; stripe_invoice_number: string | null; replaces_stripe_invoice_id: string | null; reason: string | null; kind: string }
+      const ledger = (ledgerRows ?? []) as LedgerRow[]
+      const numberOf = new Map(shown.map(inv => [inv.id as string, inv.number]))
+      invoices = shown.map(inv => {
+        const own = ledger.find(r => r.stripe_invoice_id === inv.id)
+        const replacement = ledger.find(r => r.replaces_stripe_invoice_id === inv.id)
+        return {
+          id: inv.id,
+          number: inv.number,
+          created: inv.created,
+          due_date: inv.due_date,
+          status: inv.status,
+          amount_due: inv.amount_due,
+          amount_paid: inv.amount_paid,
+          total: inv.total,
+          currency: inv.currency,
+          description: inv.lines.data[0]?.description ?? inv.description ?? null,
+          note: own?.reason && own.reason !== 'Group registration' ? own.reason : null,
+          replaced_by: replacement ? (replacement.stripe_invoice_number ?? numberOf.get(replacement.stripe_invoice_id) ?? 'a newer invoice') : null,
+          pdf_url: inv.invoice_pdf,
+          hosted_url: inv.hosted_invoice_url,
+        }
+      })
     } catch (err) {
       console.error('[billing] Stripe error:', err)
     }
@@ -116,5 +136,35 @@ export async function GET(req: Request) {
     .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .order('expires_at', { ascending: true, nullsFirst: false })
 
-  return NextResponse.json({ invoices, participations, credits: creditRows ?? [] })
+  // ── Refunds (cancelled places) ───────────────────────────────────────────────
+  // The payer sees a refund: the organiser for places on their group's payment,
+  // the member for their own registration or a seat they paid themselves.
+  const { data: ownedRegs } = await db.from('registrations').select('id').eq('teacher_member_id', member.id)
+  const ownedIds = (ownedRegs ?? []).map(r => r.id as string)
+  const refundFilter = ownedIds.length ? `member_id.eq.${member.id},registration_id.in.(${ownedIds.join(',')})` : `member_id.eq.${member.id}`
+  const { data: refundRows } = await db
+    .from('event_refunds')
+    .select('id, created_at, refund_cents, currency, event_slug, member_id, registration_id, registrations(event_title, type, member_pays_individually, teacher_member_id)')
+    .eq('refund_type', 'cash')
+    .gt('refund_cents', 0)
+    .or(refundFilter)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  type RefundReg = { event_title: string | null; type: string | null; member_pays_individually: boolean | null; teacher_member_id: string | null }
+  const refunds = (refundRows ?? []).flatMap(r => {
+    const reg = (Array.isArray(r.registrations) ? r.registrations[0] : r.registrations) as RefundReg | null
+    const organiserPaid = reg?.type === 'group' && !reg.member_pays_individually
+    const mine = organiserPaid ? reg?.teacher_member_id === member.id : r.member_id === member.id
+    if (!mine) return []
+    return [{
+      id: r.id,
+      created_at: r.created_at,
+      amount: r.refund_cents,
+      currency: r.currency ?? 'usd',
+      event_title: reg?.event_title ?? r.event_slug,
+      for_group: organiserPaid,
+    }]
+  })
+
+  return NextResponse.json({ invoices, participations, credits: creditRows ?? [], refunds })
 }

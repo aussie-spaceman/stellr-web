@@ -8,6 +8,8 @@ import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { batchInvites } from '@/lib/esign/outbox'
 import { isMinor } from '@/lib/docusign'
 import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/individual-payment'
+import { applyRosterChange } from '@/lib/group-billing'
+import { stripeClient } from '@/lib/stripe'
 
 export interface SheetSyncRegistration {
   id: string
@@ -73,6 +75,7 @@ async function syncFromSheet(
   const sheetRows = await readSheetParticipants(registration.spreadsheet_id)
 
   let created = 0
+  const createdPeople: { id: string; role: string }[] = []
   let updated = 0
   const syncedMemberIds: string[] = []
   const paymentPeople: IndividualPaymentPerson[] = []
@@ -188,6 +191,7 @@ async function syncFromSheet(
       } else {
         participantId = inserted?.id ?? null
         created++
+        if (participantId) createdPeople.push({ id: participantId, role: eventRole })
       }
     }
 
@@ -237,6 +241,20 @@ async function syncFromSheet(
   // pay their own way. No-op for any other payment method, and for anyone
   // already notified on an earlier sync.
   const { charged, waived } = await ensureIndividualPayments(db, registration.id, paymentPeople)
+
+  // New people beyond the group's places grow it: an unpaid invoice is revised,
+  // a paid group is invoiced for the extra places (lib/group-billing.ts). One
+  // call for the whole sync, so the organiser gets one invoice, not one each.
+  if (createdPeople.length > 0) {
+    await applyRosterChange(db, stripeClient(), {
+      registrationId: registration.id,
+      change: { kind: 'added', count: createdPeople.length },
+      eventRole: createdPeople[0].role,
+      addedRoles: createdPeople.map((p) => p.role),
+      participantIds: createdPeople.map((p) => p.id),
+      actor: { memberId: null, label: 'sheet sync' },
+    }).catch((err) => console.error('[sheet-sync] billing update failed:', err))
+  }
 
   return { created, updated, syncedMemberIds, paymentLinksSent: charged + waived }
 }

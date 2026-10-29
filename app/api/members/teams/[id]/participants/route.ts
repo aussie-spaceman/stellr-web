@@ -10,6 +10,8 @@ import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { applyRosterChange } from '@/lib/group-billing'
+import { stripeClient } from '@/lib/stripe'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -182,5 +184,18 @@ export async function POST(
     lastName:      participant.last_name,
   }])
 
-  return NextResponse.json({ participant }, { status: 201 })
+  // Beyond the group's places, the group grows: an unpaid invoice is revised,
+  // a paid group is invoiced for the extra place (lib/group-billing.ts).
+  const billing = await applyRosterChange(db, stripeClient(), {
+    registrationId,
+    change: { kind: 'added', count: 1 },
+    eventRole: participant.event_role,
+    participantIds: [participant.id],
+    actor: { memberId: member.id, label: 'organiser' },
+  }).catch((err) => {
+    console.error('[teams/participants] billing update error:', err)
+    return null
+  })
+
+  return NextResponse.json({ participant, billing: { message: billing?.message ?? null, action: billing?.action ?? 'none' } }, { status: 201 })
 }

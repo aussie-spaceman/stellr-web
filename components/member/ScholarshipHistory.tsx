@@ -49,7 +49,7 @@ export function ScholarshipHistory({
                     ? 'bg-enviro-green-bg text-enviro-green-text'
                     : s.stage === 'submitted'
                       ? 'bg-pathway-amber-bg text-ink'
-                      : s.stage === 'not_offered' || s.stage === 'withdrawn'
+                      : s.stage === 'not_offered' || s.stage === 'withdrawn' || s.stage === 'cancelled'
                         ? 'bg-line-light text-content-body'
                         : 'bg-primary-soft text-primary-deep'
                 }`}

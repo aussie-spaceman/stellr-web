@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@stellr/web-ui'
-import { SCHOLARSHIP_LEVELS, discountedCents, formatUsd } from '@/lib/scholarship-levels'
+import { SCHOLARSHIP_LEVELS, discountedCents, formatUsd, type ScholarshipStage } from '@/lib/scholarship-levels'
 
 // The decision panel on /admin/scholarships/[id]: event, member, level, then
 // "Offer & register" (or "Not offered"). Sequenced one choice at a time, and
@@ -410,6 +410,89 @@ export function ScholarshipRetryRefundButton({ id }: { id: string }) {
         {busy ? 'Trying…' : 'Retry reimbursement'}
       </Button>
       {message && <span className="text-xs text-red-600">{message}</span>}
+    </div>
+  )
+}
+
+/** What cancelling does at each stage — stated before the admin confirms. */
+const CANCEL_EFFECT: Partial<Record<ScholarshipStage, string>> = {
+  awaiting_details: 'Their offer link stops working.',
+  awaiting_payment: 'They stay registered, but the discount comes off: the full event fee becomes due, and their next checkout charges it.',
+  confirmed: 'They stay registered. Nothing is charged, refunded or clawed back. To take them off the event, withdraw their registration from the roster instead.',
+  attended: 'They stay registered. Nothing is charged, refunded or clawed back.',
+}
+
+/** "Cancel scholarship" on an offered application, at any stage. */
+export function ScholarshipCancelButton({ id, stage }: { id: string; stage: ScholarshipStage }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function cancel() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/scholarships/${id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() || undefined }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(data?.error ?? 'Something went wrong.')
+        setBusy(false)
+        return
+      }
+      router.refresh()
+    } catch {
+      setError('Something went wrong.')
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-sm font-medium text-content-body hover:text-ink"
+      >
+        Cancel scholarship…
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface p-4 space-y-3 text-sm text-ink">
+      <p className="font-semibold">Cancel this scholarship?</p>
+      <ul className="list-disc pl-5 space-y-1">
+        {CANCEL_EFFECT[stage] && <li>{CANCEL_EFFECT[stage]}</li>}
+        <li>No email is sent. Let the student know yourself.</li>
+      </ul>
+      <div>
+        <label htmlFor="sch-cancel-reason" className="block font-semibold mb-1">
+          Reason <span className="font-normal text-content-body">(optional, staff only)</span>
+        </label>
+        <textarea
+          id="sch-cancel-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={1000}
+          rows={2}
+          className="w-full rounded-control border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm text-ink"
+        />
+      </div>
+      {error && <p className="text-red-600">{error}</p>}
+      <div className="flex items-center gap-3">
+        <Button variant="primary" onClick={cancel} disabled={busy}>
+          {busy ? 'Cancelling…' : 'Cancel scholarship'}
+        </Button>
+        <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-sm font-medium text-content-body hover:text-ink">
+          Keep it
+        </button>
+      </div>
     </div>
   )
 }

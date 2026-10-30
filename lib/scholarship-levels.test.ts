@@ -24,6 +24,9 @@ describe('scholarshipStage', () => {
   it('passes undecided and closed decisions straight through', () => {
     expect(scholarshipStage({ status: 'submitted', registration: null, checkedIn: false })).toBe('submitted')
     expect(scholarshipStage({ status: 'not_offered', registration: null, checkedIn: false })).toBe('not_offered')
+    // A cancelled offer stays cancelled whatever its registration says — a
+    // student who kept a confirmed place is not shown as holding a scholarship.
+    expect(scholarshipStage({ status: 'cancelled', registration: { status: 'confirmed' }, checkedIn: true })).toBe('cancelled')
   })
 
   it('reads an offer\'s progress from its registration', () => {

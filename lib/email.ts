@@ -230,10 +230,12 @@ export class EmailSendError extends Error {
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export function individualConfirmationEmail({
-  firstName, lastName, membershipId, eventTitle, registrationId,
+  firstName, lastName, membershipId, eventTitle, registrationId, checkInCodeUrl,
 }: {
   firstName: string; lastName: string; membershipId: string
   eventTitle: string; registrationId: string
+  // Their check-in code page (lib/check-in-codes.ts): one scan at the desk.
+  checkInCodeUrl?: string
 }) {
   const subject = `Registration Confirmed — ${eventTitle}`
   const html = emailLayout({
@@ -248,18 +250,26 @@ export function individualConfirmationEmail({
           <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Event</td><td style="padding:12px 16px">${esc(eventTitle)}</td></tr>
           <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${esc(registrationId)}</td></tr>
         </table>
-        <p style="color:#6b7280;font-size:14px">Keep your Membership ID handy — you'll use it to check in at the event.</p>
+        ${checkInCodeUrl
+          ? `<div style="text-align:center;margin:24px 0">
+          <a href="${checkInCodeUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:15px;font-weight:600">Show my check-in code →</a>
+          <p style="margin:10px 0 0;font-size:13px;color:#6b7280">On the day, show this code at the registration desk and we'll check you in with one scan.</p>
+        </div>`
+          : `<p style="color:#6b7280;font-size:14px">Keep your Membership ID handy — you'll use it to check in at the event.</p>`}
         <p style="color:#6b7280;font-size:14px">${esc(GUARANTEE_RECEIPT_LINE)}</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
-  const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is confirmed.\n\nMembership ID: ${membershipId}\nReference #: ${registrationId}\n\nKeep your Membership ID for check-in.\n\n${GUARANTEE_RECEIPT_LINE}\n\n— Stellr Education`
+  const checkInText = checkInCodeUrl
+    ? `On the day, show your check-in code at the registration desk: ${checkInCodeUrl}`
+    : 'Keep your Membership ID for check-in.'
+  const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is confirmed.\n\nMembership ID: ${membershipId}\nReference #: ${registrationId}\n\n${checkInText}\n\n${GUARANTEE_RECEIPT_LINE}\n\n— Stellr Education`
   return { subject, html, text }
 }
 
 export function groupConfirmationEmail({
   teacherFirstName, teacherLastName, schoolName, eventTitle,
   participantCount, registrationId, paymentMethod, detailsMethod, spreadsheetUrl, joinUrl,
-  remainingCount = 0, payUrl,
+  remainingCount = 0, payUrl, checkInCodeUrl,
 }: {
   teacherFirstName: string; teacherLastName: string; schoolName: string
   eventTitle: string; participantCount: number; registrationId: string
@@ -272,6 +282,9 @@ export function groupConfirmationEmail({
   // For a partial add_now: how many declared people were left for later. 0 means
   // either a complete add_now (nothing left) or a spreadsheet/email-link roster.
   remainingCount?: number
+  // The group's check-in code page (lib/check-in-codes.ts): the desk scans it
+  // and checks in the whole group at once.
+  checkInCodeUrl?: string
 }) {
   const subject = `Group Registration Received — ${eventTitle}`
 
@@ -327,6 +340,14 @@ export function groupConfirmationEmail({
     ${joinSection}
   ` : ''
 
+  const checkInSection = checkInCodeUrl ? `
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:16px 0">
+      <p style="margin:0 0 8px;font-weight:600;color:#1e3a5f">On the day: your group's check-in code</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151">Show this code at the registration desk when you arrive. We check in your whole group with one scan, and you tell us who isn't there.</p>
+      <a href="${checkInCodeUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600">Show our check-in code →</a>
+    </div>
+  ` : ''
+
   const html = emailLayout({
     heading: 'Group Registration Received',
     preheader: `Group registration received for ${eventTitle}.`,
@@ -341,6 +362,7 @@ export function groupConfirmationEmail({
           <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${esc(registrationId)}</td></tr>
         </table>
         ${bothOptions}
+        ${checkInSection}
         <p style="font-weight:600;color:#374151;margin-bottom:8px">What happens next:</p>
         <ul style="color:#6b7280;font-size:14px;line-height:1.8;padding-left:20px">
           ${paymentNote}
@@ -364,7 +386,8 @@ export function groupConfirmationEmail({
     : partialAddNow
       ? `Member details: ${remainingCount} still to provide — finish them using either the Google Sheet or the registration link below.`
       : 'Member details: complete your group\'s details using either the Google Sheet or the registration link below (whichever you prefer).'
-  const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}\n${registrationText}${sheetText}${joinText}\n\n— Stellr Education`
+  const checkInText = checkInCodeUrl ? `\n\nOn the day, show your group's check-in code at the registration desk: ${checkInCodeUrl}` : ''
+  const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}\n${registrationText}${sheetText}${joinText}${checkInText}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

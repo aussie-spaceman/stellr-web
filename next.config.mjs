@@ -9,6 +9,11 @@ export const VIDEO_ROUTES = [
 const VIDEO_ORIGINS = '"https://8x8.vc" "https://meet.jit.si"'
 export const VIDEO_PERMISSIONS_POLICY = `camera=(self ${VIDEO_ORIGINS}), microphone=(self ${VIDEO_ORIGINS}), geolocation=(), payment=(self)`
 
+// The check-in desk's camera scanner (components/admin/CheckInScanner.tsx) reads
+// participants' and groups' QR codes. Our own page only: no frames, no mic.
+export const CHECK_IN_DESK_ROUTE = '/admin/competitions/:slug/check-in'
+export const CHECK_IN_DESK_PERMISSIONS_POLICY = 'camera=(self), microphone=(), geolocation=(), payment=(self)'
+
 // The stellr-web-dev Vercel project (same ID as scripts/vercel-ignore-build.sh).
 export const DEV_PROJECT_ID = 'prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO'
 
@@ -172,6 +177,7 @@ const nextConfig = {
         source,
         headers: [{ key: 'Permissions-Policy', value: VIDEO_PERMISSIONS_POLICY }],
       })),
+      { source: CHECK_IN_DESK_ROUTE, headers: [{ key: 'Permissions-Policy', value: CHECK_IN_DESK_PERMISSIONS_POLICY }] },
       { source: '/sign', headers: privateLink },
       { source: '/sign/:path*', headers: privateLink },
       { source: '/register/:slug/pay/:path*', headers: privateLink },

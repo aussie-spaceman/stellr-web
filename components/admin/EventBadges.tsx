@@ -54,7 +54,12 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
   const [uploading, setUploading] = useState<string | null>(null)
   const [adjusting, setAdjusting] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  // Print order and check-in codes (Oct 2026): school order gives each group's
+  // teacher one packet at check-in; the code lets the desk scan the badge.
+  const [bySchool, setBySchool] = useState(false)
+  const [codes, setCodes] = useState(false)
   const spec = BADGE_FORMATS[format]
+  const downloadHref = `${base}/badges?format=${format}${bySchool ? '&order=school' : ''}${codes ? '&codes=1' : ''}`
 
   async function load() {
     const res = await fetch(`${base}/badge-templates`)
@@ -137,7 +142,7 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
           </p>
         </div>
         <a
-          href={`${base}/badges?format=${format}`}
+          href={downloadHref}
           className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
         >
           Download {spec.label} PDF
@@ -162,6 +167,19 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
           ))}
         </div>
         <p className="text-xs text-brand-muted-soft">{spec.description}. Each product has its own backgrounds.</p>
+      </div>
+
+      <div className="flex flex-wrap gap-x-6 gap-y-1">
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-content-body">
+          <input type="checkbox" checked={bySchool} onChange={(e) => setBySchool(e.target.checked)} className="h-5 w-5 accent-primary" />
+          Print in school order
+          <span className="text-xs text-content-muted">(each group&rsquo;s badges together)</span>
+        </label>
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-content-body">
+          <input type="checkbox" checked={codes} onChange={(e) => setCodes(e.target.checked)} className="h-5 w-5 accent-primary" />
+          Add check-in QR codes
+          <span className="text-xs text-content-muted">(bottom-right corner: keep it clear in the artwork)</span>
+        </label>
       </div>
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}

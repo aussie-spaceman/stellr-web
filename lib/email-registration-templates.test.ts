@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   registrationPaymentLinkEmail,
   groupConfirmationEmail,
+  individualConfirmationEmail,
   outstandingItemsReminderEmail,
 } from '@/lib/email'
 
@@ -72,5 +73,37 @@ describe('outstandingItemsReminderEmail — payment', () => {
     const e = outstandingItemsReminderEmail({ firstName: 'Dan', eventTitle: 'Colorado SDC', payment: { method: 'invoice', payUrl: PAY } })
     expect(e.html).toContain('invoice issued')
     expect(e.html).not.toContain(PAY)
+  })
+})
+
+describe('check-in codes in confirmation emails', () => {
+  const CODE = 'https://www.stellreducation.org/check-in/nevada/code?c=p.abc'
+
+  it('gives an individual a button to their check-in code, in html and text', () => {
+    const e = individualConfirmationEmail({
+      firstName: 'Maya', lastName: 'Rivera', membershipId: '0001234', eventTitle: 'Nevada SDC', registrationId: 'reg-1', checkInCodeUrl: CODE,
+    })
+    expect(e.html).toContain(`href="${CODE}"`)
+    expect(e.html).toContain('Show my check-in code')
+    expect(e.html).not.toContain('Keep your Membership ID handy')
+    expect(e.text).toContain(CODE)
+  })
+
+  it('keeps the old line when there is no code (no signing secret)', () => {
+    const e = individualConfirmationEmail({ firstName: 'Maya', lastName: 'Rivera', membershipId: '0001234', eventTitle: 'Nevada SDC', registrationId: 'reg-1' })
+    expect(e.html).toContain('Keep your Membership ID handy')
+    expect(e.html).not.toContain('check-in code')
+  })
+
+  it('gives a teacher their group’s code', () => {
+    const base = {
+      teacherFirstName: 'Sam', teacherLastName: 'Lee', schoolName: 'STEM HR', eventTitle: 'Nevada SDC',
+      participantCount: 5, registrationId: 'reg-1', detailsMethod: 'add_now' as const, paymentMethod: 'invoice' as const,
+    }
+    const withCode = groupConfirmationEmail({ ...base, checkInCodeUrl: CODE })
+    expect(withCode.html).toContain(`href="${CODE}"`)
+    expect(withCode.html).toContain('Show our check-in code')
+    expect(withCode.text).toContain(CODE)
+    expect(groupConfirmationEmail(base).html).not.toContain('check-in code')
   })
 })

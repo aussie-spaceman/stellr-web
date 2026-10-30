@@ -89,7 +89,8 @@ export const CHECK_IN_COOKIE = 'stellr_check_in'
 /** Long enough to cover the survey, which closes 30 days after the event. */
 export const CHECK_IN_COOKIE_MAX_AGE = 45 * 24 * 60 * 60
 
-function secret(): string | null {
+/** The signing secret for check-in cookies and codes (lib/check-in-codes.ts). */
+export function checkInSecret(): string | null {
   const s = process.env.CREDENTIAL_LINK_SECRET || process.env.SURVEY_TOKEN_SECRET || process.env.ESIGN_TOKEN_SECRET
   return s && s.length >= 32 ? s : null
 }
@@ -99,7 +100,7 @@ export function checkInCookiePath(slug: string): string {
 }
 
 export function signCheckIn(slug: string, participantId: string): string | null {
-  const s = secret()
+  const s = checkInSecret()
   if (!s) return null
   const sig = createHmac('sha256', s).update(`stellr-check-in|${slug}|${participantId}`).digest('base64url')
   return `${participantId}.${sig}`

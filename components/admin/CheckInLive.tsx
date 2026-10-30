@@ -3,43 +3,68 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import QRCode from 'qrcode'
-import { Maximize2, Minimize2, Printer, QrCode, Search, Settings2, X } from 'lucide-react'
+import { Maximize2, Minimize2, Phone, Printer, QrCode, ScanLine, Search, Settings2, X } from 'lucide-react'
 import { Button, cn } from '@stellr/web-ui'
-
-interface LiveParticipant {
-  id: string
-  firstName: string
-  lastName: string
-  eventRole: string | null
-  shirtSize: string | null
-  checkedInAt: string | null
-  checkInMethod: string | null
-  company: { number: number; name: string | null } | null
-  merch: { name: string; qty: number }[]
-  merchCollected: boolean
-}
+import CheckInFlags from '@/components/admin/CheckInFlags'
+import CheckInGroupSheet from '@/components/admin/CheckInGroupSheet'
+import CheckInScanner, { type ScanOutcome } from '@/components/admin/CheckInScanner'
+import {
+  DESK_SNAPSHOT_MAX_AGE_MS,
+  QUEUED_TAP_MAX_AGE_MS,
+  buildGroupRows,
+  compareByFirstName,
+  deskDetailsKey,
+  deskQueueKey,
+  deskSearchMatches,
+  deskSnapshotKey,
+  flagsForStorage,
+  groupMatchesFilter,
+  groupMatchesSearch,
+  parseCheckInCode,
+  pendingFromQueue,
+  queuedIds,
+  readDeskStore,
+  writeDeskStore,
+  type ArrivalFilter,
+  type DeskDetails,
+  type DeskGroup,
+  type DeskParticipant,
+  type GroupRow,
+  type QueuedAction,
+} from '@/lib/check-in-desk'
 
 interface LiveState {
   checkInOpen: boolean
   checkInToken: string | null
   resourcesUrl: string | null
-  participants: LiveParticipant[]
+  participants: DeskParticipant[]
+  groups: DeskGroup[]
   /** The check-in banner (/check-in) sends phones to this event. */
   bannerTarget: boolean
   /** Other in-person events with check-in open; opening this one closes them. */
   otherOpen: { slug: string; title: string }[]
 }
 
-type Filter = 'all' | 'waiting' | 'arrived'
-type Queued = { action: string; participantId: string; label: string }
+type View = 'people' | 'groups'
+type Patches = Record<string, Partial<DeskParticipant>>
 
 const POLL_MS = 5000
+const DETAILS_MS = 3 * 60 * 1000
 const REQUEST_TIMEOUT_MS = 8000
+const NOTICE_MS = 45_000
 const DESK_PREF_KEY = 'stellr_checkin_desk_mode'
+const VIEW_PREF_KEY = 'stellr_checkin_view'
 
-function timeLabel(d: Date) {
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+function timeLabel(d: Date | string) {
+  return new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
+
+function bodyFor(item: QueuedAction) {
+  const { label: _label, ...body } = item // eslint-disable-line @typescript-eslint/no-unused-vars
+  return body
+}
+
+const firstName = (full: string | null | undefined) => full?.trim().split(/\s+/)[0] ?? null
 
 // The registration desk's console (PRD 6.7), built for a tablet on a stand or a
 // phone in a volunteer's hand: big touch targets, and a list in a fixed
@@ -47,13 +72,23 @@ function timeLabel(d: Date) {
 // (CO, Oct 2026). Taps update the row at once; a 5-second poll picks up phones
 // checking themselves in.
 //
+// School groups arrive by the busload (check-in app review, Oct 2026), so the
+// desk also has a Groups view: one row per school, checked in as a unit after
+// unticking whoever isn't on the bus, with the teacher's phone one tap away. A
+// camera scanner reads participants' and groups' check-in codes. Each person
+// shows flags staff should know (unsigned agreement, unpaid, medical, dietary);
+// they never block check-in.
+//
 // Venue Wi-Fi is unreliable, so the console has to be honest about what it
 // knows:
 //   - polls never overlap, and a response that started before a newer one (or
 //     before a tap) is dropped, so a slow poll can't flip a row back;
 //   - polling pauses while the tab is hidden and resumes with a fresh load;
 //   - taps that can't reach the server wait in a queue and are sent, in order,
-//     when the connection returns;
+//     when the connection returns, with the time they were made;
+//   - the queue and the last list are kept on the device (lib/check-in-desk.ts),
+//     so a reload offline still opens the list and loses no taps, and in desk
+//     mode a service worker keeps the page itself for an offline reload;
 //   - the header says when it last synced, and an expired sign-in says so
 //     instead of spinning.
 export default function CheckInLive({
@@ -68,15 +103,21 @@ export default function CheckInLive({
   isVirtual: boolean
 }) {
   const [state, setState] = useState<LiveState | null>(null)
-  const [pending, setPending] = useState<Record<string, Partial<LiveParticipant>>>({})
+  const [pending, setPending] = useState<Patches>({})
+  const [details, setDetails] = useState<DeskDetails | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<Filter>('all')
+  const [filter, setFilter] = useState<ArrivalFilter>('all')
+  const [view, setView] = useState<View>('people')
+  const [sheetGroupId, setSheetGroupId] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [notice, setNotice] = useState<{ text: string; undo?: { ids: string[]; label: string } } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resourcesDraft, setResourcesDraft] = useState<string | null>(null)
   const [resourcesNote, setResourcesNote] = useState<string | null>(null)
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
+  const [fromCache, setFromCache] = useState(false)
   const [offline, setOffline] = useState(false)
   const [authProblem, setAuthProblem] = useState<401 | 403 | null>(null)
   const [queued, setQueued] = useState(0)
@@ -91,11 +132,16 @@ export default function CheckInLive({
   const lastApplied = useRef(0)
   const minAccept = useRef(0)
   const pollInFlight = useRef(false)
-  const queue = useRef<Queued[]>([])
+  const queue = useRef<QueuedAction[]>([])
   const flushing = useRef(false)
 
   const api = `/api/admin/events/${eventSlug}/check-in`
   const checkInUrl = state?.checkInToken ? `${siteUrl}/check-in/${eventSlug}?t=${state.checkInToken}` : null
+
+  const persistQueue = useCallback(() => {
+    writeDeskStore(deskQueueKey(eventSlug), queue.current)
+    setQueued(queue.current.length)
+  }, [eventSlug])
 
   const refresh = useCallback(
     async (opts: { poll?: boolean } = {}) => {
@@ -117,10 +163,13 @@ export default function CheckInLive({
         const data = (await res.json()) as LiveState
         if (mySeq < lastApplied.current || mySeq < minAccept.current) return
         lastApplied.current = mySeq
+        const now = new Date()
         setState(data)
+        setFromCache(false)
         setAuthProblem(null)
         setOffline(false)
-        setLastSynced(new Date())
+        setLastSynced(now)
+        writeDeskStore(deskSnapshotKey(eventSlug), { data, syncedAt: now.getTime() })
       } catch {
         setOffline(true)
       } finally {
@@ -128,8 +177,20 @@ export default function CheckInLive({
         if (opts.poll) pollInFlight.current = false
       }
     },
-    [api]
+    [api, eventSlug]
   )
+
+  const loadDetails = useCallback(async () => {
+    try {
+      const res = await fetch(`${api}?details=1`, { cache: 'no-store' })
+      if (!res.ok) return
+      const data = (await res.json()) as DeskDetails
+      setDetails(data)
+      writeDeskStore(deskDetailsKey(eventSlug), flagsForStorage(data))
+    } catch {
+      /* offline: keep what we have */
+    }
+  }, [api, eventSlug])
 
   const post = useCallback(
     async (body: Record<string, unknown>) => {
@@ -169,15 +230,17 @@ export default function CheckInLive({
     try {
       while (queue.current.length) {
         const item = queue.current[0]
-        const res = await post({ action: item.action, participantId: item.participantId })
+        const res = await post(bodyFor(item))
         if (!res) break
         queue.current.shift()
+        persistQueue()
         if (res.status === 401 || res.status === 403) {
           setAuthProblem(res.status)
           break
         }
         if (!res.ok) setError(`Couldn’t update ${item.label}. Try again.`)
-        if (!queue.current.some((q) => q.participantId === item.participantId)) done.push(item.participantId)
+        const later = new Set(queue.current.flatMap(queuedIds))
+        done.push(...queuedIds(item).filter((id) => !later.has(id)))
       }
     } finally {
       flushing.current = false
@@ -188,15 +251,41 @@ export default function CheckInLive({
       await refresh()
       clearPending(done)
     }
-  }, [post, refresh, clearPending])
+  }, [post, refresh, clearPending, persistQueue])
+
+  // What this device already knows: the taps still waiting to send, the last
+  // list it saw and the last flags. Then the network.
+  useEffect(() => {
+    queue.current = readDeskStore<QueuedAction[]>(deskQueueKey(eventSlug), QUEUED_TAP_MAX_AGE_MS) ?? []
+    setQueued(queue.current.length)
+    setPending(pendingFromQueue(queue.current))
+    const snapshot = readDeskStore<{ data: LiveState; syncedAt: number }>(deskSnapshotKey(eventSlug), DESK_SNAPSHOT_MAX_AGE_MS)
+    if (snapshot?.data?.participants) {
+      setState((cur) => cur ?? { ...snapshot.data, groups: snapshot.data.groups ?? [] })
+      setFromCache(true)
+      setLastSynced(new Date(snapshot.syncedAt))
+    }
+    const cachedDetails = readDeskStore<DeskDetails>(deskDetailsKey(eventSlug), DESK_SNAPSHOT_MAX_AGE_MS)
+    if (cachedDetails) setDetails((cur) => cur ?? cachedDetails)
+    try {
+      const savedView = window.localStorage.getItem(VIEW_PREF_KEY)
+      if (savedView === 'groups' || savedView === 'people') setView(savedView)
+    } catch {
+      /* storage blocked: start on People */
+    }
+  }, [eventSlug])
 
   useEffect(() => {
-    refresh()
+    refresh().then(() => flush())
+    loadDetails()
     const interval = setInterval(() => {
       if (document.visibilityState !== 'visible') return
       flush()
       refresh({ poll: true })
     }, POLL_MS)
+    const detailsInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDetails()
+    }, DETAILS_MS)
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         flush()
@@ -206,6 +295,7 @@ export default function CheckInLive({
     const onOnline = () => {
       flush()
       refresh()
+      loadDetails()
     }
     const onOffline = () => setOffline(true)
     document.addEventListener('visibilitychange', onVisible)
@@ -213,11 +303,12 @@ export default function CheckInLive({
     window.addEventListener('offline', onOffline)
     return () => {
       clearInterval(interval)
+      clearInterval(detailsInterval)
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', onOnline)
       window.removeEventListener('offline', onOffline)
     }
-  }, [refresh, flush])
+  }, [refresh, flush, loadDetails])
 
   // Desk mode: on by default below the desktop layout (phones, a portrait
   // tablet), remembered per device once someone chooses.
@@ -240,6 +331,46 @@ export default function CheckInLive({
       /* storage blocked: the choice lasts for this visit */
     }
   }
+
+  function chooseView(next: View) {
+    setView(next)
+    setFilter('all')
+    try {
+      window.localStorage.setItem(VIEW_PREF_KEY, next)
+    } catch {
+      /* storage blocked: the choice lasts for this visit */
+    }
+  }
+
+  // A desk device keeps the page itself for a reload with no connection
+  // (public/check-in-desk-sw.js). Only in desk mode, which is event day, and only
+  // in a production build: a dev server's chunks change on every save.
+  useEffect(() => {
+    if (!desk || process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return
+    let cancelled = false
+    navigator.serviceWorker
+      .register('/check-in-desk-sw.js', { scope: '/admin/competitions/' })
+      .then(() => navigator.serviceWorker.ready)
+      .then(async (reg) => {
+        // The scanner's code and reader, so scanning works offline too.
+        await import('barcode-detector/ponyfill').catch(() => null)
+        if (cancelled) return
+        const assets = performance
+          .getEntriesByType('resource')
+          .map((e) => e.name)
+          .filter((u) => {
+            const url = new URL(u)
+            return url.origin === location.origin && url.pathname.startsWith('/_next/static/')
+          })
+        reg.active?.postMessage({ type: 'warm', page: location.pathname, assets: [...assets, '/vendor/zxing_reader.wasm'] })
+      })
+      .catch(() => {
+        /* no offline copy of the page; the saved list and queue still work */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [desk])
 
   // A tablet on a stand shouldn't dim mid-queue. Wake Lock is released when the
   // tab is hidden, so take it again on return.
@@ -266,15 +397,22 @@ export default function CheckInLive({
     }
   }, [desk])
 
-  // Desk mode covers the admin chrome; Escape returns to it.
+  // Desk mode covers the admin chrome; Escape returns to it, unless a dialog is
+  // open (the dialog takes the Escape).
   useEffect(() => {
     if (!desk) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !settingsOpen) chooseDesk(false)
+      if (e.key === 'Escape' && !settingsOpen && !sheetGroupId && !scanning) chooseDesk(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [desk, settingsOpen])
+  }, [desk, settingsOpen, sheetGroupId, scanning])
+
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), NOTICE_MS)
+    return () => clearTimeout(t)
+  }, [notice])
 
   useEffect(() => {
     if (!checkInUrl) {
@@ -299,44 +437,75 @@ export default function CheckInLive({
     refresh()
   }
 
-  // Row actions show their result immediately and keep it until the server
-  // agrees. If the server can't be reached, the tap waits in the queue and the
-  // row keeps showing it.
-  async function rowAction(action: string, p: LiveParticipant, patch: Partial<LiveParticipant>) {
+  // Every change shows its result immediately and keeps it until the server
+  // agrees. If the server can't be reached, the change waits in the queue (kept
+  // on the device) and the rows keep showing it.
+  async function act(item: QueuedAction, patches: Patches): Promise<Response | null> {
     setError(null)
-    const label = `${p.firstName} ${p.lastName}`
+    const ids = Object.keys(patches)
     minAccept.current = seq.current + 1
-    setPending((cur) => ({ ...cur, [p.id]: { ...cur[p.id], ...patch } }))
+    setPending((cur) => {
+      const next = { ...cur }
+      for (const id of ids) next[id] = { ...cur[id], ...patches[id] }
+      return next
+    })
 
+    // Keep taps in order: if earlier ones are still waiting, this one waits too.
+    if (queue.current.length) {
+      queue.current.push(item)
+      persistQueue()
+      flush()
+      return null
+    }
+
+    const res = await post(bodyFor(item))
+    if (!res) {
+      queue.current.push(item)
+      persistQueue()
+      setOffline(true)
+      return null
+    }
+    if (res.status === 401 || res.status === 403) {
+      setAuthProblem(res.status)
+      clearPending(ids)
+      return res
+    }
+    if (!res.ok) {
+      const body = await res.clone().json().catch(() => null)
+      setError(body?.error ? `${item.label}: ${body.error}` : `Couldn’t update ${item.label}. Try again.`)
+    }
+    minAccept.current = seq.current + 1
+    await refresh()
+    clearPending(ids)
+    return res
+  }
+
+  function rowAction(action: string, p: DeskParticipant, patch: Partial<DeskParticipant>) {
     if (action === 'manual' && search) {
       setSearch('')
       searchRef.current?.focus()
     }
+    const at = action === 'manual' ? new Date().toISOString() : undefined
+    act({ action, participantId: p.id, at, label: `${p.firstName} ${p.lastName}` }, { [p.id]: patch })
+  }
 
-    // Keep taps in order: if earlier ones are still waiting, this one waits too.
-    if (queue.current.length) {
-      queue.current.push({ action, participantId: p.id, label })
-      setQueued(queue.current.length)
-      flush()
-      return
-    }
+  function checkInGroup(row: GroupRow, ids: string[]) {
+    setSheetGroupId(null)
+    if (!ids.length) return
+    const at = new Date().toISOString()
+    setNotice({ text: `Checked in ${ids.length} from ${row.group.label}.`, undo: { ids, label: row.group.label } })
+    act(
+      { action: 'group_check_in', participantIds: ids, at, label: row.group.label },
+      Object.fromEntries(ids.map((id) => [id, { checkedInAt: at, checkInMethod: 'manual' }]))
+    )
+  }
 
-    const res = await post({ action, participantId: p.id })
-    if (!res) {
-      queue.current.push({ action, participantId: p.id, label })
-      setQueued(queue.current.length)
-      setOffline(true)
-      return
-    }
-    if (res.status === 401 || res.status === 403) {
-      setAuthProblem(res.status)
-      clearPending([p.id])
-      return
-    }
-    if (!res.ok) setError(`Couldn’t update ${label}. Try again.`)
-    minAccept.current = seq.current + 1
-    await refresh()
-    clearPending([p.id])
+  function undoGroup(undo: { ids: string[]; label: string }) {
+    setNotice({ text: `Undid the check-in for ${undo.label}.` })
+    act(
+      { action: 'group_undo', participantIds: undo.ids, label: undo.label },
+      Object.fromEntries(undo.ids.map((id) => [id, { checkedInAt: null, checkInMethod: null }]))
+    )
   }
 
   async function saveResources() {
@@ -353,30 +522,57 @@ export default function CheckInLive({
   }
 
   const participants = useMemo(
-    () =>
-      (state?.participants ?? [])
-        .map((p) => ({ ...p, ...pending[p.id] }))
-        // Fixed order: first name, then last name. Never by arrival time.
-        .sort(
-          (a, b) =>
-            a.firstName.localeCompare(b.firstName, 'en', { sensitivity: 'base' }) ||
-            a.lastName.localeCompare(b.lastName, 'en', { sensitivity: 'base' }) ||
-            a.id.localeCompare(b.id)
-        ),
+    () => (state?.participants ?? []).map((p) => ({ ...p, ...pending[p.id] })).sort(compareByFirstName),
     [state, pending]
   )
+  const groupById = useMemo(() => new Map((state?.groups ?? []).map((g) => [g.id, g])), [state])
+  const groupRows = useMemo(() => buildGroupRows(state?.groups ?? [], participants), [state, participants])
+  const flags = details?.flags ?? {}
+
+  // A code read by the scanner. A participant is checked in on the spot (the
+  // server checks the code's signature); a group opens its list to confirm.
+  async function handleScan(code: string): Promise<ScanOutcome | null> {
+    const parsed = parseCheckInCode(code)
+    if (!parsed) return { tone: 'error', title: 'Not a Stellr check-in code' }
+    if (parsed.kind === 'g') {
+      const row = groupRows.find((r) => r.group.id === parsed.id)
+      if (!row) return { tone: 'error', title: 'That group isn’t on this event’s list', detail: 'Check you have the right event open.' }
+      setScanning(false)
+      chooseView('groups')
+      setSheetGroupId(row.group.id)
+      return null
+    }
+    const p = participants.find((x) => x.id === parsed.id)
+    if (!p) return { tone: 'error', title: 'Not on this event’s list', detail: 'Check you have the right event open, or search by name.' }
+    const who = `${p.firstName} ${p.lastName}`
+    const about = [p.company && `Company ${p.company.number}`, p.shirtSize && `Shirt ${p.shirtSize}`].filter(Boolean).join(' · ')
+    if (p.checkedInAt) return { tone: 'warn', title: who, detail: `Already checked in at ${timeLabel(p.checkedInAt)}${about ? ` · ${about}` : ''}`, flags: flags[p.id] }
+    const at = new Date().toISOString()
+    act({ action: 'scan', code, at, label: who }, { [p.id]: { checkedInAt: at, checkInMethod: 'manual' } })
+    return { tone: 'ok', title: who, detail: about || 'Checked in', flags: flags[p.id] }
+  }
 
   const arrived = participants.filter((p) => p.checkedInAt).length
   const total = participants.length
+  const hasGroups = groupRows.length > 0
+  const showGroups = view === 'groups' && hasGroups
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return participants.filter((p) => {
-      if (filter === 'waiting' && p.checkedInAt) return false
-      if (filter === 'arrived' && !p.checkedInAt) return false
-      return !q || `${p.firstName} ${p.lastName}`.toLowerCase().includes(q)
-    })
-  }, [participants, search, filter])
+  const visible = useMemo(
+    () =>
+      participants.filter((p) => {
+        if (filter === 'waiting' && p.checkedInAt) return false
+        if (filter === 'arrived' && !p.checkedInAt) return false
+        return deskSearchMatches(p, search, groupById.get(p.registrationId))
+      }),
+    [participants, search, filter, groupById]
+  )
+  const visibleGroups = useMemo(
+    () => groupRows.filter((r) => groupMatchesFilter(r, filter) && groupMatchesSearch(r, search)),
+    [groupRows, filter, search]
+  )
+  const sheetRow = sheetGroupId ? groupRows.find((r) => r.group.id === sheetGroupId) ?? null : null
+  const individuals = participants.filter((p) => !groupById.has(p.registrationId)).length
+  const noticeUndo = notice?.undo
 
   const signInHref = `/sign-in?redirect_url=${encodeURIComponent(`/admin/competitions/${eventSlug}/check-in`)}`
   const authBanner = authProblem && (
@@ -415,22 +611,29 @@ export default function CheckInLive({
     )
   }
 
-  const tabs: { key: Filter; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: total },
-    { key: 'waiting', label: 'Not arrived', count: total - arrived },
-    { key: 'arrived', label: 'Arrived', count: arrived },
-  ]
+  const groupsComplete = groupRows.filter((r) => r.arrived === r.total).length
+  const tabs: { key: ArrivalFilter; label: string; count: number }[] = showGroups
+    ? [
+        { key: 'all', label: 'All', count: groupRows.length },
+        { key: 'waiting', label: 'Not arrived', count: groupRows.length - groupsComplete },
+        { key: 'arrived', label: 'Arrived', count: groupsComplete },
+      ]
+    : [
+        { key: 'all', label: 'All', count: total },
+        { key: 'waiting', label: 'Not arrived', count: total - arrived },
+        { key: 'arrived', label: 'Arrived', count: arrived },
+      ]
 
   const syncChip = (
     <span
       role="status"
       className={cn(
         'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium',
-        offline ? 'bg-pathway-amber-bg text-brand-gold-ink' : 'bg-enviro-green-bg text-enviro-green-text'
+        offline || fromCache ? 'bg-pathway-amber-bg text-gold-ink' : 'bg-enviro-green-bg text-enviro-green-text'
       )}
     >
-      <span className={cn('h-2 w-2 rounded-full', offline ? 'bg-pathway-amber' : 'bg-enviro-green')} aria-hidden />
-      {offline ? 'Offline' : 'Live'}
+      <span className={cn('h-2 w-2 rounded-full', offline || fromCache ? 'bg-pathway-amber' : 'bg-enviro-green')} aria-hidden />
+      {offline ? 'Offline' : fromCache ? 'Connecting' : 'Live'}
       {lastSynced && <span className="font-normal">· synced {timeLabel(lastSynced)}</span>}
       {queued > 0 && <span className="font-semibold">· {queued} waiting to send</span>}
     </span>
@@ -509,6 +712,11 @@ export default function CheckInLive({
           ? 'For a virtual event, email the link: people confirm their attendance with their name and date of birth.'
           : 'The check-in banner sends phones to whichever in-person event has check-in open, so opening this one closes any other. People check themselves in with their name and date of birth while they wait. The door poster works for this event only.'}
       </p>
+      {!isVirtual && (
+        <p className="text-xs text-content-muted">
+          On an iPad, use Share → Add to Home Screen in desk mode. The desk then opens full screen and keeps working through a Wi-Fi drop.
+        </p>
+      )}
 
       <div className="space-y-2 border-t border-line-light pt-4">
         <label htmlFor="resources-url" className="block font-subheading text-sm font-semibold text-content-body">
@@ -537,6 +745,126 @@ export default function CheckInLive({
     </div>
   )
 
+  const peopleList = (
+    <ul className="divide-y divide-line-light">
+      {visible.map((p) => (
+        <li key={p.id} className={cn('flex items-center gap-3 px-4 py-3 sm:gap-4', p.checkedInAt && 'bg-enviro-green-bg/40')}>
+          <CompanyBadge company={p.company} />
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-base font-semibold text-ink">
+              {p.firstName} {p.lastName}
+            </p>
+            <p className="text-sm text-content-muted">
+              <span className="capitalize">{(p.eventRole ?? '').replace(/_/g, ' ')}</span>
+              {' · '}Shirt {p.shirtSize ?? '—'}
+              {p.company?.name && <> · {p.company.name}</>}
+              {(groupById.get(p.registrationId)?.label ?? p.schoolName) && <> · {groupById.get(p.registrationId)?.label ?? p.schoolName}</>}
+              {p.merch.length > 0 && <> · {p.merch.map((m) => `${m.name}${m.qty > 1 ? ` ×${m.qty}` : ''}`).join(', ')}</>}
+            </p>
+            <CheckInFlags flags={flags[p.id]} />
+            {p.merch.length > 0 && (
+              <button
+                onClick={() =>
+                  rowAction(p.merchCollected ? 'merch_uncollected' : 'merch_collected', p, {
+                    merchCollected: !p.merchCollected,
+                  })
+                }
+                className={cn('mt-1 min-h-11 text-sm font-medium', p.merchCollected ? 'text-enviro-green-text' : 'text-gold-ink')}
+              >
+                {p.merchCollected ? '✓ Merch collected' : 'Mark merch collected'}
+              </button>
+            )}
+          </div>
+          {p.checkedInAt ? (
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className="inline-flex rounded-full bg-enviro-green-bg px-3 py-1 text-sm font-medium text-enviro-green-text">
+                ✓ {timeLabel(p.checkedInAt)}
+                {p.checkInMethod === 'manual' && ' · desk'}
+                {p.checkInMethod === 'qr' && ' · phone'}
+                {p.checkInMethod === 'virtual' && ' · virtual'}
+              </span>
+              <button
+                onClick={() => rowAction('undo', p, { checkedInAt: null, checkInMethod: null })}
+                className="min-h-11 px-3 text-sm text-content-muted hover:text-danger"
+              >
+                Undo
+              </button>
+            </div>
+          ) : (
+            <Button
+              onClick={() => rowAction('manual', p, { checkedInAt: new Date().toISOString(), checkInMethod: 'manual' })}
+              className="min-h-12 shrink-0 px-4 py-2 text-base sm:px-5"
+            >
+              Check in
+            </Button>
+          )}
+        </li>
+      ))}
+      {visible.length === 0 && <li className="px-4 py-8 text-center text-sm text-content-muted">No one here.</li>}
+    </ul>
+  )
+
+  const groupList = (
+    <ul className="divide-y divide-line-light">
+      {visibleGroups.map((row) => {
+        const contact = details?.contacts[row.group.id]
+        const unsigned = row.members.filter((m) => flags[m.id]?.agreement).length
+        const medical = row.members.filter((m) => flags[m.id]?.medical).length
+        const done = row.arrived === row.total
+        return (
+          <li key={row.group.id} className={cn('flex items-center gap-3 px-4 py-3 sm:gap-4', done && 'bg-enviro-green-bg/40')}>
+            <div
+              className={cn(
+                'flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-control font-display tabular-nums',
+                done ? 'bg-enviro-green-bg text-enviro-green-text' : row.arrived ? 'bg-pathway-amber-bg text-gold-ink' : 'bg-surface text-content-muted'
+              )}
+              aria-label={`${row.arrived} of ${row.total} here`}
+              role="img"
+            >
+              <span className="text-lg font-bold leading-tight" aria-hidden>
+                {row.arrived}/{row.total}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-base font-semibold text-ink">{row.group.label}</p>
+              <p className="text-sm text-content-muted">
+                {row.group.teacher ?? 'Group'}
+                {' · '}
+                {done ? 'All here' : row.arrived ? `${row.total - row.arrived} not here yet` : 'Not here yet'}
+                {unsigned > 0 && <> · {unsigned} form{unsigned === 1 ? '' : 's'} not signed</>}
+                {medical > 0 && <> · {medical} medical</>}
+              </p>
+              {contact?.phone && !done && (
+                <a href={`tel:${contact.phone.replace(/[^\d+]/g, '')}`} className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary-deep">
+                  <Phone className="h-4 w-4" aria-hidden /> Call {firstName(contact.name) ?? 'teacher'}
+                </a>
+              )}
+            </div>
+            {done ? (
+              <button onClick={() => setSheetGroupId(row.group.id)} className="min-h-11 shrink-0 px-3 text-sm text-content-muted">
+                View
+              </button>
+            ) : (
+              <Button onClick={() => setSheetGroupId(row.group.id)} className="min-h-12 shrink-0 px-4 py-2 text-base sm:px-5">
+                Check in group
+              </Button>
+            )}
+          </li>
+        )
+      })}
+      {visibleGroups.length === 0 && <li className="px-4 py-8 text-center text-sm text-content-muted">No groups here.</li>}
+      {individuals > 0 && filter === 'all' && !search && (
+        <li className="px-4 py-3 text-sm text-content-muted">
+          {individuals} {individuals === 1 ? 'person' : 'people'} registered on their own: see{' '}
+          <button onClick={() => chooseView('people')} className="min-h-11 font-medium text-primary-deep underline underline-offset-2">
+            People
+          </button>
+          .
+        </li>
+      )}
+    </ul>
+  )
+
   const arrivals = (
     <div className={cn('self-start rounded-ds-card border border-line bg-white', !desk && 'lg:col-span-2')}>
       {/* Sticks under the admin top strip, or to the top of the screen in desk mode. */}
@@ -553,24 +881,47 @@ export default function CheckInLive({
             <span className="text-sm font-medium text-content-muted"> / {total}</span>
           </span>
           {syncChip}
-          <label className="relative order-last w-full sm:order-none sm:ml-auto sm:w-auto sm:min-w-[16rem] sm:max-w-xs short:order-none short:w-auto short:min-w-0 short:flex-1">
-            <span className="sr-only">Search by name</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-content-faint" aria-hidden />
-            <input
-              ref={searchRef}
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name…"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              enterKeyHint="search"
-              className="min-h-11 w-full rounded-control border border-line-strong pl-9 pr-3 text-base"
-            />
-          </label>
+          <div className="order-last flex w-full gap-2 sm:order-none sm:ml-auto sm:w-auto short:order-none short:w-auto short:flex-1">
+            <label className="relative min-w-0 flex-1 sm:min-w-[16rem] sm:max-w-xs short:min-w-0">
+              <span className="sr-only">Search by name, school or teacher</span>
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-content-faint" aria-hidden />
+              <input
+                ref={searchRef}
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Name, school or teacher…"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                enterKeyHint="search"
+                className="min-h-11 w-full rounded-control border border-line-strong pl-9 pr-3 text-base"
+              />
+            </label>
+            <Button variant="softBlue" onClick={() => setScanning(true)} className="min-h-11 shrink-0 px-3 py-2">
+              <ScanLine className="h-5 w-5" aria-hidden /> Scan
+            </Button>
+          </div>
         </div>
+        {hasGroups && (
+          <div role="tablist" aria-label="List by" className="flex gap-1 rounded-control bg-surface p-1">
+            {(['people', 'groups'] as const).map((v) => (
+              <button
+                key={v}
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => chooseView(v)}
+                className={cn(
+                  'min-h-11 flex-1 rounded-control px-3 text-sm font-semibold short:min-h-9',
+                  view === v ? 'bg-midnight text-white' : 'text-content-muted'
+                )}
+              >
+                {v === 'people' ? 'People' : `Groups ${groupRows.length}`}
+              </button>
+            ))}
+          </div>
+        )}
         <div role="tablist" aria-label="Show" className="flex gap-1 rounded-control bg-surface p-1">
           {tabs.map((t) => (
             <button
@@ -587,6 +938,16 @@ export default function CheckInLive({
             </button>
           ))}
         </div>
+        {notice && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 rounded-control bg-enviro-green-bg px-3 text-sm text-enviro-green-text">
+            <span className="min-w-0 flex-1 py-2 font-medium">{notice.text}</span>
+            {noticeUndo && (
+              <button onClick={() => undoGroup(noticeUndo)} className="min-h-11 px-2 font-semibold underline underline-offset-2">
+                Undo
+              </button>
+            )}
+          </div>
+        )}
         {error && (
           <p role="alert" className="text-sm text-danger">
             {error}
@@ -594,61 +955,24 @@ export default function CheckInLive({
         )}
       </div>
 
-      <ul className="divide-y divide-line-light">
-        {visible.map((p) => (
-          <li key={p.id} className={cn('flex items-center gap-3 px-4 py-3 sm:gap-4', p.checkedInAt && 'bg-enviro-green-bg/40')}>
-            <CompanyBadge company={p.company} />
-            <div className="min-w-0 flex-1">
-              <p className="break-words text-base font-semibold text-ink">
-                {p.firstName} {p.lastName}
-              </p>
-              <p className="text-sm text-content-muted">
-                <span className="capitalize">{(p.eventRole ?? '').replace(/_/g, ' ')}</span>
-                {' · '}Shirt {p.shirtSize ?? '—'}
-                {p.company?.name && <> · {p.company.name}</>}
-                {p.merch.length > 0 && <> · {p.merch.map((m) => `${m.name}${m.qty > 1 ? ` ×${m.qty}` : ''}`).join(', ')}</>}
-              </p>
-              {p.merch.length > 0 && (
-                <button
-                  onClick={() =>
-                    rowAction(p.merchCollected ? 'merch_uncollected' : 'merch_collected', p, {
-                      merchCollected: !p.merchCollected,
-                    })
-                  }
-                  className={cn('mt-1 min-h-11 text-sm font-medium', p.merchCollected ? 'text-enviro-green-text' : 'text-brand-gold-ink')}
-                >
-                  {p.merchCollected ? '✓ Merch collected' : 'Mark merch collected'}
-                </button>
-              )}
-            </div>
-            {p.checkedInAt ? (
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="inline-flex rounded-full bg-enviro-green-bg px-3 py-1 text-sm font-medium text-enviro-green-text">
-                  ✓ {new Date(p.checkedInAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                  {p.checkInMethod === 'manual' && ' · desk'}
-                  {p.checkInMethod === 'qr' && ' · phone'}
-                  {p.checkInMethod === 'virtual' && ' · virtual'}
-                </span>
-                <button
-                  onClick={() => rowAction('undo', p, { checkedInAt: null, checkInMethod: null })}
-                  className="min-h-11 px-3 text-sm text-content-muted hover:text-danger"
-                >
-                  Undo
-                </button>
-              </div>
-            ) : (
-              <Button
-                onClick={() => rowAction('manual', p, { checkedInAt: new Date().toISOString(), checkInMethod: 'manual' })}
-                className="min-h-12 shrink-0 px-4 py-2 text-base sm:px-5"
-              >
-                Check in
-              </Button>
-            )}
-          </li>
-        ))}
-        {visible.length === 0 && <li className="px-4 py-8 text-center text-sm text-content-muted">No one here.</li>}
-      </ul>
+      {showGroups ? groupList : peopleList}
     </div>
+  )
+
+  const overlays = (
+    <>
+      {sheetRow && (
+        <CheckInGroupSheet
+          key={sheetRow.group.id}
+          row={sheetRow}
+          flags={flags}
+          contact={details?.contacts[sheetRow.group.id]}
+          onConfirm={(ids) => checkInGroup(sheetRow, ids)}
+          onClose={() => setSheetGroupId(null)}
+        />
+      )}
+      {scanning && <CheckInScanner onCode={handleScan} onClose={() => setScanning(false)} />}
+    </>
   )
 
   if (desk) {
@@ -686,6 +1010,7 @@ export default function CheckInLive({
           {settingsOpen && <div id="checkin-settings">{settingsPanel}</div>}
           {arrivals}
         </div>
+        {overlays}
       </div>
     )
   }
@@ -704,12 +1029,13 @@ export default function CheckInLive({
         <div className="order-last self-start lg:sticky lg:top-20 lg:order-none">{settingsPanel}</div>
         {arrivals}
       </div>
+      {overlays}
     </div>
   )
 }
 
 // The number is what the desk tells each person; the name is shown in the row.
-function CompanyBadge({ company }: { company: LiveParticipant['company'] }) {
+function CompanyBadge({ company }: { company: DeskParticipant['company'] }) {
   return (
     <div
       className={cn(

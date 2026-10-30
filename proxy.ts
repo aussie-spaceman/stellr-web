@@ -216,10 +216,11 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 // /api/img (the Sanity watermarker) is left out of both entries: it reads no
 // session, and a page with a gallery fetches dozens of its URLs, each one a
 // proxy run on Vercel's metered CPU even when the CDN already has the image
-// (the proxy was 37% of the team's Active CPU on 21 Oct 2026).
+// (the proxy was 37% of the team's Active CPU on 21 Oct 2026). The check-in
+// desk's scanner reader (/vendor/zxing_reader.wasm) is a static file too.
 export const config = {
   matcher: [
-    '/((?!_next|api/img(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/((?!_next|api/img(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
     '/((?!api/img(?:/|$))(?:api|trpc).*)',
   ],
 }

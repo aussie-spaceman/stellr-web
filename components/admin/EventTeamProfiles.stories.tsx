@@ -35,6 +35,7 @@ const base: Omit<PlanningStudent, 'participantId' | 'firstName' | 'lastName'> = 
   sendCount: 1,
   lastSendError: null,
   submittedAt: '2026-10-02T15:00:00Z',
+  overridden: null,
   answers: normaliseAnswers({
     skills: { art: 'advanced', writing: 'intermediate', presenting: 'beginner', science_maths: 'intermediate', engineering: 'beginner', leadership: 'advanced' },
     strengths: ['creativity', 'teamwork'],
@@ -61,6 +62,7 @@ const plan: CompanyPlan = {
     { ...base, participantId: 'p2', firstName: 'Sam', lastName: 'Lee', gender: 'Male', locked: true, teammates: [], answers: { ...base.answers!, teammates: [] } },
     { ...base, participantId: 'p3', firstName: 'Ava', lastName: 'Patel', companyId: null, companyNumber: null, status: 'sent', submittedAt: null, answers: null, teammates: [], sendCount: 2, suggestedCompany: 2 },
     { ...base, participantId: 'p4', firstName: 'Noah', lastName: 'Kim', companyId: null, companyNumber: null, status: 'waiting', submittedAt: null, lastSentAt: null, sendCount: 0, answers: null, teammates: [], suggestedCompany: 2 },
+    { ...base, participantId: 'p5', firstName: 'Maya', lastName: 'Ortiz', companyId: 'c2', companyNumber: 2, status: 'sent', submittedAt: null, sendCount: 3, answers: null, teammates: [], overridden: { at: '2026-10-30T18:00:00Z', by: 'Event Manager' } },
   ],
 }
 

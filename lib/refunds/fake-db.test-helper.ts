@@ -1,12 +1,14 @@
 // A small in-memory stand-in for the Supabase query builder, enough for the
-// refund modules: select/eq/in/limit/maybeSingle/single/insert/upsert. Filters
-// are applied to the fixture rows; writes are recorded for assertions.
+// refund modules: select/eq/in/limit/maybeSingle/single/insert/upsert/update.
+// Filters are applied to the fixture rows; writes are recorded for assertions,
+// and an update also changes the matching fixture rows, so later reads see it.
 type Row = Record<string, unknown>
 
 export interface FakeDb {
   db: { from: (table: string) => unknown }
   inserts: { table: string; rows: Row[] }[]
   upserts: { table: string; rows: Row[]; opts: unknown }[]
+  updates: { table: string; patch: Row; rows: Row[] }[]
   /** Makes the next insert into `table` fail with this message. */
   failInsert: (table: string, message: string) => void
 }
@@ -14,6 +16,7 @@ export interface FakeDb {
 export function fakeDb(tables: Record<string, Row[]>): FakeDb {
   const inserts: FakeDb['inserts'] = []
   const upserts: FakeDb['upserts'] = []
+  const updates: FakeDb['updates'] = []
   const failing = new Map<string, string>()
 
   function builder(table: string) {
@@ -21,10 +24,18 @@ export function fakeDb(tables: Record<string, Row[]>): FakeDb {
     let limitN: number | null = null
     let written: Row[] | null = null
     let writeError: { message: string } | null = null
+    // An update's filters come after .update(), so it is applied on resolution.
+    let patch: Row | null = null
 
     const rows = () => {
       if (written) return written
       const out = (tables[table] ?? []).filter((r) => filters.every((f) => f(r)))
+      if (patch) {
+        for (const r of out) Object.assign(r, patch)
+        updates.push({ table, patch, rows: out })
+        written = out
+        return out
+      }
       return limitN === null ? out : out.slice(0, limitN)
     }
     const result = () => (writeError ? { data: null, error: writeError } : { data: rows(), error: null })
@@ -49,6 +60,7 @@ export function fakeDb(tables: Record<string, Row[]>): FakeDb {
         }
         return q
       },
+      update: (p: Row) => ((patch = p), q),
       upsert: (payload: Row[], opts: unknown) => {
         upserts.push({ table, rows: payload, opts })
         written = payload
@@ -64,6 +76,7 @@ export function fakeDb(tables: Record<string, Row[]>): FakeDb {
     db: { from: builder },
     inserts,
     upserts,
+    updates,
     failInsert: (table, message) => failing.set(table, message),
   }
 }

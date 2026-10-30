@@ -4,11 +4,13 @@ import { requireEventAccess } from '@/lib/event-access'
 import { CertificateArtworkError, generateCertificatesPdf } from '@/lib/event-pdf'
 import { EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementFromParams, placementOf } from '@/lib/event-certificates'
+import { eventArtworkTheme } from '@/lib/artwork-defaults'
 
 export const dynamic = 'force-dynamic'
 
 // GET ?award=<type>&format=&name=&name_y=&name_max_width=&name_size=
-// One page with a sample name, shown inline — so an admin can see where the
+// One page with a sample name, shown inline, on the artwork that prints (the
+// event's own, else its theme's default) — so an admin can see where the
 // name lands (and how a long one shrinks) before printing a stack. Unsaved
 // slider values ride along as query params and override the stored ones.
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -23,7 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const name = (search.get('name') ?? '').trim().slice(0, 120) || 'Alexandra Montgomery-Whitfield'
 
   const db = supabaseServer()
-  const template = await loadTemplate(db, slug, award)
+  const template = await loadTemplate(db, slug, award, await eventArtworkTheme(slug))
   if (!template) return NextResponse.json({ error: `Upload the ${EVENT_AWARDS[award].label} artwork first.` }, { status: 400 })
   const artwork = await downloadArtwork(db, template.artwork_path)
   if (!artwork) return NextResponse.json({ error: 'The artwork could not be loaded. Upload it again.' }, { status: 500 })

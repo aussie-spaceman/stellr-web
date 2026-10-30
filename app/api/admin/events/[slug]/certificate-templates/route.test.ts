@@ -35,9 +35,11 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => ({ ok: true }) }))
 vi.mock('@/lib/uploads', () => ({ claimUpload: async () => ({ ok: true }) }))
 vi.mock('@/lib/event-certificates', () => ({
-  loadTemplate: async () => h.existing,
-  loadTemplates: async () => [],
+  loadEventTemplate: async () => h.existing,
+  loadEventTemplates: async () => ({}),
+  loadDefaultTemplates: async () => ({}),
 }))
+vi.mock('@/lib/artwork-defaults', () => ({ eventArtworkTheme: async () => 'space' }))
 
 const { PUT } = await import('./route')
 

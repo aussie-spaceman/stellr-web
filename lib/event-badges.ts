@@ -11,15 +11,16 @@ import { prepareBadgeArtwork, wantsLightInk, type PreparedBadgeArtwork } from '@
 import { downloadArtwork } from '@/lib/event-certificates'
 import type { Badge, BadgeDesign, BadgePerson } from '@/lib/event-pdf'
 import { checkInCodeLink } from '@/lib/check-in-codes'
+import type { ArtworkTheme } from '@/lib/artwork-theme'
 
 // ── Event name badges: database side ─────────────────────────────────────────
-// Templates (event_badge_templates: one artwork per format per audience), who
-// gets a badge, and which template each badge uses. Layout and the rule
-// finder: lib/badge-layout.ts. Mirrors lib/event-certificates.ts.
+// Templates (event_badge_templates: one artwork per format per audience, over
+// default_badge_templates: the theme's everyone/mentors defaults), who gets a
+// badge, and which template each badge uses. Layout and the rule finder:
+// lib/badge-layout.ts. Mirrors lib/event-certificates.ts.
 
 export interface BadgeTemplate {
   id: string
-  event_slug: string
   format: BadgeFormat
   audience: BadgeAudience
   company_id: string | null
@@ -29,33 +30,67 @@ export interface BadgeTemplate {
   name_max_width: number | null
   name_size: number | null
   updated_at: string
+  /** The event's own upload, or its theme's default (lib/artwork-defaults.ts). */
+  source: 'event' | 'default'
 }
 
-const COLUMNS = 'id, event_slug, format, audience, company_id, artwork_path, name_x, name_y, name_max_width, name_size, updated_at'
+const COLUMNS = 'id, format, audience, company_id, artwork_path, name_x, name_y, name_max_width, name_size, updated_at'
+// Defaults have no company: companies belong to one event.
+const DEFAULT_COLUMNS = 'id, format, audience, artwork_path, name_x, name_y, name_max_width, name_size, updated_at'
 
 // numeric columns arrive as strings from PostgREST.
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
-function normalise(row: BadgeTemplate): BadgeTemplate {
+function normalise(row: BadgeTemplate, source: BadgeTemplate['source']): BadgeTemplate {
   return {
     ...row,
+    company_id: row.company_id ?? null,
     name_x: num(row.name_x),
     name_y: num(row.name_y),
     name_max_width: num(row.name_max_width),
     name_size: num(row.name_size),
+    source,
   }
 }
 
+/** The event's own templates. */
 export async function loadBadgeTemplates(db: SupabaseClient, slug: string, format?: BadgeFormat): Promise<BadgeTemplate[]> {
   let q = db.from('event_badge_templates').select(COLUMNS).eq('event_slug', slug)
   if (format) q = q.eq('format', format)
   const { data, error } = await q
   if (error) throw new Error(`[event-badges] templates: ${error.message}`)
-  return ((data ?? []) as BadgeTemplate[]).map(normalise)
+  return ((data ?? []) as BadgeTemplate[]).map((r) => normalise(r, 'event'))
 }
 
 export async function loadBadgeTemplate(db: SupabaseClient, slug: string, id: string): Promise<BadgeTemplate | null> {
   const { data } = await db.from('event_badge_templates').select(COLUMNS).eq('event_slug', slug).eq('id', id).maybeSingle()
-  return data ? normalise(data as BadgeTemplate) : null
+  return data ? normalise(data as BadgeTemplate, 'event') : null
+}
+
+/** A theme's defaults: everyone and mentors, per format. */
+export async function loadDefaultBadgeTemplates(db: SupabaseClient, theme: ArtworkTheme, format?: BadgeFormat): Promise<BadgeTemplate[]> {
+  let q = db.from('default_badge_templates').select(DEFAULT_COLUMNS).eq('theme', theme)
+  if (format) q = q.eq('format', format)
+  const { data, error } = await q
+  if (error) throw new Error(`[event-badges] default templates: ${error.message}`)
+  return ((data ?? []) as BadgeTemplate[]).map((r) => normalise(r, 'default'))
+}
+
+export async function loadDefaultBadgeTemplate(db: SupabaseClient, theme: ArtworkTheme, id: string): Promise<BadgeTemplate | null> {
+  const { data } = await db.from('default_badge_templates').select(DEFAULT_COLUMNS).eq('theme', theme).eq('id', id).maybeSingle()
+  return data ? normalise(data as BadgeTemplate, 'default') : null
+}
+
+/**
+ * What prints: the event's own templates, with each everyone/mentors slot it
+ * lacks (per format) filled from its theme's defaults. pickTemplate then
+ * chooses among them as before, so an event's own mentors background still
+ * beats its company one, and a default only ever stands in for a missing slot.
+ */
+export function effectiveBadgeTemplates(own: BadgeTemplate[], defaults: BadgeTemplate[]): BadgeTemplate[] {
+  const filled = defaults.filter(
+    (d) => !own.some((t) => t.format === d.format && t.audience === d.audience && t.company_id === null),
+  )
+  return [...own, ...filled]
 }
 
 export interface EventCompany {
@@ -105,6 +140,22 @@ export async function prepareTemplate(db: SupabaseClient, t: BadgeTemplate): Pro
     console.error('[event-badges] artwork prep failed:', t.artwork_path, err)
     return null
   }
+}
+
+/**
+ * For the admin panel: rows never positioned (carried over from event_settings,
+ * and the 5392 default made from the 8395 art) get the position the renderer
+ * will use, found from the artwork's rule.
+ */
+export async function fillPlacements(db: SupabaseClient, templates: BadgeTemplate[]): Promise<BadgeTemplate[]> {
+  for (const t of templates) {
+    if (t.name_x !== null && t.name_y !== null && t.name_max_width !== null && t.name_size !== null) continue
+    const prepared = await prepareTemplate(db, t)
+    if (!prepared) continue
+    const p = placementOf(t, prepared)
+    Object.assign(t, { name_x: p.nameX, name_y: p.nameY, name_max_width: p.nameMaxWidth, name_size: p.nameSize })
+  }
+  return templates
 }
 
 export function designOf(t: BadgeTemplate, prepared: PreparedBadgeArtwork, placement = placementOf(t, prepared)): BadgeDesign {
@@ -230,9 +281,10 @@ export async function loadBadgeHolders(
 }
 
 /**
- * Every holder with the design of the most specific template they have. With
- * `spares`, blank badges follow on the Everyone background (plain without
- * one): enough to fill the last sheet and one sheet more (spareCount).
+ * Every holder with the design of the most specific template they have (pass
+ * effectiveBadgeTemplates, so defaults stand in). With `spares`, blank badges
+ * follow on the Everyone background (plain without one): enough to fill the
+ * last sheet and one sheet more (spareCount).
  */
 export async function resolveBadges(
   db: SupabaseClient,

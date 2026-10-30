@@ -10,6 +10,7 @@ const TONE: Record<ScholarshipStage, string> = {
   attended: 'bg-enviro-green-bg text-enviro-green-text',
   not_offered: 'bg-line-light text-content-body',
   withdrawn: 'bg-line-light text-content-body',
+  cancelled: 'bg-line-light text-content-body',
 }
 
 export function ScholarshipStagePill({ stage, percent }: { stage: ScholarshipStage; percent?: number | null }) {

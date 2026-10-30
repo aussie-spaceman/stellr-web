@@ -12,6 +12,8 @@ const purgeSurveyDataFor = vi.fn(async () => {})
 const archiveEntity = vi.fn(async () => {})
 const runExternalCleanup = vi.fn(async () => [])
 const deletionPreflight = vi.fn(async () => ({ canDelete: true, blockers: [], entity: '', id: '' }))
+const liveScholarshipOffers = vi.fn(async (_db: unknown, regId: string) => (regId === 'r1' ? ['sch-1'] : []))
+const cancelScholarshipsOnWithdrawal = vi.fn(async (_db: unknown, ids: string[]) => ids.map((id) => ({ id, percent: 50 })))
 
 vi.mock('@/lib/credentials', () => ({ tombstoneCredentialsFor }))
 vi.mock('@/lib/event-participation-sync', () => ({ removeEventParticipation }))
@@ -21,6 +23,7 @@ vi.mock('@/lib/refunds/execute', () => ({ executeRefund: vi.fn() }))
 vi.mock('./archive', () => ({ archiveEntity }))
 vi.mock('./external', () => ({ runExternalCleanup }))
 vi.mock('./preflight', () => ({ deletionPreflight }))
+vi.mock('@/lib/scholarship-cancel', () => ({ liveScholarshipOffers, cancelScholarshipsOnWithdrawal }))
 
 // Canned reads keyed by (table, selected columns). Writes just succeed.
 const participantsById: Record<string, unknown>[] = [{ id: 'p1' }, { id: 'p2' }]
@@ -29,6 +32,9 @@ const participantMembers: Record<string, unknown>[] = [{ member_id: 'mem1' }, { 
 // erasure/teardown aborts (throws) instead of silently treating the failed read
 // as an empty result. Mutated per-test; cleared in beforeEach.
 const readErrors: Record<string, unknown> = {}
+// The registration's type for the "is this an individual registration left
+// empty?" read. Mutated per-test; reset in beforeEach.
+let registrationType = 'group'
 
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
@@ -69,7 +75,7 @@ function single(table: string, cols: string): Record<string, unknown> | null {
   }
   if (table === 'participants' && cols === 'registration_id') return { registration_id: 'r1' }
   if (table === 'registrations' && cols === 'event_slug') return { event_slug: 'evt' }
-  if (table === 'registrations' && cols.includes('type')) return { type: 'group', status: 'confirmed' }
+  if (table === 'registrations' && cols.includes('type')) return { type: registrationType, status: 'confirmed' }
   return null
 }
 
@@ -77,8 +83,10 @@ const { executeDeletion } = await import('./execute')
 
 beforeEach(() => {
   for (const fn of [tombstoneCredentialsFor, removeEventParticipation, retainSignedRecords,
-    startRetentionClock, purgeSurveyDataFor, archiveEntity, runExternalCleanup]) fn.mockClear()
+    startRetentionClock, purgeSurveyDataFor, archiveEntity, runExternalCleanup,
+    liveScholarshipOffers, cancelScholarshipsOnWithdrawal]) fn.mockClear()
   for (const k of Object.keys(readErrors)) delete readErrors[k]
+  registrationType = 'group'
 })
 
 describe('executeDeletion — credential erasure (deep review MP-2 / MP-11)', () => {
@@ -136,5 +144,34 @@ describe('executeDeletion — teardown reads fail closed (deep review QUALTEST-N
   it('aborts a group hard-delete when the registration read for the Space-access teardown errors', async () => {
     readErrors.registrations = { message: 'pool exhausted' }
     await expect(executeDeletion('registration', 'r1', { mode: 'hard' })).rejects.toThrow(/teardown aborted/i)
+  })
+})
+
+describe('executeDeletion — scholarship offers end with the registration', () => {
+  it('a soft withdrawal cancels the live offers on the registration', async () => {
+    const result = await executeDeletion('registration', 'r1', { mode: 'soft' })
+    expect(liveScholarshipOffers).toHaveBeenCalledWith(expect.anything(), 'r1')
+    expect(cancelScholarshipsOnWithdrawal).toHaveBeenCalledWith(expect.anything(), ['sch-1'])
+    expect(result.scholarshipsCancelled).toEqual([{ id: 'sch-1', percent: 50 }])
+  })
+
+  it('a hard delete reads the offers BEFORE the row goes (the FK nulls the link) and cancels them after', async () => {
+    const result = await executeDeletion('registration', 'r1', { mode: 'hard' })
+    expect(liveScholarshipOffers.mock.invocationCallOrder[0]).toBeLessThan(archiveEntity.mock.invocationCallOrder[0])
+    expect(cancelScholarshipsOnWithdrawal.mock.invocationCallOrder[0]).toBeGreaterThan(archiveEntity.mock.invocationCallOrder[0])
+    expect(result.scholarshipsCancelled).toEqual([{ id: 'sch-1', percent: 50 }])
+  })
+
+  it('deleting the only student on an individual registration withdraws it and cancels its offer', async () => {
+    registrationType = 'individual'
+    const result = await executeDeletion('participant', 'p1', { mode: 'hard' })
+    expect(liveScholarshipOffers).toHaveBeenCalledWith(expect.anything(), 'r1')
+    expect(result.scholarshipsCancelled).toEqual([{ id: 'sch-1', percent: 50 }])
+  })
+
+  it('cancels nothing when the withdrawal itself fails', async () => {
+    readErrors.registrations = { message: 'pool exhausted' }
+    await expect(executeDeletion('registration', 'r1', { mode: 'hard' })).rejects.toThrow()
+    expect(cancelScholarshipsOnWithdrawal).not.toHaveBeenCalled()
   })
 })

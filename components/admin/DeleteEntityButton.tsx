@@ -170,6 +170,14 @@ export function DeleteEntityButton({
       }
       if (!res.ok) throw new Error(data.error || 'Delete failed')
 
+      // What else the delete did: the group invoice revised, a withdrawn
+      // student's scholarship cancelled.
+      const cancelled = (data.scholarshipsCancelled ?? []) as { percent: number | null }[]
+      const followOn = [
+        data.billingMessage,
+        ...cancelled.map((c) => `Their ${c.percent != null ? `${c.percent}% ` : ''}scholarship was cancelled.`),
+      ].filter(Boolean).join(' ')
+
       const failures: string[] = (data.externalResults ?? [])
         .filter((r: { ok: boolean }) => !r.ok)
         .map((f: { detail: string }) => f.detail)
@@ -183,12 +191,12 @@ export function DeleteEntityButton({
           manual.length > 0 && `the refund needs doing by hand in Stripe (${manual.join('; ')})`,
           failures.length > 0 && `external cleanup had issues (${failures.join('; ')})`,
         ].filter(Boolean)
-        setError(`Deleted, but ${parts.join(', and ')}.${data.billingMessage ? ` ${data.billingMessage}` : ''}`)
+        setError(`Deleted, but ${parts.join(', and ')}.${followOn ? ` ${followOn}` : ''}`)
         setDeletedWithIssues(true)
         return
       }
-      if (data.billingMessage) {
-        setNotice(`Deleted. ${data.billingMessage}`)
+      if (followOn) {
+        setNotice(`Deleted. ${followOn}`)
         setDeletedWithIssues(true)
         return
       }

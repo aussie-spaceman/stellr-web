@@ -34,7 +34,7 @@ export function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
-export type ScholarshipDecision = 'submitted' | 'offered' | 'not_offered' | 'withdrawn'
+export type ScholarshipDecision = 'submitted' | 'offered' | 'not_offered' | 'withdrawn' | 'cancelled'
 
 // ── Stage ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ export type ScholarshipStage =
   | 'submitted'
   | 'not_offered'
   | 'withdrawn'
+  | 'cancelled'
   | 'awaiting_details'
   | 'awaiting_payment'
   | 'confirmed'
@@ -71,6 +72,7 @@ export const STAGE_LABEL: Record<ScholarshipStage, string> = {
   submitted: 'To review',
   not_offered: 'Not offered',
   withdrawn: 'Withdrawn',
+  cancelled: 'Cancelled',
   awaiting_details: 'Offered · awaiting details',
   awaiting_payment: 'Registered · awaiting payment',
   confirmed: 'Accepted · registered',
@@ -82,6 +84,7 @@ export const STAGE_LABEL_MEMBER: Record<ScholarshipStage, string> = {
   submitted: 'Received — under review',
   not_offered: 'Not offered this time',
   withdrawn: 'Withdrawn',
+  cancelled: 'Cancelled',
   awaiting_details: 'Offered — complete your registration details',
   awaiting_payment: 'Offered — payment outstanding',
   confirmed: 'Accepted — you’re registered',

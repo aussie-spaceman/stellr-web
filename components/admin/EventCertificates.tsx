@@ -3,11 +3,16 @@
 import { useEffect, useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { AWARD_TYPES, EVENT_AWARDS, type AwardType } from '@/lib/event-awards'
+import { ARTWORK_THEME_LABEL, type ArtworkTheme } from '@/lib/artwork-theme'
 
 // Certificate artwork + print, one row per award (lib/event-awards.ts).
 // The artwork carries every word; the renderer adds only the recipient's name,
 // at a position set per template here and checked against a live preview.
 // Who gets which award is set in EventAwards, below this panel.
+//
+// Two scopes (30 Oct 2026): with `eventSlug`, one event's own artwork, where
+// any award without its own uses the theme's default; without, the theme's
+// defaults themselves, on Competitions → Default artwork (admins only).
 
 interface Template {
   artwork_path: string
@@ -31,9 +36,18 @@ const WHO: Record<AwardType, string> = {
   mentor: 'Every volunteer mentor assigned on the Volunteers panel.',
 }
 
-export default function EventCertificates({ eventSlug }: { eventSlug: string }) {
-  const base = `/api/admin/events/${eventSlug}`
+export default function EventCertificates({
+  eventSlug, theme, canEditDefaults = false,
+}: {
+  eventSlug?: string
+  theme: ArtworkTheme
+  /** Link an admin from the event to the defaults it inherits. */
+  canEditDefaults?: boolean
+}) {
+  const base = eventSlug ? `/api/admin/events/${eventSlug}` : `/api/admin/artwork-defaults/${theme}`
+  const themeLabel = ARTWORK_THEME_LABEL[theme]
   const [templates, setTemplates] = useState<Templates | null>(null)
+  const [defaults, setDefaults] = useState<Templates | null>(null)
   const [format, setFormat] = useState<'us_letter' | 'a4'>('us_letter')
   const [uploading, setUploading] = useState<AwardType | null>(null)
   const [adjusting, setAdjusting] = useState<AwardType | null>(null)
@@ -42,15 +56,20 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
   async function load() {
     const res = await fetch(`${base}/certificate-templates`)
     if (!res.ok) { setMsg({ text: 'Could not load certificate templates.', error: true }); return }
-    setTemplates(((await res.json()) as { templates: Templates }).templates)
+    const d = (await res.json()) as { templates: Templates; defaults?: Templates }
+    setTemplates(d.templates)
+    setDefaults(d.defaults ?? null)
   }
-  useEffect(() => { void load() }, [eventSlug]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [base]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function upload(award: AwardType, file: File) {
     setUploading(award); setMsg(null)
     try {
       // Bytes go browser → storage via a signed URL; only the path is posted.
-      const stored = await uploadDirectToStorage(file, 'event-artwork', { slug: eventSlug, kind: `certificate-${award}` })
+      const kind = `certificate-${award}`
+      const stored = eventSlug
+        ? await uploadDirectToStorage(file, 'event-artwork', { slug: eventSlug, kind })
+        : await uploadDirectToStorage(file, 'artwork-default', { theme, kind })
       if ('error' in stored) { setMsg({ text: stored.error, error: true }); return }
       const result = await postUpload(
         `${base}/certificate-templates`,
@@ -66,7 +85,27 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
     }
   }
 
+  async function remove(award: AwardType) {
+    const label = EVENT_AWARDS[award].label
+    const res = await fetch(`${base}/certificate-templates?awardType=${award}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      setMsg({ text: d.error ?? `Could not remove the ${label} artwork.`, error: true })
+      return
+    }
+    setMsg({
+      text: !eventSlug
+        ? `${label}: default removed. Events without their own artwork now have none for it.`
+        : defaults?.[award]
+          ? `${label}: back to the ${themeLabel} default.`
+          : `${label}: artwork removed.`,
+    })
+    if (adjusting === award) setAdjusting(null)
+    await load()
+  }
+
   const download = (award: AwardType | 'all') => `${base}/certificates?award=${award}&format=${format}`
+  const anyDefault = AWARD_TYPES.some((t) => defaults?.[t])
 
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
@@ -74,24 +113,46 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
         <div>
           <h3 className="text-sm font-semibold text-brand-muted">Certificates</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
-            Upload the finished artwork for each certificate. Only the recipient&rsquo;s name is added, centred in the
-            space you set.
+            {eventSlug ? (
+              <>
+                {anyDefault
+                  ? `Each certificate prints on the ${themeLabel} default unless you upload this event’s own artwork.`
+                  : `There are no ${themeLabel} defaults yet, so upload this event’s own artwork.`}{' '}
+                Only the recipient&rsquo;s name is added, centred in the space you set.
+                {canEditDefaults && (
+                  <>
+                    {' '}
+                    <a href={`/admin/competitions/artwork?theme=${theme}`} className="underline hover:text-brand-muted">
+                      Change the {themeLabel} defaults
+                    </a>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                Every {themeLabel} event prints these unless it uploads its own. Only the recipient&rsquo;s name is
+                added, centred in the space you set. Replacing one keeps events that have already issued that
+                certificate on the artwork they issued it with.
+              </>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={format}
-            onChange={(e) => setFormat(e.target.value as 'us_letter' | 'a4')}
-            className="border border-line-strong rounded-lg px-2 py-1.5 text-input mouse:text-sm bg-white text-brand-muted"
-            aria-label="Paper size"
-          >
-            <option value="us_letter">US Letter</option>
-            <option value="a4">A4</option>
-          </select>
-          <a href={download('all')} className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5">
-            Download all certificates
-          </a>
-        </div>
+        {eventSlug && (
+          <div className="flex items-center gap-2">
+            <select
+              value={format}
+              onChange={(e) => setFormat(e.target.value as 'us_letter' | 'a4')}
+              className="border border-line-strong rounded-lg px-2 py-1.5 text-input mouse:text-sm bg-white text-brand-muted"
+              aria-label="Paper size"
+            >
+              <option value="us_letter">US Letter</option>
+              <option value="a4">A4</option>
+            </select>
+            <a href={download('all')} className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5">
+              Download all certificates
+            </a>
+          </div>
+        )}
       </div>
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
@@ -99,6 +160,7 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
       <ul className="divide-y divide-brand-hairline border border-brand-border rounded-lg">
         {AWARD_TYPES.map((award) => {
           const t = templates?.[award] ?? null
+          const inherited = !t && defaults?.[award] ? defaults[award] : null
           return (
             <li key={award} className="p-4 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -106,12 +168,24 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
                   <p className="font-medium text-brand-blue-dark text-sm">{EVENT_AWARDS[award].label}</p>
                   <p className="text-xs text-brand-muted-soft">
                     {WHO[award]}{' '}
-                    {t ? <span className="text-green-700">Artwork set.</span> : <span>No artwork yet.</span>}
+                    {t ? (
+                      <span className="text-green-700">{eventSlug ? 'This event’s own artwork.' : 'Artwork set.'}</span>
+                    ) : inherited ? (
+                      <span className="text-green-700">Uses the {themeLabel} default.</span>
+                    ) : (
+                      <span>No artwork yet.</span>
+                    )}
                   </p>
                 </div>
                 <label className="text-xs text-brand-muted-soft cursor-pointer">
                   <span className="underline hover:text-brand-muted">
-                    {uploading === award ? 'Uploading…' : t ? 'Replace artwork' : 'Upload artwork'}
+                    {uploading === award
+                      ? 'Uploading…'
+                      : t
+                        ? 'Replace artwork'
+                        : inherited
+                          ? 'Upload this event’s own'
+                          : 'Upload artwork'}
                   </span>
                   <input
                     type="file"
@@ -136,6 +210,11 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
                   </button>
                 )}
                 {t && (
+                  <button type="button" onClick={() => void remove(award)} className="text-xs text-brand-muted-soft underline">
+                    {eventSlug && defaults?.[award] ? 'Use the default' : 'Remove'}
+                  </button>
+                )}
+                {eventSlug && (t || inherited) && (
                   <a href={download(award)} className="text-xs font-medium px-3 py-1.5 rounded-md border border-brand-border text-brand-blue-dark hover:bg-brand-canvas">
                     Download PDF
                   </a>

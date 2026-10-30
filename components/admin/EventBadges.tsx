@@ -3,11 +3,17 @@
 import { useEffect, useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { BADGE_FORMATS, DEFAULT_BADGE_FORMAT, type BadgeAudience, type BadgeFormat } from '@/lib/badge-layout'
+import { ARTWORK_THEME_LABEL, type ArtworkTheme } from '@/lib/artwork-theme'
 
 // Name badges, like EventCertificates: pick the Avery stock, give it a
 // background, check where the name lands, download the sheet.
 // One background for everyone is enough. Mentors and each company can have
 // their own; a badge uses its company's, else the mentors', else everyone's.
+//
+// Two scopes (30 Oct 2026): with `eventSlug`, one event's own backgrounds, where
+// an Everyone or Mentors slot without its own uses the theme's default; without,
+// the theme's defaults themselves, on Competitions → Default artwork (admins
+// only; no companies, which belong to one event).
 
 const FORMATS = Object.keys(BADGE_FORMATS) as BadgeFormat[]
 /** The label's artwork box (bleed included), as literal classes for Tailwind. */
@@ -46,10 +52,19 @@ interface Row {
   fallback: string
 }
 
-export default function EventBadges({ eventSlug }: { eventSlug: string }) {
-  const base = `/api/admin/events/${eventSlug}`
+export default function EventBadges({
+  eventSlug, theme, canEditDefaults = false,
+}: {
+  eventSlug?: string
+  theme: ArtworkTheme
+  /** Link an admin from the event to the defaults it inherits. */
+  canEditDefaults?: boolean
+}) {
+  const base = eventSlug ? `/api/admin/events/${eventSlug}` : `/api/admin/artwork-defaults/${theme}`
+  const themeLabel = ARTWORK_THEME_LABEL[theme]
   const [format, setFormat] = useState<BadgeFormat>(DEFAULT_BADGE_FORMAT)
   const [templates, setTemplates] = useState<Template[] | null>(null)
+  const [defaults, setDefaults] = useState<Template[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [uploading, setUploading] = useState<string | null>(null)
   const [adjusting, setAdjusting] = useState<string | null>(null)
@@ -64,28 +79,34 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
   async function load() {
     const res = await fetch(`${base}/badge-templates`)
     if (!res.ok) { setMsg({ text: 'Could not load badge backgrounds.', error: true }); return }
-    const d = (await res.json()) as { templates: Template[]; companies: Company[] }
+    const d = (await res.json()) as { templates: Template[]; defaults?: Template[]; companies?: Company[] }
     setTemplates(d.templates)
-    setCompanies(d.companies)
+    setDefaults(d.defaults ?? [])
+    setCompanies(d.companies ?? [])
   }
-  useEffect(() => { void load() }, [eventSlug]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [base]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const everyone = templates?.find((t) => t.format === format && t.audience === 'everyone') ?? null
-  const mentors = templates?.find((t) => t.format === format && t.audience === 'mentors') ?? null
+  const own = (audience: BadgeAudience) => templates?.find((t) => t.format === format && t.audience === audience && t.company_id === null) ?? null
+  const inheritedFor = (audience: BadgeAudience) => defaults.find((t) => t.format === format && t.audience === audience) ?? null
+  // What a slot prints when it has nothing of its own, in words.
+  const hasEveryone = !!(own('everyone') ?? inheritedFor('everyone'))
+  const usesEveryone = hasEveryone ? 'Uses the Everyone background.' : 'Plain badges.'
   const rows: Row[] = [
     { key: 'everyone', audience: 'everyone', companyId: null, label: 'Everyone', who: 'Every badge without its own background below.', fallback: 'Plain badges (name, role, event).' },
-    { key: 'mentors', audience: 'mentors', companyId: null, label: 'Mentors', who: 'Optional. Volunteer mentors and anyone registered as a mentor.', fallback: everyone ? 'Uses the Everyone background.' : 'Plain badges.' },
-    ...companies.map((c) => ({
+    { key: 'mentors', audience: 'mentors', companyId: null, label: 'Mentors', who: 'Optional. Volunteer mentors and anyone registered as a mentor.', fallback: usesEveryone },
+    ...(eventSlug ? companies : []).map((c) => ({
       key: `company-${c.id}`,
       audience: 'company' as const,
       companyId: c.id,
       label: c.name ? `Company ${c.number}: ${c.name}` : `Company ${c.number}`,
       who: 'Optional. Every student in this company.',
-      fallback: everyone ? 'Uses the Everyone background.' : 'Plain badges.',
+      fallback: usesEveryone,
     })),
   ]
   const templateFor = (r: Row) =>
     templates?.find((t) => t.format === format && t.audience === r.audience && t.company_id === r.companyId) ?? null
+  // The theme default a slot falls back to (event scope; never for a company).
+  const inheritedRow = (r: Row) => (eventSlug && r.audience !== 'company' ? inheritedFor(r.audience) : null)
 
   async function save(r: Row, body: Record<string, unknown>) {
     const res = await fetch(`${base}/badge-templates`, {
@@ -102,7 +123,9 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
     setUploading(r.key); setMsg(null)
     try {
       // Bytes go browser → storage via a signed URL; only the path is posted.
-      const stored = await uploadDirectToStorage(file, 'event-artwork', { slug: eventSlug, kind: spec.artworkKind })
+      const stored = eventSlug
+        ? await uploadDirectToStorage(file, 'event-artwork', { slug: eventSlug, kind: spec.artworkKind })
+        : await uploadDirectToStorage(file, 'artwork-default', { theme, kind: spec.artworkKind })
       if ('error' in stored) { setMsg({ text: stored.error, error: true }); return }
       const result = await postUpload(
         `${base}/badge-templates`,
@@ -125,7 +148,7 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
   async function remove(r: Row, t: Template) {
     const res = await fetch(`${base}/badge-templates?id=${t.id}`, { method: 'DELETE' })
     if (!res.ok) { setMsg({ text: 'Could not remove that background.', error: true }); return }
-    setMsg({ text: `${r.label}: background removed. ${r.fallback}` })
+    setMsg({ text: `${r.label}: background removed. ${inheritedRow(r) ? `Back to the ${themeLabel} default.` : r.fallback}` })
     if (adjusting === r.key) setAdjusting(null)
     await load()
   }
@@ -136,17 +159,39 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
         <div>
           <h3 className="text-sm font-semibold text-brand-muted">Name badges</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
-            One badge for every student and volunteer mentor, full name on one line, then blank spares on the
-            Everyone background: the rest of the last sheet plus one full sheet. One background for everyone is
-            enough; give mentors or a company their own to tell them apart.
+            {eventSlug ? (
+              <>
+                One badge for every student and volunteer mentor, full name on one line, then blank spares on the
+                Everyone background: the rest of the last sheet plus one full sheet.{' '}
+                {defaults.length > 0
+                  ? `Badges use the ${themeLabel} default unless you upload this event’s own;`
+                  : `There is no ${themeLabel} default yet, so upload this event’s own;`}{' '}
+                give mentors or a company their own to tell them apart.
+                {canEditDefaults && (
+                  <>
+                    {' '}
+                    <a href={`/admin/competitions/artwork?theme=${theme}`} className="underline hover:text-brand-muted">
+                      Change the {themeLabel} defaults
+                    </a>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                Every {themeLabel} event prints these unless it uploads its own Everyone or Mentors background.
+                Company backgrounds belong to one event, so they are set on its Settings tab.
+              </>
+            )}
           </p>
         </div>
-        <a
-          href={downloadHref}
-          className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
-        >
-          Download {spec.label} PDF
-        </a>
+        {eventSlug && (
+          <a
+            href={downloadHref}
+            className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
+          >
+            Download {spec.label} PDF
+          </a>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -169,24 +214,27 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
         <p className="text-xs text-brand-muted-soft">{spec.description}. Each product has its own backgrounds.</p>
       </div>
 
-      <div className="flex flex-wrap gap-x-6 gap-y-1">
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-content-body">
-          <input type="checkbox" checked={bySchool} onChange={(e) => setBySchool(e.target.checked)} className="h-5 w-5 accent-primary" />
-          Print in school order
-          <span className="text-xs text-content-muted">(each group&rsquo;s badges together)</span>
-        </label>
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-content-body">
-          <input type="checkbox" checked={codes} onChange={(e) => setCodes(e.target.checked)} className="h-5 w-5 accent-primary" />
-          Add check-in QR codes
-          <span className="text-xs text-content-muted">(bottom-right corner: keep it clear in the artwork)</span>
-        </label>
-      </div>
+      {eventSlug && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-content-body">
+            <input type="checkbox" checked={bySchool} onChange={(e) => setBySchool(e.target.checked)} className="h-5 w-5 accent-primary" />
+            Print in school order
+            <span className="text-xs text-content-muted">(each group&rsquo;s badges together)</span>
+          </label>
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-content-body">
+            <input type="checkbox" checked={codes} onChange={(e) => setCodes(e.target.checked)} className="h-5 w-5 accent-primary" />
+            Add check-in QR codes
+            <span className="text-xs text-content-muted">(bottom-right corner: keep it clear in the artwork)</span>
+          </label>
+        </div>
+      )}
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
 
       <ul className="divide-y divide-brand-hairline border border-brand-border rounded-lg">
         {rows.map((r) => {
           const t = templateFor(r)
+          const inherited = t ? null : inheritedRow(r)
           return (
             <li key={r.key} className="p-4 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -194,12 +242,24 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
                   <p className="font-medium text-brand-blue-dark text-sm">{r.label}</p>
                   <p className="text-xs text-brand-muted-soft">
                     {r.who}{' '}
-                    {t ? <span className="text-green-700">Background set.</span> : <span>{r.fallback}</span>}
+                    {t ? (
+                      <span className="text-green-700">{eventSlug ? 'This event’s own background.' : 'Background set.'}</span>
+                    ) : inherited ? (
+                      <span className="text-green-700">Uses the {themeLabel} default.</span>
+                    ) : (
+                      <span>{r.fallback}</span>
+                    )}
                   </p>
                 </div>
                 <label className="text-xs text-brand-muted-soft cursor-pointer">
                   <span className="underline hover:text-brand-muted">
-                    {uploading === r.key ? 'Uploading…' : t ? 'Replace background' : 'Upload background'}
+                    {uploading === r.key
+                      ? 'Uploading…'
+                      : t
+                        ? 'Replace background'
+                        : inherited
+                          ? 'Upload this event’s own'
+                          : 'Upload background'}
                   </span>
                   <input
                     type="file"
@@ -225,7 +285,7 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
                 )}
                 {t && (
                   <button type="button" onClick={() => void remove(r, t)} className="text-xs text-brand-muted-soft underline">
-                    Remove
+                    {inheritedRow(r) ? 'Use the default' : 'Remove'}
                   </button>
                 )}
               </div>
@@ -255,7 +315,7 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
       </ul>
       <p className="text-xs text-brand-muted-soft">
         Backgrounds are best as a landscape PNG in the label&rsquo;s shape. They are cropped to fit, never stretched.
-        {companies.length === 0 && ' Add companies on the Companies tab to give each its own background.'} Print at 100%
+        {eventSlug && companies.length === 0 && ' Add companies on the Companies tab to give each its own background.'} Print at 100%
         (actual size), not &ldquo;fit to page&rdquo;.
       </p>
     </div>

@@ -18,6 +18,7 @@ import {
   ScholarshipReview,
   ScholarshipResendButton,
   ScholarshipRetryRefundButton,
+  ScholarshipCancelButton,
   type ReviewEvent,
   type ReviewMember,
   type ReviewRegistration,
@@ -30,6 +31,8 @@ export const metadata = { title: 'Admin — Scholarship application' }
 export const dynamic = 'force-dynamic'
 
 const DAY = 24 * 3600 * 1000
+
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 /** Members this application could belong to: same email (as member or emergency contact), or same name. */
 async function suggestMembers(app: ScholarshipApplication): Promise<ReviewMember[]> {
@@ -143,6 +146,12 @@ export default async function ScholarshipApplicationPage({ params }: { params: P
 
   // The reimbursement, when the student had already paid (retrospective case).
   const refund = app.registration_paid_at_offer && app.registration_id ? await scholarshipRefundFor(db, app.registration_id) : null
+  // After a cancel, what the student still owes on a registration they kept.
+  let dueAfterCancel: number | null = null
+  if (app.status === 'cancelled' && app.registration_id && app.registration_status === 'pending') {
+    const { data: reg } = await db.from('registrations').select('amount_due_cents').eq('id', app.registration_id).maybeSingle()
+    dueAfterCancel = (reg as { amount_due_cents: number | null } | null)?.amount_due_cents ?? null
+  }
 
   const received = new Date(app.created_at).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
@@ -225,6 +234,35 @@ export default async function ScholarshipApplicationPage({ params }: { params: P
                   {app.offer_token && <a href={scholarshipOfferUrl(app.offer_token)} target="_blank" rel="noreferrer" className="text-primary hover:text-primary-deep">Student’s offer page ↗</a>}
                 </div>
                 <ScholarshipResendButton id={app.id} />
+                <ScholarshipCancelButton id={app.id} stage={app.stage} />
+              </>
+            ) : app.status === 'cancelled' ? (
+              <>
+                <p className="text-ink">
+                  <strong>{app.percent_off}% scholarship</strong> for <strong>{app.event_title}</strong>, offered{' '}
+                  {app.offered_at ? shortDate(app.offered_at) : ''}
+                  {app.reviewed_by_name ? ` by ${app.reviewed_by_name}` : ''}.
+                </p>
+                <p className="text-ink">
+                  {app.cancellation_source === 'withdrawal'
+                    ? 'Cancelled automatically when their registration was withdrawn'
+                    : `Cancelled${app.cancelled_by_name ? ` by ${app.cancelled_by_name}` : ''}`}
+                  {app.cancelled_at ? ` on ${shortDate(app.cancelled_at)}` : ''}.
+                  {app.cancellation_source !== 'withdrawal' && app.cancellation_reason ? ` Reason: ${app.cancellation_reason}` : ''}
+                </p>
+                <p className="text-content-body">
+                  {app.registration_status === 'pending'
+                    ? `Still registered, awaiting payment${dueAfterCancel != null ? ` — ${formatUsd(dueAfterCancel)} due` : ''}.`
+                    : app.registration_status === 'confirmed'
+                      ? 'Still registered and confirmed.'
+                      : app.registration_status === 'withdrawn'
+                        ? 'Their registration is withdrawn.'
+                        : 'They hadn’t registered yet.'}
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {app.member_id && <Link href={`/admin/members/${app.member_id}`} className="text-primary hover:text-primary-deep">Member record →</Link>}
+                  {app.event_slug && <Link href={`/admin/competitions/${app.event_slug}`} className="text-primary hover:text-primary-deep">Event roster →</Link>}
+                </div>
               </>
             ) : (
               <p className="text-ink">

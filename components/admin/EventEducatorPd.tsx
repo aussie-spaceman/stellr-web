@@ -226,7 +226,7 @@ export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: strin
       {rows && rows.length === 0 && <p className="text-xs text-brand-muted-soft">No PD credentials issued for this event yet.</p>}
 
       {/* ── Certificate artwork (global, admins) ───────────────────── */}
-      {canIssue && <PdCertificateArtwork theme={theme} />}
+      {canIssue && <PdCertificateArtwork theme={theme} eventSlug={eventSlug} />}
     </div>
   )
 }

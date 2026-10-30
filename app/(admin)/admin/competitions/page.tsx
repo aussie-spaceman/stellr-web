@@ -121,6 +121,14 @@ export default async function AdminEventsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
+          {access.isAdmin && (
+            <Link
+              href="/admin/competitions/artwork"
+              className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"
+            >
+              Default artwork
+            </Link>
+          )}
           <Link
             href="/admin/competitions/check-in-banner"
             className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"

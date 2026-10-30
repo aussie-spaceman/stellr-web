@@ -2,9 +2,10 @@
 // best-fit suggestions and the admin "Team profiles" panel need, loaded once.
 //
 // Students = non-withdrawn participants in STUDENT_ROLES (school students and
-// student managers). Only students who SUBMITTED a team profile are placed by
-// Auto-Assign; the rest go to the pool for staff to place by hand (David,
-// 7 Oct 2026), each with a best-fit suggestion.
+// student managers). Auto-Assign places students who SUBMITTED a team profile,
+// and students staff have overridden (lib/team-profile/override.ts, 30 Oct
+// 2026); the rest go to the pool for staff to place by hand (David, 7 Oct
+// 2026), each with a best-fit suggestion.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ageOn, onDate } from '@/lib/age'
@@ -37,6 +38,11 @@ export interface PlanningStudent {
   sendCount: number
   lastSendError: string | null
   submittedAt: string | null
+  /**
+   * Staff let Auto-Assign place this student without a team profile. Null once
+   * they submit: Submitted wins.
+   */
+  overridden: { at: string; by: string | null } | null
   answers: TeamProfileAnswers | null
   teammates: TeammateMatch[]
   /** Best-fit company for an unplaced student; null when placed or no companies yet. */
@@ -58,7 +64,7 @@ export async function loadCompanyPlan(db: SupabaseClient, slug: string, eventDat
     db.from('event_companies').select('id, number, name').eq('event_slug', slug).order('number'),
     db
       .from('registrations')
-      .select('id, type, created_at, participants(id, member_id, first_name, last_name, event_role, gender, date_of_birth, grade, school_name, ethnicity, company_id, company_locked)')
+      .select('id, type, created_at, participants(id, member_id, first_name, last_name, event_role, gender, date_of_birth, grade, school_name, ethnicity, company_id, company_locked, team_profile_overridden_at, team_profile_overridden_by_name)')
       .eq('event_slug', slug)
       .neq('status', 'withdrawn'),
     db
@@ -160,6 +166,10 @@ export async function loadCompanyPlan(db: SupabaseClient, slug: string, eventDat
       sendCount: (prof?.send_count as number | null) ?? 0,
       lastSendError: (prof?.last_send_error as string | null) ?? null,
       submittedAt: (prof?.submitted_at as string | null) ?? null,
+      overridden:
+        !submitted && p.team_profile_overridden_at
+          ? { at: p.team_profile_overridden_at as string, by: (p.team_profile_overridden_by_name as string | null) ?? null }
+          : null,
       answers,
       teammates: answers ? matchTeammates(answers.teammates, roster, id) : [],
       suggestedCompany: null,
@@ -198,29 +208,48 @@ export function toAssignable(s: PlanningStudent): AssignableStudent {
 }
 
 export interface AutoAssignResult {
+  /** Students placed this run, overridden ones included. */
   assigned: number
-  /** Students without a submitted team profile, left unassigned for staff. */
+  /** Of those, placed without a team profile because staff overrode it. */
+  overridden: number
+  /** Students without a submitted team profile or an override, left unassigned for staff. */
   pooled: number
   kept: number
 }
 
 /**
- * Auto-Assign: places every student who submitted a team profile, keeps hand-
- * placed students where they are, and leaves everyone else unassigned.
+ * Who Auto-Assign touches: hand-placed students stay put (`locked`); students
+ * who submitted a team profile or were overridden are placed; the rest are
+ * unassigned (`pool`).
+ */
+export function autoAssignGroups(students: PlanningStudent[]) {
+  const isLocked = (s: PlanningStudent) => s.locked && s.companyNumber !== null
+  const placeable = (s: PlanningStudent) => s.status === 'submitted' || s.overridden !== null
+  return {
+    locked: students.filter(isLocked),
+    placed: students.filter((s) => !isLocked(s) && placeable(s)),
+    pool: students.filter((s) => !isLocked(s) && !placeable(s)),
+  }
+}
+
+/**
+ * Auto-Assign: places every student who submitted a team profile or was
+ * overridden, keeps hand-placed students where they are, and leaves everyone
+ * else unassigned.
  */
 export async function autoAssign(db: SupabaseClient, slug: string, eventDate: string | null): Promise<AutoAssignResult> {
   const plan = await loadCompanyPlan(db, slug, eventDate)
   if (plan.companies.length === 0) throw new AssignError('Set the number of companies first')
-  const locked = plan.students.filter((s) => s.locked && s.companyNumber !== null)
-  const responders = plan.students.filter((s) => s.status === 'submitted' && !(s.locked && s.companyNumber !== null))
-  const pool = plan.students.filter((s) => s.status !== 'submitted' && !(s.locked && s.companyNumber !== null))
-  if (responders.length === 0) throw new AssignError('No students have submitted a team profile yet')
+  const { locked, placed, pool } = autoAssignGroups(plan.students)
+  if (placed.length === 0) {
+    throw new AssignError('No students to place yet: none have submitted a team profile or been overridden')
+  }
 
-  const result = assignCompanies([...locked, ...responders].map(toAssignable), plan.companies.length)
+  const result = assignCompanies([...locked, ...placed].map(toAssignable), plan.companies.length)
   const idByNumber = new Map(plan.companies.map((c) => [c.number, c.id]))
 
   const byCompany = new Map<string | null, string[]>()
-  for (const s of responders) {
+  for (const s of placed) {
     const target = idByNumber.get(result.get(s.participantId)!) ?? null
     byCompany.set(target, [...(byCompany.get(target) ?? []), s.participantId])
   }
@@ -234,7 +263,12 @@ export async function autoAssign(db: SupabaseClient, slug: string, eventDate: st
       if (error) throw new Error(`Saving assignments failed: ${error.message}`)
     }
   }
-  return { assigned: responders.length, pooled: pool.length, kept: locked.length }
+  return {
+    assigned: placed.length,
+    overridden: placed.filter((s) => s.overridden !== null).length,
+    pooled: pool.length,
+    kept: locked.length,
+  }
 }
 
 export class AssignError extends Error {}

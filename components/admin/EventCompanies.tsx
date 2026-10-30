@@ -45,9 +45,14 @@ export default function EventCompanies({
     }
     if (typeof body?.assigned === 'number') {
       setInfo(
-        `Placed ${body.assigned} student${body.assigned === 1 ? '' : 's'} with team profiles` +
+        `Placed ${body.assigned} student${body.assigned === 1 ? '' : 's'}` +
+          (body.overridden
+            ? ` (${body.assigned - body.overridden} with team profiles, ${body.overridden} overridden)`
+            : ' with team profiles') +
           (body.kept ? `, kept ${body.kept} placed by hand` : '') +
-          (body.pooled ? `. ${body.pooled} without a team profile are unassigned: see Team profiles for suggestions.` : '.'),
+          (body.pooled
+            ? `. ${body.pooled} without a team profile are unassigned: see Team profiles to override them or for suggestions.`
+            : '.'),
       )
     }
     router.refresh()
@@ -86,7 +91,7 @@ export default function EventCompanies({
               if (
                 companies.some((c) => c.count > 0) &&
                 !window.confirm(
-                  'Re-running Auto-Assign moves every student who has submitted a team profile. Students you placed by hand stay where they are; students without a team profile become unassigned. Continue?',
+                  'Re-running Auto-Assign moves every student who has submitted a team profile or been overridden. Students you placed by hand stay where they are; everyone else becomes unassigned. Continue?',
                 )
               )
                 return

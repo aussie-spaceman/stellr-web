@@ -10,6 +10,7 @@ import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refunds/execute'
 import { applyRosterChange, voidOpenGroupInvoices } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
+import { cancelScholarshipsOnWithdrawal, liveScholarshipOffers } from '@/lib/scholarship-cancel'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
 type Db = ReturnType<typeof supabaseServer>
@@ -46,7 +47,12 @@ export async function executeDeletion(
     /** A member withdrawing themselves, rather than an admin (default). */
     actorType?: 'admin' | 'member'
   }
-): Promise<DeletionResult & { refunds: RefundResult[]; billingMessage?: string | null }> {
+): Promise<DeletionResult & {
+  refunds: RefundResult[]
+  billingMessage?: string | null
+  /** Scholarship offers cancelled because their registration was withdrawn. */
+  scholarshipsCancelled: { id: string; percent: number | null }[]
+}> {
   const def = getEntityDef(entity)
   if (!def) throw new Error(`Unknown deletable entity type: ${entity}`)
 
@@ -56,6 +62,12 @@ export async function executeDeletion(
   if (!pre.canDelete) throw new DeletionBlockedError(pre.blockers)
 
   const db = supabaseServer()
+
+  // A withdrawn student's scholarship offer ends with their registration
+  // (lib/scholarship-cancel.ts). Read the offers now: a hard delete nulls
+  // scholarship_applications.registration_id. They are cancelled only once the
+  // withdrawal has succeeded.
+  const scholarshipOffers = def.type === 'registration' ? await liveScholarshipOffers(db, id) : []
 
   // Refund paid registrations BEFORE the row is removed (we need participant
   // data + payment refs to still exist). Runs only when the admin supplied a
@@ -96,7 +108,8 @@ export async function executeDeletion(
     // Tombstoning is right-to-erasure and belongs on the HARD path only; a
     // deactivated member keeps their issued credentials (Privacy §10 retains
     // what is needed to verify credentials for 7 years).
-    return { entity, id, mode, deleted: true, externalResults, refunds }
+    const scholarshipsCancelled = await cancelScholarshipsOnWithdrawal(db, scholarshipOffers)
+    return { entity, id, mode, deleted: true, externalResults, refunds, scholarshipsCancelled }
   }
 
   // deep review MP-2: a person's credentials outlive them only as tombstones —
@@ -162,6 +175,10 @@ export async function executeDeletion(
       .update({ status: 'withdrawn', withdrawn_at: new Date().toISOString() })
       .eq('id', emptiedIndividualReg)
   }
+  const scholarshipsCancelled = await cancelScholarshipsOnWithdrawal(db, [
+    ...scholarshipOffers,
+    ...(emptiedIndividualReg ? await liveScholarshipOffers(db, emptiedIndividualReg) : []),
+  ])
 
   // deep review REG-10: now the rows are gone, revoke each departed member's
   // inherited event Space access (and delete the auto-created participation
@@ -187,7 +204,7 @@ export async function executeDeletion(
     billingMessage = outcome?.message ?? null
   }
 
-  return { entity, id, mode, deleted: true, externalResults, refunds, billingMessage }
+  return { entity, id, mode, deleted: true, externalResults, refunds, billingMessage, scholarshipsCancelled }
 }
 
 /** The group registration a participant holds a place in, or null for an individual. */

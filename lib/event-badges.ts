@@ -10,6 +10,7 @@ import {
 import { prepareBadgeArtwork, wantsLightInk, type PreparedBadgeArtwork } from '@/lib/badge-artwork'
 import { downloadArtwork } from '@/lib/event-certificates'
 import type { Badge, BadgeDesign, BadgePerson } from '@/lib/event-pdf'
+import { checkInCodeLink } from '@/lib/check-in-codes'
 
 // ── Event name badges: database side ─────────────────────────────────────────
 // Templates (event_badge_templates: one artwork per format per audience), who
@@ -131,15 +132,30 @@ export interface BadgeHolder extends BadgePerson {
 }
 
 /**
+ * 'school': each school group's badges together (then surname), so a group's
+ * packet comes off the printer in one run and goes to its teacher at check-in.
+ * Registrations on their own sort by their own school; volunteer mentors last.
+ */
+export type BadgeOrder = 'surname' | 'school'
+
+export const isBadgeOrder = (v: unknown): v is BadgeOrder => v === 'surname' || v === 'school'
+
+/**
  * Everyone who gets a badge: each registered participant, and each active
  * volunteer mentor assigned to the event (volunteers are assigned to the
- * event's container, not registered — see ../volunteers), sorted by surname.
+ * event's container, not registered — see ../volunteers), sorted by surname or
+ * by school. With `codes`, each participant's badge carries their check-in code
+ * (lib/check-in-codes.ts); volunteers aren't registered, so theirs don't.
  */
-export async function loadBadgeHolders(db: SupabaseClient, slug: string): Promise<BadgeHolder[]> {
+export async function loadBadgeHolders(
+  db: SupabaseClient,
+  slug: string,
+  opts: { order?: BadgeOrder; codes?: boolean } = {},
+): Promise<BadgeHolder[]> {
   const [{ data: regs }, { data: container }] = await Promise.all([
     db
       .from('registrations')
-      .select('id, participants(member_id, first_name, last_name, event_role, company_id, event_companies(number, name))')
+      .select('id, type, group_name, school_name, participants(id, member_id, first_name, last_name, event_role, school_name, company_id, event_companies(number, name))')
       .eq('event_slug', slug)
       .neq('status', 'withdrawn'),
     db
@@ -151,8 +167,19 @@ export async function loadBadgeHolders(db: SupabaseClient, slug: string): Promis
       .maybeSingle(),
   ])
 
-  const participants = (regs ?? []).flatMap((r) => (r.participants as Record<string, unknown>[]) ?? [])
-  const holders: (BadgeHolder & { sortKey: string })[] = participants.map((p) => {
+  // A group's members share its school, so they print together even when a
+  // student's own school field says something slightly different.
+  const participants = (regs ?? []).flatMap((r) =>
+    ((r.participants as Record<string, unknown>[]) ?? []).map(
+      (p): Record<string, unknown> & { school: string } => ({
+        ...p,
+        school: (r.type !== 'individual' ? (r.group_name as string | null) || (r.school_name as string | null) : null) || (p.school_name as string | null) || '',
+      })
+    )
+  )
+  const bySchool = opts.order === 'school'
+  type Sortable = BadgeHolder & { sortSchool: string; sortName: string }
+  const holders: Sortable[] = participants.map((p) => {
     const company = p.event_companies as { number: number; name: string | null } | null
     const role = ROLE_LABELS[p.event_role as string] ?? 'Participant'
     return {
@@ -161,7 +188,9 @@ export async function loadBadgeHolders(db: SupabaseClient, slug: string): Promis
       subtitle: company ? (company.name ?? `Company ${company.number}`) : role,
       companyId: (p.company_id as string | null) ?? null,
       mentor: p.event_role === 'mentor',
-      sortKey: `${p.last_name} ${p.first_name}`,
+      qr: opts.codes ? checkInCodeLink(slug, 'p', p.id as string) : null,
+      sortSchool: p.school,
+      sortName: `${p.last_name} ${p.first_name}`,
     }
   })
 
@@ -184,13 +213,20 @@ export async function loadBadgeHolders(db: SupabaseClient, slug: string): Promis
         subtitle: 'Mentor',
         companyId: null,
         mentor: true,
-        sortKey: `${m.last_name} ${m.first_name}`,
+        sortSchool: '',
+        sortName: `${m.last_name} ${m.first_name}`,
       })
     }
   }
 
-  holders.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-  return holders.map(({ sortKey: _s, ...h }) => h) // eslint-disable-line @typescript-eslint/no-unused-vars
+  // By school: volunteer mentors (no school) after every school, then by name.
+  const rank = (h: Sortable) => (h.mentor && !h.sortSchool ? 1 : 0)
+  holders.sort(
+    (a, b) =>
+      (bySchool ? rank(a) - rank(b) || a.sortSchool.localeCompare(b.sortSchool, 'en', { sensitivity: 'base' }) : 0) ||
+      a.sortName.localeCompare(b.sortName)
+  )
+  return holders.map(({ sortSchool: _s, sortName: _n, ...h }) => h) // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
 /**

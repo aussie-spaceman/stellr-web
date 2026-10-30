@@ -7,6 +7,7 @@ import { groupConfirmationEmail, sendEmail } from '@/lib/email'
 import { createAndSendGroupInvoice, findGroupInvoice } from '@/lib/group-invoice'
 import { runGroupRegistrationFollowUp, type FollowUpPerson } from '@/lib/group-registration-followup'
 import { formatUsd } from '@/lib/mentoring-format'
+import { checkInCodeLink } from '@/lib/check-in-codes'
 
 // "Finish registration setup" (admin): completes a group registration whose
 // request was cut off after the records were written — on 28 Oct 2026 a team of
@@ -257,6 +258,7 @@ export async function finishGroupSetup(
         detailsMethod: (reg.details_method as 'add_now' | 'spreadsheet' | 'email_link' | null) ?? 'add_now',
         spreadsheetUrl: spreadsheetUrl ?? undefined,
         joinUrl: joinUrl ?? undefined,
+        checkInCodeUrl: checkInCodeLink(reg.event_slug, 'g', reg.id) ?? undefined,
       })
       await sendEmail({ to: teacher.email, cc: reg.teacher_poc_email ? [reg.teacher_poc_email] : [], ...content })
       out.confirmation = 'sent'

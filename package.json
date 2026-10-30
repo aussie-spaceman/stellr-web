@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "predev": "node scripts/copy-scanner-wasm.mjs",
     "dev": "node scripts/dev.mjs",
     "build:tokens": "node design/build-tokens.mjs",
     "lint": "eslint .",
@@ -18,7 +19,7 @@
     "tracker": "node scripts/tracker.mjs",
     "worktrees": "node scripts/worktree-sweep.mjs",
     "check:deploy-ready": "node scripts/check-deploy-ready.mjs",
-    "prebuild": "node design/build-tokens.mjs && node scripts/ds-lint.mjs && node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs && tsx scripts/check-watermarks.ts",
+    "prebuild": "node scripts/copy-scanner-wasm.mjs && node design/build-tokens.mjs && node scripts/ds-lint.mjs && node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs && tsx scripts/check-watermarks.ts",
     "build": "next build",
     "start": "next start",
     "watermark:pdfs": "tsx scripts/watermark-pdfs.ts",
@@ -80,6 +81,7 @@
     "@tiptap/suggestion": "3.32.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "barcode-detector": "3.2.3",
     "google-auth-library": "^11.3.1",
     "lucide-react": "^1.60.0",
     "next": "^16.4.2",

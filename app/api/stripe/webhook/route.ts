@@ -17,6 +17,7 @@ import { confirmRegistration } from '@/lib/registration-confirm'
 import { recordGroupInvoicePaid } from '@/lib/group-billing'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { PRICE_CHANGE_EVENTS, revalidatePriceCaches } from '@/lib/price-cache'
+import { checkInCodeLink } from '@/lib/check-in-codes'
 
 // Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
 function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
@@ -151,7 +152,7 @@ async function markIndividualPayment(registrationId: string, seat: SeatSelector)
   // Send payment confirmation to the participant
   const participantQuery = db
     .from('participants')
-    .select('first_name, last_name, email, membership_id')
+    .select('id, first_name, last_name, email, membership_id')
     .eq('registration_id', registrationId)
   const { data: participant } = await (seat.participantId
     ? participantQuery.eq('id', seat.participantId)
@@ -160,19 +161,20 @@ async function markIndividualPayment(registrationId: string, seat: SeatSelector)
 
   const { data: reg } = await db
     .from('registrations')
-    .select('event_title')
+    .select('event_title, event_slug')
     .eq('id', registrationId)
     .maybeSingle()
 
   if (participant && reg) {
-    const p = participant as { first_name: string; last_name: string; email: string; membership_id: string }
-    const r = reg as { event_title: string }
+    const p = participant as { id: string; first_name: string; last_name: string; email: string; membership_id: string }
+    const r = reg as { event_title: string; event_slug: string }
     const emailContent = individualConfirmationEmail({
       firstName: p.first_name,
       lastName: p.last_name,
       membershipId: p.membership_id,
       eventTitle: r.event_title,
       registrationId,
+      checkInCodeUrl: checkInCodeLink(r.event_slug, 'p', p.id) ?? undefined,
     })
     await sendEmail({ to: p.email, ...emailContent })
   }

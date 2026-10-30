@@ -18,6 +18,8 @@ describe('proxy matcher', () => {
     expect(matches('/api/admin/events/slug-guard?id=x&slug=y')).toBe(true)
     expect(matches('/api/register/group')).toBe(true)
     expect(matches('/admin/members')).toBe(true)
+    expect(matches('/admin/competitions/nevada-space-design-challenge/check-in')).toBe(true)
+    expect(matches('/api/check-in-desk/manifest?slug=nevada')).toBe(true)
     expect(matches('/account')).toBe(true)
     expect(matches('/')).toBe(true)
     expect(matches('/events/nevada-space-design-challenge')).toBe(true)
@@ -27,5 +29,8 @@ describe('proxy matcher', () => {
     expect(matches('/manifest.webmanifest')).toBe(false)
     expect(matches('/app.webmanifest')).toBe(false)
     expect(matches('/images/logo-icon.svg')).toBe(false)
+    // The check-in desk's service worker and scanner reader.
+    expect(matches('/check-in-desk-sw.js')).toBe(false)
+    expect(matches('/vendor/zxing_reader.wasm')).toBe(false)
   })
 })

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
+import QRCode from 'qrcode'
 import { markWatermarked } from '@/lib/watermark/pdf'
 import { tokens } from '@/lib/tokens'
 import { BADGE_FORMATS, artworkBox, badgeName, nameSetting, placementFromLine, type BadgeFormat, type BadgePlacement } from '@/lib/badge-layout'
@@ -21,6 +22,8 @@ export interface BadgePerson {
   lastName: string
   /** company label for students, role label for adults/mentors */
   subtitle: string
+  /** Their check-in code link (lib/check-in-codes.ts), printed as a QR in the corner. */
+  qr?: string | null
 }
 
 export interface Artwork {
@@ -105,6 +108,7 @@ export async function generateBadgesPdf(
   const perPage = opts.single ? 1 : spec.cols * spec.rows
   const single = artworkBox(format)
 
+  const qrJobs: { page: PDFPage; url: string; label: { x: number; y: number; width: number; height: number } }[] = []
   let page: PDFPage | null = null
   badges.forEach((badge, i) => {
     const j = i % perPage
@@ -142,6 +146,8 @@ export async function generateBadgesPdf(
       })
     }
 
+    if (badge.person.qr) qrJobs.push({ page: p, url: badge.person.qr, label })
+
     if (!image) {
       const maxWidth = label.width - 24
       const centerX = label.x + label.width / 2
@@ -149,6 +155,16 @@ export async function generateBadgesPdf(
       drawCentered(p, eventTitle, regular, 8, centerX, label.y + 14, maxWidth)
     }
   })
+
+  // Check-in codes go in the bottom-right corner, on their own white square so
+  // they scan over any artwork. Designs that want them leave that corner clear.
+  for (const job of qrJobs) {
+    const png = await QRCode.toBuffer(job.url, { type: 'png', margin: 1, width: 360, errorCorrectionLevel: 'M' })
+    const img = await doc.embedPng(png)
+    const size = Math.min(job.label.width, job.label.height) * 0.3
+    const inset = 6
+    job.page.drawImage(img, { x: job.label.x + job.label.width - size - inset, y: job.label.y + inset, width: size, height: size })
+  }
 
   markWatermarked(doc)
   return doc.save()

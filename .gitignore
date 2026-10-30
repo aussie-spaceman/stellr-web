@@ -46,3 +46,7 @@ supabase/.temp/
 # Vitest 5 reporter and attachment output
 /.vitest/
 /lhci-report/
+
+# The desk scanner's WebAssembly reader, copied from node_modules/zxing-wasm by
+# scripts/copy-scanner-wasm.mjs before dev and build.
+/public/vendor/zxing_reader.wasm

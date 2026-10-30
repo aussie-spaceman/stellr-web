@@ -40,6 +40,7 @@ import {
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { createAndSendGroupInvoice } from '@/lib/group-invoice'
+import { checkInCodeLink } from '@/lib/check-in-codes'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -1253,6 +1254,7 @@ export async function POST(req: NextRequest) {
         remainingCount,
         // The way back if the card redirect is never completed.
         payUrl: payment_method === 'card' && checkoutUrl && payToken ? payPageUrl(event_slug, payToken) : undefined,
+        checkInCodeUrl: checkInCodeLink(event_slug, 'g', regId) ?? undefined,
       })
       await sendEmail({ to: teacher.email, cc: ccEmails, ...emailContent })
       // The confirmation email now carries the pay link, so the separate

@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
+import { checkInCodeLink } from '@/lib/check-in-codes'
 
 // Marks a registration confirmed and sends the confirmation email. Moved out of
 // the Stripe webhook (unchanged) so a 100% scholarship, which never reaches
@@ -50,19 +51,20 @@ export async function confirmRegistration(
     }
   } else {
     const { data: participant } = await db.from('participants')
-      .select('first_name, last_name, email, membership_id')
+      .select('id, first_name, last_name, email, membership_id')
       .eq('registration_id', registrationId).maybeSingle()
 
     const { data: reg } = await db.from('registrations')
-      .select('event_title').eq('id', registrationId).maybeSingle()
+      .select('event_title, event_slug').eq('id', registrationId).maybeSingle()
 
     if (participant && reg) {
-      const p = participant as { first_name: string; last_name: string; email: string; membership_id: string }
-      const r = reg as { event_title: string }
+      const p = participant as { id: string; first_name: string; last_name: string; email: string; membership_id: string }
+      const r = reg as { event_title: string; event_slug: string }
       const emailContent = individualConfirmationEmail({
         firstName: p.first_name, lastName: p.last_name,
         membershipId: p.membership_id, eventTitle: r.event_title,
         registrationId,
+        checkInCodeUrl: checkInCodeLink(r.event_slug, 'p', p.id) ?? undefined,
       })
       await sendEmail({ to: p.email, ...emailContent })
     }

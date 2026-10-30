@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { QrCode } from 'lucide-react'
 import type { AccountState, GroupStatus, GroupPersonStatus } from '@/lib/group-status'
 import type { DocusignPill } from '@/lib/docusign-status'
 import { formatUsd } from '@/lib/mentoring-format'
@@ -87,6 +88,19 @@ export function GroupStatusSection({ groups }: { groups: GroupStatus[] }) {
                   </tbody>
                 </table>
               </div>
+              {g.checkInCodeUrl && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-surface px-3 py-2">
+                  <p className="min-w-0 flex-1 text-sm text-content-body">
+                    On the day, show your group&rsquo;s code at the registration desk. We check everyone in with one scan.
+                  </p>
+                  <a
+                    href={g.checkInCodeUrl}
+                    className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-primary-deep underline-offset-2 hover:underline"
+                  >
+                    <QrCode className="h-4 w-4" aria-hidden /> Show our check-in code
+                  </a>
+                </div>
+              )}
               <p className="mt-3 text-xs text-content-secondary">
                 Consent forms go to each student&rsquo;s parent or guardian. To correct a student&rsquo;s details, open{' '}
                 <Link href="/account?tab=teams" className="font-medium text-primary underline underline-offset-2 hover:no-underline">

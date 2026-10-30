@@ -4,6 +4,7 @@ import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/
 import { classifyAgreement } from '@/lib/docusign'
 import { registrationPaid } from '@/lib/payment-status'
 import { resolveSpaceAudiences } from '@/lib/spaces'
+import { checkInCodeLink } from '@/lib/check-in-codes'
 
 // The organiser's view of a group they registered: for each person, where
 // their agreement is, whether their Stellr account is in use, and whether they
@@ -31,6 +32,8 @@ export interface GroupStatus {
   paid: boolean
   invoiceRequested: boolean
   amountDueCents: number | null
+  /** The group's check-in code page, shown at the desk on the day (school groups only). */
+  checkInCodeUrl: string | null
   people: GroupPersonStatus[]
 }
 
@@ -41,7 +44,7 @@ export async function getOrganisedGroups(memberId: string, eventSlug: string): P
   const db = supabaseServer()
   const { data: regs } = await db
     .from('registrations')
-    .select(`id, status, school_name, amount_due_cents, invoice_requested, invoice_paid_at, school_address_state,
+    .select(`id, type, status, school_name, amount_due_cents, invoice_requested, invoice_paid_at, school_address_state,
       participants(id, member_id, first_name, last_name, event_role, date_of_birth)`)
     .eq('event_slug', eventSlug)
     .in('type', ['group', 'campaign'])
@@ -50,7 +53,7 @@ export async function getOrganisedGroups(memberId: string, eventSlug: string): P
     .order('created_at', { ascending: true })
   type P = { id: string; member_id: string | null; first_name: string | null; last_name: string | null; event_role: string | null; date_of_birth: string | null }
   type R = {
-    id: string; status: string; school_name: string | null; amount_due_cents: number | null
+    id: string; type: string; status: string; school_name: string | null; amount_due_cents: number | null
     invoice_requested: boolean | null; invoice_paid_at: string | null; school_address_state: string | null
     participants: P[] | null
   }
@@ -113,6 +116,7 @@ export async function getOrganisedGroups(memberId: string, eventSlug: string): P
     paid: registrationPaid({ invoiceRequested: r.invoice_requested, invoicePaidAt: r.invoice_paid_at, status: r.status }),
     invoiceRequested: !!r.invoice_requested,
     amountDueCents: r.amount_due_cents,
+    checkInCodeUrl: r.type === 'group' ? checkInCodeLink(eventSlug, 'g', r.id) : null,
     people: (r.participants ?? [])
       .map((p): GroupPersonStatus => {
         const env = agreementOf.get(p.id)

@@ -54,6 +54,15 @@ describe('Permissions-Policy', () => {
     }
     expect(VIDEO_ROUTES.length).toBeGreaterThan(0)
   })
+
+  it('lets the check-in desk use its own camera for the scanner, and nothing else', async () => {
+    expect(await effective('/admin/competitions/nevada-space-design-challenge/check-in', 'Permissions-Policy')).toBe(
+      'camera=(self), microphone=(), geolocation=(), payment=(self)'
+    )
+    for (const path of ['/admin/competitions/nevada-space-design-challenge', '/admin/competitions/nevada-space-design-challenge/check-in/poster']) {
+      expect(await effective(path, 'Permissions-Policy')).toBe('camera=(), microphone=(), geolocation=(), payment=(self)')
+    }
+  })
 })
 
 describe('check-in private-link headers', () => {

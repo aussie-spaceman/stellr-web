@@ -139,7 +139,7 @@
     "vitest": "^5.0.5"
   },
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "//dependencyNotes": {
     "styled-components": "No direct imports — it is a required peer of sanity@6 (node_modules/sanity peerDependencies). Keep it in dependencies; do not 'clean it up' as unused. (deep review QUAL-11)",

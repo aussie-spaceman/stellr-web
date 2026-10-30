@@ -118,6 +118,9 @@ jobs:
         with:
           # Matches the Vercel project's runtime (nodeVersion 24.x), which is
           # the thing this job exists to predict; .nvmrc and engines.node agree.
+          # engines.node must name one major ("24.x"), not a range: Vercel
+          # lets engines override Project Settings, and ">=24" moved
+          # production to Node 26 on 30 Oct 2026 without CI ever running it.
           node-version: 24.x
           cache: npm
 

@@ -1,52 +1,50 @@
 import { supabaseServer } from '@/lib/supabase'
 import { MemberTable, type MemberRow } from '@/components/admin/MemberTable'
 import { requireAdminPage } from '@/lib/admin-auth'
+import {
+  activeMemberFilterCount,
+  applyMemberFilters,
+  applyMemberSort,
+  memberFilterEmbeds,
+  memberFilterParams,
+  parseMemberFilters,
+} from '@/lib/admin-member-filters'
 
 export const metadata = { title: 'Admin — Members' }
 
 export default async function AdminMembersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; bracket?: string; role?: string; tier?: string; page?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requireAdminPage()
   const params = await searchParams
-  const q = params.q ?? ''
-  const bracket = params.bracket ?? ''
-  const role = params.role ?? ''
-  const tier = params.tier ?? ''
-  const page = Math.max(1, parseInt(params.page ?? '1', 10))
+  const filters = parseMemberFilters(params)
+  const page = Math.max(1, parseInt(String(params.page ?? '1'), 10) || 1)
   const pageSize = 50
 
   const db = supabaseServer()
 
-  let query = db
+  const query = db
     .from('members')
     .select(`
       id, member_code, first_name, last_name, email, phone,
       age_bracket, event_role, grade, is_active, created_at,
       member_memberships(renewal_status, membership_tiers(name)),
-      member_schools(is_current, schools(name))
+      member_schools(is_current, schools(name))${memberFilterEmbeds(filters)}
     `, { count: 'exact' })
     .eq('is_active', true)
-    .order('last_name', { ascending: true })
-    .order('first_name', { ascending: true })
     .range((page - 1) * pageSize, page * pageSize - 1)
 
-  if (q) {
-    query = query.or(
-      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`
-    )
-  }
-  if (bracket) query = query.eq('age_bracket', bracket)
-  if (role) query = query.eq('event_role', role)
+  const { data: members, count, error } = await applyMemberSort(applyMemberFilters(query, filters), filters)
+  if (error) console.error('[admin/members] list query failed:', error.message)
 
-  const { data: members, count } = await query
-
-  const { data: tiers } = await db
-    .from('membership_tiers')
-    .select('id, name')
-    .order('sort_order')
+  const [{ data: tiers }, { data: schoolRows }] = await Promise.all([
+    db.from('membership_tiers').select('id, name').order('sort_order'),
+    db.from('schools').select('name').order('name').limit(1000),
+  ])
+  const schools = [...new Set((schoolRows ?? []).map((s) => s.name as string).filter(Boolean))]
+  const exportQuery = memberFilterParams(filters).toString()
 
   // A6 — at-a-glance summary (cheap head counts).
   const [{ count: totalMembers }, { count: schoolCount }, { count: activeMemberships }] = await Promise.all([
@@ -73,10 +71,10 @@ export default async function AdminMembersPage({
             + Add member
           </a>
           <a
-            href="/api/admin/members/export"
+            href={`/api/admin/members/export${exportQuery ? `?${exportQuery}` : ''}`}
             className="inline-flex min-h-11 items-center bg-white border border-brand-border text-brand-muted px-4 rounded-lg text-sm font-medium hover:bg-brand-canvas"
           >
-            Export CSV
+            {activeMemberFilterCount(filters) > 0 ? 'Export filtered CSV' : 'Export CSV'}
           </a>
         </div>
       </div>
@@ -91,10 +89,11 @@ export default async function AdminMembersPage({
       <MemberTable
         members={(members ?? []) as unknown as MemberRow[]}
         tiers={tiers ?? []}
+        schools={schools}
         total={count ?? 0}
         page={page}
         pageSize={pageSize}
-        filters={{ q, bracket, role, tier }}
+        filters={filters}
       />
     </div>
   )

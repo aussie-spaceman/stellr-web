@@ -15,8 +15,8 @@ import { runAfterResponse } from '@/lib/after-response'
 
 // GET /api/credentials/[number]/pdf
 // Streams the owner's certificate for a credential. An event credential prints
-// on that event's artwork for its award — the same page the admin prints for
-// the ceremony (lib/event-pdf.ts). A course credential uses the default design
+// on that event's artwork for its award, else its theme's default — the same
+// page the admin prints for the ceremony (lib/event-pdf.ts). A course credential uses the default design
 // or the course's template (lib/certificate.ts). Owner-only: a verifier gets
 // the page, not the file. Private credentials download too; consent gates
 // publishing, not the holder's own copy.
@@ -63,7 +63,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
   // A renamed award's uploaded artwork still prints its earlier name, so it
   // uses the default design until new artwork replaces it.
   if (cred.source === 'event' && cred.event_slug && isAwardType(cred.award_type) && !artworkSupersededFor(cred.award_type)) {
-    const template = await loadTemplate(db, cred.event_slug, cred.award_type)
+    const template = await loadTemplate(db, cred.event_slug, cred.award_type, pdTheme(cred.theme ?? cred.event_slug))
     const artwork = template ? await downloadArtwork(db, template.artwork_path) : null
     if (template && artwork) {
       const out = await generateCertificatesPdf([{ name: cred.recipient_name || 'Member' }], 'us_letter', artwork, placementOf(template))
@@ -75,11 +75,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     // No artwork for this award yet: fall through to the default design.
   }
 
-  // Educator PD: the theme's Cowork front with its four fields drawn, then the
-  // back; or the plain page until that theme has artwork. Never survey-gated.
+  // Educator PD: the event's own Cowork pages, else its theme's, with the four
+  // fields drawn on the front; or the plain page until there is a front. Never
+  // survey-gated.
   if (cred.source === 'pd' && cred.pd_hours) {
     const theme = pdTheme(cred.theme)
-    const [artwork, layout] = await Promise.all([loadPdArtwork(db, theme), loadPdLayout(db, theme)])
+    const [artwork, layout] = await Promise.all([
+      loadPdArtwork(db, theme, cred.event_slug),
+      loadPdLayout(db, theme, cred.event_slug),
+    ])
     const out = await renderPdCertificatePdf(
       {
         recipientName:    cred.recipient_name || 'Educator',

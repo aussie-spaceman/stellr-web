@@ -2,53 +2,141 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
 import { DEFAULT_NAME_PLACEMENT, type Artwork, type NamePlacement } from '@/lib/event-pdf'
-import { AWARD_TYPES, isAssignedAwardType, type AssignedAwardType, type AwardType } from '@/lib/event-awards'
+import { AWARD_TYPES, isAssignedAwardType, isAwardType, type AssignedAwardType, type AwardType } from '@/lib/event-awards'
+import { eventsIssuedOn } from '@/lib/artwork-defaults'
+import type { ArtworkTheme } from '@/lib/artwork-theme'
 
 // ── Event certificates + awards: database side ───────────────────────────────
-// Templates (one artwork per award), the event's students, and the judged
-// award assignments. Shared by the admin certificate/award routes and the
-// member credential download. Catalogue and rules: lib/event-awards.ts.
+// Templates (one artwork per award: the event's own upload, else its theme's
+// default), the event's students, and the judged award assignments. Shared by
+// the admin certificate/award routes and the member credential download.
+// Catalogue and rules: lib/event-awards.ts.
 
 export interface CertificateTemplate {
-  event_slug: string
   award_type: AwardType
   artwork_path: string
   name_y: number
   name_max_width: number
   name_size: number
   updated_at: string
+  /** The event's own upload, or its theme's default (lib/artwork-defaults.ts). */
+  source: 'event' | 'default'
 }
 
-const TEMPLATE_COLUMNS = 'event_slug, award_type, artwork_path, name_y, name_max_width, name_size, updated_at'
+export type TemplateSet = Record<AwardType, CertificateTemplate | null>
 
-export async function loadTemplates(
-  db: SupabaseClient,
-  slug: string,
-): Promise<Record<AwardType, CertificateTemplate | null>> {
-  const { data, error } = await db.from('event_certificate_templates').select(TEMPLATE_COLUMNS).eq('event_slug', slug)
-  if (error) throw new Error(`[event-certificates] templates: ${error.message}`)
-  const out = Object.fromEntries(AWARD_TYPES.map((t) => [t, null])) as Record<AwardType, CertificateTemplate | null>
-  for (const row of (data ?? []) as CertificateTemplate[]) out[row.award_type] = normalise(row)
+const TEMPLATE_COLUMNS = 'award_type, artwork_path, name_y, name_max_width, name_size, updated_at'
+
+const emptySet = () => Object.fromEntries(AWARD_TYPES.map((t) => [t, null])) as TemplateSet
+
+function toSet(rows: unknown[] | null, source: CertificateTemplate['source']): TemplateSet {
+  const out = emptySet()
+  for (const row of (rows ?? []) as CertificateTemplate[]) {
+    if (isAwardType(row.award_type)) out[row.award_type] = normalise(row, source)
+  }
   return out
 }
 
-export async function loadTemplate(
-  db: SupabaseClient,
-  slug: string,
-  award: AwardType,
-): Promise<CertificateTemplate | null> {
+/** The event's own uploads, one per award (null where it has none). */
+export async function loadEventTemplates(db: SupabaseClient, slug: string): Promise<TemplateSet> {
+  const { data, error } = await db.from('event_certificate_templates').select(TEMPLATE_COLUMNS).eq('event_slug', slug)
+  if (error) throw new Error(`[event-certificates] templates: ${error.message}`)
+  return toSet(data, 'event')
+}
+
+export async function loadEventTemplate(db: SupabaseClient, slug: string, award: AwardType): Promise<CertificateTemplate | null> {
   const { data } = await db
     .from('event_certificate_templates')
     .select(TEMPLATE_COLUMNS)
     .eq('event_slug', slug)
     .eq('award_type', award)
     .maybeSingle()
-  return data ? normalise(data as CertificateTemplate) : null
+  return data ? normalise(data as CertificateTemplate, 'event') : null
+}
+
+/** A theme's defaults, one per award. */
+export async function loadDefaultTemplates(db: SupabaseClient, theme: ArtworkTheme): Promise<TemplateSet> {
+  const { data, error } = await db.from('default_certificate_templates').select(TEMPLATE_COLUMNS).eq('theme', theme)
+  if (error) throw new Error(`[event-certificates] default templates: ${error.message}`)
+  return toSet(data, 'default')
+}
+
+export async function loadDefaultTemplate(db: SupabaseClient, theme: ArtworkTheme, award: AwardType): Promise<CertificateTemplate | null> {
+  const { data } = await db
+    .from('default_certificate_templates')
+    .select(TEMPLATE_COLUMNS)
+    .eq('theme', theme)
+    .eq('award_type', award)
+    .maybeSingle()
+  return data ? normalise(data as CertificateTemplate, 'default') : null
+}
+
+/** What prints: each award's own upload, else its theme default. */
+export function effectiveTemplates(own: TemplateSet, defaults: TemplateSet): TemplateSet {
+  return Object.fromEntries(AWARD_TYPES.map((t) => [t, own[t] ?? defaults[t] ?? null])) as TemplateSet
+}
+
+export async function loadTemplates(db: SupabaseClient, slug: string, theme: ArtworkTheme): Promise<TemplateSet> {
+  const [own, defaults] = await Promise.all([loadEventTemplates(db, slug), loadDefaultTemplates(db, theme)])
+  return effectiveTemplates(own, defaults)
+}
+
+export async function loadTemplate(
+  db: SupabaseClient,
+  slug: string,
+  award: AwardType,
+  theme: ArtworkTheme,
+): Promise<CertificateTemplate | null> {
+  return (await loadEventTemplate(db, slug, award)) ?? (await loadDefaultTemplate(db, theme, award))
+}
+
+/**
+ * Before a default certificate's artwork changes or goes: every event that has
+ * issued this award on that default gets its own copy, so its members' downloads
+ * keep printing the artwork they were issued on. Events with their own upload
+ * keep it. Returns how many events were pinned.
+ */
+export async function pinDefaultCertificate(
+  db: SupabaseClient,
+  theme: ArtworkTheme,
+  outgoing: CertificateTemplate,
+): Promise<number> {
+  const slugs = await eventsIssuedOn(db, { source: 'event', theme, awardType: outgoing.award_type })
+  if (slugs.length === 0) return 0
+  const { data: own, error: ownError } = await db
+    .from('event_certificate_templates')
+    .select('event_slug')
+    .eq('award_type', outgoing.award_type)
+    .in('event_slug', slugs)
+  if (ownError) throw new Error(`[event-certificates] pin: ${ownError.message}`)
+  const have = new Set(((own ?? []) as { event_slug: string }[]).map((r) => r.event_slug))
+  const rows = slugs
+    .filter((s) => !have.has(s))
+    .map((event_slug) => ({
+      event_slug,
+      award_type: outgoing.award_type,
+      artwork_path: outgoing.artwork_path,
+      name_y: outgoing.name_y,
+      name_max_width: outgoing.name_max_width,
+      name_size: outgoing.name_size,
+    }))
+  if (rows.length === 0) return 0
+  const { error } = await db
+    .from('event_certificate_templates')
+    .upsert(rows, { onConflict: 'event_slug,award_type', ignoreDuplicates: true })
+  if (error) throw new Error(`[event-certificates] pin: ${error.message}`)
+  return rows.length
 }
 
 // numeric columns arrive as strings from PostgREST.
-function normalise(row: CertificateTemplate): CertificateTemplate {
-  return { ...row, name_y: Number(row.name_y), name_max_width: Number(row.name_max_width), name_size: Number(row.name_size) }
+function normalise(row: CertificateTemplate, source: CertificateTemplate['source']): CertificateTemplate {
+  return {
+    ...row,
+    name_y: Number(row.name_y),
+    name_max_width: Number(row.name_max_width),
+    name_size: Number(row.name_size),
+    source,
+  }
 }
 
 export function placementOf(t: Pick<CertificateTemplate, 'name_y' | 'name_max_width' | 'name_size'> | null): NamePlacement {

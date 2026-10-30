@@ -107,6 +107,14 @@
     {
       "path": "/api/cron/deletion-archive-retention",
       "schedule": "0 4 2 * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 18 * * 5"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 19 * * 5"
     }
   ]
 }

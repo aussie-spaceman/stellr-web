@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  Users, Trophy, MessagesSquare, GraduationCap, SlidersHorizontal, Menu, Home,
+  Users, Trophy, MessagesSquare, GraduationCap, SlidersHorizontal, Menu, Home, LayoutDashboard,
 } from 'lucide-react'
 import { Dialog } from '@stellr/web-ui'
 
@@ -26,6 +26,10 @@ type Item = { href: string; label: string }
 type Section = { label: string; href: string; tone: string; icon: typeof Users; items: Item[] }
 
 const SECTIONS: Section[] = [
+  {
+    label: 'Dashboard', href: '/admin', tone: 'text-primary', icon: LayoutDashboard,
+    items: [{ href: '/admin', label: 'Dashboard' }],
+  },
   {
     label: 'Members', href: '/admin/members', tone: 'text-primary-deep', icon: Users,
     items: [
@@ -85,7 +89,9 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
 
   // Segment-boundary prefix match, and the most specific matching link wins
   // (so /admin/members/volunteers activates Volunteers rather than Members).
-  const matches = (href: string) => pathname === href || pathname.startsWith(href + '/')
+  // The dashboard, /admin, is the root of every admin path, so it matches only
+  // itself: otherwise a page with no rail link would light it up.
+  const matches = (href: string) => pathname === href || (href !== '/admin' && pathname.startsWith(href + '/'))
   const itemActive = (href: string) =>
     matches(href) && !ALL_HREFS.some((h) => h.length > href.length && matches(h))
   const current = (href: string) => (itemActive(href) ? (pathname === href ? 'page' : 'true') : undefined)
@@ -93,7 +99,8 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
   const sections = isAdmin ? SECTIONS : SECTIONS.filter((s) => s.label === 'Competitions')
   // On a phone the section landings are tabs; Operations, and every page
   // under each section, is in "More" (the landings don't link to all of them).
-  const tabs = sections.filter((s) => s.label !== 'Operations')
+  // The dashboard is in "More" too: it is where /admin opens anyway.
+  const tabs = sections.filter((s) => s.label !== 'Operations' && s.label !== 'Dashboard')
 
   return (
     <>

@@ -1,25 +1,28 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { claimUpload } from '@/lib/uploads'
 import { requireEventAccess } from '@/lib/event-access'
 import { isAwardType } from '@/lib/event-awards'
-import { loadTemplate, loadTemplates } from '@/lib/event-certificates'
+import { eventArtworkTheme } from '@/lib/artwork-defaults'
+import { CERTIFICATE_PLACEMENT_RANGES, claimArtwork, placementInput } from '@/lib/artwork-template-input'
+import { loadDefaultTemplates, loadEventTemplate, loadEventTemplates } from '@/lib/event-certificates'
 
 export const dynamic = 'force-dynamic'
 
-// Certificate artwork, one per award. GET lists all four; PUT replaces the
-// artwork (a path already uploaded browser → storage via /api/uploads/sign,
-// kind certificate-<award>) and/or moves the name.
+// Certificate artwork, one per award. GET lists the event's own templates and
+// its theme's defaults, which stand in for any award without one; PUT replaces
+// the event's artwork (a path already uploaded browser → storage via
+// /api/uploads/sign, kind certificate-<award>) and/or moves the name; DELETE
+// drops the event's own artwork, so that award prints the default again.
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await requireEventAccess(slug)
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
-  return NextResponse.json({ templates: await loadTemplates(supabaseServer(), slug) })
+  const db = supabaseServer()
+  const theme = await eventArtworkTheme(slug)
+  const [templates, defaults] = await Promise.all([loadEventTemplates(db, slug), loadDefaultTemplates(db, theme)])
+  return NextResponse.json({ theme, templates, defaults })
 }
-
-const isPng = (b: Uint8Array) => b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
-const isJpeg = (b: Uint8Array) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
 
 // PUT { awardType, storagePath?, fileType?, name_y?, name_max_width?, name_size? }
 export async function PUT(req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -34,42 +37,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
   const db = supabaseServer()
   const update: Record<string, unknown> = { event_slug: slug, award_type: awardType }
 
-  const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
-  if (storagePath) {
-    const fileType = typeof b.fileType === 'string' ? b.fileType : ''
-    if (!['image/png', 'image/jpeg'].includes(fileType)) {
-      return NextResponse.json({ error: 'Artwork must be a PNG or JPEG image' }, { status: 400 })
-    }
-    if (!storagePath.startsWith(`event-artwork/${slug}/certificate-${awardType}-`)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-    const claimed = await claimUpload({
-      purpose: 'event-artwork',
-      storagePath,
-      // A signed URL accepts any bytes; the renderer can only use these two.
-      verify: (bytes) => isPng(bytes) || isJpeg(bytes),
-      verifyError: 'That file doesn’t look like a PNG or JPEG image.',
-    })
-    if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
-    update.artwork_path = storagePath
-  }
+  const art = await claimArtwork(b, 'event-artwork', `event-artwork/${slug}/certificate-${awardType}-`)
+  if (art && 'error' in art) return NextResponse.json({ error: art.error }, { status: art.status })
+  if (art) update.artwork_path = art.path
 
-  const num = (k: string, min: number, max: number) => {
-    if (b[k] === undefined) return undefined
-    const v = Number(b[k])
-    return Number.isFinite(v) && v >= min && v <= max ? v : null
-  }
-  const placement = {
-    name_y: num('name_y', 0.01, 0.99),
-    name_max_width: num('name_max_width', 0.05, 1),
-    name_size: num('name_size', 8, 120),
-  }
-  for (const [k, v] of Object.entries(placement)) {
-    if (v === null) return NextResponse.json({ error: `${k} is out of range` }, { status: 400 })
-    if (v !== undefined) update[k] = v
-  }
+  const placement = placementInput(b, CERTIFICATE_PLACEMENT_RANGES)
+  if ('error' in placement) return NextResponse.json({ error: placement.error }, { status: 400 })
+  Object.assign(update, placement.values)
 
-  const existing = await loadTemplate(db, slug, awardType)
+  const existing = await loadEventTemplate(db, slug, awardType)
   if (!existing && !update.artwork_path) {
     return NextResponse.json({ error: 'Upload the artwork before positioning the name.' }, { status: 400 })
   }
@@ -83,5 +59,26 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
     console.error('[certificate templates] save error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
-  return NextResponse.json({ ok: true, template: await loadTemplate(db, slug, awardType) })
+  return NextResponse.json({ ok: true, template: await loadEventTemplate(db, slug, awardType) })
+}
+
+// DELETE ?awardType= — the award prints its theme default again (or, with no
+// default, the admin print asks for artwork and member downloads use the
+// plain design).
+export async function DELETE(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const access = await requireEventAccess(slug)
+  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const awardType = new URL(req.url).searchParams.get('awardType')
+  if (!isAwardType(awardType)) return NextResponse.json({ error: 'awardType is required' }, { status: 400 })
+  const { error } = await supabaseServer()
+    .from('event_certificate_templates')
+    .delete()
+    .eq('event_slug', slug)
+    .eq('award_type', awardType)
+  if (error) {
+    console.error('[certificate templates] delete error:', error)
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true })
 }

@@ -8,6 +8,7 @@ import { memberManagesContainer } from '@/lib/resource-upload'
 import { requireEventAccess } from '@/lib/event-access'
 import { AWARD_TYPES } from '@/lib/event-awards'
 import { BADGE_FORMATS } from '@/lib/badge-layout'
+import { isArtworkTheme } from '@/lib/artwork-theme'
 import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
 
 // Every file upload in the app, in one place.
@@ -44,6 +45,7 @@ export type UploadPurpose =
   | 'training-item-resource'
   | 'training-cert-template'
   | 'event-artwork'
+  | 'artwork-default'
   | 'pd-certificate-artwork'
   | 'event-email-attachment'
   | 'campaign-proposal'
@@ -178,6 +180,21 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       if (!access.ok) return deny('Forbidden', access.status)
       if (!EVENT_ARTWORK_KINDS.includes(ctx.kind)) return deny('Unknown artwork kind', 400)
       return { path: `event-artwork/${ctx.slug}/${ctx.kind}-${Date.now()}-${safeName}` }
+    },
+  },
+
+  // A theme's default certificate or badge artwork (lib/artwork-defaults.ts),
+  // which every event of that theme inherits — so admins only, not event managers.
+  'artwork-default': {
+    bucket: RESOURCES_BUCKET,
+    maxBytes: 10 * MB,
+    allowedTypes: ['image/png', 'image/jpeg'],
+    async grant({ ctx, safeName }) {
+      const denied = await requireAdmin()
+      if (denied) return denied
+      if (!isArtworkTheme(ctx.theme) || !ctx.kind) return deny('theme and kind required', 400)
+      if (!EVENT_ARTWORK_KINDS.includes(ctx.kind)) return deny('Unknown artwork kind', 400)
+      return { path: `artwork-defaults/${ctx.theme}/${ctx.kind}-${Date.now()}-${safeName}` }
     },
   },
 

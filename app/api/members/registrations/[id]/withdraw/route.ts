@@ -133,7 +133,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }, db)
   await notifyCommunityAdmins({
     type: 'action',
-    body: `${owned.name || owned.email} withdrew from ${owned.eventTitle}${reason ? ` (“${reason}”)` : ''}. Refund: ${refund ? refund.detail : 'none'}.`,
+    body: `${owned.name || owned.email} withdrew from ${owned.eventTitle}${reason ? ` (“${reason}”)` : ''}. Refund: ${refund ? refund.detail : 'none'}.${
+      result.scholarshipsCancelled.map((c) => ` Their ${c.percent}% scholarship was cancelled.`).join('')
+    }`,
   }).catch(() => {})
 
   return NextResponse.json({

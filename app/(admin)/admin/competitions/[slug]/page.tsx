@@ -20,7 +20,7 @@ import EventCertificates from '@/components/admin/EventCertificates'
 import EventAwards from '@/components/admin/EventAwards'
 import EventCredentials from '@/components/admin/EventCredentials'
 import EventEducatorPd from '@/components/admin/EventEducatorPd'
-import { themeFromType } from '@/lib/campaigns'
+import { artworkTheme as artworkThemeOf } from '@/lib/artwork-theme'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
 import { ContainerTraining, type ContentRow, type ModuleOption } from '@/components/admin/containers/ContainerTraining'
@@ -68,6 +68,8 @@ export default async function AdminEventDetailPage({
   if (!event) notFound()
 
   const isCampaign = event.activityType === 'campaign'
+  // Which default artwork the Settings tab's badges and certificates fall back to.
+  const artworkTheme = artworkThemeOf((event as { type?: string }).type ?? slug)
   const db = supabaseServer()
 
   // ── Roster (only fetched when needed — it involves Clerk lookups) ──────────
@@ -356,18 +358,15 @@ export default async function AdminEventDetailPage({
             />
           </section>
 
-          <EventBadges eventSlug={slug} />
+          <EventBadges eventSlug={slug} theme={artworkTheme} canEditDefaults={access.isAdmin} />
 
-          <EventCertificates eventSlug={slug} />
+          <EventCertificates eventSlug={slug} theme={artworkTheme} canEditDefaults={access.isAdmin} />
 
           <EventAwards eventSlug={slug} />
 
           <EventCredentials eventSlug={slug} eventTitle={event.title} />
 
-          <EventEducatorPd
-            eventSlug={slug}
-            theme={themeFromType((event as { type?: string }).type) === 'enviro' ? 'environmental' : 'space'}
-          />
+          <EventEducatorPd eventSlug={slug} theme={artworkTheme} />
         </div>
       )}
     </div>

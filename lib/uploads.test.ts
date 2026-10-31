@@ -124,6 +124,32 @@ describe('signUpload — event-artwork', () => {
   })
 })
 
+// A theme default is inherited by every event of that theme, so only an admin
+// may sign one — an event manager uploads their own event's art instead.
+describe('signUpload — artwork-default', () => {
+  const sign = (ctx: Record<string, string>) =>
+    signUpload({ purpose: 'artwork-default', ctx, fileName: 'art.png', fileSize: 10, contentType: 'image/png' })
+
+  it('signs for an admin, under the theme', async () => {
+    asAdmin()
+    expect(await sign({ theme: 'environmental', kind: 'certificate-mentor' })).toEqual({ bucket: 'community-resources', path: 'p', token: 't' })
+    expect(createSignedUploadUrl.mock.calls[0][0]).toMatch(/^artwork-defaults\/environmental\/certificate-mentor-\d+-art\.png$/)
+  })
+
+  it('refuses anyone else, event managers included', async () => {
+    authMock.mockResolvedValue({ sessionClaims: { metadata: { role: 'event_manager' } } })
+    expect(await sign({ theme: 'space', kind: 'badge' })).toEqual({ error: 'Forbidden', status: 403 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unknown theme or kind', async () => {
+    asAdmin()
+    expect(await sign({ theme: 'ocean', kind: 'badge' })).toMatchObject({ status: 400 })
+    expect(await sign({ theme: 'space', kind: 'certificate-best_hat' })).toMatchObject({ status: 400 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+})
+
 // An admin attaching a teacher's emailed license: admin-only, into that
 // member's own folder, and only once the license details exist.
 describe('signUpload — compliance-document-admin', () => {

@@ -33,7 +33,9 @@ scans it instead of searching a name.
 ## Before the day
 
 1. Hand-assign each mentor a company in the roster. Run auto-assign for
-   students first.
+   students first. Auto-assign places only students who submitted a team
+   profile; to place the rest too, use **Override** (one student) or
+   **Override all not submitted** in Roster → Team profiles before running it.
 2. Competition → Check-in → paste the event's Google Drive folder link into
    **Event documents** and save.
 3. Badges: Competition → Settings → **Name badges**. Tick **Print in school

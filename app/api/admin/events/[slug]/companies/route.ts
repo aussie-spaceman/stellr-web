@@ -1,16 +1,22 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
+import { actorFromAuth } from '@/lib/activity-log'
 import { autoAssign, AssignError } from '@/lib/team-profile/assign'
+import { CLEARED_OVERRIDE, overrideFields, overrideOutstanding } from '@/lib/team-profile/override'
 import { loadSurveyEvent } from '@/lib/survey/events'
 
 // Company management for an event (admins + assigned event managers).
 //   GET  — list companies with participant counts
 //   PUT  — { count } set number of companies (1-10); trims/creates rows
 //   POST — { action: 'auto_assign' }  (lib/team-profile/assign.ts: students
-//          with a submitted team profile; hand-placed students stay put)
+//          with a submitted team profile or an override; hand-placed students
+//          stay put)
 //          { action: 'rename', companyId, name }
 //          { action: 'move', participantId, companyId | null }
+//          { action: 'override', participantId, overridden }  (lib/team-profile/
+//          override.ts: let Auto-Assign place a student without a team profile)
+//          { action: 'override_all' }  every student not yet submitted
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -122,6 +128,48 @@ export async function POST(req: Request, { params }: Params) {
       .eq('id', participantId)
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
     return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'override') {
+    const { participantId, overridden } = body ?? {}
+    if (typeof participantId !== 'string' || typeof overridden !== 'boolean') {
+      return NextResponse.json({ error: 'participantId and overridden required' }, { status: 400 })
+    }
+    // Scoped to this event before writing, as `move` is (AUTH-3).
+    const { data: part } = await db
+      .from('participants')
+      .select('id, registrations!inner(event_slug)')
+      .eq('id', participantId)
+      .eq('registrations.event_slug', slug)
+      .maybeSingle()
+    if (!part) return NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
+    if (overridden) {
+      const { data: profile } = await db
+        .from('team_profiles')
+        .select('submitted_at')
+        .eq('participant_id', participantId)
+        .maybeSingle()
+      if (profile?.submitted_at) {
+        return NextResponse.json({ error: 'They’ve already submitted a team profile.' }, { status: 409 })
+      }
+    }
+    const fields = overridden
+      ? overrideFields({ userId: access.userId, name: (await actorFromAuth()).actorLabel ?? null })
+      : CLEARED_OVERRIDE
+    const { error } = await db.from('participants').update(fields).eq('id', participantId)
+    if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'override_all') {
+    try {
+      const actor = await actorFromAuth()
+      const result = await overrideOutstanding(db, slug, { userId: access.userId, name: actor.actorLabel ?? null })
+      return NextResponse.json({ ok: true, ...result })
+    } catch (err) {
+      console.error('[companies] override all failed:', err)
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
   }
 
   if (action === 'auto_assign') {

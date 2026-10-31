@@ -65,12 +65,18 @@ export interface ScholarshipApplication {
   source: 'website' | 'backfill'
   /** The registration was already paid when the offer was made (retrospective case). */
   registration_paid_at_offer: boolean
+  /** Set with status 'cancelled' (lib/scholarship-cancel.ts). */
+  cancelled_at: string | null
+  cancellation_source: 'admin' | 'withdrawal' | null
+  cancellation_reason: string | null
+  cancelled_by: string | null
+  cancelled_by_name: string | null
   created_at: string
   updated_at: string
 }
 
 export const SCHOLARSHIP_COLUMNS =
-  'id, first_name, last_name, email, phone, school, brief, activity, event_slug, event_title, member_id, status, percent_off, registration_id, offer_token, reviewed_by, reviewed_by_name, reviewed_at, offered_at, offer_emails_sent_at, admin_notes, source, registration_paid_at_offer, created_at, updated_at'
+  'id, first_name, last_name, email, phone, school, brief, activity, event_slug, event_title, member_id, status, percent_off, registration_id, offer_token, reviewed_by, reviewed_by_name, reviewed_at, offered_at, offer_emails_sent_at, admin_notes, source, registration_paid_at_offer, cancelled_at, cancellation_source, cancellation_reason, cancelled_by, cancelled_by_name, created_at, updated_at'
 
 export function mintOfferToken(): string {
   return randomBytes(32).toString('hex')

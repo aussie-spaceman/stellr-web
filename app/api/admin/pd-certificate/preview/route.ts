@@ -7,15 +7,16 @@ import { pdStandardCodes } from '@/lib/pd-standards'
 
 export const dynamic = 'force-dynamic'
 
-// GET ?theme=&name=&layout=<json> — a sample PD certificate, inline, on the current
-// artwork. Unsaved positions from the positioner ride along as `layout` and
+// GET ?theme=[&event=]&name=&layout=<json> — a sample PD certificate, inline, on
+// the artwork that prints (with `event`, its own pages over the theme's). Unsaved positions from the positioner ride along as `layout` and
 // override the saved ones, so an admin sees where each field lands before saving.
 export async function GET(req: Request) {
   if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const search = new URL(req.url).searchParams
   const theme = pdTheme(search.get('theme'))
+  const event = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(search.get('event') ?? '') ? search.get('event') : null
   const db = supabaseServer()
-  const [artwork, saved] = await Promise.all([loadPdArtwork(db, theme), loadPdLayout(db, theme)])
+  const [artwork, saved] = await Promise.all([loadPdArtwork(db, theme, event), loadPdLayout(db, theme, event)])
   let layout = saved
   const raw = search.get('layout')
   if (raw) {

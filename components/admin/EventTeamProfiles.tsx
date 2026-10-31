@@ -16,25 +16,33 @@ import {
 } from '@/lib/team-profile/questions'
 
 // Roster tab → "Team profiles": who has answered, what they said, best-fit
-// suggestions for unplaced students, and the send / resend buttons. Admins
-// and this event's event managers.
+// suggestions for unplaced students, the send / resend buttons, and the
+// override that lets Auto-Assign place a student without a team profile.
+// Admins and this event's event managers.
 
-const STATUS: Record<ProfileStatus, { label: string; cls: string }> = {
+const STATUS: Record<ProfileStatus | 'overridden', { label: string; cls: string }> = {
   submitted: { label: 'Submitted', cls: 'bg-green-100 text-green-800' },
+  overridden: { label: 'Overridden', cls: 'bg-primary-soft text-primary-deep' },
   sent: { label: 'Sent', cls: 'bg-amber-100 text-amber-800' },
   not_sent: { label: 'Not sent', cls: 'bg-gray-100 text-gray-700' },
   waiting: { label: 'Waiting on forms', cls: 'bg-gray-100 text-gray-500' },
 }
 
+// The pill: Overridden stands in for Sent / Not sent / Waiting; Submitted wins.
+const pill = (s: PlanningStudent) => (s.overridden ? 'overridden' : s.status)
+
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+
+const sendDetail = (s: PlanningStudent) =>
+  s.status === 'submitted' ? fmt(s.submittedAt) : s.lastSentAt ? `${fmt(s.lastSentAt)}${s.sendCount > 1 ? ` · ×${s.sendCount}` : ''}` : ''
 
 export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: string; plan: CompanyPlan }) {
   const router = useRouter()
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
-  const [filter, setFilter] = useState<'all' | 'unassigned' | 'outstanding'>('all')
+  const [filter, setFilter] = useState<'all' | 'unassigned' | 'outstanding' | 'overridden'>('all')
 
   const companyLabel = (n: number | null) => {
     if (n === null) return null
@@ -43,14 +51,23 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
   }
 
   const counts = useMemo(() => {
-    const c = { submitted: 0, sent: 0, not_sent: 0, waiting: 0 }
-    for (const s of plan.students) c[s.status]++
+    const c = { submitted: 0, overridden: 0, sent: 0, not_sent: 0, waiting: 0 }
+    for (const s of plan.students) c[pill(s)]++
     return c
   }, [plan.students])
+  // Overridden students still get the team profile emails.
+  const sendable = plan.students.filter((s) => s.status === 'sent' || s.status === 'not_sent').length
+  const overridable = plan.students.filter((s) => s.status !== 'submitted' && !s.overridden).length
 
   const shown = plan.students
     .filter((s) =>
-      filter === 'unassigned' ? s.companyNumber === null : filter === 'outstanding' ? s.status !== 'submitted' : true,
+      filter === 'unassigned'
+        ? s.companyNumber === null
+        : filter === 'outstanding'
+          ? s.status !== 'submitted'
+          : filter === 'overridden'
+            ? s.overridden !== null
+            : true,
     )
     .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName))
 
@@ -70,8 +87,7 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
   }
 
   async function sendAll() {
-    const outstanding = counts.sent + counts.not_sent
-    if (!window.confirm(`Send the team profile to ${outstanding} student${outstanding === 1 ? '' : 's'} who haven’t submitted one yet?`)) return
+    if (!window.confirm(`Send the team profile to ${sendable} student${sendable === 1 ? '' : 's'} who haven’t submitted one yet?`)) return
     const { ok, data } = await post(`/api/admin/events/${eventSlug}/team-profiles`, { all: true }, 'all')
     setNote(
       ok
@@ -92,6 +108,43 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
     else setNote({ ok: false, text: data?.error ?? 'Move failed.' })
   }
 
+  async function override(s: PlanningStudent, overridden: boolean) {
+    const name = `${s.firstName} ${s.lastName}`
+    const { ok, data } = await post(
+      `/api/admin/events/${eventSlug}/companies`,
+      { action: 'override', participantId: s.participantId, overridden },
+      `override:${s.participantId}`,
+    )
+    setNote(
+      !ok
+        ? { ok, text: data?.error ?? 'Saving failed.' }
+        : overridden
+          ? { ok, text: `Auto-Assign will place ${name} without a team profile.` }
+          : {
+              ok,
+              text: `Override removed for ${name}.${s.companyNumber !== null && !s.locked ? ' They stay in their company until Auto-Assign runs again.' : ''}`,
+            },
+    )
+    if (ok) router.refresh()
+  }
+
+  async function overrideAll() {
+    if (
+      !window.confirm(
+        `Let Auto-Assign place the ${overridable} student${overridable === 1 ? '' : 's'} who haven’t submitted a team profile? ` +
+          'They’re balanced on age, school, experience, gender and ethnicity. Anyone who submits later is placed on their answers the next time Auto-Assign runs.',
+      )
+    )
+      return
+    const { ok, data } = await post(`/api/admin/events/${eventSlug}/companies`, { action: 'override_all' }, 'override_all')
+    setNote(
+      ok
+        ? { ok, text: `Overrode ${data.overridden} student${data.overridden === 1 ? '' : 's'}. Run Auto-Assign to place them.` }
+        : { ok: false, text: data?.error ?? 'Saving failed.' },
+    )
+    if (ok) router.refresh()
+  }
+
   if (plan.students.length === 0) return null
 
   return (
@@ -99,7 +152,15 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="text-sm font-semibold text-brand-muted">Team profiles</h3>
         <span className="text-xs text-brand-muted-soft">
-          {counts.submitted} submitted · {counts.sent} sent · {counts.not_sent} not sent · {counts.waiting} waiting on forms
+          {[
+            `${counts.submitted} submitted`,
+            counts.overridden ? `${counts.overridden} overridden` : null,
+            `${counts.sent} sent`,
+            `${counts.not_sent} not sent`,
+            `${counts.waiting} waiting on forms`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
         <div className="ml-auto flex items-center gap-2">
           <select
@@ -111,20 +172,30 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
             <option value="all">All students</option>
             <option value="unassigned">Unassigned</option>
             <option value="outstanding">Not submitted</option>
+            <option value="overridden">Overridden</option>
           </select>
           <button
             onClick={sendAll}
-            disabled={busy !== null || counts.sent + counts.not_sent === 0}
+            disabled={busy !== null || sendable === 0}
             className="text-sm font-medium border border-brand-border rounded-lg px-3 py-1.5 text-brand-muted hover:bg-brand-canvas disabled:opacity-50"
           >
             {busy === 'all' ? 'Sending…' : 'Send to everyone not submitted'}
+          </button>
+          <button
+            onClick={overrideAll}
+            disabled={busy !== null || overridable === 0}
+            className="text-sm font-medium border border-brand-border rounded-lg px-3 py-1.5 text-brand-muted hover:bg-brand-canvas disabled:opacity-50"
+          >
+            {busy === 'override_all' ? 'Overriding…' : 'Override all not submitted'}
           </button>
         </div>
       </div>
 
       <p className="text-xs text-brand-muted-soft">
         Team profiles go out automatically once a student’s permission form is complete. Auto-Assign places students who have
-        submitted one; anyone else stays unassigned, with a suggested company. <Lock className="inline h-3 w-3" aria-label="Locked" /> marks a
+        submitted one, and any you override; anyone else stays unassigned, with a suggested company. An overridden student is
+        balanced on age, school, experience, gender and ethnicity, and still gets the team profile emails. If they submit, the
+        next Auto-Assign uses their answers. <Lock className="inline h-3 w-3" aria-label="Locked" /> marks a
         student placed by hand, whom Auto-Assign leaves alone.
       </p>
 
@@ -176,10 +247,15 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
                     )}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[s.status].cls}`}>{STATUS[s.status].label}</span>
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[pill(s)].cls}`}>{STATUS[pill(s)].label}</span>
                     <div className="mt-0.5 text-xs text-brand-muted-soft">
-                      {s.status === 'submitted' ? fmt(s.submittedAt) : s.lastSentAt ? `${fmt(s.lastSentAt)}${s.sendCount > 1 ? ` · ×${s.sendCount}` : ''}` : ''}
+                      {s.overridden ? [STATUS[s.status].label, sendDetail(s)].filter(Boolean).join(' · ') : sendDetail(s)}
                     </div>
+                    {s.overridden && (
+                      <div className="text-xs text-brand-muted-soft">
+                        {[s.overridden.by && `by ${s.overridden.by}`, fmt(s.overridden.at)].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
                     {s.lastSendError && <div className="mt-0.5 text-xs text-red-600">{s.lastSendError}</div>}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-brand-muted">
@@ -216,6 +292,16 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
                         className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark"
                       >
                         {open === s.participantId ? 'Hide' : 'Answers'}
+                      </button>
+                    )}
+                    {s.status !== 'submitted' && (
+                      <button
+                        onClick={() => override(s, !s.overridden)}
+                        disabled={busy !== null}
+                        title={s.overridden ? 'Auto-Assign leaves them unassigned again unless they submit' : 'Let Auto-Assign place them without a team profile'}
+                        className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark disabled:opacity-50"
+                      >
+                        {busy === `override:${s.participantId}` ? 'Saving…' : s.overridden ? 'Undo override' : 'Override'}
                       </button>
                     )}
                     {s.status !== 'waiting' && (

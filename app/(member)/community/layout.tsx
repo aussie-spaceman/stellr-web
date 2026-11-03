@@ -10,7 +10,7 @@ export const metadata = { title: 'Community' }
 // Gated shell for the members-only Community portal (FR-COM-01).
 // All chrome (logo, app nav, search, notifications, account menu) is provided
 // by the parent (member) layout's AppHeader — this layout only enforces the
-// gate. Middleware already bounces unauthenticated users to /sign-up; here we
+// gate. Middleware already bounces unauthenticated users to /sign-in; here we
 // additionally ensure a member record exists (else onboarding) before
 // rendering any community route.
 export default async function CommunityLayout({
@@ -19,7 +19,7 @@ export default async function CommunityLayout({
   children: React.ReactNode
 }) {
   const { userId } = await auth()
-  if (!userId) redirect('/sign-up')
+  if (!userId) redirect('/sign-in')
 
   const member = await getCurrentMember()
   if (!member || member.needsOnboarding) redirect('/account/onboarding')

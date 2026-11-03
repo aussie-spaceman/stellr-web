@@ -4,10 +4,11 @@ import { clerkAppearance } from '@/lib/clerk-appearance'
 
 export const metadata = { title: 'Sign In' }
 
-// While the site is in public review (NEXT_PUBLIC_SIGNUPS_OPEN=false), hide the
-// "Don't have an account? Sign up" link that Clerk renders at the bottom of the
-// sign-in card, so visitors can't create an account from the login page.
-const SIGNUPS_OPEN = (process.env.NEXT_PUBLIC_SIGNUPS_OPEN ?? 'true') !== 'false'
+// Sign-up is invite-only (Clerk Restricted mode, 3 Nov 2026). A Clerk
+// invitation link opens /sign-up directly with its ticket, so nobody needs the
+// "Don't have an account? Sign up" link Clerk renders at the foot of this card,
+// and for anyone without an invitation it leads to a dead end. It stays hidden.
+// Guests bounced from a member page land here (lib/sign-in-path) with ?next.
 
 // safeNext (open-redirect safety) is shared — deep review AUTH-7. See lib/safe-next.
 
@@ -22,11 +23,7 @@ export default async function SignInPage({
       <SignIn
         forceRedirectUrl={next ?? undefined}
         signUpUrl={next ? `/sign-up?next=${encodeURIComponent(next)}` : '/sign-up'}
-        appearance={
-          SIGNUPS_OPEN
-            ? clerkAppearance
-            : { ...clerkAppearance, elements: { ...clerkAppearance.elements, footerAction: { display: 'none' } } }
-        }
+        appearance={{ ...clerkAppearance, elements: { ...clerkAppearance.elements, footerAction: { display: 'none' } } }}
       />
     </div>
   )

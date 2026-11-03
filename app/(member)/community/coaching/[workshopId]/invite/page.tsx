@@ -9,7 +9,7 @@ export const metadata = { title: 'Coaching · Workshop invitation' }
 
 export default async function CoachingInvitePage({ params }: { params: Promise<{ workshopId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { workshopId } = await params
   const db = supabaseServer()

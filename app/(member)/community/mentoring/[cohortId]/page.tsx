@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
+import { signInPath } from '@/lib/sign-in-path'
 import {
   getCohortSpace,
   listCohortSessions,
@@ -19,8 +20,8 @@ export default async function CohortSpacePage({ params }: { params: Promise<{ co
   const { cohortId } = await params
   const member = await getCurrentMember()
   // Fallback guest gate (middleware normally handles this first). Preserve the
-  // return path so guests resume at this cohort after sign-up + onboarding.
-  if (!member) redirect(`/sign-up?next=${encodeURIComponent(`/community/mentoring/${cohortId}`)}`)
+  // return path so guests resume at this cohort after signing in.
+  if (!member) redirect(signInPath(`/community/mentoring/${cohortId}`))
   const [space, full] = await Promise.all([getCohortSpace(member.id, cohortId), getCohortFull(cohortId)])
   if (!space || !full) notFound()
 

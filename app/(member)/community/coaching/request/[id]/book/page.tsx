@@ -13,7 +13,7 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
 export default async function CoachingBookPage({ params }: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { id } = await params
   const req = await getRequestById(id)

@@ -21,7 +21,7 @@ function fmtStart(iso: string | null): string {
 
 export default async function CoachingPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const [allowance, cards, invites, caps, activeRequest] = await Promise.all([
     getCoachingAllowance(member),

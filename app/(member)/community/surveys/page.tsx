@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { openSurveysFor, surveyHistoryFor } from '@/lib/survey/member'
 import { formatDateInZone } from '@/lib/survey/timezone'
 import { formatDateShort } from '@/lib/utils'
+import { signInPath } from '@/lib/sign-in-path'
 
 export const metadata = { title: 'My surveys' }
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic'
 // submitted, each viewable read-only. Your own responses only.
 export default async function MySurveysPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up?next=/community/surveys')
+  if (!member) redirect(signInPath('/community/surveys'))
   const db = supabaseServer()
   const [open, history] = await Promise.all([openSurveysFor(db, member.id), surveyHistoryFor(db, member.id)])
 

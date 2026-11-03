@@ -252,14 +252,35 @@ async function addToRosterActive(cohortId: string, memberId: string): Promise<vo
   await syncObjectSpaceRoster(db, 'mentoring', cohortId, memberId)
 }
 
+export type PaidRosterResult =
+  | { rostered: true }
+  | { rostered: false; reason: 'needs-agreement' }
+
 /**
  * Roster a member into a cohort after a paid entitlement booking confirms (the
  * Stripe webhook's entitlement_booking branch). The purchase itself is recorded in
  * the entitlements ledger by confirmPaidBooking; this just grants cohort access.
  * Replaces the old enrollAfterPayment session_credits-receipt path.
+ *
+ * Runs the minor participation-agreement gate again as a backstop (3 Nov 2026):
+ * the register route gates before Checkout, but enforcement, a date of birth or
+ * an agreement can change between Checkout and the webhook. When the gate is
+ * enforced and locked the member is NOT added to the live cohort; the caller
+ * records it for staff. It never throws for this, so the webhook does not treat
+ * it as a failed booking and refund automatically. Report-only mode rosters as
+ * before (the gate logs the would-block itself).
  */
-export async function rosterAfterPaidBooking(cohortId: string, memberId: string): Promise<void> {
+export async function rosterAfterPaidBooking(cohortId: string, memberId: string): Promise<PaidRosterResult> {
+  const { data: c } = await supabaseServer()
+    .from('mentoring_cohorts')
+    .select('name')
+    .eq('id', cohortId)
+    .maybeSingle()
+  const containerName = (c as { name?: string | null } | null)?.name ?? undefined
+  const gate = await reportEnrollmentGate({ id: memberId }, { kind: 'cohort', containerId: cohortId, containerName })
+  if (accessGatesEnforced() && !gate.unlocked) return { rostered: false, reason: 'needs-agreement' }
   await addToRosterActive(cohortId, memberId)
+  return { rostered: true }
 }
 
 /** Enroll into an open cohort using session credits (draws the cohort's planned sessions). */

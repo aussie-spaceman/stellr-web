@@ -23,7 +23,7 @@ export default async function TrainingPage({
   searchParams: Promise<{ tab?: string; obj?: string }>
 }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const sp = await searchParams
   // Group progress appears automatically for members who manage a group: a

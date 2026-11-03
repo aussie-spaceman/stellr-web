@@ -10,7 +10,7 @@ export const metadata = { title: 'Mentoring · Cohort invitation' }
 
 export default async function InvitePage({ params }: { params: Promise<{ cohortId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { cohortId } = await params
   const db = supabaseServer()

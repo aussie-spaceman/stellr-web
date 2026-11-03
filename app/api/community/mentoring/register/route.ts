@@ -10,6 +10,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 
 // Self-register for an open mentoring cohort: free-with-membership, with a
 // mentoring credit, or via a one-off Stripe payment.
@@ -52,6 +53,14 @@ export async function POST(req: Request) {
   if (access.enrolled) return NextResponse.json({ error: 'Already enrolled' }, { status: 400 })
   if (!cohort.oneOffPriceCents && !cohort.oneOffStripePriceId) {
     return NextResponse.json({ error: 'This cohort has no one-off payment option' }, { status: 400 })
+  }
+  // Minor participation-agreement gate, BEFORE any Checkout exists, so a minor
+  // without an agreement on file is never charged for a seat they cannot take.
+  // Same refusal as the free and credit paths (report-only unless
+  // ACCESS_GATES_ENFORCE). The webhook re-checks at roster time as a backstop.
+  const gate = await reportEnrollmentGate(member, { kind: 'cohort', containerId: cohortId, containerName: cohort.name })
+  if (accessGatesEnforced() && !gate.unlocked) {
+    return NextResponse.json({ error: 'Could not join this cohort' }, { status: 400 })
   }
 
   const stripe = stripeClient()

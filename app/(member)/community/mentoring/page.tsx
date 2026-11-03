@@ -20,7 +20,7 @@ function fmtStart(iso: string | null): string {
 
 export default async function MentoringPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const [credits, cards, invites, caps] = await Promise.all([
     getMentoringCredits(member),

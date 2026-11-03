@@ -12,7 +12,7 @@ export default async function SpaceRootPage({
 }) {
   const { spaceSlug } = await params
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const space = await getSpaceForMember(member, spaceSlug)
   if (!space) notFound()

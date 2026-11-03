@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { issueCredential, CREDENTIAL_COLUMNS } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { logActivity } from '@/lib/activity-log'
@@ -92,7 +92,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   let emailed = false
   if (result.created) {
     emailed = await sendCredentialIssuedEmail(db, result.row, { firstName: member.first_name ?? '', email: member.email })
-    const actor = await getCurrentMember()
+    // The acting admin, not a member they may be viewing as (getCurrentMember
+    // follows a live view-as ticket). S0, Nov 2026.
+    const actor = await getSignedInMember()
     await logActivity({
       memberId: member.id,
       category: 'account',

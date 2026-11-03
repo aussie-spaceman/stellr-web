@@ -5,25 +5,24 @@ import { ownsTeam, teamViewerRole, type TeamViewerRegistration } from '@/lib/tea
 import { resolveRequestMember } from '@/lib/impersonation'
 
 // GET /api/members/teams/[id] — full team detail with participants
-// Admins may pass ?memberId= to read another member's team detail (view-as).
+// An admin holding a view-as ticket reads it as the viewed member.
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
   const db = supabaseServer()
 
-  const { member, unauthorised } = await resolveRequestMember<{ id: string; email: string | null }>(
-    req,
-    db,
-    'id, email',
-  )
+  const { member, unauthorised, impersonating: isViewAs } = await resolveRequestMember<{
+    id: string
+    email: string | null
+  }>(db, 'id, email')
   if (unauthorised) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
-  // Admin view-as (?memberId=) is a read-only lens over someone else's portal —
-  // it must never write, so it skips the on-demand join-token mint below.
-  const isViewAs = new URL(req.url).searchParams.has('memberId')
+  // Admin view-as is a read-only lens over someone else's portal — it must
+  // never write, so it skips the on-demand join-token mint below. (This keyed
+  // off ?memberId= before S0, so a full-portal view-as session DID mint one.)
 
   const { data: registration, error } = await db
     .from('registrations')

@@ -19,16 +19,30 @@ export function ImpersonationBanner({
   memberId: string
 }) {
   const [exiting, setExiting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const exit = async () => {
     setExiting(true)
+    setError(null)
+    // The end of a session is recorded before the cookie is cleared; when that
+    // record fails the session is still running, so say so and stay here
+    // rather than leave the admin believing they have exited.
     try {
-      await fetch('/api/admin/impersonation', { method: 'DELETE' })
-    } finally {
-      // Full navigation, not router.push: every server component on the way out
-      // must re-resolve without the cookie.
-      window.location.href = `/admin/members/${memberId}`
+      const res = await fetch('/api/admin/impersonation', { method: 'DELETE' })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(j.error ?? 'Could not exit view-as. Try again.')
+        setExiting(false)
+        return
+      }
+    } catch {
+      setError('Couldn’t reach Stellr. Check the connection and try again.')
+      setExiting(false)
+      return
     }
+    // Full navigation, not router.push: every server component on the way out
+    // must re-resolve without the cookie.
+    window.location.href = `/admin/members/${memberId}`
   }
 
   return (
@@ -49,6 +63,11 @@ export function ImpersonationBanner({
           {exiting ? 'Exiting…' : 'Exit view-as'}
         </button>
       </div>
+      {error && (
+        <p role="alert" className="mx-auto mt-1.5 max-w-5xl text-sm text-amber-900">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

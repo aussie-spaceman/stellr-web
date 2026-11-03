@@ -169,6 +169,40 @@ export function hasFlags(f: DeskFlags | undefined): boolean {
   return !!f && !!(f.agreement || f.unpaid || f.medical || f.dietary.length)
 }
 
+// ── The check-in banner, as the desk describes it ────────────────────────────
+//
+// S0 (Nov 2026): opening check-in closes only the other events the caller
+// manages (an admin manages them all), so check-in can stay open at an event an
+// event manager doesn't run, and the banner can point there. The desk says what
+// opening will actually do, and says when the banner points elsewhere.
+
+/** The confirm before opening while other in-person events the caller sees are open, or null. */
+export function openCheckInConfirm(others: { title: string }[]): string | null {
+  if (!others.length) return null
+  const names = others.map((o) => o.title).join(', ')
+  return `Check-in is open for ${names}. Opening this one closes ${others.length > 1 ? 'them' : 'it'}.`
+}
+
+/**
+ * The desk's line about the banner, or null. `bannerTarget` is null when the
+ * open events could not be read: say nothing rather than guess.
+ */
+export function bannerNotice(s: {
+  checkInOpen: boolean
+  bannerTarget: boolean | null
+  isVirtual: boolean
+}): { tone: 'here' | 'elsewhere'; text: string } | null {
+  if (s.bannerTarget) return { tone: 'here', text: 'The check-in banner points here.' }
+  // The banner never stands at a virtual event, so there is nothing to warn about.
+  if (s.bannerTarget === false && s.checkInOpen && !s.isVirtual) {
+    return {
+      tone: 'elsewhere',
+      text: 'The check-in banner points to another event right now, so scanning it opens that event’s check-in, not this one. An admin can close check-in there.',
+    }
+  }
+  return null
+}
+
 // ── Check-in times from a queued tap ─────────────────────────────────────────
 
 /** How far back a queued tap's own time is trusted (the desk was offline that long). */

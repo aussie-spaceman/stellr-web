@@ -7,6 +7,7 @@
 //
 // Writes are BEST-EFFORT: logActivity never throws, so instrumenting a payment
 // webhook or a profile save can't break the originating action if logging fails.
+// The exception is logActivityOrThrow, for the rows an action must not run without.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { auth, currentUser } from '@clerk/nextjs/server'
@@ -60,6 +61,22 @@ export async function logActivity(
   } catch (err) {
     console.error('[activity-log] logActivity threw:', err)
   }
+}
+
+/**
+ * Append one entry and THROW when it cannot be recorded. For the few actions
+ * whose audit row is itself the control — an adult staff member starting or
+ * ending a view of a member's (often a minor's) portal — the caller must not go
+ * ahead unrecorded. Everything else uses the best-effort logActivity above.
+ */
+export async function logActivityOrThrow(
+  input: LogActivityInput,
+  client?: SupabaseClient,
+): Promise<void> {
+  if (!input.memberId) throw new Error('[activity-log] memberId is required')
+  const db = client ?? supabaseServer()
+  const { error } = await db.from('member_activity_log').insert(toRow(input))
+  if (error) throw new Error(`[activity-log] insert failed: ${error.message}`)
 }
 
 /**

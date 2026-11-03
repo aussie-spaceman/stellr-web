@@ -5,6 +5,7 @@ import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { supabaseServer } from '@/lib/supabase'
 import { getAllEvents, type StellarEvent } from '@/lib/sanity'
 import { getCurrentMember } from '@/lib/community'
+import { assertNotImpersonating } from '@/lib/impersonation'
 import { scholarshipReceivedEmail, scholarshipStaffAlertEmail } from '@/lib/scholarship-emails'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
@@ -32,6 +33,11 @@ async function resolveEvent(activity: string): Promise<{ slug: string; title: st
 export async function POST(req: Request) {
   const limited = rateLimitGuard(req, 'scholarship', { limit: 3, windowMs: HOUR_MS })
   if (limited) return limited
+  // View-as is read only. getCurrentMember() below resolves to the member an
+  // admin is viewing as, so without this an admin's submission would be filed
+  // as that member's application.
+  const blocked = await assertNotImpersonating()
+  if (blocked) return blocked
   try {
     const parsed = schema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) {

@@ -7,12 +7,11 @@ import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 // Managers: all group registrations they own — as the registrant (teacher or
 //   student manager) OR as the nominated teacher point of contact.
 // Students: all registrations they appear in as a participant.
-// Admins may pass ?memberId= to read another member's teams (view-as).
-export async function GET(req: Request) {
+// An admin holding a view-as ticket reads the viewed member's teams.
+export async function GET() {
   const db = supabaseServer()
 
   const { member, unauthorised } = await resolveRequestMember<{ id: string; email: string | null }>(
-    req,
     db,
     'id, email',
   )

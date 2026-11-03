@@ -45,7 +45,10 @@ export function accessGatesEnforced(): boolean {
 // and age bracket are not evidence of age there: the admin add-member form
 // defaults to an adult teacher with the date of birth optional, the Clerk
 // webhook writes an adult subscriber with none, and the cohort APIs run the
-// gate without checking that the member has onboarded.
+// gate without checking that the member has onboarded. The youngest usable
+// date across the member row and their participant rows counts: the member
+// row is self-entered at onboarding, so an adult date there must not outrank
+// the minor one a registration put on a participant row.
 
 /**
  * Payment + DocuSign gate status for a member's access to a competition. Payment
@@ -141,9 +144,9 @@ export interface EnrollmentGateResult {
  *
  * "On file" reuses the DocuSign validity layer: any completed envelope linked to
  * the member (via their participant rows) counts as a participation agreement on
- * file. Who is a minor goes by date of birth alone: the member's own, else the
- * youngest usable one on their participant rows (memberAgeFacts), else a minor
- * is presumed. Role and age bracket are not consulted (see above).
+ * file. Who is a minor goes by date of birth alone: the youngest usable one on
+ * the member row or any of their participant rows (memberAgeFacts), else a
+ * minor is presumed. Role and age bracket are not consulted (see above).
  */
 export async function reportEnrollmentGate(
   member: { id: string },
@@ -160,7 +163,7 @@ export async function reportEnrollmentGate(
     id: member.id,
     date_of_birth: (m as { date_of_birth?: string | null } | null)?.date_of_birth ?? null,
   })
-  if (!isMinorOn(facts.dateOfBirth)) return { minorAgreement: true, unlocked: true }
+  if (!isMinorOn(facts.youngestDateOfBirth)) return { minorAgreement: true, unlocked: true }
 
   // Any completed DocuSign envelope on file for this member → agreement satisfied.
   const pids = facts.participantIds

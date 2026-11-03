@@ -25,6 +25,14 @@ export interface MemberAgeFacts {
    * keeps a blank member DOB). Null when none is usable.
    */
   dateOfBirth: string | null
+  /**
+   * The youngest usable date of birth on the member row OR any of their
+   * participant rows. For a minor rule a member must not be able to talk their
+   * way past (the enrolment gate, onboarding's minor guard): the member row is
+   * self-entered at onboarding, so an adult date there does not outrank a
+   * minor one a registration put on a participant row (S0, 3 Nov 2026).
+   */
+  youngestDateOfBirth: string | null
   participantIds: string[]
 }
 
@@ -34,10 +42,12 @@ export async function memberAgeFacts(
 ): Promise<MemberAgeFacts> {
   const { data } = await db.from('participants').select('id, date_of_birth').eq('member_id', member.id)
   const parts = (data ?? []) as Array<{ id: string; date_of_birth: string | null }>
+  const participantDobs = parts.map((p) => p.date_of_birth)
   return {
     dateOfBirth: isValidDob(member.date_of_birth)
       ? member.date_of_birth.slice(0, 10)
-      : youngestDob(parts.map((p) => p.date_of_birth)),
+      : youngestDob(participantDobs),
+    youngestDateOfBirth: youngestDob([member.date_of_birth, ...participantDobs]),
     participantIds: parts.map((p) => p.id),
   }
 }

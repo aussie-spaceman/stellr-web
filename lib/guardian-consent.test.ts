@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { appToday } from '@/lib/age'
-import { guardianAgreementOnFile, mayLinkLogin, youngestDob } from './guardian-consent'
+import { guardianAgreementOnFile, mayLinkLogin, memberAgeFacts, youngestDob } from './guardian-consent'
 
 // The COPPA rule for linking a login made outside the app (a self-serve Clerk
 // sign-up) to a member row: the Clerk webhook and onboarding both ask this.
@@ -37,6 +37,28 @@ describe('youngestDob', () => {
   it('picks the latest usable date and ignores the rest', () => {
     expect(youngestDob(['1990-01-01', null, 'nope', '2014-06-01T00:00:00Z', '2999-01-01'])).toBe('2014-06-01')
     expect(youngestDob([null, '', undefined])).toBeNull()
+  })
+})
+
+describe('memberAgeFacts', () => {
+  const parts = [{ id: 'p-1', date_of_birth: yearsAgo(15) }, { id: 'p-2', date_of_birth: '2999-01-01' }]
+
+  it("dateOfBirth prefers the member row's; youngestDateOfBirth takes the youngest of every row", async () => {
+    expect(await memberAgeFacts(fakeDb(parts, []), { id: 'm', date_of_birth: yearsAgo(40) })).toEqual({
+      dateOfBirth: yearsAgo(40),
+      youngestDateOfBirth: yearsAgo(15),
+      participantIds: ['p-1', 'p-2'],
+    })
+  })
+
+  it('a minor member row is still the youngest when the participant rows say adult', async () => {
+    const facts = await memberAgeFacts(fakeDb([{ id: 'p-1', date_of_birth: yearsAgo(40) }], []), { id: 'm', date_of_birth: yearsAgo(15) })
+    expect(facts.youngestDateOfBirth).toBe(yearsAgo(15))
+  })
+
+  it('skips unusable dates, and is null when none is usable', async () => {
+    expect((await memberAgeFacts(fakeDb(parts, []), { id: 'm', date_of_birth: null })).youngestDateOfBirth).toBe(yearsAgo(15))
+    expect((await memberAgeFacts(fakeDb([{ id: 'p-1', date_of_birth: '2999-01-01' }], []), { id: 'm', date_of_birth: 'nope' })).youngestDateOfBirth).toBeNull()
   })
 })
 

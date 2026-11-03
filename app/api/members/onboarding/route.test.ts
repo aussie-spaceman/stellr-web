@@ -187,6 +187,38 @@ describe('POST /api/members/onboarding — COPPA and linking by email (S0)', () 
     expect(links()).toEqual([])
   })
 
+  it('refuses a teenager with no date on the member row who types an adult one past their participant row', async () => {
+    // An existing member who joined through a link or a sheet keeps a blank
+    // member date of birth; the registration put 15 on the participant row.
+    // Filing 1990 as a parent would make them an adult everywhere the member
+    // row is read (the enrolment gate, the membership agreement).
+    for (const found of ['byClerk', 'byEmail'] as const) {
+      verified()
+      state.writes = []
+      state.byClerk = null
+      state.byEmail = null
+      state[found] = { id: 'm-teen', is_active: true, date_of_birth: null, clerk_user_id: null }
+      state.participants = [{ id: 'p-teen', date_of_birth: yearsAgo(15) }, { id: 'p-old', date_of_birth: yearsAgo(40) }]
+      const res = await post(ADULT_BODY)
+      expect(res.status, found).toBe(403)
+      expect(state.writes, found).toEqual([])
+    }
+  })
+
+  it('lets that teenager finish onboarding as the student the participant row says they are', async () => {
+    verified()
+    state.byClerk = { id: 'm-teen', is_active: true, date_of_birth: null, clerk_user_id: 'clerk-1' }
+    state.participants = [{ id: 'p-teen', date_of_birth: yearsAgo(15) }]
+    expect((await post(student(yearsAgo(15)))).status).toBe(200)
+  })
+
+  it('does not read an unusable participant date of birth as a minor on file', async () => {
+    verified()
+    state.byClerk = { id: 'm-new', is_active: true, date_of_birth: null }
+    state.participants = [{ id: 'p-1', date_of_birth: '2999-01-01' }]
+    expect((await post(ADULT_BODY)).status).toBe(200)
+  })
+
   it("does not count an agreement the child signed themselves as a guardian's", async () => {
     verified()
     state.byEmail = { id: 'm-kid', is_active: true, date_of_birth: yearsAgo(12), clerk_user_id: null }

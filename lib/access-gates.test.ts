@@ -12,7 +12,9 @@ import { fakeSupabase, type FakeDb } from '@/test/fake-supabase'
 //
 // 3 Nov 2026: "an adult by role" is an allowlist (a subscriber or an unknown
 // role is judged as a student), and the enrolment gate goes by date of birth
-// alone, the member's or else their participant rows', never by role.
+// alone, never by role: the youngest usable one on the member row or any of
+// their participant rows, so a self-entered adult date on the member row does
+// not outrank a minor one from a registration.
 
 let db: FakeDb
 const logActivity = vi.fn(async (..._args: unknown[]) => {})
@@ -164,11 +166,39 @@ describe('reportEnrollmentGate', () => {
     expect((await enrol()).unlocked).toBe(true)
   })
 
-  it("goes by the member's own date of birth when it is usable", async () => {
+  it('a minor date of birth on the member row holds, whatever the participant rows say', async () => {
     db = fakeSupabase({ members: [memberRow('mentor', MINOR_DOB)], participants: [dobRow(ADULT_DOB)], agreements: [] })
     expect((await enrol()).unlocked).toBe(false)
-    db = fakeSupabase({ members: [memberRow('participant', ADULT_DOB, 'high_school')], participants: [dobRow(MINOR_DOB)], agreements: [] })
-    expect((await enrol()).unlocked).toBe(true)
+  })
+
+  it('an adult date of birth on the member row does not outrank a minor one on a participant row', async () => {
+    // The member row is self-entered at onboarding; a registration wrote the
+    // participant row. The younger reading wins, as for a login (mayLinkLogin),
+    // so typing an adult date of birth into the profile changes nothing here.
+    for (const [role, bracket] of [['participant', 'high_school'], ['parent', 'adult'], ['subscriber', 'adult']]) {
+      logActivity.mockClear()
+      db = fakeSupabase({ members: [memberRow(role, ADULT_DOB, bracket)], participants: [dobRow(MINOR_DOB)], agreements: [] })
+      expect(await enrol(), role).toEqual({ minorAgreement: false, unlocked: false })
+      expect(logActivity, role).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('still passes an adult on both rows, and ignores an unusable participant date of birth', async () => {
+    db = fakeSupabase({
+      members: [memberRow('teacher', ADULT_DOB)],
+      participants: [dobRow(ADULT_DOB, 'p-1'), dobRow(FUTURE_DOB, 'p-2')],
+      agreements: [],
+    })
+    expect(await enrol()).toEqual({ minorAgreement: true, unlocked: true })
+  })
+
+  it('lets that minor enrol once a completed agreement is on a participant row', async () => {
+    db = fakeSupabase({
+      members: [memberRow('parent', ADULT_DOB)],
+      participants: [dobRow(MINOR_DOB, 'p-9')],
+      agreements: [{ id: 'a-1', participant_id: 'p-9', status: 'completed' }],
+    })
+    expect(await enrol()).toEqual({ minorAgreement: true, unlocked: true })
   })
 
   it('holds a student, or a placeholder subscriber, with no date of birth and no agreement', async () => {

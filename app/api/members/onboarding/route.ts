@@ -11,9 +11,9 @@ import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboardi
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
-import { isMinorOn } from '@/lib/age'
+import { isKnownMinorOn, isMinorOn } from '@/lib/age'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
-import { mayLinkLogin } from '@/lib/guardian-consent'
+import { mayLinkLogin, memberAgeFacts } from '@/lib/guardian-consent'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -135,8 +135,14 @@ export async function POST(req: Request) {
     // A minor already on file may not re-submit an adult date of birth to strip
     // their own minor status — doing so would move them into an adult bracket and
     // skip the guardian-consent path and the high-school gates. The DOB on file
-    // can only be corrected by an admin.
-    if (priorRow.date_of_birth && isMinorOn(priorRow.date_of_birth) && !required.isMinor) {
+    // can only be corrected by an admin. "On file" includes their participant
+    // rows (S0, 3 Nov 2026), the youngest usable one: an existing member who
+    // joined through a link or a sheet keeps a blank member DOB while the
+    // registration put theirs on the participant row, as mayLinkLogin reads it.
+    const minorOnFile =
+      (priorRow.date_of_birth && isMinorOn(priorRow.date_of_birth)) ||
+      isKnownMinorOn((await memberAgeFacts(db, priorRow)).youngestDateOfBirth)
+    if (minorOnFile && !required.isMinor) {
       return NextResponse.json(
         { error: 'Your date of birth is already on file and cannot be changed here. Please contact Stellr.' },
         { status: 403 },

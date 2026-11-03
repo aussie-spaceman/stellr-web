@@ -375,6 +375,35 @@ describe('sniffFileFormat — PDFs and text', () => {
     }
   })
 
+  // A UTF-16 calendar is decoded once to validate it. One with no folds was then
+  // copied and decoded again: a 25MB one added about 100MB and 260ms a claim,
+  // against 50MB and 135ms judged as first decoded, as it is now. (A capped
+  // worker heap can't show this: strings that size are kept outside the heap.)
+  it('decodes a UTF-16 calendar with no folds only once', () => {
+    const utf16 = (ics: string) => [
+      new Uint8Array(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(ics, 'utf16le')])),
+      new Uint8Array(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(ics, 'utf16le').swap16()])),
+    ]
+    const lines = 'X-ALT-DESC;FMTTYPE=text/html:<p>Bring water</p>\r\nDESCRIPTION:Bring water\r\n\n'.repeat(2000)
+    const decode = vi.spyOn(TextDecoder.prototype, 'decode')
+    try {
+      for (const b of utf16(`BEGIN:VCALENDAR\r\n${lines}END:VCALENDAR\r\n`)) {
+        decode.mockClear()
+        expect(sniffFileFormat(b)).toBe('calendar')
+        const whole = decode.mock.calls.filter(([input]) => ((input as Uint8Array | undefined)?.byteLength ?? 0) > 4096)
+        expect(whole).toHaveLength(1)
+        // Nothing to join, so the bytes come back as they are, not copied.
+        expect(unfoldLines(b, 2, b[0] === 0xff)).toBe(b)
+      }
+    } finally {
+      decode.mockRestore()
+    }
+    // Still judged line by line.
+    for (const b of utf16(`BEGIN:VCALENDAR\r\n${lines}DESCRIPTION:<script>alert(1)</script>\r\n`)) {
+      expect(sniffFileFormat(b)).toBeNull()
+    }
+  })
+
   // What the regex join cost was memory: held to a 64MB heap, it ran out on a
   // 25MB calendar of folds (it did at 256MB too). Joining on the bytes needs
   // about 25MB. The worker loads lib/file-sniff.ts from source with Node's own

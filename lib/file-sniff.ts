@@ -542,10 +542,15 @@ function unfoldUtf16(b: Uint8Array, littleEndian: boolean): Uint8Array {
   const end = b.length - (b.length & 1) // whole units only
   // The character of the unit at byte `p`, or -1 for none or one above U+00FF.
   const at = (p: number) => (p >= 0 && p < end && b[p + hi] === 0 ? b[p + lo] : -1)
+  const folds = (p: number) => at(p) === LF && (at(p + 2) === SPACE || at(p + 2) === TAB)
+  let p = 0
+  while (p < end && !folds(p)) p += 2
+  if (p >= end) return b
   const out = new Uint8Array(b.length)
-  let n = 0
-  for (let p = 0; p < end; p += 2) {
-    if (at(p) === LF && (at(p + 2) === SPACE || at(p + 2) === TAB)) {
+  out.set(b.subarray(0, p))
+  let n = p
+  for (; p < end; p += 2) {
+    if (folds(p)) {
       if (at(p - 2) === CR) n -= 2
       p += 2 // past the space or tab
       continue
@@ -613,7 +618,9 @@ function text(b: Uint8Array): FileFormat | null {
       if (c < 0x20 && !TEXT_CONTROLS.has(c)) return null
     }
     if (/^\s*BEGIN:VCALENDAR\r?\n/i.test(decoded)) {
-      decoded = '' // not needed again: let it go before the joined copy is made
+      // Most calendars have no folds, and are judged as decoded: no copy of the
+      // bytes and no second decode, which doubled their memory and time.
+      if (!/\n[ \t]/.test(decoded)) return calendarMarkupFree(decoded) ? 'calendar' : null
       // Valid UTF-16 (it decoded), so dropping folds can't pair up a stray
       // surrogate. The decoder took a byte-order mark off the front of `body`,
       // so that one is dropped here too; one that only reaches the front once a

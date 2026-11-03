@@ -9,6 +9,10 @@ import { fakeSupabase, type FakeDb } from '@/test/fake-supabase'
 // with ACCESS_GATES_ENFORCE on. These pin the role-aware rule: an adult by role
 // is a minor only when a date of birth on file says so; a student, or anyone
 // whose role says nothing about age, with no usable date is still presumed one.
+//
+// 3 Nov 2026: "an adult by role" is an allowlist (a subscriber or an unknown
+// role is judged as a student), and the enrolment gate goes by date of birth
+// alone, the member's or else their participant rows', never by role.
 
 let db: FakeDb
 const logActivity = vi.fn(async (..._args: unknown[]) => {})
@@ -26,6 +30,9 @@ const member = { id: MEMBER_ID } as CommunityMember
 const year = new Date().getFullYear()
 const MINOR_DOB = `${year - 14}-01-15`
 const ADULT_DOB = `${year - 40}-04-02`
+// Not a usable date of birth. participants.date_of_birth is NOT NULL, so on a
+// real participant row this is what "unknown" looks like.
+const FUTURE_DOB = `${year + 1}-01-15`
 
 const freeReg = { event_slug: SLUG, status: 'confirmed', amount_due_cents: 0, invoice_requested: false, invoice_paid_at: null }
 
@@ -65,8 +72,26 @@ describe('eventAccessGates — DocuSign gate with no envelope', () => {
   })
 
   it('passes anyone whose date of birth says adult', async () => {
-    db = fakeSupabase({ participants: [participant('participant', ADULT_DOB)], agreements: [] })
-    expect((await eventAccessGates(member, SLUG)).docusign).toBe(true)
+    for (const role of ['participant', 'subscriber']) {
+      db = fakeSupabase({ participants: [participant(role, ADULT_DOB)], agreements: [] })
+      expect((await eventAccessGates(member, SLUG)).docusign, role).toBe(true)
+    }
+  })
+
+  it('judges a subscriber, a legacy student spelling or an unknown role as a student', async () => {
+    for (const role of ['subscriber', 'donor', 'student', 'School Student', 'coach']) {
+      for (const dob of [FUTURE_DOB, null]) {
+        db = fakeSupabase({ participants: [participant(role, dob)], agreements: [] })
+        expect((await eventAccessGates(member, SLUG)).docusign, `${role} ${dob}`).toBe(false)
+      }
+    }
+  })
+
+  it('still passes an adult role in a legacy spelling with no usable date of birth', async () => {
+    for (const role of ['Mentor', 'Teacher', 'Volunteer']) {
+      db = fakeSupabase({ participants: [participant(role, FUTURE_DOB)], agreements: [] })
+      expect((await eventAccessGates(member, SLUG)).docusign, role).toBe(true)
+    }
   })
 })
 
@@ -94,15 +119,56 @@ function memberRow(eventRole: string, dateOfBirth: string | null, ageBracket = '
   return { id: MEMBER_ID, date_of_birth: dateOfBirth, event_role: eventRole, age_bracket: ageBracket }
 }
 
+/** A participant row for the enrolment gate, which reads only id and date of birth. */
+function dobRow(dateOfBirth: string | null, id = 'p-1') {
+  return { id, member_id: MEMBER_ID, date_of_birth: dateOfBirth }
+}
+
 const enrol = () => reportEnrollmentGate({ id: MEMBER_ID }, { kind: 'cohort', containerId: 'cohort-1', containerName: 'Rocketry' })
 
 describe('reportEnrollmentGate', () => {
-  it('lets an adult by role with no date of birth enrol without an agreement', async () => {
-    for (const role of ['mentor', 'volunteer', 'teacher', 'parent']) {
+  it('holds an adult role with no date of birth anywhere: the role is not evidence of age', async () => {
+    // The admin add-member form defaults to an adult teacher with the date of
+    // birth optional; the cohort APIs do not check the member has onboarded.
+    for (const role of ['teacher', 'mentor', 'volunteer', 'parent', 'adult']) {
       db = fakeSupabase({ members: [memberRow(role, null)], participants: [], agreements: [] })
-      expect(await enrol(), role).toEqual({ minorAgreement: true, unlocked: true })
+      expect(await enrol(), role).toEqual({ minorAgreement: false, unlocked: false })
     }
+    expect(logActivity).toHaveBeenCalledTimes(5)
+  })
+
+  it('falls back to the participant rows when the member row has no date of birth', async () => {
+    // An existing member who joined through a registration link keeps a blank
+    // member date of birth; their participant row has one.
+    db = fakeSupabase({ members: [memberRow('subscriber', null)], participants: [dobRow(ADULT_DOB)], agreements: [] })
+    expect(await enrol()).toEqual({ minorAgreement: true, unlocked: true })
     expect(logActivity).not.toHaveBeenCalled()
+  })
+
+  it('takes the youngest usable date of birth on the participant rows', async () => {
+    db = fakeSupabase({
+      members: [memberRow('teacher', null)],
+      participants: [dobRow(ADULT_DOB, 'p-1'), dobRow(MINOR_DOB, 'p-2'), dobRow(FUTURE_DOB, 'p-3')],
+      agreements: [],
+    })
+    expect((await enrol()).unlocked).toBe(false)
+  })
+
+  it('presumes a minor when no row has a usable date of birth', async () => {
+    db = fakeSupabase({ members: [memberRow('teacher', FUTURE_DOB)], participants: [dobRow(FUTURE_DOB)], agreements: [] })
+    expect((await enrol()).unlocked).toBe(false)
+  })
+
+  it("passes over an unusable date of birth on the member row to the participant rows'", async () => {
+    db = fakeSupabase({ members: [memberRow('subscriber', FUTURE_DOB)], participants: [dobRow(ADULT_DOB)], agreements: [] })
+    expect((await enrol()).unlocked).toBe(true)
+  })
+
+  it("goes by the member's own date of birth when it is usable", async () => {
+    db = fakeSupabase({ members: [memberRow('mentor', MINOR_DOB)], participants: [dobRow(ADULT_DOB)], agreements: [] })
+    expect((await enrol()).unlocked).toBe(false)
+    db = fakeSupabase({ members: [memberRow('participant', ADULT_DOB, 'high_school')], participants: [dobRow(MINOR_DOB)], agreements: [] })
+    expect((await enrol()).unlocked).toBe(true)
   })
 
   it('holds a student, or a placeholder subscriber, with no date of birth and no agreement', async () => {

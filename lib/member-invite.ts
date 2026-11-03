@@ -4,6 +4,7 @@ import { accountInviteEmail, groupAccountCreatedEmail, sendEmail } from '@/lib/e
 import { AUTH_APP_URL } from '@/lib/env'
 import { logActivity } from '@/lib/activity-log'
 import { guardianAgreementOnFile, memberAgeFacts } from '@/lib/guardian-consent'
+import { ADULT_ROLES } from '@/lib/membership-rules'
 
 // A double-click or an impatient admin should not put two invites in an inbox.
 export const ACCOUNT_INVITE_COOLDOWN_MS = 10 * 60 * 1000
@@ -17,13 +18,15 @@ export type AccountInviteResult =
 
 // An admin's record of an adult, for a hand-created member with no date of
 // birth yet (S0, 2 Nov 2026): an adult age bracket AND an adult role. A
-// subscriber is not enough — it is also what a bare self-signup gets.
+// subscriber is not enough — it is also what a bare self-signup gets. The
+// roles are the shared allowlist (ADULT_ROLES); members.event_role is an enum,
+// so it is matched as stored.
 const ADULT_BRACKETS = new Set(['adult', 'college'])
-const ADULT_ROLES = new Set(['teacher', 'mentor', 'parent', 'adult', 'volunteer'])
+const ADULT_ROLE_SET = new Set<string>(ADULT_ROLES)
 
 /** Did an admin record this member as an adult (bracket and role)? */
 export function isAdultByRole(m: { age_bracket?: string | null; event_role?: string | null }): boolean {
-  return ADULT_BRACKETS.has(m.age_bracket ?? '') && ADULT_ROLES.has(m.event_role ?? '')
+  return ADULT_BRACKETS.has(m.age_bracket ?? '') && ADULT_ROLE_SET.has(m.event_role ?? '')
 }
 
 /**

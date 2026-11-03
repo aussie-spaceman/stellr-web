@@ -16,6 +16,7 @@ vi.mock('@/lib/event-participation-sync', () => ({ removeEventParticipation: asy
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => state.db!.client }))
 
 const { DELETE, PATCH } = await import('./route')
+const { appToday } = await import('@/lib/age')
 
 function seed(extra: Record<string, object[]> = {}) {
   state.db = fakeSupabase({
@@ -100,5 +101,53 @@ describe('PATCH team participant — date of birth', () => {
     expect(stored()).toBe('2011-05-06')
     expect((await patch({ phone: '555-0100' })).status).toBe(200)
     expect(stored()).toBe('2011-05-06')
+  })
+})
+
+// S0 (2 Nov 2026): a minor takes part as a student. An edit can neither give a
+// minor an adult role or bracket nor leave one in place after a corrected date.
+describe('PATCH team participant — a minor takes part as a student', () => {
+  const patch = (b: Record<string, unknown>) =>
+    PATCH(new NextRequest('https://app.test/api/members/teams/reg/participants/p1', {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b),
+    }), { params: Promise.resolve({ id: 'reg', pid: 'p1' }) })
+  const row = () => state.db!.table('participants')[0] as Record<string, unknown>
+  /** A date of birth `n` years before the app's today, less `extraDays`. */
+  const yearsAgo = (n: number, extraDays = 0) => {
+    const d = appToday()
+    d.setUTCFullYear(d.getUTCFullYear() - n)
+    d.setUTCDate(d.getUTCDate() - extraDays)
+    return d.toISOString().slice(0, 10)
+  }
+
+  it.each([
+    ['12', yearsAgo(13, -1)],
+    ['13', yearsAgo(13)],
+    ['14', yearsAgo(14)],
+  ])('aged %s, the full edit form cannot set an adult role or bracket', async (_age, dob) => {
+    seed()
+    const res = await patch({ first_name: 'S', last_name: 'Y', date_of_birth: dob, event_role: 'Mentor', age_bracket: 'adult' })
+    expect(res.status).toBe(200)
+    expect(row()).toMatchObject({ date_of_birth: dob, event_role: 'participant', age_bracket: 'high_school' })
+  })
+
+  it('an edit of the role alone is judged on the date of birth already on the row', async () => {
+    seed()
+    Object.assign(row(), { date_of_birth: yearsAgo(12), event_role: 'participant', age_bracket: 'high_school' })
+    expect((await patch({ event_role: 'Adult' })).status).toBe(200)
+    expect(row()).toMatchObject({ event_role: 'participant', age_bracket: 'high_school' })
+  })
+
+  it('correcting a date to a minor one moves an adult role back to a student', async () => {
+    seed()
+    Object.assign(row(), { date_of_birth: '1990-01-01', event_role: 'mentor', age_bracket: 'adult' })
+    expect((await patch({ date_of_birth: yearsAgo(15) })).status).toBe(200)
+    expect(row()).toMatchObject({ event_role: 'participant', age_bracket: 'high_school' })
+  })
+
+  it('an adult keeps the role and bracket the organiser picked', async () => {
+    seed()
+    expect((await patch({ first_name: 'S', last_name: 'Y', date_of_birth: '1990-01-01', event_role: 'Mentor', age_bracket: 'adult' })).status).toBe(200)
+    expect(row()).toMatchObject({ event_role: 'mentor', age_bracket: 'adult' })
   })
 })

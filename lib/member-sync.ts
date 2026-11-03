@@ -81,8 +81,10 @@ export function fillBlanksFromStored(
 //
 // `onExisting` controls what happens when a member already exists for the email:
 //   'update' (default) — merge the submitted fields in. For TRUSTED callers only
-//     (admin sheet sync, a signed-in member editing their own row). This is the
-//     historical behaviour.
+//     (staff, or a signed-in member editing their own row). This is the
+//     historical behaviour. An organiser is not one: the Teams add and the
+//     sheet sync pass 'skip' (S0, 2 Nov 2026), since organiser input naming an
+//     existing member could rewrite that person's date of birth and role.
 //   'skip' — return the existing id and DO NOT modify the row or its roles. This
 //     is mandatory for UNAUTHENTICATED input (public forms, join links): an
 //     anonymous POST naming someone else's email must never rewrite that

@@ -12,6 +12,8 @@ import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/regist
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
 import { isMinorOn } from '@/lib/age'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { mayLinkLogin } from '@/lib/guardian-consent'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -34,6 +36,12 @@ export async function POST(req: Request) {
 
   if (!date_of_birth || !gender || !event_role) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+  // S0 (2 Nov 2026): a real past date, as on every registration route. Every
+  // age rule below reads it, and an unreadable one would be stored as given.
+  const dobCheck = checkRegistrationAge(date_of_birth)
+  if (!dobCheck.ok) {
+    return NextResponse.json({ code: dobCheck.reason, error: dobCheck.error }, { status: 400 })
   }
 
   // Onboarding fields are mandatory by audience. Everyone gives a phone; the
@@ -156,6 +164,24 @@ export async function POST(req: Request) {
     }
   }
 
+  // S0 (2 Nov 2026), COPPA: a child under 13 finishes onboarding only once a
+  // parent or guardian has signed their consent form. Age is the youngest of
+  // the date just given and the one on file (or, with none on file, their
+  // participant rows'), so typing an older date changes nothing. This is also
+  // where a self-serve sign-up the Clerk webhook held back is linked to its
+  // member row by email (below), so the webhook's rule has to hold here too.
+  const coppa = await mayLinkLogin(db, priorRow, dobCheck.dateOfBirth)
+  if (!coppa.allowed) {
+    return NextResponse.json(
+      {
+        code: 'guardian_consent_required',
+        error:
+          "A parent or guardian needs to sign your Stellr consent form before you can finish setting up your account. Once they have, come back here and try again. If they can't find the form, please contact Stellr.",
+      },
+      { status: 403 },
+    )
+  }
+
   // Resolve school FK
   let resolvedSchoolId: string | null = school_id && school_id !== 'new' ? school_id : null
 
@@ -202,7 +228,7 @@ export async function POST(req: Request) {
     clerk_user_id: userId,
     age_bracket: resolvedBracket,
     event_role: resolvedRole,
-    date_of_birth,
+    date_of_birth: dobCheck.dateOfBirth,
     gender,
     phone: phone || null,
     grade: grade || null,
@@ -235,16 +261,42 @@ export async function POST(req: Request) {
     // check whether a member already exists for this EMAIL — created by an earlier
     // event registration — and link/update it rather than spawning a duplicate.
     const clerkUser = await currentUser()
-    const primaryEmail = normalizeEmail(clerkUser?.emailAddresses.find(
-      (e) => e.id === clerkUser.primaryEmailAddressId
-    )?.emailAddress)
+    const primary = clerkUser?.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)
+    const primaryEmail = normalizeEmail(primary?.emailAddress)
 
     const { data: byEmail } = primaryEmail
-      ? await db.from('members').select('id').eq('email', primaryEmail).maybeSingle()
+      ? await db.from('members').select('id, clerk_user_id').eq('email', primaryEmail).maybeSingle()
       : { data: null }
 
     if (byEmail) {
-      const { error } = await db.from('members').update(profileUpdates).eq('id', byEmail.id)
+      // S0 (2 Nov 2026): the Clerk webhook's two rules for linking by email.
+      // Only an address the user has proved finds their record, and a record
+      // another login already holds is never moved to this one.
+      if (primary?.verification?.status !== 'verified') {
+        return NextResponse.json(
+          { code: 'email_not_verified', error: 'Please verify your email address, then try again.' },
+          { status: 403 },
+        )
+      }
+      if ((byEmail as { clerk_user_id: string | null }).clerk_user_id) {
+        return NextResponse.json(
+          { code: 'member_already_linked', error: 'This email address is already linked to another Stellr account. Please contact Stellr.' },
+          { status: 409 },
+        )
+      }
+      // Only while still unlinked, so a link made in the meantime is never overwritten.
+      const { data: linked, error } = await db
+        .from('members')
+        .update(profileUpdates)
+        .eq('id', byEmail.id)
+        .is('clerk_user_id', null)
+        .select('id')
+      if (!error && !linked?.length) {
+        return NextResponse.json(
+          { code: 'member_already_linked', error: 'This email address is already linked to another Stellr account. Please contact Stellr.' },
+          { status: 409 },
+        )
+      }
       memberError = error
       memberId = byEmail.id
     } else {

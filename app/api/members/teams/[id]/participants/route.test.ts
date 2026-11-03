@@ -45,6 +45,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 const { POST } = await import('./route')
+const { appToday } = await import('@/lib/age')
 
 function post(b: Record<string, unknown>) {
   return POST(
@@ -96,6 +97,7 @@ describe('POST /api/members/teams/[id]/participants — S0 date-of-birth check',
     const json = await res.json()
     expect(json.code).toBe('dob_invalid')
     expect(json.error).toMatch(/date of birth on file for this Stellr Member ID doesn't look right/)
+    expect(json.error).toMatch(/contact Stellr to correct it/)
     expect(h.partInsert).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
   })
@@ -103,7 +105,52 @@ describe('POST /api/members/teams/[id]/participants — S0 date-of-birth check',
   it('a real past date is saved as YYYY-MM-DD, as before', async () => {
     const res = await post({ ...person, date_of_birth: '2012-03-04' })
     expect(res.status).toBe(201)
-    expect(h.upsertMember).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ date_of_birth: '2012-03-04' }))
+    expect(h.upsertMember).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ date_of_birth: '2012-03-04' }), { onExisting: 'skip' })
     expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ date_of_birth: '2012-03-04', member_id: 'm-new' }))
+  })
+
+  it("never rewrites an existing member's record: the organiser's details stay on the participant row", async () => {
+    // An organiser naming a child's email with an adult date and role used to
+    // overwrite the child's member row, which the COPPA guard reads first.
+    const res = await post({ ...person, date_of_birth: '1990-01-01', event_role: 'Adult', age_bracket: 'adult' })
+    expect(res.status).toBe(201)
+    expect(h.upsertMember).toHaveBeenCalledWith(expect.anything(), expect.anything(), { onExisting: 'skip' })
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ date_of_birth: '1990-01-01', event_role: 'adult' }))
+  })
+})
+
+describe('POST /api/members/teams/[id]/participants — a minor takes part as a student', () => {
+  /** A date of birth `n` years before the app's today, less `extraDays`. */
+  const yearsAgo = (n: number, extraDays = 0) => {
+    const d = appToday()
+    d.setUTCFullYear(d.getUTCFullYear() - n)
+    d.setUTCDate(d.getUTCDate() - extraDays)
+    return d.toISOString().slice(0, 10)
+  }
+
+  it.each([
+    ['12', yearsAgo(13, -1)],
+    ['13', yearsAgo(13)],
+    ['14', yearsAgo(14)],
+    ['17', yearsAgo(17)],
+  ])('aged %s, an adult role and bracket are stored as participant / high school', async (_age, dob) => {
+    const res = await post({ ...person, date_of_birth: dob, event_role: 'Mentor', age_bracket: 'adult' })
+    expect(res.status).toBe(201)
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ event_role: 'participant', age_bracket: 'high_school' }))
+    expect(h.upsertMember).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ event_role: 'participant', age_bracket: 'high_school' }),
+      { onExisting: 'skip' },
+    )
+  })
+
+  it('a school student manager who is a minor stays one', async () => {
+    await post({ ...person, date_of_birth: yearsAgo(15), event_role: 'school_student_manager', age_bracket: 'adult' })
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ event_role: 'school_student_manager', age_bracket: 'high_school' }))
+  })
+
+  it('an adult keeps the role and bracket the organiser picked', async () => {
+    await post({ ...person, date_of_birth: yearsAgo(30), event_role: 'Mentor', age_bracket: 'adult' })
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ event_role: 'mentor', age_bracket: 'adult' }))
   })
 })

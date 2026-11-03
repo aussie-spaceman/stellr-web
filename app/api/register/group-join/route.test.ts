@@ -220,10 +220,12 @@ describe('POST /api/register/group-join — S0 age gate', () => {
 
   it('a signed-in member with no usable date of birth on their profile is asked to fix it, not read as an adult', async () => {
     h.auth.mockResolvedValue({ userId: 'user_me' })
+    // Account → Profile has no date-of-birth field: a missing one is added on
+    // the profile-completion page, a wrong one only staff can correct.
     for (const [dob, code, says] of [
-      [null, 'dob_missing', /add your date of birth/],
-      ['not a date', 'dob_invalid', /doesn't look right/],
-      ['2999-01-01', 'dob_invalid', /doesn't look right/],
+      [null, 'dob_missing', /add your date of birth at https:\/\/\S+\/account\/onboarding/],
+      ['not a date', 'dob_invalid', /doesn't look right\. Please contact Stellr/],
+      ['2999-01-01', 'dob_invalid', /doesn't look right\. Please contact Stellr/],
     ] as const) {
       h.signedInMember = { id: 'm-me', first_name: 'M', last_name: 'E', email: 'me@example.com', date_of_birth: dob, age_bracket: 'adult', event_role: 'teacher' }
       const res = await post()
@@ -231,10 +233,30 @@ describe('POST /api/register/group-join — S0 age gate', () => {
       const json = await res.json()
       expect(json.code).toBe(code)
       expect(json.error).toMatch(says)
-      expect(json.error).toMatch(/Account → Profile/)
+      expect(json.error).not.toMatch(/Account → Profile/)
     }
     expect(h.partInsert).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['12', yearsAgo(13, -1)],
+    ['13', yearsAgo(13)],
+    ['14', yearsAgo(14)],
+  ])('a signed-in %s-year-old whose profile holds an adult role joins as a participant', async (_l, dob) => {
+    h.auth.mockResolvedValue({ userId: 'user_me' })
+    h.signedInMember = { id: 'm-me', first_name: 'M', last_name: 'E', email: 'me@example.com', date_of_birth: dob, age_bracket: 'adult', event_role: 'mentor' }
+    const res = await post()
+    expect(res.status).toBe(201)
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ date_of_birth: dob, event_role: 'participant', age_bracket: 'high_school' }))
+    expect(h.createUser).not.toHaveBeenCalled()
+  })
+
+  it('a signed-in minor who is a school student manager stays one', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_me' })
+    h.signedInMember = { id: 'm-me', first_name: 'M', last_name: 'E', email: 'me@example.com', date_of_birth: yearsAgo(16), age_bracket: 'adult', event_role: 'school_student_manager' }
+    expect((await post()).status).toBe(201)
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ event_role: 'school_student_manager', age_bracket: 'high_school' }))
   })
 
   it('a signed-in member with a date of birth on file joins as before', async () => {

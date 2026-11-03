@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { isMinorOn, onDate } from '@/lib/age'
+import { isKnownMinorOn, isMinorOn, onDate } from '@/lib/age'
 import { deriveCompliance, loadComplianceRecordsByEmails, loadComplianceRecordsByMemberIds, type ComplianceState } from '@/lib/compliance'
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
@@ -135,9 +135,18 @@ export interface EventRosterData {
   }
 }
 
-/** Under 18 on the day of the event (today when the event has no date). */
-function isMinor(dateOfBirth: string | null, eventDate?: string): boolean {
-  return isMinorOn(dateOfBirth, eventDate ? onDate(eventDate) : undefined)
+/**
+ * Under 18 on the day of the event (today when the event has no date). With no
+ * usable date of birth, a student row is presumed a minor (S0, 2 Nov 2026); an
+ * adult by role (teacher, mentor, volunteer, chaperone) is not, since their
+ * agreement is an adult's whatever the roster says about their age, and flagging
+ * them as an outstanding minor consent would be wrong at the check-in desk.
+ */
+export function isRosterMinor(dateOfBirth: string | null, eventRole: string | null, eventDate?: string): boolean {
+  const on = eventDate ? onDate(eventDate) : undefined
+  const kind = classifyAgreement(eventRole, null)
+  const adultRole = kind != null && kind !== 'minor'
+  return adultRole ? isKnownMinorOn(dateOfBirth, on) : isMinorOn(dateOfBirth, on)
 }
 
 export async function getEventRoster(eventSlug: string, eventDate?: string): Promise<EventRosterData> {
@@ -292,7 +301,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         individualPaymentStatus: p.individual_payment_status as string | null,
       })
 
-      const minor = isMinor(p.date_of_birth as string | null, eventDate)
+      const minor = isRosterMinor(p.date_of_birth as string | null, p.event_role as string | null, eventDate)
       // An adult attendee (teacher, chaperone) gets the Adult agreement on their
       // participant row too, so "no row" means not issued, not "not required".
       // Mentors and volunteers sign member-level agreements this query can't

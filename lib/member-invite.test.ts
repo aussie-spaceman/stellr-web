@@ -10,7 +10,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
   member: null as Record<string, unknown> | null,
   participants: [{ id: 'p1', date_of_birth: null }] as Array<{ id: string; date_of_birth: string | null }>,
+  /** Completed guardian consent forms (envelope_type 'minor'). */
   completedAgreements: 0,
+  /** Completed agreements of any other type: adult, mentor, educator, volunteer. */
+  otherCompletedAgreements: 0,
+  /** The member/participant scope each agreements lookup asked for. */
+  agreementScopes: [] as string[],
   updates: [] as Array<Record<string, unknown>>,
   getUserList: vi.fn(async () => ({ data: [] as Array<{ id: string }> })),
   createUser: vi.fn(async () => ({ id: 'user_1' })),
@@ -22,14 +27,21 @@ function makeDb() {
   const from = (table: string) => {
     const chain: Record<string, unknown> = {}
     let op = 'select'
+    const eqs: Record<string, unknown> = {}
     Object.assign(chain, {
       select: (_cols?: string, opts?: { head?: boolean }) => { if (opts?.head) op = 'count'; return chain },
       update: (p: Record<string, unknown>) => { op = 'update'; h.updates.push({ table, ...p }); return chain },
-      eq: () => chain, in: () => chain, is: () => chain,
+      eq: (c: string, v: unknown) => { eqs[c] = v; return chain },
+      in: () => chain, is: () => chain,
+      or: (scope: string) => { h.agreementScopes.push(scope); return chain },
       maybeSingle: async () => ({ data: table === 'members' ? h.member : null }),
       then: (resolve: (v: unknown) => unknown) => {
         if (table === 'participants') return Promise.resolve({ data: h.participants }).then(resolve)
-        if (table === 'agreements' && op === 'count') return Promise.resolve({ count: h.completedAgreements }).then(resolve)
+        if (table === 'agreements' && op === 'count') {
+          // A lookup that does not ask for the guardian's form counts every type.
+          const count = h.completedAgreements + (eqs.envelope_type === 'minor' ? 0 : h.otherCompletedAgreements)
+          return Promise.resolve({ count, error: null }).then(resolve)
+        }
         return Promise.resolve({ data: null, error: null }).then(resolve)
       },
     })
@@ -71,6 +83,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.updates.length = 0
   h.completedAgreements = 0
+  h.otherCompletedAgreements = 0
+  h.agreementScopes.length = 0
   h.participants = [{ id: 'p1', date_of_birth: null }]
   h.getUserList.mockResolvedValue({ data: [] })
   h.createUser.mockResolvedValue({ id: 'user_1' })
@@ -106,6 +120,27 @@ describe('sendGroupAccountInvite', () => {
     h.completedAgreements = 1
     expect(await sendGroupAccountInvite(makeDb(), 'm1', opts)).toEqual({ sent: true })
     expect(h.createUser).toHaveBeenCalledTimes(1)
+  })
+
+  it("counts only a guardian's consent form, not an agreement the person signed themselves", async () => {
+    // A child once given an adult role signed an Educator or Mentor agreement
+    // to their own email. That is not a parent's consent.
+    h.otherCompletedAgreements = 1
+    h.participants = [{ id: 'p1', date_of_birth: null }]
+    for (const date_of_birth of [yearsAgo(12), null]) {
+      h.member = { ...base, date_of_birth }
+      expect(await sendGroupAccountInvite(makeDb(), 'm1', opts)).toEqual({ sent: false, reason: 'awaiting_consent' })
+    }
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("takes a guardian's form on the member (the membership agreement) as well as on their participant rows", async () => {
+    h.member = { ...base, date_of_birth: yearsAgo(12) }
+    h.participants = [{ id: 'p1', date_of_birth: yearsAgo(12) }, { id: 'p2', date_of_birth: null }]
+    h.completedAgreements = 1
+    expect(await sendGroupAccountInvite(makeDb(), 'm1', opts)).toEqual({ sent: true })
+    expect(h.agreementScopes).toEqual(['member_id.eq.m1,participant_id.in.(p1,p2)'])
   })
 
   it('reads a member with no usable date of birth from their participant row (the youngest one)', async () => {
@@ -168,6 +203,16 @@ describe('sendAccountInvite (admin, hand-created member)', () => {
 
     h.completedAgreements = 1
     expect(await sendAccountInvite(makeDb(), 'm1')).toEqual({ sent: true })
+  })
+
+  it("does not take an agreement the member signed themselves as a guardian's consent", async () => {
+    h.otherCompletedAgreements = 1
+    h.member = { ...admin, age_bracket: 'high_school', event_role: 'participant', date_of_birth: yearsAgo(12) }
+    expect(await sendAccountInvite(makeDb(), 'm1')).toEqual({ sent: false, reason: 'awaiting_consent' })
+    h.member = { ...admin, age_bracket: 'high_school', event_role: 'participant', date_of_birth: null }
+    expect(await sendAccountInvite(makeDb(), 'm1')).toEqual({ sent: false, reason: 'age_unknown' })
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.sendEmail).not.toHaveBeenCalled()
   })
 
   it('lets an adult the admin recorded (bracket and role) through with no date of birth, and logs it', async () => {

@@ -87,7 +87,7 @@ describe('syncParticipantsFromSheet — rows without a usable date of birth', ()
     expect(r.created).toBe(1)
     expect(fake.table('participants').map((p) => p.email)).toEqual(['good@x.com'])
     expect(upsertMember).toHaveBeenCalledTimes(1)
-    expect(upsertMember).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ email: 'good@x.com', date_of_birth: '2011-04-05' }))
+    expect(upsertMember).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ email: 'good@x.com', date_of_birth: '2011-04-05' }), expect.anything())
   })
 
   it('adds the row once its date of birth is fixed', async () => {
@@ -99,5 +99,22 @@ describe('syncParticipantsFromSheet — rows without a usable date of birth', ()
     const r = await syncParticipantsFromSheet(fake.client, reg)
     expect(r.skippedForDateOfBirth).toEqual([])
     expect(fake.table('participants')).toHaveLength(1)
+  })
+})
+
+// S0 (2 Nov 2026): the sheet is the organiser's. A row naming an existing
+// member's email must not rewrite that member's date of birth, role or
+// guardian (the COPPA guard reads the member row's date of birth first): the
+// member is linked as-is and the row's values go on the participant row.
+describe('syncParticipantsFromSheet — existing members are linked, never rewritten', () => {
+  it('asks upsertMember to skip an existing member, and keeps the sheet values on the participant', async () => {
+    const { upsertMember } = await import('@/lib/member-sync')
+    const fake = fakeSupabase({ participants: [] })
+    readSheetParticipants.mockResolvedValueOnce([
+      row({ first_name: 'Kid', last_name: 'Lo', email: 'kid@x.com', date_of_birth: '1990-01-01', type: 'Adult' }),
+    ])
+    await syncParticipantsFromSheet(fake.client, reg)
+    expect(upsertMember).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ email: 'kid@x.com' }), { onExisting: 'skip' })
+    expect(fake.table('participants')[0]).toMatchObject({ date_of_birth: '1990-01-01', event_role: 'adult', member_id: 'member-kid@x.com' })
   })
 })

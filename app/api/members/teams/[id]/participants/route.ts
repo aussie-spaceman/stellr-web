@@ -127,14 +127,24 @@ export async function POST(
       ? ageCheck.error
       : ageCheck.reason === 'dob_missing'
         ? "We don't have a date of birth on file for this Stellr Member ID. Ask them to add it to their profile, or enter their details by hand."
-        : "The date of birth on file for this Stellr Member ID doesn't look right. Ask them to correct it in their profile, or enter their details by hand."
+        : "The date of birth on file for this Stellr Member ID doesn't look right. Ask them to contact Stellr to correct it, or enter their details by hand."
     return NextResponse.json({ code: ageCheck.reason, error }, { status: 400 })
   }
   insert.date_of_birth = ageCheck.dateOfBirth
+  // A minor takes part as a student, whatever role and bracket were picked —
+  // the registration routes' rule (a school student manager stays one).
+  if (ageCheck.isMinor) {
+    if (insert.event_role !== 'school_student_manager') insert.event_role = 'participant'
+    insert.age_bracket = 'high_school'
+  }
 
   // Upsert a member row (non-fatal) so the person gets a member account, can be
   // linked to a school, and shows on admin member pages — parity with the
   // registration routes. The participant is saved regardless of the outcome.
+  // S0 (2 Nov 2026): an existing member is linked, never rewritten
+  // (`onExisting: 'skip'`), as on the group route and the join link. The
+  // organiser is not the authority on another person's date of birth, role or
+  // guardian, and the COPPA guard reads the member row's date of birth first.
   const memberId = linkedMemberId ?? await upsertMember(db, {
     email: body.email,
     first_name: body.first_name,
@@ -145,9 +155,9 @@ export async function POST(
     gender: body.gender,
     grade: body.grade,
     t_shirt_size: body.t_shirt_size,
-    age_bracket: body.age_bracket,
-    event_role: body.event_role,
-  })
+    age_bracket: insert.age_bracket,
+    event_role: insert.event_role,
+  }, { onExisting: 'skip' })
   if (memberId) insert.member_id = memberId
 
   const { data: participant, error } = await db

@@ -125,10 +125,15 @@ async function syncFromSheet(
     const { eventRole, ageBracket } = roleFromType(row.type, dob)
 
     // Match against the existing membership database by email — an established
-    // member is updated from this sheet row rather than duplicated — and create
-    // one otherwise, so sheet-entered people get a member account, a school link,
-    // and visibility on admin member pages. Blank cells never overwrite what's
-    // already on file (see upsertMember). Non-fatal.
+    // member is linked rather than duplicated — and create one otherwise, so
+    // sheet-entered people get a member account, a school link, and visibility
+    // on admin member pages. Non-fatal.
+    // S0 (2 Nov 2026): an existing member is never rewritten from the sheet
+    // (`onExisting: 'skip'`). The sheet is the organiser's, and the organiser is
+    // not the authority on another person's date of birth, role or guardian: a
+    // typed adult date used to overwrite a child's record, and the COPPA guard
+    // reads the member row's date of birth first. The row's values still reach
+    // the participant row below.
     const memberId = await upsertMember(db, {
       email,
       first_name: row.first_name,
@@ -146,7 +151,7 @@ async function syncFromSheet(
       ec_email: row.ec_email || null,
       ec_phone: row.ec_phone || null,
       ec_relationship: row.ec_relationship || null,
-    })
+    }, { onExisting: 'skip' })
     if (memberId) syncedMemberIds.push(memberId)
 
     const payload = {

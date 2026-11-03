@@ -19,6 +19,15 @@ const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/
 // which create the account on accept). Matched as method calls
 // (`client.users.createUser(`), so a log line that merely names one is not counted.
 const CREATES = /\.\s*create(?:User|[A-Za-z]*Invitation[A-Za-z]*)\s*\(/g
+// The same calls in any other spelling: the bare name (`const { createUser } =
+// client.users`), bracket access (`users['createUser'](`), or Clerk's REST API
+// called directly. Outside lib/clerk-provisioning none may appear at all, in
+// code (comments are ignored).
+const OTHER_SPELLINGS = [
+  /\bcreate(?:User|[A-Za-z]*Invitation[A-Za-z]*)\b/,
+  /\[\s*['"`]create(?:User|[A-Za-z]*Invitation)/,
+  /api\.clerk\.(?:com|dev)/,
+]
 
 // Operator scripts run by hand against a chosen Clerk instance, never by the
 // app: neither is reachable by a registrant.
@@ -56,6 +65,8 @@ function walk(dir: string, out: string[] = [], withTests = false): string[] {
 const read = (f: string) => readFileSync(f, 'utf8')
 const appFiles = APP_DIRS.flatMap((d) => walk(d))
 const count = (s: string, re: RegExp) => (s.match(new RegExp(re.source, 'g')) ?? []).length
+/** Source with block and line comments blanked. Rough (a `//` inside a string ends the line early), which can only hide code, never invent it. */
+const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1')
 
 /** The text of the call starting at `from` (the index of its name), to its closing paren. */
 function callText(src: string, from: number): string {
@@ -83,6 +94,28 @@ describe('every Clerk account sits behind the COPPA guard', () => {
       .map((f) => ({ f, n: count(read(f), CREATES) }))
       .filter((h) => h.n > 0)
     expect(hits).toEqual([{ f: 'lib/clerk-provisioning.ts', n: 1 }])
+  })
+
+  it('no other file reaches those calls by another spelling (bare name, bracket access, Clerk REST API)', () => {
+    const hits = appFiles
+      .filter((f) => f !== 'lib/clerk-provisioning.ts')
+      .flatMap((f) => {
+        const src = code(read(f))
+        return OTHER_SPELLINGS.filter((re) => re.test(src)).map((re) => `${f}: ${re.source}`)
+      })
+    expect(hits).toEqual([])
+  })
+
+  it('the spelling check catches what it says it does', () => {
+    const caught = (s: string) => OTHER_SPELLINGS.some((re) => re.test(code(s)))
+    expect(caught('const { createUser } = client.users; await createUser({})')).toBe(true)
+    expect(caught("await client.users['createUser']({})")).toBe(true)
+    expect(caught('await client.invitations.createInvitation({})')).toBe(true)
+    expect(caught("await fetch('https://api.clerk.com/v1/users', { method: 'POST' })")).toBe(true)
+    // Not every 'create…' is Clerk's, and a comment is not code.
+    expect(caught("const LIVE = ['created', 'sent', 'delivered']")).toBe(false)
+    expect(caught('// never call createUser here')).toBe(false)
+    expect(caught("const u = 'https://example.org' // createUser")).toBe(false)
   })
 
   it('outside the app (scripts, e2e, test), only the two named operator scripts call Clerk directly', () => {
@@ -148,6 +181,22 @@ describe('every Clerk account sits behind the COPPA guard', () => {
         if (m[1] === 'ensureClerkUserAndSignInToken') expect(call, `${f}: ${call}`).toMatch(/\bage\s*:/)
       }
     }
+  })
+
+  it('a login made outside the app (self-serve sign-up) is linked to a member row only after the same rule', () => {
+    // The Clerk webhook and onboarding are the two places that tie such a login
+    // to an existing member found by email. Each asks mayLinkLogin first.
+    const webhook = code(read('app/api/webhooks/clerk/route.ts'))
+    const link = webhook.indexOf('.update({ clerk_user_id: data.id')
+    expect(link).toBeGreaterThan(0)
+    expect(webhook.lastIndexOf('mayLinkLogin(', link)).toBeGreaterThan(webhook.indexOf("type === 'user.created'"))
+
+    const onboarding = code(read('app/api/members/onboarding/route.ts'))
+    const byEmail = onboarding.indexOf('.update(profileUpdates)\n        .eq(\'id\', byEmail.id)')
+    expect(byEmail).toBeGreaterThan(0)
+    const gate = onboarding.indexOf('mayLinkLogin(')
+    expect(gate).toBeGreaterThan(0)
+    expect(gate).toBeLessThan(byEmail)
   })
 
   it('the admin adult-by-role pass is used only by the admin account invite', () => {

@@ -17,6 +17,7 @@ import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { GENDERS } from '@/lib/registration-constants'
 import { GRANT_DEMOGRAPHIC, GRANT_PROGRAM_YEAR } from '@/lib/grant'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -211,6 +212,21 @@ export async function POST(req: Request) {
     // already reached the inbox and HubSpot by this point, and losing the
     // membership grant is recoverable in a way that losing the application is
     // not.
+    //
+    // S0 (2 Nov 2026): the Educator record is made only for a date of birth
+    // that is a real past date and says 18 or over. The schema checks only its
+    // shape, and the member is stored as an adult teacher whatever it says, so
+    // a typo'd 2030 or a child's date would put a minor on file as an adult.
+    // The application itself still stands: staff have it by email and in
+    // HubSpot, and can follow up.
+    const educatorAge = checkRegistrationAge(v.dateOfBirth)
+    const educatorDob = educatorAge.ok && !educatorAge.isMinor ? educatorAge.dateOfBirth : null
+    if (!educatorDob) {
+      console.warn('[teacher-grant] date of birth not a real adult date: no Educator record made', {
+        reason: educatorAge.ok ? 'under_18' : educatorAge.reason,
+      })
+      return NextResponse.json({ ok: true })
+    }
     try {
       const db = supabaseServer()
       // This is an UNAUTHENTICATED public form. It may create a brand-new
@@ -227,7 +243,7 @@ export async function POST(req: Request) {
         first_name: v.firstName,
         last_name: v.lastName,
         phone: v.phone || null,
-        date_of_birth: v.dateOfBirth,
+        date_of_birth: educatorDob,
         gender: v.gender,
         age_bracket: 'adult',
         event_role: 'teacher',

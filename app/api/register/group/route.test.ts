@@ -475,6 +475,9 @@ describe('POST /api/register/group — S0 age gate', () => {
     const json = await res.json()
     expect(json.code).toBe('dob_invalid')
     expect(json.error).toMatch(/date of birth on file for Lee Ng's Stellr Member ID doesn't look right/)
+    // Members cannot edit their own date of birth; only staff can correct it.
+    expect(json.error).toMatch(/contact Stellr to correct it/)
+    expect(json.error).not.toMatch(/correct it in their profile/)
     expectNothingWritten()
   })
 

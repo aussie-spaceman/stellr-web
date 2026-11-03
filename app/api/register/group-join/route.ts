@@ -14,6 +14,7 @@ import {
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { upsertMember } from '@/lib/member-sync'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { AUTH_APP_URL } from '@/lib/env'
 import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
@@ -153,16 +154,21 @@ export async function POST(req: NextRequest) {
     // would not know whether a parent has to sign.
     const profileAge = checkRegistrationAge(member.date_of_birth, { eventDate })
     if (!profileAge.ok) {
+      // Members cannot edit a date of birth on Account → Profile. A missing one
+      // is added on the profile-completion page; a wrong one only staff can fix.
       return NextResponse.json(
         {
           code: profileAge.reason,
           error: profileAge.reason === 'dob_missing'
-            ? 'Please add your date of birth to your Stellr profile (Account → Profile), then open this link again.'
-            : "The date of birth on your Stellr profile doesn't look right. Please correct it (Account → Profile), then open this link again.",
+            ? `Please add your date of birth at ${AUTH_APP_URL}/account/onboarding, then open this link again.`
+            : "The date of birth on your Stellr profile doesn't look right. Please contact Stellr to correct it, or ask your group organiser to add you.",
         },
         { status: 400 },
       )
     }
+    // A minor on the event's date takes part as a student, whatever role and
+    // bracket their profile holds (a school student manager stays one).
+    const profileRole = normalizeEventRole(member.event_role ?? 'participant')
 
     memberId = member.id
     person = {
@@ -175,8 +181,8 @@ export async function POST(req: NextRequest) {
       gender: member.gender ?? null,
       grade: member.grade ?? null,
       t_shirt_size: member.tshirt_size ?? null,
-      age_bracket: member.age_bracket,
-      event_role: normalizeEventRole(member.event_role ?? 'participant'),
+      age_bracket: profileAge.isMinor ? 'high_school' : member.age_bracket,
+      event_role: profileAge.isMinor && profileRole !== 'school_student_manager' ? 'participant' : profileRole,
       ethnicity: [],
       dietary_requirements: [],
       health_conditions: null,

@@ -344,11 +344,13 @@ export async function POST(req: NextRequest) {
       if (!check.ok) {
         // A Member ID slot's date of birth is the one on their profile, so the
         // way forward is theirs to take (or the organiser types the details in).
+        // A missing one they add when they next sign in (the account sends them
+        // to finish their profile); a wrong one only staff can change.
         const error = !p.linked
           ? check.error
           : check.reason === 'dob_missing'
             ? `We don't have a date of birth on file for ${name}'s Stellr Member ID. Ask them to add it to their profile, or enter their details by hand.`
-            : `The date of birth on file for ${name}'s Stellr Member ID doesn't look right. Ask them to correct it in their profile, or enter their details by hand.`
+            : `The date of birth on file for ${name}'s Stellr Member ID doesn't look right. Ask them to contact Stellr to correct it, or enter their details by hand.`
         return NextResponse.json({ code: check.reason, error }, { status: 400 })
       }
       p.date_of_birth = check.dateOfBirth

@@ -10,7 +10,14 @@ const { state } = vi.hoisted(() => ({
     clerkUser: null as Record<string, unknown> | null,
     byClerk: null as Record<string, unknown> | null,
     byEmail: null as Record<string, unknown> | null,
+    /** The member's participant rows (S0 tests). */
+    participants: [] as Array<{ id: string; date_of_birth: string | null }>,
+    /** Agreements on file for the member (S0 tests). */
+    agreements: [] as Array<{ envelope_type: string; status: string }>,
+    /** Whether a conditional (`.is('clerk_user_id', null)`) update finds its row. */
+    linkHits: true,
     updates: 0,
+    writes: [] as Array<{ table: string; payload: unknown; filters: Array<[string, string, unknown]> }>,
   },
 }))
 
@@ -19,26 +26,53 @@ vi.mock('@clerk/nextjs/server', () => ({
   currentUser: async () => state.clerkUser,
 }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
+// A small chainable stand-in for the Supabase client: members are found by
+// Clerk id or by email, participants and agreements come from `state`, and
+// every update is recorded.
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from(table: string) {
-      if (table !== 'members') throw new Error(`unexpected table ${table}`)
-      return {
-        select: () => ({
-          eq: (col: string) => ({
-            maybeSingle: async () => ({
-              data: col === 'clerk_user_id' ? state.byClerk : state.byEmail,
-              error: null,
-            }),
-          }),
-        }),
-        update: () => ({
-          eq: async () => {
-            state.updates += 1
-            return { error: null }
-          },
-        }),
+      const filters: Array<[string, string, unknown]> = []
+      let op = 'select'
+      let head = false
+      const eqOf = (col: string) => filters.find(([k, c]) => k === 'eq' && c === col)?.[2]
+      const result = () => {
+        if (op === 'update') {
+          const conditional = filters.some(([k, c]) => k === 'is' && c === 'clerk_user_id')
+          return { data: conditional && !state.linkHits ? [] : [{ id: eqOf('id') }], error: null }
+        }
+        if (table === 'participants') {
+          return head ? { count: state.participants.length, error: null } : { data: state.participants, error: null }
+        }
+        if (table === 'agreements') {
+          const type = eqOf('envelope_type')
+          const status = eqOf('status')
+          const n = state.agreements.filter((a) => (!type || a.envelope_type === type) && (!status || a.status === status)).length
+          return { count: n, error: null }
+        }
+        return { data: null, error: null }
       }
+      const chain: Record<string, unknown> = {
+        select: (_cols?: string, opts?: { head?: boolean }) => { if (opts?.head) head = true; return chain },
+        update: (payload: unknown) => {
+          op = 'update'
+          state.updates += 1
+          state.writes.push({ table, payload, filters })
+          return chain
+        },
+        upsert: () => chain,
+        eq: (c: string, v: unknown) => { filters.push(['eq', c, v]); return chain },
+        is: (c: string, v: unknown) => { filters.push(['is', c, v]); return chain },
+        or: (s: string) => { filters.push(['or', s, null]); return chain },
+        maybeSingle: async () => {
+          if (table !== 'members') return { data: null, error: null }
+          if (eqOf('clerk_user_id') !== undefined) return { data: state.byClerk, error: null }
+          if (eqOf('email') !== undefined) return { data: state.byEmail, error: null }
+          return { data: { id: eqOf('id'), email: 'person@test', first_name: 'A', last_name: 'B' }, error: null }
+        },
+        then: (f: (v: unknown) => unknown) => Promise.resolve(result()).then(f),
+      }
+      return chain
     },
   }),
 }))
@@ -60,6 +94,7 @@ vi.mock('@/lib/registration-notify', () => ({
 vi.mock('@/lib/membership-agreement', () => ({ dispatchMembershipAgreement: async () => ({ signNowUrl: null }) }))
 
 const { POST } = await import('./route')
+const { appToday } = await import('@/lib/age')
 
 const post = (body: unknown) =>
   POST(new Request('http://localhost/api/members/onboarding', { method: 'POST', body: JSON.stringify(body) }))
@@ -82,7 +117,11 @@ beforeEach(() => {
   }
   state.byClerk = null
   state.byEmail = null
+  state.participants = []
+  state.agreements = []
+  state.linkHits = true
   state.updates = 0
+  state.writes = []
 })
 
 describe('POST /api/members/onboarding — re-entry guards (MEM-3)', () => {
@@ -98,5 +137,128 @@ describe('POST /api/members/onboarding — re-entry guards (MEM-3)', () => {
     const res = await post(ADULT_BODY) // adult DOB in the payload
     expect(res.status).toBe(403)
     expect(state.updates).toBe(0)
+  })
+})
+
+// S0 (2 Nov 2026): onboarding is where a self-serve Clerk sign-up is linked to
+// an existing member row by email (the webhook holds a child's link back), so
+// it applies the COPPA rule and the webhook's two linking rules itself.
+describe('POST /api/members/onboarding — COPPA and linking by email (S0)', () => {
+  /** A date of birth `n` years before the app's today, less `extraDays`. */
+  const yearsAgo = (n: number, extraDays = 0) => {
+    const d = appToday()
+    d.setUTCFullYear(d.getUTCFullYear() - n)
+    d.setUTCDate(d.getUTCDate() - extraDays)
+    return d.toISOString().slice(0, 10)
+  }
+  const student = (date_of_birth: string) => ({
+    event_role: 'participant', age_bracket: 'high_school', date_of_birth, gender: 'female', phone: '555-1234',
+    grade: '7', tshirt_size: 'YM', school_id: 'school-1',
+    ec_first_name: 'Pat', ec_last_name: 'Lee', ec_email: 'pat@test', ec_phone: '555-9876', ec_relationship: 'Parent',
+  })
+  const verified = () => {
+    state.clerkUser = {
+      emailAddresses: [{ id: 'e1', emailAddress: 'person@test', verification: { status: 'verified' } }],
+      primaryEmailAddressId: 'e1', firstName: 'A', lastName: 'B',
+    }
+  }
+  /** Writes that tie this login to a member row. */
+  const links = () => state.writes.filter((w) => w.table === 'members' && (w.payload as { clerk_user_id?: string }).clerk_user_id)
+
+  it('refuses a child under 13 found by email with no guardian agreement, and links nothing', async () => {
+    verified()
+    state.byEmail = { id: 'm-kid', is_active: true, date_of_birth: yearsAgo(12), clerk_user_id: null }
+    state.participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    const res = await post(student(yearsAgo(12)))
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('guardian_consent_required')
+    expect(links()).toEqual([])
+  })
+
+  it('reads the youngest date: a child with no date on the member row cannot type an older one past it', async () => {
+    verified()
+    // Joined through a link: the member row has no date of birth, the participant row does.
+    state.byEmail = { id: 'm-kid', is_active: true, date_of_birth: null, clerk_user_id: null }
+    state.participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    for (const typed of [yearsAgo(12), yearsAgo(16), '1990-01-01']) {
+      const res = await post(typed === '1990-01-01' ? ADULT_BODY : student(typed))
+      expect(res.status, typed).toBe(403)
+    }
+    expect(links()).toEqual([])
+  })
+
+  it("does not count an agreement the child signed themselves as a guardian's", async () => {
+    verified()
+    state.byEmail = { id: 'm-kid', is_active: true, date_of_birth: yearsAgo(12), clerk_user_id: null }
+    state.participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    state.agreements = [{ envelope_type: 'adult', status: 'completed' }, { envelope_type: 'minor', status: 'sent' }]
+    expect((await post(student(yearsAgo(12)))).status).toBe(403)
+    expect(links()).toEqual([])
+  })
+
+  it("links a child under 13 once a guardian's consent form is signed, only while the row is unlinked", async () => {
+    verified()
+    state.byEmail = { id: 'm-kid', is_active: true, date_of_birth: yearsAgo(12), clerk_user_id: null }
+    state.participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    state.agreements = [{ envelope_type: 'minor', status: 'completed' }]
+    const res = await post(student(yearsAgo(12)))
+    expect(res.status).toBe(200)
+    expect(links()).toEqual([expect.objectContaining({
+      filters: [['eq', 'id', 'm-kid'], ['is', 'clerk_user_id', null]],
+    })])
+  })
+
+  it('lets 13- and 14-year-olds through on their date of birth alone', async () => {
+    verified()
+    for (const dob of [yearsAgo(13), yearsAgo(14)]) {
+      state.writes = []
+      state.byEmail = { id: 'm-1', is_active: true, date_of_birth: dob, clerk_user_id: null }
+      state.participants = [{ id: 'p-1', date_of_birth: dob }]
+      expect((await post(student(dob))).status, dob).toBe(200)
+      expect(links()).toHaveLength(1)
+    }
+  })
+
+  it('leaves adults as they were: a self-serve sign-up with no date on file finishes onboarding', async () => {
+    verified()
+    state.byClerk = { id: 'm-new', is_active: true, date_of_birth: null }
+    const res = await post(ADULT_BODY)
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses a date of birth that is not a real past date', async () => {
+    verified()
+    for (const date_of_birth of ['not a date', '2999-01-01', '1990-13-45']) {
+      const res = await post({ ...ADULT_BODY, date_of_birth })
+      expect(res.status, date_of_birth).toBe(400)
+      expect((await res.json()).code).toBe('dob_invalid')
+    }
+    expect(state.updates).toBe(0)
+  })
+
+  it('links by email only through a verified address', async () => {
+    // Default clerkUser has no verification record.
+    state.byEmail = { id: 'm-1', is_active: true, date_of_birth: '1990-01-01', clerk_user_id: null }
+    const res = await post(ADULT_BODY)
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('email_not_verified')
+    expect(links()).toEqual([])
+  })
+
+  it('never moves a member row another login already holds', async () => {
+    verified()
+    state.byEmail = { id: 'm-1', is_active: true, date_of_birth: '1990-01-01', clerk_user_id: 'clerk-other' }
+    const res = await post(ADULT_BODY)
+    expect(res.status).toBe(409)
+    expect(links()).toEqual([])
+  })
+
+  it('backs off when another login links the row between the read and the write', async () => {
+    verified()
+    state.byEmail = { id: 'm-1', is_active: true, date_of_birth: '1990-01-01', clerk_user_id: null }
+    state.linkHits = false
+    const res = await post(ADULT_BODY)
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('member_already_linked')
   })
 })

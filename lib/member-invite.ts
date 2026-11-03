@@ -3,7 +3,7 @@ import { guardedEnsureClerkUser, type GuardedClerkUser } from '@/lib/clerk-provi
 import { accountInviteEmail, groupAccountCreatedEmail, sendEmail } from '@/lib/email'
 import { AUTH_APP_URL } from '@/lib/env'
 import { logActivity } from '@/lib/activity-log'
-import { isValidDob } from '@/lib/age'
+import { guardianAgreementOnFile, memberAgeFacts } from '@/lib/guardian-consent'
 
 // A double-click or an impatient admin should not put two invites in an inbox.
 export const ACCOUNT_INVITE_COOLDOWN_MS = 10 * 60 * 1000
@@ -70,7 +70,10 @@ export async function sendAccountInvite(
     try {
       login = await guardedEnsureClerkUser(member.email, member.first_name ?? '', member.last_name ?? '', {
         dateOfBirth: member.date_of_birth,
-        guardianAgreementOnFile: () => hasCompletedAgreement(db, member.id),
+        guardianAgreementOnFile: async () => guardianAgreementOnFile(db, {
+          memberId: member.id,
+          participantIds: (await memberAgeFacts(db, member)).participantIds,
+        }),
         adultByRole: isAdultByRole(member),
       })
     } catch (e) {
@@ -141,12 +144,17 @@ export type GroupAccountInviteResult =
  * member row, or, when that has no usable date of birth (an existing member
  * who joined through a link), from their participant rows, the youngest one.
  *
+ * With no organiserName it is for someone who registered themselves (an
+ * individual registrant, or a group's student organiser) and was refused a
+ * login at registration for being under 13: the sweep sends it once their
+ * parent or guardian has signed, and the email names no organiser.
+ *
  * Never throws: the registration already exists; the result says what happened.
  */
 export async function sendGroupAccountInvite(
   db: SupabaseClient,
   memberId: string,
-  { eventTitle, organiserName }: { eventTitle: string; organiserName: string },
+  { eventTitle, organiserName }: { eventTitle: string; organiserName?: string | null },
 ): Promise<GroupAccountInviteResult> {
   const { data: member } = await db
     .from('members')
@@ -157,14 +165,13 @@ export async function sendGroupAccountInvite(
   if (member.clerk_user_id) return { sent: false, reason: 'has_account' }
   if (member.account_invite_sent_at) return { sent: false, reason: 'already_invited' }
 
-  const parts = await memberParticipants(db, member.id)
-  const dateOfBirth = isValidDob(member.date_of_birth) ? member.date_of_birth : youngestDob(parts)
+  const { dateOfBirth, participantIds } = await memberAgeFacts(db, member)
 
   let login: GuardedClerkUser | null = null
   try {
     login = await guardedEnsureClerkUser(member.email, member.first_name ?? '', member.last_name ?? '', {
       dateOfBirth,
-      guardianAgreementOnFile: () => completedAgreementFor(db, parts.map((p) => p.id)),
+      guardianAgreementOnFile: () => guardianAgreementOnFile(db, { memberId: member.id, participantIds }),
     })
   } catch (e) {
     // A Clerk failure, after the age check passed. Still send: sign-in offers
@@ -195,35 +202,10 @@ export async function sendGroupAccountInvite(
     memberId: member.id,
     category: 'account',
     actorType: 'system',
-    action: 'group_account_created',
-    summary: `Account created from a group registration (${eventTitle}); sign-in email sent to ${member.email}`,
+    action: organiserName ? 'group_account_created' : 'registration_account_created',
+    summary: organiserName
+      ? `Account created from a group registration (${eventTitle}); sign-in email sent to ${member.email}`
+      : `Account created after a registration held for consent (${eventTitle}); sign-in email sent to ${member.email}`,
   }, db)
   return { sent: true }
-}
-
-type ParticipantFacts = { id: string; date_of_birth: string | null }
-
-async function memberParticipants(db: SupabaseClient, memberId: string): Promise<ParticipantFacts[]> {
-  const { data } = await db.from('participants').select('id, date_of_birth').eq('member_id', memberId)
-  return (data ?? []) as ParticipantFacts[]
-}
-
-/** The latest usable date of birth among a member's participant rows: if they disagree, the youngest reading wins. */
-function youngestDob(parts: ParticipantFacts[]): string | null {
-  const valid = parts.map((p) => p.date_of_birth).filter((d): d is string => isValidDob(d)).map((d) => d.slice(0, 10))
-  return valid.length ? valid.sort()[valid.length - 1] : null
-}
-
-async function completedAgreementFor(db: SupabaseClient, participantIds: string[]): Promise<boolean> {
-  if (participantIds.length === 0) return false
-  const { count } = await db
-    .from('agreements')
-    .select('id', { count: 'exact', head: true })
-    .in('participant_id', participantIds)
-    .eq('status', 'completed')
-  return (count ?? 0) > 0
-}
-
-async function hasCompletedAgreement(db: SupabaseClient, memberId: string): Promise<boolean> {
-  return completedAgreementFor(db, (await memberParticipants(db, memberId)).map((p) => p.id))
 }

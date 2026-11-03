@@ -3,7 +3,7 @@ import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
 import { claimUpload, discardUpload } from '@/lib/uploads'
 import { isLiteralStoragePath } from '@/lib/storage-path'
-import { contentTypeFor, fileExtension, nameMatchesFormat } from '@/lib/file-sniff'
+import { contentTypeFor, fileExtension, nameMatchesFormat, shortenFileName } from '@/lib/file-sniff'
 import { EDITABLE, getEventEmail } from '@/lib/event-emails/store'
 
 // POST /api/admin/events/[slug]/emails/[id]/attachments — attach a file the
@@ -22,6 +22,9 @@ type Ctx = { params: Promise<{ slug: string; id: string }> }
 /** Resend caps a message at 40MB after base64 (≈4/3 growth). */
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024
 
+/** The longest name an attachment is stored and sent under. */
+const MAX_FILENAME = 200
+
 export async function POST(req: Request, { params }: Ctx) {
   const { slug, id } = await params
   const access = await requireEventAccess(slug)
@@ -29,7 +32,9 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const b = await req.json().catch(() => ({}))
   const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
-  const filename = (typeof b.filename === 'string' ? b.filename : '').trim().slice(0, 200)
+  // Judged whole; shortened (keeping the extension) only once it passes. Cut
+  // first, a 230-character `….pdf` lost its extension and was refused.
+  const filename = (typeof b.filename === 'string' ? b.filename : '').trim()
   if (!storagePath || !filename) return NextResponse.json({ error: 'storagePath and filename required' }, { status: 400 })
   // Only objects issued for THIS event's emails. Both this and the holder check
   // below compare strings, so the path must be one storage reads as written:
@@ -81,11 +86,12 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: 'Attachments on one email are limited to 25MB in total' }, { status: 413 })
   }
 
+  const sentAs = shortenFileName(filename, MAX_FILENAME)
   const attachment = {
     path: storagePath,
-    filename,
+    filename: sentAs,
     size: claimed.bytes.byteLength,
-    contentType: contentTypeFor(claimed.format, filename),
+    contentType: contentTypeFor(claimed.format, sentAs),
   }
   const { data, error } = await db
     .from('event_emails')

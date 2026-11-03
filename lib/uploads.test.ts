@@ -32,9 +32,11 @@ vi.mock('@/lib/supabase', () => ({
 
 const {
   FILE_NAME_TOO_LONG, signUpload, claimUpload, UPLOAD_PURPOSES, safeFileName, spaceAttachmentPrefix, contributionPrefix,
+  isUploadPurpose,
 } = await import('./uploads')
 type UploadPurpose = import('./uploads').UploadPurpose
 type FileFormat = import('./file-sniff').FileFormat
+const { sniffFileFormat } = await import('./file-sniff')
 const {
   EXCEL_CLSID, FORMAT_SAMPLES, HOSTILE_SAMPLES, OUTLOOK_ICS, SAMPLE_NAMES, WORD_CLSID, bytes, compoundFile, encryptedOoxml,
   threeMf, workbookStream, zipOf,
@@ -734,6 +736,80 @@ describe('signUpload — names', () => {
     getCurrentMemberMock.mockResolvedValue({ id: 'member-1' })
     expect(await sign('community-media', 'a.png', 'image/png')).toEqual({ bucket: 'community-resources', path: 'p', token: 't' })
     expect(createSignedUploadUrl.mock.calls[0][0]).toMatch(/^community-media-staging\/member-1\/\d+-a\.png$/)
+  })
+})
+
+// Whether to take .rtf, .msg and .xlsb is still to be decided, so no purpose
+// lists them. Until then each refusal says the file type isn't accepted:
+// signing used to tell an event manager that an Excel workbook (.xlsb)
+// "doesn't look like a PDF, Office, … file".
+describe('.rtf, .msg and .xlsb, until someone decides to take them', () => {
+  const OUTLOOK_CLSID = [0x0b, 0x0d, 0x02, 0x00, 0, 0, 0, 0, 0xc0, 0, 0, 0, 0, 0, 0, 0x46]
+  const PENDING = {
+    rtf: { type: 'application/rtf', format: 'text', sample: bytes('{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times;}} Hello}\n') },
+    msg: {
+      type: 'application/vnd.ms-outlook',
+      format: 'ole2',
+      sample: compoundFile(OUTLOOK_CLSID, [{ name: '__substg1.0_0037001F', data: Buffer.alloc(64) }]),
+    },
+    xlsb: {
+      type: 'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+      format: 'ooxml',
+      sample: zipOf([{ name: '[Content_Types].xml', data: '<Types/>' }, { name: 'xl/workbook.bin' }]),
+    },
+  } as const
+  const EXTS = Object.keys(PENDING) as (keyof typeof PENDING)[]
+  const CTX = { slug: 'nevada', kind: 'badge', theme: 'environmental', moduleId: 'm1', memberId: 'm1', spaceId: 's1', spaceSlug: 'rovers', containerId: 'c1' }
+  const grantEverything = () => {
+    asAdmin()
+    getCurrentMemberMock.mockResolvedValue({ id: 'm1', isAdmin: false })
+    getRegistrationMock.mockResolvedValue({ id: 'r1' })
+    requireEventAccessMock.mockResolvedValue({ ok: true, userId: 'u1', isAdmin: true, assignedSlugs: null })
+    memberManagesContainerMock.mockResolvedValue(true)
+    getSpaceForMemberMock.mockResolvedValue({ id: 's1', access: { canAccess: true }, allowMemberUploads: true })
+    licenseRow.current = { id: 'l1' }
+  }
+
+  it('sniffs each as a format some purpose takes, so the name is what refuses it', () => {
+    for (const ext of EXTS) expect(sniffFileFormat(PENDING[ext].sample)).toBe(PENDING[ext].format)
+  })
+
+  it.each(PURPOSES.flatMap((purpose) => EXTS.map((ext) => [purpose, ext] as const)))(
+    '%s won’t sign Budget.%s, and says the type isn’t accepted',
+    async (purpose, ext) => {
+      grantEverything()
+      const signed = await signUpload({ purpose, ctx: CTX, fileName: `Budget.${ext}`, fileSize: 10, contentType: PENDING[ext].type })
+      // A purpose with a list of types refuses the declared type first.
+      const error = UPLOAD_PURPOSES[purpose].allowedTypes ? 'That file type is not accepted here.' : `.${ext} files aren’t accepted here.`
+      expect(signed).toEqual({ error, status: 415 })
+      expect(createSignedUploadUrl).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(
+    PURPOSES.flatMap((purpose) =>
+      EXTS.filter((ext) => UPLOAD_PURPOSES[purpose].formats.includes(PENDING[ext].format)).map((ext) => [purpose, ext] as const),
+    ),
+  )('%s, handed Budget.%s anyway, says the same once it has read the bytes', async (purpose, ext) => {
+    stored(PENDING[ext].sample)
+    const storagePath = `p/1-Budget.${ext}`
+    expect(await claimUpload({ purpose, storagePath })).toEqual({ error: `.${ext} files aren’t accepted here.`, status: 415 })
+    expect(remove).toHaveBeenCalledWith([storagePath])
+  })
+})
+
+describe('isUploadPurpose', () => {
+  it('takes every purpose there is', () => {
+    for (const purpose of Object.keys(UPLOAD_PURPOSES)) expect(isUploadPurpose(purpose)).toBe(true)
+  })
+
+  // `in` found these on Object.prototype, and signing under one threw.
+  it.each(['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf', 'isPrototypeOf'])('refuses %j', (name) => {
+    expect(isUploadPurpose(name)).toBe(false)
+  })
+
+  it('refuses anything that is not a string', () => {
+    for (const value of [undefined, null, 42, {}, ['admin-resource']]) expect(isUploadPurpose(value)).toBe(false)
   })
 })
 

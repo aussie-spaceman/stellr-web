@@ -483,9 +483,96 @@ const adtsFrame = (b: Uint8Array) => b.length >= 7 && b[0] === 0xff && (b[1] & 0
 
 // ── Text ────────────────────────────────────────────────────────────────────
 
+const CR = 0x0d
+const LF = 0x0a
+const SPACE = 0x20
+const TAB = 0x09
+
+/**
+ * `b` with its folded lines joined (RFC 5545): every CRLF or bare LF followed by
+ * one space or tab is dropped — exactly what replace(/\r?\n[ \t]/g, '') drops
+ * from the decoded text, so decoding the result with the same decoder gives the
+ * joined text. `unit` is the bytes per code unit: 1 for an 8-bit encoding, 2 for
+ * UTF-16 in the byte order `littleEndian` names.
+ *
+ * Done on the bytes, into one array the input's size: the regex built a part
+ * per fold, and a 25MB calendar of `x\r\n \n` took 0.7s and 400–500MB a claim.
+ *
+ * Each LF followed by a space or tab is a fold, and a CR just before it is part
+ * of the fold too. That CR was always the last byte copied: a fold ends in a
+ * space or a tab, so no earlier fold took it. With nothing folded — most files —
+ * `b` itself comes back, read but not copied.
+ */
+export function unfoldLines(b: Uint8Array, unit: 1 | 2 = 1, littleEndian = true): Uint8Array {
+  if (unit === 2) return unfoldUtf16(b, littleEndian)
+  const length = b.length
+  let i = 0
+  for (; i < length; i++) {
+    if (b[i] === LF) {
+      const next = b[i + 1]
+      if (next === SPACE || next === TAB) break
+    }
+  }
+  if (i === length) return b
+  const out = new Uint8Array(length)
+  out.set(b.subarray(0, i))
+  let n = i
+  for (; i < length; i++) {
+    const c = b[i]
+    if (c === LF) {
+      const next = b[i + 1]
+      if (next === SPACE || next === TAB) {
+        if (b[i - 1] === CR) n--
+        i++ // past the space or tab
+        continue
+      }
+    }
+    out[n++] = c
+  }
+  return out.subarray(0, n)
+}
+
+/**
+ * unfoldLines for UTF-16, a code unit (two bytes) at a time. A character must
+ * have a zero high byte, so U+0A0D or U+200A is never read as a CR, LF or space.
+ */
+function unfoldUtf16(b: Uint8Array, littleEndian: boolean): Uint8Array {
+  const lo = littleEndian ? 0 : 1
+  const hi = 1 - lo
+  const end = b.length - (b.length & 1) // whole units only
+  // The character of the unit at byte `p`, or -1 for none or one above U+00FF.
+  const at = (p: number) => (p >= 0 && p < end && b[p + hi] === 0 ? b[p + lo] : -1)
+  const out = new Uint8Array(b.length)
+  let n = 0
+  for (let p = 0; p < end; p += 2) {
+    if (at(p) === LF && (at(p + 2) === SPACE || at(p + 2) === TAB)) {
+      if (at(p - 2) === CR) n -= 2
+      p += 2 // past the space or tab
+      continue
+    }
+    out[n++] = b[p]
+    out[n++] = b[p + 1]
+  }
+  if (end < b.length) out[n++] = b[end] // half a unit: kept, though valid UTF-16 never has one
+  return out.subarray(0, n)
+}
+
+/**
+ * Whether 8-bit text opens as /^\s*BEGIN:VCALENDAR\r?\n/i would find it once
+ * decoded, read without decoding the rest. Which bytes are leading space is
+ * asked of the decoder itself, so this can't drift from what `\s` matches.
+ */
+const DECODES_TO_SPACE = Uint8Array.from({ length: 256 }, (_, i) => (/\s/.test(latin1(Uint8Array.of(i))) ? 1 : 0))
+function opensAsCalendar(bytes: Uint8Array): boolean {
+  let at = 0
+  while (at < bytes.length && DECODES_TO_SPACE[bytes[at]]) at++
+  return /^BEGIN:VCALENDAR\r?\n/i.test(latin1(bytes.subarray(at, at + 17)))
+}
+
 /**
  * A calendar may carry markup only in X-ALT-DESC, the HTML description Outlook
- * and Teams add. Folded lines are joined first, so no tag spans a fold.
+ * and Teams add. `unfolded` is the calendar with its folded lines joined (see
+ * unfoldLines), so no tag spans a fold.
  *
  * Lines are read as split(/\r?\n/) would cut them, without splitting: 25MB of
  * bare newlines made millions of strings, about 1.8s and 600MB a claim. A tag
@@ -493,8 +580,7 @@ const adtsFrame = (b: Uint8Array) => b.length >= 7 && b[0] === 0xff && (b[1] & 0
  * search may run past a line end; the line check never does), that line alone
  * is read, and the search resumes after it, so no line is read twice.
  */
-function calendarMarkupFree(decoded: string): boolean {
-  const unfolded = decoded.replace(/\r?\n[ \t]/g, '')
+function calendarMarkupFree(unfolded: string): boolean {
   const search = new RegExp(MARKUP_TAG.source, 'gi')
   for (let found = search.exec(unfolded); found; found = search.exec(unfolded)) {
     const start = unfolded.lastIndexOf('\n', found.index) + 1
@@ -514,8 +600,11 @@ function text(b: Uint8Array): FileFormat | null {
   let decoded: string
   if (startsWith(b, [0xff, 0xfe]) || startsWith(b, [0xfe, 0xff])) {
     // UTF-16, as Excel's "Unicode text" export writes it.
+    const littleEndian = b[0] === 0xff
+    const encoding = littleEndian ? 'utf-16le' : 'utf-16be'
+    const body = b.subarray(2)
     try {
-      decoded = new TextDecoder(b[0] === 0xff ? 'utf-16le' : 'utf-16be', { fatal: true }).decode(b.subarray(2))
+      decoded = new TextDecoder(encoding, { fatal: true }).decode(body)
     } catch {
       return null
     }
@@ -523,14 +612,26 @@ function text(b: Uint8Array): FileFormat | null {
       const c = decoded.charCodeAt(i)
       if (c < 0x20 && !TEXT_CONTROLS.has(c)) return null
     }
+    if (/^\s*BEGIN:VCALENDAR\r?\n/i.test(decoded)) {
+      decoded = '' // not needed again: let it go before the joined copy is made
+      // Valid UTF-16 (it decoded), so dropping folds can't pair up a stray
+      // surrogate. The decoder took a byte-order mark off the front of `body`,
+      // so that one is dropped here too; one that only reaches the front once a
+      // fold is dropped stays, as it did when the decoded text was joined.
+      const mark = littleEndian ? [0xff, 0xfe] : [0xfe, 0xff]
+      const joined = unfoldLines(body.subarray(startsWith(body, mark) ? 2 : 0), 2, littleEndian)
+      return calendarMarkupFree(new TextDecoder(encoding, { ignoreBOM: true }).decode(joined)) ? 'calendar' : null
+    }
   } else {
     // Any 8-bit encoding: a Windows-1252 CSV is as legitimate as a UTF-8 one,
     // so this asks only "no binary control bytes", not "valid UTF-8".
     const bytes = b.subarray(startsWith(b, [0xef, 0xbb, 0xbf]) ? 3 : 0)
     if (bytes.length === 0 || !controlFree(bytes)) return null
+    // One byte is one character in this decoder, so folds are joined on the
+    // bytes and the calendar is decoded once, already joined.
+    if (opensAsCalendar(bytes)) return calendarMarkupFree(latin1(unfoldLines(bytes))) ? 'calendar' : null
     decoded = latin1(bytes)
   }
-  if (/^\s*BEGIN:VCALENDAR\r?\n/i.test(decoded)) return calendarMarkupFree(decoded) ? 'calendar' : null
   return MARKUP_START.test(decoded) || MARKUP_TAG.test(decoded) ? null : 'text'
 }
 
@@ -676,6 +777,25 @@ export function fileExtension(name: string): string {
   while (end > 0 && TRAILING_JUNK.test(base[end - 1])) end--
   const dot = base.lastIndexOf('.', end - 1)
   return dot > 0 ? base.slice(dot + 1, end).toLowerCase() : ''
+}
+
+/**
+ * `name` in at most `max` characters, cut from the end of the stem so it keeps
+ * its extension (one of up to 16 characters) as written: `… v1.2 … packet.pdf`
+ * must not become `… v1.2 … pack`, an extension of `2 … pack`. The dots and
+ * spaces Windows drops after an extension go with the cut, and the cut never
+ * leaves half a surrogate pair.
+ */
+export function shortenFileName(name: string, max: number): string {
+  if (name.length <= max) return name
+  const ext = fileExtension(name)
+  let end = name.length
+  while (end > 0 && TRAILING_JUNK.test(name[end - 1])) end--
+  const tail = ext && ext.length <= 16 ? name.slice(end - ext.length - 1, end) : ''
+  let cut = max - tail.length
+  const last = name.charCodeAt(cut - 1)
+  if (last >= 0xd800 && last <= 0xdbff) cut--
+  return name.slice(0, cut) + tail
 }
 
 /** True for an extension that is never accepted, whatever the bytes are. */

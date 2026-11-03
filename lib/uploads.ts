@@ -17,6 +17,7 @@ import {
   isActiveContentType,
   isDangerousExtension,
   nameMatchesFormat,
+  shortenFileName,
   sniffFileFormat,
   type FileFormat,
 } from '@/lib/file-sniff'
@@ -76,6 +77,9 @@ export type UploadPurpose =
 export type UploadContext = Record<string, string | undefined>
 
 export type UploadDenied = { error: string; status: number }
+
+/** A stored object claimUpload accepted: its bytes, its bucket and the format they sniff as. */
+export type ClaimedUpload = { bytes: Uint8Array; bucket: string; format: FileFormat }
 type Granted = { path: string }
 
 type PurposeSpec = {
@@ -127,17 +131,12 @@ export const FILE_NAME_TOO_LONG = `That file name is too long. Shorten it to ${M
 
 /**
  * Strip anything that could escape the intended prefix, and shorten to 120
- * characters — from the end of the stem, so the stored name keeps the extension
- * it was sent with (`… v1.2 … packet.pdf` must not become `… v1.2 … pack`).
+ * characters from the end of the stem, keeping the extension (shortenFileName).
  * Runs of dots become one: claimUpload refuses any path holding `..`.
  */
 export function safeFileName(name: string): string {
   const oneDot = (s: string) => s.replace(/\.{2,}/g, '.')
-  const safe = oneDot(name.replace(/[^a-zA-Z0-9._-]/g, '_')) || 'file'
-  if (safe.length <= MAX_NAME) return safe
-  const ext = fileExtension(safe)
-  const tail = ext && ext.length <= 16 ? `.${ext}` : ''
-  return oneDot(safe.slice(0, MAX_NAME - tail.length) + tail)
+  return oneDot(shortenFileName(oneDot(name.replace(/[^a-zA-Z0-9._-]/g, '_')) || 'file', MAX_NAME))
 }
 
 /**
@@ -465,8 +464,13 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   },
 }
 
+/**
+ * A purpose UPLOAD_PURPOSES defines. Its own keys only: `in` also finds what
+ * every object inherits ('toString', 'constructor', '__proto__'), and signing
+ * under one of those threw — a 500 from a route anyone can call.
+ */
 export function isUploadPurpose(value: unknown): value is UploadPurpose {
-  return typeof value === 'string' && value in UPLOAD_PURPOSES
+  return typeof value === 'string' && Object.hasOwn(UPLOAD_PURPOSES, value)
 }
 
 /** Issue a signed upload URL for a purpose, or explain why not. */
@@ -510,13 +514,14 @@ export async function signUpload(args: {
 
   // The name: claimUpload decides on the bytes, but a page, script or
   // executable — or any name this purpose never takes — can be turned away
-  // before anything is sent. Both the name as sent and the stored one.
+  // before anything is sent. Both the name as sent and the stored one. Only
+  // the name has been seen, so the refusal is about the name, as claimUpload's
+  // is: not the purpose's formatError, which says what the contents don't look
+  // like (an .xlsb "doesn't look like an Office file", though it is one).
   for (const ext of new Set([fileExtension(args.fileName), fileExtension(safeName)])) {
     if (!ext) continue
     if (isDangerousExtension(ext)) return deny(dangerousExtensionError(ext), 415)
-    if (!extensionsFor(spec.formats, !spec.sharedFileNames).has(ext)) {
-      return deny(spec.formatError ?? notAcceptedError(ext), 415)
-    }
+    if (!extensionsFor(spec.formats, !spec.sharedFileNames).has(ext)) return deny(notAcceptedError(ext), 415)
   }
 
   const db = supabaseServer()
@@ -573,7 +578,7 @@ export async function claimUpload(args: {
    * already a dedicated private bucket (e.g. teacher-licenses).
    */
   expectedPrefix?: string
-}): Promise<{ bytes: Uint8Array; bucket: string; format: FileFormat } | UploadDenied> {
+}): Promise<ClaimedUpload | UploadDenied> {
   const spec = UPLOAD_PURPOSES[args.purpose]
   const { storagePath, purpose, expectedPrefix } = args
 

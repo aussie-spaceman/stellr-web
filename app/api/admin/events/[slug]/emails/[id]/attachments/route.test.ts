@@ -143,6 +143,30 @@ describe('POST event email attachments', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
+  // The name was cut to 200 characters before its extension was read, so a
+  // 230-character `….pdf` (signing takes up to 255) lost its `.pdf`, was refused
+  // as having no extension, and its object was deleted.
+  it('takes a 230-character name, and keeps its extension when it shortens it', async () => {
+    claimedAs('pdf')
+    const filename = `${'x'.repeat(226)}.pdf`
+    expect(filename).toHaveLength(230)
+    expect((await attach({ filename })).status).toBe(200)
+    expect(discardUpload).not.toHaveBeenCalled()
+    expect(update.mock.calls[0][0].attachments[0]).toMatchObject({
+      filename: `${'x'.repeat(196)}.pdf`,
+      contentType: 'application/pdf',
+    })
+  })
+
+  it('still refuses a long name whose extension is wrong, judging the whole name', async () => {
+    claimedAs('pdf')
+    // Cut at 200, this would have read as `….pdf`.
+    expect((await attach({ filename: `${'x'.repeat(196)}.pdf${'y'.repeat(30)}.html` })).status).toBe(415)
+    expect((await attach({ filename: `${'x'.repeat(226)}.docx` })).status).toBe(415)
+    expect(discardUpload).toHaveBeenCalledTimes(2)
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it("passes on claimUpload's refusal of bytes that are not an accepted format", async () => {
     claimUpload.mockResolvedValue({ error: 'That file doesn’t look like a PDF, Office, OpenDocument, Keynote, image, CSV or calendar file.', status: 415 })
     const res = await attach({ filename: 'schedule.pdf', contentType: 'application/pdf' })

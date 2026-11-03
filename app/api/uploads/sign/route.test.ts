@@ -71,3 +71,27 @@ describe('POST /api/uploads/sign — file name length', () => {
     expect(signUpload).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/uploads/sign — purpose', () => {
+  // `purpose in UPLOAD_PURPOSES` found what every object inherits, and signing
+  // under 'toString' read no grant and threw: a 500 for anyone who asked.
+  it.each(['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'])(
+    'refuses %j as an unknown purpose, without calling signUpload',
+    async (purpose) => {
+      const res = await POST(
+        new Request('http://x/api/uploads/sign', {
+          method: 'POST',
+          body: JSON.stringify({ purpose, fileName: 'a.pdf', fileSize: 10, contentType: 'application/pdf' }),
+        }),
+      )
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'Unknown upload purpose' })
+      expect(signUpload).not.toHaveBeenCalled()
+    },
+  )
+
+  it('still signs a purpose that is defined', async () => {
+    expect((await sign('a.pdf')).status).toBe(200)
+    expect(signUpload).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'admin-resource' }))
+  })
+})

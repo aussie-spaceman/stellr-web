@@ -12,7 +12,7 @@ import {
 } from '@/lib/resource-upload'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload, contributionPrefix, discardUpload } from '@/lib/uploads'
-import { finaliseStoredUpload, watermarkIfPdf } from '@/lib/resource-finalise'
+import { finaliseStoredUpload } from '@/lib/resource-finalise'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -91,10 +91,10 @@ export async function POST(req: Request) {
 
     const displayName = (body.displayName ?? '').trim()
     const fileType = body.fileType || null
-    // Watermarking moved here with the upload; the old multipart path stored
-    // member-contributed PDFs unstamped.
-    await watermarkIfPdf(claimed.bucket, body.storagePath, claimed.bytes, fileType)
-
+    // Finalising watermarks a PDF (the old multipart path stored member
+    // contributions unstamped) and records it. It takes the claim made above,
+    // pinned to the member's folder, rather than downloading, sniffing and
+    // stamping the same object a second time.
     const created = await finaliseStoredUpload({
       purpose: 'container-contribution',
       storagePath: body.storagePath,
@@ -102,7 +102,8 @@ export async function POST(req: Request) {
       fileType,
       uploadedBy: member.id,
       contentHash,
-      expectedPrefix: CONTRIBUTION_PREFIX, // MEM-13: re-claim stays namespace-pinned
+      expectedPrefix: CONTRIBUTION_PREFIX,
+      claimed,
     })
     if ('error' in created) {
       return NextResponse.json({ error: created.error }, { status: created.status })

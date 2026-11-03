@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+import { Worker } from 'node:worker_threads'
+import { pathToFileURL } from 'node:url'
 import {
   FORMAT_EXTENSIONS,
   contentTypeFor,
@@ -6,7 +8,9 @@ import {
   isActiveContentType,
   isDangerousExtension,
   nameMatchesFormat,
+  shortenFileName,
   sniffFileFormat,
+  unfoldLines,
   type FileFormat,
 } from './file-sniff'
 import {
@@ -315,6 +319,11 @@ describe('sniffFileFormat — PDFs and text', () => {
       const ics = `BEGIN:VCALENDAR\r\n${body}`
       const expected = before(ics) ? 'calendar' : null
       expect(sniffFileFormat(bytes(ics)), JSON.stringify(ics)).toBe(expected)
+      // The same calendar exported as UTF-16, either byte order.
+      const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(ics, 'utf16le')])
+      const be = Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(ics, 'utf16le').swap16()])
+      expect(sniffFileFormat(new Uint8Array(le)), `UTF-16LE ${JSON.stringify(ics)}`).toBe(expected)
+      expect(sniffFileFormat(new Uint8Array(be)), `UTF-16BE ${JSON.stringify(ics)}`).toBe(expected)
       if (expected) calendars++
       else refused++
     }
@@ -322,16 +331,85 @@ describe('sniffFileFormat — PDFs and text', () => {
     expect(Math.min(calendars, refused)).toBeGreaterThan(1000)
   })
 
-  it('reads a calendar of millions of lines in about the time plain text takes', () => {
-    const sample = (head: string) => {
-      const out = new Uint8Array(8 * 1024 * 1024).fill(0x0a)
+  // Folds were joined with replace(/\r?\n[ \t]/g, ''), which built a part per
+  // fold: a 25MB calendar of `x\r\n \n` took 0.7s and 400–500MB a claim. They
+  // are joined on the bytes now, and must come out exactly as the regex did.
+  it('joins folded lines on the bytes exactly as the regex joined the text', () => {
+    let seed = 0xf01d
+    const random = () => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)]
+    const regex = (s: string) => s.replace(/\r?\n[ \t]/g, '')
+
+    // 8-bit: any byte at all, weighted towards the ones a fold is made of.
+    const latin1 = new TextDecoder('latin1')
+    const byteTokens = [[0x0d], [0x0a], [0x20], [0x09], [0x0d, 0x0a], [0x0d, 0x0a, 0x20], [0x0a, 0x09], [0x0d, 0x0d, 0x0a], [0x78]]
+    for (let i = 0; i < 20000; i++) {
+      const parts: number[] = []
+      for (let n = Math.floor(random() * 32); n > 0; n--) {
+        parts.push(...(random() < 0.2 ? [Math.floor(random() * 256)] : pick(byteTokens)))
+      }
+      const b = Uint8Array.from(parts)
+      expect(latin1.decode(unfoldLines(b)), JSON.stringify(parts)).toBe(regex(latin1.decode(b)))
+    }
+
+    // UTF-16, both byte orders. Code units whose bytes are a CR, LF, space or
+    // tab in the other half (U+0A0D, U+200A, U+0D00…) must not be read as one.
+    const unitTokens = [
+      '\r', '\n', ' ', '\t', '\r\n', '\r\n ', '\n\t', 'x', 'é', '﻿', ' ', '🚀',
+      '਍', ' ', 'ഀ', '਀', 'ठ', ' ', 'ഊ',
+    ]
+    for (let i = 0; i < 20000; i++) {
+      let s = ''
+      for (let n = Math.floor(random() * 24); n > 0; n--) s += pick(unitTokens)
+      const le = new Uint8Array(Buffer.from(s, 'utf16le'))
+      const be = new Uint8Array(Buffer.from(s, 'utf16le').swap16())
+      const decodeLe = new TextDecoder('utf-16le', { ignoreBOM: true })
+      const decodeBe = new TextDecoder('utf-16be', { ignoreBOM: true })
+      expect(decodeLe.decode(unfoldLines(le, 2, true)), JSON.stringify(s)).toBe(regex(s))
+      expect(decodeBe.decode(unfoldLines(be, 2, false)), JSON.stringify(s)).toBe(regex(s))
+    }
+  })
+
+  // What the regex join cost was memory: held to a 64MB heap, it ran out on a
+  // 25MB calendar of folds (it did at 256MB too). Joining on the bytes needs
+  // about 25MB. The worker loads lib/file-sniff.ts from source with Node's own
+  // type stripping, so that module must go on importing nothing.
+  it('joins the folds of a 25MB calendar within a 64MB heap', async () => {
+    const worker = new Worker(
+      `const { parentPort, workerData } = require('node:worker_threads')
+       import(workerData.source).then(({ sniffFileFormat }) => {
+         const b = Buffer.alloc(25 * 1024 * 1024, 'x\\r\\n \\n')
+         b.write('BEGIN:VCALENDAR\\r\\n', 0, 'latin1')
+         parentPort.postMessage(sniffFileFormat(new Uint8Array(b.buffer, b.byteOffset, b.length)))
+       })`,
+      {
+        eval: true,
+        // Not new URL('./file-sniff.ts', import.meta.url): Vite turns that into a served asset URL.
+        workerData: { source: pathToFileURL(`${import.meta.dirname}/file-sniff.ts`).href },
+        resourceLimits: { maxOldGenerationSizeMb: 64 },
+        stderr: true,
+      },
+    )
+    worker.stderr.resume() // Node's notice that it stripped the types
+    const outcome = await new Promise((resolve) => {
+      worker.once('message', resolve)
+      worker.once('error', (e: Error & { code?: string }) => resolve(`${e.code}: ${e.message}`))
+    })
+    await worker.terminate()
+    expect(outcome).toBe('calendar')
+  }, 30_000)
+
+  it('reads a calendar of millions of lines, or of folds, in about the time plain text takes', () => {
+    const sample = (head: string, fill: string) => {
+      const out = new Uint8Array(Buffer.alloc(8 * 1024 * 1024, fill))
       out.set(Buffer.from(head))
       return out
     }
-    const calendar = sample('BEGIN:VCALENDAR\r\n')
-    const plain = sample('BEGIN:NOTHING\r\n')
-    expect(sniffFileFormat(calendar)).toBe('calendar')
-    expect(sniffFileFormat(plain)).toBe('text')
     const fastest = (b: Uint8Array) => {
       let best = Infinity
       for (let run = 0; run < 3; run++) {
@@ -341,8 +419,15 @@ describe('sniffFileFormat — PDFs and text', () => {
       }
       return best
     }
-    // Splitting took about five times as long as reading the same bytes as text.
-    expect(fastest(calendar)).toBeLessThan(2.5 * fastest(plain) + 50)
+    // Bare newlines: splitting took about five times as long as reading the
+    // same bytes as text. Folds: the regex that joined them, about four times.
+    for (const fill of ['\n', 'x\r\n \n']) {
+      const calendar = sample('BEGIN:VCALENDAR\r\n', fill)
+      const plain = sample('BEGIN:NOTHING\r\n', fill)
+      expect(sniffFileFormat(calendar)).toBe('calendar')
+      expect(sniffFileFormat(plain)).toBe('text')
+      expect(fastest(calendar), JSON.stringify(fill)).toBeLessThan(2.5 * fastest(plain) + 50)
+    }
   })
 
   // A caller that takes no text is spared reading every byte of one to refuse it.
@@ -477,6 +562,32 @@ describe('names', () => {
     expect(nameMatchesFormat('art.png', 'jpeg', true)).toBe(true)
     expect(nameMatchesFormat('art.png', 'pdf', true)).toBe(false)
     expect(nameMatchesFormat('scan', 'pdf', true)).toBe(true)
+  })
+})
+
+describe('shortenFileName', () => {
+  it('leaves a name that fits alone', () => {
+    expect(shortenFileName('Schedule.pdf', 200)).toBe('Schedule.pdf')
+    expect(shortenFileName(`${'x'.repeat(196)}.pdf`, 200)).toBe(`${'x'.repeat(196)}.pdf`)
+  })
+
+  it('cuts the stem and keeps the extension as it is written', () => {
+    expect(shortenFileName(`${'x'.repeat(226)}.pdf`, 200)).toBe(`${'x'.repeat(196)}.pdf`)
+    expect(shortenFileName(`Parent packet ${'é'.repeat(220)}.PDF`, 200)).toBe(`Parent packet ${'é'.repeat(182)}.PDF`)
+    // The dots and spaces Windows drops after an extension go with the cut.
+    expect(shortenFileName(`${'x'.repeat(226)}.pdf. .`, 200)).toBe(`${'x'.repeat(196)}.pdf`)
+  })
+
+  it('keeps no extension it can’t fit, and cuts a name without one at the end', () => {
+    expect(shortenFileName(`${'x'.repeat(226)}.${'e'.repeat(20)}`, 200)).toBe('x'.repeat(200))
+    expect(shortenFileName('x'.repeat(230), 200)).toBe('x'.repeat(200))
+  })
+
+  it('never leaves half of a character outside the Basic Multilingual Plane', () => {
+    const name = `${'x'.repeat(195)}🚀🚀🚀.pdf` // the rocket straddles the cut
+    const short = shortenFileName(name, 200)
+    expect(short).toBe(`${'x'.repeat(195)}.pdf`)
+    expect(short.isWellFormed()).toBe(true)
   })
 })
 

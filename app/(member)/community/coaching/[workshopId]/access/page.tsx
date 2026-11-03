@@ -10,7 +10,7 @@ const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 
 
 export default async function AccessPage({ params }: { params: Promise<{ workshopId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { workshopId } = await params
   const [space, full, allowance] = await Promise.all([

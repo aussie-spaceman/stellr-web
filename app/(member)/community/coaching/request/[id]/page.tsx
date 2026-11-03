@@ -12,7 +12,7 @@ const TEAL = '#0E8C99'
 
 export default async function CoachingRequestStatusPage({ params }: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { id } = await params
   const req = await getRequestById(id)

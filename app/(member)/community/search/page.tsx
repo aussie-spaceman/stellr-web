@@ -41,7 +41,7 @@ export default async function CommunitySearchPage({
   searchParams: Promise<{ q?: string }>
 }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { q = '' } = await searchParams
   const trimmedQ = q.trim()

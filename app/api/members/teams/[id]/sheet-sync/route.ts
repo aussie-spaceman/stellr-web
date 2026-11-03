@@ -58,7 +58,7 @@ export async function POST(
   // for an individually-paid group — send each new person their payment link or
   // free-event notice (shared with the Google-Drive webhook so the two paths
   // never drift).
-  const { created, updated, paymentLinksSent } = await syncParticipantsFromSheet(db, {
+  const { created, updated, paymentLinksSent, skippedForDateOfBirth } = await syncParticipantsFromSheet(db, {
     id: registration.id,
     spreadsheet_id: registration.spreadsheet_id,
     school_name: registration.school_name,
@@ -95,5 +95,5 @@ export async function POST(
     watchActive = true
   }
 
-  return NextResponse.json({ updated, created, watchActive, paymentLinksSent })
+  return NextResponse.json({ updated, created, watchActive, paymentLinksSent, skippedForDateOfBirth })
 }

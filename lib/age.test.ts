@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageOfMajority, ageOn, appToday, isMinorOn, isUnder13On, isValidDob, onDate } from './age'
+import { ageOfMajority, ageOn, appToday, isKnownMinorOn, isMinorOn, isUnder13On, isValidDob, onDate } from './age'
 
 const on = new Date('2026-10-02T12:00:00Z')
 
@@ -24,9 +24,15 @@ describe('isMinorOn', () => {
     expect(isMinorOn('2008-10-02', on)).toBe(false)
   })
 
-  it('is false when the date of birth is unknown', () => {
-    expect(isMinorOn(null, on)).toBe(false)
-    expect(isMinorOn('', on)).toBe(false)
+  // S0 (2 Nov 2026): an unknown date of birth used to read as an adult, so a
+  // missing answer unlocked what only an adult may do. It is presumed a minor
+  // now, as lib/minor-policy already did.
+  it('presumes a minor when the date of birth is unknown or unreadable', () => {
+    expect(isMinorOn(null, on)).toBe(true)
+    expect(isMinorOn(undefined, on)).toBe(true)
+    expect(isMinorOn('', on)).toBe(true)
+    expect(isMinorOn('not a date', on)).toBe(true)
+    expect(isMinorOn('2013-02-29', on)).toBe(true)
   })
 
   it('uses the age of majority where the person lives (V2.3: AL/NE 19, MS 21)', () => {
@@ -37,6 +43,21 @@ describe('isMinorOn', () => {
     expect(isMinorOn('2007-10-02', on, 'AL')).toBe(false)
     expect(isMinorOn('2005-10-03', on, 'ms')).toBe(true)
     expect(isMinorOn('2005-10-02', on, 'MS')).toBe(false)
+  })
+})
+
+describe('isKnownMinorOn', () => {
+  it('agrees with isMinorOn for a usable date of birth, including the state rule', () => {
+    expect(isKnownMinorOn('2008-10-03', on)).toBe(true)
+    expect(isKnownMinorOn('2008-10-02', on)).toBe(false)
+    expect(isKnownMinorOn('2007-10-03', on, 'AL')).toBe(true)
+    expect(isKnownMinorOn('2007-10-03', on, 'CO')).toBe(false)
+  })
+
+  it('is false when the date of birth is unknown: only for checks a minor is exempt from', () => {
+    expect(isKnownMinorOn(null, on)).toBe(false)
+    expect(isKnownMinorOn('', on)).toBe(false)
+    expect(isKnownMinorOn('not a date', on)).toBe(false)
   })
 })
 
@@ -56,8 +77,10 @@ describe('isUnder13On', () => {
     expect(isUnder13On('2013-10-02', on)).toBe(false)
   })
 
-  it('is false when the date of birth is unknown', () => {
-    expect(isUnder13On(undefined, on)).toBe(false)
+  it('presumes under 13 when the date of birth is unknown or unreadable, so a parent comes first', () => {
+    expect(isUnder13On(undefined, on)).toBe(true)
+    expect(isUnder13On(null, on)).toBe(true)
+    expect(isUnder13On('12/01/2013', on)).toBe(true)
   })
 })
 
@@ -77,11 +100,11 @@ describe('the shared "today"', () => {
 })
 
 describe('isValidDob', () => {
-  it('accepts a real past date and nothing else; an unreadable one is never treated as a minor', () => {
+  it('accepts a real past date and nothing else; an unreadable one is never treated as an adult', () => {
     expect(isValidDob('2012-02-29')).toBe(true)
     expect(isValidDob('2013-02-29')).toBe(false)
     expect(isValidDob('not a date')).toBe(false)
     expect(isValidDob('2999-01-01')).toBe(false)
-    expect(isMinorOn('not a date', on)).toBe(false)
+    expect(isMinorOn('2999-01-01', on)).toBe(true)
   })
 })

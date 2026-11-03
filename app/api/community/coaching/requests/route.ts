@@ -5,7 +5,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 
 // Create a member-initiated coaching request (public /academy/coaching/request
 // intake submits here). Auth is enforced at submit: a guest gets 401 and the
-// form routes them through sign-up, preserving the payload to resume.
+// form routes them through sign-in, preserving the payload to resume.
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.

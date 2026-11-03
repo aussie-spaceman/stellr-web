@@ -13,7 +13,7 @@ export const metadata = { title: 'Community · Resources' }
 // client component handles grid/list, search, type filter and sort.
 export default async function ResourcesPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const rows = await listMemberResources(member)
 

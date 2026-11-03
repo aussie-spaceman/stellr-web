@@ -16,7 +16,7 @@ export default async function GroupSpacesPage({
   searchParams: Promise<{ group?: string }>
 }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const groups = await getTeacherGroups(member)
 

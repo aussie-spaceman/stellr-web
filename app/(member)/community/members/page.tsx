@@ -45,7 +45,7 @@ export default async function MemberDirectoryPage({
   searchParams: Promise<{ school?: string; state?: string }>
 }) {
   const viewer = await getCurrentMember()
-  if (!viewer) redirect('/sign-up')
+  if (!viewer) redirect('/sign-in')
 
   const { school, state } = await searchParams
   const db = supabaseServer()

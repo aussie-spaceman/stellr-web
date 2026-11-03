@@ -43,6 +43,16 @@ const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandpar
 const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
 
+// Why a requested invite did not go out (lib/member-invite AccountInviteResult),
+// for the reasons a brand-new member can hit.
+const INVITE_HELD: Record<string, string> = {
+  age_unknown:
+    'Member created, but no invite was sent: add their date of birth, or set an adult age bracket and role, then send it from their member page.',
+  awaiting_consent:
+    'Member created, but no invite was sent: they are under 13, so their login waits until a parent or guardian has signed their agreement.',
+  send_failed: 'Member created, but the invite email could not be sent. You can resend it from their member page.',
+}
+
 // The fields a create can't go without, in the order they appear.
 type RequiredField = 'first_name' | 'last_name' | 'email'
 
@@ -92,6 +102,7 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
 
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
   const [sendInvite, setSendInvite] = useState(true)
+  const [inviteNotice, setInviteNotice] = useState<{ message: string; href: string } | null>(null)
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -164,7 +175,15 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
       setError(data.error ?? 'Failed to create member.')
       return
     }
-    const { member } = await res.json()
+    const { member, invite } = await res.json()
+    // The member exists either way. When the invite was held back (S0, 2 Nov
+    // 2026: the COPPA guard asks for a date of birth, or a parent's agreement
+    // first), say so here instead of moving on as if it had gone.
+    const held = invite && !invite.sent ? INVITE_HELD[invite.reason as string] : undefined
+    if (held) {
+      setInviteNotice({ message: held, href: returnTo ?? `/admin/members/${member.id}` })
+      return
+    }
     router.push(returnTo ?? `/admin/members/${member.id}`)
   }
 
@@ -182,7 +201,7 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
         </div>
         <button
           onClick={handleSubmit}
-          disabled={saving}
+          disabled={saving || !!inviteNotice}
           className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {saving ? 'Creating…' : 'Create member'}
@@ -191,6 +210,12 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
 
       {error && (
         <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{error}</p>
+      )}
+      {inviteNotice && (
+        <p role="status" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          {inviteNotice.message}{' '}
+          <Link href={inviteNotice.href} className="font-medium underline">Continue</Link>
+        </p>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

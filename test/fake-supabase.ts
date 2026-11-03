@@ -21,11 +21,29 @@ function coerce(raw: string): unknown {
   return raw
 }
 
-/** Parses the subset of PostgREST `or` syntax the code uses: `a.is.null,b.lte.X`. */
+/** Splits an `or` expression on top-level commas, keeping `in.(a,b)` lists whole. */
+function splitOr(expr: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of expr) {
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    if (ch === ',' && depth === 0) { out.push(cur); cur = '' } else cur += ch
+  }
+  out.push(cur)
+  return out
+}
+
+/** Parses the subset of PostgREST `or` syntax the code uses: `a.is.null,b.lte.X,c.in.(x,y)`. */
 function parseOr(expr: string): Op {
-  const clauses = expr.split(',').map((c) => {
+  const clauses = splitOr(expr).map((c) => {
     const [col, op, ...rest] = c.split('.')
     const value = coerce(rest.join('.'))
+    if (op === 'in') {
+      const list = String(rest.join('.')).replace(/^\(|\)$/g, '').split(',').map(coerce)
+      return (r: Row) => list.includes(r[col])
+    }
     switch (op) {
       case 'is':  return (r: Row) => (r[col] ?? null) === value
       case 'eq':  return (r: Row) => r[col] === value
@@ -150,7 +168,7 @@ export function fakeSupabase(
         return b
       },
       or(expr: string) {
-        for (const clause of expr.split(',')) filterCols.push(clause.split('.')[0])
+        for (const clause of splitOr(expr)) filterCols.push(clause.split('.')[0])
         filters.push(parseOr(expr))
         return b
       },

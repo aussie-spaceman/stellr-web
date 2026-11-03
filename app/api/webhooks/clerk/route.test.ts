@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { Webhook } from 'svix'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { appToday } from '@/lib/age'
 
 // deep review TEST-1: the Clerk webhook provisions, updates and soft-deletes
 // member records off svix-signed events. Pin fail-closed: no secret → 500,
@@ -8,15 +9,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // signed event gets past the gate. CLERK_WEBHOOK_SECRET is read per request.
 
 const from = vi.fn()
+const syncRole = vi.fn()
+const claimInvites = vi.fn(async (..._a: unknown[]) => {})
+const logActivity = vi.fn(async (..._a: unknown[]) => {})
 
 vi.mock('next/headers', () => ({ headers: async () => ({ get: (k: string) => hdrs.get(k) ?? null }) }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from }) }))
 // Downstream helpers are irrelevant to the signature gate; a benign event type
 // never reaches them anyway.
 vi.mock('@/lib/member-enums', () => ({ normalizeEmail: (e: string) => e }))
-vi.mock('@/lib/spaces', () => ({ claimPendingSpaceInvites: vi.fn() }))
-vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: vi.fn() }))
+vi.mock('@/lib/spaces', () => ({ claimPendingSpaceInvites: (...a: unknown[]) => claimInvites(...a) }))
+vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: (...a: unknown[]) => syncRole(...a) }))
 vi.mock('@/lib/esign/retention', () => ({ startRetentionClock: vi.fn() }))
+vi.mock('@/lib/activity-log', () => ({ logActivity: (...a: unknown[]) => logActivity(...a) }))
 
 const hdrs = new Map<string, string>()
 const SECRET = 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw'
@@ -30,21 +35,24 @@ async function load(secret: string) {
   return import('./route')
 }
 
-function sign(secret: string) {
+function sign(secret: string, payload = body) {
   const id = 'msg_1'
   const timestamp = new Date()
-  const signature = new Webhook(secret).sign(id, timestamp, body)
+  const signature = new Webhook(secret).sign(id, timestamp, payload)
   hdrs.set('svix-id', id)
   hdrs.set('svix-timestamp', Math.floor(timestamp.getTime() / 1000).toString())
   hdrs.set('svix-signature', signature)
 }
 
-const post = (POST: (r: Request) => Promise<Response>) =>
-  POST(new Request('https://app.test/api/webhooks/clerk', { method: 'POST', body }))
+const post = (POST: (r: Request) => Promise<Response>, payload = body) =>
+  POST(new Request('https://app.test/api/webhooks/clerk', { method: 'POST', body: payload }))
 
 afterEach(() => {
   hdrs.clear()
   from.mockReset()
+  syncRole.mockReset()
+  claimInvites.mockClear()
+  logActivity.mockClear()
   vi.unstubAllEnvs()
   vi.resetModules()
 })
@@ -74,5 +82,218 @@ describe('POST /api/webhooks/clerk', () => {
     const { POST } = await load(SECRET)
     sign(SECRET)
     expect((await post(POST)).status).toBe(200)
+  })
+})
+
+// S0 (2 Nov 2026): user.created links a Clerk user to a member row only through
+// a verified primary email, never takes a row another login already holds, and
+// never hands a child under 13 (or a member of unknown age) to a self-serve
+// login before a parent or guardian has signed.
+describe('POST /api/webhooks/clerk — user.created linking', () => {
+  type Op = { table: string; op: string; payload?: unknown; filters: Array<[string, string, unknown]> }
+  let ops: Op[]
+  let existingMember: Record<string, unknown> | null
+  let participants: Array<{ id: string; date_of_birth: string | null }>
+  /** Completed agreements on file, by envelope_type. */
+  let agreements: string[]
+
+  /** `linkHits: false` is a link landing between the read and the conditional write. */
+  function fakeDb(linkHits = true) {
+    ops = []
+    participants = []
+    agreements = []
+    from.mockImplementation((table: string) => {
+      const o: Op = { table, op: 'select', filters: [] }
+      ops.push(o)
+      const chain: Record<string, unknown> = {
+        select: () => chain,
+        insert: (p: unknown) => { o.op = 'insert'; o.payload = p; return chain },
+        update: (p: unknown) => { o.op = 'update'; o.payload = p; return chain },
+        eq: (c: string, v: unknown) => { o.filters.push(['eq', c, v]); return chain },
+        is: (c: string, v: unknown) => { o.filters.push(['is', c, v]); return chain },
+        or: (s: string) => { o.filters.push(['or', s, null]); return chain },
+        maybeSingle: async () => ({ data: o.op === 'insert' ? { id: 'm-new' } : existingMember, error: null }),
+        // `.update(...).select('id')` returns the rows the conditional write hit.
+        then: (f: (v: unknown) => unknown) => {
+          if (table === 'participants') return Promise.resolve({ data: participants, error: null }).then(f)
+          if (table === 'agreements') {
+            const type = o.filters.find(([k, c]) => k === 'eq' && c === 'envelope_type')?.[2]
+            return Promise.resolve({ count: agreements.filter((t) => !type || t === type).length, error: null }).then(f)
+          }
+          return Promise.resolve({
+            data: o.op === 'update' ? (linkHits ? [{ id: existingMember?.id }] : []) : null,
+            error: null,
+          }).then(f)
+        },
+      }
+      return chain
+    })
+  }
+
+  /** A date of birth `n` years before the app's today (Mountain time), less `extraDays`. */
+  const yearsAgo = (n: number, extraDays = 0) => {
+    const d = appToday()
+    d.setUTCFullYear(d.getUTCFullYear() - n)
+    d.setUTCDate(d.getUTCDate() - extraDays)
+    return d.toISOString().slice(0, 10)
+  }
+  const ADULT_DOB = '1985-04-02'
+
+  /** `status` undefined leaves the address with no verification record at all. */
+  const created = (status?: string | null) => JSON.stringify({
+    type: 'user.created',
+    data: {
+      id: 'user_new', first_name: 'Kim', last_name: 'Lo', image_url: null,
+      primary_email_address_id: 'e1',
+      email_addresses: [{
+        id: 'e1', email_address: 'kim@example.com',
+        ...(status === undefined ? {} : { verification: status ? { status } : null }),
+      }],
+    },
+  })
+
+  async function deliver(payload: string) {
+    const { POST } = await load(SECRET)
+    sign(SECRET, payload)
+    const res = await post(POST, payload)
+    return { status: res.status, json: await res.json() }
+  }
+
+  const writes = () => ops.filter((o) => o.op !== 'select')
+  const linkWrite = (memberId: string) => ({
+    table: 'members', op: 'update',
+    payload: { clerk_user_id: 'user_new', profile_photo_url: null },
+    filters: [['eq', 'id', memberId], ['is', 'clerk_user_id', null]],
+  })
+
+  it('an unverified primary email links nothing and creates nothing', async () => {
+    fakeDb()
+    existingMember = { id: 'm-child', event_role: 'participant', clerk_user_id: null }
+    for (const status of ['unverified', null, undefined]) {
+      const r = await deliver(created(status))
+      expect(r).toEqual({ status: 200, json: { received: true, skipped: 'email not verified' } })
+    }
+    expect(writes()).toEqual([])
+    expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
+  })
+
+  it('an unverified email with no member on file creates no member row either', async () => {
+    fakeDb()
+    existingMember = null
+    expect((await deliver(created('unverified'))).json).toEqual({ received: true, skipped: 'email not verified' })
+    expect(writes()).toEqual([])
+  })
+
+  it('a verified email links an unlinked member, guarded so a link made meanwhile is not overwritten', async () => {
+    fakeDb()
+    existingMember = { id: 'm-1', event_role: 'teacher', clerk_user_id: null, date_of_birth: ADULT_DOB }
+    const r = await deliver(created('verified'))
+    expect(r.status).toBe(200)
+    expect(writes()).toEqual([linkWrite('m-1')])
+    expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-1', 'teacher')
+    expect(claimInvites).toHaveBeenCalledWith('m-1', 'kim@example.com')
+  })
+
+  it('a verified self-serve sign-up is not linked to a child under 13 with no guardian agreement', async () => {
+    // The individual form refused this child a login; signing up through Clerk
+    // with the same address must not hand them the record anyway.
+    fakeDb()
+    existingMember = { id: 'm-kid', event_role: 'participant', clerk_user_id: null, date_of_birth: yearsAgo(12) }
+    participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    const r = await deliver(created('verified'))
+    expect(r).toEqual({ status: 200, json: { received: true, skipped: 'guardian consent required' } })
+    expect(writes()).toEqual([])
+    expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ memberId: 'm-kid', action: 'account_link_held_for_consent' }),
+      expect.anything(),
+    )
+  })
+
+  it('judges age on the date of birth: 12 waits, 13 and 14 are linked', async () => {
+    for (const [years, extraDays, linked] of [[13, -1, false], [13, 0, true], [14, 0, true]] as const) {
+      fakeDb()
+      existingMember = { id: 'm-1', event_role: 'participant', clerk_user_id: null, date_of_birth: yearsAgo(years, extraDays) }
+      await deliver(created('verified'))
+      expect(writes(), `${years}y ${extraDays}d`).toEqual(linked ? [linkWrite('m-1')] : [])
+    }
+  })
+
+  it('a member with no usable date of birth anywhere waits, as if under 13', async () => {
+    for (const date_of_birth of [null, '', 'not a date', '2999-01-01']) {
+      fakeDb()
+      existingMember = { id: 'm-1', event_role: 'teacher', clerk_user_id: null, date_of_birth }
+      participants = [{ id: 'p1', date_of_birth: null }]
+      const r = await deliver(created('verified'))
+      expect(r.json, String(date_of_birth)).toEqual({ received: true, skipped: 'guardian consent required' })
+      expect(writes()).toEqual([])
+    }
+    expect(syncRole).not.toHaveBeenCalled()
+  })
+
+  it('reads a blank member date of birth from the participant rows (an adult is linked)', async () => {
+    fakeDb()
+    existingMember = { id: 'm-1', event_role: 'teacher', clerk_user_id: null, date_of_birth: null }
+    participants = [{ id: 'p1', date_of_birth: ADULT_DOB }]
+    await deliver(created('verified'))
+    expect(writes()).toEqual([linkWrite('m-1')])
+  })
+
+  it("links a child under 13 once a guardian's consent form is signed — and only that kind of agreement counts", async () => {
+    fakeDb()
+    existingMember = { id: 'm-kid', event_role: 'participant', clerk_user_id: null, date_of_birth: yearsAgo(12) }
+    participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    agreements = ['adult', 'mentor']
+    expect((await deliver(created('verified'))).json).toEqual({ received: true, skipped: 'guardian consent required' })
+    expect(writes()).toEqual([])
+
+    fakeDb()
+    participants = [{ id: 'p-kid', date_of_birth: yearsAgo(12) }]
+    agreements = ['minor']
+    expect((await deliver(created('verified'))).json).toEqual({ received: true })
+    expect(writes()).toEqual([linkWrite('m-kid')])
+    expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-kid', 'participant')
+  })
+
+  it('backs off when another login links the row between the read and the write', async () => {
+    fakeDb(false)
+    existingMember = { id: 'm-1', event_role: 'teacher', clerk_user_id: null, date_of_birth: ADULT_DOB }
+    const r = await deliver(created('verified'))
+    expect(r).toEqual({ status: 200, json: { received: true, skipped: 'member already linked' } })
+    expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
+  })
+
+  it('never moves a member already linked to another login', async () => {
+    fakeDb()
+    existingMember = { id: 'm-1', event_role: 'teacher', clerk_user_id: 'user_owner' }
+    const r = await deliver(created('verified'))
+    expect(r).toEqual({ status: 200, json: { received: true, skipped: 'member already linked' } })
+    expect(writes()).toEqual([])
+    expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
+  })
+
+  it('leaves a member already linked to this same login as it is (registration linked it first)', async () => {
+    fakeDb()
+    existingMember = { id: 'm-1', event_role: 'participant', clerk_user_id: 'user_new' }
+    const r = await deliver(created('verified'))
+    expect(r.json).toEqual({ received: true })
+    expect(writes()).toEqual([])
+    expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-1', 'participant')
+  })
+
+  it('a verified email with no member on file still gets a new member row', async () => {
+    fakeDb()
+    existingMember = null
+    const r = await deliver(created('verified'))
+    expect(r.json).toEqual({ received: true })
+    expect(writes()).toEqual([expect.objectContaining({
+      table: 'members', op: 'insert',
+      payload: expect.objectContaining({ clerk_user_id: 'user_new', email: 'kim@example.com' }),
+    })])
+    expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-new', 'subscriber')
   })
 })

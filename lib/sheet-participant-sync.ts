@@ -10,6 +10,7 @@ import { isMinor } from '@/lib/docusign'
 import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/individual-payment'
 import { applyRosterChange } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
 
 export interface SheetSyncRegistration {
   id: string
@@ -26,6 +27,8 @@ export interface SheetSyncResult {
   syncedMemberIds: string[]
   /** Individual payment links / free-event notices sent by this run. */
   paymentLinksSent: number
+  /** Names on rows left out because the date of birth is blank or not a real past date. */
+  skippedForDateOfBirth: string[]
 }
 
 // A syntactically valid email, the gate for syncing a sheet row (INT-4). Kept
@@ -79,6 +82,7 @@ async function syncFromSheet(
   let updated = 0
   const syncedMemberIds: string[] = []
   const paymentPeople: IndividualPaymentPerson[] = []
+  const skippedForDateOfBirth: string[] = []
 
   for (const row of sheetRows) {
     // Email is the cross-reference key for both the participant row and the
@@ -96,6 +100,16 @@ async function syncFromSheet(
     // payment, so a row without one cannot be processed meaningfully anyway.
     if (!isSyncableEmail(email)) continue
 
+    // S0 (2 Nov 2026): the registration routes' date-of-birth check. A blank or
+    // impossible date (a typo'd 2030) used to reach the member row and the
+    // agreement, and the person was then swept for a login. The row is left out
+    // and reported, not the whole sync; it syncs once the date is fixed.
+    const ageCheck = checkRegistrationAge(row.date_of_birth)
+    if (!ageCheck.ok) {
+      skippedForDateOfBirth.push([row.first_name, row.last_name].filter(Boolean).join(' ').trim() || email)
+      continue
+    }
+
     const { data: existing } = await db
       .from('participants')
       .select('id')
@@ -107,14 +121,19 @@ async function syncFromSheet(
       )
       .maybeSingle()
 
-    const dob = row.date_of_birth || null
+    const dob = ageCheck.dateOfBirth
     const { eventRole, ageBracket } = roleFromType(row.type, dob)
 
     // Match against the existing membership database by email — an established
-    // member is updated from this sheet row rather than duplicated — and create
-    // one otherwise, so sheet-entered people get a member account, a school link,
-    // and visibility on admin member pages. Blank cells never overwrite what's
-    // already on file (see upsertMember). Non-fatal.
+    // member is linked rather than duplicated — and create one otherwise, so
+    // sheet-entered people get a member account, a school link, and visibility
+    // on admin member pages. Non-fatal.
+    // S0 (2 Nov 2026): an existing member is never rewritten from the sheet
+    // (`onExisting: 'skip'`). The sheet is the organiser's, and the organiser is
+    // not the authority on another person's date of birth, role or guardian: a
+    // typed adult date used to overwrite a child's record, and the COPPA guard
+    // reads the member row's date of birth first. The row's values still reach
+    // the participant row below.
     const memberId = await upsertMember(db, {
       email,
       first_name: row.first_name,
@@ -132,7 +151,7 @@ async function syncFromSheet(
       ec_email: row.ec_email || null,
       ec_phone: row.ec_phone || null,
       ec_relationship: row.ec_relationship || null,
-    })
+    }, { onExisting: 'skip' })
     if (memberId) syncedMemberIds.push(memberId)
 
     const payload = {
@@ -256,5 +275,11 @@ async function syncFromSheet(
     }).catch((err) => console.error('[sheet-sync] billing update failed:', err))
   }
 
-  return { created, updated, syncedMemberIds, paymentLinksSent: charged + waived }
+  if (skippedForDateOfBirth.length > 0) {
+    console.warn('[sheet-sync] rows skipped for a missing or invalid date of birth', {
+      registrationId: registration.id, count: skippedForDateOfBirth.length,
+    })
+  }
+
+  return { created, updated, syncedMemberIds, paymentLinksSent: charged + waived, skippedForDateOfBirth }
 }

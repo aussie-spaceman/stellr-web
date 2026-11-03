@@ -3,13 +3,23 @@ import Stripe from 'stripe'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { enrollWithCredit, enrollFree, getCohortFull, resolveCohortAccess } from '@/lib/mentoring'
-import { getOrCreateCohortOffering } from '@/lib/entitlements'
+import { getOrCreateCohortOffering, hasReservedCohortBooking } from '@/lib/entitlements'
 import { getAcademyDiscountPercent, academyLineItemFromPrice, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
+
+// A seat this member already holds in the ledger but staff have yet to roster
+// (a held paid seat). Same answer on every path, so nobody pays twice.
+function bookingPending() {
+  return NextResponse.json(
+    { error: 'Your place in this cohort is already booked and waiting on our team. You do not need to pay again; we will be in touch.' },
+    { status: 409 },
+  )
+}
 
 // Self-register for an open mentoring cohort: free-with-membership, with a
 // mentoring credit, or via a one-off Stripe payment.
@@ -32,12 +42,14 @@ export async function POST(req: Request) {
 
   if (method === 'free') {
     const r = await enrollFree(member, cohortId)
+    if (!r.ok && r.reason === 'booking-pending') return bookingPending()
     if (!r.ok) return NextResponse.json({ error: 'Could not join this cohort' }, { status: 400 })
     return NextResponse.json({ ok: true })
   }
 
   if (method === 'credit') {
     const r = await enrollWithCredit(member, cohortId)
+    if (!r.ok && r.reason === 'booking-pending') return bookingPending()
     if (!r.ok) {
       const msg = r.reason === 'no-credit'
         ? 'You do not have enough session credits for this cohort'
@@ -50,8 +62,20 @@ export async function POST(req: Request) {
   // Paid one-off → Stripe Checkout.
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return NextResponse.json({ error: 'Already enrolled' }, { status: 400 })
+  // Already paid (or drawn credits) for this cohort but not on the roster yet,
+  // e.g. the webhook's minor-agreement backstop held the seat for staff. The
+  // roster check above cannot see that booking; never charge for it twice.
+  if (await hasReservedCohortBooking(member.id, cohortId)) return bookingPending()
   if (!cohort.oneOffPriceCents && !cohort.oneOffStripePriceId) {
     return NextResponse.json({ error: 'This cohort has no one-off payment option' }, { status: 400 })
+  }
+  // Minor participation-agreement gate, BEFORE any Checkout exists, so a minor
+  // without an agreement on file is never charged for a seat they cannot take.
+  // Same refusal as the free and credit paths (report-only unless
+  // ACCESS_GATES_ENFORCE). The webhook re-checks at roster time as a backstop.
+  const gate = await reportEnrollmentGate(member, { kind: 'cohort', containerId: cohortId, containerName: cohort.name })
+  if (accessGatesEnforced() && !gate.unlocked) {
+    return NextResponse.json({ error: 'Could not join this cohort' }, { status: 400 })
   }
 
   const stripe = stripeClient()

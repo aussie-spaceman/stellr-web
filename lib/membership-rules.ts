@@ -17,6 +17,14 @@ export const DEFAULT_ROLE_FOR_BRACKET: Record<string, string> = {
 // used by event Companies auto-assign and participation certificates.
 export const STUDENT_ROLES = ['participant', 'school_student_manager']
 
+// Roles only an adult is registered under (S0, 3 Nov 2026): the allowlist for
+// "an adult by role" (lib/roster-minor, lib/member-invite). Anything else is
+// not evidence of age: a student role, the 'subscriber' placeholder a bare
+// sign-up gets, 'donor' (in the enum, but no form or import writes it, and
+// normalizeEventRole folds it into 'subscriber'), and any value this list
+// does not know. "Chaperone" is an agreement title, not a role value.
+export const ADULT_ROLES = ['teacher', 'mentor', 'volunteer', 'parent', 'adult'] as const
+
 // Canonical tier names per (bracket, role). Updated in the standardization sweep
 // (migration 094) to the 10-tier schema; the retired tiers (Advisor, Counsellor,
 // Luminary, Donor, Expert) are gone.

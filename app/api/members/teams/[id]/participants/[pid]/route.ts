@@ -9,6 +9,7 @@ import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { stripeClient } from '@/lib/stripe'
 import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
 import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
+import { checkRegistrationAge, isRegistrationMinor } from '@/lib/registration-eligibility'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -63,6 +64,38 @@ export async function PATCH(
   }
   // Roster filters (Companies auto-assign, studentCount) match enum values.
   if ('event_role' in updates) updates.event_role = normalizeEventRole(updates.event_role)
+
+  // S0 (2 Nov 2026): an edited date of birth gets the same check as one added
+  // (POST, and the registration routes): a cleared, unreadable or future date
+  // is refused, not stored for the agreement and consent rules to misread.
+  if ('date_of_birth' in updates) {
+    const ageCheck = checkRegistrationAge(updates.date_of_birth, {
+      name: [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || 'this person',
+    })
+    if (!ageCheck.ok) return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: 400 })
+    updates.date_of_birth = ageCheck.dateOfBirth
+  }
+
+  // A minor takes part as a student (the registration routes' rule): an edit
+  // can neither give a minor an adult role or bracket nor keep one after their
+  // date of birth is corrected. The date being saved decides; without one in
+  // the edit, the one on the row does, and a missing or unreadable one counts
+  // as a minor.
+  if ('date_of_birth' in updates || 'event_role' in updates || 'age_bracket' in updates) {
+    const { data: current } = await db
+      .from('participants')
+      .select('date_of_birth, event_role')
+      .eq('id', pid)
+      .eq('registration_id', registrationId)
+      .maybeSingle()
+    const row = current as { date_of_birth: string | null; event_role: string | null } | null
+    const dob = 'date_of_birth' in updates ? updates.date_of_birth : row?.date_of_birth ?? null
+    if (isRegistrationMinor(dob)) {
+      const role = 'event_role' in updates ? updates.event_role : row?.event_role
+      updates.event_role = role === 'school_student_manager' ? role : 'participant'
+      updates.age_bracket = 'high_school'
+    }
+  }
 
   const { data: participant, error } = await db
     .from('participants')

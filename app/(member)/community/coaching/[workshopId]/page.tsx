@@ -15,7 +15,7 @@ export const metadata = { title: 'Coaching · Workshop' }
 
 export default async function WorkshopSpacePage({ params }: { params: Promise<{ workshopId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { workshopId } = await params
   const [space, full] = await Promise.all([getWorkshopSpace(member.id, workshopId), getWorkshopFull(workshopId)])

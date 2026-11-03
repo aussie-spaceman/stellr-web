@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import { Eyebrow } from '@stellr/web-ui'
 import { buildFaqJsonLd } from '@/lib/structured-data'
+import { JsonLd } from '@/components/seo/JsonLd'
 
 /**
  * A guide's FAQ, plus the matching FAQPage JSON-LD built from the same strings
@@ -15,10 +16,7 @@ export function GuideFaq({ faqs, title = 'Common questions' }: { faqs: readonly 
   const schema = buildFaqJsonLd(faqs.map((f) => ({ q: f.q, text: f.a })))
   return (
     <section className="section-padding bg-white">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }}
-      />
+      <JsonLd data={schema} />
       <div className="container-max max-w-content">
         <Eyebrow>FAQ</Eyebrow>
         <h2 className="text-3xl font-bold text-ink mt-3">{title}</h2>

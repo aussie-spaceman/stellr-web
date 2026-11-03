@@ -8,7 +8,6 @@ import {
   LICENSE_DOCUMENT_URL_TTL_SECONDS,
   TEACHER_LICENSE_BUCKET,
   isLicenseDocumentType,
-  licenseDocumentMagicMatches,
 } from '@/lib/teacher-license'
 
 export const dynamic = 'force-dynamic'
@@ -79,13 +78,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // Signed under THIS member's folder; expectedPrefix refuses any other path
   // (another member's license included) before storage is touched. The leading
-  // bytes are checked too, since the declared type can be spoofed.
+  // bytes are checked too (the purpose's formats), since the declared type can
+  // be spoofed.
   const claimed = await claimUpload({
     purpose: 'compliance-document-admin',
     storagePath,
     expectedPrefix: `${id}/`,
-    verify: licenseDocumentMagicMatches,
-    verifyError: 'That file doesn’t look like a valid image or PDF.',
   })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 

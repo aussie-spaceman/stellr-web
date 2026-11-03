@@ -21,8 +21,8 @@
  * Read-only by default. Pass --apply to write.
  *
  * Prerequisites (.env.local): NEXT_PUBLIC_SANITY_PROJECT_ID,
- * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. SANITY_API_TOKEN too if
- * the dataset is private.
+ * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY).
+ * SANITY_API_TOKEN too if the dataset is private.
  *
  * Run:
  *   npm run sync:event-spaces            # dry run — reports, changes nothing
@@ -33,6 +33,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 import { supabaseServer } from '../lib/supabase'
+import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 
 // ESM hoists static imports above this call, so nothing imported above may read
 // env at module scope. lib/supabase reads it lazily inside its functions, and
@@ -44,12 +45,12 @@ const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
 const sanityToken = process.env.SANITY_API_TOKEN
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const secretKey = supabaseSecretKey()
 
 const missing = [
   !projectId && 'NEXT_PUBLIC_SANITY_PROJECT_ID',
   !supabaseUrl && 'NEXT_PUBLIC_SUPABASE_URL',
-  !serviceKey && 'SUPABASE_SERVICE_ROLE_KEY',
+  !secretKey && SECRET_KEY_VARS,
 ].filter(Boolean)
 if (missing.length) {
   console.error(`Missing env: ${missing.join(', ')}`)

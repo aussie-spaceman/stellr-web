@@ -12,7 +12,7 @@ export const metadata = { title: 'Admin · New coaching workshop' }
 export default async function NewWorkshopPage() {
   await requireAdminPage()
   const member = await getSignedInMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
   if (!member.isAdmin) redirect('/community/coaching')
 
   const db = supabaseServer()

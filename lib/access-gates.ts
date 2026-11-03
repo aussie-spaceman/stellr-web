@@ -1,5 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { isMinorOn } from '@/lib/age'
+import { isRosterMinor } from '@/lib/roster-minor'
+import { guardianAgreementOnFile, memberAgeFacts } from '@/lib/guardian-consent'
 import type { CommunityMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
 import { registrationPaid } from '@/lib/payment-status'
@@ -31,7 +33,22 @@ export function accessGatesEnforced(): boolean {
   return process.env.ACCESS_GATES_ENFORCE === 'true'
 }
 
-const isMinor = (dob: string | null) => isMinorOn(dob)
+// Who counts as a minor here (S0, 2 Nov 2026). lib/age now presumes a minor
+// when the date of birth is unknown, which is right for a student but locked
+// adults out of events: a mentor or volunteer signs at member level, so their
+// participant row has no envelope, and with a blank date of birth the DocuSign
+// gate read them as a minor with no consent. On a participant row, an adult by
+// role (lib/roster-minor's allowlist) is a minor only when a date of birth on
+// file says so; anyone else with no usable one still is.
+//
+// The enrolment gate goes by date of birth alone (3 Nov 2026). A member's role
+// and age bracket are not evidence of age there: the admin add-member form
+// defaults to an adult teacher with the date of birth optional, the Clerk
+// webhook writes an adult subscriber with none, and the cohort APIs run the
+// gate without checking that the member has onboarded. The youngest usable
+// date across the member row and their participant rows counts: the member
+// row is self-entered at onboarding, so an adult date there must not outrank
+// the minor one a registration put on a participant row.
 
 /**
  * Payment + DocuSign gate status for a member's access to a competition. Payment
@@ -45,7 +62,7 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
 
   const { data: parts } = await db
     .from('participants')
-    .select('id, date_of_birth, individual_payment_status, registrations!inner(event_slug, status, amount_due_cents, invoice_requested, invoice_paid_at)')
+    .select('id, date_of_birth, event_role, individual_payment_status, registrations!inner(event_slug, status, amount_due_cents, invoice_requested, invoice_paid_at)')
     .eq('member_id', member.id)
 
   type Reg = {
@@ -55,6 +72,7 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
   type Row = {
     id: string
     date_of_birth: string | null
+    event_role: string | null
     individual_payment_status: string | null
     registrations: Reg | Reg[] | null
   }
@@ -101,7 +119,10 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
     const status = envByParticipant.get(m.row.id)
     if (status === 'completed') return true
     if (status) return false // issued / partial / declined / voided → outstanding
-    return !isMinor(m.row.date_of_birth) // no envelope: required only for minors
+    // No envelope: required only for minors, by the roster's role-aware rule
+    // (today, as before), so a mentor or volunteer with a blank date of birth
+    // passes and a student, a subscriber or an unrecognised role does not.
+    return !isRosterMinor(m.row.date_of_birth, m.row.event_role)
   })
 
   return { payment, docusign, unlocked: payment && docusign }
@@ -121,9 +142,13 @@ export interface EnrollmentGateResult {
  * default (mirrors the competition gates): logs who would be blocked and returns
  * the status, but callers only DENY when accessGatesEnforced() is true.
  *
- * "On file" reuses the DocuSign validity layer: any completed envelope linked to
- * the member (via their participant rows) counts as a participation agreement on
- * file. Adults always pass.
+ * "On file" means any completed agreement on one of the member's participant
+ * rows (any envelope_type, including a minor's own adult, mentor, educator or
+ * volunteer agreement; owner decision 3 Nov 2026), or a guardian's completed
+ * `minor` agreement on the member row (guardianAgreementOnFile). Who is a minor
+ * goes by date of birth alone: the youngest usable one on
+ * the member row or any of their participant rows (memberAgeFacts), else a
+ * minor is presumed. Role and age bracket are not consulted (see above).
  */
 export async function reportEnrollmentGate(
   member: { id: string },
@@ -131,13 +156,23 @@ export async function reportEnrollmentGate(
 ): Promise<EnrollmentGateResult> {
   const db = supabaseServer()
 
-  const { data: m } = await db.from('members').select('date_of_birth').eq('id', member.id).maybeSingle()
-  const minor = isMinor((m as { date_of_birth?: string | null } | null)?.date_of_birth ?? null)
-  if (!minor) return { minorAgreement: true, unlocked: true }
+  const { data: m } = await db
+    .from('members')
+    .select('date_of_birth')
+    .eq('id', member.id)
+    .maybeSingle()
+  const facts = await memberAgeFacts(db, {
+    id: member.id,
+    date_of_birth: (m as { date_of_birth?: string | null } | null)?.date_of_birth ?? null,
+  })
+  if (!isMinorOn(facts.youngestDateOfBirth)) return { minorAgreement: true, unlocked: true }
 
-  // Any completed DocuSign envelope on file for this member → agreement satisfied.
-  const { data: parts } = await db.from('participants').select('id').eq('member_id', member.id)
-  const pids = (parts ?? []).map((p) => (p as { id: string }).id)
+  // Owner decision (3 Nov 2026): any completed agreement on one of the member's
+  // participant rows counts, whatever its envelope_type, so a minor's own
+  // adult, mentor, educator or volunteer agreement keeps unlocking a seat. A
+  // guardian's `minor` agreement signed at member level (the membership
+  // agreement) also counts (guardianAgreementOnFile).
+  const pids = facts.participantIds
   let hasCompleted = false
   if (pids.length) {
     const { count } = await db
@@ -146,6 +181,9 @@ export async function reportEnrollmentGate(
       .in('participant_id', pids)
       .eq('status', 'completed')
     hasCompleted = (count ?? 0) > 0
+  }
+  if (!hasCompleted) {
+    hasCompleted = await guardianAgreementOnFile(db, { memberId: member.id, participantIds: pids })
   }
 
   if (!hasCompleted) {

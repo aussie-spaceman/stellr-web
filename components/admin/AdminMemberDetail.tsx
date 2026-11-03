@@ -315,8 +315,10 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           >
             {enteringPortal ? 'Opening…' : 'View as member'}
           </button>
-          {/* The older read-only mirror of the account page. Kept for one
-              release as a fallback if the full-portal session misbehaves. */}
+          {/* The older read-only mirror of the account page. Since S0 (Nov 2026)
+              its Teams and Billing tabs run on the same view-as session and
+              signing secret as View as member, so it is no fallback for that
+              session; only its Profile tab reads the member directly. */}
           <Link
             href={`/admin/members/${member.id}/view-as`}
             title="Older read-only summary of profile, teams and billing"

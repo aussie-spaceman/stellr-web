@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeGrade, denormalizeGrade, normalizeTshirt, denormalizeTshirt, VALID_GRADES } from './member-enums'
+import { normalizeGrade, denormalizeGrade, displayGrade, normalizeTshirt, denormalizeTshirt, VALID_GRADES } from './member-enums'
 import { SCHOOL_GRADES, deriveAgeBracket } from './registration-constants'
 
 // `participants.grade` is text and always accepted "7"; `members.grade` is the
@@ -70,5 +70,22 @@ describe('denormalizeTshirt (QUAL-2)', () => {
   it('passes a canonical size through verbatim', () => {
     expect(denormalizeTshirt('L')).toBe('L')
     expect(denormalizeTshirt('')).toBeUndefined()
+  })
+})
+
+// participants.grade holds both "10" (individual form) and "grade_10" (group
+// paths copy the member enum) — the roster showed both side by side.
+describe('displayGrade', () => {
+  it('shows school grades as a bare number whichever shape is stored', () => {
+    expect(displayGrade('10')).toBe('10')
+    expect(displayGrade('grade_10')).toBe('10')
+    expect(displayGrade('grade_7')).toBe('7')
+  })
+
+  it('labels college grades and passes unknown values through', () => {
+    expect(displayGrade('college_junior')).toBe('College Junior')
+    expect(displayGrade('Kindergarten')).toBe('Kindergarten')
+    expect(displayGrade(null)).toBeUndefined()
+    expect(displayGrade('')).toBeUndefined()
   })
 })

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { ageFromDob, maskEmail } from '@/lib/utils'
+import { maskEmail } from '@/lib/utils'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { registrationIsOpen } from '@/lib/registration'
 import type { RegistrationRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
@@ -139,6 +140,17 @@ export async function POST(req: NextRequest) {
     if (!hasSchool) {
       return NextResponse.json({ error: 'Please select your school.' }, { status: 400 })
     }
+
+    // S0 (2 Nov 2026): a real past date of birth, checked here before anything
+    // is written. An empty or unreadable one used to fall through to an adult
+    // role, bracket and agreement. Age is taken on the event's start date.
+    const ageCheck = checkRegistrationAge(date_of_birth, {
+      eventDate: (eventForGate as { date?: string | null }).date ?? null,
+    })
+    if (!ageCheck.ok) {
+      return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: 400 })
+    }
+    const dob = ageCheck.dateOfBirth
 
     const db = supabaseServer()
 
@@ -305,10 +317,10 @@ export async function POST(req: NextRequest) {
 
     const regId = (registration as Pick<RegistrationRow, 'id'>).id
 
-    // Upsert member record — creates one if this email hasn't registered before
-    const ageNow = ageFromDob(date_of_birth)
-    const resolvedBracket = ageNow < 18 ? 'high_school' : normalizeAgeBracket(age_bracket)
-    const resolvedRole = ageNow < 18 ? 'participant' : normalizeEventRole(event_role)
+    // Upsert member record — creates one if this email hasn't registered before.
+    // A minor (today or on the event date) is always a high-school participant.
+    const resolvedBracket = ageCheck.isMinor ? 'high_school' : normalizeAgeBracket(age_bracket)
+    const resolvedRole = ageCheck.isMinor ? 'participant' : normalizeEventRole(event_role)
 
     // Did THIS request create the member row (vs. one already on file)? Captured
     // before the upsert and used to decide whether a silent sign-in token is
@@ -336,7 +348,7 @@ export async function POST(req: NextRequest) {
           last_name,
           nickname: nickname || null,
           phone,
-          date_of_birth,
+          date_of_birth: dob,
           gender: normalizeGender(gender),
           grade: normalizeGrade(grade),
           tshirt_size: normalizeTshirt(t_shirt_size),
@@ -395,7 +407,7 @@ export async function POST(req: NextRequest) {
       registration_id: regId,
       member_id: memberId,
       first_name, last_name, nickname: nickname || null,
-      email, phone, date_of_birth, grade, gender,
+      email, phone, date_of_birth: dob, grade, gender,
       ethnicity: ethnicity ?? [],
       t_shirt_size, school_name, age_bracket,
       event_role: resolvedRole,
@@ -438,7 +450,7 @@ export async function POST(req: NextRequest) {
       lastName:          last_name,
       email,
       phone,
-      dateOfBirth:       date_of_birth,
+      dateOfBirth:       dob,
       // resolvedRole, not the raw client event_role: a minor is forced to
       // 'participant' above, so the agreement router can't be handed 'Mentor'
       // for a child (deep review REG-6). classifyAgreement also fails safe on DOB.
@@ -459,11 +471,16 @@ export async function POST(req: NextRequest) {
     // Provision a Clerk account + sign-in token so a brand-new registrant is
     // silently signed in and lands in the member portal (/community) afterwards.
     // Already-signed-in members have a session + clerk_user_id already. Non-fatal
-    // — a Clerk hiccup must never fail the registration.
+    // — a Clerk hiccup must never fail the registration. A child under 13 gets
+    // no login here (COPPA guard): their member row is new, so no parent can
+    // have signed yet.
     let signInToken: string | null = null
     if (!sessionMember) {
       try {
-        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name, { memberIsNew })
+        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name, {
+          memberIsNew,
+          age: { dateOfBirth: dob },
+        })
         signInToken = provisioned.signInToken
         // Only link the Clerk id when a token was actually minted (i.e. both the
         // Clerk user and the member row are new this request). Linking otherwise

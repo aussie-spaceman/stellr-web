@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { vercelTarget } from '@/lib/env'
 import { integrationEnvironments, isRealProductionApp } from '@/lib/env-guards'
+import { supabaseKeySlots } from '@/lib/supabase-keys'
 
 // GET /api/admin/health/integrations
 //
@@ -13,6 +14,12 @@ import { integrationEnvironments, isRealProductionApp } from '@/lib/env-guards'
 //
 // Returns the ENVIRONMENT of each integration ('production' | 'sandbox' |
 // 'unconfigured'), never a key, a hostname or an account id.
+//
+// `supabaseKeys` (S0, Nov 2026) says which Supabase key format each slot holds
+// ('publishable' | 'secret' | 'legacy-jwt' | …), the role it acts as ('anon' |
+// 'service_role') and which variable it came from: the check before the legacy
+// keys are disabled (docs/RUNBOOK-supabase-api-keys.md). Informational: it does
+// not feed `ok`.
 export async function GET() {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -37,6 +44,7 @@ export async function GET() {
   return NextResponse.json({
     deployment,
     environments,
+    supabaseKeys: supabaseKeySlots(),
     problems,
     ok: problems.length === 0,
   })

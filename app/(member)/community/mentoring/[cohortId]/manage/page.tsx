@@ -24,7 +24,7 @@ export default async function ManageCohortPage({
   params: Promise<{ cohortId: string }>
 }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { cohortId } = await params
   const cohort = await getCohortFull(cohortId)

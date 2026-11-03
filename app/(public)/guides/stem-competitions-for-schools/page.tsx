@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Hero, Eyebrow, Button, CtaBand } from '@stellr/web-ui'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { PROGRAMS, FAQS, CHECKED_ON, SEASON } from '@/content/guides/competitions-compared'
 
 const PATH = '/guides/stem-competitions-for-schools'
@@ -60,10 +61,7 @@ const CHOOSE = [
 export default function StemCompetitionsComparedPage() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema).replace(/</g, '\\u003c') }}
-      />
+      <JsonLd data={articleSchema} />
       <Hero
         breadcrumb="Guides · For teachers"
         title={TITLE}

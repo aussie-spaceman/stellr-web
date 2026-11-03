@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { claimUpload, discardUpload } from '@/lib/uploads'
+import { contentTypeFor } from '@/lib/file-sniff'
 import { parsePdLayout } from '@/lib/pd-certificate'
 import {
   isPdPage,
@@ -30,8 +31,6 @@ export const dynamic = 'force-dynamic'
 // Replacing a theme's page first copies the outgoing one to every event that
 // has issued PD certificates on it, so their downloads do not change.
 
-const isPng = (b: Uint8Array) => b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
-const isJpeg = (b: Uint8Array) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 /** The scope a request names, or null for a malformed event slug. */
@@ -78,13 +77,9 @@ export async function PUT(req: Request) {
   const storagePath = typeof body.storagePath === 'string' ? body.storagePath : ''
   if (!storagePath.startsWith('pd-certificate/staged-')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const claimed = await claimUpload({
-    purpose: 'pd-certificate-artwork',
-    storagePath,
-    // A signed URL accepts any bytes; the renderer can only use these two.
-    verify: (bytes) => isPng(bytes) || isJpeg(bytes),
-    verifyError: 'That file doesn’t look like a PNG or JPEG image.',
-  })
+  // A signed URL accepts any bytes; the purpose accepts only PNG or JPEG, the
+  // two the renderer can use.
+  const claimed = await claimUpload({ purpose: 'pd-certificate-artwork', storagePath })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   if (!scope.event) {
@@ -102,7 +97,7 @@ export async function PUT(req: Request) {
 
   const { error } = await db.storage.from(RESOURCES_BUCKET).upload(pdArtworkPath(scope, body.page), claimed.bytes, {
     upsert: true,
-    contentType: isPng(claimed.bytes) ? 'image/png' : 'image/jpeg',
+    contentType: contentTypeFor(claimed.format),
   })
   await discardUpload(RESOURCES_BUCKET, storagePath)
   if (error) {

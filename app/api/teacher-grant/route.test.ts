@@ -137,6 +137,24 @@ describe('POST /api/teacher-grant', () => {
     expect(member.gender).toBe('Female')
   })
 
+  // S0 (2 Nov 2026): the schema checks only the date's shape, and the member is
+  // stored as an adult teacher whatever it says.
+  it.each([
+    ['in the future', '2030-01-01'],
+    ['not a real day', '1988-02-30'],
+    ['a child', '2014-06-01'],
+    ['17', `${new Date().getUTCFullYear() - 17}-01-01`],
+  ])('makes no Educator record for a date of birth that is %s, but keeps the application', async (_l, dateOfBirth) => {
+    const res = await post({ ...VALID, dateOfBirth })
+
+    expect(res.status).toBe(200)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(captureLead).toHaveBeenCalledTimes(1)
+    expect(upsertMember).not.toHaveBeenCalled()
+    expect(linkMembersToSchoolByName).not.toHaveBeenCalled()
+    expect(autoGrantBaseMembership).not.toHaveBeenCalled()
+  })
+
   it('links the member to their school and grants the free Educator tier', async () => {
     await post(VALID)
 

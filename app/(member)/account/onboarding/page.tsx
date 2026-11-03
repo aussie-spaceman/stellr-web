@@ -31,7 +31,7 @@ export default async function OnboardingPage({
   const { userId } = await auth()
   const sp = await searchParams
   const next = safeNext(sp.next)
-  // Volunteer program signup (public /volunteer page → /sign-up → here).
+  // Volunteer program signup (public /volunteer page → sign-up or sign-in → here).
   const volunteerFlow = sp.role === 'volunteer'
   if (!userId) {
     const selfPath = volunteerFlow ? '/account/onboarding?role=volunteer' : next

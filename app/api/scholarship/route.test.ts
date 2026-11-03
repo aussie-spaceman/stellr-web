@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   sendEmail: vi.fn(async () => {}),
   rlGuard: vi.fn((): Response | null => null),
   insert: vi.fn(() => ({ select: () => ({ single: async () => ({ data: { id: 'app-1' }, error: null }) }) })),
+  impersonating: false,
 }))
 
 vi.mock('@/lib/email', () => ({ sendEmail: h.sendEmail }))
@@ -26,6 +27,10 @@ vi.mock('@/lib/scholarship-emails', () => ({
   scholarshipStaffAlertEmail: () => ({ subject: '', html: '', text: '' }),
 }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from: () => ({ insert: h.insert }) }) }))
+vi.mock('@/lib/impersonation', () => ({
+  assertNotImpersonating: async () =>
+    h.impersonating ? new Response(JSON.stringify({ error: 'Read-only', impersonating: true }), { status: 403 }) : null,
+}))
 
 const { POST } = await import('./route')
 import { captureLead } from '@/lib/hubspot'
@@ -46,6 +51,7 @@ function post() {
 beforeEach(() => {
   vi.clearAllMocks()
   h.rlGuard.mockReturnValue(null)
+  h.impersonating = false
 })
 
 describe('POST /api/scholarship', () => {
@@ -60,5 +66,15 @@ describe('POST /api/scholarship', () => {
     expect(h.insert).toHaveBeenCalledTimes(1)
     // staff alert + applicant acknowledgement
     expect(h.sendEmail).toHaveBeenCalled()
+  })
+
+  // S0 (Nov 2026): getCurrentMember() resolves to the viewed member during
+  // view-as, so an admin's submission would be filed as theirs.
+  it('is refused while an admin is viewing as a member: nothing stored or sent', async () => {
+    h.impersonating = true
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect(h.insert).not.toHaveBeenCalled()
+    expect(h.sendEmail).not.toHaveBeenCalled()
   })
 })

@@ -21,7 +21,7 @@ export default async function CourseDetailPage({
   searchParams: Promise<{ lesson?: string }>
 }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { moduleId } = await params
   const { lesson: lessonParam } = await searchParams

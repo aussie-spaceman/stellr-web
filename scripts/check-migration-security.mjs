@@ -55,11 +55,12 @@
  * Migrations already applied before this lint existed are frozen history — they
  * cannot be edited (editing an applied migration does not re-run it) and are not
  * this lint's job to retrofit. As with check-migration-names.mjs's LAST_LEGACY,
- * the sequentially-numbered migrations (≤ 148) are grandfathered. A short,
- * explicit list below grandfathers the pre-existing TIMESTAMPED migrations whose
- * SECURITY DEFINER functions revoke `FROM PUBLIC` only (esign_native,
- * post_event_survey) — that residual exposure is tracked by the DB review
- * (DB-N3), not silenced here. Everything newer must satisfy (a), (b) or (c).
+ * the sequentially-numbered migrations (≤ 148) are grandfathered. Every
+ * TIMESTAMPED migration must satisfy (a), (b) or (c); the three that once sat on
+ * a grandfather list (esign_native, post_event_survey — DB-N3) were sealed by a
+ * later migration, 20261102220634. Their one RLS helper, which must keep
+ * `authenticated`, is named in FROZEN_RLS_HELPERS and must still lose PUBLIC and
+ * anon.
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -71,18 +72,28 @@ export const MIGRATIONS_DIR = 'supabase/migrations'
 export const LAST_LEGACY = 148
 
 /**
- * Pre-existing TIMESTAMPED migrations whose SECURITY DEFINER functions were
- * revoked `FROM PUBLIC` only — applied before this lint, so they cannot be
- * fixed by editing them (a new migration would be needed). Their residual
- * anon/authenticated EXECUTE is a known, separately-tracked DB-review item
- * (DB-N3), NOT an allowlist of "safe" functions. Do not add to this list to
- * silence a NEW migration — seal it (a/b) or annotate it (c) instead.
+ * Pre-existing TIMESTAMPED migrations exempt from the rule. Empty since
+ * 20261102220634_seal_definer_functions_db_n3 sealed the three files that used
+ * to sit here (esign_native_engine, post_event_survey, post_event_survey_member_link
+ * revoked `FROM PUBLIC` only — DB-N3). Do not add to this list to silence a NEW
+ * migration: seal it (a/b) or annotate it (c) instead. A frozen file whose
+ * functions are left callable needs a sealing migration, not an exemption.
  */
-export const GRANDFATHERED_PREEXISTING = [
-  '20261002180802_esign_native_engine.sql', // esign_* audit/claim fns: FROM PUBLIC only
-  '20261002235036_post_event_survey.sql', // survey_* fns: FROM PUBLIC only
-  '20261003002925_post_event_survey_member_link.sql', // survey_follow_participant_member: FROM PUBLIC only
-]
+export const GRANDFATHERED_PREEXISTING = []
+
+/**
+ * RLS helpers declared in FROZEN migrations (so rule (c)'s comment cannot be
+ * added to their declaration) that must keep `authenticated` EXECUTE because an
+ * authenticated SELECT policy calls them. Each still has to be revoked from
+ * PUBLIC and anon somewhere in the corpus, or it is flagged. Key = schema.fn.
+ */
+export const FROZEN_RLS_HELPERS = {
+  // survey_responses / survey_answers self-read policies (post_event_survey.sql:585-623)
+  'public.survey_current_member_id': 'survey self-read RLS policies',
+}
+
+/** The roles a frozen RLS helper must still lose (it keeps authenticated). */
+export const RLS_HELPER_REVOKES = ['public', 'anon']
 
 /** The allowlist-comment escape hatch (rule c). */
 export const ALLOWLIST_MARKER = /rls-helper|security-definer-allow(?:list)?/i
@@ -245,7 +256,10 @@ export function scanMigrations(files) {
   for (const fn of sdFunctions) {
     const qualified = `${fn.schema}.${fn.name}`
     const sealed = schemaSealed.has(fn.schema) || funcSealed.has(qualified)
-    const allowlisted = ALLOWLIST_MARKER.test(fn.raw)
+    const frozenHelper =
+      Object.hasOwn(FROZEN_RLS_HELPERS, qualified) &&
+      RLS_HELPER_REVOKES.every((r) => funcRoles.get(qualified)?.has(r))
+    const allowlisted = ALLOWLIST_MARKER.test(fn.raw) || frozenHelper
     if (sealed || allowlisted || isGrandfathered(fn.file)) continue
     offenders.push({ file: fn.file, fn: qualified })
   }

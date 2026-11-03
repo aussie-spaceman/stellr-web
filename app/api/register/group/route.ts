@@ -3,8 +3,8 @@ import { randomBytes } from 'crypto'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { ageFromDob } from '@/lib/utils'
 import { registrationIsOpen } from '@/lib/registration'
+import { checkRegistrationAge, isRegistrationMinor } from '@/lib/registration-eligibility'
 import {
   sendEmail,
   groupConfirmationEmail,
@@ -60,11 +60,13 @@ const isValidCount = (n: unknown): n is number =>
 // mistyped birthdate previously downgraded the registrant to participant,
 // which hid their own group from /account?tab=teams and 403'd team management.
 // Everyone else (students, additional adults, mentors) follows the age rule.
+// `isMinor` comes from lib/registration-eligibility, which fails closed: an
+// unreadable date of birth is a minor (S0; it used to read NaN as an adult).
 const ORGANISER_ROLES = new Set(['teacher', 'school_student_manager'])
-function resolveRoleForAge(rawRole: unknown, ageNow: number): string {
+function resolveRoleForAge(rawRole: unknown, isMinor: boolean): string {
   const role = normalizeEventRole(rawRole)
   if (ORGANISER_ROLES.has(role)) return role
-  return Number.isFinite(ageNow) && ageNow < 18 ? 'participant' : role
+  return isMinor ? 'participant' : role
 }
 
 interface ParticipantPayload {
@@ -321,6 +323,37 @@ export async function POST(req: NextRequest) {
       }
       await resolveLinked(additional_adults)
       await resolveLinked(students)
+    }
+
+    // S0 (2 Nov 2026): every person this request writes needs a real past date
+    // of birth — the registrant always, and with add_now everyone entered —
+    // checked before anything is written. An empty or unreadable one used to
+    // fall through to an adult role, bracket and agreement. Age is taken on the
+    // event's start date. A Member-ID-linked person whose record has no date of
+    // birth is refused too: their participant row cannot be saved without one.
+    const eventDate = (eventForGate as { date?: string | null }).date ?? null
+    const peopleToCheck: Array<{ p: ParticipantPayload; isRegistrant: boolean }> = [
+      { p: teacher as ParticipantPayload, isRegistrant: true },
+      ...(details_method === 'add_now'
+        ? [...(additional_adults ?? []), ...(students ?? [])].map((p: ParticipantPayload) => ({ p, isRegistrant: false }))
+        : []),
+    ]
+    for (const { p, isRegistrant } of peopleToCheck) {
+      const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || 'one person'
+      const check = checkRegistrationAge(p.date_of_birth, { eventDate, name: isRegistrant ? undefined : name })
+      if (!check.ok) {
+        // A Member ID slot's date of birth is the one on their profile, so the
+        // way forward is theirs to take (or the organiser types the details in).
+        // A missing one they add when they next sign in (the account sends them
+        // to finish their profile); a wrong one only staff can change.
+        const error = !p.linked
+          ? check.error
+          : check.reason === 'dob_missing'
+            ? `We don't have a date of birth on file for ${name}'s Stellr Member ID. Ask them to add it to their profile, or enter their details by hand.`
+            : `The date of birth on file for ${name}'s Stellr Member ID doesn't look right. Ask them to contact Stellr to correct it, or enter their details by hand.`
+        return NextResponse.json({ code: check.reason, error }, { status: 400 })
+      }
+      p.date_of_birth = check.dateOfBirth
     }
 
     // Duplicate checks — one lookup for the organiser and everyone entered,
@@ -646,7 +679,7 @@ export async function POST(req: NextRequest) {
       const owner = memberEmailOwner.get(p.email)
       if (owner && owner !== key) continue
       if (!owner) memberEmailOwner.set(p.email, key)
-      const ageNow = ageFromDob(p.date_of_birth)
+      const minor = isRegistrationMinor(p.date_of_birth, eventDate)
       optionsByEmail.set(p.email, {
         ethnicity: (p as { ethnicity?: string[] }).ethnicity,
         dietary: p.dietary_requirements,
@@ -661,8 +694,8 @@ export async function POST(req: NextRequest) {
         gender: normalizeGender(p.gender),
         grade: normalizeGrade(p.grade),
         tshirt_size: normalizeTshirt(p.t_shirt_size),
-        age_bracket: ageNow < 18 ? 'high_school' : normalizeAgeBracket(p.age_bracket),
-        event_role: resolveRoleForAge(p.event_role, ageNow),
+        age_bracket: minor ? 'high_school' : normalizeAgeBracket(p.age_bracket),
+        event_role: resolveRoleForAge(p.event_role, minor),
         is_active: true,
         // Persist the profile so each member doesn't re-enter it next time (028).
         // Emergency contact goes to the members table's canonical ec_* columns —
@@ -835,13 +868,14 @@ export async function POST(req: NextRequest) {
     // sheet from the member portal — no manual sign-up required. Non-fatal: a
     // Clerk hiccup must not fail the registration.
     // Already-signed-in registrants don't need provisioning or a sign-in token —
-    // they have a Clerk session (and clerk_user_id) already.
+    // they have a Clerk session (and clerk_user_id) already. A Student Manager
+    // under 13 gets no login here (COPPA guard): no parent can have signed yet.
     let signInToken: string | null = null
     if (!sessionMember) {
       try {
         const provisioned = await ensureClerkUserAndSignInToken(
           teacher.email, teacher.first_name, teacher.last_name,
-          { memberIsNew: registrantMemberIsNew },
+          { memberIsNew: registrantMemberIsNew, age: { dateOfBirth: teacher.date_of_birth } },
         )
         signInToken = provisioned.signInToken
         // Only link the Clerk id when a token was actually minted (both the Clerk
@@ -885,7 +919,7 @@ export async function POST(req: NextRequest) {
       t_shirt_size: p.t_shirt_size,
       school_name: teacher.school_name as string,
       age_bracket: p.age_bracket,
-      event_role: resolveRoleForAge(p.event_role, ageFromDob(p.date_of_birth)),
+      event_role: resolveRoleForAge(p.event_role, isRegistrationMinor(p.date_of_birth, eventDate)),
       dietary_requirements: p.dietary_requirements ?? [],
       health_conditions: p.health_conditions || null,
       emergency_contact_first_name: p.emergency_contact_first_name || null,

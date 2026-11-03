@@ -49,8 +49,9 @@
  * sequence that is no longer in the set below is archived.
  *
  * Prerequisites:
- *   .env.local with NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
- *   pointing at the target environment, and migration 136 applied there.
+ *   .env.local with NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SECRET_KEY (or legacy
+ *   SUPABASE_SERVICE_ROLE_KEY) pointing at the target environment, and
+ *   migration 136 applied there.
  *
  * Run:
  *   npx tsx scripts/seed-welcome-drips.ts --preview            # write HTML previews, touch nothing
@@ -67,6 +68,7 @@ import { renderCampaignEmail } from '../lib/email-render'
 import { memberMergeVars } from '../lib/email-vars'
 import { TIER_GROUPS, type TierGroupKey } from '../lib/tiers'
 import { supabaseServer } from '../lib/supabase'
+import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 
 // ── env ──────────────────────────────────────────────────────────────────────
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -383,9 +385,9 @@ async function main() {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) {
-    console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (.env.local).')
+  const secretKey = supabaseSecretKey()
+  if (!url || !secretKey) {
+    console.error(`Missing NEXT_PUBLIC_SUPABASE_URL or ${SECRET_KEY_VARS} (.env.local).`)
     process.exit(1)
   }
   const db = supabaseServer()

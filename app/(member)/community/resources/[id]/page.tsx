@@ -27,7 +27,7 @@ function typeLabel(kind: string, fileType: string | null): string {
 // Report button has a target.
 export default async function ResourceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { id } = await params
   const detail = await getResourceDetail(member, id)

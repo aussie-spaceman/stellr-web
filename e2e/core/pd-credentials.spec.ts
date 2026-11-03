@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -24,7 +25,7 @@ async function removeGracePd() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   // Never against anything but the dev project.
   expect(url, 'PD e2e cleanup runs only against the dev database').toContain(DEV_PROJECT_REF)
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const { error } = await db.from('credentials').delete().eq('source', 'pd').eq('member_id', GRACE_ID)
   expect(error, `removing Grace's PD credentials: ${error?.message}`).toBeNull()
 }

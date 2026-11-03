@@ -546,7 +546,25 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
         // grants portal access) — confirmPaidBooking only records the ledger seat.
         const target = await getOfferingTarget(offeringId)
         if (target?.type === 'mentoring_cohort' && target.cohortId) {
-          await rosterAfterPaidBooking(target.cohortId, memberId)
+          const roster = await rosterAfterPaidBooking(target.cohortId, memberId)
+          if (roster && !roster.rostered) {
+            // Minor-agreement backstop (3 Nov 2026): paid, but the enforced gate
+            // kept them off the live cohort. The payment and ledger seat stand
+            // (never dropped, never auto-refunded); staff decide between getting
+            // the agreement signed and rostering by hand, or refunding.
+            await logActivity({
+              memberId,
+              category: 'billing',
+              action: 'paid_booking_held',
+              summary: `Paid for a mentoring cohort${fmtMoney(session.amount_total, session.currency)} but not added: no participation agreement on file. Needs staff action.`,
+              metadata: { kind: 'entitlement_booking', offeringId, cohortId: target.cohortId, bookingId, reason: roster.reason, paymentIntent: intent, sessionId: session.id, amount, currency: session.currency },
+              actorType: 'stripe',
+            }).catch(() => {})
+            await notifyCommunityAdmins({
+              type: 'action',
+              body: `Member ${memberId} paid for mentoring cohort ${target.cohortId}${fmtMoney(session.amount_total, session.currency)} but was not added to it: they count as a minor and have no participation agreement on file. The payment was kept (intent ${intent ?? session.id}). Get the agreement signed and add them to the cohort, or refund them.`,
+            }).catch(() => {})
+          }
         }
         if (coupon) await redeemCoupon(coupon, memberId, bookingId, amount)
         await persistStripeCustomer(session)

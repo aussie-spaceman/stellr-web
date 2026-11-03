@@ -1,5 +1,77 @@
 import { clerkClient } from '@clerk/nextjs/server'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { isUnder13On, isValidDob } from '@/lib/age'
+
+// ── The COPPA guard (S0, 2 Nov 2026) ─────────────────────────────────────────
+//
+// This file holds the app's only call to Clerk's createUser, and it is reached
+// only through guardedEnsureClerkUser: a child under 13 gets no login until a
+// parent or guardian's agreement is on file, and an unknown or unreadable date
+// of birth counts as under 13. lib/clerk-provisioning.guard.test.ts reads the
+// source tree and fails if a createUser or createInvitation call appears
+// anywhere else, or if a new caller skips the guard. (Two operator scripts
+// under scripts/ call Clerk directly; the test names them and why.)
+
+/** What the guard needs to know about the person a login is for. */
+export interface ClerkAccountAge {
+  /** As held or submitted. Unknown or unreadable is treated as under 13. */
+  dateOfBirth: string | null | undefined
+  /**
+   * Asked only for someone under 13 (or of unknown age): is a parent or
+   * guardian's completed agreement on file? Omit it when none can be (a member
+   * created by this very request). A lookup that throws counts as "no".
+   */
+  guardianAgreementOnFile?: () => Promise<boolean>
+  /**
+   * An admin recorded this person as an adult (an adult age bracket and role)
+   * and no date of birth is on file. Lets an unknown age through; never
+   * overrides a date of birth that says under 13. Admin paths only: the
+   * account invite for a hand-created member (lib/member-invite), which logs
+   * it. The guard test fails if anything else passes it.
+   */
+  adultByRole?: boolean
+}
+
+export type GuardedClerkUser =
+  | {
+      allowed: true
+      clerkUserId: string
+      created: boolean
+      /** Why the login was allowed: a date of birth 13 or over, a guardian's
+       *  agreement, or an admin's adult record (unknown age). */
+      basis: 'dob' | 'guardian_agreement' | 'adult_by_role'
+    }
+  /** No login: `under_13` from a date of birth, `age_unknown` without a usable one. */
+  | { allowed: false; reason: 'under_13' | 'age_unknown' }
+
+/**
+ * Find-or-create a passwordless Clerk login for `email`, unless the person is
+ * a child under 13 (or of unknown age) with no guardian agreement on file. Age
+ * is judged on today's date, not an event's: COPPA turns on the child's age
+ * when the account is made. The refusal comes before any Clerk call, so a
+ * refused child's address is not even looked up.
+ *
+ * A refusal is a return value, never a throw. Anything this throws comes from
+ * Clerk itself, after the age check passed.
+ */
+export async function guardedEnsureClerkUser(
+  email: string,
+  firstName: string,
+  lastName: string,
+  age: ClerkAccountAge,
+): Promise<GuardedClerkUser> {
+  let basis: 'dob' | 'guardian_agreement' | 'adult_by_role' = 'dob'
+  if (isUnder13On(age.dateOfBirth)) {
+    const knownDob = isValidDob(age.dateOfBirth)
+    const onFile = age.guardianAgreementOnFile
+      ? await age.guardianAgreementOnFile().catch(() => false)
+      : false
+    if (onFile) basis = 'guardian_agreement'
+    else if (!knownDob && age.adultByRole === true) basis = 'adult_by_role'
+    else return { allowed: false, reason: knownDob ? 'under_13' : 'age_unknown' }
+  }
+  return { allowed: true, basis, ...(await findOrCreateClerkUser(email, firstName, lastName)) }
+}
 
 export interface ProvisionedClerkUser {
   clerkUserId: string
@@ -38,18 +110,21 @@ export interface ProvisionedClerkUser {
  * webhook still links the Clerk id back to the member row by email for the
  * legitimate returning-member case.
  *
+ * The login itself goes through guardedEnsureClerkUser (`opts.age`): a child
+ * under 13, or anyone whose age is unknown, gets no login and no token here.
+ *
  * The created user is passwordless.
  */
 export async function ensureClerkUserAndSignInToken(
   email: string,
   firstName: string,
   lastName: string,
-  opts: { memberIsNew: boolean },
+  opts: { memberIsNew: boolean; age: ClerkAccountAge },
 ): Promise<ProvisionedClerkUser> {
   // deep review AUTH-N3: when the member row already exists, do not call
-  // ensureClerkUser at all. The C-1 fix already withholds the sign-in token
+  // the Clerk lookup/create at all. The C-1 fix already withholds the sign-in token
   // here (no takeover — the passwordless user can't be authenticated without an
-  // email code to the real owner), but ensureClerkUser still CREATED a Clerk
+  // email code to the real owner), but the old ensureClerkUser still CREATED a Clerk
   // user for the email, which the svix-verified user.created webhook then links
   // to the victim's member row: an attacker-triggered clerk_user_id write, plus
   // possible unsolicited Clerk "verify" mail to a real person. Provisioning only
@@ -61,7 +136,13 @@ export async function ensureClerkUserAndSignInToken(
     return { clerkUserId: '', signInToken: null, created: false }
   }
 
-  const { clerkUserId, created } = await ensureClerkUser(email, firstName, lastName)
+  const login = await guardedEnsureClerkUser(email, firstName, lastName, opts.age)
+  if (!login.allowed) {
+    // COPPA: no login until a parent or guardian has signed. Same shape as the
+    // existing-member case, so the callers neither link nor sign anyone in.
+    return { clerkUserId: '', signInToken: null, created: false }
+  }
+  const { clerkUserId, created } = login
 
   if (!created) {
     // The email already has a Clerk account → a ticket would sign the caller in
@@ -82,10 +163,13 @@ export async function ensureClerkUserAndSignInToken(
 
 /**
  * Find-or-create a passwordless Clerk user for `email`, without signing them in.
- * Also used when an admin invites a hand-created member, so the invite's
- * "sign in with this address" works even while public sign-up is closed.
+ * Also behind an admin's invite to a hand-created member and a group member's
+ * "your account is ready" email (lib/member-invite), so "sign in with this
+ * address" works even while public sign-up is closed.
+ *
+ * Deliberately not exported: every caller goes through guardedEnsureClerkUser.
  */
-export async function ensureClerkUser(
+async function findOrCreateClerkUser(
   email: string,
   firstName: string,
   lastName: string,

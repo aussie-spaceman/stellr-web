@@ -46,10 +46,22 @@ test('the member portal is reachable', async ({ page }) => {
 test('community is reachable with an active membership', async ({ page }) => {
   await page.goto('/community')
 
-  // `isCommunityRoute` in proxy.ts redirects guests to /sign-up with a ?next
+  // `isCommunityRoute` in proxy.ts redirects guests to /sign-in with a ?next
   // parameter. Ada has an active Pathfinder membership, so she must get
   // through — this pins the membership gate, not merely the auth gate.
-  await expect(page).not.toHaveURL(/\/sign-up/)
+  await expect(page).not.toHaveURL(/\/sign-(in|up)/)
+})
+
+test.describe('a guest on a member page', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  // Sign-up is invite-only (Clerk Restricted mode), so proxy.ts sends a guest
+  // to sign-in, never sign-up, and keeps where they were going in ?next.
+  test('is sent to sign-in with the page to come back to', async ({ page }) => {
+    await page.goto('/community/mentoring/discover')
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fcommunity%2Fmentoring%2Fdiscover/, { timeout: 15_000 })
+    await expect(page).not.toHaveURL(/\/sign-up/)
+  })
 })
 
 test.describe('signing out', () => {

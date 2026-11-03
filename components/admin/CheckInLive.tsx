@@ -31,6 +31,8 @@ import {
   type DeskParticipant,
   type GroupRow,
   type QueuedAction,
+  bannerNotice,
+  openCheckInConfirm,
 } from '@/lib/check-in-desk'
 
 interface LiveState {
@@ -39,9 +41,9 @@ interface LiveState {
   resourcesUrl: string | null
   participants: DeskParticipant[]
   groups: DeskGroup[]
-  /** The check-in banner (/check-in) sends phones to this event. */
-  bannerTarget: boolean
-  /** Other in-person events with check-in open; opening this one closes them. */
+  /** The check-in banner (/check-in) sends phones to this event; null when that couldn't be worked out. */
+  bannerTarget: boolean | null
+  /** Other in-person events with check-in open that the caller manages; opening this one closes them. */
   otherOpen: { slug: string; title: string }[]
 }
 
@@ -423,12 +425,9 @@ export default function CheckInLive({
   }, [checkInUrl])
 
   async function settingsAction(action: 'open' | 'close' | 'regenerate') {
-    // One banner, one event: opening here closes the other in-person check-in.
-    const others = state?.otherOpen ?? []
-    if (action === 'open' && !isVirtual && others.length) {
-      const names = others.map((o) => o.title).join(', ')
-      if (!window.confirm(`Check-in is open for ${names}. Opening this one closes it and points the banner here.`)) return
-    }
+    // One banner, one event: opening here closes the caller's other in-person check-ins.
+    const confirmText = action === 'open' && !isVirtual ? openCheckInConfirm(state?.otherOpen ?? []) : null
+    if (confirmText && !window.confirm(confirmText)) return
     setBusy(true)
     const res = await post({ action })
     setBusy(false)
@@ -639,6 +638,8 @@ export default function CheckInLive({
     </span>
   )
 
+  const bannerLine = bannerNotice({ checkInOpen: state.checkInOpen, bannerTarget: state.bannerTarget, isVirtual })
+
   const settingsPanel = (
     <div className="space-y-4 rounded-ds-card border border-line bg-white p-5">
       <div className="flex items-center justify-between">
@@ -652,9 +653,14 @@ export default function CheckInLive({
           {state.checkInOpen ? 'Open' : 'Closed'}
         </span>
       </div>
-      {state.bannerTarget && (
-        <p className="rounded-control bg-primary/10 px-3 py-2 text-sm font-medium text-primary-deep">
-          The check-in banner points here.
+      {bannerLine && (
+        <p
+          className={cn(
+            'rounded-control px-3 py-2 text-sm font-medium',
+            bannerLine.tone === 'here' ? 'bg-primary/10 text-primary-deep' : 'bg-pathway-amber-bg text-gold-ink'
+          )}
+        >
+          {bannerLine.text}
         </p>
       )}
 
@@ -710,7 +716,7 @@ export default function CheckInLive({
       <p className="text-xs text-content-muted">
         {isVirtual
           ? 'For a virtual event, email the link: people confirm their attendance with their name and date of birth.'
-          : 'The check-in banner sends phones to whichever in-person event has check-in open, so opening this one closes any other. People check themselves in with their name and date of birth while they wait. The door poster works for this event only.'}
+          : 'The check-in banner sends phones to whichever in-person event has check-in open, so opening this one closes the others you manage. People check themselves in with their name and date of birth while they wait. The door poster works for this event only.'}
       </p>
       {!isVirtual && (
         <p className="text-xs text-content-muted">

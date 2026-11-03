@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { isMinorOn, onDate } from '@/lib/age'
+import { isRosterMinor } from '@/lib/roster-minor'
 import { deriveCompliance, loadComplianceRecordsByEmails, loadComplianceRecordsByMemberIds, type ComplianceState } from '@/lib/compliance'
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
@@ -135,10 +135,11 @@ export interface EventRosterData {
   }
 }
 
-/** Under 18 on the day of the event (today when the event has no date). */
-function isMinor(dateOfBirth: string | null, eventDate?: string): boolean {
-  return isMinorOn(dateOfBirth, eventDate ? onDate(eventDate) : undefined)
-}
+/**
+ * Re-exported from lib/roster-minor, where the rule now lives so the access
+ * gates (lib/access-gates) share it without loading this module.
+ */
+export { isRosterMinor }
 
 export async function getEventRoster(eventSlug: string, eventDate?: string): Promise<EventRosterData> {
   const db = supabaseServer()
@@ -292,7 +293,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         individualPaymentStatus: p.individual_payment_status as string | null,
       })
 
-      const minor = isMinor(p.date_of_birth as string | null, eventDate)
+      const minor = isRosterMinor(p.date_of_birth as string | null, p.event_role as string | null, eventDate)
       // An adult attendee (teacher, chaperone) gets the Adult agreement on their
       // participant row too, so "no row" means not issued, not "not required".
       // Mentors and volunteers sign member-level agreements this query can't

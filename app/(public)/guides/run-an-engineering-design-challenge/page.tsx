@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Hero, Eyebrow, Button, CtaBand } from '@stellr/web-ui'
 import { GuideFaq } from '@/components/guides/GuideFaq'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { STAGES, CRITERIA, FAQS } from '@/content/guides/run-a-design-challenge'
 
 const PATH = '/guides/run-an-engineering-design-challenge'
@@ -39,10 +40,7 @@ const articleSchema = {
 export default function RunADesignChallengePage() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema).replace(/</g, '\\u003c') }}
-      />
+      <JsonLd data={articleSchema} />
       <Hero
         breadcrumb="Guides · For teachers"
         title={TITLE}

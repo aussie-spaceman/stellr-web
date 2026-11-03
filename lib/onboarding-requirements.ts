@@ -38,8 +38,11 @@ export interface OnboardingRequirements {
 }
 
 /** Under 18 today. Exact to the day, not a year subtraction: someone born in
- *  December is still 17 for most of their eighteenth calendar year. */
-const isMinorDob = (dob: string | undefined | null) => isMinorOn(dob)
+ *  December is still 17 for most of their eighteenth calendar year. Blank is
+ *  "not typed yet": the route refuses a blank date of birth outright, and the
+ *  wizard waits for one before the age questions change. Anything typed that
+ *  is not a usable date is presumed a minor (lib/age). */
+const isMinorDob = (dob: string | undefined | null) => !!dob && isMinorOn(dob)
 
 export function onboardingRequirements(a: OnboardingAudience): OnboardingRequirements {
   const isVolunteerSignup = !!a.volunteerFlow || a.event_role === 'volunteer'

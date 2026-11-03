@@ -7,9 +7,6 @@ import { prepareBadgeArtwork } from '@/lib/badge-artwork'
 // (/api/admin/artwork-defaults/[theme]/…): a claimed upload and a posted
 // placement. Each route keeps its own access check and its own row.
 
-const isPng = (b: Uint8Array) => b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
-const isJpeg = (b: Uint8Array) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
-
 export interface ClaimedArtwork {
   path: string
   bytes: Uint8Array
@@ -33,16 +30,13 @@ export async function claimArtwork(
     return { error: 'Artwork must be a PNG or JPEG image', status: 400 }
   }
   if (!storagePath.startsWith(prefix)) return { error: 'Forbidden', status: 403 }
-  const claimed = await claimUpload({
-    purpose,
-    storagePath,
-    expectedPrefix: prefix,
-    // A signed URL accepts any bytes; the renderer can only use these two.
-    verify: (bytes) => isPng(bytes) || isJpeg(bytes),
-    verifyError: 'That file doesn’t look like a PNG or JPEG image.',
-  })
+  // A signed URL accepts any bytes; both purposes accept only PNG or JPEG, the
+  // two the renderer can use. The type recorded is the one the bytes are, so a
+  // JPEG saved as `art.png` still renders.
+  const claimed = await claimUpload({ purpose, storagePath, expectedPrefix: prefix })
   if ('error' in claimed) return claimed
-  return { path: storagePath, bytes: claimed.bytes, mime: fileType }
+  const mime = claimed.format === 'png' ? 'image/png' : claimed.format === 'jpeg' ? 'image/jpeg' : fileType
+  return { path: storagePath, bytes: claimed.bytes, mime }
 }
 
 export const CERTIFICATE_PLACEMENT_RANGES = {

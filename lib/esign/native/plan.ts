@@ -1,5 +1,5 @@
 import { formatFormDate } from '@/lib/docusign-form-data'
-import { isMinorOn } from '@/lib/age'
+import { isKnownMinorOn, isMinorOn } from '@/lib/age'
 import type { CreateAgreementRequest } from '@/lib/esign/types'
 import type { Role } from '@/lib/esign/native/template'
 
@@ -122,7 +122,11 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
       const mentor: PlannedSigner = { role: 'mentor', name, email: lower(p.email), memberId, order: 2 }
       // §3A: a Mentor under the age of majority where they live needs a
       // parent or legal guardian to sign too, and the parent signs first.
-      const underMajority = isMinorOn(p.dateOfBirth ?? null, undefined, p.state ?? null)
+      // A Mentor or Volunteer is an adult by role (lib/minor-policy's
+      // presumeMinorIfUnknown: false), so only a date of birth that SAYS under
+      // the age of majority adds the parent. Registration refuses an unknown
+      // date of birth, and volunteers give one at onboarding.
+      const underMajority = isKnownMinorOn(p.dateOfBirth ?? null, undefined, p.state ?? null)
       if (underMajority && (!clean(p.guardianEmail) || !clean(p.guardianName))) {
         throw new Error('A parent or guardian name and email are required for a Mentor under the age of majority')
       }

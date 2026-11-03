@@ -13,7 +13,7 @@ export const metadata = { title: 'Community · Hosting' }
 // Coach/mentor console (FR-COM-11/12). Only reachable by approved hosts.
 export default async function HostingPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const caps = await getHostCaps(member.id)
   if (!caps.canCoach && !caps.canMentor) {

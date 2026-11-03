@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const getEventsBySlugs = vi.fn()
 vi.mock('@/lib/sanity', () => ({ getEventsBySlugs: (...a: unknown[]) => getEventsBySlugs(...a) }))
 
-import { loadOpenCheckIns, pickBannerEvent, type OpenCheckIn } from './check-in-banner'
+import { canSeeCheckIn, checkInsVisibleTo, loadOpenCheckIns, pickBannerEvent, type OpenCheckIn } from './check-in-banner'
 
 const open = (over: Partial<OpenCheckIn>): OpenCheckIn => ({
   slug: 'nevada',
@@ -92,5 +92,27 @@ describe('loadOpenCheckIns', () => {
     expect(await loadOpenCheckIns(dbReturning({ data: [], error: null }).db)).toEqual([])
     expect(getEventsBySlugs).not.toHaveBeenCalled()
     await expect(loadOpenCheckIns(dbReturning({ data: null, error: { message: 'boom' } }).db)).rejects.toThrow('boom')
+  })
+})
+
+// S0 (Nov 2026): an event manager sees, and closes, only the events they run.
+describe('checkInsVisibleTo / canSeeCheckIn', () => {
+  const all = [open({ slug: 'colorado' }), open({ slug: 'nevada' }), open({ slug: 'utah' })]
+
+  it('a full admin sees every event', () => {
+    expect(checkInsVisibleTo(all, { isAdmin: true, assignedSlugs: null })).toEqual(all)
+  })
+
+  it('an event manager sees only their assigned events', () => {
+    const viewer = { isAdmin: false, assignedSlugs: ['nevada', 'utah'] }
+    expect(checkInsVisibleTo(all, viewer).map((e) => e.slug)).toEqual(['nevada', 'utah'])
+    expect(canSeeCheckIn(viewer, 'colorado')).toBe(false)
+    expect(canSeeCheckIn(viewer, 'nevada')).toBe(true)
+  })
+
+  it('anything short of isAdmin: true sees nothing extra', () => {
+    expect(checkInsVisibleTo(all, { isAdmin: false, assignedSlugs: null })).toEqual([])
+    expect(checkInsVisibleTo(all, { isAdmin: false, assignedSlugs: [] })).toEqual([])
+    expect(checkInsVisibleTo(all, {} as unknown as { isAdmin: boolean; assignedSlugs: null })).toEqual([])
   })
 })

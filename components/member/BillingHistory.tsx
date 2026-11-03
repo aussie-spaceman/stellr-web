@@ -117,23 +117,20 @@ function receiptAvailable(p: Participation, reg: ParticipationReg): boolean {
   return reg.status === 'confirmed'
 }
 
-// `impersonateMemberId` + `readOnly` back the admin "view as member" page: the
-// data is fetched for that member (admin-gated server-side) and the interactive
-// payment controls are suppressed.
+// `readOnly` backs the admin "view as member" page: the interactive payment
+// controls are suppressed. Whose billing loads is decided server-side by the
+// view-as ticket.
 interface BillingHistoryProps {
-  impersonateMemberId?: string
   readOnly?: boolean
 }
 
-export function BillingHistory({ impersonateMemberId, readOnly = false }: BillingHistoryProps = {}) {
+export function BillingHistory({ readOnly = false }: BillingHistoryProps = {}) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [refunds, setRefunds] = useState<Refund[]>([])
   const [participations, setParticipations] = useState<Participation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payingId, setPayingId] = useState<string | null>(null)
-
-  const memberQuery = impersonateMemberId ? `?memberId=${impersonateMemberId}` : ''
 
   async function handlePay(registrationId: string) {
     setPayingId(registrationId)
@@ -157,7 +154,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
   }
 
   useEffect(() => {
-    fetch(`/api/members/billing${memberQuery}`)
+    fetch('/api/members/billing')
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
@@ -167,7 +164,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [memberQuery])
+  }, [])
 
   if (loading) {
     return (

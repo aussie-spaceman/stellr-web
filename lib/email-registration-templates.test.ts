@@ -4,6 +4,7 @@ import {
   groupConfirmationEmail,
   individualConfirmationEmail,
   outstandingItemsReminderEmail,
+  groupAccountCreatedEmail,
 } from '@/lib/email'
 
 const PAY = 'https://www.stellreducation.org/register/colorado/pay/abc'
@@ -105,5 +106,24 @@ describe('check-in codes in confirmation emails', () => {
     expect(withCode.html).toContain('Show our check-in code')
     expect(withCode.text).toContain(CODE)
     expect(groupConfirmationEmail(base).html).not.toContain('check-in code')
+  })
+})
+
+// S0 (2 Nov 2026): the same "account ready" email also goes to a child who
+// registered themselves and whose login waited for a parent's consent form.
+describe('groupAccountCreatedEmail', () => {
+  const base = { firstName: 'Kim', email: 'kim@example.com', eventTitle: 'Nevada SDC', url: 'https://app.example.org/account/onboarding' }
+
+  it('names the teacher who registered them', () => {
+    const e = groupAccountCreatedEmail({ ...base, organiserName: 'Ada Teach' })
+    expect(e.html).toContain('Ada Teach has registered you for <strong>Nevada SDC</strong>')
+    expect(e.text).toContain('Ada Teach has registered you for Nevada SDC')
+  })
+
+  it('names no one when they registered themselves', () => {
+    const e = groupAccountCreatedEmail({ ...base, organiserName: null })
+    expect(e.html).toContain("You're registered for <strong>Nevada SDC</strong>")
+    expect(e.text).toContain("You're registered for Nevada SDC")
+    expect(e.text).not.toMatch(/null|undefined|has registered you/)
   })
 })

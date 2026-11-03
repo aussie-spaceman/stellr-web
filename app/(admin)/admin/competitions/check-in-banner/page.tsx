@@ -7,7 +7,14 @@ import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
 import { SITE_URL } from '@/lib/env'
 import { isRealProductionApp } from '@/lib/env-guards'
-import { CHECK_IN_BANNER_PATH, loadOpenCheckIns, pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
+import {
+  CHECK_IN_BANNER_PATH,
+  canSeeCheckIn,
+  checkInsVisibleTo,
+  loadOpenCheckIns,
+  pickBannerEvent,
+  todayUtc,
+} from '@/lib/check-in-banner'
 
 export const metadata = { title: 'Admin — Check-In Banner' }
 export const dynamic = 'force-dynamic'
@@ -32,8 +39,11 @@ export default async function CheckInBannerAdminPage() {
   ])
   const svgHref = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 
-  const inPersonOpen = open.filter((e) => e.inPerson)
+  // An event manager sees only the events they run. Where a scan goes is worked
+  // out across every event, but another event is not named to them.
+  const inPersonOpen = checkInsVisibleTo(open, access).filter((e) => e.inPerson)
   const target = pickBannerEvent(open, todayUtc())
+  const targetShown = target && canSeeCheckIn(access, target.slug) ? target : null
 
   return (
     <div className="max-w-content space-y-6">
@@ -57,13 +67,17 @@ export default async function CheckInBannerAdminPage() {
 
       <section className="rounded-ds-card border border-line bg-white p-5">
         <h2 className="font-subheading text-sm font-semibold text-content-muted">Right now</h2>
-        {target ? (
+        {targetShown ? (
           <p className="mt-2 text-content-body">
             A scan opens check-in for{' '}
-            <Link href={`/admin/competitions/${target.slug}/check-in`} className="font-semibold text-primary">
-              {target.title ?? target.slug}
+            <Link href={`/admin/competitions/${targetShown.slug}/check-in`} className="font-semibold text-primary">
+              {targetShown.title ?? targetShown.slug}
             </Link>
             .
+          </p>
+        ) : target ? (
+          <p className="mt-2 text-content-body">
+            A scan opens check-in for another event right now, not one of yours.
           </p>
         ) : (
           <p className="mt-2 text-content-body">

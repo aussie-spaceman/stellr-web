@@ -17,7 +17,7 @@ import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
-import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
+import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger, hasReservedCohortBooking } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 import { isClearedForMinorContact } from '@/lib/compliance'
@@ -237,7 +237,7 @@ export async function listOpenCohorts(member: CommunityMember): Promise<OpenCoho
 
 export type EnrollResult =
   | { ok: true }
-  | { ok: false; reason: 'not-open' | 'already-enrolled' | 'no-credit' | 'needs-payment' | 'needs-agreement' | 'error' }
+  | { ok: false; reason: 'not-open' | 'already-enrolled' | 'booking-pending' | 'no-credit' | 'needs-payment' | 'needs-agreement' | 'error' }
 
 async function addToRosterActive(cohortId: string, memberId: string): Promise<void> {
   const db = supabaseServer()
@@ -252,14 +252,35 @@ async function addToRosterActive(cohortId: string, memberId: string): Promise<vo
   await syncObjectSpaceRoster(db, 'mentoring', cohortId, memberId)
 }
 
+export type PaidRosterResult =
+  | { rostered: true }
+  | { rostered: false; reason: 'needs-agreement' }
+
 /**
  * Roster a member into a cohort after a paid entitlement booking confirms (the
  * Stripe webhook's entitlement_booking branch). The purchase itself is recorded in
  * the entitlements ledger by confirmPaidBooking; this just grants cohort access.
  * Replaces the old enrollAfterPayment session_credits-receipt path.
+ *
+ * Runs the minor participation-agreement gate again as a backstop (3 Nov 2026):
+ * the register route gates before Checkout, but enforcement, a date of birth or
+ * an agreement can change between Checkout and the webhook. When the gate is
+ * enforced and locked the member is NOT added to the live cohort; the caller
+ * records it for staff. It never throws for this, so the webhook does not treat
+ * it as a failed booking and refund automatically. Report-only mode rosters as
+ * before (the gate logs the would-block itself).
  */
-export async function rosterAfterPaidBooking(cohortId: string, memberId: string): Promise<void> {
+export async function rosterAfterPaidBooking(cohortId: string, memberId: string): Promise<PaidRosterResult> {
+  const { data: c } = await supabaseServer()
+    .from('mentoring_cohorts')
+    .select('name')
+    .eq('id', cohortId)
+    .maybeSingle()
+  const containerName = (c as { name?: string | null } | null)?.name ?? undefined
+  const gate = await reportEnrollmentGate({ id: memberId }, { kind: 'cohort', containerId: cohortId, containerName })
+  if (accessGatesEnforced() && !gate.unlocked) return { rostered: false, reason: 'needs-agreement' }
   await addToRosterActive(cohortId, memberId)
+  return { rostered: true }
 }
 
 /** Enroll into an open cohort using session credits (draws the cohort's planned sessions). */
@@ -268,6 +289,9 @@ export async function enrollWithCredit(member: CommunityMember, cohortId: string
   if (!cohort || !cohort.isOpen) return { ok: false, reason: 'not-open' }
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return { ok: false, reason: 'already-enrolled' }
+  // A seat already paid for or drawn but not rostered (a held paid seat): staff
+  // settle it, so no second credit draw for the same cohort.
+  if (await hasReservedCohortBooking(member.id, cohortId)) return { ok: false, reason: 'booking-pending' }
   // Minor participation-agreement gate (report-only unless ACCESS_GATES_ENFORCE).
   const gate = await reportEnrollmentGate(member, { kind: 'cohort', containerId: cohortId, containerName: cohort.name })
   if (accessGatesEnforced() && !gate.unlocked) return { ok: false, reason: 'needs-agreement' }
@@ -293,6 +317,8 @@ export async function enrollFree(member: CommunityMember, cohortId: string): Pro
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return { ok: false, reason: 'already-enrolled' }
   if (access.kind !== 'free') return { ok: false, reason: 'needs-payment' }
+  // A held paid seat is staff's to roster (see enrollWithCredit).
+  if (await hasReservedCohortBooking(member.id, cohortId)) return { ok: false, reason: 'booking-pending' }
   const gate = await reportEnrollmentGate(member, { kind: 'cohort', containerId: cohortId, containerName: cohort.name })
   if (accessGatesEnforced() && !gate.unlocked) return { ok: false, reason: 'needs-agreement' }
   await addToRosterActive(cohortId, member.id)

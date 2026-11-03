@@ -91,7 +91,7 @@ function EventCard({ e }: { e: CatalogEvent }) {
 // the public website; registered items open the in-app materials portal.
 export default async function EventsPortalPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const catalog = await getMemberEventCatalog(member)
   const registered = catalog.filter((e) => e.registered)

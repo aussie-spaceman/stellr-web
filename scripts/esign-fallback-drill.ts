@@ -39,7 +39,8 @@ async function main() {
   const { docusignProvider } = await import('../lib/esign/providers/docusign')
   const { decideProvider, loadProviderState } = await import('../lib/esign/routing')
   const { AllowanceExhaustedError } = await import('../lib/esign/types')
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  const { supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
+  const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 
   const COLUMNS = 'mode, monthly_cap, reserve, overflow_types, overflow_allowlist, exhausted_until, exhausted_reason'
   const { data: saved, error } = await db.from('esign_provider_state').select(COLUMNS).eq('id', true).single()

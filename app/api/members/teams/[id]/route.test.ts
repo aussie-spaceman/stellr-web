@@ -5,7 +5,10 @@ import { NextRequest } from 'next/server'
 // The team detail is assembled from one registrations query with participants
 // embedded; the fake returns that shape directly and records nothing else.
 
-const { state } = vi.hoisted(() => ({ state: { member: { id: 'student-1', email: 'kid@school.test' } } }))
+const { state, inserts } = vi.hoisted(() => ({
+  state: { member: { id: 'student-1', email: 'kid@school.test' }, impersonating: false },
+  inserts: [] as { table: string; row: unknown }[],
+}))
 
 const registration = {
   id: 'reg-1',
@@ -32,7 +35,7 @@ const registration = {
 }
 
 vi.mock('@/lib/impersonation', () => ({
-  resolveRequestMember: async () => ({ member: state.member, unauthorised: false }),
+  resolveRequestMember: async () => ({ member: state.member, unauthorised: false, impersonating: state.impersonating }),
 }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
@@ -40,7 +43,10 @@ vi.mock('@/lib/supabase', () => ({
       const chain: Record<string, unknown> = {}
       for (const m of ['select', 'eq', 'in', 'order', 'limit']) chain[m] = () => chain
       chain.maybeSingle = async () => ({ data: table === 'registrations' ? registration : null, error: null })
-      chain.insert = async () => ({ error: null })
+      chain.insert = async (row: unknown) => {
+        inserts.push({ table, row })
+        return { error: null }
+      }
       chain.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(r)
       return chain
     },
@@ -54,6 +60,8 @@ const get = () =>
 
 beforeEach(() => {
   state.member = { id: 'student-1', email: 'kid@school.test' }
+  state.impersonating = false
+  inserts.length = 0
 })
 
 describe('GET /api/members/teams/[id] for a student on the team', () => {
@@ -86,6 +94,23 @@ describe('GET /api/members/teams/[id] for the organiser', () => {
     const body = await (await get()).json()
     const teammate = body.registration.participants.find((p: { id: string }) => p.id === 'p2')
     expect(teammate.health_conditions).toBe('epilepsy')
+  })
+
+  it('mints a join link when the group has none', async () => {
+    state.member = { id: 'teacher-1', email: 't@school.test' }
+    const body = await (await get()).json()
+    expect(inserts.map((i) => i.table)).toEqual(['group_join_tokens'])
+    expect(body.registration.joinUrl).toMatch(/\/register\/colorado\/join\//)
+  })
+
+  // S0 (Nov 2026): "is this view-as?" keyed off ?memberId=, so a full-portal
+  // view-as session (cookie, no param) wrote a join token as the organiser.
+  it('writes nothing while an admin is viewing as the organiser', async () => {
+    state.member = { id: 'teacher-1', email: 't@school.test' }
+    state.impersonating = true
+    const body = await (await get()).json()
+    expect(inserts).toEqual([])
+    expect(body.registration.joinUrl).toBeNull()
   })
 })
 

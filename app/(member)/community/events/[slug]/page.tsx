@@ -20,7 +20,7 @@ export default async function EventPortalPage({
   params: Promise<{ slug: string }>
 }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { slug } = await params
   const [event, groups] = await Promise.all([

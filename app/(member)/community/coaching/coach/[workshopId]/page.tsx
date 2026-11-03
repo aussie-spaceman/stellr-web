@@ -11,7 +11,7 @@ export const metadata = { title: 'Coaching · Manage workshop' }
 
 export default async function ManageWorkshopPage({ params }: { params: Promise<{ workshopId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const { workshopId } = await params
   const workshop = await getWorkshopFull(workshopId)

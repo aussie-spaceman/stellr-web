@@ -13,7 +13,7 @@ export const metadata = { title: 'Community · Session Room' }
 // mints a JaaS join token, and renders the call inside the portal.
 export default async function SessionRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
   const { id } = await params
 
   const db = supabaseServer()

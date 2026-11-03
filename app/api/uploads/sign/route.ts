@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { isUploadPurpose, signUpload, type UploadContext } from '@/lib/uploads'
+import {
+  FILE_NAME_TOO_LONG,
+  MAX_FILE_NAME_LENGTH,
+  isUploadPurpose,
+  signUpload,
+  type UploadContext,
+} from '@/lib/uploads'
 
 // POST /api/uploads/sign — the single entry point for every file upload.
 //
@@ -18,6 +24,11 @@ export async function POST(req: Request) {
   }
   const fileName = (typeof b.fileName === 'string' ? b.fileName : '').trim()
   if (!fileName) return NextResponse.json({ error: 'fileName is required' }, { status: 400 })
+  // Anyone can call this route, signed in or not: refuse a long name before
+  // anything reads it.
+  if (fileName.length > MAX_FILE_NAME_LENGTH) {
+    return NextResponse.json({ error: FILE_NAME_TOO_LONG }, { status: 400 })
+  }
 
   const result = await signUpload({
     purpose: b.purpose,

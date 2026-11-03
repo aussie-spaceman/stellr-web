@@ -3,12 +3,17 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
 import { resolveDownloadableAttachment } from '@/lib/resources-catalogue'
 import { logActivity } from '@/lib/activity-log'
+import { mayBeViewingAs } from '@/lib/impersonation'
 
 // GET /api/community/resources/attachment/[id]/download
 // Catalogue download: gates on CONTAINER access (the attachment's container
 // roster + membership floor), re-checked at request time, then returns a
 // short-lived signed URL. The storage path is never exposed to the client.
 // Logs the viewing container for per-binary download analytics (decision 3).
+//
+// S0 (Nov 2026): under an admin's view-as the file is still served (view-as is
+// a read lens), but nothing is counted or logged: the row would put the admin's
+// click on the member's own timeline, as the member.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
@@ -27,16 +32,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   // Per-binary open/download signal: bump the aggregate counter + log the event.
-  const db = supabaseServer()
-  db.rpc('increment_resource_download', { rid: resolved.binaryId }).then(() => {}, () => {})
-  logActivity({
-    memberId: member.id,
-    category: 'community',
-    action: 'resource_downloaded',
-    summary: `Opened resource “${resolved.title}”`,
-    metadata: { attachmentId: id, binaryId: resolved.binaryId, kind: resolved.kind },
-    actorType: 'member',
-  }).catch(() => {})
+  if (!(await mayBeViewingAs())) {
+    const db = supabaseServer()
+    db.rpc('increment_resource_download', { rid: resolved.binaryId }).then(() => {}, () => {})
+    logActivity({
+      memberId: member.id,
+      category: 'community',
+      action: 'resource_downloaded',
+      summary: `Opened resource “${resolved.title}”`,
+      metadata: { attachmentId: id, binaryId: resolved.binaryId, kind: resolved.kind },
+      actorType: 'member',
+    }).catch(() => {})
+  }
 
   return NextResponse.json({ url, title: resolved.title, kind: resolved.kind })
 }

@@ -12,7 +12,9 @@ import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { ViewAsBanner } from '@/components/admin/ViewAsBanner'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { StartViewAsSession } from '@/components/admin/StartViewAsSession'
+import { isStaffRole, requireAdminPage } from '@/lib/admin-auth'
+import { getImpersonation } from '@/lib/impersonation'
 
 export const metadata = { title: 'Admin — View As Member' }
 
@@ -20,8 +22,10 @@ const TABS = ['profile', 'teams', 'billing'] as const
 type Tab = typeof TABS[number]
 
 // Read-only mirror of the member's own /account page. Everything the member can
-// see, the admin sees here — the session-bound widgets (Teams, Billing) are
-// pointed at this member via impersonateMemberId and rendered read-only.
+// see, the admin sees here. The session-bound widgets (Teams, Billing) load from
+// the member APIs, which resolve to this member only while the admin holds a
+// view-as ticket for them; without one, those tabs offer to start a session
+// (audited, 30 minutes) instead. They took ?memberId= until S0 (Nov 2026).
 export default async function ViewAsMemberPage({
   params,
   searchParams,
@@ -75,15 +79,24 @@ export default async function ViewAsMemberPage({
 
   // The member's avatar comes from Clerk (same source as their own /account).
   let clerkUser: { imageUrl: string | null } | null = null
+  let clerkRole: unknown
   if (member.clerk_user_id) {
     try {
       const client = await clerkClient()
       const u = await client.users.getUser(member.clerk_user_id)
       clerkUser = { imageUrl: u.imageUrl ?? null }
+      clerkRole = (u.publicMetadata as { role?: unknown } | null | undefined)?.role
     } catch {
       // Member may not have a Clerk account yet — fall back to the placeholder.
     }
   }
+
+  // View-as refuses staff targets (app/api/admin/impersonation), so for staff
+  // the Teams and Billing tabs say so up front rather than offer a session that
+  // will be refused. Only a positive answer counts: if either lookup fails the
+  // tabs offer the session as usual, and the start route still refuses.
+  const { data: staffRow } = await db.from('staff_roles').select('member_id').eq('member_id', member.id).maybeSingle()
+  const isStaffTarget = Boolean(staffRow) || isStaffRole(clerkRole)
 
   const { data: directoryPrefs } = await db
     .from('member_directory_prefs')
@@ -160,6 +173,10 @@ export default async function ViewAsMemberPage({
   const tabHref = (key: Tab) =>
     key === 'profile' ? `/admin/members/${id}/view-as` : `/admin/members/${id}/view-as?tab=${key}`
 
+  // Teams and billing need a live view-as ticket for THIS member: the APIs
+  // behind them read whoever the ticket names.
+  const viewingThisMember = activeTab !== 'profile' && (await getImpersonation())?.memberId === member.id
+
   return (
     <>
       {/* Banner breaks out of admin layout's padded <main> */}
@@ -232,20 +249,39 @@ export default async function ViewAsMemberPage({
                 ? 'Manage your registered teams and participant details.'
                 : 'Teams you have been added to for upcoming events.'}
             </p>
-            <TeamsTab
-              role={member.event_role}
-              memberId={member.id}
-              impersonateMemberId={member.id}
-              readOnly
-            />
+            {viewingThisMember ? (
+              <TeamsTab role={member.event_role} memberId={member.id} readOnly />
+            ) : isStaffTarget ? (
+              <StaffNotViewable what="Teams" />
+            ) : (
+              <StartViewAsSession memberId={member.id} what="Teams" />
+            )}
           </div>
         )}
 
         {/* Billing tab */}
         {activeTab === 'billing' && showBilling && (
-          <BillingHistory impersonateMemberId={member.id} readOnly />
+          viewingThisMember ? (
+            <BillingHistory readOnly />
+          ) : isStaffTarget ? (
+            <StaffNotViewable what="Billing details" />
+          ) : (
+            <StartViewAsSession memberId={member.id} what="Billing details" />
+          )
         )}
       </div>
     </>
+  )
+}
+
+// Deliberate, not a fault: one staff member does not open another's portal
+// (deep review AUTH-9, S0). Group registrations they organise are on the
+// admin member page, which reads them directly.
+function StaffNotViewable({ what }: { what: string }) {
+  return (
+    <p className="rounded-ds-card border border-line bg-white p-5 text-sm text-content-body">
+      View-as isn’t available for staff accounts, so {what} can’t be shown here. Any group registrations they
+      organise are listed on their member page.
+    </p>
   )
 }

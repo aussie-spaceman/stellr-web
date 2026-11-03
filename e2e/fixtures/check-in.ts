@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
+import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 
 /**
  * Check-in desk test events, made fresh for each spec and removed after.
@@ -16,11 +17,11 @@ export const CHECK_IN_GROUP = 'E2E Lincoln MS'
 function db(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   if (!url.includes(DEV_PROJECT_REF)) throw new Error(`check-in e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
-  return createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 
 export function checkInConfigured(): boolean {
-  return (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').length > 0 && (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes(DEV_PROJECT_REF)
+  return (supabaseSecretKey() ?? '').length > 0 && (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes(DEV_PROJECT_REF)
 }
 
 export async function createCheckInEvent(): Promise<string> {

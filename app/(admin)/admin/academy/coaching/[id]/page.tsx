@@ -15,7 +15,7 @@ export const metadata = { title: 'Admin · Manage workshop' }
 export default async function AdminManageWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminPage()
   const member = await getSignedInMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
   if (!member.isAdmin) redirect('/community/coaching')
 
   const { id } = await params

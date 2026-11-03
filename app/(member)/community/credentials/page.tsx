@@ -26,7 +26,7 @@ const STATE_LABEL: Record<CredentialState, { text: string; className: string }> 
 
 export default async function CredentialsPage({ searchParams }: { searchParams: Promise<{ survey_first?: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const db = supabaseServer()
   const rows = await listMemberCredentials(db, member.id)

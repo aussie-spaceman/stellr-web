@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type Stripe from 'stripe'
 
 // Fixture-driven tests for the Stripe webhook's money paths (deep review PAY-13).
@@ -28,13 +28,13 @@ const h = vi.hoisted(() => ({
   logActivity: vi.fn(async () => {}),
   fireTierPurchased: vi.fn(async () => {}),
   grantTier: vi.fn(async () => ({})),
-  rosterAfterPaidBooking: vi.fn(async () => {}),
+  rosterAfterPaidBooking: vi.fn(async (): Promise<{ rostered: boolean; reason?: string }> => ({ rostered: true })),
   scheduleFromRequest: vi.fn(async () => {}),
   confirmPaidBooking: vi.fn(async () => 'b1'),
   redeemCoupon: vi.fn(async () => {}),
   grantTierAllocations: vi.fn(async () => {}),
   grantPurchasedLot: vi.fn(async () => {}),
-  getOfferingTarget: vi.fn(async () => null),
+  getOfferingTarget: vi.fn(async (): Promise<{ type: string; cohortId?: string } | null> => null),
   sendEmail: vi.fn(async () => {}),
   refundsCreate: vi.fn(async () => ({ id: 're_dup' })),
   // deep review PAY-N4: cancel the prior Stripe subscription when a new one activates.
@@ -351,6 +351,56 @@ describe('checkout.session.completed payment_status gate (PAY-6)', () => {
       data: { object: { id: 'cs_s', payment_status: 'paid', metadata: { type: 'store_order', orderId: 'o1' } } },
     } as unknown as Stripe.Event)
     expect(h.handleStoreOrderPaid).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('paid mentoring cohort booking: minor-agreement backstop', () => {
+  const bookingEvent = (id: string) => ({
+    id, type: 'checkout.session.completed',
+    data: { object: {
+      id: `cs_${id}`, payment_status: 'paid', payment_intent: `pi_${id}`,
+      amount_total: 12000, currency: 'usd', customer: null, customer_details: null,
+      metadata: { type: 'entitlement_booking', memberId: 'm1', offeringId: 'off1', creditAppliedCents: '0' },
+    } },
+  } as unknown as Stripe.Event)
+
+  beforeEach(() => {
+    h.getOfferingTarget.mockResolvedValue({ type: 'mentoring_cohort', cohortId: 'c1' })
+  })
+  afterEach(() => {
+    h.getOfferingTarget.mockResolvedValue(null)
+  })
+
+  it('rosters and raises no alert when the gate lets them in', async () => {
+    current = makeDb({ stripe_webhook_events: [] })
+    const res = await post(bookingEvent('evt_ok'))
+    expect(res.status).toBe(200)
+    expect(h.rosterAfterPaidBooking).toHaveBeenCalledWith('c1', 'm1')
+    expect(h.notifyCommunityAdmins).not.toHaveBeenCalled()
+    expect(h.logActivity).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'paid_booking_held' }))
+    expect(h.refundsCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps the payment, records it and alerts staff when the gate holds them out', async () => {
+    current = makeDb({ stripe_webhook_events: [] })
+    h.rosterAfterPaidBooking.mockResolvedValueOnce({ rostered: false, reason: 'needs-agreement' })
+    const res = await post(bookingEvent('evt_held'))
+
+    expect(res.status).toBe(200)
+    // Never dropped and never refunded automatically: the ledger seat stands.
+    expect(h.confirmPaidBooking).toHaveBeenCalledTimes(1)
+    expect(h.refundsCreate).not.toHaveBeenCalled()
+    expect(h.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      memberId: 'm1',
+      action: 'paid_booking_held',
+      metadata: expect.objectContaining({ cohortId: 'c1', reason: 'needs-agreement', paymentIntent: 'pi_evt_held' }),
+    }))
+    expect(h.notifyCommunityAdmins).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'action',
+      body: expect.stringContaining('participation agreement'),
+    }))
+    // The payment is still logged as received.
+    expect(h.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'payment_received' }))
   })
 })
 

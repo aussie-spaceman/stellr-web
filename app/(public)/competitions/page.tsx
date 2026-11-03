@@ -24,6 +24,7 @@ import { WorkCard } from '@/components/sections/WorkCard'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION, STUDENT_WORK } from '@/lib/media-manifest'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { GuideFaq } from '@/components/guides/GuideFaq'
@@ -211,12 +212,7 @@ export default async function CompetitionsPage() {
   const [tierPrices, seriesMembers] = await Promise.all([getTierPriceMap(), getSeriesMembers()])
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(buildCompetitionSeriesJsonLd(seriesMembers)),
-        }}
-      />
+      <JsonLd data={buildCompetitionSeriesJsonLd(seriesMembers)} />
       <TrackEvent
         event={{
           event: 'competition_page_view',

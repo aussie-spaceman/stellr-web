@@ -15,6 +15,7 @@
  * Opening it sends no email: the Resend key is dropped for this process.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 import { randomBytes } from 'node:crypto'
 
 const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
@@ -53,7 +54,7 @@ async function main() {
   delete process.env.RESEND_API_KEY
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   if (!url.includes(DEV_PROJECT_REF)) throw new Error(`survey e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const [command, ...args] = process.argv.slice(2)
 
   if (command === 'create') {

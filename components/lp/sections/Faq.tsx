@@ -1,6 +1,7 @@
 import { Eyebrow } from '@stellr/web-ui'
 import { buildFaqJsonLd } from '@/lib/structured-data'
 import { FaqList } from '@/components/lp/FaqList'
+import { JsonLd } from '@/components/seo/JsonLd'
 import type { LandingPageConfig } from '@/content/lp/types'
 
 /**
@@ -21,14 +22,7 @@ export function Faq({ config }: { config: LandingPageConfig }) {
 
   return (
     <section aria-labelledby="faq-h" id="faq" className="bg-white px-4 py-16 sm:px-6 lg:px-8">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
-            buildFaqJsonLd(faq.items.map((item) => ({ q: item.q, text: item.a }))),
-          ),
-        }}
-      />
+      <JsonLd data={buildFaqJsonLd(faq.items.map((item) => ({ q: item.q, text: item.a })))} />
       <div className="mx-auto grid max-w-content gap-8 lg:grid-cols-[0.42fr_1fr] lg:gap-12">
         <div>
           <Eyebrow>{faq.eyebrow}</Eyebrow>

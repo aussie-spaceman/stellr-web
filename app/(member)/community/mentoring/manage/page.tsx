@@ -10,7 +10,7 @@ export const metadata = { title: 'Mentor workspace · Your cohorts' }
 
 export default async function MentorDashboardPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
   const caps = await getHostCaps(member.id)
   if (!member.isAdmin && !caps.canMentor) redirect('/community/mentoring')
 

@@ -17,7 +17,8 @@
  *
  * ── Auth / env (put in .env.local, pointed at your STAGING project) ────────────
  *   NEXT_PUBLIC_SUPABASE_URL      staging Supabase URL
- *   SUPABASE_SERVICE_ROLE_KEY     staging service-role key (bypasses RLS)
+ *   SUPABASE_SECRET_KEY           staging secret key (bypasses RLS; legacy
+ *                                 SUPABASE_SERVICE_ROLE_KEY also accepted)
  *   CLERK_SECRET_KEY              sk_test_… for the staging Clerk instance
  *
  * ── Seed config (all optional; sensible defaults) ──────────────────────────────
@@ -51,6 +52,7 @@ import {
 } from '../lib/member-enums'
 import { syncMemberClassificationRole, addGlobalRole, type MemberRole } from '../lib/member-roles'
 import { supabaseServer } from '../lib/supabase'
+import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 
 // ── env ────────────────────────────────────────────────────────────────────────
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -58,10 +60,10 @@ if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
 else dotenv.config()
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const secretKey = supabaseSecretKey()
 const clerkSecret = process.env.CLERK_SECRET_KEY
-if (!url || !serviceKey) {
-  console.error('❌  NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in .env.local')
+if (!url || !secretKey) {
+  console.error(`❌  NEXT_PUBLIC_SUPABASE_URL and ${SECRET_KEY_VARS} must be set in .env.local`)
   process.exit(1)
 }
 if (!clerkSecret) {

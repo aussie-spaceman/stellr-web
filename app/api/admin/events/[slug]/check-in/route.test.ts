@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { OpenCheckIn } from '@/lib/check-in-banner'
 
+type Access = { ok: boolean; status?: number; isAdmin?: boolean; assignedSlugs?: string[] | null }
+const ADMIN: Access = { ok: true, isAdmin: true, assignedSlugs: null }
+
 const { requireEventAccess, getEventBySlug, loadOpenCheckIns, updates, upserts } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(async (_slug: string): Promise<{ ok: boolean; status: number }> => ({ ok: true, status: 200 })),
+  requireEventAccess: vi.fn(async (_slug: string): Promise<Access> => ({ ok: true, isAdmin: true, assignedSlugs: null })),
   getEventBySlug: vi.fn(async (_slug: string): Promise<{ setting?: string } | null> => ({ setting: 'in_person' })),
   loadOpenCheckIns: vi.fn(async (_db: unknown): Promise<OpenCheckIn[]> => []),
   updates: [] as { values: unknown; column: string; slugs: string[] }[],
@@ -21,6 +24,10 @@ vi.mock('@/lib/supabase', () => ({
       const chain = {
         select: () => chain,
         eq: () => chain,
+        neq: () => chain,
+        not: () => chain,
+        // GET's list reads (registrations, merch) come back empty.
+        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve),
         maybeSingle: async () => ({ data: { check_in_token: 'existing' }, error: null }),
         update: (values: unknown) => ({
           in: async (column: string, slugs: string[]) => {
@@ -38,7 +45,7 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 
-const { POST } = await import('./route')
+const { GET, POST } = await import('./route')
 
 const openRow = (over: Partial<OpenCheckIn>): OpenCheckIn => ({
   slug: 'colorado',
@@ -61,10 +68,20 @@ function post(body: unknown, slug = 'nevada') {
   )
 }
 
+function get(slug = 'nevada') {
+  return GET(new Request(`https://www.stellreducation.org/api/admin/events/${slug}/check-in`), {
+    params: Promise.resolve({ slug }),
+  })
+}
+
+/** An event manager assigned to these events. */
+const manager = (...assignedSlugs: string[]): Access => ({ ok: true, isAdmin: false, assignedSlugs })
+
 beforeEach(() => {
   vi.clearAllMocks()
   updates.length = 0
   upserts.length = 0
+  requireEventAccess.mockResolvedValue(ADMIN)
   getEventBySlug.mockResolvedValue({ setting: 'in_person' })
   loadOpenCheckIns.mockResolvedValue([])
 })
@@ -116,5 +133,121 @@ describe('POST /api/admin/events/[slug]/check-in — open', () => {
     requireEventAccess.mockResolvedValue({ ok: false, status: 403 })
     expect((await post({ action: 'open' })).status).toBe(403)
     expect(upserts).toEqual([])
+  })
+})
+
+// S0 (Nov 2026): opening closed check-in at EVERY other in-person event, and the
+// desk listed every open event, for any event manager — who could shut the
+// doors on, and read the names of, events they don't run.
+describe('check-in is scoped to the events the caller manages', () => {
+  const openElsewhere = () => [
+    openRow({}), // colorado
+    openRow({ slug: 'utah', title: 'Utah SDC' }),
+    openRow({ slug: 'nevada', title: 'Nevada SDC' }),
+  ]
+
+  it('an event manager opening their event leaves events they don’t manage open', async () => {
+    requireEventAccess.mockResolvedValue(manager('nevada'))
+    loadOpenCheckIns.mockResolvedValue(openElsewhere())
+    const res = await post({ action: 'open' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, closed: [] })
+    expect(updates).toEqual([])
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_open: true }])
+  })
+
+  it('an event manager closes their own other events, and only those', async () => {
+    requireEventAccess.mockResolvedValue(manager('nevada', 'utah'))
+    loadOpenCheckIns.mockResolvedValue(openElsewhere())
+    const res = await post({ action: 'open' })
+    expect(await res.json()).toEqual({ ok: true, closed: [{ slug: 'utah', title: 'Utah SDC' }] })
+    expect(updates).toEqual([{ values: { check_in_open: false }, column: 'event_slug', slugs: ['utah'] }])
+  })
+
+  it('a full admin still closes every other in-person event', async () => {
+    loadOpenCheckIns.mockResolvedValue(openElsewhere())
+    await post({ action: 'open' })
+    expect(updates).toEqual([{ values: { check_in_open: false }, column: 'event_slug', slugs: ['colorado', 'utah'] }])
+  })
+
+  it('a caller with no assignment list closes nothing (fails closed)', async () => {
+    requireEventAccess.mockResolvedValue({ ok: true, isAdmin: false })
+    loadOpenCheckIns.mockResolvedValue(openElsewhere())
+    await post({ action: 'open' })
+    expect(updates).toEqual([])
+  })
+
+  it('GET lists only the event manager’s own other open events', async () => {
+    requireEventAccess.mockResolvedValue(manager('nevada', 'utah'))
+    loadOpenCheckIns.mockResolvedValue(openElsewhere())
+    const body = await (await get()).json()
+    expect(body.otherOpen).toEqual([{ slug: 'utah', title: 'Utah SDC' }])
+    expect(JSON.stringify(body)).not.toMatch(/colorado|Colorado SDC/)
+  })
+
+  it('GET lists every other open event for a full admin', async () => {
+    loadOpenCheckIns.mockResolvedValue(openElsewhere())
+    const body = await (await get()).json()
+    expect(body.otherOpen.map((e: { slug: string }) => e.slug)).toEqual(['colorado', 'utah'])
+  })
+
+  it('GET still says whether the banner points here, without naming where else', async () => {
+    requireEventAccess.mockResolvedValue(manager('nevada'))
+    // Colorado is today's event, so the banner goes there, not to Nevada.
+    loadOpenCheckIns.mockResolvedValue([
+      openRow({ date: new Date().toISOString().slice(0, 10) }),
+      openRow({ slug: 'nevada', title: 'Nevada SDC', date: '2099-01-01' }),
+    ])
+    const body = await (await get()).json()
+    expect(body.bannerTarget).toBe(false)
+    expect(body.otherOpen).toEqual([])
+  })
+
+  // The desk warns when the banner points elsewhere. A failed read is not
+  // "elsewhere": it says nothing rather than send staff looking for a problem.
+  it('GET: when the open events cannot be read, the banner is unknown, not "elsewhere"', async () => {
+    loadOpenCheckIns.mockRejectedValue(new Error('boom'))
+    const res = await get()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.bannerTarget).toBeNull()
+    expect(body.otherOpen).toEqual([])
+  })
+})
+
+// Nevada (6 Nov) runs its desk on these: the scoping above must not get in the
+// way of the people who run the event opening, closing and re-issuing its own
+// check-in. Scanning is covered for both roles in route.desk.test.ts.
+describe.each([
+  ['a full admin', ADMIN],
+  ['Nevada’s event manager', manager('nevada')],
+])('%s at Nevada', (_who, access) => {
+  beforeEach(() => {
+    requireEventAccess.mockResolvedValue(access)
+  })
+
+  it('opens check-in, keeping the existing banner token', async () => {
+    const res = await post({ action: 'open' })
+    expect(res.status).toBe(200)
+    expect(requireEventAccess).toHaveBeenCalledWith('nevada')
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_open: true }])
+  })
+
+  it('closes check-in', async () => {
+    const res = await post({ action: 'close' })
+    expect(res.status).toBe(200)
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_open: false }])
+  })
+
+  it('re-issues the check-in link', async () => {
+    const res = await post({ action: 'regenerate' })
+    expect(res.status).toBe(200)
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_token: expect.stringMatching(/^[0-9a-f]{32}$/) }])
+  })
+
+  it('the desk reads Nevada’s own state', async () => {
+    const res = await get()
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ checkInToken: 'existing', otherOpen: [] })
   })
 })

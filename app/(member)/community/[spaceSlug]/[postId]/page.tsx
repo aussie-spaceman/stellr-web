@@ -49,7 +49,7 @@ export default async function PostDetailPage({
 }) {
   const { spaceSlug, postId } = await params
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  if (!member) redirect('/sign-in')
 
   const space = await getSpaceBySlug(spaceSlug)
   if (!space) notFound()

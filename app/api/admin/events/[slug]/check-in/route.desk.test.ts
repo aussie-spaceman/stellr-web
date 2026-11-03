@@ -11,13 +11,18 @@ interface Call {
   filters: Filter[]
 }
 
-const { calls, respond, getEventRoster } = vi.hoisted(() => ({
+type Access = { ok: true; userId: string; isAdmin: boolean; assignedSlugs: string[] | null }
+const ADMIN: Access = { ok: true, userId: 'clerk-admin', isAdmin: true, assignedSlugs: null }
+const NEVADA_MANAGER: Access = { ok: true, userId: 'clerk-em', isAdmin: false, assignedSlugs: ['nevada'] }
+
+const { calls, respond, getEventRoster, access } = vi.hoisted(() => ({
   calls: [] as Call[],
   respond: { fn: (_call: Call, _single: boolean): { data: unknown; error: null } => ({ data: null, error: null }) },
   getEventRoster: vi.fn(),
+  access: { current: null as unknown },
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => ({ ok: true, status: 200 }) }))
+vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => access.current }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async () => ({ setting: 'in_person', date: '2026-11-06' }) }))
 vi.mock('@/lib/check-in-banner', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/check-in-banner')>()),
@@ -82,6 +87,7 @@ const has = (c: Call, op: string, column: string) => c.filters.find((f) => f[0] 
 
 beforeEach(() => {
   calls.length = 0
+  access.current = ADMIN
   vi.stubEnv('SURVEY_TOKEN_SECRET', 's'.repeat(40))
   // By default every id asked about belongs to the event.
   respond.fn = (call, single) => {
@@ -130,7 +136,13 @@ describe('group check-in', () => {
 })
 
 describe('scan', () => {
-  it('checks in the participant a valid code names', async () => {
+  // Nevada (6 Nov): the event's own manager scans at the desk as well as admins.
+  // S0 scoped open/close to the caller's events; scanning must be unaffected.
+  it.each([
+    ['a full admin', ADMIN],
+    ['Nevada’s event manager', NEVADA_MANAGER],
+  ])('checks in the participant a valid code names, for %s', async (_who, who) => {
+    access.current = who
     const res = await post({ action: 'scan', code: signCheckInCode('nevada', 'p', A) })
     const body = await res.json()
     expect(res.status).toBe(200)
@@ -138,6 +150,13 @@ describe('scan', () => {
     const [u] = updates()
     expect(u.values).toMatchObject({ check_in_method: 'manual' })
     expect(has(u, 'eq', 'id')?.[2]).toBe(A)
+  })
+
+  it('a manager group-checks-in at their own event too', async () => {
+    access.current = NEVADA_MANAGER
+    const res = await post({ action: 'group_check_in', participantIds: [A, B] })
+    expect(res.status).toBe(200)
+    expect(has(updates()[0], 'in', 'id')?.[2]).toEqual([A, B])
   })
 
   it('says when they were already in, and changes nothing', async () => {

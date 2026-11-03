@@ -203,3 +203,40 @@ describe('check-in is scoped to the events the caller manages', () => {
     expect(body.otherOpen).toEqual([])
   })
 })
+
+// Nevada (6 Nov) runs its desk on these: the scoping above must not get in the
+// way of the people who run the event opening, closing and re-issuing its own
+// check-in. Scanning is covered for both roles in route.desk.test.ts.
+describe.each([
+  ['a full admin', ADMIN],
+  ['Nevada’s event manager', manager('nevada')],
+])('%s at Nevada', (_who, access) => {
+  beforeEach(() => {
+    requireEventAccess.mockResolvedValue(access)
+  })
+
+  it('opens check-in, keeping the existing banner token', async () => {
+    const res = await post({ action: 'open' })
+    expect(res.status).toBe(200)
+    expect(requireEventAccess).toHaveBeenCalledWith('nevada')
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_open: true }])
+  })
+
+  it('closes check-in', async () => {
+    const res = await post({ action: 'close' })
+    expect(res.status).toBe(200)
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_open: false }])
+  })
+
+  it('re-issues the check-in link', async () => {
+    const res = await post({ action: 'regenerate' })
+    expect(res.status).toBe(200)
+    expect(upserts).toEqual([{ event_slug: 'nevada', check_in_token: expect.stringMatching(/^[0-9a-f]{32}$/) }])
+  })
+
+  it('the desk reads Nevada’s own state', async () => {
+    const res = await get()
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ checkInToken: 'existing', otherOpen: [] })
+  })
+})

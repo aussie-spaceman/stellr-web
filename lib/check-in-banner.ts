@@ -59,8 +59,8 @@ export interface CheckInViewer {
 /**
  * Whether `viewer` may see, or close, check-in for `slug`. A full admin sees
  * every event; an event manager only the events they are assigned to. Anything
- * short of an explicit admin with no assignment list counts as an event manager,
- * so a malformed viewer sees nothing extra.
+ * short of `isAdmin: true` counts as an event manager, so a malformed viewer
+ * (no assignment list) sees nothing extra.
  */
 export function canSeeCheckIn(viewer: CheckInViewer, slug: string): boolean {
   if (viewer.isAdmin === true) return true

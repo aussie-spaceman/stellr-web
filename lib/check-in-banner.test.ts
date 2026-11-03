@@ -110,7 +110,7 @@ describe('checkInsVisibleTo / canSeeCheckIn', () => {
     expect(canSeeCheckIn(viewer, 'nevada')).toBe(true)
   })
 
-  it('anything short of an explicit admin with no list sees nothing extra', () => {
+  it('anything short of isAdmin: true sees nothing extra', () => {
     expect(checkInsVisibleTo(all, { isAdmin: false, assignedSlugs: null })).toEqual([])
     expect(checkInsVisibleTo(all, { isAdmin: false, assignedSlugs: [] })).toEqual([])
     expect(checkInsVisibleTo(all, {} as unknown as { isAdmin: boolean; assignedSlugs: null })).toEqual([])

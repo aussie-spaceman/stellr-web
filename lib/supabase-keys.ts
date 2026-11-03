@@ -22,8 +22,11 @@
 // secret into an empty string, and that must not mask the legacy fallback.
 //
 // No dependencies, on purpose: proxy.ts (via lib/crawlers.ts), the browser
-// client, scripts and e2e fixtures all import it. Read at call time, never at
-// module load, because scripts load .env.local after their imports run.
+// client, scripts and e2e fixtures all import it. scripts/verify-deletion-
+// registry.mjs imports it in plain Node, which strips the types, so keep to
+// erasable TypeScript (no enums, namespaces or constructor parameter
+// properties; its test fails otherwise). Read at call time, never at module
+// load, because scripts load .env.local after their imports run.
 //
 // Nothing here returns a key in an error or a status. Kinds, roles and variable
 // names are safe to show an admin; values never are.

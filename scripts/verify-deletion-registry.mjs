@@ -1,31 +1,31 @@
 // Read-only validation: runs each registry dependent's count query against the
 // live DB with a non-matching id (zero rows, zero mutations) to confirm the
 // table/column names actually exist. Run: node scripts/verify-deletion-registry.mjs
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
+// Node 24 (engines.node) runs a dependency-free .ts file as is, so the key is
+// read and sent exactly as the app does it: secret key first, legacy
+// service_role as fallback, a low-privilege key refused, and a secret key kept
+// off `Authorization: Bearer`.
+import { SECRET_KEY_VARS, supabaseFetch, supabaseSecretKey } from '../lib/supabase-keys.ts'
 
-// Minimal .env.local loader (script runs outside Next).
-for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
+// Minimal .env.local loader (script runs outside Next). Optional: a production
+// key goes in the shell environment, never in .env.local (docs/ENV-MATRIX.md).
+const envFile = new URL('../.env.local', import.meta.url)
+for (const line of existsSync(envFile) ? readFileSync(envFile, 'utf8').split('\n') : []) {
   const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
 }
 
-// Plain node cannot import lib/supabase-keys.ts, so this mirrors its fallback
-// (the new secret key first, the legacy service_role key until it is retired)
-// and its supabaseFetch (a secret key travels on `apikey` only, never repeated
-// on `Authorization: Bearer`; a legacy JWT key goes out as it always has).
-// Trimmed before the fallback, so a blank new variable does not mask the legacy one.
-const secretKey = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || ''
-const keyOnApikeyOnly = (input, init) => {
-  const headers = new Headers(init?.headers)
-  if (secretKey.startsWith('sb_secret_') && headers.get('Authorization') === `Bearer ${secretKey}`) {
-    headers.delete('Authorization')
-  }
-  return fetch(input, { ...init, headers })
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+const secretKey = supabaseSecretKey()
+if (!url || !secretKey) {
+  console.error(`NEXT_PUBLIC_SUPABASE_URL and ${SECRET_KEY_VARS} are required.`)
+  process.exit(1)
 }
-const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, secretKey, {
+const db = createClient(url, secretKey, {
   auth: { persistSession: false },
-  global: { fetch: keyOnApikeyOnly },
+  global: { fetch: supabaseFetch },
 })
 
 const NOMATCH_UUID = '00000000-0000-0000-0000-000000000000'

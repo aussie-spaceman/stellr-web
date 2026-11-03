@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { secretInPublicSupabaseKey } from '../next.config.mjs'
 
 // S0 key migration: next.config.mjs refuses to build when a Supabase secret key
@@ -36,5 +36,42 @@ describe('secretInPublicSupabaseKey', () => {
   it('ignores a secret key in the server-only variables', () => {
     expect(secretInPublicSupabaseKey({ SUPABASE_SECRET_KEY: 'sb_secret_TESTONLY' })).toBeNull()
     expect(secretInPublicSupabaseKey({ SUPABASE_SERVICE_ROLE_KEY: fakeLegacyKey('service_role') })).toBeNull()
+  })
+})
+
+// The check above only matters because next.config.mjs runs it as it loads,
+// which is what fails `next build`. Each test loads a fresh copy under its env.
+describe('next.config.mjs at load time', () => {
+  const PUBLIC_VARS = ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'] as const
+  const load = (env: Partial<Record<(typeof PUBLIC_VARS)[number], string>>) => {
+    for (const name of PUBLIC_VARS) vi.stubEnv(name, env[name])
+    vi.resetModules()
+    return import('../next.config.mjs')
+  }
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  it('refuses to load with a secret key in a public variable, naming the variable but not the value', async () => {
+    const failure = await load({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_TESTONLY' }).catch((e: Error) => e)
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toMatch(/^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY holds a Supabase secret key/)
+    expect((failure as Error).message).not.toContain('TESTONLY')
+  })
+
+  it('refuses to load with the legacy service_role key in the legacy public variable', async () => {
+    await expect(load({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('service_role') }))
+      .rejects.toThrow(/^NEXT_PUBLIC_SUPABASE_ANON_KEY holds a Supabase secret key/)
+  })
+
+  it('loads with only the legacy anon key set (today, on both Vercel projects)', async () => {
+    const config = await load({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('anon') })
+    expect(config.default).toBeDefined()
+  })
+
+  it('loads with the publishable key set', async () => {
+    const config = await load({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_TESTONLY' })
+    expect(config.default).toBeDefined()
   })
 })

@@ -69,6 +69,32 @@ describe('createBrowserSupabase (Realtime chat)', () => {
     expect(restCall()?.headers.get('Authorization')).toBe(`Bearer ${LEGACY_ANON}`)
   })
 
+  // The Realtime socket sends its own access_token in each channel join, apart
+  // from any HTTP header. supabase-js 2.118 fills it with the API key whenever
+  // the accessToken callback returns null; for chat it must be the Clerk session
+  // token or nothing, so Realtime falls back to the connection's apikey.
+  // The client starts its own setAuth on creation; let it settle first, or the
+  // newer call cancels ours and the value is read before either has landed.
+  const realtimeToken = async (sb: ReturnType<typeof createBrowserSupabase>) => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await sb.realtime.setAuth()
+    return sb.realtime.accessTokenValue
+  }
+
+  it('gives Realtime the Clerk session token as its access token', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', PUBLISHABLE)
+    expect(await realtimeToken(createBrowserSupabase(async () => CLERK_TOKEN))).toBe(CLERK_TOKEN)
+  })
+
+  it('never gives Realtime a key as its access token when there is no Clerk token', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', PUBLISHABLE)
+    expect(await realtimeToken(createBrowserSupabase(async () => null))).toBeNull()
+
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', undefined)
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
+    expect(await realtimeToken(createBrowserSupabase(async () => null))).toBeNull()
+  })
+
   it('refuses to start with a secret key in the public slot', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'sb_secret_TESTONLY')
     expect(() => createBrowserSupabase(async () => CLERK_TOKEN)).toThrow(/secret key/)

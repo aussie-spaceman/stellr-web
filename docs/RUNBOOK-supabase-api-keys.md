@@ -5,7 +5,9 @@ projects and the GitHub repository settings. Supabase's legacy JWT keys
 (`anon`, `service_role`) stop working at the end of 2026. Their replacements are
 the publishable key (`sb_publishable_…`) and secret keys (`sb_secret_…`), which
 are not JWTs. The code change came in S0, Nov 2026; this runbook covers the
-switch itself. **No production step before the Nevada event (6 Nov) is over.**
+switch itself. **No production step before the Nevada event (6 Nov) is over,
+and that includes promoting this code to production:** it reaches dev when it
+merges, and production with the first promotion after the event.
 
 ## What the code already does
 
@@ -33,12 +35,12 @@ switch itself. **No production step before the Nevada event (6 Nov) is over.**
 |---|---|---|
 | `lib/supabase.ts` `supabaseServer()` / `supabaseServerTyped()` | secret | Every API route, cron, webhook and server component |
 | `lib/supabase.ts` `supabase()` | public | Server-side public reads |
-| `lib/supabase-browser.ts` `createBrowserSupabase` | public | Realtime chat. `Authorization` carries the Clerk token, not a key |
+| `lib/supabase-browser.ts` `createBrowserSupabase` | public | Realtime chat. The Clerk token goes on `Authorization` and as the Realtime channel `access_token`; signed out, neither carries a key |
 | `lib/supabase-browser.ts` `createStorageUploadClient` | public | Signed uploads (`lib/upload-client.ts`): compliance documents, badge/certificate artwork, email editor, training resources |
 | `lib/crawlers.ts` (from `proxy.ts`) | secret | Raw PostgREST insert, best-effort |
-| `scripts/*`: every script that touches the database (e.g. `watermark-worker.ts`, `esign-*.ts`, `seed-*.ts`, `aeo-crawler-report.ts`) | secret | Through `lib/supabase-keys.ts` or `lib/supabase.ts`. `verify-deletion-registry.mjs` mirrors it in plain Node |
+| `scripts/*`: every script that touches the database (e.g. `watermark-worker.ts`, `esign-*.ts`, `seed-*.ts`, `aeo-crawler-report.ts`) | secret | Through `lib/supabase-keys.ts` or `lib/supabase.ts`. `verify-deletion-registry.mjs` imports `lib/supabase-keys.ts` directly (Node 24 runs it) |
 | `e2e/fixtures/{check-in,esign,esign-cli,survey-cli}.ts`, `e2e/core/{mentor,pd}-credentials.spec.ts` | secret | Dev project only |
-| `.github/workflows/ci.yml` | both | Build job: placeholders. e2e job: `DEV_SUPABASE_PUBLISHABLE_KEY \|\| DEV_SUPABASE_ANON_KEY`, `DEV_SUPABASE_SECRET_KEY \|\| DEV_SUPABASE_SERVICE_ROLE_KEY` |
+| `.github/workflows/ci.yml` | both | verify job: placeholders under the legacy names only (today's Vercel config), then a check that the public key reached the browser bundle and the secret one did not. e2e job: `DEV_SUPABASE_PUBLISHABLE_KEY \|\| DEV_SUPABASE_ANON_KEY`, `DEV_SUPABASE_SECRET_KEY \|\| DEV_SUPABASE_SERVICE_ROLE_KEY` |
 
 The following are not in the repo: `pg_net` / `net.http_post`, Database Webhooks
 (`supabase_functions.http_request`), `pg_cron` HTTP calls, Edge Functions and
@@ -63,7 +65,8 @@ forces one rotation. Here a component means a **consumer**, meaning one place th
 holds the key. Server routes, crons and webhooks share a key because they run
 in one Vercel deployment with one environment: a leak of that environment
 exposes every key in it, so splitting them would add rotations without
-narrowing a leak.
+narrowing a leak. A separate cron/webhook key would also need code, because
+every route reads the one `SUPABASE_SECRET_KEY`.
 
 | Project | Publishable | Secret keys (name = consumer) |
 |---|---|---|
@@ -75,10 +78,13 @@ consumer, so every secret key in use has one named holder.
 
 ## Steps (dev first, prod last)
 
-1. **Code on both.** This change must be deployed to dev and prod. On each, the
-   health endpoint should show `legacy-jwt` with role `anon` (public) and
-   `service_role` (secret). This proves that the deploy has the new code and
-   that today's keys sit in the right slots.
+1. **Code on both.** This change must be deployed to dev now and to prod after
+   6 Nov. On each, the health endpoint should show `legacy-jwt` with role
+   `anon` (public) and `service_role` (secret). This proves that the deploy has
+   the new code and that today's keys sit in the right slots. The health check
+   covers the server only, so also send a chat message that arrives live in a
+   second browser, and do one signed upload (on prod, one you can delete
+   afterwards). Those are the browser paths this change touches.
 2. **Create dev keys.** Dev project → Settings → API Keys → *Publishable and
    secret API keys*. Click *Create new API keys* if the button is there. Then add
    the named secret keys from the table. The legacy keys keep working.
@@ -105,22 +111,26 @@ consumer, so every secret key in use has one named holder.
 7. **Prod (after 6 Nov).** Repeat steps 2–4 on the prod project and the Vercel
    prod project (Production scope). The prod publishable key already exists;
    create only `vercel_prod`. Verify on `app.stellreducation.org`, using only
-   the step 4 checks that are safe on live data (reads, chat).
+   the step 4 checks that are safe on live data (reads, chat, and a signed
+   upload you delete afterwards).
 8. **Soak.** Leave both pairs in place for at least a week. Check the
    `cron_runs` ledger: every cron should have run green at least once on the new
    keys, and the Vercel logs should show no new 5xx on `/api/cron/*` or
    `/api/webhooks/*`.
 9. **Disable legacy on dev.** First confirm every dev consumer from the
    inventory, then use Settings → API Keys → *Legacy API keys* → disable. Re-run
-   step 4 and a CI run. Once those are clean, delete the GitHub secrets
-   `DEV_SUPABASE_ANON_KEY` / `DEV_SUPABASE_SERVICE_ROLE_KEY` and the legacy
-   variables on Vercel dev.
+   step 4 and a CI run. Keep the GitHub secrets `DEV_SUPABASE_ANON_KEY` /
+   `DEV_SUPABASE_SERVICE_ROLE_KEY` and the legacy variables on Vercel dev: the
+   new names win, so they go unused, and they are the rollback. Delete them
+   after a week clean.
 10. **Disable legacy on prod, last.** Do this only after dev has run clean
     without legacy keys for several days, and never inside an event freeze
-    window. Then remove the legacy variables from Vercel prod.
+    window. Keep the legacy variables on Vercel prod for a week, as in step 9,
+    then delete them.
 11. **Code follow-up.** Once no environment holds a legacy key, remove the
-    fallback names from `lib/supabase-keys.ts`, `ci.yml`, `next.config.mjs` and
-    `scripts/verify-deletion-registry.mjs`.
+    fallback names from `lib/supabase-keys.ts`, `ci.yml` (the e2e fallbacks,
+    and the verify job's placeholders, which use the legacy names until then),
+    and `next.config.mjs`.
 
 ## Rollback
 
@@ -128,8 +138,11 @@ consumer, so every secret key in use has one named holder.
   variables on that Vercel project and redeploy. The app falls back to the legacy
   pair, and tests pin that path. For CI, delete the two new `DEV_*` secrets.
 - **Something breaks after legacy keys are disabled:** re-enable them in the same
-  dashboard tab (Supabase makes this reversible). Then unset the new variables
-  if the new keys are the problem.
+  dashboard tab (Supabase makes this reversible). If the new keys are the
+  problem, make sure the legacy variables are on that Vercel project (for CI,
+  the two legacy `DEV_*` secrets) before you unset the new ones. If they were
+  already deleted, copy the values from *Legacy API keys* back in first. Then
+  redeploy. With neither pair set, every server route fails.
 - **Build fails with "holds a Supabase secret key":** an elevated key is in a
   `NEXT_PUBLIC_` variable. Put the publishable key there. If that value ever
   reached a deployed build, treat the key as leaked.
@@ -143,7 +156,8 @@ consumer, so every secret key in use has one named holder.
 - Secret keys always get 401 from a browser (Supabase matches the User-Agent).
   No browser code here uses one.
 - Public Realtime connections last at most 24 h unless user-authenticated. Chat
-  authenticates with the Clerk token, so it is unaffected.
+  joins with the Clerk token, so a signed-in member is unaffected. Without one
+  it sends no token (never the key), and chat falls back to polling as before.
 - The code trims a value pasted with a trailing newline. A missing GitHub
   secret arrives as `""` and counts as unset, so the legacy fallback still
   applies.

@@ -276,10 +276,54 @@ describe('claimUpload', () => {
     expect(result).toMatchObject({ bucket: 'community-resources' })
   })
 
+  // Text is read end to end, which at 25MB is most of a second. A purpose that
+  // takes no text (a proposal, a post image) refuses a text file without that.
+  it('refuses text for a purpose that takes none without reading it all', async () => {
+    stored(new Uint8Array(2 * 1024 * 1024).fill(0x0a).fill(0x61, 0, 1))
+    const decode = vi.spyOn(TextDecoder.prototype, 'decode')
+    try {
+      const result = await claimUpload({ purpose: 'campaign-proposal', storagePath: 'nevada/r1/1-proposal.pdf' })
+      expect(result).toEqual({ error: UPLOAD_PURPOSES['campaign-proposal'].formatError, status: 415 })
+      const longest = Math.max(0, ...decode.mock.calls.map(([input]) => (input as Uint8Array | undefined)?.byteLength ?? 0))
+      expect(longest).toBeLessThanOrEqual(4096)
+    } finally {
+      decode.mockRestore()
+    }
+    expect(remove).toHaveBeenCalledWith(['nevada/r1/1-proposal.pdf'])
+  })
+
   it('rejects an empty-segment (//) path without touching storage', async () => {
     const result = await claimUpload({ purpose: 'admin-resource', storagePath: 'resources//x.pdf' })
     expect(result).toMatchObject({ status: 400 })
     expect(download).not.toHaveBeenCalled()
+  })
+
+  // storage-js puts the path in the request URL unencoded, and the URL parser
+  // resolves `%2e%2e`, `.%2e`, `%2e` and `.` segments, drops tabs and newlines,
+  // and ends the path at `?` or `#`. Each of these starts with the member's own
+  // folder, so a string check passed it, yet storage would read (and watermark,
+  // overwriting) another member's file, or adopt an object a second time under
+  // another name.
+  it.each([
+    `${contributionPrefix('m1')}%2e%2e/m2/1-x.pdf`,
+    `${contributionPrefix('m1')}.%2e/m2/1-x.pdf`,
+    `${contributionPrefix('m1')}%2E%2E/%2E%2E/1-x.pdf`,
+    `${contributionPrefix('m1')}.\t./m2/1-x.pdf`,
+    `${contributionPrefix('m1')}./1-x.pdf`,
+    `${contributionPrefix('m1')}%2e/1-x.pdf`,
+    `${contributionPrefix('m1')}1-x.pdf?v=2`,
+    `${contributionPrefix('m1')}1-x.pdf#v2`,
+    `${contributionPrefix('m1')}1-x.pdf `,
+  ])('refuses %j, which storage would resolve to another path, without touching storage', async (storagePath) => {
+    stored(FORMAT_SAMPLES.pdf, 'application/pdf')
+    const result = await claimUpload({
+      purpose: 'container-contribution',
+      storagePath,
+      expectedPrefix: contributionPrefix('m1'),
+    })
+    expect(result).toEqual({ error: 'That upload path is not one we issued.', status: 400 })
+    expect(download).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
   })
 })
 

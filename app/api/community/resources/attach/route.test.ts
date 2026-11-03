@@ -7,12 +7,14 @@ import { FORMAT_SAMPLES } from '@/test/file-fixtures'
 // let a member delete an admin's file by posting its path back. The real
 // claimUpload and sniffer run here; storage, auth and the database are stubbed.
 
-const { getCurrentMember, getSpaceForMember, download, remove, insert } = vi.hoisted(() => ({
+const { getCurrentMember, getSpaceForMember, download, remove, insert, holders } = vi.hoisted(() => ({
   getCurrentMember: vi.fn(),
   getSpaceForMember: vi.fn(),
   download: vi.fn(),
   remove: vi.fn(),
   insert: vi.fn(),
+  // community_resources rows already holding the posted path.
+  holders: { rows: [] as { id: string }[], error: null as { message: string } | null },
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
@@ -30,7 +32,10 @@ vi.mock('@/lib/supabase', () => ({
     from: (table: string) =>
       table === 'community_posts'
         ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: 'post-1', space_id: SPACE } }) }) }) }
-        : { insert: (row: unknown) => (insert(row), { select: () => ({ single: async () => ({ data: { id: 'res-1' }, error: null }) }) }) },
+        : {
+            select: () => ({ eq: () => ({ limit: async () => ({ data: holders.rows, error: holders.error }) }) }),
+            insert: (row: unknown) => (insert(row), { select: () => ({ single: async () => ({ data: { id: 'res-1' }, error: null }) }) }),
+          },
   }),
 }))
 
@@ -56,6 +61,8 @@ beforeEach(() => {
   getCurrentMember.mockResolvedValue({ id: MEMBER, isAdmin: false })
   getSpaceForMember.mockResolvedValue({ id: SPACE, access: { canAccess: true }, allowMemberUploads: true })
   remove.mockResolvedValue({ error: null })
+  holders.rows = []
+  holders.error = null
 })
 
 describe('POST /api/community/resources/attach', () => {
@@ -81,5 +88,26 @@ describe('POST /api/community/resources/attach', () => {
     const res = await post(path)
     expect(res.status).toBe(200)
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ storage_path: path, space_id: SPACE }))
+  })
+
+  // Claiming downloads and sniffs the whole object (up to 25MB) and re-stamps a
+  // PDF. One upload posted back again and again must not be claimed each time.
+  it('refuses, without reading it, a path a resource already holds', async () => {
+    stored(FORMAT_SAMPLES.pdf)
+    holders.rows = [{ id: 'res-0' }]
+    const res = await post(`community-resources/${SPACE}/members/${MEMBER}/1-notes.pdf`)
+    expect(res.status).toBe(409)
+    expect(download).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+  })
+
+  it('touches nothing when it cannot tell whether a resource holds the path', async () => {
+    stored(FORMAT_SAMPLES.pdf)
+    holders.error = { message: 'timeout' }
+    const res = await post(`community-resources/${SPACE}/members/${MEMBER}/1-notes.pdf`)
+    expect(res.status).toBe(500)
+    expect(download).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
   })
 })

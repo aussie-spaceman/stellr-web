@@ -80,6 +80,26 @@ describe('POST event email attachments — a file another email holds', () => {
     expect(discardUpload).not.toHaveBeenCalled()
   })
 
+  // The holder check compares strings, but storage resolves `./`, `%2e/`, a
+  // trailing `?…` and the like before it reads, so each of these is the held
+  // file under another name: attached, it would be one object on two emails.
+  it.each([
+    'event-email/nevada/./1-file',
+    'event-email/nevada/%2e/1-file',
+    'event-email/nevada/1-file?x',
+    'event-email/nevada/1-file#x',
+    'event-email/nevada/1-file ',
+    'event-email/nevada/%2e%2e/carson/1-file',
+  ])('refuses, untouched, %j: another name for a held or foreign path', async (storagePath) => {
+    held.rows = [{ id: 'e1', attachments: [] }, { id: 'e2', attachments: [schedule] }]
+    claimedAs('pdf')
+    const res = await attach({ storagePath, filename: 'Schedule.pdf' })
+    expect(res.status).toBe(400)
+    expect(claimUpload).not.toHaveBeenCalled()
+    expect(discardUpload).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it('touches nothing when it cannot tell who holds the file', async () => {
     held.error = { message: 'timeout' }
     expect((await attach({ filename: 'schedule.html' })).status).toBe(500)

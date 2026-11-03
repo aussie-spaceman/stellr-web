@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   FORMAT_EXTENSIONS,
   contentTypeFor,
@@ -282,6 +282,93 @@ describe('sniffFileFormat — PDFs and text', () => {
     expect(sniffFileFormat(ics('DESCRIPTION:<scr\r\n\tipt src=x>'))).toBeNull()
     expect(sniffFileFormat(ics('DESCRIPTION:<scr\n ipt src=x>'))).toBeNull()
     expect(sniffFileFormat(ics('LOCATION:Hall B <i\r\n frame src=//evil.example>'))).toBeNull()
+  })
+
+  // The calendar check split the joined file into lines, so 25MB of bare
+  // newlines made 25 million strings: 1.8s and 600MB for one claim. It now reads
+  // only lines a tag search lands on, and must judge every calendar as the
+  // split did.
+  it('judges every calendar as splitting it into lines did', () => {
+    const MARKUP_TAG =
+      /<(?:!doctype|\?xml|!\[cdata\[|!--|\/?\s*(?:html|head|body|script|style|iframe|frame|frameset|object|embed|applet|svg|math|meta|link|base|form|img|template|xml)[\s/>])/i
+    const before = (ics: string) =>
+      ics
+        .replace(/\r?\n[ \t]/g, '')
+        .split(/\r?\n/)
+        .every((line) => /^X-ALT-DESC[;:]/i.test(line) || !MARKUP_TAG.test(line))
+    const tokens = [
+      '<', '>', '/', ' ', '\t', '\r', '\n', '\r\n', '\r\n ', '\n\t', 'a', 'img', 'script', 'html', '!--', '?xml',
+      '![CDATA[', '!DOCTYPE', 'X-ALT-DESC:', 'x-alt-desc;FMTTYPE=text/html:', 'X-ALT-DESC', 'DESCRIPTION:', ':',
+    ]
+    let seed = 0x5eed
+    const random = () => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    let calendars = 0
+    let refused = 0
+    for (let i = 0; i < 20000; i++) {
+      let body = ''
+      for (let n = Math.floor(random() * 24); n > 0; n--) body += tokens[Math.floor(random() * tokens.length)]
+      const ics = `BEGIN:VCALENDAR\r\n${body}`
+      const expected = before(ics) ? 'calendar' : null
+      expect(sniffFileFormat(bytes(ics)), JSON.stringify(ics)).toBe(expected)
+      if (expected) calendars++
+      else refused++
+    }
+    // Both outcomes are well represented, so the comparison means something.
+    expect(Math.min(calendars, refused)).toBeGreaterThan(1000)
+  })
+
+  it('reads a calendar of millions of lines in about the time plain text takes', () => {
+    const sample = (head: string) => {
+      const out = new Uint8Array(8 * 1024 * 1024).fill(0x0a)
+      out.set(Buffer.from(head))
+      return out
+    }
+    const calendar = sample('BEGIN:VCALENDAR\r\n')
+    const plain = sample('BEGIN:NOTHING\r\n')
+    expect(sniffFileFormat(calendar)).toBe('calendar')
+    expect(sniffFileFormat(plain)).toBe('text')
+    const fastest = (b: Uint8Array) => {
+      let best = Infinity
+      for (let run = 0; run < 3; run++) {
+        const started = performance.now()
+        sniffFileFormat(b)
+        best = Math.min(best, performance.now() - started)
+      }
+      return best
+    }
+    // Splitting took about five times as long as reading the same bytes as text.
+    expect(fastest(calendar)).toBeLessThan(2.5 * fastest(plain) + 50)
+  })
+
+  // A caller that takes no text is spared reading every byte of one to refuse it.
+  it('given formats that take no text, refuses text without reading it all', () => {
+    const big = new Uint8Array(1024 * 1024).fill(0x61)
+    const decode = vi.spyOn(TextDecoder.prototype, 'decode')
+    try {
+      expect(sniffFileFormat(big, ['pdf', 'ole2', 'ooxml', 'odf', 'iwork'])).toBeNull()
+      const longest = Math.max(0, ...decode.mock.calls.map(([input]) => (input as Uint8Array | undefined)?.byteLength ?? 0))
+      expect(longest).toBeLessThanOrEqual(4096)
+      // Still read, and still text, for a caller that takes it.
+      expect(sniffFileFormat(big, ['text'])).toBe('text')
+      expect(sniffFileFormat(big)).toBe('text')
+    } finally {
+      decode.mockRestore()
+    }
+  })
+
+  it('given formats that take no text, still lets text win over an audio frame', () => {
+    // An MPEG frame header, then text: text without `accepted`, so never mp3.
+    const framed = new Uint8Array([0xff, 0xfb, 0x90, 0x64, ...Buffer.from('a CSV, really\n')])
+    expect(sniffFileFormat(framed)).toBe('text')
+    expect(sniffFileFormat(framed, ['mp3'])).toBeNull()
+    expect(sniffFileFormat(framed, ['pdf'])).toBeNull()
+    const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 0x00, 0x01, 0x02])
+    expect(sniffFileFormat(audio, ['mp3'])).toBe('mp3')
   })
 
   it('reads a CSV that happens to start with "MZ" as text, not an executable', () => {

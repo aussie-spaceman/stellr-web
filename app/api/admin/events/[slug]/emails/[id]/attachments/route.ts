@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
 import { claimUpload, discardUpload } from '@/lib/uploads'
+import { isLiteralStoragePath } from '@/lib/storage-path'
 import { contentTypeFor, fileExtension, nameMatchesFormat } from '@/lib/file-sniff'
 import { EDITABLE, getEventEmail } from '@/lib/event-emails/store'
 
@@ -30,8 +31,11 @@ export async function POST(req: Request, { params }: Ctx) {
   const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
   const filename = (typeof b.filename === 'string' ? b.filename : '').trim().slice(0, 200)
   if (!storagePath || !filename) return NextResponse.json({ error: 'storagePath and filename required' }, { status: 400 })
-  // Only objects issued for THIS event's emails.
-  if (!storagePath.startsWith(`event-email/${slug}/`)) {
+  // Only objects issued for THIS event's emails. Both this and the holder check
+  // below compare strings, so the path must be one storage reads as written:
+  // `event-email/<slug>/%2e%2e/<other>/…` is another event's file, and
+  // `…/./<held>` another name for one an email already holds.
+  if (!isLiteralStoragePath(storagePath) || !storagePath.startsWith(`event-email/${slug}/`)) {
     return NextResponse.json({ error: 'That upload is not one we issued for this event' }, { status: 400 })
   }
 

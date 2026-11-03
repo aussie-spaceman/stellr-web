@@ -486,12 +486,27 @@ const adtsFrame = (b: Uint8Array) => b.length >= 7 && b[0] === 0xff && (b[1] & 0
 /**
  * A calendar may carry markup only in X-ALT-DESC, the HTML description Outlook
  * and Teams add. Folded lines are joined first, so no tag spans a fold.
+ *
+ * Lines are read as split(/\r?\n/) would cut them, without splitting: 25MB of
+ * bare newlines made millions of strings, about 1.8s and 600MB a claim. A tag
+ * search over the whole file finds the next line that could hold one (the
+ * search may run past a line end; the line check never does), that line alone
+ * is read, and the search resumes after it, so no line is read twice.
  */
 function calendarMarkupFree(decoded: string): boolean {
-  return decoded
-    .replace(/\r?\n[ \t]/g, '')
-    .split(/\r?\n/)
-    .every((line) => /^X-ALT-DESC[;:]/i.test(line) || !MARKUP_TAG.test(line))
+  const unfolded = decoded.replace(/\r?\n[ \t]/g, '')
+  const search = new RegExp(MARKUP_TAG.source, 'gi')
+  for (let found = search.exec(unfolded); found; found = search.exec(unfolded)) {
+    const start = unfolded.lastIndexOf('\n', found.index) + 1
+    const newline = unfolded.indexOf('\n', found.index)
+    let end = newline === -1 ? unfolded.length : newline
+    if (newline !== -1 && unfolded[end - 1] === '\r') end -= 1
+    const line = unfolded.slice(start, end)
+    if (!/^X-ALT-DESC[;:]/i.test(line) && MARKUP_TAG.test(line)) return false
+    if (newline === -1) return true
+    search.lastIndex = newline + 1
+  }
+  return true
 }
 
 /** Every byte of a text file is checked, not a sample: a tag can sit anywhere. */
@@ -521,8 +536,15 @@ function text(b: Uint8Array): FileFormat | null {
 
 // ── Sniffing ────────────────────────────────────────────────────────────────
 
-/** The format `bytes` really are, or null when they are none we accept anywhere. */
-export function sniffFileFormat(bytes: Uint8Array): FileFormat | null {
+/**
+ * The format `bytes` really are, or null when they are none we accept anywhere.
+ *
+ * `accepted`, when given, is every format the caller takes, and a file that is
+ * none of them may come back as null rather than as what it is: text is read
+ * end to end (a tag can sit anywhere), so a caller that takes neither text nor
+ * a calendar is spared reading 25MB to refuse it.
+ */
+export function sniffFileFormat(bytes: Uint8Array, accepted?: readonly FileFormat[]): FileFormat | null {
   if (bytes.length === 0 || denied(bytes)) return null
 
   for (const [format, sig] of SIGNATURES) if (startsWith(bytes, sig)) return format
@@ -549,14 +571,18 @@ export function sniffFileFormat(bytes: Uint8Array): FileFormat | null {
   // Text before the frame checks: a UTF-16 byte-order mark is also a frame sync,
   // so a file that opens with one is text or nothing — never an MP3 whose
   // "markup scan" read UTF-16 page tags as single bytes and saw none.
-  const plain = text(bytes)
+  const readsText = !accepted || accepted.includes('text') || accepted.includes('calendar')
+  const plain = readsText ? text(bytes) : null
   if (plain) return plain
   if (startsWith(bytes, [0xff, 0xfe]) || startsWith(bytes, [0xfe, 0xff])) return null
 
   const frame: FileFormat | null =
     mpegFrame(bytes) ? 'mp3' : adtsFrame(bytes) ? 'aac' : isBinaryStl(bytes) ? 'stl' : null
-  if (frame) return carriesMarkup(bytes) ? null : frame
-  return null
+  if (!frame) return null
+  // Text still wins over a frame when it was skipped above, but it is read
+  // only if the caller takes this frame (no purpose does without text).
+  if (!readsText && (!accepted?.includes(frame) || text(bytes))) return null
+  return carriesMarkup(bytes) ? null : frame
 }
 
 // ── Names ───────────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { AWARD_TYPES } from '@/lib/event-awards'
 import { BADGE_FORMATS } from '@/lib/badge-layout'
 import { isArtworkTheme } from '@/lib/artwork-theme'
 import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
+import { isLiteralStoragePath } from '@/lib/storage-path'
 import {
   extensionsFor,
   fileExtension,
@@ -579,14 +580,10 @@ export async function claimUpload(args: {
   // Only paths this app issues. An admin is trusted, but a typo must not be able
   // to rewrite an unrelated object (a lesson recording, someone's license).
   // Reject traversal and separator tricks outright (`..`, leading `/`, backslash,
-  // and empty-segment `//` that could collapse to a different path).
-  if (
-    !storagePath ||
-    storagePath.includes('..') ||
-    storagePath.startsWith('/') ||
-    storagePath.includes('//') ||
-    storagePath.includes('\\')
-  ) {
+  // and empty-segment `//` that could collapse to a different path), and any
+  // path storage would resolve to another one (`%2e%2e`, `./`, `?…`): the prefix
+  // pin below, and a caller's "already held" check, compare strings.
+  if (!isLiteralStoragePath(storagePath)) {
     return deny('That upload path is not one we issued.', 400)
   }
 
@@ -615,7 +612,9 @@ export async function claimUpload(args: {
   }
   // S0 content safety: the magic-byte check, for every purpose. A renamed HTML
   // page, SVG, script or executable sniffs as no format and never gets here.
-  const format = sniffFileFormat(bytes)
+  // Given the purpose's formats, a purpose that takes no text never reads a
+  // whole file to refuse it.
+  const format = sniffFileFormat(bytes, spec.formats)
   if (!format || !spec.formats.includes(format)) {
     await discardUpload(spec.bucket, storagePath)
     return deny(spec.formatError ?? 'That file isn’t a type accepted here, or its contents don’t match its name.', 415)

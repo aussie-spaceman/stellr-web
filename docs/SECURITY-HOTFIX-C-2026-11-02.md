@@ -87,8 +87,10 @@ sealed, and revoking `space_unread_counts` from `authenticated` (S0-9).
 2. Run `supabase/tests/security_checks.sql` on production. Expect zero rows.
 3. Run the probe against production. Expect `✅ … anon refused`:
    ```bash
-   SUPABASE_URL=https://<prod-ref>.supabase.co SUPABASE_ANON_KEY=<prod publishable key> npx tsx scripts/verify-db-grants.ts
+   NEXT_PUBLIC_SUPABASE_URL=https://<prod-ref>.supabase.co NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<prod publishable key> npx tsx scripts/verify-db-grants.ts
    ```
+   Variables set in the shell win over `.env.local` (dotenv does not override
+   them), but an exported `SUPABASE_URL` would still take precedence for the URL.
 4. Smoke test: a survey link opens and submits, and an e-sign invite sends.
 
 ## Applied to production — 3 Nov 2026

@@ -4,7 +4,7 @@ import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { claimUpload, discardUpload } from '@/lib/uploads'
+import { claimUpload, discardUpload, spaceAttachmentPrefix } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
@@ -66,14 +66,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Post not found in this space' }, { status: 404 })
   }
 
-  // deep review MEM-13: pin the claim to THIS space's attachment namespace, the
-  // exact prefix signUpload issued (community-resources/<spaceId>/…). Without it a
-  // member could post back a path in another space, a training folder or an admin
-  // file and have it adopted here — or discard-deleted if oversize.
+  // deep review MEM-13: pin the claim to this member's own folder in THIS space,
+  // the exact prefix signUpload issued. Without it a member could post back a
+  // path in another space, a training folder or an admin's space file (they sit
+  // in community-resources/<spaceId>/ too) and have it adopted here — or deleted
+  // by a refused claim.
   const claimed = await claimUpload({
     purpose: 'space-attachment',
     storagePath,
-    expectedPrefix: `community-resources/${space.id}/`,
+    expectedPrefix: spaceAttachmentPrefix(space.id, member.id),
   })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 

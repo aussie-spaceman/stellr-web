@@ -10,6 +10,15 @@ import { AWARD_TYPES } from '@/lib/event-awards'
 import { BADGE_FORMATS } from '@/lib/badge-layout'
 import { isArtworkTheme } from '@/lib/artwork-theme'
 import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
+import {
+  extensionsFor,
+  fileExtension,
+  isActiveContentType,
+  isDangerousExtension,
+  nameMatchesFormat,
+  sniffFileFormat,
+  type FileFormat,
+} from '@/lib/file-sniff'
 
 // Every file upload in the app, in one place.
 //
@@ -25,13 +34,21 @@ import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-li
 // claims it with claimUpload(), which is where size, type and the actual stored
 // bytes are verified — the browser's claims about its own file are never
 // trusted, because between signing and claiming it could have sent anything.
+// Every purpose names the formats it accepts (`formats`), and the stored bytes
+// must sniff as one of them (lib/file-sniff.ts): an extension or a declared type
+// proves nothing. The name must fit the bytes too — it decides what opens the
+// file once someone downloads it — and a page, script or executable extension is
+// never accepted.
 //
 // Two layers of authorisation, deliberately:
 //   sign  — may this caller write bytes into this purpose's namespace at all?
 //   claim — the owning route re-checks the specific object-level rule (does this
 //           member manage that container, is that post in that space, …) before
 //           anything is recorded. A signed URL alone never makes a file reachable:
-//           the buckets are private and nothing is served without a row.
+//           the buckets are private and nothing is served without a row — or,
+//           for embedded images, until the server has republished the verified
+//           bytes (community-media signs into a staging prefix the media proxy
+//           never serves).
 
 const PROPOSALS_BUCKET = 'campaign-proposals'
 const LICENSES_BUCKET = TEACHER_LICENSE_BUCKET
@@ -63,8 +80,25 @@ type Granted = { path: string }
 type PurposeSpec = {
   bucket: string
   maxBytes: number
-  /** Exact mime allowlist. Undefined means any type is acceptable. */
+  /**
+   * Exact allowlist for the type the browser DECLARES, checked when signing.
+   * Undefined means any declared type except an active one (HTML, SVG, script).
+   */
   allowedTypes?: readonly string[]
+  /**
+   * What the stored bytes must actually be, checked by claimUpload on every
+   * claim. Required: there is no purpose that takes any file at all.
+   */
+  formats: readonly FileFormat[]
+  /** Shown when the stored bytes are not one of `formats`. */
+  formatError?: string
+  /**
+   * By default a file's extension must be one of its sniffed format's
+   * (lib/file-sniff FORMAT_EXTENSIONS). The shared-file purposes also take the
+   * names in SHARED_EXTENSIONS (a notebook `.ipynb`, a 3D print `.3mf`) — never
+   * an extension nobody listed.
+   */
+  sharedFileNames?: boolean
   /**
    * Authorise the caller and decide where the object lands. Returning a path is
    * what grants the upload, so any check needed to *build* the path (resolving a
@@ -81,10 +115,41 @@ function deny(error: string, status = 403): UploadDenied {
   return { error, status }
 }
 
-/** Strip anything that could escape the intended prefix. */
+const MAX_NAME = 120
+
+/**
+ * The longest file name signUpload takes, as sent — the longest most file
+ * systems allow. Anything longer is refused before it is read.
+ */
+export const MAX_FILE_NAME_LENGTH = 255
+export const FILE_NAME_TOO_LONG = `That file name is too long. Shorten it to ${MAX_FILE_NAME_LENGTH} characters or fewer and try again.`
+
+/**
+ * Strip anything that could escape the intended prefix, and shorten to 120
+ * characters — from the end of the stem, so the stored name keeps the extension
+ * it was sent with (`… v1.2 … packet.pdf` must not become `… v1.2 … pack`).
+ * Runs of dots become one: claimUpload refuses any path holding `..`.
+ */
 export function safeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'file'
+  const oneDot = (s: string) => s.replace(/\.{2,}/g, '.')
+  const safe = oneDot(name.replace(/[^a-zA-Z0-9._-]/g, '_')) || 'file'
+  if (safe.length <= MAX_NAME) return safe
+  const ext = fileExtension(safe)
+  const tail = ext && ext.length <= 16 ? `.${ext}` : ''
+  return oneDot(safe.slice(0, MAX_NAME - tail.length) + tail)
 }
+
+/**
+ * Where a member's own space attachments land. An admin's space files sit
+ * directly under community-resources/<spaceId>/, so the member's id keeps the
+ * two apart: a claim pinned here can only read — or, refusing it, delete — an
+ * object this member was issued.
+ */
+export const spaceAttachmentPrefix = (spaceId: string, memberId: string) =>
+  `community-resources/${spaceId}/members/${memberId}/`
+
+/** Likewise for container contributions, beside the admin catalogue's resources/<time>-<name>. */
+export const contributionPrefix = (memberId: string) => `resources/members/${memberId}/`
 
 async function requireAdmin(): Promise<null | UploadDenied> {
   const { sessionClaims } = await auth()
@@ -112,6 +177,41 @@ const EVENT_ARTWORK_KINDS = [
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
 const LICENSE_TYPES = LICENSE_DOCUMENT_TYPES
+
+// Sniffed formats (lib/file-sniff.ts), by what a purpose is for.
+const IMAGES: readonly FileFormat[] = ['png', 'jpeg', 'gif', 'webp']
+/** What the certificate and badge renderers can draw. */
+const ARTWORK: readonly FileFormat[] = ['png', 'jpeg']
+/**
+ * PDF, legacy Office (DOC/PPT/XLS), OOXML (DOCX/XLSX/PPTX, never macro-enabled),
+ * OpenDocument and Keynote/Pages/Numbers. Not a plain archive, and never an
+ * installer: those sniff as 'zip' or as nothing.
+ */
+const DOCUMENTS: readonly FileFormat[] = ['pdf', 'ole2', 'ooxml', 'odf', 'iwork']
+const ARCHIVES: readonly FileFormat[] = ['zip', 'rar', '7z']
+const VIDEO: readonly FileFormat[] = ['mp4', 'webm']
+const LICENSE_FORMATS: readonly FileFormat[] = ['png', 'jpeg', 'webp', 'heif', 'pdf']
+/**
+ * Files shared in the Resources catalogue, a space or a lesson: documents,
+ * spreadsheets and slides, archives, images (scans and Photoshop files too),
+ * CAD (DWG, STL, SketchUp, and DXF/STEP as text), plain text and CSV, calendars,
+ * video and audio. Never HTML, SVG or anything executable — none of those sniff
+ * as any format, and their extensions are refused.
+ */
+const SHARED_FILES: readonly FileFormat[] = [
+  ...DOCUMENTS, ...ARCHIVES, ...IMAGES, 'bmp', 'tiff', 'heif', 'psd', 'dwg', 'stl', 'skp', 'text', 'calendar',
+  ...VIDEO, 'avi', 'asf', 'mp3', 'aac', 'wav', 'ogg', 'flac',
+]
+
+/**
+ * Embedded post images are signed here, not where the media proxy serves from.
+ * The upload route republishes the verified bytes to `community-media/…` under a
+ * type taken from the bytes, so an object nobody claimed is never reachable.
+ */
+export const COMMUNITY_MEDIA_STAGING = 'community-media-staging'
+
+const ARTWORK_ERROR = 'That file doesn’t look like a PNG or JPEG image.'
+const LICENSE_ERROR = 'That file doesn’t look like a valid image or PDF.'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
@@ -119,6 +219,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'admin-resource': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
+    formats: SHARED_FILES,
+    sharedFileNames: true,
     async grant({ safeName }) {
       const denied = await requireAdmin()
       return denied ?? { path: `resources/${Date.now()}-${safeName}` }
@@ -128,6 +230,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'space-resource': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
+    formats: SHARED_FILES,
+    sharedFileNames: true,
     async grant({ ctx, safeName }) {
       const denied = await requireAdmin()
       if (denied) return denied
@@ -142,6 +246,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'training-item': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 200 * MB,
+    formats: [...DOCUMENTS, ...IMAGES, ...VIDEO],
     async grant({ safeName }) {
       const denied = await requireAdmin()
       return denied ?? { path: `training/${Date.now()}-${safeName}` }
@@ -151,6 +256,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'training-item-resource': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
+    formats: SHARED_FILES,
+    sharedFileNames: true,
     async grant({ safeName }) {
       const denied = await requireAdmin()
       return denied ?? { path: `training/resources/${Date.now()}-${safeName}` }
@@ -161,6 +268,9 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,
     allowedTypes: ['application/pdf'],
+    // Overlaid onto every certificate for the course.
+    formats: ['pdf'],
+    formatError: 'Template must be a PDF',
     async grant({ ctx }) {
       const denied = await requireAdmin()
       if (denied) return denied
@@ -172,6 +282,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'event-artwork': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,
+    formats: ARTWORK,
+    formatError: ARTWORK_ERROR,
     async grant({ ctx, safeName }) {
       if (!ctx.slug || !ctx.kind) return deny('slug and kind required', 400)
       // Event managers upload their own event's artwork, so this is the event
@@ -189,6 +301,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,
     allowedTypes: ['image/png', 'image/jpeg'],
+    formats: ARTWORK,
+    formatError: ARTWORK_ERROR,
     async grant({ ctx, safeName }) {
       const denied = await requireAdmin()
       if (denied) return denied
@@ -204,6 +318,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,
     allowedTypes: ['image/png', 'image/jpeg'],
+    formats: ARTWORK,
+    formatError: ARTWORK_ERROR,
     async grant({ safeName }) {
       const denied = await requireAdmin()
       return denied ?? { path: `pd-certificate/staged-${Date.now()}-${safeName}` }
@@ -217,6 +333,12 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'event-email-attachment': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,
+    // Sent to participants, minors included: documents, images (an iPhone's
+    // HEIC too), text such as a CSV, and calendar files. No archives or media.
+    // The attach route also sends each file under a name and type that match
+    // its bytes, not the ones the browser posted.
+    formats: [...DOCUMENTS, ...IMAGES, 'heif', 'text', 'calendar'],
+    formatError: 'That file doesn’t look like a PDF, Office, OpenDocument, Keynote, image, CSV or calendar file.',
     async grant({ ctx, safeName }) {
       if (!ctx.slug) return deny('slug required', 400)
       const access = await requireEventAccess(ctx.slug)
@@ -234,6 +356,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: LICENSES_BUCKET,
     maxBytes: 10 * MB,
     allowedTypes: LICENSE_TYPES,
+    formats: LICENSE_FORMATS,
+    formatError: LICENSE_ERROR,
     async grant({ ctx, safeName }) {
       const denied = await requireAdmin()
       if (denied) return denied
@@ -249,9 +373,14 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   },
 
   // ── Member ───────────────────────────────────────────────────────────────
+  // The form offers PDF, Word, PowerPoint, Keynote and OpenDocument; judges
+  // open these, so the bytes must be one of them — not a zip, not an installer,
+  // not a macro document — and the name must say which.
   'campaign-proposal': {
     bucket: PROPOSALS_BUCKET,
     maxBytes: 25 * MB,
+    formats: DOCUMENTS,
+    formatError: 'That file doesn’t look like a PDF, Word, PowerPoint, Keynote or OpenDocument file.',
     async grant({ ctx, safeName }) {
       const member = await requireMember()
       if ('error' in member) return member
@@ -266,10 +395,12 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 8 * MB,
     allowedTypes: IMAGE_TYPES,
+    formats: IMAGES,
+    formatError: 'That file doesn’t look like a PNG, JPEG, GIF or WebP image.',
     async grant({ safeName }) {
       const member = await requireMember()
       if ('error' in member) return member
-      return { path: `community-media/${member.id}/${Date.now()}-${safeName}` }
+      return { path: `${COMMUNITY_MEDIA_STAGING}/${member.id}/${Date.now()}-${safeName}` }
     },
   },
 
@@ -278,6 +409,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   'space-attachment': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
+    formats: SHARED_FILES,
+    sharedFileNames: true,
     async grant({ ctx, safeName }) {
       const member = await requireMember()
       if ('error' in member) return member
@@ -287,13 +420,15 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       if (!(space.allowMemberUploads || member.isAdmin)) {
         return deny('Uploads are disabled in this space')
       }
-      return { path: `community-resources/${space.id}/${Date.now()}-${safeName}` }
+      return { path: `${spaceAttachmentPrefix(space.id, member.id)}${Date.now()}-${safeName}` }
     },
   },
 
   'container-contribution': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
+    formats: SHARED_FILES,
+    sharedFileNames: true,
     async grant({ ctx, safeName }) {
       const member = await requireMember()
       if ('error' in member) return member
@@ -301,7 +436,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       if (!(await memberManagesContainer(member, ctx.containerId))) {
         return deny('You do not manage this object.')
       }
-      return { path: `resources/${Date.now()}-${safeName}` }
+      return { path: `${contributionPrefix(member.id)}${Date.now()}-${safeName}` }
     },
   },
 
@@ -309,6 +444,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: LICENSES_BUCKET,
     maxBytes: 10 * MB,
     allowedTypes: LICENSE_TYPES,
+    formats: LICENSE_FORMATS,
+    formatError: LICENSE_ERROR,
     async grant({ ctx, safeName }) {
       const member = await requireMember()
       if ('error' in member) return member
@@ -341,6 +478,9 @@ export async function signUpload(args: {
 }): Promise<{ bucket: string; path: string; token: string } | UploadDenied> {
   const spec = UPLOAD_PURPOSES[args.purpose]
 
+  // POST /api/uploads/sign refuses these too, unauthenticated; this holds for
+  // any other caller. Nothing below reads a name of unbounded length.
+  if (args.fileName.length > MAX_FILE_NAME_LENGTH) return deny(FILE_NAME_TOO_LONG, 400)
   if (!Number.isFinite(args.fileSize) || args.fileSize <= 0) {
     return deny('That file came through empty — please try again.', 400)
   }
@@ -350,13 +490,33 @@ export async function signUpload(args: {
   if (spec.allowedTypes && !spec.allowedTypes.includes(args.contentType)) {
     return deny('That file type is not accepted here.', 415)
   }
-
+  // Storage serves the object under the type declared here. claimUpload checks
+  // the type actually stored too; this just refuses early.
+  if (isActiveContentType(args.contentType)) {
+    return deny('That file type is not accepted here.', 415)
+  }
+  // The grant builds the path from the stored name, so that is made first; it
+  // swaps unsafe characters for `_`. Every grant only reads (the session,
+  // cookies, Supabase selects), so it runs before the name checks below and a
+  // caller it refuses never reaches them.
+  const safeName = safeFileName(args.fileName)
   const granted = await spec.grant({
     ctx: args.ctx,
-    safeName: safeFileName(args.fileName),
+    safeName,
     contentType: args.contentType,
   })
   if ('error' in granted) return granted
+
+  // The name: claimUpload decides on the bytes, but a page, script or
+  // executable — or any name this purpose never takes — can be turned away
+  // before anything is sent. Both the name as sent and the stored one.
+  for (const ext of new Set([fileExtension(args.fileName), fileExtension(safeName)])) {
+    if (!ext) continue
+    if (isDangerousExtension(ext)) return deny(dangerousExtensionError(ext), 415)
+    if (!extensionsFor(spec.formats, !spec.sharedFileNames).has(ext)) {
+      return deny(spec.formatError ?? notAcceptedError(ext), 415)
+    }
+  }
 
   const db = supabaseServer()
   const { data, error } = await db.storage.from(spec.bucket).createSignedUploadUrl(granted.path)
@@ -365,6 +525,14 @@ export async function signUpload(args: {
     return deny('Could not start the upload.', 500)
   }
   return { bucket: spec.bucket, path: data.path ?? granted.path, token: data.token }
+}
+
+function dangerousExtensionError(ext: string): string {
+  return `.${ext} files can’t be uploaded: they can run or open as a web page on the computer that downloads them.`
+}
+
+function notAcceptedError(ext: string): string {
+  return `.${ext} files aren’t accepted here.`
 }
 
 /** Delete a stored object, e.g. after a claim is rejected. Never throws. */
@@ -381,27 +549,30 @@ export async function discardUpload(bucket: string, path: string): Promise<void>
  *
  * This is the only place the real bytes are seen, so it is where size and format
  * are enforced — the signing step could only check what the browser claimed.
- * A rejected object is deleted rather than left orphaned in the bucket.
+ * The bytes must sniff as one of the purpose's `formats`, whatever the file is
+ * called; the name must fit those bytes (it decides what opens the file once it
+ * is downloaded); and the type storage will serve them under must not be one a
+ * browser runs. A rejected object is deleted rather than left orphaned in the
+ * bucket. The sniffed `format` is returned so a caller can store or send the
+ * file under a type derived from it rather than the one the browser posted.
  */
 export async function claimUpload(args: {
   purpose: UploadPurpose
   storagePath: string
-  /** Extra format gate, e.g. the license magic-byte sniff. */
-  verify?: (bytes: Uint8Array) => boolean
-  verifyError?: string
   /**
    * deep review MEM-13: the namespace prefix the claimed object MUST sit under,
    * derived by the CALLER from the same authorisation it just performed (e.g.
-   * `community-resources/<spaceId>/` for a space attachment). claimUpload trusts
-   * the path the browser posts back, so without this a member who can upload
-   * anywhere could post a path in another purpose's namespace (or another
-   * space/member's folder) and have the owning route adopt the object — or, if
-   * oversize, discardUpload-DELETE it. Enforced before any storage read/remove.
-   * Community write paths MUST pass it; omitted only where the namespace is
+   * spaceAttachmentPrefix for a space attachment). claimUpload trusts the path
+   * the browser posts back, so without this a member who can upload anywhere
+   * could post a path in another purpose's namespace (or another space/member's
+   * folder) and have the owning route adopt the object — or, by failing a check,
+   * have it discardUpload-DELETED. Enforced before any storage read/remove.
+   * Community write paths MUST pass it, and a member's must be a folder of their
+   * own, never one an admin's files share; omitted only where the namespace is
    * already a dedicated private bucket (e.g. teacher-licenses).
    */
   expectedPrefix?: string
-}): Promise<{ bytes: Uint8Array; bucket: string } | UploadDenied> {
+}): Promise<{ bytes: Uint8Array; bucket: string; format: FileFormat } | UploadDenied> {
   const spec = UPLOAD_PURPOSES[args.purpose]
   const { storagePath, purpose, expectedPrefix } = args
 
@@ -442,12 +613,37 @@ export async function claimUpload(args: {
     await discardUpload(spec.bucket, storagePath)
     return deny(`File too large (max ${Math.round(spec.maxBytes / MB)}MB).`, 413)
   }
-  if (args.verify && !args.verify(bytes)) {
+  // S0 content safety: the magic-byte check, for every purpose. A renamed HTML
+  // page, SVG, script or executable sniffs as no format and never gets here.
+  const format = sniffFileFormat(bytes)
+  if (!format || !spec.formats.includes(format)) {
     await discardUpload(spec.bucket, storagePath)
-    return deny(args.verifyError ?? 'That file type is not accepted here.', 400)
+    return deny(spec.formatError ?? 'That file isn’t a type accepted here, or its contents don’t match its name.', 415)
+  }
+  // The name is what a downloader's computer acts on: a real PDF kept as
+  // `x.html` opens as a page. Signing refused the obvious cases; this is the
+  // check that counts, against the path the object actually has.
+  const ext = fileExtension(storagePath)
+  const strict = !spec.sharedFileNames
+  if (!nameMatchesFormat(storagePath, format, strict)) {
+    await discardUpload(spec.bucket, storagePath)
+    return deny(
+      isDangerousExtension(ext)
+        ? dangerousExtensionError(ext)
+        : extensionsFor(spec.formats, strict).has(ext)
+          ? `That file’s contents don’t match its .${ext} name.`
+          : notAcceptedError(ext),
+      415,
+    )
+  }
+  // Real bytes under an active type are still a page: a PDF stored as text/html
+  // renders as HTML. The blob carries the type storage serves the object with.
+  if (isActiveContentType(stored.type)) {
+    await discardUpload(spec.bucket, storagePath)
+    return deny('That file type is not accepted here.', 415)
   }
 
-  return { bytes, bucket: spec.bucket }
+  return { bytes, bucket: spec.bucket, format }
 }
 
 /** Overwrite a claimed object in place, e.g. after watermarking it. */

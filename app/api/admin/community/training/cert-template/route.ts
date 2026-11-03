@@ -22,15 +22,9 @@ export async function POST(req: Request) {
   }
 
   const db = supabaseServer()
-  const claimed = await claimUpload({
-    purpose: 'training-cert-template',
-    storagePath: path,
-    // This PDF is overlaid onto every certificate for the course, so confirm the
-    // stored object really is a PDF rather than trusting the declared type.
-    verify: (bytes) =>
-      bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46,
-    verifyError: 'Template must be a PDF',
-  })
+  // This PDF is overlaid onto every certificate for the course; the purpose
+  // accepts only bytes that really are a PDF, whatever type was declared.
+  const claimed = await claimUpload({ purpose: 'training-cert-template', storagePath: path })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   const { error } = await db.from('training_modules').update({ cert_template_path: path }).eq('id', moduleId)

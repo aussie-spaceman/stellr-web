@@ -60,6 +60,15 @@ describe('/api/community/media path traversal (MEM-1)', () => {
     expect(sign).not.toHaveBeenCalled()
   })
 
+  // S0 content safety: uploads are signed into community-media-staging/ and
+  // only republished to community-media/ once verified. A staged object — which
+  // the uploader could PUT under any type — is never served.
+  it('never serves a staged, unclaimed upload', async () => {
+    const res = await call(['community-media-staging', UUID, '1700000000000-photo.png'])
+    expect(res.status).toBe(404)
+    expect(sign).not.toHaveBeenCalled()
+  })
+
   it('signs a legitimate community-media object and redirects', async () => {
     const res = await call(['community-media', UUID, '1700000000000-photo.png'])
     expect(sign).toHaveBeenCalledWith(`community-media/${UUID}/1700000000000-photo.png`)

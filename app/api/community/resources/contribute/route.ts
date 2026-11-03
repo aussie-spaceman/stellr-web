@@ -11,7 +11,7 @@ import {
   sha256Hex,
 } from '@/lib/resource-upload'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { claimUpload, discardUpload } from '@/lib/uploads'
+import { claimUpload, contributionPrefix, discardUpload } from '@/lib/uploads'
 import { finaliseStoredUpload, watermarkIfPdf } from '@/lib/resource-finalise'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
@@ -66,11 +66,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'You do not manage this object.' }, { status: 403 })
     }
 
-    // deep review MEM-13: a container-contribution object is issued under the
-    // flat `resources/` namespace (lib/uploads). Pin the claim to it so a manager
-    // cannot post back a path in another namespace (a training video, a teacher
-    // license folder) and have this route adopt — or discard-delete — it.
-    const CONTRIBUTION_PREFIX = 'resources/'
+    // deep review MEM-13: a container-contribution object is issued under this
+    // member's own folder (lib/uploads contributionPrefix). Pin the claim to it
+    // so a manager cannot post back a path in another namespace (a training
+    // video, the admin catalogue's resources/<time>-<name>) and have this route
+    // adopt it — or delete it, by a refused claim or as a "duplicate".
+    const CONTRIBUTION_PREFIX = contributionPrefix(member.id)
     const claimed = await claimUpload({
       purpose: 'container-contribution',
       storagePath: body.storagePath,

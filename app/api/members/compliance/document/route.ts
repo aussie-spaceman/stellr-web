@@ -9,7 +9,6 @@ import {
   LICENSE_DOCUMENT_URL_TTL_SECONDS,
   TEACHER_LICENSE_BUCKET,
   isLicenseDocumentType,
-  licenseDocumentMagicMatches,
 } from '@/lib/teacher-license'
 
 const BUCKET = TEACHER_LICENSE_BUCKET
@@ -53,14 +52,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Defence in depth: the declared type can be spoofed, so confirm the actual
-  // leading bytes match a permitted format. A failed check deletes the object.
-  const claimed = await claimUpload({
-    purpose: 'compliance-document',
-    storagePath,
-    verify: licenseDocumentMagicMatches,
-    verifyError: 'That file doesn’t look like a valid image or PDF.',
-  })
+  // Defence in depth: the declared type can be spoofed, so claimUpload confirms
+  // the actual leading bytes are one of the purpose's formats. A failed check
+  // deletes the object.
+  const claimed = await claimUpload({ purpose: 'compliance-document', storagePath })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   // Remove any previous image so we don't orphan objects in the bucket.

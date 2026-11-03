@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { ConsentMode } from '@/components/analytics/ConsentMode'
 import { SiteTracking } from '@/components/analytics/SiteTracking'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { Toaster } from '@/components/ui/Toast'
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
 import { fontVariables } from '@/lib/fonts'
@@ -87,7 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             never fire before the denied-by-default state lands. Not a tag: it
             sets defaults on the dataLayer and makes no request. */}
         <ConsentMode />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchema) }} />
+        <JsonLd data={siteSchema} />
       </head>
       <body>
         {/* Keyboard users skip the header's 30-odd links. Every layout's

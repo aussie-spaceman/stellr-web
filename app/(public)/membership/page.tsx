@@ -5,6 +5,7 @@ import { ALL_TIERS, FAQS } from './tier-data'
 import MembershipExplorer from './MembershipExplorer'
 import { VIDEOS, PHOTOS } from '@/lib/media-manifest'
 import { buildFaqJsonLd } from '@/lib/structured-data'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 import { ProofStrip } from '@/components/sections/ProofStrip'
 
@@ -35,10 +36,7 @@ export default async function MembershipPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
+      <JsonLd data={faqJsonLd} />
       <MembershipExplorer
         prices={priceById}
         monthly={monthlyById}

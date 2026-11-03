@@ -9,6 +9,7 @@ import { CoverImage, CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
 import { buildArticleJsonLd } from '@/lib/structured-data'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 export const revalidate = 3600
@@ -70,10 +71,8 @@ export default async function NewsArticlePage({ params }: PageProps) {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildArticleJsonLd(post, slug)) }}
-      />
+      {/* Built from the Sanity post: JsonLd escapes it so no field can close the tag. */}
+      <JsonLd data={buildArticleJsonLd(post, slug)} />
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark text-white">
         {post.coverImage && (

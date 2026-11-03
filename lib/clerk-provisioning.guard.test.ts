@@ -10,12 +10,15 @@ import { join } from 'node:path'
 // instead of quietly opening a fourth way for a child under 13 to get a login.
 
 const APP_DIRS = ['app', 'lib', 'components', 'packages']
+// Run by hand or by CI, never by the app: scanned so a direct Clerk call there
+// has to be named below too.
+const OUTSIDE_DIRS = ['scripts', 'e2e', 'test']
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/
-// Clerk's account-creating calls: a user, an invitation to sign up, or an
-// organization invitation (which also creates the account on accept). Matched
-// as method calls (`client.users.createUser(`), so a log line that merely
-// names one is not counted.
-const CREATES = /\.(createUser|createInvitation|createBulkInvitations|createOrganizationInvitation)\s*\(/g
+// Clerk's account-creating calls: a user, or any kind of invitation to sign up
+// (createInvitation, createBulkInvitations, createOrganizationInvitation, …,
+// which create the account on accept). Matched as method calls
+// (`client.users.createUser(`), so a log line that merely names one is not counted.
+const CREATES = /\.\s*create(?:User|[A-Za-z]*Invitation[A-Za-z]*)\s*\(/g
 
 // Operator scripts run by hand against a chosen Clerk instance, never by the
 // app: neither is reachable by a registrant.
@@ -37,14 +40,15 @@ const IMPORTERS: Record<string, number> = {
 }
 const GUARDED_EXPORTS = new Set(['guardedEnsureClerkUser', 'ensureClerkUserAndSignInToken'])
 
-function walk(dir: string, out: string[] = []): string[] {
+/** Source files under `dir`; test, spec and story files only when `withTests` (e2e's specs are its code). */
+function walk(dir: string, out: string[] = [], withTests = false): string[] {
   let entries: string[]
   try { entries = readdirSync(dir) } catch { return out }
   for (const name of entries) {
     if (name === 'node_modules' || name.startsWith('.')) continue
     const p = join(dir, name)
-    if (statSync(p).isDirectory()) walk(p, out)
-    else if (SOURCE.test(name) && !/\.(test|spec|stories)\.[^.]+$/.test(name)) out.push(p)
+    if (statSync(p).isDirectory()) walk(p, out, withTests)
+    else if (SOURCE.test(name) && (withTests || !/\.(test|spec|stories)\.[^.]+$/.test(name))) out.push(p)
   }
   return out
 }
@@ -81,9 +85,11 @@ describe('every Clerk account sits behind the COPPA guard', () => {
     expect(hits).toEqual([{ f: 'lib/clerk-provisioning.ts', n: 1 }])
   })
 
-  it('outside the app, only the two named operator scripts call Clerk directly', () => {
+  it('outside the app (scripts, e2e, test), only the two named operator scripts call Clerk directly', () => {
     const hits = Object.fromEntries(
-      walk('scripts').map((f) => [f, count(read(f), CREATES)]).filter(([, n]) => (n as number) > 0),
+      OUTSIDE_DIRS.flatMap((d) => walk(d, [], true))
+        .map((f) => [f, count(read(f), CREATES)])
+        .filter(([, n]) => (n as number) > 0),
     )
     expect(hits).toEqual(Object.fromEntries(Object.entries(SCRIPT_ALLOWLIST).map(([f, v]) => [f, v.count])))
   })
@@ -105,6 +111,11 @@ describe('every Clerk account sits behind the COPPA guard', () => {
     const reg = functionBody(src, 'export async function ensureClerkUserAndSignInToken(')
     expect(reg).toMatch(/guardedEnsureClerkUser\s*\(/)
     expect(reg).not.toMatch(/findOrCreateClerkUser\s*\(/)
+
+    // And those two guarded entry points are the only functions it exports.
+    const exportedFns = [...src.matchAll(/export\s+(?:async\s+)?function\s+(\w+)/g)].map((m) => m[1]).sort()
+    expect(exportedFns).toEqual(['ensureClerkUserAndSignInToken', 'guardedEnsureClerkUser'])
+    expect(src).not.toMatch(/export\s+(const|let|var)\s/)
   })
 
   it('only the four known files import lib/clerk-provisioning, and only its guarded exports', () => {

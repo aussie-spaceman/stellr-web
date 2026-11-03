@@ -107,11 +107,20 @@ export async function POST(req: Request) {
       if (!linkedTo) {
         // Link the existing member record to the new Clerk user — only while it
         // is still unlinked, so a link made in the meantime is never overwritten.
-        await db
+        const { data: linked, error: linkError } = await db
           .from('members')
           .update({ clerk_user_id: data.id, profile_photo_url: data.image_url })
           .eq('id', existing.id)
           .is('clerk_user_id', null)
+          .select('id')
+        // Nothing updated: another login took the row between the read and the
+        // write (or the write failed). Back off: the row is not this user's, so
+        // no roles are seeded and no invites claimed on its behalf.
+        if (!linked?.length) {
+          if (linkError) console.error('[clerk webhook] member link failed:', linkError)
+          else console.warn('[clerk webhook] member linked by another login before this one: not linked', { clerkUserId: data.id })
+          return NextResponse.json({ received: true, skipped: 'member already linked' })
+        }
       }
       memberId = (existing as { id: string }).id
 

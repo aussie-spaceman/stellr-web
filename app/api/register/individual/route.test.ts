@@ -154,20 +154,25 @@ describe('POST /api/register/individual', () => {
 
 describe('POST /api/register/individual — S0 age gate', () => {
   it.each([
-    ['unknown (missing)', undefined],
-    ['unknown (blank)', ''],
-    ['invalid (not a date)', 'abc'],
-    ['invalid (no such day)', '2013-02-30'],
-    ['invalid (US format)', '12/01/2012'],
-    ['in the future', '2999-01-01'],
-  ])('a date of birth that is %s is a 400 before anything is written, whatever role was picked', async (_l, dob) => {
+    ['unknown (missing)', undefined, 'dob_missing'],
+    ['unknown (null)', null, 'dob_missing'],
+    ['unknown (blank)', '', 'dob_missing'],
+    ['invalid (not a date)', 'abc', 'dob_invalid'],
+    ['invalid (no such day)', '2013-02-30', 'dob_invalid'],
+    ['invalid (US format)', '12/01/2012', 'dob_invalid'],
+    ['invalid (implausible year)', '0201-05-05', 'dob_invalid'],
+    ['in the future', '2999-01-01', 'dob_invalid'],
+  ])('a date of birth that is %s is a 400 before anything is written, whatever role was picked', async (_l, dob, code) => {
     const res = await post({ date_of_birth: dob, event_role: 'mentor', age_bracket: 'adult' })
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/date of birth/)
+    const json = await res.json()
+    expect(json.code).toBe(code)
+    expect(json.error).toMatch(/date of birth/)
     expect(h.regInsert).not.toHaveBeenCalled()
     expect(h.memberUpsert).not.toHaveBeenCalled()
     expect(h.partInsert).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
+    expect(h.getUserList).not.toHaveBeenCalled()
     expect(h.createUser).not.toHaveBeenCalled()
   })
 

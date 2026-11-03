@@ -123,10 +123,12 @@ export async function POST(
     name: [insert.first_name, insert.last_name].filter(Boolean).join(' ').trim() || 'this person',
   })
   if (!ageCheck.ok) {
-    const error = linkedMemberId
-      ? "We don't have a date of birth on file for this Stellr Member ID. Ask them to add it to their profile, or enter their details by hand."
-      : ageCheck.error
-    return NextResponse.json({ error }, { status: 400 })
+    const error = !linkedMemberId
+      ? ageCheck.error
+      : ageCheck.reason === 'dob_missing'
+        ? "We don't have a date of birth on file for this Stellr Member ID. Ask them to add it to their profile, or enter their details by hand."
+        : "The date of birth on file for this Stellr Member ID doesn't look right. Ask them to correct it in their profile, or enter their details by hand."
+    return NextResponse.json({ code: ageCheck.reason, error }, { status: 400 })
   }
   insert.date_of_birth = ageCheck.dateOfBirth
 

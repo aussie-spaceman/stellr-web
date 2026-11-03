@@ -124,9 +124,12 @@ describe('sendGroupAccountInvite', () => {
   })
 
   it('holds anyone with no usable date of birth anywhere, as if under 13', async () => {
-    h.member = { ...base, date_of_birth: null }
     h.participants = []
-    expect(await sendGroupAccountInvite(makeDb(), 'm1', opts)).toEqual({ sent: false, reason: 'awaiting_consent' })
+    for (const date_of_birth of [null, '', 'not a date']) {
+      h.member = { ...base, date_of_birth }
+      expect(await sendGroupAccountInvite(makeDb(), 'm1', opts)).toEqual({ sent: false, reason: 'awaiting_consent' })
+    }
+    expect(h.createUser).not.toHaveBeenCalled()
     expect(h.sendEmail).not.toHaveBeenCalled()
   })
 
@@ -190,10 +193,17 @@ describe('sendAccountInvite (admin, hand-created member)', () => {
     expect(h.sendEmail).not.toHaveBeenCalled()
   })
 
-  it('never lets an adult record override a date of birth that says under 13', async () => {
+  it('never lets an adult record override a date of birth that says under 13, until a parent has signed', async () => {
     h.member = { ...admin, date_of_birth: yearsAgo(11) }
     expect(await sendAccountInvite(makeDb(), 'm1')).toEqual({ sent: false, reason: 'awaiting_consent' })
     expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.logActivity).not.toHaveBeenCalled()
+
+    h.completedAgreements = 1
+    expect(await sendAccountInvite(makeDb(), 'm1')).toEqual({ sent: true })
+    expect(h.createUser).toHaveBeenCalledTimes(1)
+    // The login rests on the guardian's agreement, not the adult record.
+    expect(h.logActivity).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'account_login_adult_by_role' }), expect.anything())
   })
 
   it('emails a member who already has a login without touching Clerk', async () => {

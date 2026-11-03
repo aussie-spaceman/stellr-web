@@ -36,6 +36,8 @@ const h = vi.hoisted(() => ({
   afterTasks: [] as Array<() => Promise<unknown>>,
   // Captures every row passed to `.insert()`, keyed by table name.
   captures: {} as Record<string, unknown[]>,
+  // …and to `.upsert()` (the member rows).
+  upserts: {} as Record<string, unknown[]>,
 }))
 
 // A thenable Supabase chain: terminal `.single()`/`.maybeSingle()` resolve, and
@@ -63,7 +65,7 @@ function makeDb(captures: Record<string, unknown[]>) {
     const chain: Record<string, unknown> = {
       select: () => chain, eq: () => chain, in: () => chain, not: () => chain, is: () => chain,
       insert: (p: unknown) => { state.op = 'insert'; state.payload = p; (captures[table] ||= []).push(p); return chain },
-      upsert: (p: unknown) => { state.op = 'upsert'; state.payload = p; return chain },
+      upsert: (p: unknown) => { state.op = 'upsert'; state.payload = p; (h.upserts[table] ||= []).push(p); return chain },
       update: (p: unknown) => { state.op = 'update'; state.payload = p; return chain },
       delete: () => { state.op = 'delete'; return chain },
       single: async () => { state.single = true; return result() },
@@ -161,6 +163,7 @@ function post(b: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks()
   for (const k of Object.keys(h.captures)) delete h.captures[k]
+  for (const k of Object.keys(h.upserts)) delete h.upserts[k]
   h.afterTasks.length = 0
   h.getEventBySlug.mockResolvedValue({ title: 'Colorado Space Challenge', activityType: 'live_event', stripePriceId: 'price_x' })
   h.priceRetrieve.mockResolvedValue({ unit_amount: 13500, currency: 'usd' })
@@ -382,6 +385,15 @@ function yearsAgo(n: number, extraDays = 0): string {
   return d.toISOString().slice(0, 10)
 }
 const participantRows = () => (h.captures.participants?.[0] ?? []) as Array<Record<string, unknown>>
+const memberRows = () => (h.upserts.members ?? []).flatMap((p) => (Array.isArray(p) ? p : [p])) as Array<Record<string, unknown>>
+/** Nothing at all was written: no registration, participant or member row, no login, no email. */
+function expectNothingWritten() {
+  expect(h.captures).toEqual({})
+  expect(h.upserts).toEqual({})
+  expect(h.getUserList).not.toHaveBeenCalled()
+  expect(h.createUser).not.toHaveBeenCalled()
+  expect(h.sendEmail).not.toHaveBeenCalled()
+}
 const studentManager = (dob: string) => body({
   registrant_role: 'student_manager',
   teacher: {
@@ -400,16 +412,19 @@ describe('POST /api/register/group — S0 age gate', () => {
   })
 
   it.each([
-    ['unknown', ''],
-    ['invalid', 'abc'],
-    ['impossible', '2013-02-30'],
-    ['in the future', '2999-01-01'],
-  ])('a student whose date of birth is %s is a 400 naming them, before anything is written', async (_l, dob) => {
+    ['missing', undefined, 'dob_missing'],
+    ['blank', '', 'dob_missing'],
+    ['invalid', 'abc', 'dob_invalid'],
+    ['impossible', '2013-02-30', 'dob_invalid'],
+    ['implausible', '0201-05-05', 'dob_invalid'],
+    ['in the future', '2999-01-01', 'dob_invalid'],
+  ])('a student whose date of birth is %s stops the whole registration with a 400 naming them, before anything is written', async (_l, dob, code) => {
     const res = await post(body({ students: [STUDENT('s1@example.com'), { ...STUDENT('s2@example.com'), first_name: 'Ana', last_name: 'Ruiz', date_of_birth: dob }] }))
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/date of birth for Ana Ruiz/)
-    expect(h.captures.registrations).toBeUndefined()
-    expect(h.createUser).not.toHaveBeenCalled()
+    const json = await res.json()
+    expect(json.code).toBe(code)
+    expect(json.error).toMatch(/date of birth for Ana Ruiz/)
+    expectNothingWritten()
   })
 
   it('an additional adult with an unreadable date of birth is refused, not stored as an adult', async () => {
@@ -418,14 +433,21 @@ describe('POST /api/register/group — S0 age gate', () => {
       additional_adults: [{ email: 'a@x.com', first_name: 'Al', last_name: 'X', date_of_birth: 'not a date', phone: '', gender: '', t_shirt_size: '', age_bracket: 'adult', event_role: 'Mentor' }],
     }))
     expect(res.status).toBe(400)
-    expect(h.captures.registrations).toBeUndefined()
+    expectNothingWritten()
   })
 
   it('the registrant needs a usable date of birth too', async () => {
     const res = await post(body({ teacher: { ...body().teacher as object, date_of_birth: '' } }))
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe('Please add your date of birth.')
-    expect(h.captures.registrations).toBeUndefined()
+    expect(await res.json()).toEqual({ code: 'dob_missing', error: 'Please add your date of birth.' })
+    expectNothingWritten()
+  })
+
+  it('checks the registrant even when the roster comes later (sheet / email link)', async () => {
+    const res = await post(body({ details_method: 'sheet', students: [], teacher: { ...body().teacher as object, date_of_birth: 'nope' } }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('dob_invalid')
+    expectNothingWritten()
   })
 
   it('a Member-ID-linked person with no date of birth on file is refused with a way forward', async () => {
@@ -436,8 +458,24 @@ describe('POST /api/register/group — S0 age gate', () => {
     }
     const res = await post(body({ students: [STUDENT('s1@example.com'), { linked: true, existing_membership_id: 'STL-1' }] }))
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/date of birth on file for Lee Ng/)
-    expect(h.captures.registrations).toBeUndefined()
+    const json = await res.json()
+    expect(json.code).toBe('dob_missing')
+    expect(json.error).toMatch(/don't have a date of birth on file for Lee Ng/)
+    expectNothingWritten()
+  })
+
+  it('a Member-ID-linked person whose date of birth on file is wrong is asked to correct it', async () => {
+    h.onFile = {
+      memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', nickname: null, email: 'lee@x.com', phone: null,
+      date_of_birth: '2999-01-01', grade: null, gender: null, t_shirt_size: null, ethnicity: [], dietary_requirements: [],
+      health_conditions: null,
+    }
+    const res = await post(body({ students: [STUDENT('s1@example.com'), { linked: true, existing_membership_id: 'STL-1' }] }))
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe('dob_invalid')
+    expect(json.error).toMatch(/date of birth on file for Lee Ng's Stellr Member ID doesn't look right/)
+    expectNothingWritten()
   })
 
   it.each([
@@ -449,6 +487,20 @@ describe('POST /api/register/group — S0 age gate', () => {
     expect(res.status).toBe(201)
     const row = participantRows().find((p) => p.email === 's2@example.com')
     expect(row).toMatchObject({ date_of_birth: dob, event_role: 'participant' })
+    // The member row, too: a high-school participant, not the adult the form sent.
+    expect(memberRows().find((m) => m.email === 's2@example.com')).toMatchObject({ age_bracket: 'high_school', event_role: 'participant' })
+  })
+
+  it('takes the age on the event date, but an adult who is a minor today is still stored as a participant', async () => {
+    // 17 today, 18 at an event a year out: not refused, and not stored as an adult mentor.
+    h.getEventBySlug.mockResolvedValue({ title: 'Colorado Space Challenge', activityType: 'live_event', stripePriceId: 'price_x', date: yearsAgo(-1) })
+    const res = await post(body({
+      adult_count: 2, total_participants: 4,
+      additional_adults: [{ email: 'almost@x.com', first_name: 'Al', last_name: 'Most', date_of_birth: yearsAgo(18, -1), phone: '', gender: '', t_shirt_size: '', age_bracket: 'adult', event_role: 'Mentor' }],
+    }))
+    expect(res.status).toBe(201)
+    expect(participantRows().find((p) => p.email === 'almost@x.com')).toMatchObject({ event_role: 'participant' })
+    expect(memberRows().find((m) => m.email === 'almost@x.com')).toMatchObject({ age_bracket: 'high_school', event_role: 'participant' })
   })
 
   it('a Student Manager aged 12 is registered but gets no login and no sign-in token', async () => {

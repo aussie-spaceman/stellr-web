@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
       eventDate: (eventForGate as { date?: string | null }).date ?? null,
     })
     if (!ageCheck.ok) {
-      return NextResponse.json({ error: ageCheck.error }, { status: 400 })
+      return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: 400 })
     }
     const dob = ageCheck.dateOfBirth
 

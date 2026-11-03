@@ -151,9 +151,15 @@ export async function POST(req: NextRequest) {
     // The stored date of birth is what the participant row and the agreement
     // use. Without a usable one the row cannot be saved, and the agreement
     // would not know whether a parent has to sign.
-    if (!checkRegistrationAge(member.date_of_birth, { eventDate }).ok) {
+    const profileAge = checkRegistrationAge(member.date_of_birth, { eventDate })
+    if (!profileAge.ok) {
       return NextResponse.json(
-        { error: 'Please add your date of birth to your Stellr profile (Account → Profile), then open this link again.' },
+        {
+          code: profileAge.reason,
+          error: profileAge.reason === 'dob_missing'
+            ? 'Please add your date of birth to your Stellr profile (Account → Profile), then open this link again.'
+            : "The date of birth on your Stellr profile doesn't look right. Please correct it (Account → Profile), then open this link again.",
+        },
         { status: 400 },
       )
     }
@@ -165,7 +171,7 @@ export async function POST(req: NextRequest) {
       nickname: (member as { nickname?: string | null }).nickname ?? null,
       email: member.email,
       phone: member.phone ?? null,
-      date_of_birth: member.date_of_birth ?? null,
+      date_of_birth: profileAge.dateOfBirth,
       gender: member.gender ?? null,
       grade: member.grade ?? null,
       t_shirt_size: member.tshirt_size ?? null,
@@ -198,7 +204,7 @@ export async function POST(req: NextRequest) {
 
     const ageCheck = checkRegistrationAge(dob, { eventDate })
     if (!ageCheck.ok) {
-      return NextResponse.json({ error: ageCheck.error }, { status: 400 })
+      return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: 400 })
     }
     const isMinor = ageCheck.isMinor
     const role = normalizeEventRole(str(d.type) || 'participant')

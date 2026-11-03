@@ -129,7 +129,9 @@ export function todayInAppZone(): string {
  * when the person is still 17. That misclassification skips the minor→participant
  * role override and the guardian/parental-consent requirement, so age must be
  * exact here. The arithmetic lives in lib/age, the one copy; NaN for a date
- * that cannot be read. */
+ * that cannot be read. `NaN < 18` is false, so NaN must never be read as an
+ * adult: the registration routes stopped using this for that reason (S0, 2 Nov
+ * 2026) and gate on lib/registration-eligibility, which refuses the date. */
 export function ageFromDob(dob: string | Date): number {
   const birth = typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dob)
     ? new Date(dob.slice(0, 10) + 'T00:00:00Z')

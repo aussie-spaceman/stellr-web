@@ -15,13 +15,13 @@ vi.mock('@/lib/email', () => ({ sendEmail: async () => ({}), studentLeftTeamEmai
 vi.mock('@/lib/event-participation-sync', () => ({ removeEventParticipation: async () => {} }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => state.db!.client }))
 
-const { DELETE } = await import('./route')
+const { DELETE, PATCH } = await import('./route')
 
 function seed(extra: Record<string, object[]> = {}) {
   state.db = fakeSupabase({
     members: [{ id: 'teacher', email: 't@s.test', clerk_user_id: 'clerk-teacher', is_active: true, event_role: 'teacher', first_name: 'T', last_name: 'X' }],
     registrations: [{
-      id: 'reg', teacher_member_id: 'teacher', teacher_email: 't@s.test', teacher_poc_email: null,
+      id: 'reg', type: 'group', teacher_member_id: 'teacher', teacher_email: 't@s.test', teacher_poc_email: null,
       teacher_first_name: 'T', event_title: 'Event', event_slug: 'e1',
     }],
     participants: [{ id: 'p1', registration_id: 'reg', member_id: 'stu', event_role: 'participant', first_name: 'S', last_name: 'Y', email: 's@s.test' }],
@@ -68,5 +68,37 @@ describe('DELETE team participant — retained-record guard (MEM-15)', () => {
     const res = await del()
     expect(res.status).toBe(200)
     expect(state.db!.table('participants')).toHaveLength(0)
+  })
+})
+
+// S0 (2 Nov 2026): an organiser's edit gets the same date-of-birth check as an add.
+describe('PATCH team participant — date of birth', () => {
+  const patch = (b: Record<string, unknown>) =>
+    PATCH(new NextRequest('https://app.test/api/members/teams/reg/participants/p1', {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b),
+    }), { params: Promise.resolve({ id: 'reg', pid: 'p1' }) })
+  const stored = () => (state.db!.table('participants')[0] as Record<string, unknown>).date_of_birth
+
+  it.each([
+    ['cleared', '', 'dob_missing'],
+    ['unreadable', '31/12/2012', 'dob_invalid'],
+    ['in the future', '2999-01-01', 'dob_invalid'],
+  ])('refuses a date of birth that is %s, leaving the row as it was', async (_l, dob, code) => {
+    seed()
+    state.db!.table('participants')[0].date_of_birth = '2012-03-04'
+    const res = await patch({ first_name: 'S', last_name: 'Y', date_of_birth: dob })
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe(code)
+    expect(json.error).toMatch(/date of birth for S Y/)
+    expect(stored()).toBe('2012-03-04')
+  })
+
+  it('saves a real past date, and an edit that leaves the date out is untouched by the check', async () => {
+    seed()
+    expect((await patch({ first_name: 'S', last_name: 'Y', date_of_birth: '2011-05-06' })).status).toBe(200)
+    expect(stored()).toBe('2011-05-06')
+    expect((await patch({ phone: '555-0100' })).status).toBe(200)
+    expect(stored()).toBe('2011-05-06')
   })
 })

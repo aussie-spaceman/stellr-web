@@ -9,13 +9,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const from = vi.fn()
 const syncRole = vi.fn()
+const claimInvites = vi.fn(async (..._a: unknown[]) => {})
 
 vi.mock('next/headers', () => ({ headers: async () => ({ get: (k: string) => hdrs.get(k) ?? null }) }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from }) }))
 // Downstream helpers are irrelevant to the signature gate; a benign event type
 // never reaches them anyway.
 vi.mock('@/lib/member-enums', () => ({ normalizeEmail: (e: string) => e }))
-vi.mock('@/lib/spaces', () => ({ claimPendingSpaceInvites: vi.fn(async () => {}) }))
+vi.mock('@/lib/spaces', () => ({ claimPendingSpaceInvites: (...a: unknown[]) => claimInvites(...a) }))
 vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: (...a: unknown[]) => syncRole(...a) }))
 vi.mock('@/lib/esign/retention', () => ({ startRetentionClock: vi.fn() }))
 
@@ -47,6 +48,7 @@ afterEach(() => {
   hdrs.clear()
   from.mockReset()
   syncRole.mockReset()
+  claimInvites.mockClear()
   vi.unstubAllEnvs()
   vi.resetModules()
 })
@@ -86,7 +88,8 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
   let ops: Op[]
   let existingMember: Record<string, unknown> | null
 
-  function fakeDb() {
+  /** `linkHits: false` is a link landing between the read and the conditional write. */
+  function fakeDb(linkHits = true) {
     ops = []
     from.mockImplementation((table: string) => {
       const o: Op = { table, op: 'select', filters: [] }
@@ -98,18 +101,26 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
         eq: (c: string, v: unknown) => { o.filters.push(['eq', c, v]); return chain },
         is: (c: string, v: unknown) => { o.filters.push(['is', c, v]); return chain },
         maybeSingle: async () => ({ data: o.op === 'insert' ? { id: 'm-new' } : existingMember, error: null }),
-        then: (f: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(f),
+        // `.update(...).select('id')` returns the rows the conditional write hit.
+        then: (f: (v: unknown) => unknown) => Promise.resolve({
+          data: o.op === 'update' ? (linkHits ? [{ id: existingMember?.id }] : []) : null,
+          error: null,
+        }).then(f),
       }
       return chain
     })
   }
 
-  const created = (status: string | null) => JSON.stringify({
+  /** `status` undefined leaves the address with no verification record at all. */
+  const created = (status?: string | null) => JSON.stringify({
     type: 'user.created',
     data: {
       id: 'user_new', first_name: 'Kim', last_name: 'Lo', image_url: null,
       primary_email_address_id: 'e1',
-      email_addresses: [{ id: 'e1', email_address: 'kim@example.com', verification: status ? { status } : null }],
+      email_addresses: [{
+        id: 'e1', email_address: 'kim@example.com',
+        ...(status === undefined ? {} : { verification: status ? { status } : null }),
+      }],
     },
   })
 
@@ -125,12 +136,20 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
   it('an unverified primary email links nothing and creates nothing', async () => {
     fakeDb()
     existingMember = { id: 'm-child', event_role: 'participant', clerk_user_id: null }
-    for (const status of ['unverified', null]) {
+    for (const status of ['unverified', null, undefined]) {
       const r = await deliver(created(status))
       expect(r).toEqual({ status: 200, json: { received: true, skipped: 'email not verified' } })
     }
     expect(writes()).toEqual([])
     expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
+  })
+
+  it('an unverified email with no member on file creates no member row either', async () => {
+    fakeDb()
+    existingMember = null
+    expect((await deliver(created('unverified'))).json).toEqual({ received: true, skipped: 'email not verified' })
+    expect(writes()).toEqual([])
   })
 
   it('a verified email links an unlinked member, guarded so a link made meanwhile is not overwritten', async () => {
@@ -144,6 +163,16 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
       filters: [['eq', 'id', 'm-1'], ['is', 'clerk_user_id', null]],
     }])
     expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-1', 'teacher')
+    expect(claimInvites).toHaveBeenCalledWith('m-1', 'kim@example.com')
+  })
+
+  it('backs off when another login links the row between the read and the write', async () => {
+    fakeDb(false)
+    existingMember = { id: 'm-1', event_role: 'teacher', clerk_user_id: null }
+    const r = await deliver(created('verified'))
+    expect(r).toEqual({ status: 200, json: { received: true, skipped: 'member already linked' } })
+    expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
   })
 
   it('never moves a member already linked to another login', async () => {
@@ -153,6 +182,7 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
     expect(r).toEqual({ status: 200, json: { received: true, skipped: 'member already linked' } })
     expect(writes()).toEqual([])
     expect(syncRole).not.toHaveBeenCalled()
+    expect(claimInvites).not.toHaveBeenCalled()
   })
 
   it('leaves a member already linked to this same login as it is (registration linked it first)', async () => {
@@ -173,5 +203,6 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
       table: 'members', op: 'insert',
       payload: expect.objectContaining({ clerk_user_id: 'user_new', email: 'kim@example.com' }),
     })])
+    expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-new', 'subscriber')
   })
 })

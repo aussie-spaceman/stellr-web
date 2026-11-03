@@ -163,8 +163,9 @@ export async function ensureClerkUserAndSignInToken(
 
 /**
  * Find-or-create a passwordless Clerk user for `email`, without signing them in.
- * Also reached when an admin invites a hand-created member, so the invite's
- * "sign in with this address" works even while public sign-up is closed.
+ * Also behind an admin's invite to a hand-created member and a group member's
+ * "your account is ready" email (lib/member-invite), so "sign in with this
+ * address" works even while public sign-up is closed.
  *
  * Deliberately not exported: every caller goes through guardedEnsureClerkUser.
  */

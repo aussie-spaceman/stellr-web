@@ -64,13 +64,16 @@ beforeEach(() => {
 
 describe('POST /api/members/teams/[id]/participants — S0 date-of-birth check', () => {
   it.each([
-    ['missing', undefined],
-    ['unreadable', '31/12/2012'],
-    ['in the future', '2030-05-01'],
-  ])('a date of birth that is %s is a 400 before any member, participant or agreement', async (_l, dob) => {
+    ['missing', undefined, 'dob_missing'],
+    ['unreadable', '31/12/2012', 'dob_invalid'],
+    ['impossible', '2013-02-30', 'dob_invalid'],
+    ['in the future', '2030-05-01', 'dob_invalid'],
+  ])('a date of birth that is %s is a 400 before any member, participant or agreement', async (_l, dob, code) => {
     const res = await post({ ...person, date_of_birth: dob })
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/date of birth for Ana Ruiz/)
+    const json = await res.json()
+    expect(json.code).toBe(code)
+    expect(json.error).toMatch(/date of birth for Ana Ruiz/)
     expect(h.upsertMember).not.toHaveBeenCalled()
     expect(h.partInsert).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
@@ -80,8 +83,21 @@ describe('POST /api/members/teams/[id]/participants — S0 date-of-birth check',
     h.onFile = { memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', email: 'lee@x.com', date_of_birth: null, event_role: 'participant' }
     const res = await post({ linked: true, membership_id: 'STL-1', event_role: 'Student' })
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/Stellr Member ID/)
+    const json = await res.json()
+    expect(json.code).toBe('dob_missing')
+    expect(json.error).toMatch(/don't have a date of birth on file for this Stellr Member ID/)
     expect(h.partInsert).not.toHaveBeenCalled()
+  })
+
+  it('a Member-ID-linked person whose date of birth on file is wrong is asked to correct it', async () => {
+    h.onFile = { memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', email: 'lee@x.com', date_of_birth: '2999-01-01', event_role: 'participant' }
+    const res = await post({ linked: true, membership_id: 'STL-1', event_role: 'Student' })
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe('dob_invalid')
+    expect(json.error).toMatch(/date of birth on file for this Stellr Member ID doesn't look right/)
+    expect(h.partInsert).not.toHaveBeenCalled()
+    expect(h.dispatch).not.toHaveBeenCalled()
   })
 
   it('a real past date is saved as YYYY-MM-DD, as before', async () => {

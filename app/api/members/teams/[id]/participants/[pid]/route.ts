@@ -9,6 +9,7 @@ import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { stripeClient } from '@/lib/stripe'
 import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
 import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -63,6 +64,17 @@ export async function PATCH(
   }
   // Roster filters (Companies auto-assign, studentCount) match enum values.
   if ('event_role' in updates) updates.event_role = normalizeEventRole(updates.event_role)
+
+  // S0 (2 Nov 2026): an edited date of birth gets the same check as one added
+  // (POST, and the registration routes): a cleared, unreadable or future date
+  // is refused, not stored for the agreement and consent rules to misread.
+  if ('date_of_birth' in updates) {
+    const ageCheck = checkRegistrationAge(updates.date_of_birth, {
+      name: [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || 'this person',
+    })
+    if (!ageCheck.ok) return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: 400 })
+    updates.date_of_birth = ageCheck.dateOfBirth
+  }
 
   const { data: participant, error } = await db
     .from('participants')

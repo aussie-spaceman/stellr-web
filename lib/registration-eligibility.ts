@@ -6,7 +6,8 @@
 //
 // The rules, the same in every route:
 //   - The date of birth must be a real past date (YYYY-MM-DD). Anything else is
-//     a 400 with a message the registrant can act on, before anything is written.
+//     a 400 with a message the registrant can act on, before anything is written,
+//     and a `code` (the refusal's `reason`) a client can tell apart.
 //   - Age is worked out on the event's start date, or today when the event has
 //     no usable date (a campaign).
 //   - "Minor" for the role and bracket is under 18 on EITHER date, so a person
@@ -32,7 +33,15 @@ export interface RegistrationAgeOk {
   isMinor: boolean
 }
 
-export type RegistrationAgeResult = RegistrationAgeOk | { ok: false; error: string }
+export interface RegistrationAgeRefused {
+  ok: false
+  /** No date of birth; one that is not a real past date; or under the event's floor. */
+  reason: 'dob_missing' | 'dob_invalid' | 'under_minimum_age'
+  /** Safe to show the person filling in the form. */
+  error: string
+}
+
+export type RegistrationAgeResult = RegistrationAgeOk | RegistrationAgeRefused
 
 export interface RegistrationAgeOptions {
   /** The event's start date (YYYY-MM-DD, or a timestamp starting with one). */
@@ -59,7 +68,11 @@ export function checkRegistrationAge(dateOfBirth: unknown, opts: RegistrationAge
   const whose = opts.name?.trim()
   const raw = typeof dateOfBirth === 'string' ? dateOfBirth.trim() : ''
   if (!raw) {
-    return { ok: false, error: whose ? `Please add a date of birth for ${whose}.` : 'Please add your date of birth.' }
+    return {
+      ok: false,
+      reason: 'dob_missing',
+      error: whose ? `Please add a date of birth for ${whose}.` : 'Please add your date of birth.',
+    }
   }
   const today = opts.today ?? appToday()
   const dob = raw.slice(0, 10)
@@ -68,6 +81,7 @@ export function checkRegistrationAge(dateOfBirth: unknown, opts: RegistrationAge
   if (!Number.isFinite(ageToday) || ageToday < 0 || ageToday > MAX_AGE || onDate(dob) > today) {
     return {
       ok: false,
+      reason: 'dob_invalid',
       error: whose
         ? `The date of birth for ${whose} doesn't look right. Please check it and try again.`
         : "That date of birth doesn't look right. Please check it and try again.",
@@ -77,6 +91,7 @@ export function checkRegistrationAge(dateOfBirth: unknown, opts: RegistrationAge
   if (opts.minAge != null && ageAtEvent < opts.minAge) {
     return {
       ok: false,
+      reason: 'under_minimum_age',
       error: whose
         ? `${whose} must be ${opts.minAge} or older on the day of the event to take part.`
         : `You must be ${opts.minAge} or older on the day of the event to take part.`,

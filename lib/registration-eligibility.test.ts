@@ -9,17 +9,21 @@ const today = new Date('2026-11-02T12:00:00Z')
 describe('checkRegistrationAge', () => {
   it('refuses a missing date of birth, naming whose it is', () => {
     for (const v of [undefined, null, '', '   ', 42, {}]) {
-      expect(checkRegistrationAge(v, { today })).toEqual({ ok: false, error: 'Please add your date of birth.' })
+      expect(checkRegistrationAge(v, { today })).toEqual({ ok: false, reason: 'dob_missing', error: 'Please add your date of birth.' })
     }
-    expect(checkRegistrationAge('', { today, name: 'Sam Lee' })).toEqual({ ok: false, error: 'Please add a date of birth for Sam Lee.' })
+    expect(checkRegistrationAge('', { today, name: 'Sam Lee' })).toEqual({
+      ok: false, reason: 'dob_missing', error: 'Please add a date of birth for Sam Lee.',
+    })
   })
 
   it('refuses an unreadable, impossible, future or implausibly old date', () => {
     for (const v of ['abc', '12/01/2013', '2013-02-29', '2013-13-01', '2026-11-03', '2999-01-01', '1890-01-01', '0211-05-04']) {
       const r = checkRegistrationAge(v, { today })
-      expect(r.ok, v).toBe(false)
-      if (!r.ok) expect(r.error).toMatch(/doesn't look right/)
+      expect(r, v).toMatchObject({ ok: false, reason: 'dob_invalid', error: "That date of birth doesn't look right. Please check it and try again." })
     }
+    expect(checkRegistrationAge('abc', { today, name: 'Sam Lee' })).toMatchObject({
+      reason: 'dob_invalid', error: "The date of birth for Sam Lee doesn't look right. Please check it and try again.",
+    })
   })
 
   it('works out the age on the event date, and today', () => {
@@ -51,7 +55,7 @@ describe('checkRegistrationAge', () => {
 
   it('applies a floor on the event date when one is given (the tenant 14+ rule)', () => {
     expect(checkRegistrationAge('2013-01-01', { today, eventDate: '2026-12-01', minAge: 14 })).toEqual({
-      ok: false, error: 'You must be 14 or older on the day of the event to take part.',
+      ok: false, reason: 'under_minimum_age', error: 'You must be 14 or older on the day of the event to take part.',
     })
     // 13 today, 14 by the event: allowed.
     expect(checkRegistrationAge('2012-11-20', { today, eventDate: '2026-12-01', minAge: 14 })).toMatchObject({ ok: true, ageAtEvent: 14 })

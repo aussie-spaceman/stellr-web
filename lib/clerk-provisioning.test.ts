@@ -93,8 +93,10 @@ describe('ensureClerkUserAndSignInToken — the COPPA guard on registration', ()
     ['12', bornYearsAgo(12)],
     ['one day short of 13', bornYearsAgo(13, -1)],
     ['unknown', null],
+    ['not given', undefined],
     ['blank', ''],
     ['unreadable', '12/01/2013'],
+    ['impossible', '2013-02-29'],
     ['in the future', '2999-01-01'],
   ])('a new registrant aged %s gets no login, no token, and Clerk is never asked', async (_label, dob) => {
     getUserList.mockResolvedValue({ data: [] })
@@ -139,6 +141,14 @@ describe('guardedEnsureClerkUser', () => {
     })
     expect(broken).toEqual({ allowed: false, reason: 'age_unknown' })
     expect(getUserList).not.toHaveBeenCalled()
+  })
+
+  it('does not look for a guardian agreement for someone 13 or over', async () => {
+    getUserList.mockResolvedValue({ data: [] })
+    const onFile = vi.fn(async () => false)
+    expect(await guardedEnsureClerkUser('a@x.test', 'A', 'B', { dateOfBirth: bornYearsAgo(13), guardianAgreementOnFile: onFile }))
+      .toMatchObject({ allowed: true, basis: 'dob' })
+    expect(onFile).not.toHaveBeenCalled()
   })
 
   it('lets an unknown age through on an admin adult record, but never overrides a DOB under 13', async () => {

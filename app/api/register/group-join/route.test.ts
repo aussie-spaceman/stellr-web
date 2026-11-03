@@ -170,14 +170,20 @@ describe('POST /api/register/group-join', () => {
 
 describe('POST /api/register/group-join — S0 age gate', () => {
   it.each([
-    ['unknown (blank)', ''],
-    ['invalid (not a date)', 'abc'],
-    ['invalid (no such day)', '2013-02-30'],
-    ['in the future', '2999-01-01'],
-  ])('a new joiner whose date of birth is %s is a 400 before any member, login or participant', async (_l, dob) => {
+    ['unknown (missing)', undefined, undefined],
+    ['unknown (blank)', '', undefined],
+    ['invalid (not a date)', 'abc', 'dob_invalid'],
+    ['invalid (no such day)', '2013-02-30', 'dob_invalid'],
+    ['invalid (US format)', '06/01/2013', 'dob_invalid'],
+    ['invalid (implausible year)', '0201-05-05', 'dob_invalid'],
+    ['in the future', '2999-01-01', 'dob_invalid'],
+  ])('a new joiner whose date of birth is %s is a 400 before any member, login or participant', async (_l, dob, code) => {
     const res = await post({ date_of_birth: dob, type: 'Mentor' })
     expect(res.status).toBe(400)
+    // A blank one is caught with the other required fields, before the age check.
+    expect((await res.json()).code).toBe(code)
     expect(h.upsertMember).not.toHaveBeenCalled()
+    expect(h.getUserList).not.toHaveBeenCalled()
     expect(h.createUser).not.toHaveBeenCalled()
     expect(h.partInsert).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
@@ -212,15 +218,23 @@ describe('POST /api/register/group-join — S0 age gate', () => {
     expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({ event_role: 'mentor', age_bracket: 'adult' }))
   })
 
-  it('a signed-in member with no usable date of birth on their profile is asked to add one', async () => {
+  it('a signed-in member with no usable date of birth on their profile is asked to fix it, not read as an adult', async () => {
     h.auth.mockResolvedValue({ userId: 'user_me' })
-    for (const dob of [null, 'not a date']) {
+    for (const [dob, code, says] of [
+      [null, 'dob_missing', /add your date of birth/],
+      ['not a date', 'dob_invalid', /doesn't look right/],
+      ['2999-01-01', 'dob_invalid', /doesn't look right/],
+    ] as const) {
       h.signedInMember = { id: 'm-me', first_name: 'M', last_name: 'E', email: 'me@example.com', date_of_birth: dob, age_bracket: 'adult', event_role: 'teacher' }
       const res = await post()
       expect(res.status).toBe(400)
-      expect((await res.json()).error).toMatch(/date of birth/)
+      const json = await res.json()
+      expect(json.code).toBe(code)
+      expect(json.error).toMatch(says)
+      expect(json.error).toMatch(/Account → Profile/)
     }
     expect(h.partInsert).not.toHaveBeenCalled()
+    expect(h.dispatch).not.toHaveBeenCalled()
   })
 
   it('a signed-in member with a date of birth on file joins as before', async () => {

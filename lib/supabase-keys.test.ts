@@ -222,6 +222,18 @@ describe('supabaseFetch (the fetch every supabase-js client here is given)', () 
     },
   )
 
+  it('keeps the URL, method, body and other headers of a write when it drops the header', async () => {
+    await supabaseFetch('https://example.supabase.co/rest/v1/x', {
+      method: 'POST',
+      headers: { apikey: SECRET, Authorization: `Bearer ${SECRET}`, Prefer: 'return=minimal' },
+      body: '{"id":1}',
+    })
+    expect(seen[0].input).toBe('https://example.supabase.co/rest/v1/x')
+    expect(seen[0].init).toMatchObject({ method: 'POST', body: '{"id":1}' })
+    expect(sentHeaders().get('Prefer')).toBe('return=minimal')
+    expect(sentHeaders().get('Authorization')).toBeNull()
+  })
+
   it('does the same when supabase-js hands over a Headers object', async () => {
     await supabaseFetch('https://example.supabase.co/rest/v1/x', {
       headers: new Headers({ apikey: SECRET, authorization: `Bearer ${SECRET}` }),

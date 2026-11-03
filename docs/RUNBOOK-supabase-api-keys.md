@@ -46,8 +46,10 @@ Auth hooks. No code verifies or depends on a key being a JWT.
 `lib/supabase-keys.ts` and `next.config.mjs` read a legacy key's `role` claim,
 without verification, only to catch swapped keys. **The repo cannot see
 dashboard-only configuration.** Before disabling legacy keys, check Database →
-Webhooks, Authentication → Hooks, Edge Functions and Integrations in each
-project. Any of these that send a key must send a secret key on `apikey`.
+Webhooks, any `cron` job that sends an `Authorization` header, Authentication →
+Hooks, Edge Functions and Integrations in each project, and any outside tool
+that was given the anon or service_role key. Any of these that send a key must
+send a secret key on `apikey`.
 
 Key holders outside the code: Vercel **prod** project, Vercel **dev** project
 (`stellr-web-dev`), GitHub Actions secrets, each laptop's `.env.local` (dev keys
@@ -65,8 +67,11 @@ narrowing a leak.
 
 | Project | Publishable | Secret keys (name = consumer) |
 |---|---|---|
-| dev | `web` | `vercel-dev`, `github-ci`, `laptop-<machine>` (one each), `watermark-worker` if it runs on dev |
-| prod | `web` | `vercel-prod`, `watermark-worker` if deployed. For a one-off prod script, a `script-<machine>-<date>` key in the shell environment, deleted afterwards. Never in `.env.local` (`docs/ENV-MATRIX.md`) |
+| dev (`xvxlhbxtiwxpopoqjygm`) | `default` | `vercel_dev`, `github_ci`, `laptop_<machine>` (one each), `watermark_worker` if it runs on dev |
+| prod (`hwtzpfrnksksxlwwabqz`) | `default` (already exists) | `vercel_prod`, `watermark_worker` if deployed. For a one-off prod script, a `script_<machine>` key in the shell environment, deleted afterwards. Never in `.env.local` (`docs/ENV-MATRIX.md`) |
+
+Creating the new keys also makes a secret key named `default`. Give it to no
+consumer, so every secret key in use has one named holder.
 
 ## Steps (dev first, prod last)
 
@@ -78,9 +83,10 @@ narrowing a leak.
    secret API keys*. Click *Create new API keys* if the button is there. Then add
    the named secret keys from the table. The legacy keys keep working.
 3. **Vercel dev.** Add `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and
-   `SUPABASE_SECRET_KEY` (the `vercel-dev` key) to every environment that
-   currently has the legacy pair. Leave the legacy pair in place. Redeploy the
-   newest READY deployment, because `NEXT_PUBLIC_` values only change on a rebuild.
+   `SUPABASE_SECRET_KEY` (the `vercel_dev` key, marked Sensitive) to every
+   environment that currently has the legacy pair. Leave the legacy pair in
+   place. Redeploy the newest READY deployment, because `NEXT_PUBLIC_` values
+   only change on a rebuild.
 4. **Verify dev.** The health endpoint should show `publishable`/`anon` from
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `secret`/`service_role` from
    `SUPABASE_SECRET_KEY`. Then exercise the following on dev: public pages; a
@@ -89,24 +95,32 @@ narrowing a leak.
    check-in desk lookup; issuing an e-sign agreement. Look in the runtime logs
    for 401, `Invalid API key` or `SupabaseKeySlotError`.
 5. **GitHub Actions.** Add the repository secrets `DEV_SUPABASE_PUBLISHABLE_KEY`
-   and `DEV_SUPABASE_SECRET_KEY` (the `github-ci` key). Let one CI run finish. To
-   pass, the e2e job must have **run** its steps; a skipped job proves nothing.
+   and `DEV_SUPABASE_SECRET_KEY` (the `github_ci` key). Let one CI run finish. To
+   pass, the e2e job must have **run** its steps: read the *Check configuration*
+   and test step outcomes, not the badge. A skipped job proves nothing.
 6. **Laptops and worker.** Put the new pair in each `.env.local`, using that
-   machine's own secret key. Start `npm run dev` and run one read-only script.
-   Set the worker host's `SUPABASE_SECRET_KEY` if a worker is deployed.
+   machine's own secret key, and delete the two legacy lines. Start
+   `npm run dev` and run one read-only script. Set the worker host's
+   `SUPABASE_SECRET_KEY` if a worker is deployed.
 7. **Prod (after 6 Nov).** Repeat steps 2–4 on the prod project and the Vercel
-   prod project (Production scope). Verify on `app.stellreducation.org`.
+   prod project (Production scope). The prod publishable key already exists;
+   create only `vercel_prod`. Verify on `app.stellreducation.org`, using only
+   the step 4 checks that are safe on live data (reads, chat).
 8. **Soak.** Leave both pairs in place for at least a week. Check the
    `cron_runs` ledger: every cron should have run green at least once on the new
-   keys.
+   keys, and the Vercel logs should show no new 5xx on `/api/cron/*` or
+   `/api/webhooks/*`.
 9. **Disable legacy on dev.** First confirm every dev consumer from the
    inventory, then use Settings → API Keys → *Legacy API keys* → disable. Re-run
    step 4 and a CI run. Once those are clean, delete the GitHub secrets
    `DEV_SUPABASE_ANON_KEY` / `DEV_SUPABASE_SERVICE_ROLE_KEY` and the legacy
    variables on Vercel dev.
 10. **Disable legacy on prod, last.** Do this only after dev has run clean
-    without legacy keys for several days. Then remove the legacy variables
-    from Vercel prod.
+    without legacy keys for several days, and never inside an event freeze
+    window. Then remove the legacy variables from Vercel prod.
+11. **Code follow-up.** Once no environment holds a legacy key, remove the
+    fallback names from `lib/supabase-keys.ts`, `ci.yml`, `next.config.mjs` and
+    `scripts/verify-deletion-registry.mjs`.
 
 ## Rollback
 

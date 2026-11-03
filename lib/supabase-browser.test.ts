@@ -61,6 +61,14 @@ describe('createBrowserSupabase (Realtime chat)', () => {
     expect(restCall()?.headers.get('Authorization')).toBe(`Bearer ${CLERK_TOKEN}`)
   })
 
+  it('sends the legacy anon key on Authorization as before when signed out (today\'s config)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
+    const sb = createBrowserSupabase(async () => null)
+    await sb.from('community_posts').select('id')
+    expect(restCall()?.headers.get('apikey')).toBe(LEGACY_ANON)
+    expect(restCall()?.headers.get('Authorization')).toBe(`Bearer ${LEGACY_ANON}`)
+  })
+
   it('refuses to start with a secret key in the public slot', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'sb_secret_TESTONLY')
     expect(() => createBrowserSupabase(async () => CLERK_TOKEN)).toThrow(/secret key/)
@@ -89,6 +97,8 @@ describe('createStorageUploadClient (signed upload)', () => {
     const put = await upload()
     expect(put.headers.get('apikey')).toBe(PUBLISHABLE)
     expect(put.headers.get('Authorization')).toBeNull()
+    // The signed URL's own token travels in the query string, untouched.
+    expect(put.url).toContain('token=signed-token')
   })
 
   it('works with only the legacy anon name set (today), sending it on both headers as before', async () => {

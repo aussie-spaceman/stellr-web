@@ -14,7 +14,8 @@ for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8
 // (the new secret key first, the legacy service_role key until it is retired)
 // and its supabaseFetch (a secret key travels on `apikey` only, never repeated
 // on `Authorization: Bearer`; a legacy JWT key goes out as it always has).
-const secretKey = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+// Trimmed before the fallback, so a blank new variable does not mask the legacy one.
+const secretKey = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || ''
 const keyOnApikeyOnly = (input, init) => {
   const headers = new Headers(init?.headers)
   if (secretKey.startsWith('sb_secret_') && headers.get('Authorization') === `Bearer ${secretKey}`) {

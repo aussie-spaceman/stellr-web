@@ -9,17 +9,19 @@
 // keys", Known limitations). The owner steps for the switch are in
 // docs/RUNBOOK-supabase-api-keys.md.
 //
-// Every reader of a Supabase key goes through this module, so a deployment can
-// move to the new keys by setting the new variables, and back by unsetting them:
+// Every reader of a Supabase key goes through this module, and it reads two
+// variables only:
 //
 //   public (browser-safe)   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-//                           falls back to NEXT_PUBLIC_SUPABASE_ANON_KEY (legacy)
 //   elevated (server only)  SUPABASE_SECRET_KEY
-//                           falls back to SUPABASE_SERVICE_ROLE_KEY (legacy)
 //
-// Either key format works under either name, so nothing here depends on a key
-// being a JWT. An empty variable counts as unset: GitHub Actions turns a missing
-// secret into an empty string, and that must not mask the legacy fallback.
+// The legacy names (NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY)
+// were a fallback until 3 Nov 2026 and are no longer read (runbook step 11);
+// the legacy keys are disabled on both Supabase projects. A legacy JWT VALUE in
+// a new name is still recognised, so a service_role JWT pasted into the public
+// slot (or an anon JWT into the secret slot) is still caught, and nothing here
+// depends on a key being a JWT. An empty variable counts as unset: GitHub
+// Actions turns a missing secret into an empty string.
 //
 // No dependencies, on purpose: proxy.ts (via lib/crawlers.ts), the browser
 // client, scripts and e2e fixtures all import it. scripts/verify-deletion-
@@ -33,8 +35,8 @@
 
 export type SupabaseKeyKind = 'publishable' | 'secret' | 'legacy-jwt' | 'unrecognised'
 
-export const PUBLIC_KEY_VARS = 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or legacy NEXT_PUBLIC_SUPABASE_ANON_KEY)'
-export const SECRET_KEY_VARS = 'SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY)'
+export const PUBLIC_KEY_VARS = 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
+export const SECRET_KEY_VARS = 'SUPABASE_SECRET_KEY'
 
 /**
  * The format of a key, from its prefix and shape alone (no decoding). A legacy
@@ -73,30 +75,21 @@ export function supabaseKeyRole(key: string): string | null {
 
 type Picked = { name: string; key: string }
 
-function pick(primary: [string, string | undefined], legacy: [string, string | undefined]): Picked | null {
-  for (const [name, raw] of [primary, legacy]) {
-    // Trimmed: a value pasted into a dashboard with a trailing newline is the
-    // commonest way a correct key gets rejected.
-    const key = raw?.trim()
-    if (key) return { name, key }
-  }
-  return null
+function pick(name: string, raw: string | undefined): Picked | null {
+  // Trimmed: a value pasted into a dashboard with a trailing newline is the
+  // commonest way a correct key gets rejected.
+  const key = raw?.trim()
+  return key ? { name, key } : null
 }
 
-// The process.env.NEXT_PUBLIC_* reads must stay literal. Next inlines only
+// The process.env.NEXT_PUBLIC_* read must stay literal. Next inlines only
 // literal references into the browser bundle; a computed name is undefined there.
 function pickPublic(): Picked | null {
-  return pick(
-    ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY],
-    ['NEXT_PUBLIC_SUPABASE_ANON_KEY', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY],
-  )
+  return pick('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
 }
 
 function pickSecret(): Picked | null {
-  return pick(
-    ['SUPABASE_SECRET_KEY', process.env.SUPABASE_SECRET_KEY],
-    ['SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY],
-  )
+  return pick('SUPABASE_SECRET_KEY', process.env.SUPABASE_SECRET_KEY)
 }
 
 /** 'secret', 'publishable', or 'legacy anon' / 'legacy service_role': for messages. */
@@ -116,7 +109,8 @@ export class SupabaseKeySlotError extends Error {
 }
 
 /**
- * The low-privilege key (publishable, or legacy anon), or undefined when unset.
+ * The low-privilege key (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY), or undefined
+ * when unset.
  *
  * Throws when the variable holds an elevated key (a secret key, or the legacy
  * service_role JWT): a NEXT_PUBLIC_ value ships in the browser bundle, so that
@@ -134,8 +128,8 @@ export function supabasePublicKey(): string | undefined {
 }
 
 /**
- * The elevated key (secret, or legacy service_role), or undefined when unset.
- * Server code and scripts only.
+ * The elevated key (SUPABASE_SECRET_KEY), or undefined when unset. Server code
+ * and scripts only.
  *
  * Throws when the variable holds a low-privilege key (the publishable key, or
  * the legacy anon JWT). That client would run as `anon` instead of bypassing
@@ -189,7 +183,7 @@ export function supabaseFetch(input: RequestInfo | URL, init?: RequestInit): Pro
 }
 
 export type SupabaseKeySlot = {
-  /** The variable the key was read from, or null when neither is set. */
+  /** The variable the key was read from, or null when it is unset. */
   variable: string | null
   kind: SupabaseKeyKind | 'unconfigured'
   /** The role the key acts as ('anon' | 'service_role' | …), or null when unknown. */
@@ -198,10 +192,10 @@ export type SupabaseKeySlot = {
 
 /**
  * What this deployment holds in each slot: kind, role and variable name, never
- * the value. Lets the owner confirm, from inside a deployment, that it runs on
- * the new keys before the legacy ones are disabled (`vercel env pull` redacts
- * secrets, so nothing outside the deployment can tell), and that the public
- * slot says `anon` and the secret slot `service_role`. Never throws.
+ * the value. Lets the owner confirm, from inside a deployment, that it holds
+ * the new keys (`vercel env pull` redacts secrets, so nothing outside the
+ * deployment can tell), and that the public slot says `anon` and the secret
+ * slot `service_role`. Never throws.
  */
 export function supabaseKeySlots(): { public: SupabaseKeySlot; secret: SupabaseKeySlot } {
   const describe = (picked: Picked | null): SupabaseKeySlot =>

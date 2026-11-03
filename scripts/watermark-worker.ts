@@ -9,7 +9,7 @@
  * and overwrites the same path in place.
  *
  * Env (from .env.local or the environment):
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY         (required; legacy SUPABASE_SERVICE_ROLE_KEY also accepted)
+ *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY         (required)
  *   FFMPEG_PATH                                           (optional; else ffmpeg-static / system ffmpeg)
  *
  *   npx tsx scripts/watermark-worker.ts            # continuous: poll every 15s

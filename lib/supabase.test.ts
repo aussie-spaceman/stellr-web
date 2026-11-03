@@ -15,9 +15,10 @@ const b64url = (s: string) => Buffer.from(s).toString('base64url')
 const fakeLegacyKey = (role: string) =>
   `${b64url('{"alg":"HS256","typ":"JWT"}')}.${b64url(JSON.stringify({ iss: 'supabase', role }))}.TESTONLY`
 
-// S0 key migration: the server clients take the secret key (or the legacy
-// service_role key while it exists) through lib/supabase-keys.ts. These run a
-// real supabase-js query against a stubbed fetch and read what went out.
+// S0 key migration: the server clients take SUPABASE_SECRET_KEY through
+// lib/supabase-keys.ts; the legacy SUPABASE_SERVICE_ROLE_KEY is no longer read
+// (runbook step 11, 3 Nov 2026). These run a real supabase-js query against a
+// stubbed fetch and read what went out.
 describe('server client keys (S0)', () => {
   const SECRET = 'sb_secret_TESTONLY'
   const LEGACY_SERVICE = fakeLegacyKey('service_role')
@@ -53,11 +54,10 @@ describe('server client keys (S0)', () => {
   it.each([
     ['supabaseServer', supabaseServer],
     ['supabaseServerTyped', supabaseServerTyped],
-  ])('%s falls back to the legacy service_role key, on both headers as before, when only the legacy name is set', async (_name, make) => {
+  ])('%s is unconfigured, before any request, when only the legacy name is set', (_name, make) => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
-    await make().from('registrations').select('id')
-    expect(sent[0].get('apikey')).toBe(LEGACY_SERVICE)
-    expect(sent[0].get('Authorization')).toBe(`Bearer ${LEGACY_SERVICE}`)
+    expect(() => make()).toThrow(/Supabase server env vars not configured \(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY\)/)
+    expect(sent).toHaveLength(0)
   })
 
   it('keeps a secret key off Authorization on Storage calls too', async () => {
@@ -68,8 +68,9 @@ describe('server client keys (S0)', () => {
     expect(storage.get('Authorization')).toBeNull()
   })
 
-  it('names both variables when neither is set', () => {
-    expect(() => supabaseServer()).toThrow(/SUPABASE_SECRET_KEY \(or legacy SUPABASE_SERVICE_ROLE_KEY\)/)
+  it('names only the new variable when it is unset', () => {
+    expect(() => supabaseServer()).toThrow(/SUPABASE_SECRET_KEY\)$/)
+    expect(() => supabaseServer()).not.toThrow(/SERVICE_ROLE/)
   })
 
   it('refuses a publishable key in the secret slot before any request', () => {
@@ -85,8 +86,8 @@ describe('server client keys (S0)', () => {
   })
 })
 
-// The public server-side client (supabase()): publishable key, or the legacy
-// anon key while only the legacy name is set (today's Vercel config).
+// The public server-side client (supabase()): NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+// only; a legacy-only env is unconfigured.
 describe('public client keys (S0)', () => {
   const PUBLISHABLE = 'sb_publishable_TESTONLY'
   const LEGACY_ANON = fakeLegacyKey('anon')
@@ -115,20 +116,20 @@ describe('public client keys (S0)', () => {
     expect(sent[0].get('Authorization')).toBeNull()
   })
 
-  it('works with only the legacy anon name set, sending it on both headers as before', async () => {
+  it('is unconfigured, before any request, when only the legacy anon name is set', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    await supabase().from('events').select('id')
-    expect(sent[0].get('apikey')).toBe(LEGACY_ANON)
-    expect(sent[0].get('Authorization')).toBe(`Bearer ${LEGACY_ANON}`)
+    expect(() => supabase()).toThrow(/Supabase env vars not configured \(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\)/)
+    expect(sent).toHaveLength(0)
   })
 
-  it('refuses a legacy service_role key in the public slot', () => {
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', fakeLegacyKey('service_role'))
-    expect(() => supabase()).toThrow(/NEXT_PUBLIC_SUPABASE_ANON_KEY holds a Supabase legacy service_role key/)
+  it('refuses a legacy service_role JWT in the public slot', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', fakeLegacyKey('service_role'))
+    expect(() => supabase()).toThrow(/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY holds a Supabase legacy service_role key/)
   })
 
-  it('names both variables when neither is set', () => {
-    expect(() => supabase()).toThrow(/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \(or legacy NEXT_PUBLIC_SUPABASE_ANON_KEY\)/)
+  it('names only the new variable when it is unset', () => {
+    expect(() => supabase()).toThrow(/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\)$/)
+    expect(() => supabase()).not.toThrow(/ANON_KEY/)
   })
 })
 

@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/database.types'
 import { PUBLIC_KEY_VARS, SECRET_KEY_VARS, supabaseFetch, supabasePublicKey, supabaseSecretKey } from '@/lib/supabase-keys'
 
-// Keys come from lib/supabase-keys.ts, which reads the new publishable/secret
-// variables and falls back to the legacy anon/service_role ones. supabaseFetch
+// Keys come from lib/supabase-keys.ts, which reads the publishable/secret
+// variables only (the legacy-name fallback was removed 3 Nov 2026). supabaseFetch
 // keeps a publishable or secret key off `Authorization: Bearer` (supabase-js
 // would repeat it there); a legacy JWT key goes out exactly as it always has.
 

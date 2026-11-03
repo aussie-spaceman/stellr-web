@@ -49,8 +49,8 @@
  * sequence that is no longer in the set below is archived.
  *
  * Prerequisites:
- *   .env.local with NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SECRET_KEY (or legacy
- *   SUPABASE_SERVICE_ROLE_KEY) pointing at the target environment, and
+ *   .env.local with NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SECRET_KEY
+ *   pointing at the target environment, and
  *   migration 136 applied there.
  *
  * Run:

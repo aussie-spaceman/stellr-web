@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// S0 key migration: before the legacy Supabase keys are disabled, the owner
-// checks here which key format the deployment actually holds. `vercel env pull`
+// S0 key migration: the owner checks here which key format the deployment
+// actually holds. `vercel env pull`
 // redacts secrets, so only the deployment can say. Kinds, roles and variable
 // names only: a key value must never appear in the response.
 
@@ -48,15 +48,17 @@ describe('GET /api/admin/health/integrations — supabaseKeys', () => {
     for (const value of [PUBLISHABLE, SECRET, LEGACY_SERVICE]) expect(text).not.toContain(value)
   })
 
-  it('shows a deployment still on the legacy keys (today), with each role', async () => {
+  // Since runbook step 11 (3 Nov 2026) the legacy names are not read, so a
+  // deployment that only has them shows both slots unconfigured.
+  it('shows a legacy-only deployment as unconfigured, never echoing the values', async () => {
     authMock.mockResolvedValue({ userId: 'u-admin', sessionClaims: { metadata: { role: 'admin' } } })
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
 
     const text = await (await GET()).text()
     expect(JSON.parse(text).supabaseKeys).toEqual({
-      public: { variable: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', kind: 'legacy-jwt', role: 'anon' },
-      secret: { variable: 'SUPABASE_SERVICE_ROLE_KEY', kind: 'legacy-jwt', role: 'service_role' },
+      public: { variable: null, kind: 'unconfigured', role: null },
+      secret: { variable: null, kind: 'unconfigured', role: null },
     })
     for (const value of [LEGACY_ANON, LEGACY_SERVICE]) expect(text).not.toContain(value)
   })

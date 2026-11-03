@@ -11,31 +11,36 @@ const fakeLegacyKey = (role: string) =>
   `${b64url('{"alg":"HS256","typ":"JWT"}')}.${b64url(JSON.stringify({ iss: 'supabase', role }))}.TESTONLY`
 
 describe('secretInPublicSupabaseKey', () => {
-  it('names the public variable that holds a secret key', () => {
+  it('names the public variable when it holds a secret key', () => {
     expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_TESTONLY' }))
       .toBe('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
-    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: ' sb_secret_TESTONLY\n' }))
-      .toBe('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ' sb_secret_TESTONLY\n' }))
+      .toBe('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
   })
 
-  it('names the public variable that holds the legacy service_role key', () => {
-    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('service_role') }))
-      .toBe('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  it('names the public variable when it holds the legacy service_role key', () => {
     expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `${fakeLegacyKey('service_role')}\n` }))
       .toBe('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
   })
 
   it('lets publishable, legacy anon and placeholder keys through', () => {
     expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_TESTONLY' })).toBeNull()
-    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('anon') })).toBeNull()
-    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci.eyJyb2xl.YW5vbg' })).toBeNull()
+    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: fakeLegacyKey('anon') })).toBeNull()
+    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'eyJhbGci.eyJyb2xl.YW5vbg' })).toBeNull()
     expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'placeholder-publishable-key' })).toBeNull()
     expect(secretInPublicSupabaseKey({})).toBeNull()
   })
 
-  it('ignores a secret key in the server-only variables', () => {
+  // Step 11 (3 Nov 2026): the app reads NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY only,
+  // and Next inlines only the variables code references, so a stray legacy
+  // NEXT_PUBLIC_SUPABASE_ANON_KEY never reaches the bundle.
+  it('checks only the publishable variable, not the retired legacy one', () => {
+    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: 'sb_secret_TESTONLY' })).toBeNull()
+    expect(secretInPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('service_role') })).toBeNull()
+  })
+
+  it('ignores a secret key in the server-only variable', () => {
     expect(secretInPublicSupabaseKey({ SUPABASE_SECRET_KEY: 'sb_secret_TESTONLY' })).toBeNull()
-    expect(secretInPublicSupabaseKey({ SUPABASE_SERVICE_ROLE_KEY: fakeLegacyKey('service_role') })).toBeNull()
   })
 })
 
@@ -60,13 +65,13 @@ describe('next.config.mjs at load time', () => {
     expect((failure as Error).message).not.toContain('TESTONLY')
   })
 
-  it('refuses to load with the legacy service_role key in the legacy public variable', async () => {
-    await expect(load({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('service_role') }))
-      .rejects.toThrow(/^NEXT_PUBLIC_SUPABASE_ANON_KEY holds a Supabase secret key/)
+  it('refuses to load with the legacy service_role key in the public variable', async () => {
+    await expect(load({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: fakeLegacyKey('service_role') }))
+      .rejects.toThrow(/^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY holds a Supabase secret key/)
   })
 
-  it('loads with only the legacy anon key set (today, on both Vercel projects)', async () => {
-    const config = await load({ NEXT_PUBLIC_SUPABASE_ANON_KEY: fakeLegacyKey('anon') })
+  it('ignores the retired legacy public variable (no longer read)', async () => {
+    const config = await load({ NEXT_PUBLIC_SUPABASE_ANON_KEY: 'sb_secret_TESTONLY' })
     expect(config.default).toBeDefined()
   })
 

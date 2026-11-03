@@ -6,6 +6,7 @@ import {
   isGrandfathered,
   MIGRATIONS_DIR,
   GRANDFATHERED_PREEXISTING,
+  FROZEN_RLS_HELPERS,
 } from '../scripts/check-migration-security.mjs'
 
 // deep review DB-N3: a SECURITY DEFINER function bypasses RLS and is EXECUTE-able
@@ -120,17 +121,54 @@ describe('check-migration-security (DB-N3)', () => {
     expect(offenders).toEqual([])
   })
 
-  it('grandfathers the frozen history (sequential ≤ 148 and the named pre-existing files)', () => {
+  it('grandfathers only the sequential frozen history (≤ 148), no timestamped file', () => {
     expect(isGrandfathered('118_security_advisor_warn_hardening.sql')).toBe(true)
-    expect(isGrandfathered('20261002180802_esign_native_engine.sql')).toBe(true)
-    // ...but NOT a brand-new timestamped migration.
+    // DB-N3: these used to be grandfathered; 20261102220634 sealed them instead.
+    expect(GRANDFATHERED_PREEXISTING).toEqual([])
+    expect(isGrandfathered('20261002180802_esign_native_engine.sql')).toBe(false)
+    expect(isGrandfathered('20261002235036_post_event_survey.sql')).toBe(false)
     expect(isGrandfathered(NEW)).toBe(false)
   })
 
-  it('every grandfathered-pre-existing entry still exists (no stale exemption hiding a gap)', () => {
-    const present = new Set(readMigrationFiles(MIGRATIONS_DIR).map((f) => f.name))
-    for (const name of GRANDFATHERED_PREEXISTING) {
-      expect(present.has(name), `${name} is grandfathered but no longer exists`).toBe(true)
+  it('flags the DB-N3 functions when the sealing migration is absent', () => {
+    // Proves the repo is green because of the seal, not because nothing is checked.
+    const corpus = readMigrationFiles(MIGRATIONS_DIR).filter(
+      (f) => f.name !== '20261102220634_seal_definer_functions_db_n3.sql',
+    )
+    const flagged = scanMigrations(corpus).offenders.map((o) => o.fn)
+    for (const fn of [
+      'public.survey_purge_person',
+      'public.esign_purge_audit',
+      'public.esign_append_audit',
+      'public.survey_claim_email',
+      'public.survey_current_member_id',
+    ]) {
+      expect(flagged, fn).toContain(fn)
     }
+  })
+
+  it('accepts a frozen RLS helper only once PUBLIC and anon are revoked', () => {
+    const frozen = {
+      name: '20261002235036_post_event_survey.sql',
+      sql: `CREATE OR REPLACE FUNCTION public.survey_current_member_id()
+        RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER AS $$ SELECT NULL::uuid $$;`,
+    }
+    expect(Object.keys(FROZEN_RLS_HELPERS)).toContain('public.survey_current_member_id')
+    // Still anon-reachable: flagged.
+    expect(scanMigrations([frozen]).offenders).toHaveLength(1)
+    // PUBLIC only (anon keeps its direct grant): flagged.
+    expect(
+      scanMigrations([
+        frozen,
+        { name: NEW, sql: 'REVOKE EXECUTE ON FUNCTION public.survey_current_member_id() FROM PUBLIC;' },
+      ]).offenders,
+    ).toHaveLength(1)
+    // PUBLIC and anon gone, authenticated kept: accepted.
+    expect(
+      scanMigrations([
+        frozen,
+        { name: NEW, sql: 'REVOKE EXECUTE ON FUNCTION public.survey_current_member_id() FROM PUBLIC, anon;' },
+      ]).offenders,
+    ).toEqual([])
   })
 })

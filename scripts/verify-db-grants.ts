@@ -14,17 +14,25 @@
  *   FAIL  → 200 (anon can still execute definer functions)
  *   Anything else (a 401 for a bad key, say) is inconclusive, never a pass.
  *
- * Works with a legacy anon JWT or a new sb_publishable_… key.
+ * Works with a legacy anon JWT or a new sb_publishable_… key. The key is read
+ * through lib/supabase-keys.ts (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, falling
+ * back to the legacy NEXT_PUBLIC_SUPABASE_ANON_KEY), which also refuses an
+ * elevated key in the public slot.
  *
  * For the full picture run supabase/tests/security_checks.sql (zero rows = pass).
  *
  *   npx tsx scripts/verify-db-grants.ts
- *   SUPABASE_URL=… SUPABASE_ANON_KEY=… npx tsx scripts/verify-db-grants.ts   # another project
+ *   NEXT_PUBLIC_SUPABASE_URL=… NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=… npx tsx scripts/verify-db-grants.ts   # another project
+ *
+ * dotenv never overrides a variable already set in the shell, so the two set
+ * on the command line win over .env.local. (SUPABASE_URL, if set, still takes
+ * precedence over NEXT_PUBLIC_SUPABASE_URL for the URL.)
  */
 
 import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
+import { PUBLIC_KEY_VARS, supabaseApiHeaders, supabasePublicKey } from '../lib/supabase-keys'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
@@ -41,16 +49,17 @@ function classifyProbe(status: number, body: string): 'pass' | 'fail' | 'inconcl
 
 async function main() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // Read at call time: the import above runs before dotenv loads .env.local.
+  const anon = supabasePublicKey()
   if (!url || !anon) {
-    console.error('❌ set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (or SUPABASE_URL / SUPABASE_ANON_KEY)')
+    console.error(`❌ set NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL) and ${PUBLIC_KEY_VARS}`)
     process.exit(2)
   }
 
   // A legacy anon key is a JWT and goes in Authorization too; a publishable
-  // key is not a JWT, and sending it as a Bearer token would 401 for the wrong reason.
-  const headers: Record<string, string> = { apikey: anon, 'Content-Type': 'application/json' }
-  if (anon.startsWith('eyJ')) headers.Authorization = `Bearer ${anon}`
+  // key is not a JWT, and sending it as a Bearer token would 401 for the wrong
+  // reason. supabaseApiHeaders makes that call.
+  const headers: Record<string, string> = { ...supabaseApiHeaders(anon), 'Content-Type': 'application/json' }
 
   const res = await fetch(`${url.replace(/\/$/, '')}/rest/v1/rpc/${PROBE_FN}`, {
     method: 'POST',

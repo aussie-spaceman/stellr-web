@@ -86,6 +86,51 @@ export function imagesConfig(env = process.env) {
 // preview deployment has one host, and both URL variables point at it.
 const APP_HOST = new URL(process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org').host
 
+/**
+ * True for the legacy service_role key: a JWT whose `role` claim says so. Read
+ * without verifying the signature, only to catch it in a public slot, where it
+ * looks the same by prefix as the anon key.
+ *
+ * @param {string} value
+ */
+function isLegacyServiceRoleKey(value) {
+  if (!/^eyJ[\w-]*\.[\w-]+\.[\w-]+$/.test(value)) return false
+  try {
+    return JSON.parse(Buffer.from(value.split('.')[1], 'base64url').toString('utf8'))?.role === 'service_role'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The public Supabase key variable that holds an elevated key (a secret key,
+ * `sb_secret_…`, or the legacy service_role JWT), or null. Next copies
+ * NEXT_PUBLIC_ values into the browser bundle at build time, so such a key
+ * pasted into the public slot would be published with the site. Names the
+ * variable, never the value. Exported for next-config-supabase-keys.test.ts;
+ * lib/supabase-keys.ts holds the runtime half. See
+ * docs/RUNBOOK-supabase-api-keys.md.
+ *
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function secretInPublicSupabaseKey(env = process.env) {
+  for (const name of ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']) {
+    const value = (env[name] ?? '').trim()
+    if (value.startsWith('sb_secret_') || isLegacyServiceRoleKey(value)) return name
+  }
+  return null
+}
+
+const leakedSupabaseKey = secretInPublicSupabaseKey()
+if (leakedSupabaseKey) {
+  throw new Error(
+    `${leakedSupabaseKey} holds a Supabase secret key (sb_secret_… or the legacy service_role key), ` +
+    'and NEXT_PUBLIC_ values ship to every browser. Set the publishable key there instead. ' +
+    'If this value was ever deployed, treat it as leaked: delete that secret key in Supabase, or for the ' +
+    'legacy service_role key, move to secret keys and disable the legacy keys. See docs/RUNBOOK-supabase-api-keys.md.',
+  )
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.

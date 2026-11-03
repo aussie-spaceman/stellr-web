@@ -27,7 +27,8 @@ async function main() {
   const { createClient } = await import('@supabase/supabase-js')
   const { nativeProvider } = await import('../lib/esign/providers/native')
   const { signNowUrlFor } = await import('../lib/esign/outbox')
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  const { supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
+  const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 
   const [kind, arg] = process.argv.slice(2)
   if (kind === 'link') {

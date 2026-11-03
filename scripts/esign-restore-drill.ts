@@ -34,12 +34,13 @@ async function main() {
   const { decryptBackup } = await import('../lib/esign/backup-crypto')
   const { driveBackupStore } = await import('../lib/esign/backup-store')
   const { backupName } = await import('../lib/esign/replicate')
+  const { SECRET_KEY_VARS, supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  const key = supabaseSecretKey()
+  if (!url || !key) throw new Error(`NEXT_PUBLIC_SUPABASE_URL and ${SECRET_KEY_VARS} are required`)
   console.log(`Database: ${new URL(url).host}`)
-  const db = createClient(url, key, { auth: { persistSession: false } })
+  const db = createClient(url, key, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const store = driveBackupStore()
   const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 

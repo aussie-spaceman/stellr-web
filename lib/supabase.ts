@@ -1,21 +1,33 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/database.types'
+import { PUBLIC_KEY_VARS, SECRET_KEY_VARS, supabaseFetch, supabasePublicKey, supabaseSecretKey } from '@/lib/supabase-keys'
+
+// Keys come from lib/supabase-keys.ts, which reads the new publishable/secret
+// variables and falls back to the legacy anon/service_role ones. supabaseFetch
+// keeps a publishable or secret key off `Authorization: Bearer` (supabase-js
+// would repeat it there); a legacy JWT key goes out exactly as it always has.
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY)')
-  return createClient(url, key)
+  const key = supabasePublicKey()
+  if (!url || !key) throw new Error(`Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL, ${PUBLIC_KEY_VARS})`)
+  return createClient(url, key, { global: { fetch: supabaseFetch } })
 }
 
 export const supabase = getSupabaseClient
 
-export function supabaseServer() {
+function serverEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) throw new Error('Supabase server env vars not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
-  return createClient(url, serviceKey, {
+  const secretKey = supabaseSecretKey()
+  if (!url || !secretKey) throw new Error(`Supabase server env vars not configured (NEXT_PUBLIC_SUPABASE_URL, ${SECRET_KEY_VARS})`)
+  return { url, secretKey }
+}
+
+export function supabaseServer() {
+  const { url, secretKey } = serverEnv()
+  return createClient(url, secretKey, {
     auth: { persistSession: false },
+    global: { fetch: supabaseFetch },
   })
 }
 
@@ -30,10 +42,9 @@ export function supabaseServer() {
 // lib/database.types.ts for every table with `supabase gen types` and thread
 // the generic through; that needs DB access this change does not have.
 export function supabaseServerTyped() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) throw new Error('Supabase server env vars not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
-  return createClient<Database>(url, serviceKey, {
+  const { url, secretKey } = serverEnv()
+  return createClient<Database>(url, secretKey, {
     auth: { persistSession: false },
+    global: { fetch: supabaseFetch },
   })
 }

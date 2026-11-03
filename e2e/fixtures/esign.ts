@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 
 /**
  * Stellr signing test agreements, made fresh for each spec and removed after.
@@ -25,7 +26,7 @@ function db(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   // The suite never runs against production; this file refuses to even try.
   if (!url.includes(DEV_PROJECT_REF)) throw new Error(`esign e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
-  return createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 
 export interface TestAgreement {

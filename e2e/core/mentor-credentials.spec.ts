@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -24,7 +25,7 @@ function devDb() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   // Never against anything but the dev project.
   expect(url, 'mentor e2e fixtures run only against the dev database').toContain(DEV_PROJECT_REF)
-  return createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 
 async function containerId(): Promise<string> {

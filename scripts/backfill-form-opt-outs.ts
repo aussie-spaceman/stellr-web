@@ -37,9 +37,10 @@ async function main() {
   const { fetchEnvelopeFieldValues } = await import('../lib/esign/operations')
   const { formOptOuts } = await import('../lib/docusign-form-data')
   const { recordCredentialOptOutFromForm, OPT_OUT_ENVELOPE_COLUMNS } = await import('../lib/docusign-optout')
+  const { supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { persistSession: false } })
+  const db = createClient(url, supabaseSecretKey() ?? '', { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   console.log(`Supabase: ${new URL(url).host}`)
   console.log(`DocuSign: ${process.env.DOCUSIGN_BASE_PATH ?? '(unset — sandbox default)'}`)
   console.log(APPLY ? 'Mode:     APPLY\n' : 'Mode:     dry run (pass --apply to record)\n')

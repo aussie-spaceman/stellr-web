@@ -10,8 +10,21 @@ for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
 }
 
-const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+// Plain node cannot import lib/supabase-keys.ts, so this mirrors its fallback
+// (the new secret key first, the legacy service_role key until it is retired)
+// and its supabaseFetch (a secret key travels on `apikey` only, never repeated
+// on `Authorization: Bearer`; a legacy JWT key goes out as it always has).
+const secretKey = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+const keyOnApikeyOnly = (input, init) => {
+  const headers = new Headers(init?.headers)
+  if (secretKey.startsWith('sb_secret_') && headers.get('Authorization') === `Bearer ${secretKey}`) {
+    headers.delete('Authorization')
+  }
+  return fetch(input, { ...init, headers })
+}
+const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, secretKey, {
   auth: { persistSession: false },
+  global: { fetch: keyOnApikeyOnly },
 })
 
 const NOMATCH_UUID = '00000000-0000-0000-0000-000000000000'

@@ -79,8 +79,10 @@ dev writes to production.
 | Variable | Production | Dev | Where the dev value comes from |
 |---|---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | prod project | `https://xvxlhbxtiwxpopoqjygm.supabase.co` | Already known |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | prod anon | dev anon | Supabase dashboard → dev project → API keys |
-| `SUPABASE_SERVICE_ROLE_KEY` | prod service role | dev service role | Same page. **The single most dangerous variable to share** — full write access, bypasses every check in server code |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | prod legacy `anon` JWT (**in use today**) | dev legacy `anon` JWT (**in use today**) | Supabase dashboard → dev project → Settings → API Keys → *Legacy API keys*. Read only while `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is unset; removed once legacy keys are disabled (`docs/RUNBOOK-supabase-api-keys.md`) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | not set yet → prod `sb_publishable_…` | not set yet → dev `sb_publishable_…` | Same page, *Publishable and secret API keys*. Wins over the legacy variable once set |
+| `SUPABASE_SERVICE_ROLE_KEY` | prod legacy `service_role` JWT (**in use today**) | dev legacy `service_role` JWT (**in use today**) | Same page, *Legacy API keys*. Read only while `SUPABASE_SECRET_KEY` is unset. **The single most dangerous variable to share** — full write access, bypasses every check in server code |
+| `SUPABASE_SECRET_KEY` | not set yet → prod `sb_secret_…` named `vercel-prod` | not set yet → dev `sb_secret_…` named `vercel-dev` | Same page, *Publishable and secret API keys*. One named secret key per consumer (each Vercel project, CI, each laptop, the watermark worker): `docs/RUNBOOK-supabase-api-keys.md`. Same danger as the row above; wins over it once set |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_live_…` | `pk_test_…` | Clerk dashboard → Development instance |
 | `CLERK_SECRET_KEY` | `sk_live_…` | `sk_test_…` | Same |
 | `CLERK_WEBHOOK_SECRET` | prod endpoint | dev endpoint | New webhook on the dev instance pointing at the dev app URL |

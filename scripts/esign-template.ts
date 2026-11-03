@@ -98,11 +98,12 @@ async function convert(key: string, exportPath: string | undefined) {
 
 async function client() {
   const { createClient } = await import('@supabase/supabase-js')
+  const { SECRET_KEY_VARS, supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  const key = supabaseSecretKey()
+  if (!url || !key) throw new Error(`NEXT_PUBLIC_SUPABASE_URL and ${SECRET_KEY_VARS} are required`)
   console.log(`Target: ${new URL(url).host}`)
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient(url, key, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 
 async function publish(key: string) {

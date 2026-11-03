@@ -1,4 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { supabaseFetch, supabasePublicKey } from '@/lib/supabase-keys'
+
+// Both clients use the public key: the publishable key, or the legacy anon key
+// until it is retired (lib/supabase-keys.ts). Never a secret key: these run in
+// the browser, where Supabase refuses one anyway. supabaseFetch keeps the
+// publishable key off `Authorization: Bearer`, which carries the Clerk session
+// token or nothing.
 
 // Browser Supabase client authenticated with the current Clerk session token
 // (Supabase Third-Party Auth). Used ONLY for Realtime chat subscriptions so a
@@ -9,11 +16,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 // falls back to polling), so this is safe to ship ahead of the dashboard step.
 export function createBrowserSupabase(getToken: () => Promise<string | null>): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const key = supabasePublicKey()
   if (!url || !key) throw new Error('Supabase public env vars not configured')
   return createClient(url, key, {
     accessToken: async () => (await getToken().catch(() => null)) ?? null,
     realtime: { params: { eventsPerSecond: 5 } },
+    global: { fetch: supabaseFetch },
   })
 }
 
@@ -23,7 +31,7 @@ export function createBrowserSupabase(getToken: () => Promise<string | null>): S
 // instead of through a route handler capped at 4.5MB by the platform.
 export function createStorageUploadClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const key = supabasePublicKey()
   if (!url || !key) throw new Error('Supabase public env vars not configured')
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient(url, key, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }

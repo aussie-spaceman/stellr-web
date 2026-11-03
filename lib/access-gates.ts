@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { isMinorOn } from '@/lib/age'
+import { isKnownMinorOn, isMinorOn } from '@/lib/age'
+import { isAdultByRole, isRosterMinor } from '@/lib/roster-minor'
 import type { CommunityMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
 import { registrationPaid } from '@/lib/payment-status'
@@ -31,7 +32,31 @@ export function accessGatesEnforced(): boolean {
   return process.env.ACCESS_GATES_ENFORCE === 'true'
 }
 
-const isMinor = (dob: string | null) => isMinorOn(dob)
+// Who counts as a minor here (S0, 2 Nov 2026). lib/age now presumes a minor
+// when the date of birth is unknown, which is right for a student but locked
+// adults out: a mentor or volunteer signs at member level, so their participant
+// row has no envelope, and with a blank date of birth the DocuSign gate read
+// them as a minor with no consent. An adult by role is a minor here only when a
+// date of birth on file says so; anyone else with no usable one still is.
+
+/**
+ * The member-row version, for the enrolment gate. members.event_role is never
+ * null, but 'subscriber' is the placeholder the Clerk webhook and
+ * normalizeEventRole write before the member says who they are, and
+ * age_bracket likewise defaults to 'adult', so neither is evidence of age.
+ * Only an explicit adult role (teacher, mentor, volunteer, parent, donor,
+ * adult) outside the high-school bracket counts.
+ */
+function memberIsMinorForGate(m: {
+  date_of_birth?: string | null
+  event_role?: string | null
+  age_bracket?: string | null
+} | null): boolean {
+  const role = m?.event_role ?? null
+  const explicitAdult = role !== 'subscriber' && isAdultByRole(role) && m?.age_bracket !== 'high_school'
+  const dob = m?.date_of_birth ?? null
+  return explicitAdult ? isKnownMinorOn(dob) : isMinorOn(dob)
+}
 
 /**
  * Payment + DocuSign gate status for a member's access to a competition. Payment
@@ -45,7 +70,7 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
 
   const { data: parts } = await db
     .from('participants')
-    .select('id, date_of_birth, individual_payment_status, registrations!inner(event_slug, status, amount_due_cents, invoice_requested, invoice_paid_at)')
+    .select('id, date_of_birth, event_role, individual_payment_status, registrations!inner(event_slug, status, amount_due_cents, invoice_requested, invoice_paid_at)')
     .eq('member_id', member.id)
 
   type Reg = {
@@ -55,6 +80,7 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
   type Row = {
     id: string
     date_of_birth: string | null
+    event_role: string | null
     individual_payment_status: string | null
     registrations: Reg | Reg[] | null
   }
@@ -101,7 +127,10 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
     const status = envByParticipant.get(m.row.id)
     if (status === 'completed') return true
     if (status) return false // issued / partial / declined / voided → outstanding
-    return !isMinor(m.row.date_of_birth) // no envelope: required only for minors
+    // No envelope: required only for minors, by the roster's role-aware rule
+    // (today, as before), so a mentor or volunteer with a blank date of birth
+    // passes and a student with one does not.
+    return !isRosterMinor(m.row.date_of_birth, m.row.event_role)
   })
 
   return { payment, docusign, unlocked: payment && docusign }
@@ -123,7 +152,8 @@ export interface EnrollmentGateResult {
  *
  * "On file" reuses the DocuSign validity layer: any completed envelope linked to
  * the member (via their participant rows) counts as a participation agreement on
- * file. Adults always pass.
+ * file. Adults always pass: by date of birth, or, with none on file, by an
+ * explicit adult role (memberIsMinorForGate).
  */
 export async function reportEnrollmentGate(
   member: { id: string },
@@ -131,8 +161,14 @@ export async function reportEnrollmentGate(
 ): Promise<EnrollmentGateResult> {
   const db = supabaseServer()
 
-  const { data: m } = await db.from('members').select('date_of_birth').eq('id', member.id).maybeSingle()
-  const minor = isMinor((m as { date_of_birth?: string | null } | null)?.date_of_birth ?? null)
+  const { data: m } = await db
+    .from('members')
+    .select('date_of_birth, event_role, age_bracket')
+    .eq('id', member.id)
+    .maybeSingle()
+  const minor = memberIsMinorForGate(
+    m as { date_of_birth?: string | null; event_role?: string | null; age_bracket?: string | null } | null,
+  )
   if (!minor) return { minorAgreement: true, unlocked: true }
 
   // Any completed DocuSign envelope on file for this member → agreement satisfied.

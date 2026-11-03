@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { isKnownMinorOn, isMinorOn, onDate } from '@/lib/age'
+import { isRosterMinor } from '@/lib/roster-minor'
 import { deriveCompliance, loadComplianceRecordsByEmails, loadComplianceRecordsByMemberIds, type ComplianceState } from '@/lib/compliance'
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
@@ -136,18 +136,10 @@ export interface EventRosterData {
 }
 
 /**
- * Under 18 on the day of the event (today when the event has no date). With no
- * usable date of birth, a student row is presumed a minor (S0, 2 Nov 2026); an
- * adult by role (teacher, mentor, volunteer, chaperone) is not, since their
- * agreement is an adult's whatever the roster says about their age, and flagging
- * them as an outstanding minor consent would be wrong at the check-in desk.
+ * Re-exported from lib/roster-minor, where the rule now lives so the access
+ * gates (lib/access-gates) share it without loading this module.
  */
-export function isRosterMinor(dateOfBirth: string | null, eventRole: string | null, eventDate?: string): boolean {
-  const on = eventDate ? onDate(eventDate) : undefined
-  const kind = classifyAgreement(eventRole, null)
-  const adultRole = kind != null && kind !== 'minor'
-  return adultRole ? isKnownMinorOn(dateOfBirth, on) : isMinorOn(dateOfBirth, on)
-}
+export { isRosterMinor }
 
 export async function getEventRoster(eventSlug: string, eventDate?: string): Promise<EventRosterData> {
   const db = supabaseServer()

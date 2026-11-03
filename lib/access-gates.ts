@@ -142,9 +142,11 @@ export interface EnrollmentGateResult {
  * default (mirrors the competition gates): logs who would be blocked and returns
  * the status, but callers only DENY when accessGatesEnforced() is true.
  *
- * "On file" means a guardian's agreement: a completed `minor` envelope on one of
- * the member's participant rows or on the member row (guardianAgreementOnFile).
- * A minor's own adult, mentor or educator agreement does not count. Who is a minor goes by date of birth alone: the youngest usable one on
+ * "On file" means any completed agreement on one of the member's participant
+ * rows (any envelope_type, including a minor's own adult, mentor, educator or
+ * volunteer agreement; owner decision 3 Nov 2026), or a guardian's completed
+ * `minor` agreement on the member row (guardianAgreementOnFile). Who is a minor
+ * goes by date of birth alone: the youngest usable one on
  * the member row or any of their participant rows (memberAgeFacts), else a
  * minor is presumed. Role and age bracket are not consulted (see above).
  */
@@ -165,12 +167,24 @@ export async function reportEnrollmentGate(
   })
   if (!isMinorOn(facts.youngestDateOfBirth)) return { minorAgreement: true, unlocked: true }
 
-  // A guardian's signed agreement on file (3 Nov 2026): a completed `minor`
-  // agreement on one of their participant rows or, the membership agreement, on
-  // the member. Not any completed envelope: a child who signed an adult, mentor
-  // or educator agreement sent to their own email has given no guardian's
-  // consent. Same rule as the login guard (guardianAgreementOnFile).
-  const hasCompleted = await guardianAgreementOnFile(db, { memberId: member.id, participantIds: facts.participantIds })
+  // Owner decision (3 Nov 2026): any completed agreement on one of the member's
+  // participant rows counts, whatever its envelope_type, so a minor's own
+  // adult, mentor, educator or volunteer agreement keeps unlocking a seat. A
+  // guardian's `minor` agreement signed at member level (the membership
+  // agreement) also counts (guardianAgreementOnFile).
+  const pids = facts.participantIds
+  let hasCompleted = false
+  if (pids.length) {
+    const { count } = await db
+      .from('agreements')
+      .select('id', { count: 'exact', head: true })
+      .in('participant_id', pids)
+      .eq('status', 'completed')
+    hasCompleted = (count ?? 0) > 0
+  }
+  if (!hasCompleted) {
+    hasCompleted = await guardianAgreementOnFile(db, { memberId: member.id, participantIds: pids })
+  }
 
   if (!hasCompleted) {
     await logActivity({

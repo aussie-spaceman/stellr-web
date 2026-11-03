@@ -246,17 +246,18 @@ describe('reportEnrollmentGate', () => {
     expect((await enrol()).unlocked).toBe(false)
   })
 
-  it("does not count a minor's own adult, mentor or educator agreement as a guardian's", async () => {
-    // A child once sent an adult agreement to their own email and signed it has
-    // given no guardian's consent (lib/guardian-consent, guardianAgreementOnFile).
+  it("counts a minor's own adult, mentor, educator or volunteer agreement on a participant row", async () => {
+    // Owner decision (3 Nov 2026): any completed agreement on a participant row
+    // is an agreement on file, whatever its envelope_type.
     for (const type of ['adult', 'mentor', 'educator', 'volunteer']) {
       db = fakeSupabase({
         members: [memberRow('participant', MINOR_DOB, 'high_school')],
         participants: [dobRow(MINOR_DOB, 'p-9')],
         agreements: [{ id: 'a-1', participant_id: 'p-9', member_id: null, envelope_type: type, status: 'completed' }],
       })
-      expect(await enrol(), type).toEqual({ minorAgreement: false, unlocked: false })
+      expect(await enrol(), type).toEqual({ minorAgreement: true, unlocked: true })
     }
+    expect(logActivity).not.toHaveBeenCalled()
   })
 
   it("lets a minor enrol on a guardian's membership agreement signed at member level", async () => {

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { EventRosterData, PaymentPill, RosterGroup, RosterParticipant } from '@/lib/event-admin'
 import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES, type DocusignPill } from '@/lib/docusign-status'
 import type { ComplianceState } from '@/lib/compliance'
+import { displayGrade } from '@/lib/member-enums'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
@@ -466,7 +467,7 @@ export default function EventRoster({
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
                       <CardField label="Role">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</CardField>
                       <CardField label="School">{p.school_name ?? '—'}</CardField>
-                      <CardField label="Grade">{p.grade ?? '—'}</CardField>
+                      <CardField label="Grade">{displayGrade(p.grade) ?? '—'}</CardField>
                       <CardField label="Shirt">{p.t_shirt_size ?? '—'}</CardField>
                       <CardField label="Payment">{paymentCell(p)}</CardField>
                       <CardField label="DocuSign">{docusignCell(p)}</CardField>
@@ -532,7 +533,7 @@ export default function EventRoster({
                         </td>
                         <td className={`${TD} text-brand-muted`}>{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
                         <td className={`${TD} text-brand-muted`}>{p.school_name ?? '—'}</td>
-                        <td className={`${TD} text-brand-muted`}>{p.grade ?? '—'}</td>
+                        <td className={`${TD} text-brand-muted`}>{displayGrade(p.grade) ?? '—'}</td>
                         <td className={`${TD} text-brand-muted`}>{p.t_shirt_size ?? '—'}</td>
                         <td className={TD}>
                           {placeable(p) ? (

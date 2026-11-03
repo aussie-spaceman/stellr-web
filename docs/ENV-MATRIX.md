@@ -81,12 +81,6 @@ dev writes to production.
 | `NEXT_PUBLIC_SUPABASE_URL` | prod project | `https://xvxlhbxtiwxpopoqjygm.supabase.co` | Already known |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | prod `sb_publishable_…` | dev `sb_publishable_…` | Supabase dashboard → dev project → Settings → API Keys → *Publishable and secret API keys*. The only public Supabase key the app reads |
 | `SUPABASE_SECRET_KEY` | prod `sb_secret_…` named `vercel_prod` | dev `sb_secret_…` named `vercel_dev` | Same page. One named secret key per consumer (each Vercel project, CI, each laptop, the watermark worker): `docs/RUNBOOK-supabase-api-keys.md`. The only elevated Supabase key the app reads. **The single most dangerous variable to share** — full write access, bypasses every check in server code |
-
-The legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` were a
-fallback until **3 Nov 2026**, when the code stopped reading them (runbook step
-11) and the legacy JWT keys were disabled on both Supabase projects. Where
-either variable is still set (Vercel, GitHub secrets, an old `.env.local`), it
-is ignored and can be deleted.
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_live_…` | `pk_test_…` | Clerk dashboard → Development instance |
 | `CLERK_SECRET_KEY` | `sk_live_…` | `sk_test_…` | Same |
 | `CLERK_WEBHOOK_SECRET` | prod endpoint | dev endpoint | New webhook on the dev instance pointing at the dev app URL |
@@ -96,6 +90,13 @@ is ignored and can be deleted.
 | `NEXT_PUBLIC_SITE_URL` | unset → falls back to `https://www.stellreducation.org` | dev www URL | **Must be set on dev.** `proxy.ts` redirects public-only routes here; unset means dev bounces users to production |
 | `NEXT_PUBLIC_AUTH_APP_URL` | `https://app.stellreducation.org` | dev app URL | `APP_HOST` derives from this; it decides which host is the member app |
 | `CRON_SECRET` | prod secret | a *different* secret | Generate fresh. Sharing it lets a dev URL trigger prod-shaped calls |
+
+The legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` were a
+fallback until **3 Nov 2026**, when the code stopped reading them (runbook step
+11). The legacy JWT keys are disabled on both Supabase projects: dev at 23:27 UTC
+and production at 23:31 UTC on 3 Nov 2026, both confirmed refused at the
+gateway (runbook steps 9–10). Where either variable is still set (Vercel, GitHub
+secrets, an old `.env.local`), it is ignored and can be deleted.
 
 ## 3. Sandbox already, or safe to share
 

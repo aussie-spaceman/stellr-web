@@ -9,13 +9,17 @@ switch itself. **No production step before the Nevada event (6 Nov) is over,
 and that includes promoting this code to production:** it reaches dev when it
 merges, and production with the first promotion after the event.
 
-> **Status, 3 Nov 2026: step 11 done.** On the owner's instruction, with every
-> environment already holding the new publishable/secret keys, the legacy
-> fallback was removed from the code and the legacy keys are being disabled on
-> both projects. The app now reads `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and
-> `SUPABASE_SECRET_KEY` only; `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
-> `SUPABASE_SERVICE_ROLE_KEY` are ignored wherever they are still set. Steps
-> 1–10 below are kept as the record of how the switch was planned.
+> **Status, 3 Nov 2026: steps 9–11 done; the legacy keys are disabled.** On
+> the owner's instruction, with every environment already holding the new
+> publishable/secret keys, the legacy JWT keys were disabled on the dev project
+> at 23:27 UTC and on the production project at 23:31 UTC on 3 Nov 2026, and
+> both were confirmed refused at the Supabase gateway. The legacy fallback was
+> removed from the code the same day. The app now reads
+> `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` only;
+> `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are ignored
+> wherever they are still set. Steps 1–10 below are kept as the record of how
+> the switch was planned; the owner's instruction overrode the pre-Nevada
+> production hold and the soak periods in steps 8–10.
 
 ## What the code does
 
@@ -126,13 +130,16 @@ consumer, so every secret key in use has one named holder.
    `cron_runs` ledger: every cron should have run green at least once on the new
    keys, and the Vercel logs should show no new 5xx on `/api/cron/*` or
    `/api/webhooks/*`.
-9. **Disable legacy on dev.** First confirm every dev consumer from the
+9. **Disable legacy on dev. Done 3 Nov 2026, 23:27 UTC**; a legacy key was
+   confirmed refused at the gateway afterwards. First confirm every dev consumer from the
    inventory, then use Settings → API Keys → *Legacy API keys* → disable. Re-run
    step 4 and a CI run. Keep the GitHub secrets `DEV_SUPABASE_ANON_KEY` /
    `DEV_SUPABASE_SERVICE_ROLE_KEY` and the legacy variables on Vercel dev: the
    new names win, so they go unused, and they are the rollback. Delete them
    after a week clean.
-10. **Disable legacy on prod, last.** Do this only after dev has run clean
+10. **Disable legacy on prod, last. Done 3 Nov 2026, 23:31 UTC**, on the
+    owner's instruction ahead of the planned soak; a legacy key was confirmed
+    refused at the gateway afterwards. Do this only after dev has run clean
     without legacy keys for several days, and never inside an event freeze
     window. Keep the legacy variables on Vercel prod for a week, as in step 9,
     then delete them.
@@ -140,7 +147,8 @@ consumer, so every secret key in use has one named holder.
     `lib/supabase-keys.ts`, `ci.yml` (the e2e `||` fallbacks; the verify job's
     placeholders now use the new names), `next.config.mjs` (the build guard
     checks `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` only), `.env.local.example`,
-    scripts and docs, and the legacy keys are disabled on both projects. The
+    scripts and docs. The legacy keys are disabled on both projects (dev
+    23:27 UTC, production 23:31 UTC, 3 Nov 2026, steps 9–10). The
     legacy variables on Vercel, the `DEV_SUPABASE_ANON_KEY` /
     `DEV_SUPABASE_SERVICE_ROLE_KEY` GitHub secrets and any legacy lines left in
     a laptop's `.env.local` are now unused and can be deleted.

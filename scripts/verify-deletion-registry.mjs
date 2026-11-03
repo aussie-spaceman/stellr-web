@@ -4,9 +4,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 // Node 24 (engines.node) runs a dependency-free .ts file as is, so the key is
-// read and sent exactly as the app does it: secret key first, legacy
-// service_role as fallback, a low-privilege key refused, and a secret key kept
-// off `Authorization: Bearer`.
+// read and sent exactly as the app does it, through lib/supabase-keys.ts:
+// SUPABASE_SECRET_KEY only (no legacy fallback), a low-privilege key refused,
+// and a secret key kept off `Authorization: Bearer`.
 import { SECRET_KEY_VARS, supabaseFetch, supabaseSecretKey } from '../lib/supabase-keys.ts'
 
 // Minimal .env.local loader (script runs outside Next). Optional: a production

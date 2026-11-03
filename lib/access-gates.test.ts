@@ -196,7 +196,7 @@ describe('reportEnrollmentGate', () => {
     db = fakeSupabase({
       members: [memberRow('parent', ADULT_DOB)],
       participants: [dobRow(MINOR_DOB, 'p-9')],
-      agreements: [{ id: 'a-1', participant_id: 'p-9', status: 'completed' }],
+      agreements: [{ id: 'a-1', participant_id: 'p-9', envelope_type: 'minor', status: 'completed' }],
     })
     expect(await enrol()).toEqual({ minorAgreement: true, unlocked: true })
   })
@@ -229,8 +229,8 @@ describe('reportEnrollmentGate', () => {
       members: [memberRow('participant', null, 'high_school')],
       participants: [{ id: 'p-9', member_id: MEMBER_ID }],
       agreements: [
-        { id: 'a-1', participant_id: 'p-9', status: 'sent' },
-        { id: 'a-2', participant_id: 'p-9', status: 'completed' },
+        { id: 'a-1', participant_id: 'p-9', envelope_type: 'minor', status: 'sent' },
+        { id: 'a-2', participant_id: 'p-9', envelope_type: 'minor', status: 'completed' },
       ],
     })
     expect(await enrol()).toEqual({ minorAgreement: true, unlocked: true })
@@ -241,7 +241,38 @@ describe('reportEnrollmentGate', () => {
     db = fakeSupabase({
       members: [memberRow('subscriber', null)],
       participants: [{ id: 'p-9', member_id: MEMBER_ID }],
-      agreements: [{ id: 'a-1', participant_id: 'p-9', status: 'sent' }],
+      agreements: [{ id: 'a-1', participant_id: 'p-9', envelope_type: 'minor', status: 'sent' }],
+    })
+    expect((await enrol()).unlocked).toBe(false)
+  })
+
+  it("does not count a minor's own adult, mentor or educator agreement as a guardian's", async () => {
+    // A child once sent an adult agreement to their own email and signed it has
+    // given no guardian's consent (lib/guardian-consent, guardianAgreementOnFile).
+    for (const type of ['adult', 'mentor', 'educator', 'volunteer']) {
+      db = fakeSupabase({
+        members: [memberRow('participant', MINOR_DOB, 'high_school')],
+        participants: [dobRow(MINOR_DOB, 'p-9')],
+        agreements: [{ id: 'a-1', participant_id: 'p-9', member_id: null, envelope_type: type, status: 'completed' }],
+      })
+      expect(await enrol(), type).toEqual({ minorAgreement: false, unlocked: false })
+    }
+  })
+
+  it("lets a minor enrol on a guardian's membership agreement signed at member level", async () => {
+    db = fakeSupabase({
+      members: [memberRow('participant', MINOR_DOB, 'high_school')],
+      participants: [],
+      agreements: [{ id: 'a-1', participant_id: null, member_id: MEMBER_ID, envelope_type: 'minor', status: 'completed' }],
+    })
+    expect(await enrol()).toEqual({ minorAgreement: true, unlocked: true })
+  })
+
+  it("does not count another member's member-level agreement", async () => {
+    db = fakeSupabase({
+      members: [memberRow('participant', MINOR_DOB, 'high_school')],
+      participants: [],
+      agreements: [{ id: 'a-1', participant_id: null, member_id: 'member-2', envelope_type: 'minor', status: 'completed' }],
     })
     expect((await enrol()).unlocked).toBe(false)
   })

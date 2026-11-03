@@ -472,6 +472,34 @@ export async function getOrCreateCohortOffering(cohortId: string): Promise<strin
   return (created as { id: string } | null)?.id ?? null
 }
 
+/**
+ * Does this member already hold a live (reserved) booking for the cohort's
+ * offering? The enrol paths ask this only once they know the member is not on
+ * the active roster: a reserved booking with no roster row is a seat already
+ * paid for or drawn that staff have yet to settle, most often a paid seat the
+ * minor-agreement backstop held (rosterAfterPaidBooking). A second charge or
+ * credit draw for it must be refused. Read-only: never creates the offering.
+ * A read error counts as "yes", so a failed read cannot take a second payment.
+ */
+export async function hasReservedCohortBooking(memberId: string, cohortId: string): Promise<boolean> {
+  const { data: off, error: offErr } = await ent()
+    .from('offerings')
+    .select('id')
+    .eq('cohort_id', cohortId)
+    .eq('type', 'mentoring_cohort')
+    .maybeSingle()
+  if (offErr) return true
+  if (!off) return false
+  const { count, error } = await ent()
+    .from('bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('member_id', memberId)
+    .eq('offering_id', (off as { id: string }).id)
+    .eq('status', 'reserved')
+  if (error) return true
+  return (count ?? 0) > 0
+}
+
 /** {type, cohortId} an offering points at — for post-booking rostering decisions. */
 export async function getOfferingTarget(offeringId: string): Promise<{ type: string; cohortId: string | null } | null> {
   const { data } = await ent().from('offerings').select('type, cohort_id').eq('id', offeringId).maybeSingle()

@@ -1,7 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { isMinorOn } from '@/lib/age'
 import { isRosterMinor } from '@/lib/roster-minor'
-import { memberAgeFacts } from '@/lib/guardian-consent'
+import { guardianAgreementOnFile, memberAgeFacts } from '@/lib/guardian-consent'
 import type { CommunityMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
 import { registrationPaid } from '@/lib/payment-status'
@@ -142,9 +142,9 @@ export interface EnrollmentGateResult {
  * default (mirrors the competition gates): logs who would be blocked and returns
  * the status, but callers only DENY when accessGatesEnforced() is true.
  *
- * "On file" reuses the DocuSign validity layer: any completed envelope linked to
- * the member (via their participant rows) counts as a participation agreement on
- * file. Who is a minor goes by date of birth alone: the youngest usable one on
+ * "On file" means a guardian's agreement: a completed `minor` envelope on one of
+ * the member's participant rows or on the member row (guardianAgreementOnFile).
+ * A minor's own adult, mentor or educator agreement does not count. Who is a minor goes by date of birth alone: the youngest usable one on
  * the member row or any of their participant rows (memberAgeFacts), else a
  * minor is presumed. Role and age bracket are not consulted (see above).
  */
@@ -165,17 +165,12 @@ export async function reportEnrollmentGate(
   })
   if (!isMinorOn(facts.youngestDateOfBirth)) return { minorAgreement: true, unlocked: true }
 
-  // Any completed DocuSign envelope on file for this member → agreement satisfied.
-  const pids = facts.participantIds
-  let hasCompleted = false
-  if (pids.length) {
-    const { count } = await db
-      .from('agreements')
-      .select('id', { count: 'exact', head: true })
-      .in('participant_id', pids)
-      .eq('status', 'completed')
-    hasCompleted = (count ?? 0) > 0
-  }
+  // A guardian's signed agreement on file (3 Nov 2026): a completed `minor`
+  // agreement on one of their participant rows or, the membership agreement, on
+  // the member. Not any completed envelope: a child who signed an adult, mentor
+  // or educator agreement sent to their own email has given no guardian's
+  // consent. Same rule as the login guard (guardianAgreementOnFile).
+  const hasCompleted = await guardianAgreementOnFile(db, { memberId: member.id, participantIds: facts.participantIds })
 
   if (!hasCompleted) {
     await logActivity({

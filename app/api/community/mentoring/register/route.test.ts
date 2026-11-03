@@ -10,6 +10,9 @@ const h = vi.hoisted(() => ({
   enforced: false,
   unlocked: true,
   gate: vi.fn(),
+  reserved: false,
+  enrollFree: vi.fn(async () => ({ ok: true }) as { ok: boolean; reason?: string }),
+  enrollWithCredit: vi.fn(async () => ({ ok: true }) as { ok: boolean; reason?: string }),
   checkoutCreate: vi.fn(async () => ({ url: 'https://checkout.example/cs_1' })),
 }))
 
@@ -21,8 +24,8 @@ vi.mock('@/lib/community', () => ({
 vi.mock('@/lib/mentoring', () => ({
   getCohortFull: async () => ({ id: 'c1', name: 'Rocketry', isOpen: true, oneOffPriceCents: 12000, oneOffStripePriceId: null }),
   resolveCohortAccess: async () => ({ enrolled: false, kind: 'paid' }),
-  enrollFree: vi.fn(),
-  enrollWithCredit: vi.fn(),
+  enrollFree: (...args: unknown[]) => h.enrollFree(...(args as [])),
+  enrollWithCredit: (...args: unknown[]) => h.enrollWithCredit(...(args as [])),
 }))
 vi.mock('@/lib/access-gates', () => ({
   accessGatesEnforced: () => h.enforced,
@@ -46,7 +49,10 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 vi.mock('@/lib/stripe-customer', () => ({ ensureStripeCustomer: async () => 'cus_1' }))
-vi.mock('@/lib/entitlements', () => ({ getOrCreateCohortOffering: async () => 'off1' }))
+vi.mock('@/lib/entitlements', () => ({
+  getOrCreateCohortOffering: async () => 'off1',
+  hasReservedCohortBooking: async () => h.reserved,
+}))
 vi.mock('@/lib/academy-discount', () => ({
   getAcademyDiscountPercent: async () => 0,
   academyLineItemFromPrice: vi.fn(),
@@ -57,16 +63,42 @@ vi.mock('@/lib/guarantee', () => ({ GUARANTEE_CHECKOUT_TEXT: {} }))
 
 import { POST } from './route'
 
-const paid = () =>
+const register = (method: 'free' | 'credit' | 'paid') =>
   POST(new Request('http://localhost/api/community/mentoring/register', {
     method: 'POST',
-    body: JSON.stringify({ cohortId: 'c1', method: 'paid' }),
+    body: JSON.stringify({ cohortId: 'c1', method }),
   }))
+const paid = () => register('paid')
+
+// A held paid seat (3 Nov 2026): the backstop kept the member off the roster but
+// the ledger booking stands. No second charge or credit draw for the same cohort.
+const PENDING = { error: 'Your place in this cohort is already booked and waiting on our team. You do not need to pay again; we will be in touch.' }
+
+describe('POST /api/community/mentoring/register — a seat already booked but not rostered', () => {
+  it('refuses a second Checkout when a reserved booking exists', async () => {
+    h.reserved = true
+    const res = await paid()
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual(PENDING)
+    expect(h.checkoutCreate).not.toHaveBeenCalled()
+  })
+
+  it('gives the same answer when the credit or free path finds the booking', async () => {
+    for (const method of ['credit', 'free'] as const) {
+      const fn = method === 'credit' ? h.enrollWithCredit : h.enrollFree
+      fn.mockResolvedValueOnce({ ok: false, reason: 'booking-pending' })
+      const res = await register(method)
+      expect(res.status, method).toBe(409)
+      expect(await res.json(), method).toEqual(PENDING)
+    }
+  })
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
   h.enforced = false
   h.unlocked = true
+  h.reserved = false
 })
 
 describe('POST /api/community/mentoring/register — paid seat, minor-agreement gate', () => {

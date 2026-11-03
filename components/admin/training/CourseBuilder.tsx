@@ -267,50 +267,71 @@ function CredentialFields({ course: m, patch, busy }: { course: AdminModule; pat
 function CertTemplate({ moduleId, hasTemplate, onDone }: { moduleId: string; hasTemplate: boolean; onDone: () => void }) {
   const previewHref = `/api/admin/training/cert-preview?moduleId=${moduleId}`
   const [busy, setBusy] = useState(false)
+  // Shown, not dropped: a refused template must not look like nothing happened.
+  const [error, setError] = useState<string | null>(null)
   const upload = async (file: File) => {
     setBusy(true)
+    setError(null)
     try {
       // Bytes go browser → storage via a signed URL; only the path is posted.
       const stored = await uploadDirectToStorage(file, 'training-cert-template', { moduleId })
-      if ('error' in stored) return
+      if ('error' in stored) return setError(stored.error)
       const result = await postUpload(
         '/api/admin/community/training/cert-template',
         JSON.stringify({ moduleId, storagePath: stored.storagePath }),
         { headers: { 'Content-Type': 'application/json' } },
       )
-      if (!('error' in result)) onDone()
+      if ('error' in result) return setError(result.error)
+      onDone()
     } finally {
       setBusy(false)
     }
   }
   const clear = async () => {
     setBusy(true)
+    setError(null)
     try {
       const res = await fetch(`/api/admin/community/training/cert-template?moduleId=${moduleId}`, { method: 'DELETE' })
-      if (res.ok) onDone()
+      if (res.ok) return onDone()
+      const data = await res.json().catch(() => ({}))
+      setError(typeof data.error === 'string' ? data.error : 'Could not remove the template. Please try again.')
     } finally {
       setBusy(false)
     }
   }
   return (
-    <span className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft" title="Optional certificate template PDF — overlaid with the member's details. If unset, a default Stellr certificate is generated.">
-      Certificate
-      {hasTemplate ? (
-        <>
-          <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Template set</span>
-          <button onClick={clear} disabled={busy} aria-label="Remove certificate template" className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
-        </>
-      ) : (
-        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted hover:bg-brand-canvas focus-within:ring-2 focus-within:ring-primary-deep/30">
-          <Upload className="h-3 w-3" aria-hidden="true" /> {busy ? 'Uploading…' : 'Upload PDF'}
-          {/* sr-only, not display:none, so the picker is reachable by keyboard. */}
-          <input type="file" accept="application/pdf" className="sr-only" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-        </label>
-      )}
-      <a href={previewHref} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-brand-blue-bright hover:underline">
-        Preview
-      </a>
-    </span>
+    <>
+      <span className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft" title="Optional certificate template PDF — overlaid with the member's details. If unset, a default Stellr certificate is generated.">
+        Certificate
+        {hasTemplate ? (
+          <>
+            <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Template set</span>
+            <button onClick={clear} disabled={busy} aria-label="Remove certificate template" className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+          </>
+        ) : (
+          <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted hover:bg-brand-canvas focus-within:ring-2 focus-within:ring-primary-deep/30">
+            <Upload className="h-3 w-3" aria-hidden="true" /> {busy ? 'Uploading…' : 'Upload PDF'}
+            {/* sr-only, not display:none, so the picker is reachable by keyboard.
+                Cleared once read, so the same file can be picked again after a refusal. */}
+            <input
+              type="file"
+              accept="application/pdf"
+              className="sr-only"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) upload(file)
+              }}
+            />
+          </label>
+        )}
+        <a href={previewHref} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-brand-blue-bright hover:underline">
+          Preview
+        </a>
+      </span>
+      {error && <p role="alert" className="w-full text-xs text-danger">{error}</p>}
+    </>
   )
 }
 

@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { isMinorOn } from '@/lib/age'
+import { isLiteralStoragePath } from '@/lib/storage-path'
 
 /**
  * deep review MEM-10 (safeguarding / minors' PII): is this member a minor, for
@@ -30,15 +31,10 @@ export async function signedDownloadUrl(storagePath: string): Promise<string | n
   // deep review MEM-1: this helper is shared by every download route and signs
   // with the service_role key, so it fails closed on any path that could escape
   // its intended prefix. storage-js and the WHATWG URL parser normalise `..`/`//`
-  // before the request leaves; no legitimate caller passes those (every path is
-  // `<prefix>/<id>/<ts>-<safeName>` built server-side), so reject them outright.
-  if (
-    !storagePath ||
-    storagePath.includes('..') ||
-    storagePath.includes('//') ||
-    storagePath.includes('\\') ||
-    storagePath.startsWith('/')
-  ) {
+  // — and `%2e%2e`, `.\t.`, `./`, `?…` — before the request leaves; no
+  // legitimate caller passes those (every path is `<prefix>/<id>/<ts>-<safeName>`
+  // built server-side), so reject them outright (lib/storage-path).
+  if (!isLiteralStoragePath(storagePath)) {
     console.error('[community] refused suspicious storage path')
     return null
   }

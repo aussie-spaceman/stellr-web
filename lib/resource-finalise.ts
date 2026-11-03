@@ -1,6 +1,13 @@
 import { supabaseServer } from '@/lib/supabase'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
-import { claimUpload, discardUpload, replaceUpload, type UploadPurpose, type UploadDenied } from '@/lib/uploads'
+import {
+  claimUpload,
+  discardUpload,
+  replaceUpload,
+  type ClaimedUpload,
+  type UploadPurpose,
+  type UploadDenied,
+} from '@/lib/uploads'
 
 // Second half of a direct-to-storage upload that becomes a community_resources
 // row. The browser has already put the bytes in the bucket via a signed URL;
@@ -26,12 +33,20 @@ export async function finaliseStoredUpload(args: {
   contentHash?: string | null
   /** deep review MEM-13: forwarded to claimUpload to pin the namespace. */
   expectedPrefix?: string
+  /**
+   * What the caller's own claimUpload of this purpose and path returned, when
+   * it made one first (to hash the bytes, say). It isn't claimed again: that
+   * downloaded and sniffed up to 25MB a second time to learn nothing new.
+   */
+  claimed?: ClaimedUpload
 }): Promise<Finalised | UploadDenied> {
-  const claimed = await claimUpload({
-    purpose: args.purpose,
-    storagePath: args.storagePath,
-    expectedPrefix: args.expectedPrefix,
-  })
+  const claimed =
+    args.claimed ??
+    (await claimUpload({
+      purpose: args.purpose,
+      storagePath: args.storagePath,
+      expectedPrefix: args.expectedPrefix,
+    }))
   if ('error' in claimed) return claimed
 
   const { bucket } = claimed

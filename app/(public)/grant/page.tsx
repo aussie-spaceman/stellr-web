@@ -8,6 +8,7 @@ import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { QUOTES, mediaUrl } from '@/lib/media-manifest'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { buildFaqJsonLd } from '@/lib/structured-data'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 import {
   GRANT_AMOUNTS,
@@ -43,12 +44,7 @@ export default async function GrantPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(buildFaqJsonLd(FAQS.map((f) => ({ q: f.q, text: f.text })))),
-        }}
-      />
+      <JsonLd data={buildFaqJsonLd(FAQS.map((f) => ({ q: f.q, text: f.text })))} />
 
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-midnight text-white pt-16 pb-[70px] short:pt-6 short:pb-8 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_85%_-10%,#28306B_0%,#141A3D_45%,#0E1330_100%)]">

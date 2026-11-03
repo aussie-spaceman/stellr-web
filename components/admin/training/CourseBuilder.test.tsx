@@ -4,6 +4,12 @@ import userEvent from '@testing-library/user-event'
 import type { AdminModule, AdminSection } from '@/components/admin/community/TrainingManager'
 import { CourseBuilder } from './CourseBuilder'
 
+const { uploadDirectToStorage } = vi.hoisted(() => ({ uploadDirectToStorage: vi.fn() }))
+vi.mock('@/lib/upload-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/upload-client')>()),
+  uploadDirectToStorage,
+}))
+
 const refresh = vi.fn()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn() }),
@@ -110,5 +116,53 @@ describe('CourseBuilder curriculum — reordering without dragging (WCAG 2.5.7)'
     const draggable = container.querySelectorAll('[draggable="true"]')
     expect(draggable).toHaveLength(3)
     expect(within(draggable[0] as HTMLElement).getByRole('button', { name: 'Move Alpha down' })).toBeInTheDocument()
+  })
+})
+
+// A refused certificate template used to change nothing on screen: the server's
+// reason was dropped, at signing and when the route claimed the stored file.
+describe('CourseBuilder certificate template — refusals are shown', () => {
+  const STORED = { storagePath: 'training-cert/course-1/1-cert.pdf', fileName: 'cert.pdf', fileType: 'application/pdf', fileSize: 1 }
+  const pdf = () => new File(['%PDF-1.7'], 'cert.pdf', { type: 'application/pdf' })
+
+  beforeEach(() => uploadDirectToStorage.mockReset())
+
+  it('shows why signing refused the file', async () => {
+    uploadDirectToStorage.mockResolvedValue({ error: 'That file type is not accepted here.' })
+    render(<CourseBuilder courses={[course]} objects={[]} tiers={[]} />)
+    await userEvent.setup().upload(screen.getByLabelText(/Upload PDF/), pdf())
+    expect(await screen.findByRole('alert')).toHaveTextContent('That file type is not accepted here.')
+    expect(calls.some((c) => c.url === '/api/admin/community/training/cert-template')).toBe(false)
+  })
+
+  it('shows why the route refused the stored file, and can be tried again with the same file', async () => {
+    uploadDirectToStorage.mockResolvedValue(STORED)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'Template must be a PDF' }), { status: 415 })),
+    )
+    render(<CourseBuilder courses={[course]} objects={[]} tiers={[]} />)
+    const user = userEvent.setup()
+    const input = screen.getByLabelText(/Upload PDF/) as HTMLInputElement
+    await user.upload(input, pdf())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Template must be a PDF')
+    expect(refresh).not.toHaveBeenCalled()
+    // The picker is cleared, so choosing the same file again uploads it again.
+    expect(input.value).toBe('')
+    await user.upload(input, pdf())
+    expect(uploadDirectToStorage).toHaveBeenCalledTimes(2)
+  })
+
+  it('still saves a template the route accepts', async () => {
+    uploadDirectToStorage.mockResolvedValue(STORED)
+    render(<CourseBuilder courses={[course]} objects={[]} tiers={[]} />)
+    await userEvent.setup().upload(screen.getByLabelText(/Upload PDF/), pdf())
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalled())
+    expect(calls).toContainEqual({
+      url: '/api/admin/community/training/cert-template',
+      method: 'POST',
+      body: { moduleId: 'course-1', storagePath: STORED.storagePath },
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

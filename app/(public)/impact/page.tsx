@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react'
 import { Award, Certificate, Global, Satellite, Team } from '@stellr/icons'
 import { Eyebrow, Button } from '@stellr/web-ui'
 import { WhitePaperGate } from '@/components/sections/WhitePaperGate'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { buildImpactDatasetJsonLd } from '@/lib/structured-data'
 import { STELLR_EIN } from '@/lib/org'
 
@@ -174,14 +175,7 @@ const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
 export default function ImpactPage() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
-            buildImpactDatasetJsonLd(PARTICIPATION_2026.map((s) => s.schema))
-          ),
-        }}
-      />
+      <JsonLd data={buildImpactDatasetJsonLd(PARTICIPATION_2026.map((s) => s.schema))} />
       {/* ── 1. Hero ───────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-midnight text-white pt-[54px] pb-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(130%_120%_at_20%_-10%,#2A2150_0%,#161B40_42%,#0C1024_100%)]">
         <div className="container-max">

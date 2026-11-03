@@ -46,6 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     }
 
     const db = supabaseServer()
+    // Refuses (and deletes) anything whose bytes are not a PDF, Office,
+    // OpenDocument or Keynote file, whatever it is called (lib/uploads.ts).
     const claimed = await claimUpload({ purpose: 'campaign-proposal', storagePath })
     if ('error' in claimed) {
       return NextResponse.json({ error: claimed.error }, { status: claimed.status })

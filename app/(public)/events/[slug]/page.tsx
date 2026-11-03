@@ -15,6 +15,7 @@ import { CardPills } from '@/components/ui/CardPills'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
+import { JsonLd } from '@/components/seo/JsonLd'
 import { getEventPrice, eventPriceLabel } from '@/lib/event-pricing'
 import { gradeBand } from '@/lib/grade-band'
 import { getSeriesMembers } from '@/lib/schema-series'
@@ -261,21 +262,16 @@ export default async function EventDetailPage({ params }: PageProps) {
     // (CampaignMemberAware), so this page can be cached.
     return (
       <>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            // A campaign with no season/year has no derivable dates, so it
-            // has no valid Event node — the FAQ block still stands alone.
-            __html: JSON.stringify(
-              [
-                buildCampaignJsonLd(event, slug, {
-                  series: seriesMembers,
-                  description: eventSummary(event),
-                }),
-                buildFaqJsonLd(CAMPAIGN_FAQS),
-              ].filter(Boolean),
-            ),
-          }}
+        {/* A campaign with no season/year has no derivable dates, so it has
+            no valid Event node — the FAQ block still stands alone. */}
+        <JsonLd
+          data={[
+            buildCampaignJsonLd(event, slug, {
+              series: seriesMembers,
+              description: eventSummary(event),
+            }),
+            buildFaqJsonLd(CAMPAIGN_FAQS),
+          ].filter(Boolean)}
         />
         <TrackEvent
           event={{
@@ -324,10 +320,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
       <TrackEvent
         event={{
           event: 'competition_page_view',

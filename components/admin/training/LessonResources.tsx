@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { uploadDirectToStorage } from '@/lib/upload-client'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { Plus, Trash2, FileText, Link2, Upload, X, Search } from 'lucide-react'
 
 // Per-lesson attached resources (files / links) shown beneath the lesson's
@@ -29,6 +29,7 @@ export function LessonResources({ itemId }: { itemId: string }) {
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [catalogue, setCatalogue] = useState<CatalogueResult[]>([])
   const [searching, setSearching] = useState(false)
@@ -53,14 +54,20 @@ export function LessonResources({ itemId }: { itemId: string }) {
     return () => { active = false; clearTimeout(t) }
   }, [query, mode, adding])
 
+  // Every failure comes back as a message (postUpload), and is shown: a refused
+  // upload must not look like nothing happened.
+  const post = (body: Record<string, unknown>) =>
+    postUpload('/api/admin/community/training/resources', JSON.stringify({ itemId, ...body }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
   const attachExisting = async (resourceId: string) => {
     setBusy(true)
+    setError(null)
     try {
-      const res = await fetch('/api/admin/community/training/resources', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId, kind: 'existing', resourceId }),
-      })
-      if (res.ok) { setAdding(false); setQuery(''); setCatalogue([]); load() }
+      const result = await post({ kind: 'existing', resourceId })
+      if ('error' in result) return setError(result.error)
+      setAdding(false); setQuery(''); setCatalogue([]); load()
     } finally {
       setBusy(false)
     }
@@ -68,32 +75,22 @@ export function LessonResources({ itemId }: { itemId: string }) {
 
   const add = async () => {
     if (!title.trim()) return
+    if (mode === 'file' && !file) return setError('Choose a file to upload.')
+    if (mode === 'link' && !url.trim()) return setError('Add a URL for this resource.')
     setBusy(true)
+    setError(null)
     try {
-      let res: Response
+      let result: Awaited<ReturnType<typeof post>>
       if (mode === 'file') {
-        if (!file) { setBusy(false); return }
         // Bytes go browser → storage via a signed URL; only the path is posted.
-        const stored = await uploadDirectToStorage(file, 'training-item-resource')
-        if ('error' in stored) { setBusy(false); return }
-        res = await fetch('/api/admin/community/training/resources', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            itemId,
-            kind: 'file',
-            title: title.trim(),
-            storagePath: stored.storagePath,
-            fileType: stored.fileType,
-          }),
-        })
+        const stored = await uploadDirectToStorage(file as File, 'training-item-resource')
+        if ('error' in stored) return setError(stored.error)
+        result = await post({ kind: 'file', title: title.trim(), storagePath: stored.storagePath, fileType: stored.fileType })
       } else {
-        if (!url.trim()) { setBusy(false); return }
-        res = await fetch('/api/admin/community/training/resources', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemId, kind: 'link', title: title.trim(), externalUrl: url.trim() }),
-        })
+        result = await post({ kind: 'link', title: title.trim(), externalUrl: url.trim() })
       }
-      if (res.ok) { setTitle(''); setUrl(''); setFile(null); setAdding(false); load() }
+      if ('error' in result) return setError(result.error)
+      setTitle(''); setUrl(''); setFile(null); setAdding(false); load()
     } finally {
       setBusy(false)
     }
@@ -124,11 +121,11 @@ export function LessonResources({ itemId }: { itemId: string }) {
         <div className="mt-2 space-y-2 rounded-md border border-brand-border p-2">
           <div className="flex items-center gap-1">
             {(['link', 'file', 'existing'] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${mode === m ? 'bg-brand-soft text-brand-blue-dark' : 'text-brand-muted-soft'}`} style={mode === m ? { background: '#EAF0FE' } : undefined}>
+              <button key={m} onClick={() => { setMode(m); setError(null) }} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${mode === m ? 'bg-brand-soft text-brand-blue-dark' : 'text-brand-muted-soft'}`} style={mode === m ? { background: '#EAF0FE' } : undefined}>
                 {m === 'link' ? 'Link' : m === 'file' ? 'File' : 'Existing'}
               </button>
             ))}
-            <button onClick={() => setAdding(false)} className="ml-auto text-brand-muted-soft hover:text-brand-muted"><X className="h-3.5 w-3.5" /></button>
+            <button onClick={() => { setAdding(false); setError(null) }} className="ml-auto text-brand-muted-soft hover:text-brand-muted"><X className="h-3.5 w-3.5" /></button>
           </div>
           {mode === 'existing' ? (
             <div className="space-y-1.5">
@@ -169,6 +166,7 @@ export function LessonResources({ itemId }: { itemId: string }) {
               </button>
             </>
           )}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-blue-dark">

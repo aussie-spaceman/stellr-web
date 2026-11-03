@@ -202,6 +202,17 @@ describe('check-in is scoped to the events the caller manages', () => {
     expect(body.bannerTarget).toBe(false)
     expect(body.otherOpen).toEqual([])
   })
+
+  // The desk warns when the banner points elsewhere. A failed read is not
+  // "elsewhere": it says nothing rather than send staff looking for a problem.
+  it('GET: when the open events cannot be read, the banner is unknown, not "elsewhere"', async () => {
+    loadOpenCheckIns.mockRejectedValue(new Error('boom'))
+    const res = await get()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.bannerTarget).toBeNull()
+    expect(body.otherOpen).toEqual([])
+  })
 })
 
 // Nevada (6 Nov) runs its desk on these: the scoping above must not get in the

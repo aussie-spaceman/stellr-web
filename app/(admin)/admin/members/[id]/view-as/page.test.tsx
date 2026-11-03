@@ -10,12 +10,25 @@ import { fakeSupabase, type FakeDb } from '@/test/fake-supabase'
 const h = vi.hoisted(() => ({
   db: null as unknown as FakeDb,
   ticket: null as { memberId: string; adminMemberId: string; issuedAt: number } | null,
+  clerkUser: {} as Record<string, unknown> | Error,
 }))
 
-vi.mock('@clerk/nextjs/server', () => ({ clerkClient: async () => ({ users: { getUser: async () => ({}) } }) }))
+vi.mock('@clerk/nextjs/server', () => ({
+  clerkClient: async () => ({
+    users: {
+      getUser: async () => {
+        if (h.clerkUser instanceof Error) throw h.clerkUser
+        return h.clerkUser
+      },
+    },
+  }),
+}))
 vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('notFound') } }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => h.db.client }))
-vi.mock('@/lib/admin-auth', () => ({ requireAdminPage: async () => {} }))
+vi.mock('@/lib/admin-auth', async (importOriginal) => ({
+  isStaffRole: (await importOriginal<typeof import('@/lib/admin-auth')>()).isStaffRole,
+  requireAdminPage: async () => {},
+}))
 vi.mock('@/lib/impersonation', () => ({ getImpersonation: async () => h.ticket }))
 vi.mock('@/lib/docusign-recipients', () => ({ loadRecipientsByEnvelopeRows: async () => new Map() }))
 vi.mock('@/components/member/AccountProfile', () => ({ AccountProfile: () => null }))
@@ -54,6 +67,7 @@ function page(tab: 'teams' | 'billing') {
 beforeEach(() => {
   h.db = fakeSupabase({ members: [TEACHER] })
   h.ticket = null
+  h.clerkUser = {}
 })
 
 describe('admin account summary, Teams and Billing', () => {
@@ -80,5 +94,31 @@ describe('admin account summary, Teams and Billing', () => {
 
     render(await page('billing'))
     expect(JSON.parse(screen.getByTestId('billing').textContent ?? '{}')).toEqual({ readOnly: true })
+  })
+})
+
+// View-as refuses staff targets. For a teacher who is also an event manager,
+// the tabs say so instead of offering a session the server will refuse.
+describe('admin account summary for a staff member', () => {
+  it.each(['admin', 'event_manager'])('Clerk role %s: explains why, offers no session', async (role) => {
+    h.db = fakeSupabase({ members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }] })
+    h.clerkUser = { publicMetadata: { role } }
+    render(await page('teams'))
+    expect(screen.getByText(/View-as isn’t available for staff accounts, so Teams can’t be shown here/)).toBeInTheDocument()
+    expect(screen.queryByTestId('start')).toBeNull()
+  })
+
+  it('a staff_roles row: explains why on Billing too', async () => {
+    h.db = fakeSupabase({ members: [TEACHER], staff_roles: [{ member_id: TEACHER.id, scopes: ['events'] }] })
+    render(await page('billing'))
+    expect(screen.getByText(/so Billing details can’t be shown here/)).toBeInTheDocument()
+    expect(screen.queryByTestId('start')).toBeNull()
+  })
+
+  it('when Clerk cannot be asked, still offers the session: the start route makes the call', async () => {
+    h.db = fakeSupabase({ members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }] })
+    h.clerkUser = new Error('Clerk is down')
+    render(await page('teams'))
+    expect(screen.getByTestId('start')).toBeInTheDocument()
   })
 })

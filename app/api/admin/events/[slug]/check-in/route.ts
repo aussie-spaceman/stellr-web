@@ -66,7 +66,7 @@ export async function GET(req: Request, { params }: Params) {
       .eq('store_orders.event_slug', slug)
       .not('participant_member_id', 'is', null),
     // Polled every few seconds: a hiccup here must not blank the desk list.
-    loadOpenCheckIns(db).catch(() => []),
+    loadOpenCheckIns(db).catch(() => null),
   ])
 
   const merchByMember = new Map<string, { name: string; qty: number }[]>()
@@ -109,9 +109,11 @@ export async function GET(req: Request, { params }: Params) {
     participants,
     groups,
     // Where the banner points is worked out across every event, but only said
-    // as yes/no for this one; the events listed are the caller's own.
-    bannerTarget: pickBannerEvent(openCheckIns, todayUtc())?.slug === slug,
-    otherOpen: checkInsVisibleTo(openCheckIns, access)
+    // as yes/no for this one; the events listed are the caller's own. Null when
+    // the open events could not be read, so the desk does not report the banner
+    // pointing elsewhere on a hiccup.
+    bannerTarget: openCheckIns ? pickBannerEvent(openCheckIns, todayUtc())?.slug === slug : null,
+    otherOpen: checkInsVisibleTo(openCheckIns ?? [], access)
       .filter((e) => e.inPerson && e.slug !== slug)
       .map((e) => ({ slug: e.slug, title: e.title ?? e.slug })),
   })

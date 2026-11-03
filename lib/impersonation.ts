@@ -46,27 +46,37 @@ export interface ImpersonationTicket {
   issuedAt: number
 }
 
-export class ImpersonationNotConfiguredError extends Error {
-  constructor() {
-    super(
-      'View as member is switched off on this deployment: IMPERSONATION_SECRET is not set ' +
-        `(it must be its own random value of at least ${MIN_SECRET_LENGTH} characters).`,
-    )
-    this.name = 'ImpersonationNotConfiguredError'
-  }
-}
-
 // S0 (Nov 2026): the key used to fall back to CLERK_SECRET_KEY, then
 // CRON_SECRET. Either of those leaking (a cron URL in a log, a Clerk key in a
 // screenshot) would have let anyone mint a ticket, and rotating one silently
 // changed the other. The key is now dedicated: unset, too short, or a copy of
 // one of those two, and view-as is off. Nothing else depends on it, so a
 // deployment without it loses view-as and nothing more.
+function secretProblem(key: string | undefined): string | null {
+  if (!key) return 'IMPERSONATION_SECRET is not set'
+  if (key.length < MIN_SECRET_LENGTH) return `IMPERSONATION_SECRET is shorter than ${MIN_SECRET_LENGTH} characters`
+  if (key === process.env.CLERK_SECRET_KEY || key === process.env.CRON_SECRET) {
+    return 'IMPERSONATION_SECRET is a copy of CLERK_SECRET_KEY or CRON_SECRET'
+  }
+  return null
+}
+
+export class ImpersonationNotConfiguredError extends Error {
+  constructor() {
+    // Names the actual problem, so whoever sets the variable is not sent
+    // looking for a deploy fault when the value is merely too short.
+    const problem = secretProblem(process.env.IMPERSONATION_SECRET) ?? 'IMPERSONATION_SECRET is not usable'
+    super(
+      `View as member is switched off on this deployment: ${problem} ` +
+        `(it must be its own random value of at least ${MIN_SECRET_LENGTH} characters).`,
+    )
+    this.name = 'ImpersonationNotConfiguredError'
+  }
+}
+
 function secretOrNull(): string | null {
   const key = process.env.IMPERSONATION_SECRET
-  if (!key || key.length < MIN_SECRET_LENGTH) return null
-  if (key === process.env.CLERK_SECRET_KEY || key === process.env.CRON_SECRET) return null
-  return key
+  return key && !secretProblem(key) ? key : null
 }
 
 /** Whether view-as can run on this deployment. The start route checks this first. */
@@ -137,21 +147,27 @@ export { IMPERSONATION_COOKIE }
 export const IMPERSONATION_TTL_SECONDS = TTL_SECONDS
 
 /**
- * The active impersonation for this request, or null.
- *
- * Re-authorises on every call: a non-admin holding the cookie (role revoked,
- * signed out, or someone else's browser) gets null, not access.
+ * What this request's view-as cookie amounts to: no session, a live one, or
+ * one that could not be checked because the issuer lookup failed. The last is
+ * not "no session": the member resolver makes its own lookup, which may
+ * succeed, so a write guard that read it as "no session" would let an admin
+ * write as the member whenever the two reads disagreed (S0 review).
  */
-export async function getImpersonation(): Promise<ImpersonationTicket | null> {
+type ViewAsState =
+  | { kind: 'none' }
+  | { kind: 'active'; ticket: ImpersonationTicket }
+  | { kind: 'unverified' }
+
+async function viewAsState(): Promise<ViewAsState> {
   const jar = await cookies()
   const raw = jar.get(COOKIE)?.value
-  if (!raw) return null
+  if (!raw) return { kind: 'none' }
 
   const { userId, sessionClaims } = await auth()
-  if (!userId || !isAdminClaims(sessionClaims)) return null
+  if (!userId || !isAdminClaims(sessionClaims)) return { kind: 'none' }
 
   const ticket = decodeTicket(raw)
-  if (!ticket) return null
+  if (!ticket) return { kind: 'none' }
 
   // deep review AUTH-9: bind the ticket to the admin who issued it. isAdminClaims
   // alone would let ANY admin — or a leaked cookie replayed in another admin's
@@ -170,11 +186,33 @@ export async function getImpersonation(): Promise<ImpersonationTicket | null> {
     .select('id')
     .eq('clerk_user_id', userId)
     .maybeSingle()
-  if (error) return null
+  if (error) return { kind: 'unverified' }
   const callerMemberId = (data as { id: string } | null)?.id ?? null
-  if (!callerMemberId || callerMemberId !== ticket.adminMemberId) return null
+  if (!callerMemberId || callerMemberId !== ticket.adminMemberId) return { kind: 'none' }
 
-  return ticket
+  return { kind: 'active', ticket }
+}
+
+/**
+ * The active impersonation for this request, or null.
+ *
+ * Re-authorises on every call: a non-admin holding the cookie (role revoked,
+ * signed out, or someone else's browser) gets null, not access. A ticket that
+ * could not be checked is null here too: nothing is shown as the member.
+ */
+export async function getImpersonation(): Promise<ImpersonationTicket | null> {
+  const state = await viewAsState()
+  return state.kind === 'active' ? state.ticket : null
+}
+
+/**
+ * True while this request is, or may be, an admin viewing as a member: a live
+ * ticket, or one that could not be checked. For the side effects of a member's
+ * own READ (a download counter, an "opened" row on their timeline), which must
+ * not be recorded as the member's when an admin is the one looking.
+ */
+export async function mayBeViewingAs(): Promise<boolean> {
+  return (await viewAsState()).kind !== 'none'
 }
 
 /** The member id the member-facing code should act as, or null. */
@@ -191,9 +229,21 @@ export async function impersonatedMemberId(): Promise<string | null> {
  *
  * Impersonation is a lens, not a login: an admin looking at someone's account
  * must not be able to spend their money, sign their documents or post as them.
+ *
+ * Fails closed: when a view-as cookie is present but could not be checked, the
+ * write is refused too (503), rather than let through on a guess.
  */
 export async function assertNotImpersonating(): Promise<Response | null> {
-  if (!(await getImpersonation())) return null
+  const state = await viewAsState()
+  if (state.kind === 'none') return null
+  if (state.kind === 'unverified') {
+    return new Response(
+      JSON.stringify({
+        error: 'Could not confirm whether you are viewing as a member, so nothing was changed. Try again.',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
   return new Response(
     JSON.stringify({
       error: 'Read-only while viewing as a member. Exit view-as to make changes.',

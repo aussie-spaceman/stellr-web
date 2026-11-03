@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bannerNotice,
   buildGroupRows,
   checkInTime,
+  openCheckInConfirm,
   codeFromScan,
   deskSearchMatches,
   flagsForStorage,
@@ -153,5 +155,38 @@ describe('the queue kept on the device', () => {
       contacts: {},
     })
     expect(stored.flags[ID_A]).toEqual({ agreement: 'Not Issued', agreementDetail: null, unpaid: null, medical: 'See the roster', dietary: ['See the roster'] })
+  })
+})
+
+// S0 (Nov 2026): an event manager's open closes only their own events, so an
+// event they don't run can keep the banner. The desk must not promise the
+// banner moves here, and must say when it points elsewhere.
+describe('the banner, as the desk describes it', () => {
+  it('the open confirm names what will close, and promises nothing about the banner', () => {
+    expect(openCheckInConfirm([])).toBeNull()
+    expect(openCheckInConfirm([{ title: 'Utah SDC' }])).toBe('Check-in is open for Utah SDC. Opening this one closes it.')
+    expect(openCheckInConfirm([{ title: 'Utah SDC' }, { title: 'Iowa SDC' }])).toBe(
+      'Check-in is open for Utah SDC, Iowa SDC. Opening this one closes them.',
+    )
+    expect(openCheckInConfirm([{ title: 'Utah SDC' }])).not.toMatch(/banner/)
+  })
+
+  it('says when the banner points here', () => {
+    expect(bannerNotice({ checkInOpen: true, bannerTarget: true, isVirtual: false })).toEqual({
+      tone: 'here',
+      text: 'The check-in banner points here.',
+    })
+  })
+
+  it('says when check-in is open here but the banner points to another event', () => {
+    const n = bannerNotice({ checkInOpen: true, bannerTarget: false, isVirtual: false })
+    expect(n?.tone).toBe('elsewhere')
+    expect(n?.text).toMatch(/points to another event right now/)
+  })
+
+  it('says nothing when it cannot know, when check-in is closed, or for a virtual event', () => {
+    expect(bannerNotice({ checkInOpen: true, bannerTarget: null, isVirtual: false })).toBeNull()
+    expect(bannerNotice({ checkInOpen: false, bannerTarget: false, isVirtual: false })).toBeNull()
+    expect(bannerNotice({ checkInOpen: true, bannerTarget: false, isVirtual: true })).toBeNull()
   })
 })

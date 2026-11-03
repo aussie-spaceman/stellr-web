@@ -27,7 +27,9 @@ afterEach(() => {
   else process.env.IMPERSONATION_SECRET = saved
 })
 
-const { encodeTicket, getImpersonation, resolveRequestMember } = await import('@/lib/impersonation')
+const { encodeTicket, getImpersonation, resolveRequestMember, assertNotImpersonating, mayBeViewingAs } = await import(
+  '@/lib/impersonation'
+)
 
 const ADMIN = { id: 'admin-member', clerk_user_id: 'clerk-admin', email: 'admin@stellr.test', is_active: true }
 const OTHER_ADMIN = { id: 'other-admin', clerk_user_id: 'clerk-other-admin', email: 'other@stellr.test', is_active: true }
@@ -79,6 +81,55 @@ describe('getImpersonation', () => {
     h.cookie = ticketFor(KID.id)
     delete process.env.IMPERSONATION_SECRET
     expect(await getImpersonation()).toBeNull()
+  })
+})
+
+// The write guard and the member resolver each look the issuer up. If the
+// guard read a failed lookup as "no session" while the resolver's own lookup
+// succeeded, an admin's write would run against the viewed member's account.
+describe('assertNotImpersonating', () => {
+  it('lets a request with no view-as cookie through', async () => {
+    expect(await assertNotImpersonating()).toBeNull()
+  })
+
+  it('refuses a write during a live view-as session', async () => {
+    h.cookie = ticketFor(KID.id)
+    const res = await assertNotImpersonating()
+    expect(res?.status).toBe(403)
+    expect(await res?.json()).toMatchObject({ impersonating: true })
+  })
+
+  it('fails closed when the ticket cannot be checked', async () => {
+    h.cookie = ticketFor(KID.id)
+    h.db = fakeSupabase({ members: [ADMIN, KID] }, { failOn: (t) => (t === 'members' ? 'boom' : null) })
+    const res = await assertNotImpersonating()
+    expect(res?.status).toBe(503)
+    expect((await res?.json()).error).toMatch(/nothing was changed/)
+  })
+
+  it('lets a non-admin holding a stray cookie through: it grants them nothing', async () => {
+    h.cookie = ticketFor(KID.id)
+    h.role = undefined
+    expect(await assertNotImpersonating()).toBeNull()
+  })
+
+  it('lets the caller through when the ticket was started by another admin: it is not theirs', async () => {
+    h.cookie = ticketFor(KID.id, OTHER_ADMIN.id)
+    expect(await assertNotImpersonating()).toBeNull()
+  })
+})
+
+describe('mayBeViewingAs', () => {
+  it('is false with no cookie, true with a live ticket', async () => {
+    expect(await mayBeViewingAs()).toBe(false)
+    h.cookie = ticketFor(KID.id)
+    expect(await mayBeViewingAs()).toBe(true)
+  })
+
+  it('is true when the ticket cannot be checked, so nothing is recorded as the member', async () => {
+    h.cookie = ticketFor(KID.id)
+    h.db = fakeSupabase({ members: [ADMIN, KID] }, { failOn: (t) => (t === 'members' ? 'boom' : null) })
+    expect(await mayBeViewingAs()).toBe(true)
   })
 })
 

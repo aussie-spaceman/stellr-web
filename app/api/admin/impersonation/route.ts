@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { isAdminClaims, isStaffRole } from '@/lib/admin-auth'
 import { supabaseServer } from '@/lib/supabase'
-import { logActivityOrThrow, actorFromAuth } from '@/lib/activity-log'
+import { logActivityOrThrow, actorFromAuth, type Actor } from '@/lib/activity-log'
 import {
   decodeTicket,
   encodeTicket,
@@ -28,6 +28,8 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function cookieOptions(maxAge: number) {
   return { httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production', path: '/', maxAge }
 }
@@ -36,15 +38,44 @@ function refuse(status: number, error: string) {
   return NextResponse.json({ error }, { status })
 }
 
-async function logEnded(ticket: ImpersonationTicket, reason: 'exited' | 'replaced') {
-  await logActivityOrThrow({
-    ...(await actorFromAuth()),
-    memberId: ticket.memberId,
-    category: 'account',
-    action: 'impersonation_ended',
-    summary: 'An admin stopped viewing the portal as this member',
-    metadata: { reason },
-  })
+/** True only when the member is definitely gone: the lookup worked and found no row. */
+async function memberIsGone(memberId: string): Promise<boolean> {
+  const { data, error } = await supabaseServer().from('members').select('id').eq('id', memberId).maybeSingle()
+  return !error && !data
+}
+
+/**
+ * Record the end of a session. Throws when it cannot be recorded, so the
+ * caller leaves the session running — except when the viewed member has since
+ * been purged. member_activity_log rows cascade with the member (migration
+ * 046), so that insert can never succeed, the start row is already gone, and
+ * refusing would trap the admin in a session with no exit for 30 minutes.
+ *
+ * The row names the admin who started the session (metadata.adminMemberId,
+ * from the signed ticket) as well as whoever ended it.
+ */
+async function logEnded(ticket: ImpersonationTicket, reason: 'exited' | 'replaced', actor: Actor) {
+  try {
+    await logActivityOrThrow({
+      ...actor,
+      memberId: ticket.memberId,
+      category: 'account',
+      action: 'impersonation_ended',
+      summary: 'An admin stopped viewing the portal as this member',
+      metadata: { reason, adminMemberId: ticket.adminMemberId },
+    })
+  } catch (err) {
+    if (await memberIsGone(ticket.memberId)) {
+      console.warn('[impersonation] viewed member no longer exists; ending view-as with nothing to record')
+      return
+    }
+    throw err
+  }
+}
+
+/** Clerk says the user does not exist: a dangling clerk_user_id, not an outage. */
+function isClerkNotFound(err: unknown): boolean {
+  return (err as { status?: number } | null)?.status === 404
 }
 
 export async function POST(req: Request) {
@@ -58,6 +89,8 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const memberId = typeof body.memberId === 'string' ? body.memberId : null
   if (!memberId) return refuse(400, 'memberId required')
+  // A malformed id would fail Postgres's uuid cast and read as a database error.
+  if (!UUID.test(memberId)) return refuse(400, 'memberId must be a member id')
 
   const db = supabaseServer()
   const { data: member, error: memberError } = await db
@@ -76,7 +109,10 @@ export async function POST(req: Request) {
   //   - the Clerk publicMetadata.role of the target's Clerk user.
   // Either lookup failing refuses the request. This used to allow on a Clerk
   // error, which made the refusal of an admin target only as strong as Clerk's
-  // uptime, and it only refused role 'admin'.
+  // uptime, and it only refused role 'admin'. The one Clerk error that is an
+  // answer is 404: a Clerk user that does not exist cannot sign in or hold a
+  // role (a missed user.deleted webhook leaves such ids behind), and staff_roles
+  // has already been checked, so that target is not staff.
   const { data: staffRow, error: staffError } = await db
     .from('staff_roles')
     .select('member_id')
@@ -93,8 +129,11 @@ export async function POST(req: Request) {
       const u = await client.users.getUser(targetClerkId)
       role = (u.publicMetadata as { role?: unknown } | null)?.role
     } catch (err) {
-      console.error('[impersonation] could not verify the target is not staff:', err)
-      return refuse(503, 'Could not confirm this member is not staff, so view-as was not started. Try again.')
+      // A 404 leaves role unset: no Clerk user, so not staff.
+      if (!isClerkNotFound(err)) {
+        console.error('[impersonation] could not verify the target is not staff:', err)
+        return refuse(503, 'Could not confirm this member is not staff, so view-as was not started. Try again.')
+      }
     }
     if (isStaffRole(role)) return refuse(403, 'Cannot view as a staff member.')
   }
@@ -123,22 +162,35 @@ export async function POST(req: Request) {
   // deep review QUAL-1: this audit row is a safeguarding control — an adult
   // staff member viewing a minor's portal. It is awaited, and S0 made it
   // mandatory: if it cannot be written, the new session is not started.
-  let previousEnded = false
-  try {
-    if (previous) {
-      await logEnded(previous, 'replaced')
-      previousEnded = true
+  //
+  // Who started it is the admin verified above, not whatever actorFromAuth's
+  // best-effort lookup returns: that falls back to an anonymous 'system' actor
+  // on any error, and "who viewed this child" must not depend on it. The label
+  // is still taken from it, best-effort.
+  const actor: Actor = { ...(await actorFromAuth()), actorType: 'admin', actorMemberId: adminMemberId }
+  if (previous) {
+    try {
+      await logEnded(previous, 'replaced', actor)
+    } catch (err) {
+      console.error('[impersonation] audit write failed; leaving the previous view-as running:', err)
+      return refuse(
+        503,
+        'Could not record the end of your current view-as session, so a new one was not started. Try again.',
+      )
     }
+  }
+  try {
     await logActivityOrThrow({
-      ...(await actorFromAuth()),
+      ...actor,
       memberId,
       category: 'account',
       action: 'impersonation_started',
       summary: 'An admin began viewing the portal as this member (read only)',
+      metadata: { adminMemberId },
     })
   } catch (err) {
     console.error('[impersonation] audit write failed; not starting view-as:', err)
-    if (!previousEnded) {
+    if (!previous) {
       return refuse(503, 'Could not record the start of this view-as session, so it was not started. Try again.')
     }
     // The previous session's end is already on the record. Leaving its cookie
@@ -173,12 +225,17 @@ export async function DELETE() {
   // S0: when there IS a live session, its end is recorded before the cookie is
   // cleared, and a failed write leaves the session running (still read only,
   // still capped by the 30-minute TTL) with an error the banner shows, rather
-  // than a gap in the audit trail.
+  // than a gap in the audit trail. The one exception is a viewed member who has
+  // since been purged (logEnded).
+  //
+  // The caller here is not verified (see above), so the row records them as
+  // actorFromAuth finds them, and names the admin who started the session from
+  // the signed ticket.
   const jar = await cookies()
   const ticket = decodeTicket(jar.get(IMPERSONATION_COOKIE)?.value)
   if (ticket) {
     try {
-      await logEnded(ticket, 'exited')
+      await logEnded(ticket, 'exited', await actorFromAuth())
     } catch (err) {
       console.error('[impersonation] audit write failed; leaving view-as running:', err)
       return refuse(503, 'Could not record the end of this view-as session, so it is still running. Try again.')

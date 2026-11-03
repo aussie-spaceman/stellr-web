@@ -55,6 +55,14 @@ describe('StartViewAsSession', () => {
     }))
   })
 
+  // Starting one switches the admin's whole member portal to this member, read
+  // only, until they exit: their own member-side changes are refused meanwhile.
+  it('says the whole member portal switches to this member until Exit view', () => {
+    render(<StartViewAsSession memberId="m1" what="Teams" />)
+    expect(screen.getByText(/your whole member portal shows this member, read only/)).toBeInTheDocument()
+    expect(screen.getByText(/Until you select Exit view, or for 30 minutes/)).toBeInTheDocument()
+  })
+
   it('shows why a session was refused and does not re-render', async () => {
     reply = { status: 403, body: { error: 'Cannot view as a staff member.' } }
     render(<StartViewAsSession memberId="m1" what="Billing details" />)

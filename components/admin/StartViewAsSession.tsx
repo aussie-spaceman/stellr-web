@@ -41,8 +41,8 @@ export function StartViewAsSession({ memberId, what }: { memberId: string; what:
   return (
     <div className="space-y-3 rounded-ds-card border border-line bg-white p-5">
       <p className="text-sm text-content-body">
-        {what} open in a view-as session. Starting one is recorded on this member’s activity timeline, and it ends
-        when you exit or after 30 minutes.
+        {what} open in a view-as session. Starting one is recorded on this member’s activity timeline. Until you
+        select Exit view, or for 30 minutes, your whole member portal shows this member, read only.
       </p>
       <Button onClick={start} disabled={starting} className="min-h-11 px-4 py-2">
         <Eye className="h-4 w-4" aria-hidden /> {starting ? 'Starting…' : 'Start view-as session'}

@@ -145,6 +145,19 @@ describe('the signing key is dedicated', () => {
     expect(decodeTicket(raw)).toBeNull()
   })
 
+  // The owner sets the variable during rollout; "not set" for a value that is
+  // merely too short sends them looking for a deploy fault instead.
+  it('says which problem the key has', () => {
+    delete process.env.IMPERSONATION_SECRET
+    expect(new ImpersonationNotConfiguredError().message).toMatch(/IMPERSONATION_SECRET is not set/)
+    process.env.IMPERSONATION_SECRET = 'x'.repeat(24)
+    expect(() => impersonationSecret()).toThrow(/IMPERSONATION_SECRET is shorter than 32 characters/)
+    process.env.IMPERSONATION_SECRET = process.env.CLERK_SECRET_KEY
+    expect(() => impersonationSecret()).toThrow(/IMPERSONATION_SECRET is a copy of CLERK_SECRET_KEY or CRON_SECRET/)
+    process.env.IMPERSONATION_SECRET = process.env.CRON_SECRET
+    expect(new ImpersonationNotConfiguredError().message).not.toMatch(/not set/)
+  })
+
   it('rotating the key ends every open ticket', () => {
     const raw = encodeTicket(ticket)
     process.env.IMPERSONATION_SECRET = 'a-completely-different-key-of-enough-length'

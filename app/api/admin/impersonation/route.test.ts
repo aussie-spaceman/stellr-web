@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   cookieValue: undefined as string | undefined,
   decoded: null as { memberId: string; adminMemberId: string; issuedAt: number } | null,
   encoded: [] as unknown[],
+  actor: { actorType: 'admin', actorMemberId: 'admin1' } as Record<string, unknown>,
 }))
 const logActivityOrThrow = vi.fn()
 const getUser = vi.fn()
@@ -51,13 +52,17 @@ vi.mock('@/lib/impersonation', () => ({
 }))
 vi.mock('@/lib/activity-log', () => ({
   logActivityOrThrow: (...a: unknown[]) => logActivityOrThrow(...a),
-  actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'admin1' }),
+  actorFromAuth: async () => h.actor,
 }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => h.db.client }))
 
 const { POST, DELETE } = await import('./route')
 
-const TARGET = { id: 'm1', first_name: 'A', last_name: 'B', email: 'a@b.c', clerk_user_id: 'clerk_target' }
+const M1 = '11111111-1111-4111-8111-111111111111'
+const OTHER = '22222222-2222-4222-8222-222222222222'
+const NOBODY = '99999999-9999-4999-8999-999999999999'
+const TARGET = { id: M1, first_name: 'A', last_name: 'B', email: 'a@b.c', clerk_user_id: 'clerk_target' }
+const OTHER_MEMBER = { id: OTHER, first_name: 'C', last_name: 'D', email: 'c@d.e', clerk_user_id: null }
 const ADMIN_ROW = { id: 'admin1', clerk_user_id: 'admin-clerk' }
 
 beforeEach(() => {
@@ -65,15 +70,16 @@ beforeEach(() => {
   logActivityOrThrow.mockResolvedValue(undefined)
   getUser.mockReset()
   getUser.mockResolvedValue({ publicMetadata: {} })
-  h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], staff_roles: [] })
+  h.db = fakeSupabase({ members: [TARGET, OTHER_MEMBER, ADMIN_ROW], staff_roles: [] })
   h.isAdmin = true
   h.configured = true
   h.cookieValue = undefined
   h.decoded = null
   h.encoded = []
+  h.actor = { actorType: 'admin', actorMemberId: 'admin1' }
 })
 
-function post(memberId = 'm1') {
+function post(memberId = M1) {
   return POST(new Request('https://app.test/api/admin/impersonation', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -90,13 +96,19 @@ function cookieSet(res: Response): string | null {
 
 const actions = () => logActivityOrThrow.mock.calls.map((c) => (c[0] as { action: string }).action)
 
+/** A view-as cookie for `memberId`, started by this admin. */
+function holdTicketFor(memberId: string) {
+  h.cookieValue = 'old-ticket'
+  h.decoded = { memberId, adminMemberId: 'admin1', issuedAt: Date.now() }
+}
+
 describe('POST /api/admin/impersonation', () => {
   it('starts view-as of a member: ticket bound to this admin, start audited, cookie set', async () => {
     const res = await post()
     expect(res.status).toBe(200)
-    expect(h.encoded).toEqual([expect.objectContaining({ memberId: 'm1', adminMemberId: 'admin1' })])
+    expect(h.encoded).toEqual([expect.objectContaining({ memberId: M1, adminMemberId: 'admin1' })])
     expect(actions()).toEqual(['impersonation_started'])
-    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({ memberId: 'm1', category: 'account' })
+    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({ memberId: M1, category: 'account' })
     expect(cookieSet(res)).toBe('ticket-abc')
   })
 
@@ -109,6 +121,20 @@ describe('POST /api/admin/impersonation', () => {
     const res = await post()
     expect(res.status).toBe(200)
     expect(settled, 'the audit insert had not settled when the response returned').toBe(true)
+  })
+
+  // The best-effort actor lookup falls back to an anonymous 'system' actor on
+  // any error. The start row must still say which admin started the session.
+  it('records the verified admin as the starter, even when the actor lookup comes back empty', async () => {
+    h.actor = { actorType: 'system' }
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({
+      action: 'impersonation_started',
+      actorType: 'admin',
+      actorMemberId: 'admin1',
+      metadata: { adminMemberId: 'admin1' },
+    })
   })
 
   it('403s a non-admin', async () => {
@@ -128,7 +154,7 @@ describe('POST /api/admin/impersonation', () => {
   })
 
   it('refuses a target with a staff_roles row, without asking Clerk', async () => {
-    h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], staff_roles: [{ member_id: 'm1', scopes: ['events'] }] })
+    h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], staff_roles: [{ member_id: M1, scopes: ['events'] }] })
     const res = await post()
     expect(res.status).toBe(403)
     expect(getUser).not.toHaveBeenCalled()
@@ -140,6 +166,24 @@ describe('POST /api/admin/impersonation', () => {
     const res = await post()
     expect(res.status).toBe(503)
     expect(logActivityOrThrow).not.toHaveBeenCalled()
+    expect(cookieSet(res)).toBeNull()
+  })
+
+  // A member row can point at a Clerk user that no longer exists (a missed
+  // user.deleted webhook). That is an answer, not an outage: no Clerk user, no
+  // role. Retrying a 503 could never succeed.
+  it('treats a Clerk 404 as "no Clerk user, so not staff"', async () => {
+    getUser.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }))
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(actions()).toEqual(['impersonation_started'])
+    expect(cookieSet(res)).toBe('ticket-abc')
+  })
+
+  it('still fails closed on any other Clerk error status', async () => {
+    getUser.mockRejectedValue(Object.assign(new Error('Too many requests'), { status: 429 }))
+    const res = await post()
+    expect(res.status).toBe(503)
     expect(cookieSet(res)).toBeNull()
   })
 
@@ -169,7 +213,14 @@ describe('POST /api/admin/impersonation', () => {
   })
 
   it('404s an unknown member', async () => {
-    expect((await post('nobody')).status).toBe(404)
+    expect((await post(NOBODY)).status).toBe(404)
+  })
+
+  it('400s a malformed member id rather than reporting a database error', async () => {
+    const res = await post('not-a-uuid')
+    expect(res.status).toBe(400)
+    expect(getUser).not.toHaveBeenCalled()
+    expect(cookieSet(res)).toBeNull()
   })
 
   it('without IMPERSONATION_SECRET: says view-as is off, before touching anything', async () => {
@@ -189,17 +240,20 @@ describe('POST /api/admin/impersonation', () => {
   })
 
   it('switching members closes the previous session in the audit trail first', async () => {
-    h.cookieValue = 'old-ticket'
-    h.decoded = { memberId: 'someone-else', adminMemberId: 'admin1', issuedAt: Date.now() }
+    holdTicketFor(OTHER)
     const res = await post()
     expect(res.status).toBe(200)
     expect(actions()).toEqual(['impersonation_ended', 'impersonation_started'])
-    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({ memberId: 'someone-else', metadata: { reason: 'replaced' } })
+    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({
+      memberId: OTHER,
+      actorType: 'admin',
+      actorMemberId: 'admin1',
+      metadata: { reason: 'replaced', adminMemberId: 'admin1' },
+    })
   })
 
   it('switching members: when the new start cannot be recorded after the old end was, the old session ends too', async () => {
-    h.cookieValue = 'old-ticket'
-    h.decoded = { memberId: 'someone-else', adminMemberId: 'admin1', issuedAt: Date.now() }
+    holdTicketFor(OTHER)
     logActivityOrThrow.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('insert failed'))
     const res = await post()
     expect(res.status).toBe(503)
@@ -210,34 +264,80 @@ describe('POST /api/admin/impersonation', () => {
   })
 
   it('switching members: when the old end cannot be recorded, the old session is left as it was', async () => {
-    h.cookieValue = 'old-ticket'
-    h.decoded = { memberId: 'someone-else', adminMemberId: 'admin1', issuedAt: Date.now() }
+    holdTicketFor(OTHER)
     logActivityOrThrow.mockRejectedValueOnce(new Error('insert failed'))
     const res = await post()
     expect(res.status).toBe(503)
     expect(actions()).toEqual(['impersonation_ended'])
+    // Says what actually failed: the end of the old session, not the new start.
+    expect((await res.json()).error).toMatch(/end of your current view-as session/)
     expect(cookieSet(res)).toBeNull()
+  })
+
+  // The member of the old session was purged while it ran. Their log rows
+  // cascaded away with them, so the end can never be recorded; that must not
+  // block starting a new session for up to 30 minutes.
+  it('switching members: an old session whose member was purged does not block the new one', async () => {
+    holdTicketFor(NOBODY)
+    logActivityOrThrow.mockRejectedValueOnce(new Error('violates foreign key constraint'))
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(actions()).toEqual(['impersonation_ended', 'impersonation_started'])
+    expect(cookieSet(res)).toBe('ticket-abc')
   })
 })
 
 describe('DELETE /api/admin/impersonation', () => {
   it('logs impersonation_ended, then clears the cookie (AUTH-9)', async () => {
     h.cookieValue = 'ticket-abc'
-    h.decoded = { memberId: 'm1', adminMemberId: 'admin1', issuedAt: Date.now() }
+    h.decoded = { memberId: M1, adminMemberId: 'admin1', issuedAt: Date.now() }
     const res = await DELETE()
     expect(res.status).toBe(200)
     expect(actions()).toEqual(['impersonation_ended'])
-    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({ memberId: 'm1', metadata: { reason: 'exited' } })
+    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({ memberId: M1, metadata: { reason: 'exited' } })
     expect(cookieSet(res)).toBe('')
+  })
+
+  // DELETE is not admin-gated, so whoever ends the session is recorded as found;
+  // the admin who started it comes from the signed ticket.
+  it('names the admin who started the session, whoever ends it', async () => {
+    h.cookieValue = 'ticket-abc'
+    h.decoded = { memberId: M1, adminMemberId: 'admin-who-started', issuedAt: Date.now() }
+    h.actor = { actorType: 'system' }
+    const res = await DELETE()
+    expect(res.status).toBe(200)
+    expect(logActivityOrThrow.mock.calls[0][0]).toMatchObject({
+      actorType: 'system',
+      metadata: { reason: 'exited', adminMemberId: 'admin-who-started' },
+    })
   })
 
   it('leaves the session running when its end cannot be recorded', async () => {
     h.cookieValue = 'ticket-abc'
-    h.decoded = { memberId: 'm1', adminMemberId: 'admin1', issuedAt: Date.now() }
+    h.decoded = { memberId: M1, adminMemberId: 'admin1', issuedAt: Date.now() }
     logActivityOrThrow.mockRejectedValue(new Error('insert failed'))
     const res = await DELETE()
     expect(res.status).toBe(503)
     expect((await res.json()).error).toMatch(/still running/)
+    expect(cookieSet(res)).toBeNull()
+  })
+
+  it('ends the session when its member was purged: there is nothing left to record against', async () => {
+    h.cookieValue = 'ticket-abc'
+    h.decoded = { memberId: NOBODY, adminMemberId: 'admin1', issuedAt: Date.now() }
+    logActivityOrThrow.mockRejectedValue(new Error('violates foreign key constraint'))
+    const res = await DELETE()
+    expect(res.status).toBe(200)
+    expect(cookieSet(res)).toBe('')
+  })
+
+  it('stays fail-closed when it cannot tell whether the member was purged', async () => {
+    h.cookieValue = 'ticket-abc'
+    h.decoded = { memberId: NOBODY, adminMemberId: 'admin1', issuedAt: Date.now() }
+    h.db = fakeSupabase({ members: [] }, { failOn: (table) => (table === 'members' ? 'boom' : null) })
+    logActivityOrThrow.mockRejectedValue(new Error('insert failed'))
+    const res = await DELETE()
+    expect(res.status).toBe(503)
     expect(cookieSet(res)).toBeNull()
   })
 

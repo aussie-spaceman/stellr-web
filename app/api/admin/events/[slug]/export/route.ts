@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import { toCsv } from '@/lib/csv'
+import { displayGrade } from '@/lib/member-enums'
 import { supabaseServer } from '@/lib/supabase'
 import { MEDIA_REASON_LABEL, mediaForParticipants } from '@/lib/survey/media'
 
@@ -32,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       p.email,
       p.event_role ?? '',
       p.school_name ?? '',
-      p.grade ?? '',
+      displayGrade(p.grade) ?? '',
       p.gender ?? '',
       p.date_of_birth ?? '',
       p.t_shirt_size ?? '',

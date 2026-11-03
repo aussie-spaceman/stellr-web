@@ -127,6 +127,16 @@ export function denormalizeTshirt(v: unknown): string | undefined {
   return s.length > 0 ? s : undefined
 }
 
+// Grade → display value for rosters/exports: school grades as a bare number
+// ("10"), college grades as their form label. participants.grade is text and
+// holds both shapes — the individual form writes "10", while the group paths
+// copy the member's enum ("grade_10"). Unrecognised values pass through.
+export function displayGrade(v: unknown): string | undefined {
+  const s = (v ?? '').toString().trim()
+  if (!s) return undefined
+  return denormalizeGrade(normalizeGrade(s)) ?? s
+}
+
 // Event role → display label for rosters/admin tables. Accepts enum values and
 // legacy display strings (canonicalised first); undefined when unrecognised.
 export function displayEventRole(v: unknown): string | undefined {

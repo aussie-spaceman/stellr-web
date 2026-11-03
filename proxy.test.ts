@@ -2,8 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest, type NextFetchEvent } from 'next/server'
 
-// Sign-up is invite-only (Clerk Restricted mode, 3 Nov 2026): a guest on a
-// member page is sent to /sign-in, never /sign-up, keeping ?next so they come
+// Anyone can create an account (decision 24, 3 Nov 2026). A guest on a member
+// page is sent to sign-in, whose card links on to sign-up; a guest on a page
+// meant for new members goes straight to sign-up. Both keep ?next so they come
 // back to the page they asked for. Clerk is stubbed: clerkMiddleware just runs
 // the handler with an auth() that reports the test's userId.
 
@@ -36,13 +37,13 @@ beforeEach(() => {
   state.userId = null
 })
 
-describe('proxy: guests on member pages go to sign-in', () => {
+describe('proxy: guests on member pages get sign-in or sign-up', () => {
   it('redirects a guest on /community to /sign-in with ?next', async () => {
-    const res = await hit('/community/mentoring/discover')
+    const res = await hit('/community')
     expect(res.status).toBe(307)
     const to = new URL(res.headers.get('location')!)
     expect(to.pathname).toBe('/sign-in')
-    expect(to.searchParams.get('next')).toBe('/community/mentoring/discover')
+    expect(to.searchParams.get('next')).toBe('/community')
   })
 
   it('keeps the query string in ?next and redirects /home too', async () => {
@@ -52,10 +53,19 @@ describe('proxy: guests on member pages go to sign-in', () => {
     expect(to.searchParams.get('next')).toBe('/home?tab=events')
   })
 
-  it('never sends a guest to /sign-up', async () => {
-    for (const path of ['/community', '/community/surveys', '/home']) {
-      const res = await hit(path)
-      expect(res.headers.get('location') ?? '').not.toContain('/sign-up')
+  it('sends a guest on mentoring discovery, a page for new members, to /sign-up with ?next', async () => {
+    const res = await hit('/community/mentoring/discover')
+    expect(res.status).toBe(307)
+    const to = new URL(res.headers.get('location')!)
+    expect(to.pathname).toBe('/sign-up')
+    expect(to.searchParams.get('next')).toBe('/community/mentoring/discover')
+  })
+
+  it('sends a guest on other mentoring pages to /sign-in', async () => {
+    for (const path of ['/community/mentoring', '/community/mentoring/abc', '/community/surveys']) {
+      const to = new URL((await hit(path)).headers.get('location')!)
+      expect(to.pathname).toBe('/sign-in')
+      expect(to.searchParams.get('next')).toBe(path)
     }
   })
 

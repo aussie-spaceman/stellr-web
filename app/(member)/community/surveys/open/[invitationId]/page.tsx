@@ -3,7 +3,7 @@ import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { invitationForMember } from '@/lib/survey/access'
 import { SurveyLoader } from '@/components/survey/SurveyLoader'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
 
 export const metadata = { title: 'Survey' }
 export const dynamic = 'force-dynamic'
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 // recorded as opened_from = dashboard.
 export default async function DashboardSurveyPage({ params }: { params: Promise<{ invitationId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect(signInPath('/community/surveys'))
+  if (!member) redirect(authPath('/community/surveys'))
   const { invitationId } = await params
   if (!/^[0-9a-f-]{36}$/.test(invitationId)) notFound()
   const inv = await invitationForMember(supabaseServer(), member.id, invitationId)

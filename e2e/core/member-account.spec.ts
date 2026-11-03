@@ -55,12 +55,22 @@ test('community is reachable with an active membership', async ({ page }) => {
 test.describe('a guest on a member page', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
-  // Sign-up is invite-only (Clerk Restricted mode), so proxy.ts sends a guest
-  // to sign-in, never sign-up, and keeps where they were going in ?next.
-  test('is sent to sign-in with the page to come back to', async ({ page }) => {
-    await page.goto('/community/mentoring/discover')
-    await expect(page).toHaveURL(/\/sign-in\?next=%2Fcommunity%2Fmentoring%2Fdiscover/, { timeout: 15_000 })
-    await expect(page).not.toHaveURL(/\/sign-up/)
+  // Anyone can create an account (decision 24). proxy.ts sends a guest on a
+  // member page to sign-in, keeping where they were going in ?next, and the
+  // sign-in card offers a "Sign up" link that keeps ?next too.
+  test('is sent to sign-in with a visible way to sign up', async ({ page }) => {
+    await page.goto('/community')
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fcommunity(&|$)/, { timeout: 15_000 })
+    const signUp = page.getByRole('link', { name: /sign up/i })
+    await expect(signUp).toBeVisible({ timeout: 15_000 })
+    await expect(signUp).toHaveAttribute('href', /\/sign-up\?next=%2Fcommunity/)
+  })
+
+  // /join is where a priced membership card leads, so a guest there is usually
+  // new: they go straight to sign-up and come back to checkout afterwards.
+  test('on /join is sent to sign-up with the checkout to come back to', async ({ page }) => {
+    await page.goto('/join?tier=catalyst')
+    await expect(page).toHaveURL(/\/sign-up\?next=%2Fjoin%3Ftier%3Dcatalyst/, { timeout: 15_000 })
   })
 })
 

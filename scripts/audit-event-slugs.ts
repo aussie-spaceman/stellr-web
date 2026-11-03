@@ -14,7 +14,7 @@
  *   npm run fix:event-slug -- --from <old> --to <new>
  *
  * Prerequisites (.env.local): NEXT_PUBLIC_SANITY_PROJECT_ID,
- * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY)
  *
  * Run:
  *   npm run audit:event-slugs
@@ -24,6 +24,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 import { supabaseServer } from '../lib/supabase'
+import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 
 // ESM hoists static imports above this call, so nothing imported above may read
 // env at module scope — Sanity is queried over raw fetch for that reason.
@@ -33,12 +34,12 @@ dotenv.config(fs.existsSync(envPath) ? { path: envPath } : {})
 const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const secretKey = supabaseSecretKey()
 
 const missing = [
   !projectId && 'NEXT_PUBLIC_SANITY_PROJECT_ID',
   !supabaseUrl && 'NEXT_PUBLIC_SUPABASE_URL',
-  !serviceKey && 'SUPABASE_SERVICE_ROLE_KEY',
+  !secretKey && SECRET_KEY_VARS,
 ].filter(Boolean)
 
 if (missing.length) {

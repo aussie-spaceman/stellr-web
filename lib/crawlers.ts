@@ -1,3 +1,5 @@
+import { supabaseApiHeaders, supabaseSecretKey } from './supabase-keys'
+
 /**
  * Search and AI crawlers, by the product token in their user agent.
  *
@@ -51,18 +53,18 @@ export function matchCrawler(userAgent: string | null): string | null {
 /**
  * Record one crawler page request. Straight to PostgREST rather than through
  * supabase-js, to keep the proxy bundle small; best-effort by design — a failed
- * write must never affect the response the crawler gets.
+ * write must never affect the response the crawler gets. The key headers come
+ * from supabaseApiHeaders(): a secret key goes on `apikey` only (it is not a JWT).
  */
 export async function recordCrawlerHit(bot: string, path: string): Promise<void> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) return
   try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = supabaseSecretKey()
+    if (!url || !key) return
     await fetch(`${url}/rest/v1/crawler_hits`, {
       method: 'POST',
       headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
+        ...supabaseApiHeaders(key),
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },

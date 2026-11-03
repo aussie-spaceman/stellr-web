@@ -20,6 +20,7 @@ import * as fs from 'fs'
 import { createSign } from 'crypto'
 import { requireStripe } from '../lib/stripe'
 import { supabaseServer } from '../lib/supabase'
+import { supabaseSecretKey } from '../lib/supabase-keys'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
@@ -49,7 +50,7 @@ async function checkStripe() {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const svc = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const svc = supabaseSecretKey()
   if (!url || !svc) { console.log(warn('Supabase env missing — cannot read DB price IDs')); return }
   const db = supabaseServer()
 

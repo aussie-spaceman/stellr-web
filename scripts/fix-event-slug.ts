@@ -16,14 +16,15 @@
  *   npm run fix:event-slug -- --from old-slug --to new-slug           # dry run
  *   npm run fix:event-slug -- --from old-slug --to new-slug --apply   # writes
  *
- * Prerequisites (.env.local): NEXT_PUBLIC_SUPABASE_URL,
- * SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SANITY_PROJECT_ID
+ * Prerequisites (.env.local): NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY
+ * (or legacy SUPABASE_SERVICE_ROLE_KEY), NEXT_PUBLIC_SANITY_PROJECT_ID
  */
 
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 import { supabaseServer } from '../lib/supabase'
+import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 
 // ESM hoists static imports above this call, so nothing imported above may read
 // env at module scope — Sanity is queried over raw fetch for that reason.
@@ -40,7 +41,7 @@ const to = arg('to')
 const apply = process.argv.includes('--apply')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const secretKey = supabaseSecretKey()
 const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
 
@@ -52,8 +53,8 @@ if (from === to) {
   console.error('❌  --from and --to are the same slug; nothing to do.')
   process.exit(1)
 }
-if (!supabaseUrl || !serviceKey) {
-  console.error('❌  Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env.local')
+if (!supabaseUrl || !secretKey) {
+  console.error(`❌  Missing NEXT_PUBLIC_SUPABASE_URL / ${SECRET_KEY_VARS} in .env.local`)
   process.exit(1)
 }
 

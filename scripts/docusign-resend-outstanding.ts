@@ -39,9 +39,10 @@ async function main() {
   // a hoisted static import once captured an empty private key (9 Sept 2026).
   const { createClient } = await import('@supabase/supabase-js')
   const { reissueParticipantAgreement } = await import('../lib/docusign-reissue')
+  const { supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { persistSession: false } })
+  const db = createClient(url, supabaseSecretKey() ?? '', { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   console.log(`Supabase: ${new URL(url).host}`)
   console.log(`DocuSign: ${process.env.DOCUSIGN_BASE_PATH ?? '(unset — sandbox default)'}`)
   console.log(`Event:    ${EVENT}${SENT_BEFORE ? `, envelopes sent before ${SENT_BEFORE}` : ''}`)

@@ -9,7 +9,7 @@
  * and overwrites the same path in place.
  *
  * Env (from .env.local or the environment):
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (required)
+ *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY         (required; legacy SUPABASE_SERVICE_ROLE_KEY also accepted)
  *   FFMPEG_PATH                                           (optional; else ffmpeg-static / system ffmpeg)
  *
  *   npx tsx scripts/watermark-worker.ts            # continuous: poll every 15s
@@ -24,15 +24,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { watermarkVideoFile } from '../lib/watermark/video'
 import { sleep } from '../lib/utils'
 import { supabaseServer } from '../lib/supabase'
+import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
 else dotenv.config()
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-if (!url || !serviceKey) {
-  console.error('❌  NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
+const secretKey = supabaseSecretKey()
+if (!url || !secretKey) {
+  console.error(`❌  NEXT_PUBLIC_SUPABASE_URL and ${SECRET_KEY_VARS} must be set`)
   process.exit(1)
 }
 

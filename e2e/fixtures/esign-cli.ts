@@ -8,6 +8,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 
 const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 
@@ -16,7 +17,7 @@ async function main() {
   delete process.env.RESEND_API_KEY
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   if (!url.includes(DEV_PROJECT_REF)) throw new Error(`esign e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const [command, arg] = process.argv.slice(2)
 
   if (command === 'link') {

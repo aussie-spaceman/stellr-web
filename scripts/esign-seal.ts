@@ -67,7 +67,8 @@ async function apply(rowId: string) {
   if (!url.includes(DEV_PROJECT_REF)) throw new Error(`Refusing: apply runs against the dev project only (${DEV_PROJECT_REF})`)
   const { createClient } = await import('@supabase/supabase-js')
   const { applyCertificateSeal } = await import('../lib/esign/native/certificate-seal')
-  const db = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false } })
+  const { supabaseFetch, supabaseSecretKey } = await import('../lib/supabase-keys')
+  const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   console.log(await applyCertificateSeal(db, rowId))
 }
 

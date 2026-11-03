@@ -6,13 +6,14 @@
  *   npm run aeo:crawlers -- --days 7
  *
  * Point it at production by running with the production Supabase URL and
- * service-role key in the environment — never by putting them in .env.local
- * (see docs/ENV-MATRIX.md).
+ * secret key (SUPABASE_SECRET_KEY) in the environment — never by putting them
+ * in .env.local (see docs/ENV-MATRIX.md, docs/RUNBOOK-supabase-api-keys.md).
  */
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 import { CRAWLERS } from '../lib/crawlers'
+import { SECRET_KEY_VARS, supabaseApiHeaders, supabaseSecretKey } from '../lib/supabase-keys'
 
 type Hit = { bot: string; path: string }
 
@@ -22,8 +23,8 @@ async function main() {
   if (!Number.isFinite(days) || days <= 0) throw new Error('--days must be a positive number')
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.')
+  const key = supabaseSecretKey()
+  if (!url || !key) throw new Error(`NEXT_PUBLIC_SUPABASE_URL and ${SECRET_KEY_VARS} are required.`)
 
   const since = new Date(Date.now() - days * 86_400_000).toISOString()
   const hits: Hit[] = []
@@ -31,7 +32,7 @@ async function main() {
   for (let offset = 0; ; offset += PAGE) {
     const res = await fetch(
       `${url}/rest/v1/crawler_hits?select=bot,path&seen_at=gte.${since}&order=id.asc&limit=${PAGE}&offset=${offset}`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+      { headers: supabaseApiHeaders(key) }
     )
     if (!res.ok) throw new Error(`crawler_hits read failed: ${res.status} ${await res.text()}`)
     const page = (await res.json()) as Hit[]

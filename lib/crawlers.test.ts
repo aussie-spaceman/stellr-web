@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { AI_CRAWLER_TOKENS, matchCrawler } from './crawlers'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AI_CRAWLER_TOKENS, matchCrawler, recordCrawlerHit } from './crawlers'
 
 // Real user-agent strings as each vendor documents them.
 const UA = {
@@ -39,5 +39,48 @@ describe('AI_CRAWLER_TOKENS', () => {
       ])
     )
     expect(AI_CRAWLER_TOKENS).not.toContain('Googlebot')
+  })
+})
+
+// S0 key migration: this is a raw PostgREST call, not supabase-js, so it builds
+// its own headers. A secret key is not a JWT and must not go on Authorization.
+describe('recordCrawlerHit', () => {
+  const SECRET = 'sb_secret_TESTONLY'
+  const LEGACY_SERVICE = 'eyJhbGci.eyJyb2xl.c2VydmljZQ'
+  const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
+
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
+    vi.stubEnv('SUPABASE_SECRET_KEY', undefined)
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', undefined)
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+    fetchMock.mockClear()
+  })
+
+  const headersSent = () => (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].headers as Record<string, string>
+
+  it('sends a new secret key on apikey only', async () => {
+    vi.stubEnv('SUPABASE_SECRET_KEY', SECRET)
+    await recordCrawlerHit('GPTBot', '/events')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(headersSent().apikey).toBe(SECRET)
+    expect(headersSent()).not.toHaveProperty('Authorization')
+  })
+
+  it('still sends a legacy service_role JWT on both headers', async () => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
+    await recordCrawlerHit('GPTBot', '/events')
+    expect(headersSent()).toMatchObject({ apikey: LEGACY_SERVICE, Authorization: `Bearer ${LEGACY_SERVICE}` })
+  })
+
+  it('skips the write, without throwing, when the key is missing or mis-slotted', async () => {
+    await expect(recordCrawlerHit('GPTBot', '/events')).resolves.toBeUndefined()
+    vi.stubEnv('SUPABASE_SECRET_KEY', 'sb_publishable_TESTONLY')
+    await expect(recordCrawlerHit('GPTBot', '/events')).resolves.toBeUndefined()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

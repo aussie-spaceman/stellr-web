@@ -7,8 +7,11 @@
  *   - No home-state field exists. The school's state stands in for it, as the
  *     privacy runbook (Part C) already does for NY/CO media defaults.
  *   - No ward field exists, so wards are caught only by the other two rules.
- *   - A student with no date of birth is treated as a minor: the cautious
- *     reading, and the one lib/no-ads.ts already takes.
+ *   - Anyone with no usable date of birth is treated as a minor: the cautious
+ *     reading, the one lib/no-ads.ts already takes, and (since S0, 2 Nov 2026)
+ *     the one lib/age isMinorOn takes too. A caller that knows the person is an
+ *     adult by role (mentor, teacher, parent) says so with
+ *     presumeMinorIfUnknown: false.
  * Age itself always comes from lib/age.ts. Imports nothing else, so the
  * credential routes can use it without lib/locations' Sanity client (moved
  * here from lib/survey/minor, 9 Oct 2026).
@@ -33,13 +36,14 @@ export interface MinorFacts {
   ageBracket?: string | null
   grade?: string | null
   isWard?: boolean | null
-  /** Students with no DOB are presumed minors; adults (mentors, teachers, parents) are not. */
+  /** With no usable DOB the person is presumed a minor unless this is false
+   *  (an adult by role: mentor, teacher, parent). */
   presumeMinorIfUnknown?: boolean
 }
 
 export function isMinorPerPolicy(f: MinorFacts, on: Date | string = appToday()): boolean {
   if (f.isWard) return true
   if (f.ageBracket === 'high_school' || isSchoolGrade(f.grade)) return true
-  if (!isValidDob(f.dateOfBirth)) return f.presumeMinorIfUnknown === true
+  if (!isValidDob(f.dateOfBirth)) return f.presumeMinorIfUnknown !== false
   return ageOn(f.dateOfBirth, onDate(on)) < ageOfMajority(f.state)
 }

@@ -15,7 +15,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatDateShort } from '@/lib/utils'
-import { isMinorOn } from '@/lib/age'
+import { isKnownMinorOn } from '@/lib/age'
 
 // Student roles never require a background check (even at 18+). Kept as an
 // export because the roster and volunteer code use it to mean "is a student".
@@ -93,8 +93,10 @@ export interface ComplianceSummary {
   check: BackgroundCheck | null
 }
 
-// Unknown DOB → treated as an adult (safer: requires the check).
-const isMinor = (dateOfBirth: string | null | undefined, ref?: Date) => isMinorOn(dateOfBirth, ref)
+// Unknown DOB → treated as an adult (safer: requires the check). Being a minor
+// is what exempts someone here, so this is the one place "unknown" must not
+// presume a minor (lib/age isKnownMinorOn).
+const isMinor = (dateOfBirth: string | null | undefined, ref?: Date) => isKnownMinorOn(dateOfBirth, ref)
 
 /**
  * Does this member need a background check or a verified license to take part?

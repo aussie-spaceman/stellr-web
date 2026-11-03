@@ -55,7 +55,7 @@ describe('syncParticipantsFromSheet — half-typed rows do not create phantoms',
     await syncParticipantsFromSheet(fake.client, reg)
 
     // Second push: the email is now filled in.
-    readSheetParticipants.mockResolvedValueOnce([row({ first_name: 'Jane', email: 'jane@x.com' })])
+    readSheetParticipants.mockResolvedValueOnce([row({ first_name: 'Jane', email: 'jane@x.com', date_of_birth: '2011-04-05' })])
     await syncParticipantsFromSheet(fake.client, reg)
 
     expect(fake.table('participants')).toHaveLength(1)
@@ -67,5 +67,37 @@ describe('syncParticipantsFromSheet — half-typed rows do not create phantoms',
     readSheetParticipants.mockResolvedValueOnce([row({ first_name: 'Half', email: 'not-an-email' })])
     await syncParticipantsFromSheet(fake.client, reg)
     expect(fake.table('participants')).toHaveLength(0)
+  })
+})
+
+// S0 (2 Nov 2026): the registration routes' date-of-birth check. A row whose
+// date of birth is blank or not a real past date is left out and reported —
+// not the whole sync — and syncs once it is fixed.
+describe('syncParticipantsFromSheet — rows without a usable date of birth', () => {
+  it('skips and reports them, writing no member or participant, and syncs the rest', async () => {
+    const { upsertMember } = await import('@/lib/member-sync')
+    const fake = fakeSupabase({ participants: [] })
+    readSheetParticipants.mockResolvedValueOnce([
+      row({ first_name: 'Blank', last_name: 'Dob', email: 'blank@x.com' }),
+      row({ first_name: 'Future', last_name: 'Dob', email: 'future@x.com', date_of_birth: '2030-05-01' }),
+      row({ first_name: 'Good', last_name: 'Dob', email: 'good@x.com', date_of_birth: '2011-04-05' }),
+    ])
+    const r = await syncParticipantsFromSheet(fake.client, reg)
+    expect(r.skippedForDateOfBirth).toEqual(['Blank Dob', 'Future Dob'])
+    expect(r.created).toBe(1)
+    expect(fake.table('participants').map((p) => p.email)).toEqual(['good@x.com'])
+    expect(upsertMember).toHaveBeenCalledTimes(1)
+    expect(upsertMember).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ email: 'good@x.com', date_of_birth: '2011-04-05' }))
+  })
+
+  it('adds the row once its date of birth is fixed', async () => {
+    const fake = fakeSupabase({ participants: [] })
+    readSheetParticipants.mockResolvedValueOnce([row({ first_name: 'Typo', email: 'typo@x.com', date_of_birth: '2030-05-01' })])
+    await syncParticipantsFromSheet(fake.client, reg)
+    expect(fake.table('participants')).toHaveLength(0)
+    readSheetParticipants.mockResolvedValueOnce([row({ first_name: 'Typo', email: 'typo@x.com', date_of_birth: '2010-05-01' })])
+    const r = await syncParticipantsFromSheet(fake.client, reg)
+    expect(r.skippedForDateOfBirth).toEqual([])
+    expect(fake.table('participants')).toHaveLength(1)
   })
 })

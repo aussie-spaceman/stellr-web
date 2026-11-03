@@ -3,11 +3,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { agreementValid } from '@/lib/docusign-agreements'
 import { relabelIssuedAward } from '@/lib/event-awards'
 import { isMinorPerPolicy, type MinorFacts } from '@/lib/minor-policy'
+import { isKnownMinorOn } from '@/lib/age'
 import {
   CREDENTIAL_COLUMNS,
   ageBlock,
   canShare,
-  isMinorOn,
   normaliseCredentialNumber,
   type CredentialRow,
   type CredentialSource,
@@ -164,8 +164,21 @@ export async function holderIsMinor(
   if (c.is_minor) return true
   const known = 'date_of_birth' in c ? (c.date_of_birth ?? null) : null
   const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id })
-  if (!facts) return isMinorOn(known)
-  return isMinorPerPolicy({ ...facts, dateOfBirth: known ?? facts.dateOfBirth })
+  if (!facts) return isKnownMinorOn(known)
+  return minorPerPolicyIfDobKnown({ ...facts, dateOfBirth: known ?? facts.dateOfBirth })
+}
+
+/**
+ * Who the credential emails go to, and the `is_minor` stamped on a new
+ * credential, keep reading a missing date of birth as "not a Minor" — the one
+ * exception to lib/age and lib/minor-policy presuming a minor (S0, 2 Nov 2026).
+ * `is_minor` never clears, so a guess would make an educator with no DOB on
+ * file (PD credentials) a Minor for life; going public already fails closed on
+ * an unknown DOB (ageBlock); and a student is still caught by grade or the
+ * high-school bracket.
+ */
+function minorPerPolicyIfDobKnown(facts: MinorFacts): boolean {
+  return isMinorPerPolicy({ ...facts, presumeMinorIfUnknown: false })
 }
 
 /**
@@ -235,8 +248,8 @@ export async function issueCredential(
   // the consent check and the email re-read the records anyway.
   const facts = await holderMinorFacts(db, { memberId: input.memberId ?? null, participantId: input.participantId ?? null })
   const isMinor = facts
-    ? isMinorPerPolicy({ ...facts, dateOfBirth: input.recipient.dateOfBirth ?? facts.dateOfBirth })
-    : isMinorOn(input.recipient.dateOfBirth)
+    ? minorPerPolicyIfDobKnown({ ...facts, dateOfBirth: input.recipient.dateOfBirth ?? facts.dateOfBirth })
+    : isKnownMinorOn(input.recipient.dateOfBirth)
 
   const insert = {
     number:         generateCredentialNumber(),

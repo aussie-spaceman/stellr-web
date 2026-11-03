@@ -13,7 +13,7 @@ import {
 } from '@/lib/member-enums'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { upsertMember } from '@/lib/member-sync'
-import { ageFromDob } from '@/lib/utils'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
@@ -128,6 +128,9 @@ export async function POST(req: NextRequest) {
   }
   const schoolName = (reg.school_name as string) ?? ''
   const memberPaysIndividually = (reg.member_pays_individually as boolean) ?? false
+  // S0 (2 Nov 2026): ages are taken on the event's start date (else today), and
+  // a missing or unreadable date of birth is refused before anything is written.
+  const eventDate = (joinEvent as { date?: string | null }).date ?? null
 
   let person: JoinPerson
   let memberId: string
@@ -144,6 +147,15 @@ export async function POST(req: NextRequest) {
 
     if (!member) {
       return NextResponse.json({ error: 'Member profile not found. Please complete your Stellr profile first.' }, { status: 404 })
+    }
+    // The stored date of birth is what the participant row and the agreement
+    // use. Without a usable one the row cannot be saved, and the agreement
+    // would not know whether a parent has to sign.
+    if (!checkRegistrationAge(member.date_of_birth, { eventDate }).ok) {
+      return NextResponse.json(
+        { error: 'Please add your date of birth to your Stellr profile (Account → Profile), then open this link again.' },
+        { status: 400 },
+      )
     }
 
     memberId = member.id
@@ -184,8 +196,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'First name, last name, email and date of birth are required.' }, { status: 400 })
     }
 
-    const ageNow = ageFromDob(dob)
-    const isMinor = Number.isFinite(ageNow) && ageNow < 18
+    const ageCheck = checkRegistrationAge(dob, { eventDate })
+    if (!ageCheck.ok) {
+      return NextResponse.json({ error: ageCheck.error }, { status: 400 })
+    }
+    const isMinor = ageCheck.isMinor
     const role = normalizeEventRole(str(d.type) || 'participant')
     const eventRole = isMinor && role !== 'school_student_manager' ? 'participant' : role
 
@@ -195,7 +210,7 @@ export async function POST(req: NextRequest) {
       nickname: str(d.nickname) || null,
       email,
       phone: str(d.phone) || null,
-      date_of_birth: dob,
+      date_of_birth: ageCheck.dateOfBirth,
       gender: normalizeGender(d.gender),
       grade: normalizeGrade(d.grade),
       t_shirt_size: normalizeTshirt(d.t_shirt_size),
@@ -254,8 +269,13 @@ export async function POST(req: NextRequest) {
     // Provision a passwordless Clerk account + sign-in token so the participant
     // is silently signed in on success (non-fatal — they can still sign in later
     // with the same email). Eagerly link the Clerk id to avoid a webhook race.
+    // A child under 13 gets no login here (COPPA guard): their member row is
+    // new, so no parent can have signed yet. The daily group sweep makes it later.
     try {
-      const provisioned = await ensureClerkUserAndSignInToken(person.email, person.first_name, person.last_name, { memberIsNew })
+      const provisioned = await ensureClerkUserAndSignInToken(person.email, person.first_name, person.last_name, {
+        memberIsNew,
+        age: { dateOfBirth: person.date_of_birth },
+      })
       signInToken = provisioned.signInToken
       // Only link the Clerk id when a token was minted (both Clerk user and
       // member row new this request); otherwise linking would bind a

@@ -15,7 +15,7 @@ import {
   type CreatedAgreement,
 } from '@/lib/esign/types'
 import { notifyCommunityAdmins } from '@/lib/notify'
-import { isMinorOn } from '@/lib/age'
+import { isKnownMinorOn } from '@/lib/age'
 
 // Issues one agreement on whichever engine should take it. The single place
 // the choice is made, so no caller knows or cares which engine that is.
@@ -101,7 +101,9 @@ export async function issueAgreement(
 
 function needsParentCoSign(req: CreateAgreementRequest): boolean {
   if (req.type !== 'mentor' && req.type !== 'volunteer') return false
-  return isMinorOn(req.params.dateOfBirth ?? null, undefined, req.params.state ?? null)
+  // Same reading as the plan (lib/esign/native/plan): an adult by role, so
+  // only a known under-majority date of birth adds the parent.
+  return isKnownMinorOn(req.params.dateOfBirth ?? null, undefined, req.params.state ?? null)
 }
 
 // One outage alert per server instance per hour, not one per agreement: a

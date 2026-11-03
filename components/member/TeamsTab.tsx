@@ -317,7 +317,13 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
     const res = await fetch(`/api/members/teams/${registrationId}/sheet-sync`, { method: 'POST' })
     const data = await res.json()
     if (res.ok) {
-      setSyncMsg(`Synced: ${data.updated} updated, ${data.created} added.${data.watchActive ? ' Live sync active.' : ''}`)
+      const skipped: string[] = Array.isArray(data.skippedForDateOfBirth) ? data.skippedForDateOfBirth : []
+      setSyncMsg(
+        `Synced: ${data.updated} updated, ${data.created} added.${data.watchActive ? ' Live sync active.' : ''}` +
+        (skipped.length > 0
+          ? ` Skipped, as the date of birth is missing or doesn’t look right: ${skipped.join(', ')}. Fix it in the sheet and sync again.`
+          : ''),
+      )
       // Reload full team
       const r2 = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
       const d2 = await r2.json()

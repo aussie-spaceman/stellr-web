@@ -66,15 +66,33 @@ export function ageOfMajority(state?: string | null): number {
  * Under the age of majority on `on`. Pass the state where the person lives
  * when it is known; without it, 18 applies. (Students still in high school
  * are Minors at any age under the agreements; callers decide that by role.)
+ *
+ * An unknown or unreadable date of birth is presumed a minor, as
+ * lib/minor-policy does (S0, 2 Nov 2026): it used to count as an adult, so a
+ * missing answer unlocked what only an adult may do. Where being a minor is
+ * what RELAXES a safeguard (the background-check exemption), the unknown case
+ * has to fall the other way: use isKnownMinorOn there.
  */
 export function isMinorOn(dateOfBirth: string | null | undefined, on = appToday(), state?: string | null): boolean {
-  // Unknown or unreadable: not assumed a minor (every caller already treats it so).
-  if (!isValidDob(dateOfBirth)) return false
+  if (!isValidDob(dateOfBirth)) return true
   return ageOn(dateOfBirth, on) < ageOfMajority(state)
 }
 
-/** Under 13: the age below which a parent's consent has to come first. */
+/**
+ * A date of birth on file that says under the age of majority on `on`; unknown
+ * is false. Only for a decision where treating someone as a minor would loosen
+ * a check, so the safe reading of "we don't know" is "adult".
+ */
+export function isKnownMinorOn(dateOfBirth: string | null | undefined, on = appToday(), state?: string | null): boolean {
+  return isValidDob(dateOfBirth) && ageOn(dateOfBirth, on) < ageOfMajority(state)
+}
+
+/**
+ * Under 13: the age below which a parent's consent has to come first (COPPA).
+ * An unknown or unreadable date of birth is presumed under 13, so it waits for
+ * the parent too.
+ */
 export function isUnder13On(dateOfBirth: string | null | undefined, on = appToday()): boolean {
-  if (!isValidDob(dateOfBirth)) return false
+  if (!isValidDob(dateOfBirth)) return true
   return ageOn(dateOfBirth, on) < 13
 }

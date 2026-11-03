@@ -8,11 +8,15 @@ import { syncMemberClassificationRole } from '@/lib/member-roles'
 import { startRetentionClock } from '@/lib/esign/retention'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
-// This keeps the members table in sync with Clerk identity records.
+// This keeps the members table in sync with Clerk identity records. A new
+// Clerk user is tied to a member row only through a verified primary email,
+// and never to a row another login already holds.
 
 interface ClerkEmailAddress {
   email_address: string
   id: string
+  /** Clerk's verification of this address: 'verified' once its owner proved it. */
+  verification?: { status?: string | null } | null
 }
 
 interface ClerkUserPayload {
@@ -66,28 +70,49 @@ export async function POST(req: Request) {
   const { type, data } = event
 
   if (type === 'user.created') {
-    const primaryEmail = normalizeEmail(data.email_addresses.find(
-      (e) => e.id === data.primary_email_address_id
-    )?.email_address)
+    const primary = data.email_addresses.find((e) => e.id === data.primary_email_address_id)
+    const primaryEmail = normalizeEmail(primary?.email_address)
 
     if (!primaryEmail) {
       return NextResponse.json({ received: true, skipped: 'no primary email' })
     }
 
+    // S0 (2 Nov 2026): an address its owner has not proved gets no member row,
+    // linked or new. A Clerk user can exist with an unverified address (an
+    // OAuth provider that does not verify, a backend create): linking it would
+    // hand that login an existing member's record — possibly a child's — and
+    // creating one would reserve the address for whoever typed it.
+    if (primary?.verification?.status !== 'verified') {
+      console.warn('[clerk webhook] user.created with an unverified primary email: not linked', { clerkUserId: data.id })
+      return NextResponse.json({ received: true, skipped: 'email not verified' })
+    }
+
     // Check if a member record already exists for this email (created via event registration)
     const { data: existing } = await db
       .from('members')
-      .select('id, event_role')
+      .select('id, event_role, clerk_user_id')
       .eq('email', primaryEmail)
       .maybeSingle()
 
     let memberId: string | null = null
     if (existing) {
-      // Link the existing member record to the new Clerk user
-      await db
-        .from('members')
-        .update({ clerk_user_id: data.id, profile_photo_url: data.image_url })
-        .eq('id', existing.id)
+      const linkedTo = (existing as { clerk_user_id: string | null }).clerk_user_id
+      // Never move a member row from one login to another: the row already
+      // belongs to the Clerk user it names. (The registration routes link the
+      // login they just made before this event lands; that is the same id.)
+      if (linkedTo && linkedTo !== data.id) {
+        console.warn('[clerk webhook] user.created for an email whose member is linked to another login: not linked', { clerkUserId: data.id })
+        return NextResponse.json({ received: true, skipped: 'member already linked' })
+      }
+      if (!linkedTo) {
+        // Link the existing member record to the new Clerk user — only while it
+        // is still unlinked, so a link made in the meantime is never overwritten.
+        await db
+          .from('members')
+          .update({ clerk_user_id: data.id, profile_photo_url: data.image_url })
+          .eq('id', existing.id)
+          .is('clerk_user_id', null)
+      }
       memberId = (existing as { id: string }).id
 
       // Seed roles on this branch too. It is the COMMON path for self-serve

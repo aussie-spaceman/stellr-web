@@ -12,6 +12,7 @@ import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { applyRosterChange } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
+import { checkRegistrationAge } from '@/lib/registration-eligibility'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -114,6 +115,21 @@ export async function POST(
     }
   }
 
+  // S0 (2 Nov 2026): the same date-of-birth check as the registration routes,
+  // before anything is written. A typo (a future date, an unreadable one) used
+  // to reach the member row and the agreement, and the person was then swept
+  // for a login. Age is taken on today's date; this route has no event date.
+  const ageCheck = checkRegistrationAge(insert.date_of_birth, {
+    name: [insert.first_name, insert.last_name].filter(Boolean).join(' ').trim() || 'this person',
+  })
+  if (!ageCheck.ok) {
+    const error = linkedMemberId
+      ? "We don't have a date of birth on file for this Stellr Member ID. Ask them to add it to their profile, or enter their details by hand."
+      : ageCheck.error
+    return NextResponse.json({ error }, { status: 400 })
+  }
+  insert.date_of_birth = ageCheck.dateOfBirth
+
   // Upsert a member row (non-fatal) so the person gets a member account, can be
   // linked to a school, and shows on admin member pages — parity with the
   // registration routes. The participant is saved regardless of the outcome.
@@ -123,7 +139,7 @@ export async function POST(
     last_name: body.last_name,
     nickname: body.nickname,
     phone: body.phone,
-    date_of_birth: body.date_of_birth,
+    date_of_birth: ageCheck.dateOfBirth,
     gender: body.gender,
     grade: body.grade,
     t_shirt_size: body.t_shirt_size,

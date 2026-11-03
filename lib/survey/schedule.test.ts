@@ -204,11 +204,15 @@ describe('minor rule', () => {
     expect(isMinorPerPolicy({ dateOfBirth: '2006-01-01', state: 'MS' }, on)).toBe(true) // 20 < 21
   })
 
-  it('counts anyone still in school, and presumes students with no DOB are minors', () => {
+  it('counts anyone still in school, and presumes anyone with no DOB is a minor unless an adult by role', () => {
     expect(isMinorPerPolicy({ dateOfBirth: '2007-01-01', state: 'CO', grade: 'grade_12' }, '2026-10-10')).toBe(true)
     expect(isMinorPerPolicy({ dateOfBirth: '2007-01-01', state: 'CO', ageBracket: 'high_school' }, '2026-10-10')).toBe(true)
     expect(isMinorPerPolicy({ dateOfBirth: null, state: 'CO', presumeMinorIfUnknown: true })).toBe(true)
-    expect(isMinorPerPolicy({ dateOfBirth: null, state: 'CO' })).toBe(false)
+    // S0 (2 Nov 2026): the default agrees with lib/age isMinorOn — unknown is a minor…
+    expect(isMinorPerPolicy({ dateOfBirth: null, state: 'CO' })).toBe(true)
+    expect(isMinorPerPolicy({ dateOfBirth: 'not a date', state: 'CO' })).toBe(true)
+    // …unless the caller knows an adult by role.
+    expect(isMinorPerPolicy({ dateOfBirth: null, state: 'CO', presumeMinorIfUnknown: false })).toBe(false)
     expect(isMinorPerPolicy({ dateOfBirth: '1990-01-01', state: 'CO', isWard: true })).toBe(true)
     expect(isSchoolGrade('11')).toBe(true)
     expect(isSchoolGrade('11th')).toBe(true)

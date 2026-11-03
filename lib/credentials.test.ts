@@ -81,7 +81,9 @@ describe('age gates', () => {
   it('isMinorOn is under 18', () => {
     expect(isMinorOn('2008-09-22', NOW)).toBe(true)
     expect(isMinorOn('2008-09-21', NOW)).toBe(false)
-    expect(isMinorOn(null, NOW)).toBe(false)
+    // Unknown is presumed a minor (lib/age, S0). Credentials keep reading it as
+    // "not a Minor" for emails and is_minor: see holderIsMinor.
+    expect(isMinorOn(null, NOW)).toBe(true)
   })
   it('canUseLinkedIn is 16+, and unknown DOB is a no', () => {
     expect(canUseLinkedIn('2010-09-21', NOW)).toBe(true)

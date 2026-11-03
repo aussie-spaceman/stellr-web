@@ -80,4 +80,17 @@ describe('route guards (static inventory)', () => {
     })
     expect(missing).toEqual([])
   })
+
+  // S0 (Nov 2026): getCurrentMember() follows a live view-as ticket and returns
+  // the member an admin is viewing as. An admin route that used it to name the
+  // actor recorded that member (often a minor) as the person who revoked or
+  // issued. Admin routes name the actor with getSignedInMember().
+  it('no /api/admin route resolves the acting admin with getCurrentMember', () => {
+    const files = routeFiles('app/api/admin')
+    expect(files.length).toBeGreaterThan(100)
+    // The import, not the name: comments explaining the rule may mention it.
+    const imports = /import\s*\{[^}]*\bgetCurrentMember\b[^}]*\}\s*from/
+    const offenders = files.filter((f) => imports.test(readFileSync(f, 'utf8')))
+    expect(offenders).toEqual([])
+  })
 })

@@ -12,7 +12,9 @@ import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { ViewAsBanner } from '@/components/admin/ViewAsBanner'
+import { StartViewAsSession } from '@/components/admin/StartViewAsSession'
 import { requireAdminPage } from '@/lib/admin-auth'
+import { getImpersonation } from '@/lib/impersonation'
 
 export const metadata = { title: 'Admin — View As Member' }
 
@@ -20,8 +22,10 @@ const TABS = ['profile', 'teams', 'billing'] as const
 type Tab = typeof TABS[number]
 
 // Read-only mirror of the member's own /account page. Everything the member can
-// see, the admin sees here — the session-bound widgets (Teams, Billing) are
-// pointed at this member via impersonateMemberId and rendered read-only.
+// see, the admin sees here. The session-bound widgets (Teams, Billing) load from
+// the member APIs, which resolve to this member only while the admin holds a
+// view-as ticket for them; without one, those tabs offer to start a session
+// (audited, 30 minutes) instead. They took ?memberId= until S0 (Nov 2026).
 export default async function ViewAsMemberPage({
   params,
   searchParams,
@@ -160,6 +164,10 @@ export default async function ViewAsMemberPage({
   const tabHref = (key: Tab) =>
     key === 'profile' ? `/admin/members/${id}/view-as` : `/admin/members/${id}/view-as?tab=${key}`
 
+  // Teams and billing need a live view-as ticket for THIS member: the APIs
+  // behind them read whoever the ticket names.
+  const viewingThisMember = activeTab !== 'profile' && (await getImpersonation())?.memberId === member.id
+
   return (
     <>
       {/* Banner breaks out of admin layout's padded <main> */}
@@ -232,18 +240,21 @@ export default async function ViewAsMemberPage({
                 ? 'Manage your registered teams and participant details.'
                 : 'Teams you have been added to for upcoming events.'}
             </p>
-            <TeamsTab
-              role={member.event_role}
-              memberId={member.id}
-              impersonateMemberId={member.id}
-              readOnly
-            />
+            {viewingThisMember ? (
+              <TeamsTab role={member.event_role} memberId={member.id} readOnly />
+            ) : (
+              <StartViewAsSession memberId={member.id} what="Teams" />
+            )}
           </div>
         )}
 
         {/* Billing tab */}
         {activeTab === 'billing' && showBilling && (
-          <BillingHistory impersonateMemberId={member.id} readOnly />
+          viewingThisMember ? (
+            <BillingHistory readOnly />
+          ) : (
+            <StartViewAsSession memberId={member.id} what="Billing details" />
+          )
         )}
       </div>
     </>

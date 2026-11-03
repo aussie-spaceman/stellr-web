@@ -5,7 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
 import { getEventRoster } from '@/lib/event-admin'
-import { loadOpenCheckIns, pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
+import { checkInsVisibleTo, loadOpenCheckIns, pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
 import { verifyCheckInCode } from '@/lib/check-in-codes'
 import { checkInTime, meaningfulNote, type DeskContact, type DeskDetails, type DeskFlags, type DeskGroup } from '@/lib/check-in-desk'
 
@@ -16,8 +16,10 @@ import { checkInTime, meaningfulNote, type DeskContact, type DeskDetails, type D
 //          medical and dietary notes) and each group's teacher contact. Heavier,
 //          and it rarely changes, so the desk loads it once and every few minutes.
 //   POST — { action: 'open' } | { action: 'close' } | { action: 'regenerate' }
-//          Opening an in-person event closes any other in-person event's check-in,
-//          so the banner has one place to go.
+//          Opening an in-person event closes the other in-person check-ins the
+//          caller manages, so the banner has one place to go. Only a full admin
+//          manages every event; an event manager never closes, or sees the name
+//          of, an event they aren't assigned to (lib/check-in-banner checkInsVisibleTo).
 //          { action: 'manual', participantId, at? } | { action: 'undo', participantId }
 //          { action: 'group_check_in', participantIds, at? } | { action: 'group_undo', participantIds }
 //          { action: 'scan', code, at? } — a participant's code checks them in; a
@@ -106,8 +108,10 @@ export async function GET(req: Request, { params }: Params) {
     resourcesUrl: settings?.resources_url ?? null,
     participants,
     groups,
+    // Where the banner points is worked out across every event, but only said
+    // as yes/no for this one; the events listed are the caller's own.
     bannerTarget: pickBannerEvent(openCheckIns, todayUtc())?.slug === slug,
-    otherOpen: openCheckIns
+    otherOpen: checkInsVisibleTo(openCheckIns, access)
       .filter((e) => e.inPerson && e.slug !== slug)
       .map((e) => ({ slug: e.slug, title: e.title ?? e.slug })),
   })
@@ -207,12 +211,16 @@ export async function POST(req: Request, { params }: Params) {
     let closed: { slug: string; title: string }[] = []
     if (action === 'open') {
       // One banner, one event. A virtual event's check-in is its emailed
-      // attendance link, so opening one leaves the in-person event alone.
+      // attendance link, so opening one leaves the in-person event alone. An
+      // event manager closes only events they manage; check-in left open at
+      // someone else's event is that event's to close.
       const event = (await getEventBySlug(slug)) as { setting?: string } | null
       if (event?.setting !== 'virtual') {
         const open = await loadOpenCheckIns(db).catch(() => null)
         if (!open) return NextResponse.json({ error: 'Database error' }, { status: 500 })
-        closed = open.filter((e) => e.inPerson && e.slug !== slug).map((e) => ({ slug: e.slug, title: e.title ?? e.slug }))
+        closed = checkInsVisibleTo(open, access)
+          .filter((e) => e.inPerson && e.slug !== slug)
+          .map((e) => ({ slug: e.slug, title: e.title ?? e.slug }))
         if (closed.length) {
           const { error } = await db
             .from('event_settings')

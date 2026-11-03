@@ -274,7 +274,7 @@ const CONSENT_TYPE_LABEL: Record<string, string> = {
 
 // ── Teacher view ──────────────────────────────────────────────────────────────
 
-function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; readOnly: boolean }) {
+function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
   const [teams, setTeams] = useState<TeamRegistration[]>([])
   const [participations, setParticipations] = useState<StudentTeam[]>([])
   const [loading, setLoading] = useState(true)
@@ -292,7 +292,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
   const [billingMsg, setBillingMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`/api/members/teams${memberQuery}`)
+    fetch(`/api/members/teams`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
@@ -301,12 +301,12 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [memberQuery])
+  }, [])
 
   async function loadTeam(id: string) {
     if (expanded === id) { setExpanded(null); setFullTeam(null); return }
     setExpanded(id)
-    const res = await fetch(`/api/members/teams/${id}${memberQuery}`)
+    const res = await fetch(`/api/members/teams/${id}`)
     const data = await res.json()
     if (!data.error) setFullTeam(data)
   }
@@ -319,7 +319,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
     if (res.ok) {
       setSyncMsg(`Synced: ${data.updated} updated, ${data.created} added.${data.watchActive ? ' Live sync active.' : ''}`)
       // Reload full team
-      const r2 = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
+      const r2 = await fetch(`/api/members/teams/${registrationId}`)
       const d2 = await r2.json()
       if (!d2.error) setFullTeam(d2)
     } else {
@@ -340,7 +340,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
     const out = await res.json().catch(() => ({})) as { error?: string; billing?: { message?: string | null } }
     setBillingMsg(res.ok ? out.billing?.message ?? 'Participant removed.' : out.error ?? 'Could not remove the participant.')
     // Reload
-    const r = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
+    const r = await fetch(`/api/members/teams/${registrationId}`)
     const d = await r.json()
     if (!d.error) setFullTeam(d)
     setRemoving(null)
@@ -351,7 +351,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
     setAdding(false)
     setEditing(null)
     if (expanded) {
-      fetch(`/api/members/teams/${expanded}${memberQuery}`)
+      fetch(`/api/members/teams/${expanded}`)
         .then(r => r.json())
         .then(d => { if (!d.error) setFullTeam(d) })
     }
@@ -368,7 +368,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
       const data = await res.json() as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Resend failed')
       setConsentMsg('Reminder sent.')
-      const r = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
+      const r = await fetch(`/api/members/teams/${registrationId}`)
       const d = await r.json()
       if (!d.error) setFullTeam(d)
     } catch (e) {
@@ -808,11 +808,9 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
 
 function StudentTeamsView({
   memberId: _memberId,
-  memberQuery,
   readOnly,
 }: {
   memberId: string
-  memberQuery: string
   readOnly: boolean
 }) {
   const [teams, setTeams] = useState<StudentTeam[]>([])
@@ -820,7 +818,7 @@ function StudentTeamsView({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`/api/members/teams${memberQuery}`)
+    fetch(`/api/members/teams`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
@@ -828,7 +826,7 @@ function StudentTeamsView({
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [memberQuery])
+  }, [])
 
   if (loading) return <p className="text-sm text-brand-muted-soft py-4">Loading your teams…</p>
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
@@ -850,15 +848,12 @@ function StudentTeamsView({
 interface Props {
   role: string
   memberId: string
-  // Admin "view as member": fetch this member's teams (admin-gated server-side)
-  // and render read-only — all mutating controls are hidden.
-  impersonateMemberId?: string
+  // Admin "view as member": render read-only — all mutating controls are
+  // hidden. Whose teams load is decided server-side by the view-as ticket.
   readOnly?: boolean
 }
 
-export function TeamsTab({ memberId, impersonateMemberId, readOnly = false }: Props) {
-  const memberQuery = impersonateMemberId ? `?memberId=${impersonateMemberId}` : ''
-
+export function TeamsTab({ memberId, readOnly = false }: Props) {
   // Manager vs participant view is driven by what the member actually owns, not
   // by their members.event_role: a student manager's row is 'participant' and
   // a teacher POC can be any role, yet both fully manage a group. The teams API
@@ -869,7 +864,7 @@ export function TeamsTab({ memberId, impersonateMemberId, readOnly = false }: Pr
 
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/members/teams${memberQuery}`)
+    fetch(`/api/members/teams`)
       .then(r => r.json())
       .then(data => {
         if (cancelled) return
@@ -878,11 +873,11 @@ export function TeamsTab({ memberId, impersonateMemberId, readOnly = false }: Pr
       })
       .catch(err => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
-  }, [memberQuery])
+  }, [])
 
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
   if (apiRole === null) return <p className="text-sm text-brand-muted-soft py-4">Loading your teams…</p>
   if (apiRole === 'group_manager')
-    return <TeacherTeamsView memberQuery={memberQuery} readOnly={readOnly} />
-  return <StudentTeamsView memberId={memberId} memberQuery={memberQuery} readOnly={readOnly} />
+    return <TeacherTeamsView readOnly={readOnly} />
+  return <StudentTeamsView memberId={memberId} readOnly={readOnly} />
 }

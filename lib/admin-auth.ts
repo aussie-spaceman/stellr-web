@@ -26,6 +26,15 @@ export function isEventManagerClaims(sessionClaims: Claims): boolean {
   return roleFromClaims(sessionClaims) === 'event_manager'
 }
 
+// Every Clerk role that opens the admin portal. Checked against a Clerk user's
+// publicMetadata.role, for the cases that hold a user record rather than
+// session claims (view-as refuses any staff target).
+export const STAFF_CLERK_ROLES = ['admin', 'event_manager'] as const
+
+export function isStaffRole(role: unknown): boolean {
+  return typeof role === 'string' && (STAFF_CLERK_ROLES as readonly string[]).includes(role)
+}
+
 // The current request's user is a platform admin. The one-liner most
 // /api/admin routes need; the claims variants above are for callers that
 // already hold a session.

@@ -1,13 +1,38 @@
 'use client'
 
-import Link from 'next/link'
+import { useState } from 'react'
 
 interface Props {
   memberId: string
   memberName: string
 }
 
+// Banner on the admin account summary (/admin/members/[id]/view-as). Its teams
+// and billing tabs run on a view-as session, so leaving ends that session — and
+// records the end — the same way the portal's own Exit view-as does.
 export function ViewAsBanner({ memberId, memberName }: Props) {
+  const [exiting, setExiting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function exit() {
+    setExiting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/impersonation', { method: 'DELETE' })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(j.error ?? 'Could not exit view-as. Try again.')
+        setExiting(false)
+        return
+      }
+    } catch {
+      setError('Couldn’t reach Stellr. Check the connection and try again.')
+      setExiting(false)
+      return
+    }
+    window.location.href = `/admin/members/${memberId}`
+  }
+
   return (
     <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
@@ -20,13 +45,20 @@ export function ViewAsBanner({ memberId, memberName }: Props) {
           </svg>
           <span>Viewing portal as <strong>{memberName}</strong> — read only</span>
         </div>
-        <Link
-          href={`/admin/members/${memberId}`}
-          className="text-sm font-medium text-amber-700 hover:text-amber-900 underline"
+        <button
+          type="button"
+          onClick={exit}
+          disabled={exiting}
+          className="text-sm font-medium text-amber-700 hover:text-amber-900 underline disabled:opacity-60"
         >
-          Exit view
-        </Link>
+          {exiting ? 'Exiting…' : 'Exit view'}
+        </button>
       </div>
+      {error && (
+        <p role="alert" className="max-w-5xl mx-auto mt-2 text-sm text-amber-900">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

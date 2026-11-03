@@ -6,9 +6,10 @@ import { getEventsBySlugs } from '@/lib/sanity'
 // Oct 2026: staff take one printed banner from event to event. Its QR code is
 // the fixed address /check-in, which sends the phone on to whichever in-person
 // event has check-in open (the desk console's Open check-in switch). Opening one
-// in-person event's check-in closes the others (admin check-in route), so
-// normally exactly one is open. Virtual events are left out: their attendance
-// link is emailed, and the banner never stands at one.
+// in-person event's check-in closes the others the caller manages (admin
+// check-in route; an admin manages them all), so normally exactly one is open.
+// Virtual events are left out: their attendance link is emailed, and the banner
+// never stands at one.
 
 export const CHECK_IN_BANNER_PATH = '/check-in'
 
@@ -38,14 +39,41 @@ function daysAway(e: OpenCheckIn, today: string): number {
 
 /**
  * The event a banner scan goes to, or null when no in-person check-in is open.
- * Two open at once is a mistake the admin route prevents; if it happens anyway,
- * the event nearest `today` (YYYY-MM-DD) wins, so the banner still lands
- * somewhere sensible.
+ * Two can be open at once — an event manager opening theirs leaves an event
+ * they don't run alone — so the event nearest `today` (YYYY-MM-DD) wins, and
+ * the banner still lands somewhere sensible.
  */
 export function pickBannerEvent(open: OpenCheckIn[], today: string): OpenCheckIn | null {
   const usable = open.filter((e) => e.inPerson && e.token)
   if (usable.length === 0) return null
   return [...usable].sort((a, b) => daysAway(a, today) - daysAway(b, today) || a.slug.localeCompare(b.slug))[0]
+}
+
+/** Who is asking: lib/event-access's answer for an allowed caller. */
+export interface CheckInViewer {
+  isAdmin: boolean
+  /** The events an event manager is assigned to; null for a full admin. */
+  assignedSlugs: string[] | null
+}
+
+/**
+ * Whether `viewer` may see, or close, check-in for `slug`. A full admin sees
+ * every event; an event manager only the events they are assigned to. Anything
+ * short of an explicit admin with no assignment list counts as an event manager,
+ * so a malformed viewer sees nothing extra.
+ */
+export function canSeeCheckIn(viewer: CheckInViewer, slug: string): boolean {
+  if (viewer.isAdmin === true) return true
+  return (viewer.assignedSlugs ?? []).includes(slug)
+}
+
+/**
+ * The open check-ins `viewer` may see. S0 (Nov 2026): the desk and the banner
+ * page listed every open event, and opening one closed all the others, for any
+ * event manager — who could see and shut check-in at events they don't run.
+ */
+export function checkInsVisibleTo(open: OpenCheckIn[], viewer: CheckInViewer): OpenCheckIn[] {
+  return open.filter((e) => canSeeCheckIn(viewer, e.slug))
 }
 
 export function todayUtc(): string {

@@ -6,15 +6,15 @@ import Stripe from 'stripe'
 import { requireStripe } from '@/lib/stripe'
 
 // GET /api/members/billing — returns Stripe invoices + participation payment history
-// Admins may pass ?memberId= to read another member's billing (view-as).
-export async function GET(req: Request) {
+// for the signed-in member, or the member an admin is viewing as (view-as ticket).
+export async function GET() {
   const db = supabaseServer()
 
   const { member, unauthorised } = await resolveRequestMember<{
     id: string
     stripe_customer_id: string | null
     event_role: string
-  }>(req, db, 'id, stripe_customer_id, event_role')
+  }>(db, 'id, stripe_customer_id, event_role')
   if (unauthorised) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 

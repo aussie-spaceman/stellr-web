@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { revokeCredential, holderIsMinor, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
 import { logActivity } from '@/lib/activity-log'
 import { sendEmail, credentialRevokedEmail } from '@/lib/email'
@@ -26,7 +26,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const reason = (body.reason ?? '').trim()
   if (!reason) return NextResponse.json({ error: 'A reason is required' }, { status: 400 })
 
-  const actor = await getCurrentMember()
+  // The acting admin, never the member they may be viewing as: getCurrentMember()
+  // resolves to the viewed member while a view-as ticket is live, which would
+  // record the member (often a minor) as the person who revoked (S0, Nov 2026).
+  const actor = await getSignedInMember()
   const row = await revokeCredential(db, id, reason, actor?.id ?? null)
   if (!row) return NextResponse.json({ error: 'Already revoked' }, { status: 409 })
 

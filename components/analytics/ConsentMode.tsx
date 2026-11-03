@@ -35,8 +35,13 @@ import { noAdsScript } from '@/lib/no-ads'
 // STRICT_REGIONS moved to lib/consent.ts: the HubSpot tracking script has to
 // gate against the same list, and two copies would drift.
 
-export function ConsentMode() {
-  const script = `
+/**
+ * The script's exact text. lib/csp.ts hashes it for the Content-Security-Policy:
+ * this tag sits in the prerendered root layout, so it can't carry a per-request
+ * nonce. Any change here changes the hash, which follows automatically.
+ */
+export function consentModeScript(): string {
+  return `
 (function(){
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
@@ -74,6 +79,8 @@ export function ConsentMode() {
   catch (e) { document.documentElement.setAttribute(${JSON.stringify(CONSENT_NEEDED_ATTR)}, ''); }
 })();
 `.trim()
+}
 
-  return <script dangerouslySetInnerHTML={{ __html: script }} />
+export function ConsentMode() {
+  return <script dangerouslySetInnerHTML={{ __html: consentModeScript() }} />
 }

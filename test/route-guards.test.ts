@@ -94,3 +94,21 @@ describe('route guards (static inventory)', () => {
     expect(offenders).toEqual([])
   })
 })
+
+// Routes that are public on purpose: no session, any caller. Each entry says
+// why, and what limits it instead. S1 starts the list with the CSP report
+// endpoint; other public routes are added as they are reviewed.
+const PUBLIC_ROUTES: Record<string, string> = {
+  'app/api/csp-report/route.ts':
+    'browsers post CSP violation reports with no session; 16 KB cap, per-IP rate limit, logs a scrubbed line, keeps nothing',
+}
+
+describe('public routes (static inventory)', () => {
+  it('every listed public route exists, reads no session, and is rate-limited', () => {
+    for (const f of Object.keys(PUBLIC_ROUTES)) {
+      const src = readFileSync(f, 'utf8')
+      expect(src, f).not.toMatch(/\bauth\(\)|currentUser|getCurrentMember|cookies\(\)/)
+      expect(src, f).toMatch(/checkRateLimit|rateLimitGuard/)
+    }
+  })
+})

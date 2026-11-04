@@ -202,7 +202,21 @@ async function issueOrReuse(
     //    against a different participant row (re-added after removal, a second
     //    registration for the same event). Chasing them twice for one signature
     //    reads as a system error; an outstanding envelope is still live.
-    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return { outcome: 'in_flight' }
+    //    The envelope stays the one to sign, so it must also be THIS row's:
+    //    removing a participant clears agreements.participant_id, and an
+    //    unlinked envelope reads "Not Issued" on the roster however far along
+    //    it is (4 Nov 2026).
+    if (await hasOpenEnvelopeForEvent(db, ctx, type)) {
+      if (ctx.participantId && ctx.memberId) {
+        await adoptOpenEnvelope(db, {
+          participantId: ctx.participantId,
+          memberId: ctx.memberId,
+          eventSlug: ctx.eventSlug,
+          type,
+        })
+      }
+      return { outcome: 'in_flight' }
+    }
 
     // 3. Paperwork on the member's profile is valid for 3 years across events:
     //    if an unexpired signed agreement of the required type is on record,
@@ -486,6 +500,56 @@ async function hasOpenEnvelopeForEvent(
     return false
   }
   return !!data
+}
+
+export interface AdoptedEnvelope {
+  id: string
+  envelope_id: string
+  provider: string | null
+  status: string
+  reused_from: string | null
+}
+
+/**
+ * Link a live envelope left without a roster row to this participant, and return
+ * it. Removing a participant clears agreements.participant_id, but the envelope
+ * lives on: it still has its signatures and its signer's link. When that member
+ * is added back to the event it is theirs again, and no second one is needed.
+ *
+ * Matched by member, never by email or name: a family address is shared between
+ * siblings, and a member row is one person. Only an unlinked envelope is taken,
+ * so another live registration's paperwork is never moved. Never throws: at worst
+ * the roster keeps showing "Not Issued" and Reissue tries again.
+ */
+export async function adoptOpenEnvelope(
+  db: SupabaseClient,
+  input: { participantId: string; memberId: string; eventSlug: string; type: AgreementType },
+): Promise<AdoptedEnvelope | null> {
+  try {
+    const { data, error } = await db
+      .from('agreements')
+      .select('id, envelope_id, provider, status, reused_from')
+      .eq('event_slug', input.eventSlug)
+      .eq('member_id', input.memberId)
+      .is('participant_id', null)
+      .in('envelope_type', coveringTypes(input.type))
+      .in('status', OPEN_ENVELOPE_STATUSES)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) return null
+    const { error: linkError } = await db
+      .from('agreements')
+      .update({ participant_id: input.participantId, updated_at: new Date().toISOString() })
+      .eq('id', data.id)
+      .is('participant_id', null)
+    if (linkError) throw linkError
+    return data as AdoptedEnvelope
+  } catch (err) {
+    console.error('[docusign] could not link the open envelope to the participant (non-fatal):', err)
+    return null
+  }
 }
 
 // Resolve a member by email when the caller had no member id — a failed or

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { resendEnvelope, voidEnvelope, dispatchAgreement } = vi.hoisted(() => ({
+const { resendEnvelope, voidEnvelope, dispatchAgreement, adoptOpenEnvelope } = vi.hoisted(() => ({
+  adoptOpenEnvelope: vi.fn(async (_db: unknown, _input: unknown): Promise<Record<string, unknown> | null> => null),
   resendEnvelope: vi.fn(async (_id: string) => 1),
   voidEnvelope: vi.fn(async (_id: string, _reason?: string) => {}),
   dispatchAgreement: vi.fn(async (_db: unknown, _ctx: unknown) => 'issued' as const),
@@ -11,7 +12,7 @@ vi.mock('./docusign', async () => ({
   voidEnvelope,
   classifyAgreement: (role: string | null) => (role === 'participant' ? 'minor' : role ? 'adult' : null),
 }))
-vi.mock('./docusign-agreements', () => ({ dispatchAgreement, ISSUE_FAILED_PREFIX: 'failed:' }))
+vi.mock('./docusign-agreements', () => ({ adoptOpenEnvelope, dispatchAgreement, ISSUE_FAILED_PREFIX: 'failed:' }))
 
 const { reissueParticipantAgreement } = await import('./docusign-reissue')
 
@@ -59,6 +60,22 @@ const PARTICIPANT = {
 beforeEach(() => vi.clearAllMocks())
 
 describe('reissueParticipantAgreement', () => {
+  it('links a live envelope left unlinked by a removal and re-sends it, with no prompt and no new envelope', async () => {
+    adoptOpenEnvelope.mockResolvedValueOnce({ id: 'row-9', envelope_id: 'env-9', provider: 'docusign', status: 'sent', reused_from: null })
+    const db = fakeDb({ participant: PARTICIPANT, envelope: null, bounced: [] })
+    const r = await reissueParticipantAgreement(db as never, 'p-1', { eventSlug: 'colorado' })
+    expect(adoptOpenEnvelope).toHaveBeenCalledWith(db, { participantId: 'p-1', memberId: 'm-1', eventSlug: 'colorado', type: 'minor' })
+    expect(r).toEqual({ kind: 'resent', envelopeRowId: 'row-9', recipients: 1 })
+    expect(resendEnvelope).toHaveBeenCalledWith('env-9')
+    expect(dispatchAgreement).not.toHaveBeenCalled()
+  })
+
+  it('still asks first when there is no unlinked envelope either', async () => {
+    const db = fakeDb({ participant: PARTICIPANT, envelope: null })
+    const r = await reissueParticipantAgreement(db as never, 'p-1', { eventSlug: 'colorado' })
+    expect(r.kind).toBe('needs_confirm')
+  })
+
   it('resends a live envelope without spending quota', async () => {
     const db = fakeDb({ participant: PARTICIPANT, envelope: { id: 'row-1', envelope_id: 'env-1', status: 'sent' } })
     const r = await reissueParticipantAgreement(db as never, 'p-1', { eventSlug: 'colorado' })

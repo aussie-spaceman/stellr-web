@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { describeDispatchOutcome } from '@/lib/docusign-status'
 
 // Re-sends a participant's outstanding DocuSign from the roster. A live envelope
 // is resent for free; if a new envelope is needed (voided, declined, never
@@ -50,7 +51,7 @@ export function ReissueDocusignButton({
         setResult(
           data.action === 'resent'
             ? { ok: true, text: data.recipients > 0 ? 'Re-sent' : 'Nobody left to sign' }
-            : { ok: true, text: data.outcome === 'issued' ? 'New envelope issued' : `No envelope sent (${data.outcome})` },
+            : { ok: true, text: describeDispatchOutcome(data.outcome) },
         )
         router.refresh() // so the DocuSign pill shows the new envelope
       }

@@ -52,7 +52,7 @@ vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: (table: string) => {
       const chain: Record<string, unknown> = {
-        select: () => chain, eq: () => chain, not: () => chain, is: () => chain,
+        select: () => chain, eq: () => chain, not: () => chain, is: () => chain, limit: () => chain,
         maybeSingle: async () => {
           if (table === 'group_join_tokens') return { data: tokenRow, error: null }
           if (table === 'members') return { data: h.signedInMember, error: null }

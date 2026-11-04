@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { resolveEmailPair } from '@/lib/member-email'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { grantTierAllocations } from '@/lib/entitlements'
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
 
   const body = await req.json()
   const {
-    first_name, last_name, nickname, email, phone,
+    first_name, last_name, nickname, phone,
     date_of_birth, gender,
     age_bracket, event_role,
     grade, tshirt_size,
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
     tier_id,
     send_invite,
   } = body
+  // Personal takes primacy (lib/member-email): with only a school address,
+  // it is the primary.
+  const { email, school_email } = resolveEmailPair({ email: body.email, school_email: body.school_email })
 
   if (!first_name || !last_name || !email) {
     return NextResponse.json({ error: 'First name, last name, and email are required' }, { status: 400 })
@@ -41,7 +45,7 @@ export async function POST(req: Request) {
   const { data: existing } = await db
     .from('members')
     .select('id')
-    .eq('email', email.trim().toLowerCase())
+    .eq('email', email)
     .maybeSingle()
 
   if (existing) {
@@ -106,7 +110,8 @@ export async function POST(req: Request) {
       first_name: first_name.trim(),
       last_name: last_name.trim(),
       nickname: nickname?.trim() || null,
-      email: email.trim().toLowerCase(),
+      email,
+      school_email,
       phone: phone || null,
       date_of_birth: date_of_birth || null,
       gender: gender || null,

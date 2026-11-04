@@ -127,6 +127,9 @@ export async function PATCH(req: Request) {
     'grade', 'tshirt_size', 'profile_photo_url',
     'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone', 'ec_relationship',
     'health_conditions',
+    // Optional school address for members under 18 (lib/member-email). The
+    // login email stays the primary; nothing is sent here while it is on file.
+    'school_email',
   ]
 
   const { data: member } = await db
@@ -146,6 +149,12 @@ export async function PATCH(req: Request) {
     let value = body[key]
     // MEM-16: a blank enum must become null, not '' (which the DB enum rejects).
     if (ENUM_FIELDS.has(key) && typeof value === 'string' && value.trim() === '') value = null
+    if (key === 'school_email') {
+      value = typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : null
+      if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value as string)) {
+        return NextResponse.json({ error: 'Enter a valid school email address.' }, { status: 400 })
+      }
+    }
     updates[key] = value
   }
 

@@ -54,6 +54,9 @@ export interface SheetParticipant {
   ec_email: string
   ec_phone: string
   ec_relationship: string
+  /** Column R, added 4 Nov 2026. Sheets made before then have no such column
+   *  and read ''. */
+  school_email: string
 }
 
 export async function readSheetParticipants(spreadsheetId: string): Promise<SheetParticipant[]> {
@@ -63,7 +66,7 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
   const sheets = sheetsApi({ version: 'v4', auth })
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: 'Participants!A2:Q',
+    range: 'Participants!A2:R',
     valueRenderOption: 'UNFORMATTED_VALUE',
   })
 
@@ -76,7 +79,8 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
     .filter(row => {
       const firstName = String(row[2] ?? '').trim()
       const email = String(row[4] ?? '').trim()
-      return Boolean(firstName || email)
+      const schoolEmail = String(row[17] ?? '').trim()
+      return Boolean(firstName || email || schoolEmail)
     })
     .map(row => ({
       // The "<new … registrant>" placeholder in col A is not a real id.
@@ -99,6 +103,7 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
       ec_email: String(row[14] ?? ''),
       ec_phone: String(row[15] ?? ''),
       ec_relationship: String(row[16] ?? ''),
+      school_email: String(row[17] ?? ''),
     }))
 }
 
@@ -192,9 +197,13 @@ const HEADERS = [
   'Emergency Contact First Name', 'Emergency Contact Last Name',
   'Emergency Contact Email', 'Emergency Contact Phone',
   'Emergency Contact Relationship',
+  // Appended (4 Nov 2026) so every earlier column keeps its position and sheets
+  // made before it still read correctly. Under 18: the personal address goes
+  // in Email, the school one here (lib/member-email).
+  'School Email',
 ]
 
-const COL_WIDTHS = [130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180, 200]
+const COL_WIDTHS = [130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180, 200, 200]
 
 // Column indices (0-based)
 const COL_TYPE = 1
@@ -237,6 +246,7 @@ export interface SheetSeedRow {
   ec_email: string
   ec_phone: string
   ec_relationship: string
+  school_email?: string
 }
 
 export async function createGroupRegistrationSheet({
@@ -311,14 +321,15 @@ export async function createGroupRegistrationSheet({
       (p.dietary_requirements ?? []).join(', '),
       p.health_conditions ?? '',
       p.ec_first_name ?? '', p.ec_last_name ?? '', p.ec_email ?? '', p.ec_phone ?? '', p.ec_relationship ?? '',
+      p.school_email ?? '',
     ])
     const adultRows = Array.from({ length: additionalAdultCount }, () => [
       '<new adult registrant>', 'Adult', '', '', '', '', '', '', '', 'N/A — Adult',
-      '', '', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult',
+      '', '', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', '',
     ])
     const studentRows = Array.from({ length: studentCount }, () => [
       '<new student registrant>', 'Student', '', '', '', '', '', '', '', '',
-      '', '', '', '', '', '', '',
+      '', '', '', '', '', '', '', '',
     ])
     await sheets.spreadsheets.values.update({
       spreadsheetId,

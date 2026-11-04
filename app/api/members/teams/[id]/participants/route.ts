@@ -14,6 +14,7 @@ import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import { applyRosterChange } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { resolveEmailPair } from '@/lib/member-email'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -73,12 +74,16 @@ export async function POST(
   }
   // Roster filters (Companies auto-assign, studentCount) match enum values.
   if ('event_role' in insert) insert.event_role = normalizeEventRole(insert.event_role)
+  // Personal takes primacy: with only a school address, it is the primary.
+  const emails = resolveEmailPair({ email: body.email, school_email: body.school_email })
+  insert.email = emails.email
+  insert.school_email = emails.school_email
 
   // Duplicate guard — the optional Member ID lets the organiser catch someone
   // who is already on the roster (e.g. added via the sheet) before re-adding
   // them. Match on membership_id when supplied, otherwise on email.
   const membershipId = (body.membership_id ?? '').toString().trim()
-  const email = (body.email ?? '').toString().trim()
+  const email = emails.email
   if (membershipId || email) {
     const { data: dupe } = await db
       .from('participants')
@@ -147,7 +152,8 @@ export async function POST(
   // organiser is not the authority on another person's date of birth, role or
   // guardian, and the COPPA guard reads the member row's date of birth first.
   const memberId = linkedMemberId ?? await upsertMember(db, {
-    email: body.email,
+    email: emails.email,
+    school_email: emails.school_email,
     first_name: body.first_name,
     last_name: body.last_name,
     nickname: body.nickname,

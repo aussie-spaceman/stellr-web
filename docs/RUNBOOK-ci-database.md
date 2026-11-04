@@ -116,6 +116,52 @@ If the first run fails at the baseline or a migration, that is the finding this
 job exists for: the repository cannot rebuild production. Fix the baseline or
 the migration (never edit an applied migration; add a new one) before step 3.
 
+## The e2e-local job
+
+`e2e-local` in `.github/workflows/ci.yml` runs the Playwright suite against a
+Supabase stack on the runner instead of the shared dev project, with no
+`e2e-dev-supabase` lock. It holds no Supabase secret.
+
+**Status: report-only, and not yet proven.** It is not a required check, and a
+failure does not fail the workflow. `e2e` remains the gate. A green badge says
+nothing about this job: read its steps and its summary.
+
+### How it is built
+
+| Step | What happens |
+|---|---|
+| Start | `supabase start` with migrations and seed off. Postgres, Kong, PostgREST and Storage; everything else is excluded. |
+| Point | Reads the URL and keys from `supabase status`, and stops if the URL is not on loopback. |
+| Database | `scripts/e2e-stack-db.sh`: baseline, migrations, `supabase/seed.sql`, `supabase/seed-e2e-stack.sql`. |
+| Wait | Reads `public.members` and `entitlements.tiers` through the gateway until PostgREST has the schema. |
+| Seed | `npm run seed:e2e-stack`: blank agreement documents with the real field maps, survey definitions, and Clerk links looked up by address. Refuses anything but loopback and `sk_test_`. |
+| Suite | `npm run build`, then `npx playwright test`. Storybook and Lighthouse stay in `e2e`: neither reads the database. |
+
+Clerk is still the shared dev instance. Only the database moved.
+
+### What it does not test
+
+- **The hosted dev project:** a missing bucket, an unexposed schema or a migration
+  not applied to dev will not show here. `e2e` still covers this.
+- **The real agreement documents:** the fixtures are blank pages, so wording and
+  placement stay with `scripts/esign-template.ts check`.
+- **Realtime:** not started, and no spec needs it.
+- **Certificate artwork:** none is stored, so certificates print the plain design.
+
+### Removing the lock (owner)
+
+The lock can go only when all of these hold. Record the evidence here.
+
+1. About 10 PR runs where `e2e-local` and `e2e` agree on every test. Compare the
+   skipped lists as well as the failures: the job's summary lists its skips.
+2. Two `e2e-local` runs overlapping with no failures, which proves concurrent
+   sign-ins as the same Clerk users. Clerk's rate limits are the unknown.
+3. Real start-up times recorded in this section.
+
+Then move this job's contents under the required `e2e` name, delete the
+`concurrency` block and the dev Supabase secrets from it, and keep a manual or
+nightly run against dev so drift there is still seen.
+
 ## The schema diff against production
 
 CI never connects to production. The owner takes a schema-only dump and gives it

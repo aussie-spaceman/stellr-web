@@ -1,4 +1,5 @@
 import { clerkSetup } from '@clerk/testing/playwright'
+import { assertE2eSupabase } from '../lib/testing/e2e-supabase-target'
 
 /**
  * Two checks before any spec runs, plus Clerk's testing setup.
@@ -27,6 +28,11 @@ const FORBIDDEN_HOSTS = [
 ]
 
 export default async function globalSetup() {
+  // The specs' fixtures write with the secret key, so check the database as
+  // well as the app. Unset is fine: a run against a deployment holds no
+  // database settings of its own.
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL) assertE2eSupabase()
+
   // Exchanges the secret key for a testing token, so auth.setup.ts can sign in
   // without meeting Clerk's bot-detection and new-device challenges.
   if (process.env.CLERK_SECRET_KEY) await clerkSetup()

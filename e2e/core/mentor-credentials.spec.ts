@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -19,12 +20,9 @@ import { storageStatePath } from '../fixtures/users'
 
 const SLUG = 'nevada-space-design-challenge'
 const GRACE_ID = '00000000-0000-4000-a000-000000000002' // supabase/seed.sql
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 
 function devDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  // Never against anything but the dev project.
-  expect(url, 'mentor e2e fixtures run only against the dev database').toContain(DEV_PROJECT_REF)
+  const url = assertE2eSupabase()
   return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 
@@ -37,7 +35,7 @@ async function containerId(): Promise<string> {
     .eq('campaign_ref', SLUG)
     .maybeSingle()
   expect(error, error?.message).toBeNull()
-  expect(data?.id, `no event container for ${SLUG} on dev`).toBeTruthy()
+  expect(data?.id, `no event container for ${SLUG}`).toBeTruthy()
   return data!.id as string
 }
 

@@ -578,3 +578,157 @@ jobs:
           report | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::warning::The repository schema differs from the production dump: $n_prod object(s) only in production, $n_repo only in the repository, $n_changed with different definitions. Identifiers are in the job summary."
           exit 1
+
+  # The e2e suite on a disposable Supabase stack on this runner: no shared dev
+  # database, so no repo-wide queue and no fixture collisions between runs. Runs
+  # beside `e2e` to prove the two agree (docs/RUNBOOK-ci-database.md, "The
+  # e2e-local job"). Report-only: a failure shows red on the PR but does not fail
+  # the workflow, and it is not a required check. It holds no Supabase secret, and
+  # the stack's keys are the CLI's fixed local defaults, read from `supabase status`.
+  #
+  # No report artifact, unlike `e2e`: this repo's artifacts are public, and traces
+  # and videos of signed-in sessions are not needed to compare two runs.
+  e2e-local:
+    name: e2e-local
+    runs-on: ubuntu-latest
+    needs: [verify, changes]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.code != 'false' }}
+    continue-on-error: true
+    # 5 more than `e2e`, for the stack, so a slow runner reads as a result here.
+    timeout-minutes: 25
+
+    env:
+      SUPABASE_CLI_VERSION: 2.105.0
+      NEXT_PUBLIC_APP_ENV: dev
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_AUTH_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /account
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: /account/onboarding
+      NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
+      E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
+      E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # One `supabase start`: it does nothing if the database is already up, so
+      # services cannot be added after `supabase db start`. The CLI must not replay
+      # the migrations or seed (see the `db` job). Left out: what the suite never
+      # reaches. Realtime has no spec; the app signs in with Clerk, not Auth.
+      - name: Start the local stack
+        env:
+          SUPABASE_DB_MIGRATIONS_ENABLED: 'false'
+          SUPABASE_DB_SEED_ENABLED: 'false'
+        run: >-
+          supabase start
+          -x realtime,gotrue,studio,imgproxy,mailpit,logflare,vector,postgres-meta,supavisor,edge-runtime
+
+      # NEXT_PUBLIC_* are inlined at build, so these must be set before `npm run
+      # build`. A URL that is not on this machine stops the job here.
+      - name: Point the job at the local stack
+        run: |
+          values="$(supabase status -o env)"
+          read_value() { echo "$values" | sed -n "s/^$1=\"\(.*\)\"$/\1/p"; }
+          url="$(read_value API_URL)"
+          public_key="$(read_value PUBLISHABLE_KEY)"
+          secret_key="$(read_value SECRET_KEY)"
+          case "$url" in
+            http://127.0.0.1:*) ;;
+            *) echo "::error::The local stack's API URL is not on this machine."; exit 1 ;;
+          esac
+          if [ -z "$public_key" ] || [ -z "$secret_key" ]; then
+            echo "::error::supabase status did not report the local keys."; exit 1
+          fi
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$url"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$public_key"
+            echo "SUPABASE_SECRET_KEY=$secret_key"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the database
+        run: bash scripts/e2e-stack-db.sh
+
+      # Reaching a table in each exposed schema through the gateway proves the
+      # schema reload landed, and that the secret key works with no bearer token.
+      # The tier count proves the membership_tiers trigger filled entitlements.tiers.
+      - name: Wait for PostgREST to see the schema
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null -H "apikey: $SUPABASE_SECRET_KEY" \
+                 "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/members?select=id&limit=1" \
+               && tiers="$(curl -fsS -H "apikey: $SUPABASE_SECRET_KEY" -H 'Accept-Profile: entitlements' \
+                 "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/tiers?select=code")"; then
+              count="$(echo "$tiers" | jq length)"
+              echo "PostgREST is ready; entitlements.tiers has $count rows."
+              [ "$count" -ge 12 ] && exit 0
+              echo "::error::Expected at least 12 tiers."; exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::PostgREST never served both schemas."; exit 1
+
+      - name: Seed documents, surveys and Clerk links
+        run: npm run seed:e2e-stack
+
+      - run: |
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          echo "ESIGN_TOKEN_SECRET=$secret" >> "$GITHUB_ENV"
+
+      - id: pw-version
+        run: |
+          echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
+
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium webkit
+
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium webkit
+
+      - run: npm run build
+
+      - run: npx playwright test
+        env:
+          CI: 'true'
+
+      - if: always()
+        name: Summarise the run
+        run: |
+          if [ -f test-results/e2e-results.json ]; then
+            node scripts/e2e-report-summary.mjs test-results/e2e-results.json | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No Playwright report: the suite did not finish." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Fixture data only, so safe in this public log.
+      - if: failure()
+        name: Stack logs
+        run: |
+          for c in rest storage kong; do
+            echo "::group::$c"
+            docker logs --tail 80 "supabase_${c}_stellr-web" 2>&1 || true
+            echo "::endgroup::"
+          done

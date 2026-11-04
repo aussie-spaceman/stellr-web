@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -17,13 +18,12 @@ import { storageStatePath } from '../fixtures/users'
 
 test.use({ storageState: storageStatePath('admin') })
 
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 
-// Dev only: this writes and deletes rows and storage objects directly.
+// This writes and deletes rows and storage objects directly.
 function fixtureDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const url = assertE2eSupabase()
   const key = supabaseSecretKey()
-  if (!url.includes(DEV_PROJECT_REF) || !key) throw new Error('training-builder.spec needs the dev Supabase project')
+  if (!key) throw new Error('training-builder.spec needs the Supabase secret key')
   return createClient(url, key, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 

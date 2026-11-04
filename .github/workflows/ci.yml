@@ -93,14 +93,14 @@ jobs:
       # Placeholders. `next build` instantiates clients at module scope (see
       # lib/supabase.ts), so the build needs syntactically valid values — it
       # never connects to anything with them. Real values live in Vercel.
-      # Supabase keys under the legacy names only, as both Vercel projects are
-      # set today: this build proves the fallback in lib/supabase-keys.ts (the
-      # e2e job runs the new names). Switch to the new names once the legacy
-      # keys are retired (docs/RUNBOOK-supabase-api-keys.md, step 11).
+      # Supabase keys under the only names the app reads (the legacy
+      # anon/service_role fallback was removed 3 Nov 2026,
+      # docs/RUNBOOK-supabase-api-keys.md step 11). The values are deliberately
+      # neither key format, so the bundle check below can grep for them.
       NEXT_PUBLIC_APP_ENV: dev
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
-      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
+      SUPABASE_SECRET_KEY: placeholder-secret-key
       NEXT_PUBLIC_SANITY_PROJECT_ID: placeholder
       # Public media host (non-secret; same value in every environment).
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
@@ -156,14 +156,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # S0: with only the legacy names set, the browser bundle must still carry
-      # the anon key (through lib/supabase-keys.ts; chat and signed uploads read
-      # it), and must never carry the server-only key.
+      # S0: the browser bundle must carry the publishable key (through
+      # lib/supabase-keys.ts; chat and signed uploads read it), and must never
+      # carry the server-only secret key.
       - name: Supabase keys in the browser bundle
         run: |
-          grep -rqF placeholder-anon-key .next/static \
+          grep -rqF placeholder-publishable-key .next/static \
             || { echo "::error::The public Supabase key did not reach the browser bundle."; exit 1; }
-          if grep -rqF placeholder-service-role-key .next/static; then
+          if grep -rqF placeholder-secret-key .next/static; then
             echo "::error::The server-only Supabase key reached the browser bundle."; exit 1
           fi
 
@@ -210,11 +210,11 @@ jobs:
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
 
       # Secrets. Configure at Settings → Secrets and variables → Actions.
-      # Supabase: the new publishable/secret key secrets win; the legacy
-      # anon/service_role secrets fill in until they are deleted
-      # (docs/RUNBOOK-supabase-api-keys.md). lib/supabase-keys.ts reads either format.
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY || secrets.DEV_SUPABASE_ANON_KEY }}
-      SUPABASE_SECRET_KEY: ${{ secrets.DEV_SUPABASE_SECRET_KEY || secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}
+      # Supabase: the publishable and secret keys only; the legacy
+      # anon/service_role secrets are no longer read
+      # (docs/RUNBOOK-supabase-api-keys.md, step 11).
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.DEV_SUPABASE_SECRET_KEY }}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
       CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
       E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}

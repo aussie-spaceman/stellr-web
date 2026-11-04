@@ -16,8 +16,8 @@
  *   npm run fix:event-slug -- --from old-slug --to new-slug           # dry run
  *   npm run fix:event-slug -- --from old-slug --to new-slug --apply   # writes
  *
- * Prerequisites (.env.local): NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY
- * (or legacy SUPABASE_SERVICE_ROLE_KEY), NEXT_PUBLIC_SANITY_PROJECT_ID
+ * Prerequisites (.env.local): NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY,
+ * NEXT_PUBLIC_SANITY_PROJECT_ID
  */
 
 import * as dotenv from 'dotenv'

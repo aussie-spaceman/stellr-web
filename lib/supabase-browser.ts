@@ -1,8 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabasePublicKey } from '@/lib/supabase-keys'
 
-// Both clients use the public key: the publishable key, or the legacy anon key
-// until it is retired (lib/supabase-keys.ts). Never a secret key: these run in
+// Both clients use the public key, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+// (lib/supabase-keys.ts). Never a secret key: these run in
 // the browser, where Supabase refuses one anyway. supabaseFetch keeps the
 // publishable key off `Authorization: Bearer`, which carries the Clerk session
 // token or nothing.

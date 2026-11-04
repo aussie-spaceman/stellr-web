@@ -62,8 +62,8 @@ Vercel can't run ffmpeg, so these are watermarked out-of-band:
 - **Worker**: `scripts/watermark-worker.ts` (`npm run watermark:worker`, or `--once` for cron)
   claims pending jobs, downloads from Supabase, burns the mark via `lib/watermark/video.ts`,
   and overwrites the file in place. Uses `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SECRET_KEY`
-  (its own secret key, `watermark_worker`; legacy `SUPABASE_SERVICE_ROLE_KEY` is read while that
-  is unset). See `docs/RUNBOOK-supabase-api-keys.md`.
+  (its own secret key, `watermark_worker`; the legacy `SUPABASE_SERVICE_ROLE_KEY` is no longer
+  read since 3 Nov 2026). See `docs/RUNBOOK-supabase-api-keys.md`.
 - Model is **overwrite-in-place** (recording still publishes immediately; the mark lands once
   the worker runs). There is a short window before processing where the raw file is served —
   acceptable because recordings are login-gated. If a zero-window guarantee is wanted later,

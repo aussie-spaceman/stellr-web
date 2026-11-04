@@ -103,8 +103,8 @@ function isLegacyServiceRoleKey(value) {
 }
 
 /**
- * The public Supabase key variable that holds an elevated key (a secret key,
- * `sb_secret_…`, or the legacy service_role JWT), or null. Next copies
+ * NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY when it holds an elevated key (a secret
+ * key, `sb_secret_…`, or the legacy service_role JWT), or null. Next copies
  * NEXT_PUBLIC_ values into the browser bundle at build time, so such a key
  * pasted into the public slot would be published with the site. Names the
  * variable, never the value. Exported for next-config-supabase-keys.test.ts;
@@ -114,11 +114,11 @@ function isLegacyServiceRoleKey(value) {
  * @param {Record<string, string | undefined>} [env]
  */
 export function secretInPublicSupabaseKey(env = process.env) {
-  for (const name of ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']) {
-    const value = (env[name] ?? '').trim()
-    if (value.startsWith('sb_secret_') || isLegacyServiceRoleKey(value)) return name
-  }
-  return null
+  // The only public key variable the app reads (the legacy
+  // NEXT_PUBLIC_SUPABASE_ANON_KEY fallback was removed 3 Nov 2026).
+  const name = 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
+  const value = (env[name] ?? '').trim()
+  return value.startsWith('sb_secret_') || isLegacyServiceRoleKey(value) ? name : null
 }
 
 const leakedSupabaseKey = secretInPublicSupabaseKey()

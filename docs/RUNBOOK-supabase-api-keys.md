@@ -9,13 +9,26 @@ switch itself. **No production step before the Nevada event (6 Nov) is over,
 and that includes promoting this code to production:** it reaches dev when it
 merges, and production with the first promotion after the event.
 
-## What the code already does
+> **Status, 3 Nov 2026: steps 9–11 done; the legacy keys are disabled.** On
+> the owner's instruction, with every environment already holding the new
+> publishable/secret keys, the legacy JWT keys were disabled on the dev project
+> at 23:27 UTC and on the production project at 23:31 UTC on 3 Nov 2026, and
+> both were confirmed refused at the Supabase gateway. The legacy fallback was
+> removed from the code the same day. The app now reads
+> `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` only;
+> `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are ignored
+> wherever they are still set. Steps 1–10 below are kept as the record of how
+> the switch was planned; the owner's instruction overrode the pre-Nevada
+> production hold and the soak periods in steps 8–10.
+
+## What the code does
 
 - Every key reader goes through `lib/supabase-keys.ts`. It reads
-  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` first. When
-  those are unset or empty it falls back to `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
-  `SUPABASE_SERVICE_ROLE_KEY`, which is how every deployment runs today. Either
-  key format works under either name.
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` only; unset
+  or empty means unconfigured. The legacy names were a fallback until
+  3 Nov 2026 and are no longer read. A legacy JWT *value* under a new name is
+  still recognised (so the slot checks below still catch a swapped one), but
+  the legacy keys are disabled, so Supabase would reject it.
 - A publishable or secret key travels on the `apikey` header only, never on
   `Authorization: Bearer`. supabase-js clients get `supabaseFetch` for this;
   raw fetches use `supabaseApiHeaders`. A legacy key goes out exactly as before.
@@ -40,7 +53,7 @@ merges, and production with the first promotion after the event.
 | `lib/crawlers.ts` (from `proxy.ts`) | secret | Raw PostgREST insert, best-effort |
 | `scripts/*`: every script that touches the database (e.g. `watermark-worker.ts`, `esign-*.ts`, `seed-*.ts`, `aeo-crawler-report.ts`) | secret | Through `lib/supabase-keys.ts` or `lib/supabase.ts`. `verify-deletion-registry.mjs` imports `lib/supabase-keys.ts` directly (Node 24 runs it) |
 | `e2e/fixtures/{check-in,esign,esign-cli,survey-cli}.ts`, `e2e/core/{mentor,pd}-credentials.spec.ts` | secret | Dev project only |
-| `.github/workflows/ci.yml` | both | verify job: placeholders under the legacy names only (today's Vercel config), then a check that the public key reached the browser bundle and the secret one did not. e2e job: `DEV_SUPABASE_PUBLISHABLE_KEY \|\| DEV_SUPABASE_ANON_KEY`, `DEV_SUPABASE_SECRET_KEY \|\| DEV_SUPABASE_SERVICE_ROLE_KEY` |
+| `.github/workflows/ci.yml` | both | verify job: placeholders under the new names, then a check that the public key reached the browser bundle and the secret one did not. e2e job: `DEV_SUPABASE_PUBLISHABLE_KEY` and `DEV_SUPABASE_SECRET_KEY` only (no legacy fallback since 3 Nov 2026) |
 
 The following are not in the repo: `pg_net` / `net.http_post`, Database Webhooks
 (`supabase_functions.http_request`), `pg_cron` HTTP calls, Edge Functions and
@@ -117,32 +130,44 @@ consumer, so every secret key in use has one named holder.
    `cron_runs` ledger: every cron should have run green at least once on the new
    keys, and the Vercel logs should show no new 5xx on `/api/cron/*` or
    `/api/webhooks/*`.
-9. **Disable legacy on dev.** First confirm every dev consumer from the
+9. **Disable legacy on dev. Done 3 Nov 2026, 23:27 UTC**; a legacy key was
+   confirmed refused at the gateway afterwards. First confirm every dev consumer from the
    inventory, then use Settings → API Keys → *Legacy API keys* → disable. Re-run
    step 4 and a CI run. Keep the GitHub secrets `DEV_SUPABASE_ANON_KEY` /
    `DEV_SUPABASE_SERVICE_ROLE_KEY` and the legacy variables on Vercel dev: the
    new names win, so they go unused, and they are the rollback. Delete them
    after a week clean.
-10. **Disable legacy on prod, last.** Do this only after dev has run clean
+10. **Disable legacy on prod, last. Done 3 Nov 2026, 23:31 UTC**, on the
+    owner's instruction ahead of the planned soak; a legacy key was confirmed
+    refused at the gateway afterwards. Do this only after dev has run clean
     without legacy keys for several days, and never inside an event freeze
     window. Keep the legacy variables on Vercel prod for a week, as in step 9,
     then delete them.
-11. **Code follow-up.** Once no environment holds a legacy key, remove the
-    fallback names from `lib/supabase-keys.ts`, `ci.yml` (the e2e fallbacks,
-    and the verify job's placeholders, which use the legacy names until then),
-    and `next.config.mjs`.
+11. **Code follow-up. Done 3 Nov 2026.** The fallback names were removed from
+    `lib/supabase-keys.ts`, `ci.yml` (the e2e `||` fallbacks; the verify job's
+    placeholders now use the new names), `next.config.mjs` (the build guard
+    checks `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` only), `.env.local.example`,
+    scripts and docs. The legacy keys are disabled on both projects (dev
+    23:27 UTC, production 23:31 UTC, 3 Nov 2026, steps 9–10). The
+    legacy variables on Vercel, the `DEV_SUPABASE_ANON_KEY` /
+    `DEV_SUPABASE_SERVICE_ROLE_KEY` GitHub secrets and any legacy lines left in
+    a laptop's `.env.local` are now unused and can be deleted.
 
 ## Rollback
 
-- **A new key misbehaves while the legacy keys are on:** unset the two new
-  variables on that Vercel project and redeploy. The app falls back to the legacy
-  pair, and tests pin that path. For CI, delete the two new `DEV_*` secrets.
-- **Something breaks after legacy keys are disabled:** re-enable them in the same
-  dashboard tab (Supabase makes this reversible). If the new keys are the
-  problem, make sure the legacy variables are on that Vercel project (for CI,
-  the two legacy `DEV_*` secrets) before you unset the new ones. If they were
-  already deleted, copy the values from *Legacy API keys* back in first. Then
-  redeploy. With neither pair set, every server route fails.
+Since 3 Nov 2026 the code no longer reads the legacy names, so unsetting the
+new variables no longer falls back to the legacy pair: it leaves the deployment
+unconfigured, and every server route fails.
+
+- **A new key misbehaves:** create a replacement secret key (or use the
+  project's publishable key), put it in the same variable and redeploy.
+- **The new keys as a whole are the problem:** re-enable the legacy keys in
+  *Legacy API keys* (Supabase makes this reversible) and put the legacy JWT
+  values into the **new** variable names (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  gets the `anon` JWT, `SUPABASE_SECRET_KEY` the `service_role` JWT; the code
+  accepts either format under the new names and sends a JWT on both headers as
+  before). Redeploy. Putting them back under the old names does nothing unless
+  the step 11 commit is reverted.
 - **Build fails with "holds a Supabase secret key":** an elevated key is in a
   `NEXT_PUBLIC_` variable. Put the publishable key there. If that value ever
   reached a deployed build, treat the key as leaked.
@@ -159,5 +184,5 @@ consumer, so every secret key in use has one named holder.
   joins with the Clerk token, so a signed-in member is unaffected. Without one
   it sends no token (never the key), and chat falls back to polling as before.
 - The code trims a value pasted with a trailing newline. A missing GitHub
-  secret arrives as `""` and counts as unset, so the legacy fallback still
-  applies.
+  secret arrives as `""` and counts as unset; with no legacy fallback, the e2e
+  job's *Check configuration* step then reports it missing.

@@ -40,7 +40,7 @@ www↔app experience and is the critical path.
 
 ## 2. Database (Supabase) — migrations & data integrity
 
-- [ ] Production Supabase env in Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`. The legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` are read only while those are unset, until the legacy keys are disabled (`docs/RUNBOOK-supabase-api-keys.md`).
+- [ ] Production Supabase env in Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`. These are the only Supabase key variables the app reads: the legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` fallback was removed on 3 Nov 2026 and the legacy keys are disabled (`docs/RUNBOOK-supabase-api-keys.md`).
 - [ ] All migrations `001`–`021` applied to the production DB in filename order (applied manually — no `supabase/config.toml` migration tracking). The earlier `019_` collision is **resolved**: `community_automation` was renumbered `019_`→`021_`, leaving the training pair intact (`019_training_sections` → `020_training_player`, which depends on it).
 - [ ] Confirm the recently-added migrations are applied: `014` (emergency-contact relationship), `015` (Adult/Mentor DocuSign agreements), `016` (member enum values).
 - [ ] **Member enum drift / backfill** (known open item):

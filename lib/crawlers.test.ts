@@ -71,10 +71,16 @@ describe('recordCrawlerHit', () => {
     expect(headersSent()).not.toHaveProperty('Authorization')
   })
 
-  it('still sends a legacy service_role JWT on both headers', async () => {
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
+  it('still sends a legacy service_role JWT value (under the new name) on both headers', async () => {
+    vi.stubEnv('SUPABASE_SECRET_KEY', LEGACY_SERVICE)
     await recordCrawlerHit('GPTBot', '/events')
     expect(headersSent()).toMatchObject({ apikey: LEGACY_SERVICE, Authorization: `Bearer ${LEGACY_SERVICE}` })
+  })
+
+  it('skips the write when only the legacy SUPABASE_SERVICE_ROLE_KEY is set (no longer read)', async () => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
+    await expect(recordCrawlerHit('GPTBot', '/events')).resolves.toBeUndefined()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('skips the write, without throwing, when the key is missing or mis-slotted', async () => {

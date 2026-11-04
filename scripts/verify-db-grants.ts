@@ -14,9 +14,8 @@
  *   FAIL  → 200 (anon can still execute definer functions)
  *   Anything else (a 401 for a bad key, say) is inconclusive, never a pass.
  *
- * Works with a legacy anon JWT or a new sb_publishable_… key. The key is read
- * through lib/supabase-keys.ts (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, falling
- * back to the legacy NEXT_PUBLIC_SUPABASE_ANON_KEY), which also refuses an
+ * Uses the sb_publishable_… key. The key is read through lib/supabase-keys.ts
+ * (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY only), which also refuses an
  * elevated key in the public slot.
  *
  * For the full picture run supabase/tests/security_checks.sql (zero rows = pass).
@@ -56,7 +55,7 @@ async function main() {
     process.exit(2)
   }
 
-  // A legacy anon key is a JWT and goes in Authorization too; a publishable
+  // A legacy JWT value would go in Authorization too; a publishable
   // key is not a JWT, and sending it as a Bearer token would 401 for the wrong
   // reason. supabaseApiHeaders makes that call.
   const headers: Record<string, string> = { ...supabaseApiHeaders(anon), 'Content-Type': 'application/json' }

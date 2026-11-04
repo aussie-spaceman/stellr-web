@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBrowserSupabase, createStorageUploadClient } from './supabase-browser'
 
-// S0 key migration: the browser clients take the publishable key (or the legacy
-// anon key while it exists). The publishable key is not a JWT, so it must never
+// S0 key migration: the browser clients take NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+// only; the legacy NEXT_PUBLIC_SUPABASE_ANON_KEY is no longer read (runbook step
+// 11, 3 Nov 2026). The publishable key is not a JWT, so it must never
 // go out on Authorization: that header carries the Clerk session token or
 // nothing. These run real supabase-js requests against a stubbed fetch and read
 // the headers that went out.
@@ -53,20 +54,10 @@ describe('createBrowserSupabase (Realtime chat)', () => {
     expect(restCall()?.headers.get('Authorization')).toBeNull()
   })
 
-  it('falls back to the legacy anon key while the publishable variable is unset', async () => {
+  it('is unconfigured when only the legacy anon name is set', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    const sb = createBrowserSupabase(async () => CLERK_TOKEN)
-    await sb.from('community_posts').select('id')
-    expect(restCall()?.headers.get('apikey')).toBe(LEGACY_ANON)
-    expect(restCall()?.headers.get('Authorization')).toBe(`Bearer ${CLERK_TOKEN}`)
-  })
-
-  it('sends the legacy anon key on Authorization as before when signed out (today\'s config)', async () => {
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    const sb = createBrowserSupabase(async () => null)
-    await sb.from('community_posts').select('id')
-    expect(restCall()?.headers.get('apikey')).toBe(LEGACY_ANON)
-    expect(restCall()?.headers.get('Authorization')).toBe(`Bearer ${LEGACY_ANON}`)
+    expect(() => createBrowserSupabase(async () => CLERK_TOKEN)).toThrow(/not configured/)
+    expect(sent).toHaveLength(0)
   })
 
   // The Realtime socket sends its own access_token in each channel join, apart
@@ -89,10 +80,6 @@ describe('createBrowserSupabase (Realtime chat)', () => {
   it('never gives Realtime a key as its access token when there is no Clerk token', async () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', PUBLISHABLE)
     expect(await realtimeToken(createBrowserSupabase(async () => null))).toBeNull()
-
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', undefined)
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    expect(await realtimeToken(createBrowserSupabase(async () => null))).toBeNull()
   })
 
   it('refuses to start with a secret key in the public slot', () => {
@@ -100,8 +87,8 @@ describe('createBrowserSupabase (Realtime chat)', () => {
     expect(() => createBrowserSupabase(async () => CLERK_TOKEN)).toThrow(/secret key/)
   })
 
-  it('refuses to start with a legacy service_role key in the public slot', () => {
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', fakeLegacyKey('service_role'))
+  it('refuses to start with a legacy service_role JWT in the public slot', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', fakeLegacyKey('service_role'))
     expect(() => createBrowserSupabase(async () => CLERK_TOKEN)).toThrow(/legacy service_role key/)
   })
 
@@ -127,10 +114,9 @@ describe('createStorageUploadClient (signed upload)', () => {
     expect(put.url).toContain('token=signed-token')
   })
 
-  it('works with only the legacy anon name set (today), sending it on both headers as before', async () => {
+  it('is unconfigured when only the legacy anon name is set', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    const put = await upload()
-    expect(put.headers.get('apikey')).toBe(LEGACY_ANON)
-    expect(put.headers.get('Authorization')).toBe(`Bearer ${LEGACY_ANON}`)
+    expect(() => createStorageUploadClient()).toThrow(/not configured/)
+    expect(sent).toHaveLength(0)
   })
 })

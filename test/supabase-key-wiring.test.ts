@@ -8,14 +8,18 @@ import { supabasePublicKey, supabaseSecretKey } from '@/lib/supabase-keys'
 // S0 key migration: lib/supabase-keys.ts is tested on its own; these pin that
 // everything else goes through it. A client made without supabaseFetch would
 // send a publishable or secret key as a Bearer token, and a direct env read
-// would skip the legacy fallback and the slot check.
+// would skip the slot check. Since runbook step 11 (3 Nov 2026) the legacy
+// anon/service_role variables are read nowhere, lib/supabase-keys.ts included.
 
-const KEY_VARS = [
-  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-  'SUPABASE_SECRET_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-] as const
+const KEY_VARS = ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'] as const
+const LEGACY_VARS = ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'] as const
+
+function envReaders(names: readonly string[], candidates: { path: string; text: string }[]): string[] {
+  const alt = names.join('|')
+  const direct = new RegExp(`process\\.env(?:\\.|\\[\\s*['"\`])(${alt})\\b`)
+  const destructured = new RegExp(`\\{[^}]*\\b(${alt})\\b[^}]*\\}\\s*=\\s*process\\.env`)
+  return candidates.filter((f) => direct.test(f.text) || destructured.test(f.text)).map((f) => f.path)
+}
 
 const ROOTS = ['app', 'components', 'lib', 'packages', 'scripts', 'e2e', 'proxy.ts']
 
@@ -62,14 +66,14 @@ describe('Supabase key wiring', () => {
   })
 
   it('reads the key variables only in lib/supabase-keys.ts', () => {
-    const names = KEY_VARS.join('|')
-    const direct = new RegExp(`process\\.env(?:\\.|\\[\\s*['"\`])(${names})\\b`)
-    const destructured = new RegExp(`\\{[^}]*\\b(${names})\\b[^}]*\\}\\s*=\\s*process\\.env`)
-    const readers = files
-      .filter((f) => f.path !== join('lib', 'supabase-keys.ts'))
-      .filter((f) => direct.test(f.text) || destructured.test(f.text))
-      .map((f) => f.path)
-    expect(readers).toEqual([])
+    const keys = files.find((f) => f.path === join('lib', 'supabase-keys.ts'))
+    // Not vacuous: the resolver itself matches.
+    expect(envReaders(KEY_VARS, keys ? [keys] : [])).toEqual([join('lib', 'supabase-keys.ts')])
+    expect(envReaders(KEY_VARS, files.filter((f) => f !== keys))).toEqual([])
+  })
+
+  it('reads the legacy anon/service_role variables nowhere (runbook step 11)', () => {
+    expect(envReaders(LEGACY_VARS, files)).toEqual([])
   })
 })
 
@@ -77,21 +81,17 @@ describe('.env.local.example', () => {
   afterEach(() => vi.unstubAllEnvs())
   const template = parse(readFileSync('.env.local.example', 'utf8'))
 
-  it('names the new variables', () => {
-    expect(Object.keys(template)).toEqual(expect.arrayContaining(['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY']))
+  it('names the new variables and not the legacy ones', () => {
+    expect(Object.keys(template)).toEqual(expect.arrayContaining([...KEY_VARS]))
+    const text = readFileSync('.env.local.example', 'utf8')
+    for (const name of LEGACY_VARS) expect(text).not.toMatch(new RegExp(`^#?\\s*${name}=`, 'm'))
   })
 
-  // A copied template is the starting .env.local. A non-empty placeholder under
-  // a new name would win over a real legacy key filled in below it, and every
-  // call would send the placeholder.
-  it('does not mask a legacy key pair filled in by a developer', () => {
-    const b64url = (s: string) => Buffer.from(s).toString('base64url')
-    const fakeLegacyKey = (role: string) =>
-      `${b64url('{"alg":"HS256","typ":"JWT"}')}.${b64url(JSON.stringify({ iss: 'supabase', role }))}.TESTONLY`
+  // A copied template is the starting .env.local. Its key slots are empty, so a
+  // copy nobody filled in is unconfigured rather than holding a placeholder.
+  it('leaves both key slots empty, so an unfilled copy is unconfigured', () => {
     for (const name of KEY_VARS) vi.stubEnv(name, template[name])
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', fakeLegacyKey('anon'))
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', fakeLegacyKey('service_role'))
-    expect(supabasePublicKey()).toBe(fakeLegacyKey('anon'))
-    expect(supabaseSecretKey()).toBe(fakeLegacyKey('service_role'))
+    expect(supabasePublicKey()).toBeUndefined()
+    expect(supabaseSecretKey()).toBeUndefined()
   })
 })

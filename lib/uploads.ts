@@ -14,6 +14,12 @@ import { isArtworkTheme } from '@/lib/artwork-theme'
 import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
 import { isLiteralStoragePath } from '@/lib/storage-path'
 import {
+  MAX_MEMBER_PDF_PAGES,
+  PDF_PAGES_UNKNOWN,
+  PDF_TOO_MANY_PAGES,
+  checkPdfPageLimit,
+} from '@/lib/pdf-page-count'
+import {
   extensionsFor,
   fileExtension,
   isActiveContentType,
@@ -106,6 +112,13 @@ type PurposeSpec = {
    * an extension nobody listed.
    */
   sharedFileNames?: boolean
+  /**
+   * The most pages a PDF may have (lib/pdf-page-count.ts), counted by
+   * claimUpload before anything opens the file. Set on every purpose any
+   * member reaches (sign-up is open) that takes a PDF; staff-only purposes
+   * (admin, event manager) have none.
+   */
+  maxPdfPages?: number
   /**
    * Authorise the caller and decide where the object lands. Returning a path is
    * what grants the upload, so any check needed to *build* the path (resolving a
@@ -362,6 +375,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     // HEIC too), text such as a CSV, and calendar files. No archives or media.
     // The attach route also sends each file under a name and type that match
     // its bytes, not the ones the browser posted.
+    // No page cap: only staff (admins, and event managers the admin portal
+    // assigns) reach this, and nothing opens these PDFs with pdf-lib.
     formats: [...DOCUMENTS, ...IMAGES, 'heif', 'text', 'calendar'],
     formatError: 'That file doesn’t look like a PDF, Office, OpenDocument, Keynote, image, CSV or calendar file.',
     async grant({ ctx, safeName }) {
@@ -420,6 +435,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: PROPOSALS_BUCKET,
     maxBytes: 25 * MB,
     formats: DOCUMENTS,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     formatError: 'That file doesn’t look like a PDF, Word, PowerPoint, Keynote or OpenDocument file.',
     async grant({ ctx, safeName }) {
       const member = await requireMember()
@@ -450,6 +466,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
     formats: SHARED_FILES,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     sharedFileNames: true,
     async grant({ ctx, safeName }) {
       const member = await requireMember({ onboarded: true, community: 'upload' })
@@ -468,6 +485,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
     formats: SHARED_FILES,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     sharedFileNames: true,
     async grant({ ctx, safeName }) {
       const member = await requireMember({ onboarded: true, community: 'contribute' })
@@ -485,6 +503,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     maxBytes: 10 * MB,
     allowedTypes: LICENSE_TYPES,
     formats: LICENSE_FORMATS,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     formatError: LICENSE_ERROR,
     async grant({ ctx, safeName }) {
       const member = await requireMember({ onboarded: true })
@@ -685,6 +704,16 @@ export async function claimUpload(args: {
   if (isActiveContentType(stored.type)) {
     await discardUpload(spec.bucket, storagePath)
     return deny('That file type is not accepted here.', 415)
+  }
+  // A member's PDF is page-counted before anything (the watermark's pdf-lib)
+  // opens it: a crafted file can pack hundreds of thousands of pages into a
+  // few MB. One that can't be counted cheaply is refused, not trusted.
+  if (format === 'pdf' && spec.maxPdfPages !== undefined) {
+    const pages = await checkPdfPageLimit(bytes, spec.maxPdfPages)
+    if (pages !== 'ok') {
+      await discardUpload(spec.bucket, storagePath)
+      return pages === 'over' ? deny(PDF_TOO_MANY_PAGES, 413) : deny(PDF_PAGES_UNKNOWN, 415)
+    }
   }
 
   return { bytes, bucket: spec.bucket, format }

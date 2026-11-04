@@ -955,3 +955,104 @@ describe('signUpload — who may upload as a member', () => {
     expect(await sign('community-media')).toMatchObject({ token: 't' })
   })
 })
+
+// A member's PDF is capped at 50 pages (owner decision, 3 Nov 2026), counted
+// before the watermark's pdf-lib opens it. Admin-only purposes keep no cap.
+const { PDFDocument } = await import('pdf-lib')
+const { deflateSync } = await import('node:zlib')
+const { MAX_MEMBER_PDF_PAGES, PDF_TOO_MANY_PAGES, PDF_PAGES_UNKNOWN } = await import('./pdf-page-count')
+
+describe('claimUpload — PDF page cap', () => {
+  const pdfOf = async (pages: number) => {
+    const doc = await PDFDocument.create()
+    for (let i = 0; i < pages; i++) doc.addPage([612, 792])
+    return doc.save()
+  }
+  // 300,000 pages in one compressed object stream: a few MB on disk.
+  const crafted = () => {
+    const objects = ['<< /Type /Pages >>', ...Array.from({ length: 300_000 }, () => '<< /Type /Page /Parent 3 0 R >>')]
+    const offsets: number[] = []
+    let body = ''
+    for (const o of objects) {
+      offsets.push(body.length)
+      body += `${o}\n`
+    }
+    const header = offsets.map((off, i) => `${i + 3} ${off}`).join(' ')
+    const data = deflateSync(Buffer.from(`${header}\n${body}`, 'latin1'))
+    return Buffer.concat([
+      Buffer.from(`%PDF-1.7\n2 0 obj\n<< /Type /ObjStm /First ${header.length + 1} /Filter /FlateDecode >>\nstream\n`),
+      data,
+      Buffer.from('\nendstream\nendobj\n%%EOF\n'),
+    ])
+  }
+
+  // Every purpose any member reaches (sign-up is open) that takes a PDF.
+  const MEMBER_PDF: [UploadPurpose, string, string?][] = [
+    ['campaign-proposal', 'nevada/r1/1-proposal.pdf'],
+    ['space-attachment', `${spaceAttachmentPrefix('s1', 'm1')}1-notes.pdf`, spaceAttachmentPrefix('s1', 'm1')],
+    ['container-contribution', `${contributionPrefix('m1')}1-notes.pdf`, contributionPrefix('m1')],
+    ['compliance-document', 'm1/1-licence.pdf'],
+  ]
+
+  it('caps every member purpose that takes a PDF, and no staff-only one', () => {
+    const capped = PURPOSES.filter((p) => UPLOAD_PURPOSES[p].maxPdfPages !== undefined).sort()
+    expect(capped).toEqual(MEMBER_PDF.map(([p]) => p).sort())
+    for (const p of capped) expect(UPLOAD_PURPOSES[p].maxPdfPages).toBe(MAX_MEMBER_PDF_PAGES)
+  })
+
+  it.each(MEMBER_PDF)('%s takes 50 pages and refuses 51', async (purpose, storagePath, expectedPrefix) => {
+    stored(await pdfOf(50), 'application/pdf')
+    expect(await claimUpload({ purpose, storagePath, expectedPrefix })).toMatchObject({ format: 'pdf' })
+    expect(remove).not.toHaveBeenCalled()
+
+    stored(await pdfOf(51), 'application/pdf')
+    expect(await claimUpload({ purpose, storagePath, expectedPrefix })).toEqual({ error: PDF_TOO_MANY_PAGES, status: 413 })
+    expect(remove).toHaveBeenCalledWith([storagePath])
+  })
+
+  it('refuses the 300,000-page file quickly, and deletes it', async () => {
+    stored(crafted(), 'application/pdf')
+    const started = performance.now()
+    const result = await claimUpload({ purpose: 'campaign-proposal', storagePath: 'nevada/r1/1-proposal.pdf' })
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect([PDF_TOO_MANY_PAGES, PDF_PAGES_UNKNOWN]).toContain((result as { error: string }).error)
+    expect(remove).toHaveBeenCalledWith(['nevada/r1/1-proposal.pdf'])
+  })
+
+  it('refuses a PDF whose pages it can’t count', async () => {
+    stored(
+      Buffer.from('%PDF-1.7\n2 0 obj\n<< /Type /ObjStm /Filter /LZWDecode >>\nstream\nxx\nendstream\nendobj\n%%EOF\n'),
+      'application/pdf',
+    )
+    expect(await claimUpload({ purpose: 'compliance-document', storagePath: 'm1/1-licence.pdf' })).toEqual({
+      error: PDF_PAGES_UNKNOWN,
+      status: 415,
+    })
+  })
+
+  it('leaves staff-only purposes at their own limits', async () => {
+    stored(await pdfOf(51), 'application/pdf')
+    expect(await claimUpload({ purpose: 'admin-resource', storagePath: 'resources/1-a.pdf' })).toMatchObject({ format: 'pdf' })
+    stored(await pdfOf(51), 'application/pdf')
+    expect(
+      await claimUpload({ purpose: 'compliance-document-admin', storagePath: 'm1/1-licence.pdf' }),
+    ).toMatchObject({ format: 'pdf' })
+  })
+
+  // Review finding: event-email attachments are staff-only and never opened
+  // with pdf-lib, so a handbook or rules pack over 50 pages still attaches.
+  it('lets an event manager attach a PDF over 50 pages to an event email', async () => {
+    stored(await pdfOf(51), 'application/pdf')
+    expect(
+      await claimUpload({ purpose: 'event-email-attachment', storagePath: 'event-email/nevada/1-handbook.pdf' }),
+    ).toMatchObject({ format: 'pdf' })
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('counts nothing for a file that isn’t a PDF', async () => {
+    stored(FORMAT_SAMPLES.png, 'image/png')
+    expect(await claimUpload({ purpose: 'compliance-document', storagePath: 'm1/1-licence.png' })).toMatchObject({
+      format: 'png',
+    })
+  })
+})

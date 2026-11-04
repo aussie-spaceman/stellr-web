@@ -173,6 +173,9 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.schools': platform('school directory'),
   'public.platform_pricing': platform(),
   'public.audit_log': platform('row audit; platform_audit_events in S4'),
+  'public.platform_audit_events': platform(
+    'S4 hash-chained audit. Nullable tenant_id names the chain (NULL = the platform chain), so it is not own (own means NOT NULL)',
+  ),
   'public.email_suppressions': platform('global suppression list'),
 
   // ── Stellr-only products ─────────────────────────────────────────────────

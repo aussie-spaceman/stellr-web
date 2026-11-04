@@ -120,6 +120,7 @@ SELECT set_eq(
     'public.object_type_singleton_roles',
     'public.participants',
     'public.platform_admins',
+    'public.platform_audit_events',
     'public.platform_pricing',
     'public.privacy_requests',
     'public.refund_policies',

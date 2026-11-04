@@ -158,8 +158,12 @@ describe('findings 4 and 7: storage paths, emails, refs and nested body ids are 
     expect(r.body).toEqual(['email', 'items[].variantId', 'lines[].productId', 'storagePath'])
     expect(r.fill).toEqual(['items', 'lines', 'note'])
   })
-  it('the routes the review named are now targets', () => {
-    const files = idorTargets().map((t) => t.file)
+  // idorTargets() parses every route file with the TypeScript compiler: CPU
+  // bound, and over the 5 s default on a loaded CI runner (4 Nov). One call,
+  // and an explicit budget.
+  it('the routes the review named are now targets', { timeout: 30_000 }, () => {
+    const targets = idorTargets()
+    const files = targets.map((t) => t.file)
     for (const f of [
       'app/api/members/compliance/document/route.ts',
       'app/api/community/media/upload/route.ts',
@@ -168,7 +172,7 @@ describe('findings 4 and 7: storage paths, emails, refs and nested body ids are 
     ]) {
       expect(files, f).toContain(f)
     }
-    const checkout = idorTargets().find((t) => t.file === 'app/api/store/checkout/route.ts')
+    const checkout = targets.find((t) => t.file === 'app/api/store/checkout/route.ts')
     expect(checkout?.body).toContain('items[].variantId')
   })
 })

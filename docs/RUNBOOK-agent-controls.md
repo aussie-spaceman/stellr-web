@@ -38,23 +38,34 @@ Merge the existing branch protection into the ruleset, or keep both and check th
 
 **Effect:** the machine account can push branches and open PRs. A PR that touches a guard file cannot merge until the owner approves it. Other PRs still need one approval, from the owner.
 
-## 3. The `production` environment
+## 3. The `prod-migrations` environment
 
-Settings → Environments → New environment `production`:
+**Not `production`.** This repo already has an environment called "Production" (and "Production – stellr-web", "Production – stellr-web-dev"), created by Vercel's GitHub integration for its deployments, with no reviewers and no branch policy (checked 3 Nov 2026). GitHub environment names ignore case, so a workflow naming `production` would bind to Vercel's unprotected one. The Action names `prod-migrations` instead. Leave the Vercel environments alone.
+
+Settings → Environments → New environment `prod-migrations`:
 
 - **Required reviewers:** the owner. Leave **Prevent self-review** off while the owner is the only reviewer: it stops whoever started a run from approving it, and only the owner can start one (the machine account's token has no Actions permission). Turn it on when a second reviewer exists.
 - **Deployment branches and tags:** selected branches `main` and `dev` only.
-- **Environment secret** `PROD_DATABASE_URL`: the owner's production session-pooler URI for `postgres` (Supabase → Connect → Session pooler). Only workflows that name `environment: production` can read it, and only after the owner approves the run.
+- **Environment secret** `PROD_DATABASE_URL`: the owner's production session-pooler URI for `postgres` (Supabase → Connect → Session pooler). Add it **last**, after the reviewer and branch rules are saved. Only jobs that name `environment: prod-migrations` can read it, and only after the owner approves the run.
 
-`.github/workflows/prod-migrate.yml` ("Production migration") is now the only way SQL reaches production:
+Order matters. If the Action runs before the environment exists, GitHub creates `prod-migrations` on the spot with no protection rules, but also with no secret, so the job stops at "PROD_DATABASE_URL is not set" and touches nothing. Once the secret is there, the reviewer rule is the gate: check it in §7 before relying on it.
+
+`.github/workflows/prod-migrate.yml` ("Production migration") is then the only way SQL reaches production:
 
 1. Anyone with the Actions permission (the owner; not the machine account's token) runs it from `dev` or `main`, naming one file in `supabase/migrations/`.
-2. The `check` job, with no secrets, refuses a bad name, a file outside the folder, transaction control, `CONCURRENTLY`, and psql backslash commands. It also runs `scripts/check-migration-security.mjs`, then prints the file and its SHA-256 to the run summary.
-3. The owner reads the summary and approves the `production` environment.
-4. The `apply` job refuses a migration already in the ledger (by version or name). Then, in one transaction, it runs the file, writes the ledger row and runs `supabase/tests/security_checks.sql`. Any row from the check rolls everything back. Afterwards it re-reads the ledger row by name and re-runs the check.
+2. The `check` job, with no secrets, refuses a bad name, a file outside the folder, top-level transaction control (`scripts/check-migration-transaction.mjs` splits the file into statements the way psql does, so `END;`, `ABORT;`, `commit work;` and a `COMMIT` after another statement on the same line are all caught, and PL/pgSQL `END;` is not), `CONCURRENTLY`, and psql backslash commands. It also runs `scripts/check-migration-security.mjs`, then prints the file and its SHA-256 to the run summary.
+3. The owner reads the summary and approves the `prod-migrations` environment.
+4. The `apply` job refuses a migration already in the ledger (by version or name). Then, in one transaction, it runs the file, checks the transaction id has not changed (so a file that slipped past step 2 and committed stops before its ledger row), writes the ledger row and runs `supabase/tests/security_checks.sql`. Any row from the check rolls everything back. Afterwards it re-reads the ledger row by name and re-runs the check.
 5. `dry_run: true` does all of that and rolls back. Use it to preview a risky migration.
 
-The promote skill's "apply the migration to production before merging" step becomes: run this Action, approve it, confirm the run summary.
+**The run log is public.** This repo is public, and so are its Actions logs. Postgres error messages can quote production values: a CHECK or NOT NULL failure prints the whole failing row, a duplicate key prints the key, a bad cast quotes the value. So the Action runs every production `psql` with `VERBOSITY=sqlstate`, writes the output to files on the runner, and prints only its own `==` progress lines and each error's SQLSTATE (for example `ERROR:  23514`, a check violation). To read the full message, open Supabase → Logs → Postgres as the owner. Never re-run a failing migration with more verbose settings to "see the error" in the log.
+
+**Rollout order** (so two rules never contradict each other):
+
+1. Land `prod-migrate.yml` on `dev`, then promote it to `main` in a release that has **no pending migrations** (`npm run db:status -- --prod` clean). `workflow_dispatch` only appears once the file is on the default branch.
+2. Set up §1–§3, then prove §7.
+3. Record the date in §7. From that date, `CLAUDE.md` ("Agents: data is never instructions") makes the Action the only route for production SQL, and the promote skill's Step 3 ("apply it to production") means: run this Action, approve it, confirm the run summary. Update `.claude/skills/promote/SKILL.md` Step 3 to say so in the same PR that records the date.
+4. Until then, the promote skill's Step 3 stands as written: production SQL only with the owner's explicit yes for that migration.
 
 ## 4. A read-only production role for the agent
 
@@ -75,12 +86,25 @@ GRANT USAGE ON SCHEMA public, entitlements, supabase_migrations TO agent_readonl
 -- Start from nothing on every re-run.
 REVOKE ALL ON ALL TABLES IN SCHEMA public, entitlements, supabase_migrations FROM agent_readonly;
 
--- 2. SELECT on every column of every table EXCEPT sensitive tables and columns.
+-- 2. SELECT on an ALLOWLIST of columns: keys, timestamps, statuses, flags and
+-- amounts. Nothing else, whatever a future migration adds.
+--
+-- Why an allowlist: the role has BYPASSRLS, so every row of every granted
+-- column is readable. A denylist misses whatever nobody thought of; the first
+-- one missed live capability tokens (registrations.pay_token,
+-- participants.pay_token, scholarship_applications.offer_token,
+-- group_join_tokens.token, event_settings.check_in_token) and minors' names
+-- (agreements.minor_name, credentials.recipient_name).
+--
+-- A column is granted only if (a) its name and type fit one of the shapes in
+-- the WHERE clause below, AND (b) its name matches nothing in `never`, AND
+-- (c) its table is not in `denied_tables`. test/ops-backups.test.ts evaluates
+-- this block against the schema and fails if a known-sensitive column passes.
 --
 -- Postgres rule: REVOKE SELECT (col) does nothing while a table-level SELECT
--- grant exists, because the table grant covers every column. So sensitive
--- columns are withheld by granting a column list that leaves them out, never
--- by granting the table and revoking columns.
+-- grant exists, because the table grant covers every column. So columns are
+-- withheld by granting a column list that leaves them out, never by granting
+-- the table and revoking columns.
 DO $$
 DECLARE
   -- Whole tables the agent never reads.
@@ -97,8 +121,10 @@ DECLARE
     'public.stripe_webhook_events',      -- raw payloads with names and emails
     'public.lead_capture_failures'       -- raw form payloads
   ];
-  -- Columns withheld wherever they appear (matched on the column name).
-  denied_columns text := '^(email|.*_email|phone|.*_phone|date_of_birth|dob|birth.*|.*health.*|medical.*|allerg.*|dietary.*|ethnic.*|gender|emergency_.*|ec_.*|address.*|street.*|city|postcode|postal_code|zip.*|.*_ip|ip_address|user_agent|.*_user_agent|prefill|signer_values|.*payload.*|first_name|last_name|full_name|preferred_name|legal_name|signer_name|parent_.*|guardian_.*|discord.*|photo.*|avatar.*|license_number|.*licen[cs]e_no|clerk_user_id|stripe_customer_id|notes|.*_notes)$';
+  -- Never granted, whatever the type, matched anywhere in the column name:
+  -- capability tokens and secrets; names and contact details; health,
+  -- identity and safeguarding words; free text people write.
+  never text := '(token|secret|password|passcode|hash|salt|nonce|otp|key|code|pin$|email|phone|name|birth|dob|address|street|city|postcode|postal|zip|_ip$|^ip|agent|url|path|signature|photo|avatar|health|medical|allerg|diet|ethnic|gender|disab|pronoun|note|answer|body|message|brief|school|reason|comment|text$|payload|prefill|value|clerk|discord|certn|actor|customer|checkout|licen[cs]e|emergency|^ec_)';
   t record;
   cols text;
 BEGIN
@@ -109,16 +135,36 @@ BEGIN
        AND table_type = 'BASE TABLE'
   LOOP
     CONTINUE WHEN (t.s || '.' || t.n) = ANY (denied_tables);
-    SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position)
+    SELECT string_agg(quote_ident(c.column_name), ', ' ORDER BY c.ordinal_position)
       INTO cols
-      FROM information_schema.columns
-     WHERE table_schema = t.s AND table_name = t.n
-       AND column_name !~ denied_columns;
+      FROM information_schema.columns c
+     WHERE c.table_schema = t.s AND c.table_name = t.n
+       AND c.column_name !~* never
+       AND (
+             -- keys: row ids and foreign keys (uuid, integer or text ids)
+             (c.column_name ~ '^(id|.+_id)$'
+              AND c.data_type IN ('uuid', 'integer', 'bigint', 'smallint', 'text', 'character varying'))
+             -- when things happened
+          OR (c.column_name ~ '(_at|_on|_date)$'
+              AND c.data_type IN ('timestamp with time zone', 'timestamp without time zone', 'date'))
+             -- state and classification
+          OR (c.column_name ~ '^(status|.+_status|state|kind|type|.+_type|role|.+_role|tier|slug|.+_slug|currency|source|channel|version|.+_version|season|year|.+_year|position|sort_order|priority|stage|step)$'
+              AND c.data_type IN ('text', 'character varying', 'USER-DEFINED', 'integer', 'smallint', 'bigint'))
+             -- yes/no flags (sensitive ones are caught by `never`)
+          OR c.data_type = 'boolean'
+             -- amounts and counts
+          OR (c.column_name ~ '(count|_cents|amount|quantity|capacity|seats|attempts|total|percent)'
+              AND c.data_type IN ('integer', 'bigint', 'smallint', 'numeric'))
+       );
     IF cols IS NOT NULL THEN
       EXECUTE format('GRANT SELECT (%s) ON %I.%I TO agent_readonly', cols, t.s, t.n);
     END IF;
   END LOOP;
 END $$;
+
+-- The migration ledger's names are public (they are file names in this repo);
+-- `name` is caught by `never` above, so grant it here.
+GRANT SELECT (version, name) ON supabase_migrations.schema_migrations TO agent_readonly;
 
 -- 3. Belt and braces: nothing on the denied tables, even if granted before.
 REVOKE ALL ON public.deletion_archive, public.member_background_checks,
@@ -127,6 +173,14 @@ REVOKE ALL ON public.deletion_archive, public.member_background_checks,
   public.chat_messages, public.survey_answers, public.survey_responses,
   public.stripe_webhook_events, public.lead_capture_failures
 FROM agent_readonly;
+
+-- 4. Read what was granted before trusting it. Every row should be a key, a
+-- timestamp, a status, a flag or an amount. Anything else: add a word to
+-- `never` and re-run.
+SELECT table_schema, table_name, string_agg(column_name, ', ' ORDER BY column_name) AS columns
+  FROM information_schema.column_privileges
+ WHERE grantee = 'agent_readonly' AND privilege_type = 'SELECT'
+ GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
 Then the **login role**. The owner creates it and sets the password in a way the agent never sees:
@@ -144,7 +198,7 @@ ALTER ROLE agent_ro SET idle_in_transaction_session_timeout = '60s';
 
 - Set the password on the owner's machine with `psql` and `\password agent_ro` (nothing is echoed or kept in history), using a password generated in the password manager.
 - Put the connection string (session pooler, user `agent_ro.<project ref>`) only into the configuration of the database tool the agent uses, for example a Postgres MCP server's environment. Add `Read` and `Bash` deny rules for that file to `~/.claude/settings.json`. On a single-user machine an agent with a shell could still find it, so the role's grants, not the secrecy of the file, are the real control.
-- Check: as `agent_ro`, `SELECT email FROM public.members LIMIT 1` must fail with "permission denied", `SELECT id FROM public.members LIMIT 1` must work, and `CREATE TABLE x (i int)` must fail.
+- Check: as `agent_ro`, each of these must fail with "permission denied": `SELECT email FROM public.members LIMIT 1`, `SELECT pay_token FROM public.registrations LIMIT 1`, `SELECT minor_name FROM public.agreements LIMIT 1`, `SELECT token FROM public.group_join_tokens LIMIT 1`, `SELECT offer_token FROM public.scholarship_applications LIMIT 1`, and `CREATE TABLE x (i int)`. `SELECT id, status, created_at FROM public.registrations LIMIT 1` must work.
 - The schema-diff gate (plan S1) will see these grants. Exclude roles `agent_readonly`, `agent_ro` and `backup_reader` from the diff, or diff with `--no-privileges`.
 - If `BYPASSRLS` is refused on Supabase (to confirm), leave the login role without it and tell the agent that RLS tables read as empty. Do not add `USING (true)` policies outside a migration.
 
@@ -169,6 +223,10 @@ With the machine account's token, try each of these and record the outcome:
 | Open a PR changing `proxy.ts`, approve it with the machine account | Cannot approve own PR; merge blocked until the owner approves | | |
 | Push a change to `.github/workflows/ci.yml` | Refused (token has no Workflows permission) | | |
 | Start "Production migration" via the API | Refused (token has no Actions permission) | | |
-| Run "Production migration" as the owner with `dry_run: true` | `apply` waits for the owner's approval; after approval it rolls back and the ledger is unchanged | | |
+| Run "Production migration" as the owner with `dry_run: true`, and do not approve for 10 minutes | Run shows "Waiting" for review on `prod-migrations`; no `apply` step has started (proves the reviewer rule is on the environment the job actually uses) | | |
+| Approve that run | It rolls back; the ledger is unchanged; the log shows only `==` lines | | |
 | `execute_sql` against production from the agent | Tool denied, or not connected to production | | |
 | `SELECT email FROM members` as `agent_ro` | Permission denied | | |
+| `SELECT pay_token FROM registrations`, `SELECT minor_name FROM agreements`, `SELECT token FROM group_join_tokens` as `agent_ro` | Permission denied, each | | |
+
+When every row passes, write the date here: **Proven on: (not yet).** That date is when the `CLAUDE.md` rule takes over from the promote skill's Step 3 (§3, "Rollout order").

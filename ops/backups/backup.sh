@@ -146,6 +146,12 @@ case "$kind" in
     pg_dump "$PROD_DATABASE_URL" --format=custom --strict-names \
       --table=storage.buckets --table=storage.objects \
       --file="$stage/storage-meta.dump"
+    # --table leaves out the types and functions those two tables need
+    # (storage.buckettype on newer Supabase), so a restore into an empty
+    # database fails. The storage schema's definitions, no data, let the
+    # restore drill create them first (restore-drill.sh).
+    pg_dump "$PROD_DATABASE_URL" --schema-only --schema=storage --no-owner --no-privileges \
+      --file="$stage/storage-schema.sql"
     { "$here/fingerprint.sh" "$stage/app.dump"; "$here/fingerprint.sh" "$stage/storage-meta.dump"; } \
       | sort -t$'\t' -k1,1 > "$stage/manifest.tsv"
     ;;
@@ -181,10 +187,9 @@ summary "- tables: $tables, rows: $rows"
 key="$kind/$day_path/stellr-$kind-$ts.tar.age"
 encrypt_and_upload "$key"
 
-# Keep the first nightly of each month under monthly/ (longer lock rule).
-if [ "$kind" = "nightly" ] && [ "$(date -u +%d)" = "01" ]; then
-  monthly="monthly/$(date -u +%Y/%m)/stellr-nightly-$ts.tar.age"
-  r2 s3 cp --no-progress "s3://$R2_BUCKET/$key" "s3://$R2_BUCKET/$monthly"
-  r2 s3 cp --no-progress "s3://$R2_BUCKET/$key.sha256" "s3://$R2_BUCKET/$monthly.sha256"
-  summary "- monthly copy: \`$monthly\`"
-fi
+# No monthly/ copy. A longer-locked monthly archive would keep pending-consent
+# under-13 accounts (and the parent email collected only to ask for consent)
+# and erased people well past their purge dates, under a lock nobody can
+# shorten (COPPA §312.5(c)(1), §312.10). Nothing outlives the 35-day nightly
+# unless counsel approves a longer period: docs/compliance/retention-schedule.md
+# row 29, docs/RUNBOOK-backups.md §1.

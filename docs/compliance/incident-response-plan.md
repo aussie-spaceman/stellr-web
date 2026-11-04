@@ -108,7 +108,7 @@ Preserve before you fix, where safe.
 - **Vercel runtime logs last about an hour on Hobby.** Capture them at once.
 - Export Clerk sign-in logs, Supabase logs, Google Workspace audit logs and Resend send logs while they still exist.
 - Keep a single written timeline with times, sources and decisions.
-- **Backups are evidence.** R2 bucket lock keeps each archive unchanged until it ages out (hourly 8 days, nightly 35, monthly 400). To keep one longer for an investigation, copy it to a `legal-hold/` prefix with its own longer lock rule before it expires.
+- **Backups are evidence.** R2 bucket lock keeps each archive unchanged until it ages out (hourly 8 days, nightly and storage 35; no longer tier, retention schedule row 29). To keep one longer for an investigation, copy it to a `legal-hold/` prefix with its own longer lock rule before it expires.
 - GitHub keeps Actions run logs (who started a `Production migration`, who approved it) for 90 days by default. Download the relevant ones.
 
 ## 7. Notification

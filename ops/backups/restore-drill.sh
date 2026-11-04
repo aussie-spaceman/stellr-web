@@ -7,6 +7,7 @@
 #   ops/backups/restore-drill.sh --identity KEY --nightly latest --hourly latest --storage latest \
 #       --report drill-2026-12-01.txt
 #   ops/backups/restore-drill.sh --identity KEY --nightly ./stellr-nightly-20261201T092300Z.tar.age
+#   (--hourly needs --nightly: the hourly is overlaid on a copy of the nightly)
 #
 # Archives: a local file, or `latest` to fetch the newest one from R2 (needs
 # R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET — use a
@@ -21,6 +22,8 @@
 # What passes:
 #   1. every table in each database archive restores with the same row count
 #      and the same content hash (fingerprint.sh on a fresh dump of scratch);
+#      the hourly is restored with overlay-critical.sh onto a copy of the
+#      restored nightly, so the drill also exercises recovery step 3;
 #   2. count(*) in scratch agrees with the manifest;
 #   3. nightly: every e-sign audit chain verifies (esign_verify_audit), and
 #      the audit anchor is printed — the same value lib/esign/replicate.ts
@@ -61,6 +64,16 @@ done
 
 [ -n "$identity" ] && [ -f "$identity" ] || { echo "--identity <age private key file> is required" >&2; exit 2; }
 [ -n "$nightly$hourly$storage" ] || { echo "give at least one of --nightly, --hourly, --storage" >&2; exit 2; }
+# The hourly archive holds only the critical tables. pg_dump --table does not
+# dump the enum types, schemas or other tables they depend on (members needs
+# public.gender_type and friends; entitlements.* needs the entitlements
+# schema and its enums), so it cannot restore into an empty database. The
+# drill restores it the way a real recovery would: over a copy of the
+# nightly, through overlay-critical.sh (RUNBOOK-backups §6 step 3).
+if [ -n "$hourly" ] && [ -z "$nightly" ]; then
+  echo "--hourly needs --nightly: the hourly is restored over the nightly, as in a real recovery" >&2
+  exit 2
+fi
 for tool in age psql pg_restore pg_dump tar; do
   command -v "$tool" >/dev/null 2>&1 || { echo "$tool is not installed" >&2; exit 2; }
 done
@@ -146,11 +159,13 @@ start_scratch() {
 
 valid_table() { [[ "$1" =~ ^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$ ]]; }
 
-# Restore one database archive into its own fresh database and verify it.
-restore_and_verify() {
-  local kind="$1" db="drill_$1" dir="$work/$1"
+count_errors() { grep -c 'error:\|ERROR' "$1" || true; }
+
+# The nightly: into a fresh database prepared by scratch-prep.sql.
+restore_nightly() {
+  local db="drill_nightly" dir="$work/nightly"
   say ""
-  say "== $kind: restore into scratch database $db"
+  say "== nightly: restore into scratch database $db"
   psql -X -q -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db"
   psql -X -q -d "$db" -v ON_ERROR_STOP=1 -f "$here/scratch-prep.sql" >/dev/null
   if [ -f "$dir/roles.sql" ]; then
@@ -158,12 +173,46 @@ restore_and_verify() {
     role_errs="$(psql -X -q -d "$db" -f "$dir/roles.sql" 2>&1 >/dev/null | grep -c 'ERROR' || true)"
     say "      roles.sql applied ($role_errs statements refused, expected for Supabase-reserved roles)"
   fi
-  local d errs
-  for d in "$dir"/*.dump; do
-    pg_restore --no-owner --dbname="$db" "$d" 2> "$work/$kind-$(basename "$d").log" || true
-    errs="$(grep -c 'error:' "$work/$kind-$(basename "$d").log" || true)"
-    say "      pg_restore $(basename "$d"): $errs objects refused (Supabase-only extensions, auth, grants); judged by data below"
-  done
+  pg_restore --no-owner --dbname="$db" "$dir/app.dump" 2> "$work/nightly-app.log" || true
+  say "      pg_restore app.dump: $(count_errors "$work/nightly-app.log") objects refused (Supabase-only extensions, auth, grants); judged by data below"
+  # storage.buckets / storage.objects were dumped with --table, which leaves
+  # out the storage schema's own types (storage.buckettype on newer Supabase)
+  # and functions. storage-schema.sql (schema only, whole storage schema)
+  # creates them first; then the two tables' rows load as data only.
+  if [ -f "$dir/storage-schema.sql" ]; then
+    psql -X -q -d "$db" -f "$dir/storage-schema.sql" > /dev/null 2> "$work/nightly-storage-schema.log" || true
+    say "      storage-schema.sql: $(count_errors "$work/nightly-storage-schema.log") statements refused (Supabase-only roles and functions)"
+    pg_restore --data-only --no-owner --disable-triggers --dbname="$db" "$dir/storage-meta.dump" 2> "$work/nightly-storage.log" || true
+  else
+    # Archives taken before storage-schema.sql existed.
+    pg_restore --no-owner --dbname="$db" "$dir/storage-meta.dump" 2> "$work/nightly-storage.log" || true
+  fi
+  say "      pg_restore storage-meta.dump: $(count_errors "$work/nightly-storage.log") errors; judged by data below"
+  verify_tables nightly "$db"
+}
+
+# The hourly: over a copy of the restored nightly, the way a real recovery
+# does it (overlay-critical.sh, RUNBOOK-backups §6 step 3). This proves the
+# archive AND the recovery step.
+restore_hourly() {
+  local db="drill_hourly" dir="$work/hourly"
+  say ""
+  say "== hourly: overlay onto a copy of the nightly ($db), as in a full recovery"
+  psql -X -q -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db TEMPLATE drill_nightly"
+  if "$here/overlay-critical.sh" --dbname "$db" --dump "$dir/critical.dump" --tables "$dir/manifest.tsv" \
+       > "$work/hourly-overlay.log" 2>&1; then
+    say "      $(grep -E '^overlay:' "$work/hourly-overlay.log" | tail -1)"
+    grep -E 'WARNING: +orphans' "$work/hourly-overlay.log" | sed -E 's/.*WARNING: +/warn  /' | tee -a "$out" || true
+  else
+    fail "overlay-critical.sh failed (log: table and constraint names only):"
+    grep -E 'ERROR|error:' "$work/hourly-overlay.log" | head -5 | tee -a "$out" || true
+  fi
+  verify_tables hourly "$db"
+}
+
+# Compare a restored database's tables with the archive's manifest.
+verify_tables() {
+  local kind="$1" db="$2" dir="$work/$1"
 
   # 1. Fresh dump of scratch, fingerprinted the same way as at backup time.
   local args=() t
@@ -238,8 +287,8 @@ say "      scratch Postgres: $PGHOST:$PGPORT ($(psql -X -At -d postgres -c 'show
 [ -z "$hourly" ]  || fetch hourly "$hourly"
 [ -z "$storage" ] || fetch storage "$storage"
 
-[ -z "$nightly" ] || { restore_and_verify nightly; esign_checks; }
-[ -z "$hourly" ]  || restore_and_verify hourly
+[ -z "$nightly" ] || { restore_nightly; esign_checks; }
+[ -z "$hourly" ]  || restore_hourly
 [ -z "$storage" ] || storage_checks
 
 elapsed=$(( $(date +%s) - started ))

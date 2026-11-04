@@ -571,3 +571,203 @@ export function analyzeNamedExport(fileName: string, src: string, name: string):
   }
   return null
 }
+
+// ── Request id inputs (S2/S4 cross-tenant and IDOR generator) ─────────────────
+//
+// Which ids a route handler takes from the query string or the request body,
+// so lib/security/idor-targets.ts can tell an id-bearing route that has no
+// dynamic path segment. Static, per file, and deliberately generous: a false
+// positive only adds a test case, a false negative drops one.
+//
+// Found:
+//   - query: `<x>.searchParams.get('name')` / `.getAll('name')`, on
+//     `searchParams`, on any `….searchParams`, or on a name bound to one of
+//     those or to `new URLSearchParams(…)`;
+//   - body: a name bound to `await <x>.json()` / `.formData()` (through
+//     `await`, `as`, parentheses and `.catch(…)`), or to a repo body reader
+//     (`readJson`, `readCapped`, `readParams`), then the fields destructured
+//     from it, read as `body.name` / `body['name']`, or `form.get('name')`;
+//     plus the keys of any `z.object({ … })` in a file that reads a body;
+//   - nested body: fields of the elements of a body array, iterated with
+//     `for … of` or an array method (`items[].variantId`).
+// Kept: names that look like an id (`isIdLikeName`). The rest of the body
+// fields are returned as `fill`.
+
+/**
+ * True for a field name that names a record: an id, slug, token or number, a
+ * storage path (`storagePath`: the object key IS the record), a reference
+ * string (`ref=tr:<id>`), or an email (a person is looked up by it). For a
+ * nested field (`items[].variantId`) the last part decides.
+ */
+export function isIdLikeName(name: string): boolean {
+  const n = name.split('.').pop() ?? name
+  return (
+    /^(id|ids|uuid|slug|token|number|key|path|paths|ref|refs|email|emails)$/i.test(n) ||
+    /(Id|Ids|_id|_ids|Slug|_slug|Token|_token|Number|_number|Uuid|Path|_path|Ref|_ref|Email|_email)$/.test(n) ||
+    /^(event|participant|participation|registration|member|team|cohort|invitation)$/.test(n)
+  )
+}
+
+const BODY_READERS = new Set(['readJson', 'readCapped', 'readParams'])
+
+export interface RequestIdInputs {
+  query: string[]
+  /** Id-like body fields; `items[].variantId` is a field of each `items` element. */
+  body: string[]
+  /** The other top-level body fields: the harness fills them so validation lets the id through. */
+  fill: string[]
+}
+
+export function requestIdInputs(fileName: string, src: string): RequestIdInputs {
+  const sf = parse(fileName, src)
+  const query = new Set<string>()
+  const body = new Set<string>()
+  const paramsNames = new Set<string>(['searchParams'])
+  const bodyNames = new Set<string>()
+  const zodKeys = new Set<string>()
+  let readsBody = false
+
+  const peel = (e: ts.Expression): ts.Expression => {
+    let cur = strip(e)
+    // `req.json().catch(() => null)` → `req.json()`
+    while (
+      ts.isCallExpression(cur) &&
+      ts.isPropertyAccessExpression(cur.expression) &&
+      ['catch', 'then', 'finally'].includes(cur.expression.name.text)
+    ) {
+      cur = strip(cur.expression.expression)
+    }
+    return cur
+  }
+  const isBodyRead = (e: ts.Expression): boolean => {
+    const cur = peel(e)
+    if (!ts.isCallExpression(cur)) return false
+    if (ts.isPropertyAccessExpression(cur.expression)) {
+      return ['json', 'formData'].includes(cur.expression.name.text) && cur.arguments.length === 0
+    }
+    return ts.isIdentifier(cur.expression) && BODY_READERS.has(cur.expression.text)
+  }
+  const isParamsSource = (e: ts.Expression): boolean => {
+    const cur = strip(e)
+    if (ts.isPropertyAccessExpression(cur)) return cur.name.text === 'searchParams'
+    if (ts.isNewExpression(cur)) return ts.isIdentifier(cur.expression) && cur.expression.text === 'URLSearchParams'
+    if (ts.isIdentifier(cur)) return paramsNames.has(cur.text)
+    return false
+  }
+  const bodyIdent = (e: ts.Expression): boolean => {
+    const cur = strip(e)
+    return ts.isIdentifier(cur) && bodyNames.has(cur.text)
+  }
+  const addPattern = (p: ts.BindingName, into: Set<string>) => {
+    if (!ts.isObjectBindingPattern(p)) return
+    for (const el of p.elements) {
+      const key = el.propertyName ?? el.name
+      if (ts.isIdentifier(key) || ts.isStringLiteral(key)) into.add(key.text)
+    }
+  }
+
+  // Pass 1: bindings (a name bound to the body or to search params).
+  const bind = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && n.initializer) {
+      if (isBodyRead(n.initializer)) {
+        readsBody = true
+        if (ts.isIdentifier(n.name)) bodyNames.add(n.name.text)
+        else addPattern(n.name, body)
+      } else if (isParamsSource(n.initializer)) {
+        if (ts.isIdentifier(n.name)) paramsNames.add(n.name.text)
+      } else if (ts.isObjectBindingPattern(n.name)) {
+        // `const { searchParams } = new URL(req.url)` / `req.nextUrl`
+        for (const el of n.name.elements) {
+          const key = el.propertyName ?? el.name
+          if (ts.isIdentifier(key) && key.text === 'searchParams' && ts.isIdentifier(el.name)) paramsNames.add(el.name.text)
+        }
+      }
+    }
+    if (ts.isCallExpression(n) && isBodyRead(n)) readsBody = true
+    ts.forEachChild(n, bind)
+  }
+  bind(sf)
+
+  // Pass 2: reads.
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
+      const method = n.expression.name.text
+      const recv = strip(n.expression.expression)
+      const arg = n.arguments[0]
+      if ((method === 'get' || method === 'getAll') && arg && ts.isStringLiteralLike(arg)) {
+        if (isParamsSource(recv)) query.add(arg.text)
+        else if (bodyIdent(recv)) body.add(arg.text)
+      }
+      // z.object({ … })
+      if (method === 'object' && ts.isIdentifier(recv) && recv.text === 'z' && arg && ts.isObjectLiteralExpression(arg)) {
+        for (const p of arg.properties) {
+          if ((ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) {
+            zodKeys.add(p.name.text)
+          }
+        }
+      }
+    }
+    // `body.teamId`, but not a method call on the body (`form.get(…)`).
+    const isCallee = n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n
+    if (ts.isPropertyAccessExpression(n) && bodyIdent(n.expression) && !isCallee) body.add(n.name.text)
+    if (ts.isElementAccessExpression(n) && bodyIdent(n.expression) && ts.isStringLiteralLike(n.argumentExpression)) {
+      body.add(n.argumentExpression.text)
+    }
+    if (ts.isVariableDeclaration(n) && n.initializer && bodyIdent(n.initializer)) addPattern(n.name, body)
+
+    // Nested: `const raw = Array.isArray(body.items) ? body.items : []`, then
+    // `for (const it of raw) it.variantId` or `raw.map((it) => it.variantId)`.
+    if (ts.isVariableDeclaration(n) && n.initializer && ts.isIdentifier(n.name)) {
+      const field = bodyFieldIn(n.initializer)
+      if (field) arrayNames.set(n.name.text, field)
+    }
+    if (ts.isForOfStatement(n) && ts.isVariableDeclarationList(n.initializer)) {
+      const field = arrayField(n.expression)
+      const decl = n.initializer.declarations[0]
+      if (field && decl && ts.isIdentifier(decl.name)) elemNames.set(decl.name.text, field)
+    }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && ARRAY_METHODS.has(n.expression.name.text)) {
+      const field = arrayField(n.expression.expression)
+      const fn = n.arguments[0]
+      if (field && fn && (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) {
+        const param = fn.parameters[n.expression.name.text === 'reduce' ? 1 : 0]
+        if (param && ts.isIdentifier(param.name)) elemNames.set(param.name.text, field)
+      }
+    }
+    if (ts.isPropertyAccessExpression(n)) {
+      const recv = strip(n.expression)
+      if (ts.isIdentifier(recv) && elemNames.has(recv.text)) nested.add(`${elemNames.get(recv.text)}[].${n.name.text}`)
+    }
+    ts.forEachChild(n, visit)
+  }
+  const arrayNames = new Map<string, string>()
+  const elemNames = new Map<string, string>()
+  const nested = new Set<string>()
+  /** The body field an expression reads (`body.items`, `body?.items ?? []`), if exactly one. */
+  const bodyFieldIn = (e: ts.Expression): string | null => {
+    const found = new Set<string>()
+    const walk = (x: ts.Node): void => {
+      if (ts.isPropertyAccessExpression(x) && bodyIdent(x.expression)) found.add(x.name.text)
+      ts.forEachChild(x, walk)
+    }
+    walk(e)
+    return found.size === 1 ? [...found][0] : null
+  }
+  const arrayField = (e: ts.Expression): string | null => {
+    const cur = strip(e)
+    if (ts.isIdentifier(cur) && arrayNames.has(cur.text)) return arrayNames.get(cur.text) ?? null
+    if (ts.isPropertyAccessExpression(cur) && bodyIdent(cur.expression)) return cur.name.text
+    return null
+  }
+  visit(sf)
+
+  if (readsBody) for (const k of zodKeys) body.add(k)
+  const keep = (s: Set<string>) => [...s].filter(isIdLikeName).sort()
+  return {
+    query: keep(query),
+    body: [...keep(body), ...keep(nested)].sort(),
+    fill: [...body].filter((b) => !isIdLikeName(b)).sort(),
+  }
+}
+
+const ARRAY_METHODS = new Set(['map', 'forEach', 'filter', 'some', 'every', 'find', 'flatMap', 'reduce'])

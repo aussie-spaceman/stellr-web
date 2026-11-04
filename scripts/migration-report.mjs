@@ -16,19 +16,37 @@
  *   DROP               DROP <object>, or ALTER … DROP CONSTRAINT
  *   DROP_COLUMN        ALTER TABLE … DROP [COLUMN] <name>
  *   TRUNCATE           TRUNCATE <table>
- *   DELETE_NO_WHERE    DELETE FROM <table> with no WHERE
- *   UPDATE_NO_WHERE    UPDATE <table> SET … with no WHERE
- *   GRANT_PUBLIC_ROLE  GRANT … TO anon / authenticated / PUBLIC
+ *   DELETE_NO_WHERE    DELETE FROM <table> with no top-level WHERE (a WHERE
+ *                      inside a subquery does not count), including inside
+ *                      a WITH … AS (…) CTE or after one
+ *   UPDATE_NO_WHERE    the same for UPDATE <table> SET …
+ *   GRANT_PUBLIC_ROLE  GRANT … TO anon / authenticated / PUBLIC (WITH … OPTION
+ *                      and GRANTED BY after the role list are ignored)
  *   SECURITY_DEFINER   a function declared SECURITY DEFINER
  *   RLS_DISABLED       DISABLE ROW LEVEL SECURITY or NO FORCE ROW LEVEL SECURITY
- *   POLICY_TRUE        a policy with USING (true) or WITH CHECK (true) for any
- *                      role other than service_role (which bypasses RLS anyway)
+ *   PRIVILEGED         role attributes (ALTER/CREATE ROLE … BYPASSRLS,
+ *                      SUPERUSER, LOGIN …), REASSIGN OWNED, OWNER TO anon /
+ *                      authenticated / PUBLIC, COPY … PROGRAM, ALTER SYSTEM
+ *   POLICY_TRUE        a policy whose USING or WITH CHECK is always true
+ *                      (true, (true), 1 = 1, … OR true) for any role other
+ *                      than service_role (which bypasses RLS anyway)
+ *   POLICY_WIDENED     ALTER POLICY … TO a role list that includes anon,
+ *                      authenticated or PUBLIC
  *   AUTH_STORAGE       creates, alters, drops, writes or grants on an object in
- *                      the auth or storage schema (Supabase-owned)
+ *                      the auth or storage schema (Supabase-owned), whether
+ *                      named outright or reached through a search_path that
+ *                      puts auth or storage first; and any SET search_path
+ *                      that names either
+ *   DYNAMIC_SQL        EXECUTE inside a function or DO body: SQL built at run
+ *                      time. Its string literals are checked as SQL too
+ *                      (format() placeholders and concatenated values become
+ *                      a placeholder name), but a statement held in a variable
+ *                      cannot be, so the EXECUTE itself is always flagged.
  *
  * Statements inside function bodies ($$ … $$) are checked too, and flagged as
  * "in the body of <function>": a function that truncates a table is as
- * dangerous as a migration that does.
+ * dangerous as a migration that does. Flags found in an EXECUTE's SQL say
+ * "in dynamic SQL (EXECUTE) in …".
  *
  *   node scripts/migration-report.mjs                      # changed vs origin/dev
  *   node scripts/migration-report.mjs --base origin/main
@@ -60,8 +78,14 @@ export const FLAGS = {
   SECURITY_DEFINER:
     'Runs as the function owner, so RLS does not apply inside it. Needs SET search_path and REVOKE EXECUTE FROM PUBLIC, anon, authenticated.',
   RLS_DISABLED: 'Turns row level security off (or stops forcing it). Every policy on the table stops applying.',
+  PRIVILEGED:
+    'Changes role attributes or ownership, or reaches the server itself (COPY … PROGRAM, ALTER SYSTEM). A role with BYPASSRLS or ownership ignores every policy.',
   POLICY_TRUE: 'A policy whose condition is always true: every row is visible or writable to the roles it names.',
+  POLICY_WIDENED:
+    'Points an existing policy at anon, authenticated or PUBLIC. Whatever rows the policy allows (often everything, for a service-role policy) become reachable by them.',
   AUTH_STORAGE: 'Touches the auth or storage schema, which Supabase owns. Changes there affect sign-in or every file bucket.',
+  DYNAMIC_SQL:
+    'Runs SQL built at run time (EXECUTE). Only its literal parts can be checked here; read what it builds, including any SQL held in a variable.',
 }
 
 const PUBLIC_ROLES = new Set(['anon', 'authenticated', 'public'])
@@ -204,12 +228,124 @@ export function targetsOf(stmt) {
   return found
 }
 
-const schemaOf = (target) => (target.startsWith('schema:') ? target.slice(7) : target.includes('.') ? target.split('.')[0] : 'public')
+const SUPABASE_SCHEMAS = ['auth', 'storage']
 
-/** Red-flag codes for one masked statement (top level or inside a body). */
-export function flagsForStatement(stmt) {
+/** The schema a target lives in; unqualified names resolve via searchPath[0]. */
+const schemaOf = (target, searchPath) =>
+  target.startsWith('schema:') ? target.slice(7) : target.includes('.') ? target.split('.')[0] : (searchPath?.[0] ?? 'public')
+
+/** Blanks everything inside parentheses, so a match is at the top level. */
+export function topLevel(s) {
+  let depth = 0
+  let out = ''
+  for (const c of s) {
+    if (c === '(') (depth++, (out += ' '))
+    else if (c === ')') ((depth = Math.max(0, depth - 1)), (out += ' '))
+    else out += depth ? ' ' : c
+  }
+  return out
+}
+
+/** The text inside the parenthesis that opens at `open`, and the index after it. */
+function balanced(s, open) {
+  let depth = 1
+  let j = open + 1
+  while (j < s.length && depth) {
+    if (s[j] === '(') depth++
+    else if (s[j] === ')') depth--
+    j++
+  }
+  return { inner: s.slice(open + 1, depth ? j : j - 1), end: j }
+}
+
+/**
+ * Splits `WITH a AS (…), b AS (…) <main>` into the CTE bodies and the main
+ * statement, each of which is checked as a statement of its own (a CTE may
+ * DELETE or UPDATE). Null when the shape is not recognised.
+ */
+export function cteSegments(stmt) {
+  const s = squash(stmt)
+  const head = /^with\s+(?:recursive\s+)?/i.exec(s)
+  if (!head) return null
+  const segments = []
+  let i = head[0].length
+  for (;;) {
+    const m = /^[A-Za-z_][\w$]*\s*(?:\([^()]*\)\s*)?as\s+(?:not\s+)?(?:materialized\s+)?\(/i.exec(s.slice(i))
+    if (!m) return null
+    const { inner, end } = balanced(s, i + m[0].length - 1)
+    segments.push(inner.trim())
+    i = end
+    const comma = /^\s*,\s*/.exec(s.slice(i))
+    if (!comma) break
+    i += comma[0].length
+  }
+  segments.push(s.slice(i).trim())
+  return segments.filter(Boolean)
+}
+
+/** The expressions of every USING ( … ) and WITH CHECK ( … ) clause. */
+function policyExpressions(s) {
+  const out = []
+  const re = /\b(?:using|with check)\s*\(/gi
+  let m
+  while ((m = re.exec(s))) {
+    const { inner, end } = balanced(s, m.index + m[0].length - 1)
+    out.push(inner)
+    re.lastIndex = end
+  }
+  return out
+}
+
+/** Whether a policy expression is trivially always true. */
+export function alwaysTrue(expr) {
+  let e = expr.trim()
+  while (e.startsWith('(') && balanced(e, 0).end === e.length) e = e.slice(1, -1).trim()
+  const mask = topLevel(e)
+  const cuts = [...mask.matchAll(/\bor\b/gi)].map((m) => m.index)
+  if (cuts.length) {
+    const parts = []
+    let from = 0
+    for (const c of cuts) (parts.push(e.slice(from, c)), (from = c + 2))
+    parts.push(e.slice(from))
+    return parts.some(alwaysTrue)
+  }
+  if (/^(?:true|not\s+false)$/i.test(e)) return true
+  const eq = /^(\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)$/.exec(e)
+  return Boolean(eq && Number(eq[1]) === Number(eq[2]))
+}
+
+/** The role names after the first top-level ` TO ` of a policy statement. */
+function policyRoles(s) {
+  const to = /\bto\s+(.+?)(?:\s+using\b|\s+with\s+check\b|$)/i.exec(s)
+  return to ? to[1].split(',').map((r) => r.trim().toLowerCase()) : null
+}
+
+/**
+ * The schemas a statement sets search_path to — `SET [LOCAL|SESSION]
+ * search_path = …`, or a function's `SET search_path TO …` clause — read from
+ * the ORIGINAL text (the value is often a quoted string, which masking
+ * blanks). Null when it sets none.
+ */
+export function searchPathSet(original) {
+  const value = String.raw`(?:'[^']*'|"[^"]*"|[\w$]+)`
+  const m = new RegExp(String.raw`(?:^|[\s;])set\s+(?:local\s+|session\s+)?search_path\s*(?:=|to)\s*(${value}(?:\s*,\s*${value})*)`, 'i').exec(original)
+  if (!m) return null
+  return m[1]
+    .split(',')
+    .map((x) => x.replace(/['"]/g, '').trim().toLowerCase())
+    .filter((x) => x && x !== '$user')
+}
+
+/**
+ * Red-flag codes for one masked statement (top level or inside a body).
+ * `searchPath` resolves unqualified names for AUTH_STORAGE.
+ */
+export function flagsForStatement(stmt, { searchPath } = {}) {
   const s = squash(stmt)
   const flags = new Set()
+
+  const ctes = /^with\b/i.test(s) ? cteSegments(s) : null
+  if (ctes) for (const seg of ctes) for (const f of flagsForStatement(seg, { searchPath })) flags.add(f)
 
   if (/^drop\s/i.test(s)) flags.add('DROP')
   if (/^alter\s/i.test(s) && /\bdrop constraint\b/i.test(s)) flags.add('DROP')
@@ -223,27 +359,46 @@ export function flagsForStatement(stmt) {
     }
   }
   if (/^truncate\b/i.test(s)) flags.add('TRUNCATE')
-  if (/^delete from\b/i.test(s) && !/\bwhere\b/i.test(s)) flags.add('DELETE_NO_WHERE')
-  if (/^update\b/i.test(s) && /\bset\b/i.test(s) && !/\bwhere\b/i.test(s)) flags.add('UPDATE_NO_WHERE')
+  // Only a top-level WHERE filters the statement: one inside a subquery
+  // (USING (SELECT … WHERE …), SET a = (SELECT … WHERE …)) does not.
+  const top = topLevel(s)
+  if (/^delete from\b/i.test(s) && !/\bwhere\b/i.test(top)) flags.add('DELETE_NO_WHERE')
+  if (/^update\b/i.test(s) && /\bset\b/i.test(top) && !/\bwhere\b/i.test(top)) flags.add('UPDATE_NO_WHERE')
 
-  const grant = /^(?:alter default privileges\b.*?\s)?grant\b.*?\bto\s+(.+?)(?:\s+with\s+grant\s+option)?$/i.exec(s)
+  const grant = /^(?:alter default privileges\b.*?\s)?grant\b.*?\bto\s+(.+)$/i.exec(s)
   if (grant) {
-    const roles = grant[1].split(',').map((r) => r.trim().replace(/^group\s+/i, '').toLowerCase())
+    // The role list ends at WITH GRANT/ADMIN/INHERIT/SET … or GRANTED BY.
+    const list = grant[1].replace(/\s+(?:with\s+(?:grant|admin|inherit|set)\b|granted\s+by\b).*$/i, '')
+    const roles = list.split(',').map((r) => r.trim().replace(/^group\s+/i, '').toLowerCase())
     if (roles.some((r) => PUBLIC_ROLES.has(r))) flags.add('GRANT_PUBLIC_ROLE')
   }
 
   if (/\bsecurity definer\b/i.test(s)) flags.add('SECURITY_DEFINER')
   if (/\b(?:disable|no force) row level security\b/i.test(s)) flags.add('RLS_DISABLED')
-  if (/^(?:create|alter) policy\b/i.test(s) && /\b(?:using|with check)\s*\(\s*(?:\(\s*)*true\s*(?:\)\s*)*\)/i.test(s)) {
+
+  if (
+    (/^(?:create|alter) (?:role|user|group)\b/i.test(s) && /\b(?:superuser|bypassrls|createrole|createdb|replication|login|password)\b/i.test(s)) ||
+    /^reassign owned\b/i.test(s) ||
+    (/^copy\b/i.test(s) && /\bprogram\b/i.test(s)) ||
+    /^alter system\b/i.test(s) ||
+    /\bowner to (?:anon|authenticated|public)\b/i.test(s)
+  )
+    flags.add('PRIVILEGED')
+
+  if (/^(?:create|alter) policy\b/i.test(s) && policyExpressions(s).some(alwaysTrue)) {
     // service_role bypasses RLS anyway, so a policy TO service_role alone is
     // the repo's routine "service role full access" shape, not a hole. No TO
-    // clause means PUBLIC.
-    const to = /\bto\s+(.+?)(?:\s+using\b|\s+with\s+check\b|$)/i.exec(s)
-    const roles = to ? to[1].split(',').map((r) => r.trim().toLowerCase()) : ['public']
+    // clause means PUBLIC (for ALTER POLICY: the roles it already had, which
+    // this report cannot see, so it is flagged too).
+    const roles = policyRoles(s) ?? ['public']
     if (roles.some((r) => r !== 'service_role')) flags.add('POLICY_TRUE')
   }
+  if (/^alter policy\b/i.test(s) && !/\brename to\b/i.test(s)) {
+    const roles = policyRoles(s)
+    if (roles?.some((r) => PUBLIC_ROLES.has(r))) flags.add('POLICY_WIDENED')
+  }
 
-  if (targetsOf(s).some((t) => ['auth', 'storage'].includes(schemaOf(t)))) flags.add('AUTH_STORAGE')
+  if (targetsOf(s).some((t) => SUPABASE_SCHEMAS.includes(schemaOf(t, searchPath)))) flags.add('AUTH_STORAGE')
   return [...flags]
 }
 
@@ -254,8 +409,66 @@ export function flagsForStatement(stmt) {
  * when the statement holds none (an assignment, RETURN, RAISE, END IF …).
  */
 export function bodyStatement(stmt) {
-  const m = /\b(delete\s+from|truncate|update|drop|grant|alter|insert\s+into|create)\b/i.exec(stmt)
+  const m = /\b(with|delete\s+from|truncate|update|drop|grant|revoke|alter|insert\s+into|create|reassign|copy)\b/i.exec(stmt)
   return m ? stmt.slice(m.index) : null
+}
+
+/**
+ * The offset of a PL/pgSQL EXECUTE (dynamic SQL) in a masked body statement,
+ * or -1. Not GRANT/REVOKE EXECUTE (a privilege) and not EXECUTE FUNCTION /
+ * PROCEDURE (a trigger's action).
+ */
+export function dynamicExecute(stmt) {
+  for (const m of stmt.matchAll(/\bexecute\b/gi)) {
+    const before = stmt.slice(0, m.index).trimEnd()
+    const after = stmt.slice(m.index + m[0].length).trimStart()
+    if (/(?:\bgrant|\brevoke|,)$/i.test(before)) continue
+    if (/^(?:function|procedure|on)\b/i.test(after)) continue
+    return m.index
+  }
+  return -1
+}
+
+/**
+ * The SQL an EXECUTE runs, as far as it can be read: its string literals
+ * ('…', E'…', $tag$…$tag$) joined, with format() placeholders and the gaps
+ * between concatenated literals replaced by a placeholder name.
+ */
+export function dynamicSqlText(original) {
+  const parts = []
+  let i = 0
+  while (i < original.length) {
+    const c = original[i]
+    if (c === '-' && original[i + 1] === '-') {
+      const end = original.indexOf('\n', i)
+      i = end === -1 ? original.length : end
+    } else if (c === "'") {
+      const escapes = i > 0 && /[eE]/.test(original[i - 1]) && !/[\w$]/.test(original[i - 2] ?? '')
+      let j = i + 1
+      let text = ''
+      while (j < original.length) {
+        if (escapes && original[j] === '\\') ((text += original[j + 1] ?? ''), (j += 2))
+        else if (original[j] === "'" && original[j + 1] === "'") ((text += "'"), (j += 2))
+        else if (original[j] === "'") break
+        else text += original[j++]
+      }
+      parts.push(text)
+      i = j + 1
+    } else if (c === '$' && !/[\w$]/.test(original[i - 1] ?? '')) {
+      const m = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(original.slice(i))
+      if (!m) {
+        i++
+        continue
+      }
+      const start = i + m[0].length
+      const end = original.indexOf(m[0], start)
+      parts.push(original.slice(start, end === -1 ? original.length : end))
+      i = end === -1 ? original.length : end + m[0].length
+    } else {
+      i++
+    }
+  }
+  return parts.join(' _dyn_ ').replace(/%(?:\d+\$)?-?\d*[IsL]/g, '_dyn_')
 }
 
 /** The name a CREATE FUNCTION / PROCEDURE statement declares, if any. */
@@ -267,6 +480,8 @@ function functionName(stmt) {
 /** A one-line plain-English description of a statement. */
 export function describe(stmt) {
   const s = squash(stmt)
+  const ctes = /^with\b/i.test(s) ? cteSegments(s) : null
+  if (ctes) return `With ${ctes.length - 1} CTE${ctes.length === 2 ? '' : 's'}: ${describe(ctes.at(-1))}`
   const first = targetsOf(s)[0]
   const t = first?.startsWith('schema:') ? first.slice(7) : first
   const m = (re) => re.exec(s)
@@ -332,32 +547,74 @@ const excerpt = (text) => {
  * Analyses one migration. Returns its statements (described) and flags, each
  * flag with code, line and excerpt, sorted by line then flag order.
  */
+const touchesSupabaseSchema = (path) => Boolean(path?.some((x) => SUPABASE_SCHEMAS.includes(x)))
+
 export function analyse(path, sql) {
   const statements = splitStatements(sql)
   const flags = []
   const order = Object.keys(FLAGS)
   const described = []
-  for (const st of statements) {
-    described.push({ line: st.line, text: describe(st.masked) })
-    for (const code of flagsForStatement(st.masked)) flags.push({ path, line: st.line, code, excerpt: excerpt(st.original), where: null })
-    const fn = functionName(st.masked)
-    for (const body of st.bodies) {
-      for (const inner of splitStatements(body.text)) {
-        const cmd = bodyStatement(inner.masked)
-        if (!cmd) continue
+  // The file's search_path, as SET statements change it (null: the default,
+  // which puts public first).
+  let searchPath = null
+
+  const push = (line, code, text, where) => flags.push({ path, line, code, excerpt: excerpt(text), where })
+
+  // Checks a dollar-quoted body (absolute offset `at`). Statements in it may
+  // SET search_path, run EXECUTE, or hold nested bodies of their own.
+  const checkBody = (text, at, where, initialPath) => {
+    let bodyPath = initialPath
+    for (const inner of splitStatements(text)) {
+      const set = searchPathSet(inner.original)
+      if (set) {
+        if (touchesSupabaseSchema(set)) push(lineAt(sql, at + inner.offset), 'AUTH_STORAGE', inner.original, where)
+        bodyPath = set
+      }
+      const exec = dynamicExecute(inner.masked)
+      if (exec !== -1) {
+        const line = lineAt(sql, at + inner.offset + exec)
+        const execText = inner.original.slice(exec)
+        push(line, 'DYNAMIC_SQL', execText, where)
+        for (const dyn of splitStatements(dynamicSqlText(execText))) {
+          const cmd = bodyStatement(dyn.masked)
+          if (!cmd) continue
+          for (const code of flagsForStatement(cmd, { searchPath: bodyPath })) push(line, code, execText, `in dynamic SQL (EXECUTE) ${where}`)
+        }
+        continue
+      }
+      const cmd = bodyStatement(inner.masked)
+      if (cmd) {
         const skip = inner.masked.length - cmd.length
-        for (const code of flagsForStatement(cmd)) {
+        for (const code of flagsForStatement(cmd, { searchPath: bodyPath })) {
           if (code === 'SECURITY_DEFINER') continue
-          flags.push({
-            path,
-            line: lineAt(sql, body.offset + inner.offset + skip),
-            code,
-            excerpt: excerpt(inner.original.slice(skip)),
-            where: fn ? `in the body of ${fn}` : 'in a code block',
-          })
+          push(lineAt(sql, at + inner.offset + skip), code, inner.original.slice(skip), where)
         }
       }
+      // A function created inside a DO block, for one.
+      const fn = cmd ? functionName(cmd) : null
+      for (const nested of inner.bodies) checkBody(nested.text, at + nested.offset, fn ? `in the body of ${fn}` : where, bodyPath)
     }
+  }
+
+  for (const st of statements) {
+    described.push({ line: st.line, text: describe(st.masked) })
+    // The statement's own text outside its bodies: where a SET clause lives.
+    let head = st.original
+    for (const b of st.bodies) {
+      const rel = b.offset - st.offset
+      head = head.slice(0, rel) + ' '.repeat(b.text.length) + head.slice(rel + b.text.length)
+    }
+    const set = searchPathSet(head)
+    const flagsHere = new Set(flagsForStatement(st.masked, { searchPath }))
+    if (touchesSupabaseSchema(set)) flagsHere.add('AUTH_STORAGE')
+    for (const code of flagsHere) push(st.line, code, st.original, null)
+    if (set && /^set\b/i.test(st.masked)) searchPath = set
+    if (/^reset\s+(?:search_path|all)\b/i.test(st.masked)) searchPath = null
+
+    const fn = functionName(st.masked)
+    // A function's own SET search_path clause governs its body.
+    const bodyPath = fn && set ? set : searchPath
+    for (const body of st.bodies) checkBody(body.text, body.offset, fn ? `in the body of ${fn}` : 'in a code block', bodyPath)
   }
   flags.sort((a, b) => a.line - b.line || order.indexOf(a.code) - order.indexOf(b.code))
   return { path, statements: described, flags }

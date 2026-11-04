@@ -6,10 +6,15 @@ name: Mutation testing
 # to watch, not a merge gate. Report-only: the score lands in the job summary
 # and the HTML report in an artifact.
 #
-# One check does fail the job: a run that kills no mutant at all. That means
-# the test runner is not activating mutants (as with
-# @stryker-mutator/vitest-runner 10.0.0 under Vitest 5, fixed in 10.1.0), so
-# every mutant "survives" and the score is meaningless rather than low.
+# Two guards keep a meaningless score off the summary:
+#   - Runner support: @stryker-mutator/vitest-runner 10.0.0 never activates a
+#     mutant under Vitest 5 (fixed in 10.1.0, which the 14-day rule allows from
+#     6 Nov 2026). On such a pair the run is SKIPPED with a warning and a
+#     summary line, rather than failing red every night
+#     (scripts/stryker-runner-support.mjs). Bumping both @stryker-mutator
+#     packages to 10.1.x turns the run on with no edit here.
+#   - Zero kills: on a supported pair, a run that kills no mutant at all still
+#     fails the job, because that means mutants are not being activated.
 
 on:
   schedule:
@@ -46,7 +51,18 @@ jobs:
 
       - run: npm ci
 
+      - name: Runner support
+        id: support
+        run: |
+          node scripts/stryker-runner-support.mjs
+          if grep -q '^supported=false$' "$GITHUB_OUTPUT"; then
+            msg="Mutation testing skipped: @stryker-mutator/vitest-runner $(node -p "require('./node_modules/@stryker-mutator/vitest-runner/package.json').version") does not activate mutants under Vitest $(node -p "require('./node_modules/vitest/package.json').version"). Bump both @stryker-mutator packages to 10.1.x (docs/RUNBOOK-security-scans.md)."
+            echo "::warning::$msg"
+            { echo "### Mutation score"; echo ""; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Stryker
+        if: steps.support.outputs.supported == 'true'
         env:
           MUTATE: ${{ inputs.mutate }}
         run: |
@@ -57,7 +73,7 @@ jobs:
           fi
 
       - name: Score
-        if: always()
+        if: always() && steps.support.outputs.supported == 'true'
         run: |
           if [ ! -f reports/mutation/mutation.json ]; then
             echo "::error::Stryker wrote no report."

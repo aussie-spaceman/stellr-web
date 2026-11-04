@@ -46,3 +46,13 @@ CREATE POLICY "anyone reads widgets" ON public.widgets
 
 CREATE POLICY "anyone uploads" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (bucket_id = 'agreements');
+
+ALTER ROLE anon WITH BYPASSRLS;
+
+ALTER POLICY "service role full access" ON public.members TO anon, authenticated;
+
+DO $$
+BEGIN
+  EXECUTE format('DROP TABLE public.%I', 'old_events');
+END
+$$;

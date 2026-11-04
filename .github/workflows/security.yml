@@ -159,8 +159,17 @@ jobs:
   # lockfile-lint: every package resolves from registry.npmjs.org over https
   # with a sha512 integrity hash, and its name matches the tarball (the two
   # npm aliases in the tree are named). npm audit signatures: every installed
-  # package carries a valid registry signature. Installed with --ignore-scripts
-  # so no package code runs before the lockfile is checked.
+  # package carries a valid registry signature.
+  #
+  # The checker must not come from the lockfile it checks: a PR that edits
+  # package-lock.json controls where lockfile-lint (the devDependency) and its
+  # dependencies are fetched from, so it could swap in one that always passes.
+  # So lockfile-lint runs BEFORE npm ci, as a pinned version fetched by npx in
+  # the runner's temp directory (outside the checkout, so neither the repo's
+  # package-lock.json nor any .npmrc in it is read). NPM_CONFIG_BEFORE fixes
+  # its transitive dependencies to what the registry held on that date, so the
+  # same tree resolves every run. Keep the flags identical to `lint:lockfile`
+  # in package.json (test/security-workflows.test.ts checks).
   supply-chain:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -172,10 +181,18 @@ jobs:
           node-version: 24.x
           cache: npm
 
-      - run: npm ci --ignore-scripts
+      - name: lockfile-lint (pinned, not from the lockfile under test)
+        working-directory: ${{ runner.temp }}
+        env:
+          NPM_CONFIG_BEFORE: '2026-10-21'
+        run: >-
+          npx --yes lockfile-lint@5.1.0
+          --path "$GITHUB_WORKSPACE/package-lock.json"
+          --type npm --allowed-hosts npm --validate-https --validate-integrity --validate-integrity-strict --validate-package-names --allowed-package-name-aliases @typescript/old:typescript ui5:@sanity/ui
 
-      - name: lockfile-lint
-        run: npm run lint:lockfile
+      # Only after the lockfile passed: --ignore-scripts, so no install script
+      # runs even then.
+      - run: npm ci --ignore-scripts
 
       - name: npm audit signatures
         run: npm audit signatures

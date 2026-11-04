@@ -11,8 +11,15 @@ of it touches the dev or production projects, and none of it holds a secret.
 | OSV-Scanner on `package-lock.json` | `security.yml` → `osv-scanner` | No (4 advisories open in transitive dev/build deps) | Clear them, then `OSV_ENFORCE=true` |
 | gitleaks on the commits a PR or push adds | `security.yml` → `gitleaks` | No (not yet run in CI) | After a green run, `GITLEAKS_ENFORCE=true` |
 | lockfile-lint + `npm audit signatures` | `security.yml` → `supply-chain` | Yes (both passed when added) | Add `supply-chain` to the required checks |
+
+CI runs lockfile-lint as `npx --yes lockfile-lint@5.1.0` in the runner's temp
+directory, before `npm ci`, with `NPM_CONFIG_BEFORE` fixing its dependency tree
+to a date. It must not be the devDependency: a PR that edits
+`package-lock.json` decides where that copy comes from, so it could install a
+checker that always passes. To bump it, change the version (and the date) in
+`security.yml` and in `package.json` together; a test checks they match.
 | Migration report with RED FLAGS | `security.yml` → `migration-report` (PRs touching `supabase/migrations`) | Never: summary + warning | — |
-| Stryker mutation testing | `mutation.yml`, nightly 03:17 UTC and by hand | Never, but fails if no mutant is killed | Set `thresholds.break` in `stryker.config.mjs` |
+| Stryker mutation testing | `mutation.yml`, nightly 03:17 UTC and by hand | Never. Skipped with a warning while the pinned vitest-runner cannot activate mutants; on a supported runner, fails if no mutant is killed | Bump Stryker to 10.1.x, then set `thresholds.break` in `stryker.config.mjs` |
 
 A report-only job still shows red on the PR; it cannot fail the workflow.
 Repo variables live at Settings → Secrets and variables → Actions → Variables.
@@ -48,16 +55,31 @@ npm run migration:report -- path/to/file.sql   # named files
 ```
 
 The RED FLAGS are pattern rules (DROP, DROP COLUMN, TRUNCATE, DELETE or UPDATE
-without WHERE, GRANT to anon/authenticated/PUBLIC, SECURITY DEFINER, RLS
-disabled or not forced, a policy that is always true for a non-service role,
-anything in the auth or storage schema). The same SQL always gives the same
-flags. A flag means "read this statement", not "this is wrong": dropping and
+without a top-level WHERE, also inside or after a WITH CTE, GRANT to
+anon/authenticated/PUBLIC, SECURITY DEFINER, RLS disabled or not forced, role
+attributes and ownership changes, a policy that is always true for a
+non-service role, ALTER POLICY widened to anon/authenticated/PUBLIC, anything
+in the auth or storage schema, including through `SET search_path`, and every
+EXECUTE of dynamic SQL). The literal parts of an EXECUTE's SQL are checked
+against the same rules; SQL held in a variable cannot be, which is why the
+EXECUTE itself is always flagged. The same SQL always gives the same flags. A flag means "read this statement", not "this is wrong": dropping and
 re-creating a policy is routine. `scripts/fixtures/migration-report/` holds a
 seeded dangerous migration that must trip every flag.
 
 ## Mutation testing
 
 `npm run test:mutation` (or `npx stryker run --mutate lib/impersonation.ts`).
+
+The pinned `@stryker-mutator/vitest-runner` 10.0.0 does not activate mutants
+under Vitest 5: every test shows "(covered 0)" and nothing is killed. 10.1.0
+fixed it, and the 14-day rule allows it from 6 Nov 2026. Until then
+`mutation.yml` checks the pair first (`scripts/stryker-runner-support.mjs`) and
+skips the run with a warning in the job summary rather than failing red every
+night. After the bump the run switches on with no workflow edit:
+
+```sh
+npm install --save-dev --save-exact --before=2026-10-24 @stryker-mutator/core@10.1.1 @stryker-mutator/vitest-runner@10.1.1
+```
 Reports land in `reports/mutation/` (gitignored). Add tenancy, field-crypto and
 ledger modules to `mutate` in `stryker.config.mjs` as those stages land.
 

@@ -9,7 +9,7 @@ const { state } = vi.hoisted(() => ({
   state: {
     pending: null as Record<string, unknown> | null,
     consented: false,
-    open: [] as Array<{ id: string; envelope_id: string; provider: string }>,
+    open: [] as Array<{ id: string; envelope_id: string; provider: string; event_slug: string }>,
     voided: [] as string[],
     reminded: [] as string[],
     sent: 0,
@@ -17,9 +17,6 @@ const { state } = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/community', () => ({
-  getCurrentMember: async () => ({ id: 'm-teen', email: 'kid@example.test' }),
-}))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: async () => {} }))
 vi.mock('@/lib/esign/operations', () => ({
@@ -29,9 +26,14 @@ vi.mock('@/lib/esign/operations', () => ({
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from() {
+      const eq: Record<string, unknown> = {}
       const chain: Record<string, unknown> = {
-        select: () => chain, eq: () => chain, in: () => chain, update: () => chain,
-        then: (f: (v: unknown) => unknown) => Promise.resolve({ data: state.open, error: null }).then(f),
+        select: () => chain, in: () => chain, update: () => chain,
+        eq: (c: string, v: unknown) => { eq[c] = v; return chain },
+        then: (f: (v: unknown) => unknown) => Promise.resolve({
+          data: state.open.filter((r) => eq.event_slug === undefined || r.event_slug === eq.event_slug),
+          error: null,
+        }).then(f),
       }
       return chain
     },
@@ -39,6 +41,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 vi.mock('@/lib/pending-consent', async (orig) => ({
   ...(await orig<typeof import('@/lib/pending-consent')>()),
+  signedInMemberForConsent: async () => ({ id: 'm-teen', email: 'kid@example.test' }),
   getPendingConsent: async () => state.pending,
   settlePendingConsent: async () => state.consented,
   openPendingConsent: async (_db: unknown, input: Record<string, unknown>) => { state.opened.push(input) },
@@ -53,7 +56,7 @@ const post = (body: unknown = {}) =>
 beforeEach(() => {
   state.pending = { member_id: 'm-teen', band: 'teen', guardian_name: 'Pat Lee', guardian_email: 'pat@example.test', last_sent_at: null }
   state.consented = false
-  state.open = [{ id: 'a1', envelope_id: 'env-1', provider: 'native' }]
+  state.open = [{ id: 'a1', envelope_id: 'env-1', provider: 'native', event_slug: 'membership' }]
   state.voided = []
   state.reminded = []
   state.sent = 0
@@ -90,6 +93,29 @@ describe('POST /api/consent/request', () => {
     expect(state.voided).toEqual(['env-1'])
     expect(state.opened).toEqual([expect.objectContaining({ guardianEmail: 'new@example.test', band: 'teen' })])
     expect(state.sent).toBe(1)
+  })
+
+  // Review finding: the open-forms query had no event_slug filter, so a
+  // correction voided the member's EVENT permission form too, and a resend
+  // could remind the event form instead of the consent form.
+  it('never voids or reminds an event permission form, only the membership consent form', async () => {
+    state.open = [
+      { id: 'ev', envelope_id: 'env-event', provider: 'native', event_slug: 'colorado-sdc-2026' },
+      { id: 'a1', envelope_id: 'env-1', provider: 'native', event_slug: 'membership' },
+    ]
+    await post()
+    expect(state.reminded).toEqual(['env-1'])
+    state.reminded = []
+    await post({ guardian_email: 'new@example.test' })
+    expect(state.voided).toEqual(['env-1'])
+  })
+
+  it('409 while no parent or guardian has been named yet (opened at the age screen)', async () => {
+    state.pending!.guardian_email = null
+    const res = await post({ guardian_email: 'new@example.test' })
+    expect(res.status).toBe(409)
+    expect(state.voided).toEqual([])
+    expect(state.sent).toBe(0)
   })
 
   it("refuses the member's own address or a malformed one", async () => {

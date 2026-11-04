@@ -13,13 +13,15 @@ through an invite, an event registration or a consent envelope.
 |---|---|
 | 18 or over | Registers at once, as today. |
 | 13–17 | Registers, gives a parent or legal guardian's name and email (as their emergency contact). The guardian is sent the Participation Agreement — Student / Minor on Stellr signing. Until it is signed the account is **pending**: the student can read public content, their own profile and their own registrations; they cannot post, comment, chat, react, upload, contribute resources, join a Space, or appear in the member directory or @mention search. |
-| Under 13 | Gives only a first name, date of birth and a parent's email (their login email is held by the sign-in provider). The parent is sent the same agreement. The account is **inactive** until the parent signs: no community, no member pages. After consent: never listed in the directory or mention search, no direct messages (none exist), and no posting, comments or chat, because Stellr has no pre-moderated space yet. Reactions and joining a Space are allowed. |
+| Under 13 | Gives only a first name, date of birth and a parent's email (their login email is held by the sign-in provider). The parent is sent the same agreement. The account is **inactive** until the parent signs: no community (reading included), no member pages, no event or group registration, and no other profile field can be added. After consent: never listed in the directory or mention search, no direct messages (none exist), and no posting, comments or chat, because Stellr has no pre-moderated space yet. Reactions and joining a Space are allowed. |
 | Date of birth missing or not a real date | Refused at the age screen. Anywhere a stored date is unreadable, the account is treated as under 13. |
 
 - The age screen asks for the date of birth on its own, first, and does not mention any age threshold.
 - A date of birth on file that says the person is a minor cannot be changed by them to an adult one.
 - Marketing consent is set off for everyone under 18 at onboarding.
-- A pending request not signed within 30 days of being sent is deleted with the account, its data and its sign-in login, through the deletion registry, with no archive copy kept. An account whose parent has signed but whose student has not yet signed is not deleted.
+- Only **self**-registration is pending. A minor an adult brought to Stellr (an admin invite, an event or group registration, an event's consent form) keeps today's path: their event's own consent form, no pending state, no 30-day deletion.
+- The 30-day clock starts when the date of birth is given on the age screen, so a sign-up abandoned there is deleted too.
+- A pending request not signed within 30 days is deleted with the account, its data and its sign-in login, through the deletion registry, with no archive copy kept. An account whose parent has signed but whose student has not yet signed is not deleted, nor is one that has since been registered for an event.
 - The parent or guardian confirms the child's year of birth and that they are the parent or legal guardian before signing (the signing flow already does both).
 
 ## Proposed Terms §4.1 — Who may use the Services

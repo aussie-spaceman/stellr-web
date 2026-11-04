@@ -11,7 +11,13 @@ const { state } = vi.hoisted(() => ({
     byClerk: null as Record<string, unknown> | null,
     byEmail: null as Record<string, unknown> | null,
     participants: [] as Array<{ id: string; date_of_birth: string | null }>,
-    agreements: [] as Array<{ envelope_type: string; status: string }>,
+    agreements: [] as Array<{ envelope_type: string; status: string; event_slug?: string }>,
+    /** Rows opened at the age screen (no guardian yet). */
+    screened: [] as Array<Record<string, unknown>>,
+    /** openPendingConsent throws. */
+    openFails: false,
+    invited: false,
+    sequence: [] as string[],
     writes: [] as Array<{ table: string; op: string; payload: unknown }>,
     opened: [] as Array<Record<string, unknown>>,
     sent: [] as string[],
@@ -33,6 +39,7 @@ vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from(table: string) {
       const filters: Array<[string, string, unknown]> = []
+      const ors: string[] = []
       let op = 'select'
       let head = false
       let payload: unknown = null
@@ -40,6 +47,7 @@ vi.mock('@/lib/supabase', () => ({
       const result = () => {
         if (op !== 'select') {
           state.writes.push({ table, op, payload })
+          state.sequence.push(`${table}:${op}`)
           return { data: [{ id: eqOf('id') ?? 'm-new' }], error: null }
         }
         if (table === 'participants') {
@@ -48,7 +56,10 @@ vi.mock('@/lib/supabase', () => ({
         if (table === 'agreements') {
           const type = eqOf('envelope_type')
           const status = eqOf('status')
-          const n = state.agreements.filter((a) => (!type || a.envelope_type === type) && (!status || a.status === status)).length
+          const notMembership = ors.some((o) => o.includes('event_slug.neq.membership'))
+          const n = state.agreements.filter((a) =>
+            (!type || a.envelope_type === type) && (!status || a.status === status) &&
+            (!notMembership || a.event_slug !== 'membership')).length
           return { count: n, data: [], error: null }
         }
         return { data: null, error: null }
@@ -61,10 +72,11 @@ vi.mock('@/lib/supabase', () => ({
         eq: (c: string, v: unknown) => { filters.push(['eq', c, v]); return chain },
         is: (c: string, v: unknown) => { filters.push(['is', c, v]); return chain },
         in: () => chain,
-        or: () => chain,
+        or: (f: string) => { ors.push(f); return chain },
         single: async () => {
           if (op === 'insert') {
             state.writes.push({ table, op, payload })
+            state.sequence.push(`${table}:${op}`)
             return { data: { id: 'm-new' }, error: null }
           }
           return { data: null, error: null }
@@ -73,6 +85,9 @@ vi.mock('@/lib/supabase', () => ({
           if (table !== 'members') return { data: null, error: null }
           if (eqOf('clerk_user_id') !== undefined) return { data: state.byClerk, error: null }
           if (eqOf('email') !== undefined) return { data: state.byEmail, error: null }
+          if (eqOf('id') !== undefined && filters.length === 1) {
+            return { data: { id: eqOf('id'), account_invite_sent_at: state.invited ? '2026-10-01' : null, email: 'kid@example.test', first_name: 'A', last_name: 'B' }, error: null }
+          }
           return { data: { id: eqOf('id'), email: 'kid@example.test', first_name: 'A', last_name: 'B' }, error: null }
         },
         then: (f: (v: unknown) => unknown) => Promise.resolve(result()).then(f),
@@ -83,7 +98,15 @@ vi.mock('@/lib/supabase', () => ({
 }))
 vi.mock('@/lib/pending-consent', async (orig) => ({
   ...(await orig<typeof import('@/lib/pending-consent')>()),
-  openPendingConsent: async (_db: unknown, input: Record<string, unknown>) => { state.opened.push(input) },
+  openPendingConsent: async (_db: unknown, input: Record<string, unknown>) => {
+    if (state.openFails) throw new Error('insert failed')
+    state.opened.push(input)
+    state.sequence.push('pending:open')
+  },
+  openScreenedRequest: async (_db: unknown, input: Record<string, unknown>) => {
+    state.screened.push(input)
+    state.sequence.push('pending:screened')
+  },
   sendConsentRequest: async (_db: unknown, memberId: string) => { state.sent.push(memberId); return { outcome: 'issued' } },
 }))
 vi.mock('@/lib/email-campaigns', () => ({ fireCampaignEvent: async () => {} }))
@@ -96,10 +119,11 @@ vi.mock('@/lib/volunteer', () => ({
 }))
 vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: async () => {} }))
 vi.mock('@/lib/registration-notify', () => ({
-  sendAccountConfirmation: async () => {},
+  sendAccountConfirmation: async () => { state.sequence.push('email:confirmation') },
   notifyStaffOfRegistration: async () => {},
 }))
 vi.mock('@/lib/membership-agreement', () => ({
+  MEMBERSHIP_SLUG: 'membership',
   dispatchMembershipAgreement: async () => { state.membershipDispatched += 1; return { signNowUrl: null } },
 }))
 
@@ -133,6 +157,10 @@ beforeEach(() => {
   state.opened = []
   state.sent = []
   state.membershipDispatched = 0
+  state.screened = []
+  state.openFails = false
+  state.invited = false
+  state.sequence = []
 })
 afterEach(() => { process.env.MINOR_SELF_SIGNUP_ENABLED = flagBefore })
 
@@ -180,6 +208,7 @@ describe('flag ON — the age screen', () => {
 
   it("records a minor's date where none is on file, so it can't be changed by going back", async () => {
     await post({ stage: 'age', date_of_birth: yearsAgo(15) })
+    expect(state.screened).toEqual([{ memberId: 'm-1', band: 'teen' }])
     expect(memberWrites()).toEqual([
       expect.objectContaining({ op: 'update', payload: { date_of_birth: yearsAgo(15), marketing_consent: false } }),
     ])
@@ -270,7 +299,7 @@ describe('flag ON — 13 to 17', () => {
   })
 
   it('a guardian agreement already on file means no pending state', async () => {
-    state.agreements = [{ envelope_type: 'minor', status: 'completed' }]
+    state.agreements = [{ envelope_type: 'minor', status: 'completed', event_slug: 'membership' }]
     const res = await post(student(yearsAgo(15)))
     expect(res.status).toBe(200)
     expect((await res.json()).pendingConsent).toBeUndefined()
@@ -283,5 +312,88 @@ describe('flag ON — 13 to 17', () => {
     expect((await res.json()).pendingConsent).toBeUndefined()
     expect(state.opened).toEqual([])
     expect(memberWrites()[0].payload).not.toHaveProperty('marketing_consent')
+  })
+})
+
+// Review findings (3 Nov 2026), each with the scenario that used to go wrong.
+describe('flag ON — review regressions', () => {
+  beforeEach(() => { process.env.MINOR_SELF_SIGNUP_ENABLED = 'true' })
+
+  // An under-13 who stopped at the age screen kept a member row with their
+  // date of birth and no pending row, so the 30-day purge never reached it.
+  it('the age screen opens the pending row for a self-registering child, BEFORE the date of birth is written', async () => {
+    const res = await post({ stage: 'age', date_of_birth: yearsAgo(12) })
+    expect(await res.json()).toEqual({ band: 'child', consented: false })
+    expect(state.screened).toEqual([{ memberId: 'm-1', band: 'child' }])
+    expect(state.sequence).toEqual(['pending:screened', 'members:update'])
+  })
+
+  // With the flag on, an event-registered or invited minor was put into the
+  // pending state (and onto the purge's list); an under-13 one had every
+  // field the teacher entered wiped.
+  it('a 15-year-old an event registration brought here keeps the pre-decision path: no pending row, the membership agreement', async () => {
+    state.participants = [{ id: 'p-1', date_of_birth: yearsAgo(15) }]
+    const res = await post(student(yearsAgo(15), { ec_relationship: 'Aunt' }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).pendingConsent).toBeUndefined()
+    expect(state.opened).toEqual([])
+    expect(state.membershipDispatched).toBe(1)
+  })
+
+  it('so does an invited 15-year-old, and the age screen opens nothing for them', async () => {
+    state.invited = true
+    const age = await post({ stage: 'age', date_of_birth: yearsAgo(15) })
+    expect(await age.json()).toEqual({ band: 'teen', consented: true })
+    expect(state.screened).toEqual([])
+    const res = await post(student(yearsAgo(15)))
+    expect((await res.json()).pendingConsent).toBeUndefined()
+    expect(state.opened).toEqual([])
+  })
+
+  it('an under-13 an event registration brought here, parent not yet signed: the old 403, and nothing written', async () => {
+    state.participants = [{ id: 'p-1', date_of_birth: yearsAgo(12) }]
+    const res = await post({ date_of_birth: yearsAgo(12), first_name: 'Sam', parent_email: 'parent@example.test' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('guardian_consent_required')
+    expect(memberWrites()).toEqual([])
+    expect(state.opened).toEqual([])
+    const age = await post({ stage: 'age', date_of_birth: yearsAgo(12) })
+    expect(age.status).toBe(403)
+    expect(state.screened).toEqual([])
+  })
+
+  it('a membership consent form in flight is not an adult route: a re-run stays pending', async () => {
+    state.agreements = [{ envelope_type: 'minor', status: 'sent', event_slug: 'membership' }]
+    const res = await post(student(yearsAgo(15)))
+    expect((await res.json()).pendingConsent).toBe('guardian')
+    expect(state.membershipDispatched).toBe(0)
+  })
+
+  // The pending row used to be opened after the profile write, the grant and
+  // the emails; a failed insert left a finished minor account with no
+  // pending row, so full community access.
+  it('opens the pending row before the profile write, and writes nothing if it cannot', async () => {
+    await post(student(yearsAgo(15)))
+    expect(state.sequence.indexOf('pending:open')).toBeLessThan(state.sequence.indexOf('members:update'))
+
+    state.writes = []
+    state.sequence = []
+    state.openFails = true
+    const res = await post(student(yearsAgo(15)))
+    expect(res.status).toBe(500)
+    expect(memberWrites()).toEqual([])
+    expect(state.sequence).not.toContain('email:confirmation')
+  })
+
+  it('a row created by the write itself is rolled back to unfinished when the pending row cannot be opened', async () => {
+    state.byClerk = null
+    state.openFails = true
+    const res = await post(student(yearsAgo(15)))
+    expect(res.status).toBe(500)
+    expect(memberWrites().map((w) => w.payload)).toEqual([
+      expect.objectContaining({ gender: 'female' }),
+      { gender: null },
+    ])
+    expect(state.sequence).not.toContain('email:confirmation')
   })
 })

@@ -53,7 +53,10 @@ const ENTITIES: Record<string, EntityDef> = {
   // as a member hard delete — in-flight consent forms voided, Clerk login
   // deleted, credentials tombstoned — but keeps NO archive snapshot: the data
   // was collected only to ask for consent (COPPA §312.5(c)(1)) and goes with
-  // the request. Same blockers as a member; a blocked purge is retried daily.
+  // the request. A member's blockers, plus any event participation: a minor an
+  // event or group registration reaches came by an adult route and is never
+  // this purge's to delete (its guardian form is the event's). A blocked purge
+  // is retried on a later day (next_attempt_at).
   pending_consent_member: {
     type: 'pending_consent_member',
     table: 'members',
@@ -65,6 +68,7 @@ const ENTITIES: Record<string, EntityDef> = {
     actsAs: 'member',
     archive: false,
     dependents: [
+      { table: 'participants', fkColumn: 'member_id', label: 'event participations' },
       { table: 'registrations', fkColumn: 'teacher_member_id', label: 'event registrations (as teacher)',
         inactiveValues: { column: 'status', values: ['withdrawn', 'cancelled'] } },
       { table: 'sessions', fkColumn: 'host_member_id', label: 'coaching/mentoring sessions (as host)',

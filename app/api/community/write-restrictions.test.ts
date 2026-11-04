@@ -22,6 +22,10 @@ vi.mock('@/lib/community', () => ({
   },
 }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
+vi.mock('@/lib/spaces', async (orig) => ({
+  ...(await orig<typeof import('@/lib/spaces')>()),
+  respondToSpaceInvite: async () => { state.dbTouched += 1; return true },
+}))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => {
     state.dbTouched += 1
@@ -48,6 +52,7 @@ const modules: Record<string, { POST: (req: Request) => Promise<Response> }> = {
   './resources/contribute/route': await import('./resources/contribute/route'),
   './spaces/join/route': await import('./spaces/join/route'),
 }
+const inviteRespond = await import('./spaces/invite/respond/route')
 
 beforeEach(() => {
   state.calls = []
@@ -67,4 +72,26 @@ describe('community write routes honour memberCommunityTier', () => {
       expect(state.dbTouched).toBe(0)
     })
   }
+})
+
+// Review finding (3 Nov 2026): accepting a Space invite joined the Space while
+// /spaces/join refused the same member.
+describe('Space invite respond', () => {
+  const respond = (action: string) =>
+    inviteRespond.POST(new Request('http://localhost/api/community/spaces/invite/respond', {
+      method: 'POST', body: JSON.stringify({ spaceId: 'sp-1', action }),
+    }))
+
+  it('accepting is a join: a restricted member gets the 403 and nothing is written', async () => {
+    const res = await respond('accept')
+    expect(res.status).toBe(403)
+    expect(state.calls).toEqual(['join'])
+    expect(state.dbTouched).toBe(0)
+  })
+
+  it('declining stays open to everyone', async () => {
+    const res = await respond('decline')
+    expect(res.status).toBe(200)
+    expect(state.calls).toEqual([])
+  })
 })

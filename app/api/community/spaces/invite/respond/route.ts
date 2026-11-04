@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember } from '@/lib/community'
 import { respondToSpaceInvite } from '@/lib/spaces'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -18,6 +18,12 @@ export async function POST(req: Request) {
   const { spaceId, action } = await req.json().catch(() => ({}))
   if (!spaceId || (action !== 'accept' && action !== 'decline')) {
     return NextResponse.json({ error: 'spaceId and a valid action are required' }, { status: 400 })
+  }
+  // Accepting joins the Space, so the same age and consent gate as
+  // /spaces/join (decision 24). Declining stays open to everyone.
+  if (action === 'accept') {
+    const blocked = await communityWriteBlock(member, 'join')
+    if (blocked) return blocked
   }
 
   const ok = await respondToSpaceInvite(spaceId, member.id, action === 'accept')

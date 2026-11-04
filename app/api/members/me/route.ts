@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { childAwaitingConsentBlock } from '@/lib/pending-consent'
 import { assertNotImpersonating, impersonatedMemberId } from '@/lib/impersonation'
 
 // Treat null/undefined/'' as equivalent so an untouched empty field (the form
@@ -111,6 +112,13 @@ export async function PATCH(req: Request) {
 
   const body = await req.json()
   const db = supabaseServer()
+
+  // Decision 24, COPPA: before a parent consents, a child's account holds a
+  // first name, date of birth and parent email, nothing more. No profile
+  // field may be added, and setting gender here would also have marked
+  // onboarding complete (lib/pending-consent).
+  const childBlock = await childAwaitingConsentBlock(db, userId)
+  if (childBlock) return childBlock
 
   // Only allow safe fields to be updated by the member themselves
   const allowed = [

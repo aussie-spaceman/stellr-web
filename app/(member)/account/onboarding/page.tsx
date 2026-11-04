@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { OnboardingForm, PendingConsentPanel, type SelectedTier } from '@/components/member/OnboardingForm'
-import { getPendingConsent, minorSelfSignupEnabled, settlePendingConsent } from '@/lib/pending-consent'
+import { minorSelfSignupEnabled, readPendingConsent, settlePendingConsent } from '@/lib/pending-consent'
 import { supabaseServer } from '@/lib/supabase'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
 import { impersonatedMemberId } from '@/lib/impersonation'
@@ -52,8 +52,12 @@ export default async function OnboardingPage({
   // (decision 24) sees who the form went to, with a resend, rather than the
   // form again. Read before the "already complete" redirect: a 13–17-year-old
   // has a complete profile and comes here to resend or correct the address.
-  const pending = member && !viewAsId ? await getPendingConsent(db, member.id) : null
-  if (pending && !(await settlePendingConsent(db, member!.id))) {
+  // A request opened at the age screen names no guardian yet: the form follows.
+  // A failed read shows the form too: this page only displays, and every
+  // server route enforces the pending state on its own (fail-closed) read.
+  const read = member && !viewAsId ? await readPendingConsent(db, member.id) : null
+  const pending = read?.state === 'pending' && read.row.guardian_email ? read.row : null
+  if (pending?.guardian_email && !(await settlePendingConsent(db, member!.id))) {
     return (
       <div className="max-w-2xl mx-auto">
         <div className="mb-8">

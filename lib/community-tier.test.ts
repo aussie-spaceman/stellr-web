@@ -7,14 +7,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // contribute (no moderated space exists yet).
 
 const { state } = vi.hoisted(() => ({
-  state: { pending: new Set<string>(), consentLanded: new Set<string>() },
+  state: {
+    pending: new Set<string>(),
+    /** Pending rows in the under-13 band. */
+    childBand: new Set<string>(),
+    consentLanded: new Set<string>(),
+    /** The pending-consent read fails. */
+    readFails: false,
+  },
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: null }) }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({}) }))
 vi.mock('@/lib/pending-consent', async (orig) => ({
   ...(await orig<typeof import('./pending-consent')>()),
-  getPendingConsent: async (_db: unknown, id: string) => (state.pending.has(id) ? { member_id: id } : null),
+  readPendingConsent: async (_db: unknown, id: string) => {
+    if (state.readFails) return { state: 'unknown' }
+    return state.pending.has(id)
+      ? { state: 'pending', row: { member_id: id, band: state.childBand.has(id) ? 'child' : 'teen' } }
+      : { state: 'none' }
+  },
   settlePendingConsent: async (_db: unknown, id: string) => state.consentLanded.has(id),
 }))
 
@@ -32,17 +44,33 @@ const before = process.env.MINOR_SELF_SIGNUP_ENABLED
 
 beforeEach(() => {
   state.pending = new Set()
+  state.childBand = new Set()
   state.consentLanded = new Set()
+  state.readFails = false
   process.env.MINOR_SELF_SIGNUP_ENABLED = 'true'
 })
 afterEach(() => { process.env.MINOR_SELF_SIGNUP_ENABLED = before })
 
 describe('memberCommunityTier', () => {
-  it('a pending minor of any age is consent_pending', async () => {
+  it('a pending teen is consent_pending; a pending child is inactive', async () => {
     state.pending.add('teen')
     state.pending.add('kid')
+    state.childBand.add('kid')
     expect(await memberCommunityTier({ id: 'teen', date_of_birth: yearsAgo(15) })).toBe('consent_pending')
-    expect(await memberCommunityTier({ id: 'kid', date_of_birth: yearsAgo(12) })).toBe('consent_pending')
+    expect(await memberCommunityTier({ id: 'kid', date_of_birth: yearsAgo(12) })).toBe('inactive')
+  })
+
+  // Review finding: a read error used to count as "no pending row", so a
+  // pending 15-year-old got 'full'.
+  it('fails closed when the pending-consent read fails: under 18 is restricted, adults are not', async () => {
+    state.readFails = true
+    expect(await memberCommunityTier({ id: 'teen', date_of_birth: yearsAgo(15) })).toBe('consent_pending')
+    expect(await memberCommunityTier({ id: 'teen', date_of_birth: yearsAgo(17) })).toBe('consent_pending')
+    expect(await memberCommunityTier({ id: 'kid', date_of_birth: yearsAgo(12) })).toBe('inactive')
+    expect(await memberCommunityTier({ id: 'unknown-age', date_of_birth: null })).toBe('consent_pending')
+    expect(await memberCommunityTier({ id: 'adult', date_of_birth: yearsAgo(18) })).toBe('full')
+    const res = await communityWriteBlock({ id: 'teen', date_of_birth: yearsAgo(15) }, 'post')
+    expect(res?.status).toBe(403)
   })
 
   it('leaves the pending state once the guardian agreement is on file', async () => {
@@ -77,6 +105,7 @@ describe('tierAllows / communityWriteBlock', () => {
     for (const w of WRITES) {
       expect(tierAllows('full', w)).toBe(true)
       expect(tierAllows('consent_pending', w)).toBe(false)
+      expect(tierAllows('inactive', w)).toBe(false)
       expect(tierAllows('child', w), w).toBe(w === 'react' || w === 'join')
     }
   })

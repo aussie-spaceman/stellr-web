@@ -18,6 +18,7 @@ import { AUTH_APP_URL } from '@/lib/env'
 import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { childAwaitingConsentBlock } from '@/lib/pending-consent'
 
 // A participant, normalised to the enum/shape the participants + members tables
 // and DocuSign expect — built either from the signed-in member's profile, or
@@ -138,6 +139,11 @@ export async function POST(req: NextRequest) {
   let signInToken: string | null = null
 
   if (userId) {
+    // Decision 24, COPPA: a child whose parent has not consented joins
+    // nothing until the parent signs (lib/pending-consent).
+    const childBlock = await childAwaitingConsentBlock(db, userId)
+    if (childBlock) return childBlock
+
     // ── Signed-in member: their stored profile is authoritative ────────────────
     const { data: member } = await db
       .from('members')

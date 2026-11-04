@@ -1,8 +1,11 @@
 -- Minor self-registration: the pending guardian-consent state (decision 24,
 -- 3 Nov 2026; plan S1). Read and written by lib/pending-consent.ts.
 --
--- A member aged 13–17 who registers themselves, or a child under 13, finishes
--- onboarding with one row here. Until consented_at is set:
+-- A member aged 13–17 who registers themselves, or a child under 13, gets one
+-- row here from the age screen on (guardian_email still null until they name a
+-- parent or guardian), so an abandoned sign-up is purged like any other.
+-- Minors who came through an adult route (an admin invite, an event
+-- registration, an event consent form) never get one. Until consented_at is set:
 --   • 13–17 ('teen'): read-only on community — no posting, chat, reactions,
 --     uploads, Space joins, directory listing or mentions;
 --   • under 13 ('child'): the account stays inactive; only first name, date of
@@ -22,11 +25,15 @@ CREATE TABLE IF NOT EXISTS public.member_pending_consent (
   member_id      uuid PRIMARY KEY REFERENCES public.members(id) ON DELETE CASCADE,
   band           text NOT NULL CHECK (band IN ('teen', 'child')),
   guardian_name  text,
-  guardian_email text NOT NULL,
+  guardian_email text,
   requested_at   timestamptz NOT NULL DEFAULT now(),
   last_sent_at   timestamptz,
   consented_at   timestamptz,
   purge_after    timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
+  -- The purge's retry cursor: a row it held (a guardian has signed, an adult
+  -- route appeared) or failed to delete waits until then, so held rows never
+  -- crowd newer ones out of the daily batch.
+  next_attempt_at timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 

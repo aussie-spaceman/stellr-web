@@ -112,8 +112,9 @@ type PurposeSpec = {
   sharedFileNames?: boolean
   /**
    * The most pages a PDF may have (lib/pdf-page-count.ts), counted by
-   * claimUpload before anything opens the file. Set on every purpose a member
-   * reaches that takes a PDF; admin-only purposes have none.
+   * claimUpload before anything opens the file. Set on every purpose any
+   * member reaches (sign-up is open) that takes a PDF; staff-only purposes
+   * (admin, event manager) have none.
    */
   maxPdfPages?: number
   /**
@@ -349,8 +350,9 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     // HEIC too), text such as a CSV, and calendar files. No archives or media.
     // The attach route also sends each file under a name and type that match
     // its bytes, not the ones the browser posted.
+    // No page cap: only staff (admins, and event managers the admin portal
+    // assigns) reach this, and nothing opens these PDFs with pdf-lib.
     formats: [...DOCUMENTS, ...IMAGES, 'heif', 'text', 'calendar'],
-    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     formatError: 'That file doesn’t look like a PDF, Office, OpenDocument, Keynote, image, CSV or calendar file.',
     async grant({ ctx, safeName }) {
       if (!ctx.slug) return deny('slug required', 400)

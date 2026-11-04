@@ -905,16 +905,15 @@ describe('claimUpload — PDF page cap', () => {
     ])
   }
 
-  // Every purpose a member (or an event manager) reaches that takes a PDF.
+  // Every purpose any member reaches (sign-up is open) that takes a PDF.
   const MEMBER_PDF: [UploadPurpose, string, string?][] = [
     ['campaign-proposal', 'nevada/r1/1-proposal.pdf'],
     ['space-attachment', `${spaceAttachmentPrefix('s1', 'm1')}1-notes.pdf`, spaceAttachmentPrefix('s1', 'm1')],
     ['container-contribution', `${contributionPrefix('m1')}1-notes.pdf`, contributionPrefix('m1')],
     ['compliance-document', 'm1/1-licence.pdf'],
-    ['event-email-attachment', 'event-email/nevada/1-schedule.pdf'],
   ]
 
-  it('caps every member purpose that takes a PDF, and no admin-only one', () => {
+  it('caps every member purpose that takes a PDF, and no staff-only one', () => {
     const capped = PURPOSES.filter((p) => UPLOAD_PURPOSES[p].maxPdfPages !== undefined).sort()
     expect(capped).toEqual(MEMBER_PDF.map(([p]) => p).sort())
     for (const p of capped) expect(UPLOAD_PURPOSES[p].maxPdfPages).toBe(MAX_MEMBER_PDF_PAGES)
@@ -950,13 +949,23 @@ describe('claimUpload — PDF page cap', () => {
     })
   })
 
-  it('leaves admin-only purposes at their own limits', async () => {
+  it('leaves staff-only purposes at their own limits', async () => {
     stored(await pdfOf(51), 'application/pdf')
     expect(await claimUpload({ purpose: 'admin-resource', storagePath: 'resources/1-a.pdf' })).toMatchObject({ format: 'pdf' })
     stored(await pdfOf(51), 'application/pdf')
     expect(
       await claimUpload({ purpose: 'compliance-document-admin', storagePath: 'm1/1-licence.pdf' }),
     ).toMatchObject({ format: 'pdf' })
+  })
+
+  // Review finding: event-email attachments are staff-only and never opened
+  // with pdf-lib, so a handbook or rules pack over 50 pages still attaches.
+  it('lets an event manager attach a PDF over 50 pages to an event email', async () => {
+    stored(await pdfOf(51), 'application/pdf')
+    expect(
+      await claimUpload({ purpose: 'event-email-attachment', storagePath: 'event-email/nevada/1-handbook.pdf' }),
+    ).toMatchObject({ format: 'pdf' })
+    expect(remove).not.toHaveBeenCalled()
   })
 
   it('counts nothing for a file that isn’t a PDF', async () => {

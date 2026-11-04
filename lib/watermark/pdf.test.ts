@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument, PDFName } from 'pdf-lib'
-import { countPageTree, isPdf, pdfHasWatermark, stampPdfDocument, stampPdfBytes } from './pdf'
+import { MAX_STAMP_PAGES, countPageTree, isPdf, pdfHasWatermark, stampPdfDocument, stampPdfBytes } from './pdf'
 
 async function makePdf(pages = 3): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
@@ -59,6 +59,15 @@ describe('countPageTree', () => {
     kids.push(kids.get(0))
     expect(countPageTree(doc)).toBeNull()
     await expect(stampPdfBytes(await doc.save({ useObjectStreams: false }))).rejects.toThrow(/page tree/)
+  })
+
+  // Defence in depth behind the member cap: no path stamps without limit.
+  it('stampPdfBytes won’t stamp more than MAX_STAMP_PAGES pages', async () => {
+    const doc = await PDFDocument.create()
+    const page = doc.addPage([10, 10])
+    const kids = doc.catalog.Pages().Kids()
+    for (let i = 0; i < MAX_STAMP_PAGES; i++) kids.push(doc.context.register(page.node.clone()))
+    await expect(stampPdfBytes(await doc.save({ useObjectStreams: false }))).rejects.toThrow(/more than 2000 pages/)
   })
 
   it('refuses a branch that lists itself', async () => {

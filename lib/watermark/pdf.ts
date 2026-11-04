@@ -105,13 +105,23 @@ export function countPageTree(doc: PDFDocument, max = Infinity): number | null {
 }
 
 /**
+ * The most pages stampPdfBytes stamps. A member's PDF is capped at 50 before it
+ * gets here (lib/pdf-page-count); this backstops any path that skipped that,
+ * and still fits the longest handbook an admin shares.
+ */
+export const MAX_STAMP_PAGES = 2000
+
+/**
  * Load raw PDF bytes, stamp them, and return the stamped bytes. No-op if
  * already stamped. Throws on a page tree that lists a node twice or can't be
- * walked (countPageTree), before pdf-lib walks it.
+ * walked (countPageTree), or that has more than MAX_STAMP_PAGES pages, before
+ * pdf-lib walks it.
  */
 export async function stampPdfBytes(bytes: Uint8Array | ArrayBuffer): Promise<Uint8Array> {
   const doc = await PDFDocument.load(bytes)
-  if (countPageTree(doc) === null) throw new Error('PDF page tree repeats a node or cannot be read')
+  const pages = countPageTree(doc, MAX_STAMP_PAGES)
+  if (pages === null) throw new Error('PDF page tree repeats a node or cannot be read')
+  if (pages > MAX_STAMP_PAGES) throw new Error(`PDF has more than ${MAX_STAMP_PAGES} pages to stamp`)
   if (pdfHasWatermark(doc)) return doc.save()
   await stampPdfDocument(doc)
   return doc.save()

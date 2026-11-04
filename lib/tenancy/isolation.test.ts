@@ -16,8 +16,14 @@ import {
   TENANT_ROLE,
 } from '../../scripts/gen-tenant-isolation-pgtap.mjs'
 import { isolationPolicyProblems, ISOLATION_POLICIES, S4_FIRST_MIGRATION } from '../../scripts/check-migration-tenancy.mjs'
-import { schemaSources } from '../../scripts/lib/schema-tables.mjs'
-import { TENANT_APP_READ_ONLY_TABLES, TENANT_PARENT_REFS, SELF_REF_TABLES, guardWithCheck } from './tenant-role'
+import { schemaSources, readSchemaInventory } from '../../scripts/lib/schema-tables.mjs'
+import {
+  TENANT_APP_NO_ACCESS_TABLES,
+  TENANT_APP_READ_ONLY_TABLES,
+  TENANT_PARENT_REFS,
+  SELF_REF_TABLES,
+  guardWithCheck,
+} from './tenant-role'
 
 const MIGRATION = 'supabase/migrations/20261104200000_tenant_isolation_policies.sql'
 
@@ -31,6 +37,19 @@ describe('cross-tenant pgTAP matrix (S4)', () => {
     expect(fixtureProblems()).toEqual([])
     expect(tenantTables().length).toBe(35)
     expect(Object.keys(FIXTURES).sort()).toEqual(tenantTables())
+  })
+
+  it('every non-tenant table that carries tenant_id is listed in TENANT_APP_NO_ACCESS_TABLES (and the matrix asserts tenant_app has no grant)', () => {
+    const { tables } = readSchemaInventory('.')
+    const withTenantId = [...tables.entries()]
+      .filter(([name, t]) => t.columns.has('tenant_id') && TABLE_REGISTRY[name]?.tenantColumn === 'none')
+      .map(([name]) => name)
+      .sort()
+    expect(withTenantId).toEqual(Object.keys(TENANT_APP_NO_ACCESS_TABLES).sort())
+    const sql = generate()
+    for (const n of Object.keys(TENANT_APP_NO_ACCESS_TABLES)) {
+      expect(sql).toContain(`NOT has_table_privilege('${TENANT_ROLE}', '${n}', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')`)
+    }
   })
 
   it('refuses to generate when a tenant table has no fixture (a new table cannot slip past the matrix)', () => {

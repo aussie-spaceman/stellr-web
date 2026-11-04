@@ -103,7 +103,9 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.tenancy_derivation_log': system('derivation orphan counts'),
 
   // ── S4 field encryption ──────────────────────────────────────────────────
-  'public.tenant_data_keys': own('wrapped per-tenant field-encryption data keys (lib/field-crypto.ts)'),
+  'public.tenant_data_keys': platform(
+    'wrapped per-tenant field-encryption data keys (lib/field-crypto.ts). Platform-level although it carries tenant_id NOT NULL: key material is read only by service_role through lib/field-crypto-store.ts, never by tenant_app (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES)',
+  ),
 
   // ── Event-scoped, tenant derived from event_slug ─────────────────────────
   'public.agreements': slug('e-sign envelopes (renamed from docusign_envelopes)'),

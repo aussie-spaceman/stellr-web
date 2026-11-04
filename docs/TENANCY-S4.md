@@ -58,6 +58,8 @@ Two rules sit on top of "rows of its own tenant". Both are in `lib/tenancy/tenan
 
   A tenant therefore cannot attach a join token to another tenant's registration, or an assignment to another tenant's module. It cannot learn whether another tenant's id exists either: RLS refuses before the foreign-key check could answer with 23503. A key to a `via_parent` table must be NULL until that table has its own `tenant_id`. The matrix checks `TENANT_PARENT_REFS` against the real foreign keys, so a new foreign key between tenant tables fails the `db` job until it is listed and guarded.
 
+- **Some tables with a `tenant_id` are platform-level, and `tenant_app` gets nothing on them.** `platform_audit_events` (the hash-chained audit, written by `lib/audit/platform.ts`) and `tenant_data_keys` (wrapped field-encryption keys, read by `lib/field-crypto-store.ts`) are classified `platform` in the registry and listed in `TENANT_APP_NO_ACCESS_TABLES` with the reason. They get no tenant policy and no grant; the matrix asserts `tenant_app` holds no privilege on either, and `lib/tenancy/isolation.test.ts` fails when another non-tenant table with a `tenant_id` is not listed.
+
 ## What tenantDb does and does not stop
 
 `tenantDb` is how S5 server code will act as one tenant. It assumes the code calling it is reviewed code in an allow-listed file. Request data reaches it only as bound values.

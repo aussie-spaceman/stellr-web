@@ -27,6 +27,8 @@
  *   * routing, ownership and role tables (events, tenant_domains,
  *     tenant_memberships) are read-only to tenant_app: INSERT, UPDATE and
  *     DELETE are refused even on its own rows;
+ *   * platform-level tables that carry a tenant_id (platform_audit_events,
+ *     tenant_data_keys: TENANT_APP_NO_ACCESS_TABLES) grant tenant_app nothing;
  *   * a row it writes may not point at the other tenant's parent row, nor at
  *     an id that does not exist (the same refusal, so no existence oracle),
  *     nor at an event its tenant does not have; the same row pointing at its
@@ -44,7 +46,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { TABLE_REGISTRY } from '../lib/tenancy/registry.ts'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants.ts'
-import { TENANT_APP_READ_ONLY_TABLES, TENANT_PARENT_REFS } from '../lib/tenancy/tenant-role.ts'
+import { TENANT_APP_NO_ACCESS_TABLES, TENANT_APP_READ_ONLY_TABLES, TENANT_PARENT_REFS } from '../lib/tenancy/tenant-role.ts'
 
 export const OUTPUT = 'supabase/tests/database/tenant_isolation.test.sql'
 
@@ -306,6 +308,13 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
   ${lit(refs.map((r) => `${r.table.replace(/^public\./, '')}.${r.column}->${r.parent.replace(/^public\./, '')}`).sort().join(' '))},
   'every foreign key between tenant tables is listed in lib/tenancy/tenant-role.ts TENANT_PARENT_REFS (and so guarded)');`,
   )
+  for (const n of Object.keys(TENANT_APP_NO_ACCESS_TABLES).sort()) {
+    t(
+      `SELECT ok(NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid = ${lit(n)}::regclass),
+  ${lit(`${n}: platform-level (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES), RLS on and ${ROLE} has no privilege on it at all`)});`,
+    )
+  }
   for (const n of viaParentTables(registry)) {
     t(
       `SELECT ok(NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'SELECT, INSERT, UPDATE, DELETE'),

@@ -37,6 +37,19 @@ export const TENANT_APP_READ_ONLY_TABLES: readonly string[] = [
   'public.tenant_memberships',
 ]
 
+/**
+ * Platform-level tables that carry a tenant_id but are classified platform in
+ * lib/tenancy/registry.ts, so tenant_app gets no policy and no grant on them.
+ * The matrix (supabase/tests/database/tenant_isolation.test.sql) asserts
+ * tenant_app holds no privilege at all on each. Key: table. Value: why.
+ */
+export const TENANT_APP_NO_ACCESS_TABLES: Readonly<Record<string, string>> = {
+  'public.platform_audit_events':
+    'hash-chained audit (S4 audit lane): written by service_role through lib/audit/platform.ts; a tenant must not read or rewrite the chain, and tenant_id is nullable (NULL = the platform chain)',
+  'public.tenant_data_keys':
+    'wrapped field-encryption data keys (S4 field-crypto lane): read only by service_role through lib/field-crypto-store.ts; a tenant session never needs key material, and deleting a row crypto-shreds the tenant',
+}
+
 export interface TenantParentRef {
   /** The referencing tenant table (own/derived). */
   table: string

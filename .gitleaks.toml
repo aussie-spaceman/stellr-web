@@ -28,3 +28,10 @@ regexes = [
   '''(?i)placeholder''',
   '''whsec_(?:test|whatever|A{32})\b''',
 ]
+
+[[allowlists]]
+description = "IDOR honeytokens (lib/testing/honeytokens.ts): invented Canary-tenant values that are meant to look real"
+regexTarget = "match"
+regexes = [
+  '''STL-\d{4}-CANARY\d{2}\b''',
+]

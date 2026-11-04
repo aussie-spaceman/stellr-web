@@ -556,7 +556,11 @@ SET LOCAL row_security = on;
 -- Let the test runner become ${TENANT_ROLE} (rolled back with everything else).
 -- A superuser runner needs no grant; a non-superuser runner that created the
 -- role holds ADMIN on it but, on Postgres 16+, not SET until granted.
-GRANT ${TENANT_ROLE} TO CURRENT_USER;
+-- Granted to the runner by NAME: Supabase's supautils hook crashed the server
+-- on the bare CURRENT_USER role spec (CI db job, 4 Nov), which has no name.
+DO $grant$ BEGIN
+  EXECUTE format('GRANT %I TO %I', '${TENANT_ROLE}', current_user);
+END $grant$;
 
 SELECT plan(${tests});
 `

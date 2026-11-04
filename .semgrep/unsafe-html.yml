@@ -1,0 +1,42 @@
+# Semgrep CE rule: raw HTML sinks (multi-tenant plan, S2; S0 content safety).
+#
+# All JSON-LD renders through components/seo/JsonLd.tsx, which escapes the body
+# with lib/json-ld.ts so no string can close the script tag early. Any other
+# dangerouslySetInnerHTML is a place where content (Sanity, a member's text, a
+# tenant's branding later) could become page script.
+#
+# Allow-list (the `paths.exclude` below):
+#   components/seo/JsonLd.tsx        — the escaping component itself.
+#   components/analytics/ConsentMode.tsx — a first-party inline script built
+#     only from constants through JSON.stringify (no content input); pinned by
+#     test/inline-scripts.test.ts and the CSP nonce tests.
+# test/json-ld-sinks.test.ts already pins the sink count in vitest; this rule
+# gives the same signal in the Semgrep report and catches createElement props.
+#
+# Rule tests: semgrep --test --config .semgrep/unsafe-html.yml .semgrep/tests/unsafe-html.tsx
+rules:
+  - id: stellr-dangerously-set-inner-html
+    severity: ERROR
+    languages: [typescript, javascript]
+    message: >-
+      dangerouslySetInnerHTML outside the JSON-LD escaping component. Render
+      JSON-LD with <JsonLd data={...} /> (components/seo/JsonLd.tsx); render
+      text as React children. If raw HTML is truly required, sanitise it and add
+      the file to the allow-list in .semgrep/unsafe-html.yml with a reason.
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      plan: multi-tenant S2 static analysis
+    paths:
+      exclude:
+        - /components/seo/JsonLd.tsx
+        - /components/analytics/ConsentMode.tsx
+        - '*.test.ts'
+        - '*.test.tsx'
+    pattern-either:
+      - pattern: <$EL dangerouslySetInnerHTML={$V} />
+      - pattern: <$EL dangerouslySetInnerHTML={$V}>$...CHILDREN</$EL>
+      - pattern: '{..., dangerouslySetInnerHTML: $V, ...}'
+      - pattern: $X.innerHTML = $V
+      - pattern: $X.outerHTML = $V
+      - pattern: $X.insertAdjacentHTML(...)

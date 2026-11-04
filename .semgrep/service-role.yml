@@ -1,0 +1,53 @@
+# Semgrep CE rules: the service-role Supabase client (multi-tenant plan, S2).
+#
+# supabaseServer() / supabaseServerTyped() in lib/supabase.ts hold the secret
+# key: RLS never applies to them. They belong in server code only — route
+# handlers, server components, server actions, crons, lib/ helpers, scripts —
+# never in a browser bundle (the CI bundle check greps for the key itself; this
+# catches the import before it gets that far).
+#
+# Allow-list (by directory, the `paths.exclude` below):
+#   app/, lib/, scripts/, e2e/, test/, supabase/ and test files anywhere.
+#   components/survey/DashboardSurveys.tsx — an async server component
+#   (grandfathered; it has no 'use client' and the second rule still guards it).
+# Anything else (components/, packages/, sanity/, proxy.ts, a new top-level
+# directory) must take a client from a server-side caller instead.
+#
+# Run locally: semgrep scan --config .semgrep --metrics=off
+# Rule tests:  semgrep --test --config .semgrep/service-role.yml .semgrep/tests/service-role.tsx
+rules:
+  - id: stellr-service-role-outside-allowlist
+    severity: ERROR
+    languages: [typescript, javascript]
+    message: >-
+      The service-role Supabase client (lib/supabase.ts) is imported outside the
+      server allow-list. It bypasses RLS. Pass a client in from a route handler,
+      server component or lib/ helper, or extend the allow-list in
+      .semgrep/service-role.yml with a reason.
+    metadata:
+      category: security
+      cwe: 'CWE-284: Improper Access Control'
+      plan: multi-tenant S2 static analysis
+    paths:
+      exclude:
+        - /app/
+        - /lib/
+        - /scripts/
+        - /e2e/
+        - /test/
+        - /supabase/
+        - /components/survey/DashboardSurveys.tsx
+        - '*.test.ts'
+        - '*.test.tsx'
+    patterns:
+      - pattern-either:
+          - pattern: import { supabaseServer } from "$MOD"
+          - pattern: import { supabaseServer as $ALIAS } from "$MOD"
+          - pattern: import { supabaseServerTyped } from "$MOD"
+          - pattern: import { supabaseServerTyped as $ALIAS } from "$MOD"
+          - pattern: import * as $NS from "$MOD"
+          - pattern: require("$MOD")
+          - pattern: import("$MOD")
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(@/lib/supabase|(\.\./)+lib/supabase|\./supabase)$

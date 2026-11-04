@@ -13,6 +13,10 @@ export default defineConfig({
     // pattern only matched the top-level one — so every third-party *.test.ts
     // in there ran and reported ~130 failing files (21 Sept 2026).
     exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next'],
+    // Under Stryker (stryker.config.mjs, nightly) instrumented code runs
+    // up to ~20x slower, so the PDF-bomb tests outgrow the 5 s default.
+    // Every normal run keeps Vitest's default.
+    ...(process.env.STRYKER_MUTATOR_WORKER ? { testTimeout: 180_000 } : {}),
     // deep review TEST-10: a coverage provider (@vitest/coverage-v8) so
     // `vitest run --coverage` can report where the trust-boundary code is and
     // isn't exercised. Deliberately NO thresholds yet — coverage is only

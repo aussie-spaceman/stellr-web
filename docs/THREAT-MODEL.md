@@ -23,7 +23,7 @@ Related documents: `docs/compliance/information-security-program.md` (the WISP),
 **Target (plan, "Target architecture").** Adds:
 - Postgres `tenants`, `tenant_domains`, `tenant_memberships`, `platform_admins` as the authority on who belongs where (S3). Clerk authenticates only.
 - Host-to-tenant routing in `proxy.ts` with an internal rewrite to `/_t/[tenant]/…`, a tenant-host route allow-list and per-host CSP (S5).
-- Database-enforced isolation: trigger-derived `tenant_id`, composite foreign keys, FORCE RLS via a server-minted tenant JWT or an allow-listed worker, and a `tenantDb()` wrapper (S4).
+- Database-enforced isolation: trigger-derived `tenant_id`, composite foreign keys, tenant RLS on a dedicated non-BYPASSRLS role `tenant_app` reached only through the allow-listed `tenantDb()` wrapper (the S4 spike chose this over a tenant JWT: `docs/S4-SPIKE.md`), with FORCE RLS as an owner-gated later step (S4).
 - Application field encryption for health, allergy, emergency and guardian contact (S4).
 - A hash-chained `platform_audit_events` log and read-only support mode (S4, S6).
 - Shared `identities` with a hash-chained `consent_grants` ledger and a sealed share function (S7).
@@ -176,11 +176,11 @@ flowchart LR
 
 | | Threat | Existing control | Planned control | Residual |
 |---|---|---|---|---|
-| S | Any handler acts as any tenant, because the secret key bypasses RLS | Keys only through `lib/supabase-keys.ts`; wiring tested (`test/supabase-key-wiring.test.ts`) | `tenantDb()` / `lib/tenancy/db.ts` with FORCE RLS via tenant JWT, or an allow-listed worker (S4 spike decides); Semgrep rule "service-role outside allowlist" (S2) | **H** today (~386 files); target **M**: an allow-listed service-role path remains for webhooks and crons |
+| S | Any handler acts as any tenant, because the secret key bypasses RLS | Keys only through `lib/supabase-keys.ts`; wiring tested (`test/supabase-key-wiring.test.ts`). The tenant path exists but is not wired: `lib/tenancy/db.ts` (`tenantDb()`, off by default, importers allow-listed in `lib/tenancy/db-callers.ts`) runs as `tenant_app` under the tenant policies of `supabase/migrations/20261104200000_tenant_isolation_policies.sql` (S4, `docs/S4-SPIKE.md`) | Routes converted to `tenantDb()` one feature area per PR (S5); Semgrep rule "service-role outside allowlist" (S2) | **H** today (~386 files); target **M**: an allow-listed service-role path remains for webhooks and crons |
 | T | Unscoped `.from()` writes hit another tenant's rows | none specific to tenants | Trigger-derived `tenant_id`, composite FKs (S3, S4); Semgrep "unscoped `.from()`" (S2); canary fault-injection proves the suites fail (S4) | **M** after S4 |
 | R | Service-role writes bypass audit | `audit_log` trigger on `members` (copies plaintext, see I) | `platform_audit_events` append-only even against service role (S4) | **L** after S4 |
 | I | Plaintext health and emergency data copied into `audit_log` and `deletion_archive` | Retention purge of the archive (`lib/deletion/archive-retention.ts`) | Scrub the columns from the trigger and archive (S0, not yet on this branch); field encryption with per-tenant data keys and blind indexes, scanner gate "no plaintext anywhere" (S4) | **H** until the S0 scrub lands; **L** after S4 |
-| D | Long queries starve the pool | — | Query-plan and latency budget from the S4 spike | **L** |
+| D | Long queries starve the pool | Query-plan and latency budget set by the S4 spike (`docs/S4-SPIKE.md`, §3–4) | Budget checked per converted feature area (S5) | **L** |
 | E | Code path picks the secret client where the anon or tenant client would do | `supabaseServerTyped()` for typed hot paths (`lib/supabase.ts`) | Service-role allow-list in Semgrep (S2) and codemods (S5) | **M** |
 
 ### 6.5 TB5 Supabase RLS and Postgres roles
@@ -190,7 +190,7 @@ flowchart LR
 | S | Anon key (public in every bundle) used directly against PostgREST | DB-N3 SECURITY DEFINER functions sealed (`supabase/migrations/20261102220634_seal_definer_functions_db_n3.sql`, `docs/SECURITY-HOTFIX-C-2026-11-02.md`); lint refuses an unsealed definer (`scripts/check-migration-security.mjs`, `test/migration-security.test.ts`); post-apply check (`supabase/tests/security_checks.sql`) | Revoke anon and authenticated table grants except an allow-list (S0; ~102 `GRANT ALL` to anon remain in `supabase/baseline.sql`) | **H** until the grant revoke lands; most tables still rely on RLS alone |
 | T | Policy helper bug lets one member write another's row | RLS helpers for spaces and chat with suspension checks (recent migrations) | Generated pgTAP: every table classified, tenant tables have NOT NULL, index, composite FK and RLS (S3); cross-tenant pgTAP matrix (S4) | **M** |
 | R | Ledger or audit rows altered after the fact | e-sign audit hash chain (`lib/esign/native/audit.ts`, `lib/esign/integrity.ts`) | `platform_audit_events` and `consent_grants` hash-chained (S4, S7); ledger append-only in pgTAP (S9) | **L** |
-| I | **Cross-tenant read** through a missing policy, a view, or Storage | Storage path canonicalisation (`lib/storage-path.ts`) | FORCE RLS on tenant tables; new objects under `{tenant_id}/` with storage tests (S4); sealed share function with a column allow-list equal to decision 5 (S7) | **M** after S4: legacy Storage objects stay in place under policy |
+| I | **Cross-tenant read** through a missing policy, a view, or Storage | Storage path canonicalisation (`lib/storage-path.ts`); for the tenant role, PERMISSIVE plus RESTRICTIVE tenant policies on all 35 tenant tables, proven by the generated matrix `supabase/tests/database/tenant_isolation.test.sql` and required by the tenancy lint; Storage ownership rule `supabase/migrations/20261104210000_storage_tenant_prefix.sql` and `lib/tenancy/storage.ts` (S4) | FORCE RLS on tenant tables once the owner confirms BYPASSRLS on the definer owner (`supabase/tests/tenancy_force_rls_readiness.sql`); tenant_id on the `via_parent` tables; storage.objects policies (S4, S5); sealed share function with a column allow-list equal to decision 5 (S7) | **M** after S4: legacy Storage objects stay in place under policy |
 | D | Supabase Free quotas (DB 500 MB, egress, MAU) exhausted; project paused | Scheduled crons in `vercel.json` touch the database daily, which keeps a Free project from pausing | Quota alarms at 60% (S1); Pro only when a trigger fires | **M** |
 | E | **New table created without RLS**, so default grants expose it to the anon key | RLS is enforced; `REVOKE` is not. `scripts/check-migration-tenancy.mjs` (run by `npm run lint:migrations` and `prebuild`) reads every table from `supabase/baseline.sql` plus the migrations and fails when any table lacks `ENABLE ROW LEVEL SECURITY` or is missing from the table registry `lib/tenancy/registry.ts` (S3). `scripts/check-migration-names.mjs` and `scripts/check-migration-security.mjs` check names and SECURITY DEFINER sealing only; `supabase/tests/security_checks.sql` checks definers only. Nothing yet checks the `REVOKE ALL` the written rule asks for. `supabase/baseline.sql` sets `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon` (and the same for `authenticated` and for role `supabase_admin`), so a new public table that forgets `ENABLE ROW LEVEL SECURITY` is readable and writable with the public anon key | Refuse a `CREATE TABLE` without a `REVOKE` in `scripts/check-migration-security.mjs` (proposed, not yet in the plan; add to S2); `supabase db advisors` in CI flags RLS-disabled tables (S2); stop default privileges granting to anon and authenticated alongside the grant revoke (S0); generated pgTAP (`scripts/gen-tenancy-pgtap.mjs`) requires RLS on every table in the database itself, not just in the migration text (S3) | **M** while RLS is linted but `REVOKE` is not (an RLS-enabled table with no policy denies anon, but a permissive policy plus the default grant still exposes it); **L** once `REVOKE` is enforced too |
 
@@ -304,7 +304,7 @@ The failure that would end the product is one tenant seeing or changing another 
 | Path | Stopped by (target) | Stage | Test that proves it |
 |---|---|---|---|
 | Admin route loads a row by global id | `loadScoped` / `lib/authz.ts` | S5 | IDOR generator, case count equals manifest count (S2) |
-| Handler forgets a `tenant_id` filter | FORCE RLS via tenant JWT, trigger-derived `tenant_id` | S3, S4 | pgTAP cross-tenant matrix; canary job proves the suite fails |
+| Handler forgets a `tenant_id` filter | Tenant RLS on `tenant_app` via `tenantDb()`, trigger-derived `tenant_id`; FORCE RLS later | S3, S4 | pgTAP cross-tenant matrix (`supabase/tests/database/tenant_isolation.test.sql`); fault injection showed it fails (`docs/S4-SPIKE.md`, §6); canary CI job still planned |
 | Composite key mismatch (event of A, participant of B) | Composite foreign keys | S3 | generated pgTAP |
 | Cached page served across hosts | tenant in cache key via `/_t/[tenant]` | S5 | warm-cache body-hash comparison |
 | Storage object read across tenants | `{tenant_id}/` prefixes with policy | S4 | storage tests |
@@ -344,7 +344,6 @@ Ranked by current residual. "Accepted" means the owner has knowingly taken the r
 These files are named by the plan and cited above as future controls. They are listed here so `test/threat-model.test.ts` can tell a planned path from a broken citation. When one lands, remove it from this list and move its mention into an **Existing** column.
 
 - `lib/authz.ts` (S5)
-- `lib/tenancy/db.ts` (S4)
 - `lib/field-crypto.ts` (S4)
 
 ---
@@ -356,3 +355,4 @@ These files are named by the plan and cited above as future controls. They are l
 | 4 Nov 2026 | First version, S2 docs lane | agent, for owner review |
 | 4 Nov 2026 | Review fixes: TB5 "new table without RLS" had no real existing control (default privileges grant anon ALL), now H; Checkr and Printful are not Svix, Printful's URL secret rated M; `agent_readonly` moved from Existing to Planned in §7.2 I. Probes for each claim added to `test/threat-model.test.ts` | agent, for owner review |
 | 4 Nov 2026 | S2+S3 integration: `lib/tenancy/registry.ts`, `lib/events/repo.ts` and `scripts/check-migration-tenancy.mjs` landed, moved out of §10; TB5 E now cites the tenancy lint's RLS check as Existing, residual H to M (`REVOKE` still unenforced) | agent, for owner review |
+| 4 Nov 2026 | S4 isolation lane: spike chose Option B (`docs/S4-SPIKE.md`); `lib/tenancy/db.ts` landed (not wired), moved out of §10; TB4 S, TB4 D, TB5 I and §8 cite the tenant policies, the matrix and the Storage rule; FORCE RLS recorded as owner-gated. Residuals unchanged until S5 routes use `tenantDb()` | agent, for owner review |

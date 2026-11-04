@@ -1,0 +1,32 @@
+name: E2E nightly
+
+# CI skips e2e on a push whose code already passed on its PR (see `changes` in
+# ci.yml). Those re-runs also noticed the dev database or a third party changing
+# under code that had not, so this runs the whole CI workflow against dev once a
+# night instead. It waits for that run and takes its result, so a failure shows
+# here and GitHub notifies whoever last edited this schedule.
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  run-ci-on-dev:
+    runs-on: ubuntu-latest
+    # Long enough to queue behind other e2e runs and then run the whole workflow.
+    timeout-minutes: 90
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh workflow run ci.yml --repo "$REPO" --ref dev
+          sleep 20
+          run=$(gh run list --repo "$REPO" --workflow ci.yml --branch dev --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+          echo "Waiting for https://github.com/$REPO/actions/runs/$run"
+          gh run watch "$run" --repo "$REPO" --exit-status --interval 60

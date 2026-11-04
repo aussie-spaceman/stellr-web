@@ -1,9 +1,6 @@
 {
   "ci": {
     "collect": {
-      "startServerCommand": "npm start",
-      "startServerReadyPattern": "Ready",
-      "startServerReadyTimeout": 60000,
       "url": [
         "http://localhost:3000/",
         "http://localhost:3000/competitions",

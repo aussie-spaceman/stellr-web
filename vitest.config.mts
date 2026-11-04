@@ -5,14 +5,21 @@ import { fileURLToPath } from 'node:url'
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
-    include: ['**/*.test.{ts,tsx}'],
     // '**/node_modules/**' rather than 'node_modules': a git worktree under
     // .claude/worktrees/<name>/ carries its own node_modules, and the bare
     // pattern only matched the top-level one — so every third-party *.test.ts
     // in there ran and reported ~130 failing files (21 Sept 2026).
     exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next'],
+    // Building a jsdom per file was 44% of the suite's summed time (4 Nov 2026),
+    // and most *.test.ts files never touch a DOM. Component tests (*.test.tsx)
+    // keep jsdom. A *.test.ts file that needs one says so on its first line:
+    // `// @vitest-environment jsdom`. `extends: true` inherits everything else
+    // in this file. Without it, a project would have no setup file or aliases.
+    projects: [
+      { extends: true, test: { name: 'node', environment: 'node', include: ['**/*.test.ts'] } },
+      { extends: true, test: { name: 'dom', environment: 'jsdom', include: ['**/*.test.tsx'] } },
+    ],
     // Under Stryker (stryker.config.mjs, nightly) instrumented code runs
     // up to ~20x slower, so the PDF-bomb tests outgrow the 5 s default.
     // Every normal run keeps Vitest's default.

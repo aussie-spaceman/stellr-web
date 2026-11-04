@@ -1,0 +1,64 @@
+# Files that guard production. A change to any of them needs the owner's
+# review before it can merge into `dev` or `main` — once the branch ruleset
+# requires code-owner review (docs/RUNBOOK-agent-controls.md, step 2). Until
+# then this file only requests the review; it does not enforce it.
+#
+# Later rules win, so keep the list flat: one path, one owner.
+#
+# Adding a guard, a gate test or a security file? Add its path here in the
+# same PR (docs/compliance/information-security-program.md, §3). A pattern
+# that matches nothing yet is harmless: GitHub ignores it until the file lands.
+
+# CI, workflows (incl. the production-migration Action) and this file
+/.github/**                         @aussie-spaceman
+
+# Build and migration gates
+/scripts/check-*.mjs                @aussie-spaceman
+
+# Structural guard and gate tests
+/test/route-guards.test.ts          @aussie-spaceman
+/test/*guard*                       @aussie-spaceman
+/test/*gate*                        @aussie-spaceman
+/lib/*.guard.test.ts                @aussie-spaceman
+
+# Schema, and the checks the production-migration Action and CI trust
+/supabase/migrations/**             @aussie-spaceman
+/supabase/tests/security_checks.sql @aussie-spaceman
+/supabase/tests/database/**         @aussie-spaceman
+
+# Keys, impersonation, access gates, request proxy
+/lib/supabase-keys.ts               @aussie-spaceman
+/lib/impersonation.ts               @aussie-spaceman
+/lib/access-gates.ts                @aussie-spaceman
+/proxy.ts                           @aussie-spaceman
+
+# Sign-in, onboarding and consent gates
+/lib/auth-path.ts                   @aussie-spaceman
+/lib/onboarded-member.ts            @aussie-spaceman
+/lib/pending-consent.ts             @aussie-spaceman
+/app/api/consent/**                 @aussie-spaceman
+
+# Community access
+/lib/community.ts                   @aussie-spaceman
+/lib/community-tier*.ts             @aussie-spaceman
+
+# Content Security Policy
+/lib/csp.ts                         @aussie-spaceman
+/app/api/csp-report/**              @aussie-spaceman
+
+# Email sending and suppression
+/lib/email/transport.ts             @aussie-spaceman
+/lib/email/suppressions.ts          @aussie-spaceman
+
+# Uploads: byte checks and storage paths
+/lib/file-sniff.ts                  @aussie-spaceman
+/lib/uploads.ts                     @aussie-spaceman
+
+# Inbound webhooks (signature checks)
+/app/api/webhooks/**                @aussie-spaceman
+
+# Backup scripts (run with production read access in the private repo)
+/ops/backups/**                     @aussie-spaceman
+
+# Binding instructions for AI agents
+/CLAUDE.md                          @aussie-spaceman

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, X, Check } from 'lucide-react'
 import { ObjectPicker } from './ObjectPicker'
 import type { TrainableObject, ObjectType } from '@/lib/training-admin'
+import { objectUsesAudience, type Audience } from '@/lib/training-audience'
 
 // Assignments & requirements card (Course builder). A course is assigned to any
 // number of Objects; each assignment carries a requirement PER membership tier
@@ -28,6 +29,8 @@ export interface AdminAssignment {
   default_requirement: Requirement
   tier_requirements: Record<string, Requirement>
   due_at: string | null
+  /** Event/campaign Objects only; 'all' everywhere else. */
+  audience: Audience
 }
 
 const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
@@ -77,6 +80,38 @@ function ReqControl({ value, onChange }: { value: Requirement; onChange: (v: Req
   )
 }
 
+// Who on an event's roster the course is for. Read from the roster admins
+// control (registrations + the Volunteers panel), not the self-chosen event role.
+const AUDIENCE_OPTS: { value: Audience; label: string; hint: string }[] = [
+  { value: 'all', label: 'Everyone', hint: 'Everyone on this event’s roster.' },
+  { value: 'participants', label: 'Students', hint: 'Registered participants only.' },
+  { value: 'volunteers', label: 'Volunteers & mentors', hint: 'Only people on this event’s Volunteers panel.' },
+]
+
+function AudienceControl({ value, onChange }: { value: Audience; onChange: (v: Audience) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Who this course is for" className="inline-flex flex-wrap items-center rounded-lg border border-brand-border bg-white p-0.5">
+      {AUDIENCE_OPTS.map((o) => {
+        const active = value === o.value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            title={o.hint}
+            onClick={() => onChange(o.value)}
+            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition ${active ? 'bg-primary text-white' : 'text-brand-muted-soft hover:text-brand-muted'}`}
+          >
+            {active && <Check className="h-3 w-3" />}
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function AssignmentCard({
   assignment,
   tiers,
@@ -90,7 +125,7 @@ function AssignmentCard({
   tiers: AdminTier[]
   dirty: boolean
   saving: boolean
-  onChange: (patch: Partial<Pick<AdminAssignment, 'default_requirement' | 'tier_requirements' | 'due_at'>>) => void
+  onChange: (patch: Partial<Pick<AdminAssignment, 'default_requirement' | 'tier_requirements' | 'due_at' | 'audience'>>) => void
   onSave: () => void
   onRemove: () => void
 }) {
@@ -130,6 +165,21 @@ function AssignmentCard({
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Audience — event/campaign Objects only. The tier grid below still applies on top. */}
+      {objectUsesAudience(assignment.object_type) && (
+        <div className="mt-3 rounded-lg bg-brand-canvas px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium text-brand-muted">Who it&apos;s for</span>
+            <AudienceControl value={assignment.audience ?? 'all'} onChange={(v) => onChange({ audience: v })} />
+          </div>
+          {assignment.audience === 'volunteers' && (
+            <p className="mt-1.5 text-xs text-brand-muted-soft">
+              Only people on this event&apos;s Volunteers panel see this course. Add your mentors there first.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Default requirement — global setting applied to every tier unless overridden. */}
       <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-brand-canvas px-3 py-2">
@@ -247,7 +297,7 @@ export function ObjectAssignments({
         const { id } = await res.json()
         setAssignments((prev) => [
           ...prev,
-          { id, object_type: obj.type, object_ref: obj.ref, object_label: obj.label, default_requirement: 'optional', tier_requirements: {}, due_at: null },
+          { id, object_type: obj.type, object_ref: obj.ref, object_label: obj.label, default_requirement: 'optional', tier_requirements: {}, due_at: null, audience: 'all' },
         ])
         setAdding(false)
       }
@@ -275,6 +325,7 @@ export function ObjectAssignments({
           defaultRequirement: current.default_requirement,
           tierRequirements: current.tier_requirements,
           dueAt: current.due_at,
+          audience: current.audience ?? 'all',
         }),
       })
       setDirty((prev) => { const n = new Set(prev); n.delete(id); return n })
@@ -293,7 +344,7 @@ export function ObjectAssignments({
     <div className="rounded-xl border border-brand-border bg-white p-4">
       <h3 className="text-base font-bold text-brand-blue-dark">Assignments &amp; requirements</h3>
       <p className="mt-0.5 text-sm text-brand-muted-soft">
-        Assign this course to any number of Objects. Whether it&apos;s mandatory or optional is set <strong>per Object</strong> — and per membership tier within each.
+        Assign this course to any number of Objects. Whether it&apos;s mandatory or optional is set <strong>per Object</strong>{' '}— and per membership tier within each. For an event, you can also choose whether it&apos;s for students or for volunteers and mentors.
       </p>
 
       <div className="mt-4 space-y-3">

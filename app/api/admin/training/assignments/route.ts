@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
 import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { AUDIENCES, objectUsesAudience, type Audience } from '@/lib/training-audience'
 
 // Admin CRUD for course_object_assignments — assign a course to an Object with
 // per-membership-tier requirements (Course builder · Assignments & requirements).
@@ -10,8 +11,13 @@ import { currentUserIsAdmin } from '@/lib/admin-auth'
 const OBJECT_TYPES = ['competition', 'campaign', 'cohort', 'workshop', 'space']
 const REQS = ['mandatory', 'optional', 'na']
 
+// Audience only narrows event/campaign assignments; anything else stays 'all'.
+function audienceFor(objectType: string, v: unknown): Audience {
+  return objectUsesAudience(objectType) && AUDIENCES.includes(v as Audience) ? (v as Audience) : 'all'
+}
+
 // POST — create/upsert an assignment.
-// Body: { moduleId, objectType, objectRef, objectLabel?, defaultRequirement?, tierRequirements?, dueAt? }
+// Body: { moduleId, objectType, objectRef, objectLabel?, defaultRequirement?, tierRequirements?, dueAt?, audience? }
 export async function POST(req: Request) {
   if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
@@ -39,6 +45,7 @@ export async function POST(req: Request) {
         default_requirement: REQS.includes(b.defaultRequirement) ? b.defaultRequirement : 'optional',
         tier_requirements: b.tierRequirements ?? {},
         due_at: b.dueAt || null,
+        audience: audienceFor(b.objectType, b.audience),
         created_by: admin?.id ?? null,
         updated_at: new Date().toISOString(),
       },
@@ -53,7 +60,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ id: data.id })
 }
 
-// PATCH — update requirements / due date. Body: { id, defaultRequirement?, tierRequirements?, dueAt? }
+// PATCH — update requirements / due date / audience. Body: { id, defaultRequirement?, tierRequirements?, dueAt?, audience? }
 export async function PATCH(req: Request) {
   if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
@@ -63,6 +70,12 @@ export async function PATCH(req: Request) {
   if (b.tierRequirements && typeof b.tierRequirements === 'object') patch.tier_requirements = b.tierRequirements
   if ('dueAt' in b) patch.due_at = b.dueAt || null
   const db = supabaseServer()
+  if ('audience' in b) {
+    if (!AUDIENCES.includes(b.audience)) return NextResponse.json({ error: 'invalid audience' }, { status: 400 })
+    const { data: row } = await db.from('course_object_assignments').select('object_type').eq('id', b.id).maybeSingle()
+    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    patch.audience = audienceFor(row.object_type as string, b.audience)
+  }
   const { error } = await db.from('course_object_assignments').update(patch).eq('id', b.id)
   if (error) return NextResponse.json({ error: 'Could not update assignment' }, { status: 500 })
   return NextResponse.json({ ok: true })

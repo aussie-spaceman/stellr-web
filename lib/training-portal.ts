@@ -12,6 +12,7 @@ import {
 } from '@/lib/training'
 import { issueCredential } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
+import { audienceIncludes, memberEventRelationships } from '@/lib/training-audience'
 
 // Data layer for the redesigned Training portal (member + admin). Sits on top of
 // lib/training.ts and reconciles the two assignment sources:
@@ -111,14 +112,20 @@ export async function getAssignedCourses(member: CommunityMember): Promise<Assig
   const eventLabel = new Map<string, string>()
   const eventType = new Map<string, ObjectType>()
   const eventRefs: string[] = []
+  // Either ref (Sanity _id or slug) → slug, for the roster relationship lookup.
+  const eventSlug = new Map<string, string>()
   for (const e of events) {
     const t: ObjectType = e.activityType === 'campaign' ? 'campaign' : 'competition'
     for (const ref of [e.eventId, e.slug].filter((r): r is string => !!r)) {
       eventRefs.push(ref)
       eventLabel.set(ref, e.title)
       eventType.set(ref, t)
+      eventSlug.set(ref, e.slug)
     }
   }
+  // The member's roster relationships per event (participant / volunteer / …),
+  // which an assignment's audience is matched against.
+  const relationships = eventRefs.length > 0 ? await memberEventRelationships(db, member.id) : new Map<string, Set<string>>()
   const eventRoles: string[] = []
   if (member.event_role) {
     eventRoles.push(member.event_role)
@@ -178,7 +185,7 @@ export async function getAssignedCourses(member: CommunityMember): Promise<Assig
   if (objectRefs.length > 0) {
     const { data: rich } = await db
       .from('course_object_assignments')
-      .select('module_id, object_type, object_ref, object_label, default_requirement, tier_requirements, due_at')
+      .select('module_id, object_type, object_ref, object_label, default_requirement, tier_requirements, due_at, audience')
       .in('object_ref', objectRefs)
     for (const a of rich ?? []) {
       const base = byId.get(a.module_id as string)
@@ -189,6 +196,12 @@ export async function getAssignedCourses(member: CommunityMember): Promise<Assig
       const isEventObj = objectType === 'competition' || objectType === 'campaign'
       if (isEventObj && !eventRefs.includes(objectRef)) continue
       if (!isEventObj && !cohortIds.includes(objectRef)) continue
+      // Audience: an event course for volunteers only skips the students, and
+      // the reverse. Non-event Objects are always 'all'.
+      if (isEventObj) {
+        const rels = relationships.get(eventSlug.get(objectRef) ?? objectRef) ?? new Set<string>()
+        if (!audienceIncludes(a.audience, rels)) continue
+      }
 
       const requirement = effectiveRequirement(
         {
@@ -441,11 +454,11 @@ async function objectMandatoryCourses(refs: string[]): Promise<GroupCourseCol[]>
       .eq('is_mandatory', true),
     db
       .from('course_object_assignments')
-      .select('module_id, due_at, default_requirement, tier_requirements, training_modules(title)')
+      .select('module_id, due_at, default_requirement, tier_requirements, audience, training_modules(title)')
       .in('object_ref', refs),
   ])
 
-  const title = (row: { training_modules?: unknown }) => {
+  const title =(row: { training_modules?: unknown }) => {
     const m = Array.isArray(row.training_modules) ? row.training_modules[0] : row.training_modules
     return (m as { title?: string } | null)?.title ?? 'Course'
   }
@@ -462,6 +475,8 @@ async function objectMandatoryCourses(refs: string[]): Promise<GroupCourseCol[]>
     const mandatory =
       a.default_requirement === 'mandatory' || Object.values(tierReqs).includes('mandatory')
     if (!mandatory) continue
+    // The group matrix lists students: a volunteers-only course is not theirs.
+    if (!audienceIncludes(a.audience, ['participant'])) continue
     cols.set(a.module_id as string, {
       moduleId: a.module_id as string,
       title: title(a),

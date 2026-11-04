@@ -37,6 +37,7 @@ export function VideoRoom({
   autoRecord = false,
   onApi,
   onParticipantCount,
+  onRecordingChange,
 }: {
   scriptSrc: string
   domain: string
@@ -52,6 +53,8 @@ export function VideoRoom({
   onApi?: (api: JitsiApi) => void
   /** Live participant count for the embedding chrome. */
   onParticipantCount?: (n: number) => void
+  /** Fires when file recording starts or stops, or the provider refuses it. */
+  onRecordingChange?: (state: { on: boolean; error?: string }) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -84,6 +87,11 @@ export function VideoRoom({
           try { api?.executeCommand('startRecording', { mode: 'file' }) } catch { /* JaaS may reject if unconfigured */ }
         }
       })
+      api.addListener('recordingStatusChanged', (...args: unknown[]) => {
+        const e = (args[0] ?? {}) as { on?: boolean; mode?: string; error?: string }
+        if (e.mode && e.mode !== 'file') return
+        onRecordingChange?.({ on: !!e.on, ...(e.error ? { error: e.error } : {}) })
+      })
       onApi?.(api)
     }
 
@@ -105,7 +113,7 @@ export function VideoRoom({
       cancelled = true
       api?.dispose()
     }
-  }, [scriptSrc, domain, roomName, jwt, displayName, isHost, autoRecord, onApi, onParticipantCount])
+  }, [scriptSrc, domain, roomName, jwt, displayName, isHost, autoRecord, onApi, onParticipantCount, onRecordingChange])
 
   return <div ref={containerRef} className={className} />
 }

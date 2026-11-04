@@ -230,6 +230,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.session_actions': stellr('coaching'),
   'public.session_hosts': stellr('coaching'),
   'public.session_participants': stellr('coaching'),
+  'public.recording_offloads': stellr('academy + coaching: a recording on its way from the room to storage'),
   'public.sessions': stellr('coaching'),
   'public.staff_roles': stellr('Stellr staff scopes; mapped to Stellr staff memberships'),
   'public.store_products': stellr('store catalogue'),

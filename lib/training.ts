@@ -3,6 +3,7 @@ import {
   type CommunityMember,
   memberCanAccess,
   signedDownloadUrl,
+  VIDEO_SIGNED_URL_TTL_SECONDS,
 } from '@/lib/community'
 import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-provider'
 import { currentUserHasScope } from '@/lib/admin-auth'
@@ -384,7 +385,7 @@ async function liveLessonMedia(
   row: { recording_path?: string | null; recording_status?: string | null }
 ): Promise<LessonMedia> {
   if (row.recording_status === 'available' && row.recording_path) {
-    const url = await signedDownloadUrl(row.recording_path)
+    const url = await signedDownloadUrl(row.recording_path, VIDEO_SIGNED_URL_TTL_SECONDS)
     return url ? { type: 'video', url } : { type: 'unavailable' }
   }
 
@@ -467,7 +468,7 @@ export async function getLesson(
         ? { type: 'interactive', key: row.interactive_key as string }
         : { type: 'unavailable' }
     } else if ((kind === 'video' || kind === 'document') && row.storage_path) {
-      const url = await signedDownloadUrl(row.storage_path as string)
+      const url = await signedDownloadUrl(row.storage_path as string, kind === 'video' ? VIDEO_SIGNED_URL_TTL_SECONDS : undefined)
       media = url ? { type: kind, url } : { type: 'unavailable' }
     } else if (row.external_url && isValidHttpUrl(row.external_url as string)) {
       const embed = embedSrc(row.external_url as string)

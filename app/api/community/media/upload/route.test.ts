@@ -14,7 +14,7 @@ const { getCurrentMember, download, remove, upload } = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
-vi.mock('@/lib/community', () => ({ RESOURCES_BUCKET: 'community-resources', getCurrentMember }))
+vi.mock('@/lib/community', () => ({ RESOURCES_BUCKET: 'community-resources', getCurrentMember, communityWriteBlock: async () => null }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/spaces', () => ({ getSpaceForMember: vi.fn() }))
 vi.mock('@/lib/campaign-registrations', () => ({ getMemberCampaignRegistration: vi.fn() }))

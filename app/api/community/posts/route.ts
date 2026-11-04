@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, tiptapToPlainText } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember, tiptapToPlainText } from '@/lib/community'
 import { getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { getChannelPosts } from '@/lib/space-posts'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
@@ -60,6 +60,9 @@ export async function POST(req: Request) {
 
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'post')
+  if (restricted) return restricted
 
   const parsed = createPostSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {

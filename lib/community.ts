@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
@@ -14,6 +15,79 @@ import { isLiteralStoragePath } from '@/lib/storage-path'
  */
 export function memberIsMinor(m: { date_of_birth?: string | null; age_bracket?: string | null }): boolean {
   return isMinorOn(m.date_of_birth) || m.age_bracket === 'high_school'
+}
+
+/**
+ * What a member may do in the community, by age and consent (decision 24,
+ * 3 Nov 2026). The ONE place every community write route asks:
+ *
+ *   'full'            — no age restriction beyond the existing gates.
+ *   'consent_pending' — a self-registered minor whose parent or guardian has
+ *                       not signed yet (lib/pending-consent). Read-only: no
+ *                       posting, comments, chat, reactions, uploads,
+ *                       contributions or Space joins.
+ *   'child'           — under 13, consent given. No directory listing and no
+ *                       mentions (memberIsMinor already covers both); posting
+ *                       only in moderated spaces, and no pre-moderated space
+ *                       exists yet, so no posts, comments, chat, uploads or
+ *                       contributions. Reacting and joining a Space stay open.
+ *                       Applies while MINOR_SELF_SIGNUP_ENABLED is on, so the
+ *                       live behaviour of existing members does not change
+ *                       before the owner approves the revised Terms.
+ *
+ * Directory listing and mention search need nothing extra: every account this
+ * can return other than 'full' is under 18, and memberIsMinor already keeps
+ * minors out of both (deep review MEM-10).
+ */
+export type CommunityTier = 'full' | 'consent_pending' | 'child'
+
+export async function memberCommunityTier(
+  member: { id: string; date_of_birth?: string | null; isAdmin?: boolean },
+): Promise<CommunityTier> {
+  if (member.isAdmin) return 'full'
+  const pc = await import('@/lib/pending-consent')
+  const db = supabaseServer()
+  const pending = await pc.getPendingConsent(db, member.id)
+  if (pending && !(await pc.settlePendingConsent(db, member.id))) return 'consent_pending'
+  if (pc.minorSelfSignupEnabled() && pc.isKnownUnder13(member.date_of_birth)) return 'child'
+  return 'full'
+}
+
+export type CommunityWrite = 'post' | 'comment' | 'chat' | 'react' | 'upload' | 'contribute' | 'join'
+
+const CHILD_ALLOWED: ReadonlySet<CommunityWrite> = new Set(['react', 'join'])
+
+/** Whether a member of `tier` may make this kind of community write. */
+export function tierAllows(tier: CommunityTier, action: CommunityWrite): boolean {
+  if (tier === 'full') return true
+  if (tier === 'consent_pending') return false
+  return CHILD_ALLOWED.has(action)
+}
+
+/**
+ * The 403 a community write route returns when the member's age or consent
+ * state does not allow the action, or null to carry on. Call it straight after
+ * resolving the member, before any other work.
+ */
+export async function communityWriteBlock(
+  member: { id: string; date_of_birth?: string | null; isAdmin?: boolean },
+  action: CommunityWrite,
+): Promise<NextResponse | null> {
+  const tier = await memberCommunityTier(member)
+  if (tierAllows(tier, action)) return null
+  if (tier === 'consent_pending') {
+    return NextResponse.json(
+      {
+        code: 'guardian_consent_pending',
+        error: 'This opens up once your parent or guardian has signed your consent form.',
+      },
+      { status: 403 },
+    )
+  }
+  return NextResponse.json(
+    { code: 'community_restricted', error: 'This part of the community isn’t available on your account.' },
+    { status: 403 },
+  )
 }
 
 // Private Supabase Storage bucket for community resources (FR-COM-03).

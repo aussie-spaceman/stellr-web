@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { OnboardingForm, type SelectedTier } from '@/components/member/OnboardingForm'
+import { OnboardingForm, PendingConsentPanel, type SelectedTier } from '@/components/member/OnboardingForm'
+import { getPendingConsent, minorSelfSignupEnabled, settlePendingConsent } from '@/lib/pending-consent'
 import { supabaseServer } from '@/lib/supabase'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
 import { impersonatedMemberId } from '@/lib/impersonation'
@@ -47,6 +48,26 @@ export default async function OnboardingPage({
     ? await memberQuery.eq('id', viewAsId).maybeSingle()
     : await memberQuery.eq('clerk_user_id', userId).maybeSingle()
 
+  // A self-registered minor whose parent or guardian has not consented yet
+  // (decision 24) sees who the form went to, with a resend, rather than the
+  // form again. Read before the "already complete" redirect: a 13–17-year-old
+  // has a complete profile and comes here to resend or correct the address.
+  const pending = member && !viewAsId ? await getPendingConsent(db, member.id) : null
+  if (pending && !(await settlePendingConsent(db, member!.id))) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="mb-8">
+          <h1 className="font-heading text-ds-h2 text-ink">Almost there</h1>
+        </div>
+        <PendingConsentPanel
+          kind={pending.band === 'child' ? 'parent' : 'guardian'}
+          guardianEmail={pending.guardian_email}
+          next={next ?? undefined}
+        />
+      </div>
+    )
+  }
+
   if (member?.date_of_birth && member?.gender) redirect(next ?? '/home')
 
   const selectedTier = tierFromNext(next)
@@ -54,10 +75,10 @@ export default async function OnboardingPage({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">
+        <h1 className="font-heading text-ds-h2 text-ink">
           {volunteerFlow ? 'Join as a volunteer' : 'Complete your profile'}
         </h1>
-        <p className="mt-2 text-sm text-brand-muted">
+        <p className="mt-2 text-sm text-content-body">
           {volunteerFlow
             ? 'Tell us a bit about yourself. We’ll then send your Volunteer Agreement and set up your volunteer training.'
             : 'Tell us a bit about yourself to get the most out of your Stellr membership.'}
@@ -68,6 +89,7 @@ export default async function OnboardingPage({
         next={next ?? undefined}
         selectedTier={selectedTier}
         volunteerFlow={volunteerFlow}
+        minorSelfSignup={minorSelfSignupEnabled()}
       />
     </div>
   )

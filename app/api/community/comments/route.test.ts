@@ -10,6 +10,7 @@ const { state } = vi.hoisted(() => ({ state: { db: null as FakeDb | null } }))
 vi.mock('@/lib/community', () => ({
   getCurrentMember: async () => ({ id: 'm1', first_name: 'A', last_name: 'B' }),
   tiptapToPlainText: () => 'hello there',
+  communityWriteBlock: async () => null,
 }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/spaces', () => ({ getSpaceAccessById: async () => ({ canAccess: true }), isMemberMutedInSpace: async () => false }))

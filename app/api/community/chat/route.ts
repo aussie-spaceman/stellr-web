@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember } from '@/lib/community'
 import { canAccessChannel, canPostToChannel, listMessages, postMessage } from '@/lib/sessions'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -29,6 +29,9 @@ export async function POST(req: Request) {
 
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'chat')
+  if (restricted) return restricted
 
   const { channelId, body } = await req.json().catch(() => ({}))
   if (!channelId || !body) return NextResponse.json({ error: 'channelId and body required' }, { status: 400 })

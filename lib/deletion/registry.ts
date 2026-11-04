@@ -48,6 +48,30 @@ const ENTITIES: Record<string, EntityDef> = {
     ],
   },
 
+  // A self-registered minor whose parent or guardian never consented within
+  // 30 days (decision 24; lib/pending-consent purgeUnconsentedAccounts). Runs
+  // as a member hard delete — in-flight consent forms voided, Clerk login
+  // deleted, credentials tombstoned — but keeps NO archive snapshot: the data
+  // was collected only to ask for consent (COPPA §312.5(c)(1)) and goes with
+  // the request. Same blockers as a member; a blocked purge is retried daily.
+  pending_consent_member: {
+    type: 'pending_consent_member',
+    table: 'members',
+    label: 'Member awaiting guardian consent',
+    pk: 'id',
+    keyType: 'uuid',
+    softDelete: null,
+    external: ['stripe', 'docusign', 'clerk'],
+    actsAs: 'member',
+    archive: false,
+    dependents: [
+      { table: 'registrations', fkColumn: 'teacher_member_id', label: 'event registrations (as teacher)',
+        inactiveValues: { column: 'status', values: ['withdrawn', 'cancelled'] } },
+      { table: 'sessions', fkColumn: 'host_member_id', label: 'coaching/mentoring sessions (as host)',
+        inactiveValues: { column: 'status', values: TERMINAL_SESSION_STATUSES } },
+    ],
+  },
+
   // ---- Schools -----------------------------------------------------------
   // Schools soft-delete via is_active (hidden from search/registration). A hard
   // purge is blocked while members are still linked via member_schools.

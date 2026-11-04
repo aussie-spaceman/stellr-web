@@ -160,6 +160,22 @@ const QUEUED_RECIPIENT_STATUS = 'created'
  * Kept here so the roster's "no envelope row" branch speaks the same vocabulary
  * as every other case rather than hand-rolling its own pill.
  */
+/**
+ * What a send attempt did, in words for staff. The dispatch codes (in_flight,
+ * on_file…) are for logs; an admin read "No envelope sent (in_flight)" in green
+ * and could not tell if that was good news.
+ */
+export function describeDispatchOutcome(outcome: string): string {
+  switch (outcome) {
+    case 'issued': return 'New consent form sent.'
+    case 'in_flight': return 'Already out for signature, so nothing new was sent.'
+    case 'on_file': return 'A signed form is already on file, so nothing new was sent.'
+    case 'not_required': return 'No consent form is required for this person.'
+    case 'failed': return 'The form could not be sent.'
+    default: return 'Nothing new was sent.'
+  }
+}
+
 export function describeMissingEnvelope(required: boolean): EnvelopeDescription {
   return {
     pill:  required ? 'not_issued' : 'not_required',

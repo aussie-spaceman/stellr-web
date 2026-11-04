@@ -1,0 +1,53 @@
+name: IDOR canary
+
+# Canary fault injection for the cross-tenant / IDOR suites (multi-tenant plan
+# S4 gate: "the canary job proves the suites can fail"). scripts/idor-canary.mjs
+# runs the suites intact, then deletes one isolation guard at a time in a temp
+# copy (a fixture handler's owner / tenant / admin check, and the member filter
+# of one real route) and asserts the suite FAILS each time. A mutation that
+# survives means the suite cannot see that missing guard.
+#
+# Needs no secrets: auth and the database are mocked at the module boundary.
+# Non-blocking until the repository variable CANARY_ENFORCE is set to 'true'
+# (Settings → Secrets and variables → Actions → Variables): until then a
+# failure shows as a warning on the run, not a red check.
+
+on:
+  pull_request:
+    paths:
+      - 'app/api/**'
+      - 'lib/**'
+      - 'test/idor/**'
+      - 'scripts/idor-canary.mjs'
+      - '.github/workflows/idor-canary.yml'
+  schedule:
+    # 04:41 UTC daily, off the hour and away from the mutation run.
+    - cron: '41 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: idor-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: ${{ vars.CANARY_ENFORCE != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fault injection (the IDOR suites must fail on every mutation)
+        run: node scripts/idor-canary.mjs

@@ -13,6 +13,8 @@ import {
   IMPERSONATION_TTL_SECONDS,
   type ImpersonationTicket,
 } from '@/lib/impersonation'
+import { audit, auditEnabled } from '@/lib/audit/platform'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Start / stop "view as member" for the whole member portal.
 //
@@ -70,6 +72,38 @@ async function logEnded(ticket: ImpersonationTicket, reason: 'exited' | 'replace
       return
     }
     throw err
+  }
+}
+
+/**
+ * S4 platform audit, shadow-only: a second record of each view-as edge in
+ * platform_audit_events (lib/audit/platform.ts), on Stellr's chain. Off unless
+ * PLATFORM_AUDIT_ENABLED=true. It runs only after the member_activity_log row
+ * above is written, never throws and is time-bounded, so it cannot change
+ * whether a session starts or ends. metadata is ids only.
+ */
+async function auditViewAs(
+  action: 'support.impersonate.start' | 'support.impersonate.stop',
+  actorClerkId: string | null,
+  ticket: { memberId: string; adminMemberId: string },
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  if (!auditEnabled()) return
+  await audit({
+    tenantId: STELLR_TENANT_ID,
+    actor: actorClerkId ?? 'system',
+    action,
+    target: { table: 'members', id: ticket.memberId },
+    metadata: { adminMemberId: ticket.adminMemberId, ...extra },
+  })
+}
+
+/** The caller's Clerk id, or null when there is none (or it cannot be read). */
+async function callerClerkId(): Promise<string | null> {
+  try {
+    return (await auth()).userId ?? null
+  } catch {
+    return null
   }
 }
 
@@ -204,6 +238,9 @@ export async function POST(req: Request) {
     return res
   }
 
+  if (previous) await auditViewAs('support.impersonate.stop', userId, previous, { reason: 'replaced' })
+  await auditViewAs('support.impersonate.start', userId, { memberId, adminMemberId })
+
   const m = member as { first_name: string | null; last_name: string | null; email: string | null }
   const res = NextResponse.json({
     ok: true,
@@ -240,6 +277,7 @@ export async function DELETE() {
       console.error('[impersonation] audit write failed; leaving view-as running:', err)
       return refuse(503, 'Could not record the end of this view-as session, so it is still running. Try again.')
     }
+    if (auditEnabled()) await auditViewAs('support.impersonate.stop', await callerClerkId(), ticket, { reason: 'exited' })
   }
 
   const res = NextResponse.json({ ok: true })

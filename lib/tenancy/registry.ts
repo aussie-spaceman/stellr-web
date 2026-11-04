@@ -102,6 +102,11 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.tenancy_settings': system('derivation mode'),
   'public.tenancy_derivation_log': system('derivation orphan counts'),
 
+  // ── S4 field encryption ──────────────────────────────────────────────────
+  'public.tenant_data_keys': platform(
+    'wrapped per-tenant field-encryption data keys (lib/field-crypto.ts). Platform-level although it carries tenant_id NOT NULL: key material is read only by service_role through lib/field-crypto-store.ts, never by tenant_app (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES)',
+  ),
+
   // ── Event-scoped, tenant derived from event_slug ─────────────────────────
   'public.agreements': slug('e-sign envelopes (renamed from docusign_envelopes)'),
   'public.credentials': slug(),
@@ -173,6 +178,9 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.schools': platform('school directory'),
   'public.platform_pricing': platform(),
   'public.audit_log': platform('row audit; platform_audit_events in S4'),
+  'public.platform_audit_events': platform(
+    'S4 hash-chained audit. Nullable tenant_id names the chain (NULL = the platform chain), so it is not own (own means NOT NULL)',
+  ),
   'public.email_suppressions': platform('global suppression list'),
 
   // ── Stellr-only products ─────────────────────────────────────────────────

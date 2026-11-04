@@ -30,6 +30,7 @@ import { pendingAddonLines } from '@/lib/registration-checkout'
 import { confirmRegistration } from '@/lib/registration-confirm'
 import { attachOfferToRegistration, findOfferByToken } from '@/lib/scholarships'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
@@ -381,6 +382,7 @@ export async function POST(req: NextRequest) {
         console.error('Member upsert error (non-fatal — participant still created):', memberUpsertError)
       }
       memberId = memberRow?.id ?? memberId
+      if (memberRow?.id) shadowSyncFields('members', [memberRow.id])
     }
 
     // Resolve the school to a schools row and link the member to it, so the
@@ -431,6 +433,8 @@ export async function POST(req: NextRequest) {
       await db.from('registrations').delete().eq('id', regId)
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('participants', [partRow.id])
 
     // A scholarship offer now has its registration: link it, and record the
     // discounted amount due (the checkout below applies the coupon itself).

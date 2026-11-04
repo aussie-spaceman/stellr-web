@@ -571,3 +571,140 @@ export function analyzeNamedExport(fileName: string, src: string, name: string):
   }
   return null
 }
+
+// ── Request id inputs (S2/S4 cross-tenant and IDOR generator) ─────────────────
+//
+// Which ids a route handler takes from the query string or the request body,
+// so lib/security/idor-targets.ts can tell an id-bearing route that has no
+// dynamic path segment. Static, per file, and deliberately generous: a false
+// positive only adds a test case, a false negative drops one.
+//
+// Found:
+//   - query: `<x>.searchParams.get('name')` / `.getAll('name')`, on
+//     `searchParams`, on any `….searchParams`, or on a name bound to one of
+//     those or to `new URLSearchParams(…)`;
+//   - body: a name bound to `await <x>.json()` / `.formData()` (through
+//     `await`, `as`, parentheses and `.catch(…)`), or to a repo body reader
+//     (`readJson`, `readCapped`, `readParams`), then the fields destructured
+//     from it, read as `body.name` / `body['name']`, or `form.get('name')`;
+//     plus the keys of any `z.object({ … })` in a file that reads a body.
+// Kept: names that look like an id (`isIdLikeName`).
+
+/** True for a field name that carries a record id, slug, token or number. */
+export function isIdLikeName(name: string): boolean {
+  return (
+    /^(id|ids|uuid|slug|token|number|key)$/i.test(name) ||
+    /(Id|Ids|_id|_ids|Slug|_slug|Token|_token|Number|_number|Uuid)$/.test(name) ||
+    /^(event|participant|participation|registration|member|team|cohort|invitation)$/.test(name)
+  )
+}
+
+const BODY_READERS = new Set(['readJson', 'readCapped', 'readParams'])
+
+export interface RequestIdInputs {
+  query: string[]
+  body: string[]
+}
+
+export function requestIdInputs(fileName: string, src: string): RequestIdInputs {
+  const sf = parse(fileName, src)
+  const query = new Set<string>()
+  const body = new Set<string>()
+  const paramsNames = new Set<string>(['searchParams'])
+  const bodyNames = new Set<string>()
+  const zodKeys = new Set<string>()
+  let readsBody = false
+
+  const peel = (e: ts.Expression): ts.Expression => {
+    let cur = strip(e)
+    // `req.json().catch(() => null)` → `req.json()`
+    while (
+      ts.isCallExpression(cur) &&
+      ts.isPropertyAccessExpression(cur.expression) &&
+      ['catch', 'then', 'finally'].includes(cur.expression.name.text)
+    ) {
+      cur = strip(cur.expression.expression)
+    }
+    return cur
+  }
+  const isBodyRead = (e: ts.Expression): boolean => {
+    const cur = peel(e)
+    if (!ts.isCallExpression(cur)) return false
+    if (ts.isPropertyAccessExpression(cur.expression)) {
+      return ['json', 'formData'].includes(cur.expression.name.text) && cur.arguments.length === 0
+    }
+    return ts.isIdentifier(cur.expression) && BODY_READERS.has(cur.expression.text)
+  }
+  const isParamsSource = (e: ts.Expression): boolean => {
+    const cur = strip(e)
+    if (ts.isPropertyAccessExpression(cur)) return cur.name.text === 'searchParams'
+    if (ts.isNewExpression(cur)) return ts.isIdentifier(cur.expression) && cur.expression.text === 'URLSearchParams'
+    if (ts.isIdentifier(cur)) return paramsNames.has(cur.text)
+    return false
+  }
+  const bodyIdent = (e: ts.Expression): boolean => {
+    const cur = strip(e)
+    return ts.isIdentifier(cur) && bodyNames.has(cur.text)
+  }
+  const addPattern = (p: ts.BindingName, into: Set<string>) => {
+    if (!ts.isObjectBindingPattern(p)) return
+    for (const el of p.elements) {
+      const key = el.propertyName ?? el.name
+      if (ts.isIdentifier(key) || ts.isStringLiteral(key)) into.add(key.text)
+    }
+  }
+
+  // Pass 1: bindings (a name bound to the body or to search params).
+  const bind = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && n.initializer) {
+      if (isBodyRead(n.initializer)) {
+        readsBody = true
+        if (ts.isIdentifier(n.name)) bodyNames.add(n.name.text)
+        else addPattern(n.name, body)
+      } else if (isParamsSource(n.initializer)) {
+        if (ts.isIdentifier(n.name)) paramsNames.add(n.name.text)
+      } else if (ts.isObjectBindingPattern(n.name)) {
+        // `const { searchParams } = new URL(req.url)` / `req.nextUrl`
+        for (const el of n.name.elements) {
+          const key = el.propertyName ?? el.name
+          if (ts.isIdentifier(key) && key.text === 'searchParams' && ts.isIdentifier(el.name)) paramsNames.add(el.name.text)
+        }
+      }
+    }
+    if (ts.isCallExpression(n) && isBodyRead(n)) readsBody = true
+    ts.forEachChild(n, bind)
+  }
+  bind(sf)
+
+  // Pass 2: reads.
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
+      const method = n.expression.name.text
+      const recv = strip(n.expression.expression)
+      const arg = n.arguments[0]
+      if ((method === 'get' || method === 'getAll') && arg && ts.isStringLiteralLike(arg)) {
+        if (isParamsSource(recv)) query.add(arg.text)
+        else if (bodyIdent(recv)) body.add(arg.text)
+      }
+      // z.object({ … })
+      if (method === 'object' && ts.isIdentifier(recv) && recv.text === 'z' && arg && ts.isObjectLiteralExpression(arg)) {
+        for (const p of arg.properties) {
+          if ((ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) {
+            zodKeys.add(p.name.text)
+          }
+        }
+      }
+    }
+    if (ts.isPropertyAccessExpression(n) && bodyIdent(n.expression)) body.add(n.name.text)
+    if (ts.isElementAccessExpression(n) && bodyIdent(n.expression) && ts.isStringLiteralLike(n.argumentExpression)) {
+      body.add(n.argumentExpression.text)
+    }
+    if (ts.isVariableDeclaration(n) && n.initializer && bodyIdent(n.initializer)) addPattern(n.name, body)
+    ts.forEachChild(n, visit)
+  }
+  visit(sf)
+
+  if (readsBody) for (const k of zodKeys) body.add(k)
+  const keep = (s: Set<string>) => [...s].filter(isIdLikeName).sort()
+  return { query: keep(query), body: keep(body) }
+}

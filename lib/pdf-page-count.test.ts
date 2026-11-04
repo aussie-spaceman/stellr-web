@@ -882,6 +882,46 @@ describe('numbers pdf-lib moves or loops by', () => {
       expect(scan(withStream('<< /Size 100000000 /W 9 0 R >>'))?.bound).toBe(1)
       for (const file of [await pdfOf(7, true), await pdfOf(7, false)]) expect(scan(file)?.bound).toBeGreaterThanOrEqual(7)
     })
+
+    // Word, Google Docs, Acrobat, iText and pdf-lib all write a CID font's /W
+    // by reference, or with references in it, inside an object stream, in a
+    // file with an xref stream. An xref stream is always a top-level object,
+    // so names in inflated data never set its numbers (8e830394 refused these).
+    it('lets through a CID font’s /W in an object stream, by reference or holding one', async () => {
+      for (const pad of [0, 500]) {
+        const doc = await PDFDocument.create()
+        doc.addPage([612, 792])
+        doc.addPage([612, 792])
+        const ctx = doc.context
+        for (let i = 0; i < pad; i++) ctx.register(ctx.obj({ Pad: 'xxxxxxxxxxxxxxxxxxxxxxxx' }))
+        const widths = ctx.register(ctx.obj([0, [500, 600, 700]]))
+        const run = ctx.register(ctx.obj([500, 600]))
+        ctx.register(ctx.obj({ Type: 'Font', Subtype: 'CIDFontType2', BaseFont: 'ABCDEF+Calibri', W: widths, DW: 1000 }))
+        ctx.register(ctx.obj({ Type: 'Font', Subtype: 'CIDFontType2', BaseFont: 'ABCDEF+Arial', W: [0, run], DW: 1000 }))
+        const file = await doc.save()
+        const text = Buffer.from(file).toString('latin1')
+        expect(text).toContain('/XRef')
+        expect(text).not.toContain('/CIDFontType2') // in the object stream, compressed
+        expect(scan(file)?.bound, `pad ${pad}`).toBeGreaterThanOrEqual(2)
+        expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).toBe('ok')
+        expect(await pdfLibPages(file)).toBe(2)
+      }
+      // The same, hand-built: `/W 20 0 R` and `/W [0 573 0 R]` in an object stream.
+      const fonts = objStmObject(5, [
+        [6, '<< /Type /Font /Subtype /CIDFontType2 /W 20 0 R >>'],
+        [7, '<< /Type /Font /Subtype /CIDFontType2 /W [0 573 0 R] >>'],
+        [8, '<< /W 9 %x\n0 R /Size 21 0 R /Index [0 22 0 R] >>'],
+      ])
+      expect(scan(join(xref('/W [1 2 1] /Size 4'), fonts))?.bound).toBeGreaterThanOrEqual(1)
+    })
+
+    it('still refuses an xref stream whose /W points into an object stream', () => {
+      const widths = objStmObject(5, [[9, '[1 2000000000 1]']])
+      expect(scan(join(xref('/W 9 0 R /Size 1'), widths))).toBeNull()
+      expect(scan(join(xref('/W [1 9 0 R 1] /Size 1'), objStmObject(5, [[9, '2000000000']])))).toBeNull()
+      // Written in the file (not in an object stream), a /W reference still counts.
+      expect(scan(join(xref('/W [1 2 1] /Size 4'), '5 0 obj\n<< /W 20 0 R >>\nendobj\n'))).toBeNull()
+    })
   })
 
   // pdf-lib parses the file front to back and never seeks: a /Prev chain that
@@ -1139,6 +1179,31 @@ describe('streams pdf-lib inflates on load', () => {
       // An image that inflates far stays compressed through a load.
       const big = deflateSync(Buffer.alloc(64 * MB, 0xff))
       expect(checkLoadInflation(withStreams([{ dict: '<< /Subtype /Image /Filter /FlateDecode /Length {L} >>', data: big }]))).toBe(0)
+    })
+
+    it('refuses an object or xref stream whose /Filter is a reference, as the scan does', () => {
+      const flate = new Uint8Array(deflateSync(Buffer.from('5 0 << /A 1 >>', 'latin1')))
+      const hex = new Uint8Array(Buffer.from('35203020', 'latin1'))
+      for (const type of ['/ObjStm /N 1 /First 4', '/XRef /Size 1 /W [1 1 1]']) {
+        for (const filter of ['9 0 R', '[9 0 R]', '[/FlateDecode 9 0 R]']) {
+          for (const data of [flate, hex]) {
+            const file = withStreams([{ dict: `<< /Type ${type} /Filter ${filter} /Length {L} >>`, data }])
+            expect(checkLoadInflation(file), `${type} ${filter}`).toBeNull()
+            expect(scan(file), `${type} ${filter}`).toBeNull()
+          }
+        }
+      }
+      // Not on an image, which stays compressed through a load.
+      expect(checkLoadInflation(withStreams([{ dict: '<< /Subtype /Image /Filter 9 0 R /Length {L} >>', data: hex }]))).toBe(0)
+      // A dictionary it can't read (a comment in it) after a /Filter reference
+      // elsewhere: that /Filter may be this stream's.
+      const unreadable = { dict: '<< /Type /ObjStm %c\n/N 1 /First 4 /Filter /FlateDecode /Length {L} >>', data: flate }
+      const elsewhere = (filter: string) => `6 0 obj\n<< /Filter ${filter} >>\nendobj\n`
+      expect(checkLoadInflation(join(elsewhere('9 0 R'), withStreams([unreadable])))).toBeNull()
+      // A signature's build properties hold a /Filter dictionary, which pdf-lib
+      // never decodes by: signed files load as before.
+      const signature = elsewhere('<< /Name /Adobe.PPKLite >>')
+      expect(checkLoadInflation(join(signature, withStreams([unreadable])))).toBeGreaterThan(0)
     })
   })
 

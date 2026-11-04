@@ -311,6 +311,31 @@ function filterResolved(b: Uint8Array, nameStop: number): boolean {
 }
 
 /**
+ * Whether a /Filter's value may reach pdf-lib through a reference: one itself
+ * (`/Filter 9 0 R`), one in its array (`/Filter [9 0 R]`), or a value a
+ * comment hides or that runs past FILTER_WINDOW. Narrower than
+ * filterResolved: a dictionary (a signature's build properties, `/Filter
+ * <</Name /Adobe.PPKLite …>>`), a string, or an array holding one before any
+ * reference is no filter pdf-lib decodes by — it throws on it
+ * (decodePDFRawStream) before reading a byte.
+ */
+function filterMayBeRef(b: Uint8Array, nameStop: number): boolean {
+  const stop = Math.min(b.length, nameStop + FILTER_WINDOW)
+  let j = nameStop
+  while (j < stop && WS[b[j]]) j++
+  if (j >= stop || b[j] === PERCENT || isNumeric(b[j])) return true
+  if (b[j] !== LBRACKET) return false
+  j++
+  for (;;) {
+    while (j < stop && WS[b[j]]) j++
+    if (j >= stop || b[j] === PERCENT || isNumeric(b[j])) return true
+    if (b[j] !== SLASH) return false
+    j++
+    while (j < stop && !ENDS_NAME[b[j]]) j++
+  }
+}
+
+/**
  * Whether a /DecodeParms is written out directly (a dictionary, an array, a
  * name or null). pdf-lib only reads it for LZW, which this scan refuses
  * anyway; a reference or a hidden value is refused all the same, so no
@@ -344,7 +369,9 @@ function parmsResolved(b: Uint8Array, nameStop: number): boolean {
 //     every /Size, /Index and /W must be written out as numbers whose product
 //     stays under XREF_WORK_LIMIT. (/W is also a CID font's widths array; one
 //     that holds anything but numbers is no xref /W, since pdf-lib throws on
-//     it, and one of numbers only counts.)
+//     it, and one of numbers only counts.) Only names in the file count: an
+//     xref stream is always a top-level object, so /Size, /Index and /W in a
+//     stream's inflated data (a CID font in an object stream) never do.
 //   - An object stream's /First, added to every entry's offset. A signed one
 //     is refused. Each entry is parsed once wherever it lands, so neither it
 //     nor /N (the loop reading the header stops at the end of the data) can
@@ -545,8 +572,21 @@ function numberArray(b: Uint8Array, nameStop: number, kind: 'index' | 'widths', 
   }
 }
 
-/** Read the name whose `/` is at `i` into `flags`; returns where it ends. */
-function readName(b: Uint8Array, i: number, flags: Flags): number {
+/**
+ * Read the name whose `/` is at `i` into `flags`; returns where it ends.
+ *
+ * `inStream`: the name is in a stream's inflated data, not the file. Such a
+ * name still counts for everything but an xref stream's numbers (/Size,
+ * /Index, /W): pdf-lib decodes an xref stream only when it is a top-level
+ * object (PDFParser.parseIndirectObject), and a stream can't sit inside an
+ * object stream (pdf-lib never decodes one parsed there), so no xref stream's
+ * dictionary is ever in inflated data. A top-level xref stream that takes one
+ * of those numbers by reference — to an object inside an object stream, say —
+ * is refused where the reference is read, in the file. Inflated data is where
+ * a CID font's /W lives in most files (`/W 20 0 R`, `/W [0 [500] 3 0 R]`), and
+ * counting it there refused ordinary Word, Acrobat and pdf-lib output.
+ */
+function readName(b: Uint8Array, i: number, flags: Flags, inStream = false): number {
   const end = nameEnd(b, i)
   // Only names that open with their first letter, or with an escape, can be
   // one of these; most names are passed over on one byte.
@@ -572,13 +612,13 @@ function readName(b: Uint8Array, i: number, flags: Flags): number {
     if (signedFirst(b, end)) flags.badNumber = true
   } else if ((first === 0x58 || escaped) && nameIs(b, i + 1, end, 'XRef')) {
     flags.xref = true
-  } else if ((first === 0x53 || escaped) && nameIs(b, i + 1, end, 'Size')) {
+  } else if (!inStream && (first === 0x53 || escaped) && nameIs(b, i + 1, end, 'Size')) {
     readSize(b, end, flags)
-  } else if ((first === 0x49 || escaped) && nameIs(b, i + 1, end, 'Index')) {
+  } else if (!inStream && (first === 0x49 || escaped) && nameIs(b, i + 1, end, 'Index')) {
     const lengths = numberArray(b, end, 'index', flags)
     if (lengths < 0) flags.xrefUnresolved = true
     else flags.xrefEntries += lengths
-  } else if ((first === 0x57 || escaped) && nameIs(b, i + 1, end, 'W')) {
+  } else if (!inStream && (first === 0x57 || escaped) && nameIs(b, i + 1, end, 'W')) {
     const widths = numberArray(b, end, 'widths', flags)
     if (widths < 0) flags.xrefUnresolved = true
     else flags.xrefWidths = Math.max(flags.xrefWidths, widths)
@@ -591,11 +631,14 @@ function readName(b: Uint8Array, i: number, flags: Flags): number {
   return end
 }
 
-/** Read every name in decompressed data into `flags`, stopping once markers pass `stopAbove`. */
+/**
+ * Read every name in a stream's inflated data into `flags` (as `inStream`, see
+ * readName), stopping once markers pass `stopAbove`.
+ */
 function readNames(b: Uint8Array, flags: Flags, stopAbove: number): void {
   for (let i = 0; i < b.length; i++) {
     if (b[i] !== SLASH) continue
-    i = readName(b, i, flags) - 1
+    i = readName(b, i, flags, true) - 1
     if (flags.markers > stopAbove) return
   }
 }
@@ -679,9 +722,11 @@ type StreamDict = {
   otherFilter: boolean
   /** The dictionary was read. */
   read: boolean
+  /** A /Filter whose value may be a reference pdf-lib would look up (filterMayBeRef). */
+  unresolvedFilter: boolean
 }
 
-const UNREAD: StreamDict = { loadDecoded: true, otherFilter: false, read: false }
+const UNREAD: StreamDict = { loadDecoded: true, otherFilter: false, read: false, unresolvedFilter: false }
 const LT = 0x3c
 const GT = 0x3e
 /** Bytes a dictionary read stops at: they open strings, comments, or nothing pdf-lib reads in a dictionary. */
@@ -762,7 +807,7 @@ function streamDict(b: Uint8Array, keyword: number, budget: { left: number }): S
   if (budget.left < 0) return UNREAD
 
   // Forwards over the dictionary, now known to hold no string or comment.
-  const dict: StreamDict = { loadDecoded: false, otherFilter: false, read: true }
+  const dict: StreamDict = { loadDecoded: false, otherFilter: false, read: true, unresolvedFilter: false }
   for (let i = start; i < end; i++) {
     if (b[i] !== SLASH) continue
     const stop = nameEnd(b, i)
@@ -770,6 +815,8 @@ function streamDict(b: Uint8Array, keyword: number, budget: { left: number }): S
     else if (nameIs(b, i + 1, stop, 'Type')) {
       const v = skipWs(b, stop, end - stop)
       if (v < 0 || b[v] !== SLASH) dict.loadDecoded = true
+    } else if (nameIs(b, i + 1, stop, 'Filter')) {
+      if (filterMayBeRef(b, stop)) dict.unresolvedFilter = true
     } else if (OTHER_FILTERS.some((f) => nameIs(b, i + 1, stop, f))) dict.otherFilter = true
     i = stop - 1
   }
@@ -817,7 +864,8 @@ function inflateStream(input: Uint8Array, budget: number, ratio: boolean): { dat
  * applies to, which a page count would refuse for reasons that cost a load
  * nothing. Same rules as the scan: every stream pdf-lib may decode on load is
  * inflated in full, and one under a filter that can't be bounded cheaply is
- * refused.
+ * refused — as is one whose /Filter is a reference (`/Filter 9 0 R`,
+ * `/Filter [9 0 R]`), which pdf-lib looks up to a name this can't see.
  */
 export function checkLoadInflation(bytes: Uint8Array, limits: ScanLimits = {}): number | null {
   const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -828,14 +876,16 @@ export function checkLoadInflation(bytes: Uint8Array, limits: ScanLimits = {}): 
   let nextEndstream = -1
   const dictBudget = { left: DICT_READ_BUDGET }
   // LZW, ASCII85, ASCIIHex or RunLength named anywhere before a stream: its
-  // dictionary may name it, so one that can't be read may be under it.
-  const flags = { otherFilter: false }
+  // dictionary may name it, so one that can't be read may be under it. The
+  // same for a /Filter that may be a reference: it may be this stream's.
+  const flags = { otherFilter: false, unresolvedFilter: false }
   let namesReadTo = 0
   const readNamesTo = (to: number) => {
     for (let i = namesReadTo; i < to; i++) {
       if (bytes[i] !== SLASH) continue
       const stop = nameEnd(bytes, i)
       if (OTHER_FILTERS.some((f) => nameIs(bytes, i + 1, stop, f))) flags.otherFilter = true
+      else if (nameIs(bytes, i + 1, stop, 'Filter') && filterMayBeRef(bytes, stop)) flags.unresolvedFilter = true
       i = stop - 1
     }
     namesReadTo = Math.max(namesReadTo, to)
@@ -845,10 +895,13 @@ export function checkLoadInflation(bytes: Uint8Array, limits: ScanLimits = {}): 
     const start = streamDataStart(bytes, keyword + STREAM.length)
     const flate = isZlibHeader(bytes, start)
     readNamesTo(keyword)
-    if (!flate && !flags.otherFilter) continue
+    if (!flate && !flags.otherFilter && !flags.unresolvedFilter) continue
     const dict = streamDict(bytes, keyword, dictBudget)
     if (!dict.loadDecoded) continue
     if (dict.otherFilter || (!dict.read && flags.otherFilter)) return null
+    // A filter pdf-lib looks up, on a stream it decodes on load: it may name
+    // one this can't bound, from where this can't see.
+    if (dict.unresolvedFilter || (!dict.read && flags.unresolvedFilter)) return null
     if (!flate) continue
     // As in the scan: data inflated in full never overlaps, and so many
     // streams to inflate is "can't tell".

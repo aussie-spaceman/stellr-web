@@ -355,7 +355,7 @@ jobs:
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
       # verify's build has already type-checked this code. See next.config.mjs.
       SKIP_BUILD_TYPECHECK: '1'
-      E2E_ALLOW_UNCONFIGURED: ${{ vars.E2E_ALLOW_UNCONFIGURED }}
+      ALLOW_UNCONFIGURED: ${{ vars.E2E_ALLOW_UNCONFIGURED }}
 
     steps:
       - uses: actions/checkout@v7
@@ -405,7 +405,7 @@ jobs:
               echo ""
               echo "Add them at **Settings → Secrets and variables → Actions**."
             } >> "$GITHUB_STEP_SUMMARY"
-            if [ "$E2E_ALLOW_UNCONFIGURED" != "true" ]; then
+            if [ "$ALLOW_UNCONFIGURED" != "true" ]; then
               echo "::error::e2e secrets are missing, so the suite cannot run. A required check must not pass green without running — failing closed. Set the repository variable E2E_ALLOW_UNCONFIGURED=true only for an environment (e.g. a fork) that cannot hold these secrets."
               exit 1
             fi

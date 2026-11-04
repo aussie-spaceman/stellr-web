@@ -48,6 +48,39 @@ export function deflateBomb(header: string, spaces: number): Buffer {
 export const MB = 1024 * 1024
 export const GB = 1024 * MB
 
+// ── Wall-clock budgets ──────────────────────────────────────────────────────
+//
+// A "linear time" test bounds growth, not speed. The scan reads 25 MB of the
+// worst input in at most ~570 ms on a quiet laptop (~1.2 s on a CI runner); a
+// quadratic pass over the same bytes takes tens of seconds to minutes. So the
+// budget can be generous: it is multiplied by TIME_SCALE (5 on CI's slower,
+// shared runners, 3 elsewhere), which still leaves an order of magnitude
+// between a linear pass on a loaded machine and a super-linear one. Two CI
+// runs at 1,026 ms and 1,169 ms against an unscaled 1,000 ms (Nov 2026), and a
+// laptop with every core busy reaching 2.2 s, are why.
+//
+// Not for tests whose speed IS the property — a bomb refused before it
+// inflates: those use REFUSAL_MS, unscaled.
+export const TIME_SCALE = process.env.CI ? 5 : 3
+
+/** A linear-time budget: `ms` on a quiet, fast machine, scaled for the runner. */
+export const linearBudgetMs = (ms: number) => ms * TIME_SCALE
+
+/**
+ * Vitest's timeout for a test with a linear budget: past the budget, plus the
+ * fixture it builds (seconds, for 2.5 million offsets), so a slow machine fails
+ * on the budget's message, never on Vitest's default 5 s.
+ */
+export const LINEAR_TEST_TIMEOUT_MS = 30_000
+
+/**
+ * The bound on refusing a deflate bomb. The scan refuses one in ~5 ms (it stops
+ * at LOAD_INFLATE_BUDGET); inflating the 4 GB bomb in full takes ~2.3 s on a
+ * fast laptop and longer on CI. 1 s keeps 200× headroom over the refusal and
+ * stays below the inflate — and far under the sandbox's 8 s worker timeout.
+ */
+export const REFUSAL_MS = 1_000
+
 /**
  * A one-page PDF with one stream object whose data is a bomb inflating to
  * `size` bytes behind a short, valid object-stream header (`5 0 << /A 1 >>`).

@@ -190,6 +190,8 @@ export async function GET(req: NextRequest) {
               eventTitle:   env.event_title,
               isReminder:   true,
             }),
+            // Critical mail (lib/email/suppressions.ts): guardian consent.
+            critical: true,
           })
         }
       }

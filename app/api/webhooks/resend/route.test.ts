@@ -82,6 +82,46 @@ describe('POST /api/webhooks/resend — suppression list', () => {
     expect(fake.table('email_suppressions')).toHaveLength(0)
   })
 
+  // Review finding: the suppression write ran first and threw, so a deploy that
+  // lands before the migration (or any failed upsert) stopped signing-invitation
+  // bounces being recorded. The e-sign half now runs first and on its own.
+  it('records a signing-invitation bounce even when the suppression write fails', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', secret)
+    const fake = fakeSupabase(
+      {
+        agreement_recipients: [{ id: 'r1', envelope_row: 'env-1', email: 'parent@example.test', status: 'sent', invite_email_id: 're_1' }],
+        agreements: [{ id: 'env-1', event_title: 'Nevada', minor_name: 'Kid', signer_name: 'Parent' }],
+        email_suppressions: [],
+      },
+      { failOn: (t) => (t === 'email_suppressions' ? 'relation "public.email_suppressions" does not exist' : null) },
+    )
+    db.current = fake.client
+    const body = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_1', to: ['parent@example.test'], bounce: { type: 'Permanent', message: 'No such user' } } })
+    const res = await POST(signed(body))
+    // The bounce is on the roster and staff were told…
+    expect(fake.table('agreement_recipients')[0]).toMatchObject({ status: 'autoresponded' })
+    const { notifyCommunityAdmins } = await import('@/lib/notify')
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    // …and the 500 asks Resend to retry the suppression half. The retry does
+    // not alert twice: the signer is no longer 'sent'.
+    expect(res.status).toBe(500)
+    await POST(signed(body))
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+  })
+
+  it('still records the suppression when the e-sign half fails', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', secret)
+    const fake = fakeSupabase(
+      { agreement_recipients: [], email_suppressions: [] },
+      { failOn: (t) => (t === 'agreement_recipients' ? 'boom' : null) },
+    )
+    db.current = fake.client
+    const body = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_9', to: ['gone@example.test'], bounce: { type: 'Permanent' } } })
+    const res = await POST(signed(body))
+    expect(res.status).toBe(500)
+    expect(fake.table('email_suppressions').map((r) => r.email)).toEqual(['gone@example.test'])
+  })
+
   it('rejects a signed body that is not an event', async () => {
     vi.stubEnv('RESEND_WEBHOOK_SECRET', secret)
     setup()

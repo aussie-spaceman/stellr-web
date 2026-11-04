@@ -116,7 +116,7 @@ interface Template {
 export interface SendResult {
   sent: number
   failed: number
-  skipped: number // already in the ledger for this (campaign, dedupKey)
+  skipped: number // already in the ledger for this (campaign, dedupKey), no address, or on the suppression list
   // deep review INT-2 / PUB-4: set when the loop stopped early because the
   // shared daily email budget ran out. The members not reached were NOT written
   // to the ledger, so the caller must leave the campaign/queue row runnable and
@@ -151,7 +151,7 @@ async function sendToMembers(
 
     const unsub = unsubscribeUrl(m.marketing_unsubscribe_token)
     const vars = memberMergeVars(m, unsub)
-    let status: 'sent' | 'failed' = 'sent'
+    let status: 'sent' | 'failed' | 'suppressed' = 'sent'
     let error: string | null = null
     try {
       const { subject, html, text } = renderCampaignEmail(template, vars, unsub)
@@ -163,7 +163,7 @@ async function sendToMembers(
       // List-Unsubscribe-Post header lets a mail client POST the opt-out (which
       // the route performs) separately from the GET a link scanner issues — so a
       // district Safe-Links scanner fetching the URL no longer opts the teacher out.
-      await sendEmail({
+      const out = await sendEmail({
         to: m.email,
         from: MARKETING_FROM,
         subject,
@@ -175,7 +175,15 @@ async function sendToMembers(
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
       })
-      result.sent++
+      // S1: an address on the suppression list was skipped, not sent. The
+      // ledger's 'suppressed' status (migration 022) records it, so it is
+      // neither counted as delivered nor retried.
+      if (out?.suppressed) {
+        status = 'suppressed'
+        result.skipped++
+      } else {
+        result.sent++
+      }
     } catch (e) {
       // deep review INT-2 / PUB-4: a quota/429 is the shared Resend budget
       // running out, NOT this member failing. STOP the loop and leave this

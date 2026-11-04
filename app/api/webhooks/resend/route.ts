@@ -10,12 +10,12 @@ import { handleSuppressionEvent, type ResendDeliveryEvent } from '@/lib/email/su
 // Without the secret every call is refused.
 //
 // Two consumers:
-//   • the suppression list (lib/email/suppressions.ts): hard bounces and spam
-//     complaints are recorded in email_suppressions, so sendEmail stops
-//     sending non-critical mail to those addresses;
-//   • Stellr signing invitations that bounce (lib/esign/bounces.ts).
-// Both are idempotent, so a redelivered event changes nothing. A failure
-// returns 500 and Resend retries.
+//   • Stellr signing invitations that bounce (lib/esign/bounces.ts);
+//   • the suppression list (lib/email/suppressions.ts): permanent bounces and
+//     spam complaints are recorded in email_suppressions, so sendEmail stops
+//     sending non-critical mail to those addresses.
+// Both are idempotent, so a redelivered event changes nothing. A failure in
+// either returns 500 and Resend retries; one failing never stops the other.
 
 export async function POST(req: Request) {
   const secret = process.env.RESEND_WEBHOOK_SECRET
@@ -42,8 +42,29 @@ export async function POST(req: Request) {
   }
   if (!event || typeof event.type !== 'string') return NextResponse.json({ error: 'Malformed event' }, { status: 400 })
 
+  // The two consumers run independently, signing bounces first: they were here
+  // before the suppression list, and a failed suppression write (the table
+  // missing because code deployed before the migration, or any write error)
+  // must never stop a bounced consent form reaching the roster and staff. Each
+  // failure is logged; either one returns 500 so Resend retries. A retry is
+  // safe: both handlers are idempotent, and the signing half does not alert
+  // twice because the signer is no longer 'sent'.
   const db = supabaseServer()
-  const { suppressed } = await handleSuppressionEvent(db, event)
-  const result = await handleResendEvent(db, event)
-  return NextResponse.json({ received: true, suppressed, ...result })
+  let bounced = 0
+  let suppressed = 0
+  let failed = false
+  try {
+    ;({ bounced } = await handleResendEvent(db, event))
+  } catch (err) {
+    failed = true
+    console.error('[webhooks/resend] signing bounce not recorded:', err instanceof Error ? err.message : err)
+  }
+  try {
+    ;({ suppressed } = await handleSuppressionEvent(db, event))
+  } catch (err) {
+    failed = true
+    console.error('[webhooks/resend] suppression not recorded:', err instanceof Error ? err.message : err)
+  }
+  if (failed) return NextResponse.json({ error: 'Not fully recorded; retry', bounced, suppressed }, { status: 500 })
+  return NextResponse.json({ received: true, suppressed, bounced })
 }

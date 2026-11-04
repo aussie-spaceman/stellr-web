@@ -20,10 +20,12 @@ const state: {
   // exercise "a throw mid-dispatch resets the campaign to scheduled, not stuck
   // in sending".
   membersError: boolean
+  // S1: addresses sendEmail reports as on the suppression list.
+  suppressedTo: string[]
 } = {
   campaigns: [], queueRows: [], members: [], templates: [],
   inserts: {}, updates: {}, claimSucceeds: true, quotaAfter: -1,
-  failAll: false, membersError: false,
+  failAll: false, membersError: false, suppressedTo: [],
 }
 
 const sent: Array<{ to: string; subject: string }> = []
@@ -42,7 +44,9 @@ vi.mock('@/lib/email', () => {
       if (state.quotaAfter >= 0 && sent.length >= state.quotaAfter) {
         throw new EmailSendError('daily budget spent', 429)
       }
+      if (state.suppressedTo.includes(o.to)) return { id: null, suppressed: true }
       sent.push(o)
+      return { id: 're_1' }
     }),
     MARKETING_FROM: 'Stellr <hello@mail.example.org>',
     EmailSendError,
@@ -119,6 +123,7 @@ beforeEach(() => {
   state.quotaAfter = -1
   state.failAll = false
   state.membersError = false
+  state.suppressedTo = []
   sent.length = 0
   vi.clearAllMocks()
 })
@@ -191,6 +196,30 @@ describe('campaign sends advertise List-Unsubscribe (RFC 8058)', () => {
     const headers = (sent[0] as { headers?: Record<string, string> }).headers
     expect(headers?.['List-Unsubscribe']).toMatch(/^<.*unsubscribe\?token=tok>$/)
     expect(headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+  })
+})
+
+// Review finding: a send the suppression list stopped came back as
+// { id: null, suppressed: true } and was counted and ledgered as 'sent'.
+describe('a suppressed recipient', () => {
+  it('is counted as skipped and ledgered as suppressed, not sent', async () => {
+    const { dispatchDueCampaigns } = await import('@/lib/email-campaigns')
+    state.campaigns = [{ id: 'c1', template_id: 't1', audience: {} }]
+    state.templates = [{ name: 'Blast', subject: 'Hi', body_json: {} }]
+    const mk = (id: string) => ({
+      id, first_name: id, last_name: 'M', email: `${id}@example.org`,
+      membership_id: id, age_bracket: 'adult', marketing_unsubscribe_token: `tok-${id}`,
+    })
+    state.members = [mk('a'), mk('b')]
+    state.suppressedTo = ['b@example.org']
+
+    const { results } = await dispatchDueCampaigns()
+
+    expect(results.c1).toMatchObject({ sent: 1, failed: 0, skipped: 1 })
+    expect((state.inserts['email_campaign_sends'] ?? []).map((r) => [r.member_id, r.status])).toEqual([
+      ['a', 'sent'],
+      ['b', 'suppressed'],
+    ])
   })
 })
 

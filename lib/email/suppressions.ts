@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EmailKind } from '@/lib/email-budget'
+import { maskEmail } from '@/lib/utils'
 
 // The email suppression list (table email_suppressions, migration
 // 20261103234624). sendEmail() checks it before every send; the Resend webhook
@@ -11,13 +12,28 @@ import type { EmailKind } from '@/lib/email-budget'
 // be the safe one, and the plan's rule is "when unsure, suppress":
 //
 //   • critical: true   — always sent. Reserved for mail a child's safety or an
-//                        account's security depends on: guardian consent
-//                        requests, safeguarding notices, sign-in and account
-//                        security mail. A suppressed critical send is logged.
+//                        account's security depends on. A suppressed critical
+//                        send is logged. The critical senders today (pinned by
+//                        test/critical-email-senders.test.ts):
+//                          - Stellr signing invitations and reminders, guardian,
+//                            student and member (lib/esign/outbox.ts);
+//                          - the DocuSign heads-up and reminder to a guardian
+//                            (lib/docusign-agreements.ts,
+//                            app/api/cron/docusign-reminders);
+//                          - account sign-in invites (lib/member-invite.ts);
+//                          - the privacy-request confirmation link
+//                            (lib/privacy-requests.ts).
+//                        Critical mail still goes through Resend, so an address
+//                        on Resend's own list bounces there and the bounce
+//                        webhook reports it (the roster's Email Bounced pill).
 //   • marketing        — skipped for ANY suppression reason.
 //   • transactional    — skipped for bounce, complaint and manual entries.
 //                        NOT skipped for 'unsubscribe': opting out of news must
 //                        never stop a registration receipt or a pay link.
+//
+// A skipped send returns { id: null, suppressed: true }. A caller that records
+// delivery must treat that as NOT sent (the e-sign outbox, account invites and
+// campaigns do).
 //
 // Note for critical mail: Resend keeps its own suppression list for hard
 // bounces and complaints and will not deliver to those addresses whatever this
@@ -89,11 +105,17 @@ export interface ResendDeliveryEvent {
 }
 
 /**
- * Turn a Resend delivery event into suppressions: every recipient of a hard
- * bounce, every recipient of a spam complaint. A transient bounce (mailbox
- * full, greylisting) is not recorded — the address is fine, and suppressing it
- * would silently stop a parent's consent mail. A bounce Resend could not
- * classify is recorded: when unsure, suppress.
+ * Turn a Resend delivery event into suppressions: every recipient of a
+ * permanent bounce, every recipient of a spam complaint.
+ *
+ * Only a bounce Resend marks 'Permanent' is recorded. A transient bounce
+ * (mailbox full, greylisting) is not: the address is fine. Nor is an
+ * 'Undetermined' or unclassified one: a row here is never removed by itself
+ * (no expiry, no admin screen yet), so one ambiguous event would block a
+ * parent's working address for good, and Resend's own list does not block
+ * those either. They are logged, masked, so a pattern can still be seen.
+ * ("When unsure, suppress" applies to which mail a suppression stops, not to
+ * whether a vague bounce becomes a permanent block.)
  */
 export async function handleSuppressionEvent(
   db: SupabaseClient,
@@ -101,7 +123,14 @@ export async function handleSuppressionEvent(
 ): Promise<{ suppressed: number }> {
   let reason: SuppressionReason
   if (event.type === 'email.bounced') {
-    if ((event.data?.bounce?.type ?? '').toLowerCase() === 'transient') return { suppressed: 0 }
+    const bounceType = (event.data?.bounce?.type ?? '').toLowerCase()
+    if (bounceType !== 'permanent') {
+      if (bounceType !== 'transient') {
+        const who = (event.data?.to ?? []).filter((e): e is string => typeof e === 'string').map((e) => maskEmail(normaliseEmail(e)))
+        console.warn(`[email] Bounce of type '${event.data?.bounce?.type ?? 'none'}' — not suppressing:`, who.join(', '))
+      }
+      return { suppressed: 0 }
+    }
     reason = 'bounce'
   } else if (event.type === 'email.complained') {
     reason = 'complaint'

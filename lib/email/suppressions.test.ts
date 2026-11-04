@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 import {
   handleSuppressionEvent,
@@ -72,11 +72,25 @@ describe('handleSuppressionEvent', () => {
     ])
   })
 
-  it('records an unclassified bounce (when unsure, suppress) but not a transient one', async () => {
+  // Review finding: a bounce Resend could not classify was suppressed for good,
+  // which could block every later consent form to a parent's working address.
+  // Only an explicit permanent bounce is recorded; the rest are logged.
+  it('records only a permanent bounce: not a transient, undetermined or unclassified one', async () => {
     const fake = fakeSupabase({}, { schema })
-    await handleSuppressionEvent(fake.client, { type: 'email.bounced', data: { to: ['full@example.test'], bounce: { type: 'Transient' } } })
-    await handleSuppressionEvent(fake.client, { type: 'email.bounced', data: { to: ['odd@example.test'] } })
-    expect(fake.table('email_suppressions').map((r) => r.email)).toEqual(['odd@example.test'])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await handleSuppressionEvent(fake.client, { type: 'email.bounced', data: { to: ['full@example.test'], bounce: { type: 'Transient' } } }))
+      .toEqual({ suppressed: 0 })
+    expect(await handleSuppressionEvent(fake.client, { type: 'email.bounced', data: { to: ['odd@example.test'], bounce: { type: 'Undetermined' } } }))
+      .toEqual({ suppressed: 0 })
+    expect(await handleSuppressionEvent(fake.client, { type: 'email.bounced', data: { to: ['bare@example.test'] } }))
+      .toEqual({ suppressed: 0 })
+    expect(await handleSuppressionEvent(fake.client, { type: 'email.bounced', data: { to: ['gone@example.test'], bounce: { type: 'Permanent', subType: 'Suppressed' } } }))
+      .toEqual({ suppressed: 1 })
+    expect(fake.table('email_suppressions').map((r) => r.email)).toEqual(['gone@example.test'])
+    // The unrecorded non-transient ones are logged, masked.
+    expect(warn.mock.calls.map((c) => String(c[0])).join('\n')).toMatch(/not suppressing/i)
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('odd@example.test')
+    warn.mockRestore()
   })
 
   it('ignores every other event', async () => {

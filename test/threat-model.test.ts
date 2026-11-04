@@ -152,7 +152,10 @@ describe('docs/THREAT-MODEL.md coverage', () => {
   it('does not claim a migration lint enforces RLS on new tables unless one does', () => {
     const tb5 = sections.find((s) => s.heading.startsWith('6.5 '))!
     const row = tb5.rows.find((r) => r[0] === 'E')!
-    const lintSrc = ['scripts/check-migration-names.mjs', 'scripts/check-migration-security.mjs']
+    // Every script lint:migrations runs (S3 added check-migration-tenancy.mjs).
+    const lintFiles = ['scripts/check-migration-names.mjs', 'scripts/check-migration-security.mjs', 'scripts/check-migration-tenancy.mjs']
+    const lintSrc = lintFiles
+      .filter((p) => existsSync(join(ROOT, p)))
       .map((p) => readFileSync(join(ROOT, p), 'utf8'))
       .join('\n')
     const lintChecksRls = /ROW LEVEL SECURITY/i.test(lintSrc)

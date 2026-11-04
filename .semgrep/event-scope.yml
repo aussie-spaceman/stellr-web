@@ -15,8 +15,11 @@
 # cross-tenant suite targets.
 #
 # The table list comes from supabase/baseline.sql plus the timestamped
-# migrations (columns named event_slug / event_id). When S3 lands
-# lib/tenancy/registry.ts, generate this list from it instead.
+# migrations (columns named event_slug / event_id). It must cover every table
+# lib/tenancy/registry.ts (S3) classifies as event_scoped with an event_slug
+# key; test/semgrep-event-scope.test.ts fails when the two drift.
+# docusign_envelopes is the compatibility view over agreements (renamed
+# 20261002213222) and stays listed while any caller still uses the old name.
 #
 # Rule tests: semgrep --test --config .semgrep/event-scope.yml .semgrep/tests/event-scope.ts
 rules:
@@ -44,7 +47,7 @@ rules:
       - pattern: $DB.from("$TABLE")
       - metavariable-regex:
           metavariable: $TABLE
-          regex: ^(registrations|event_participations|event_companies|event_manager_assignments|event_refunds|event_settings|event_store_offerings|group_join_tokens|member_groups|merch_batches|refund_policies|store_event_discounts|store_orders|volunteer_event_interest|docusign_envelopes|credentials|event_award_assignments|event_badge_templates|event_certificate_templates|event_email_sends|event_emails|group_invoices|scholarship_applications|survey_access_log|survey_distributions|survey_responses|team_profiles)$
+          regex: ^(registrations|event_participations|event_companies|event_manager_assignments|event_refunds|event_settings|event_store_offerings|group_join_tokens|member_groups|merch_batches|refund_policies|store_event_discounts|store_orders|volunteer_event_interest|agreements|docusign_envelopes|credentials|event_award_assignments|event_badge_templates|event_certificate_templates|event_email_sends|event_emails|group_invoices|scholarship_applications|survey_access_log|survey_distributions|survey_responses|team_profiles)$
       - pattern-not-inside: $Q.eq("event_slug", ...)
       - pattern-not-inside: $Q.eq("event_id", ...)
       - pattern-not-inside: $Q.neq("event_slug", ...)

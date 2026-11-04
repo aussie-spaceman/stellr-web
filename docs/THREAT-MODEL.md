@@ -192,7 +192,7 @@ flowchart LR
 | R | Ledger or audit rows altered after the fact | e-sign audit hash chain (`lib/esign/native/audit.ts`, `lib/esign/integrity.ts`) | `platform_audit_events` and `consent_grants` hash-chained (S4, S7); ledger append-only in pgTAP (S9) | **L** |
 | I | **Cross-tenant read** through a missing policy, a view, or Storage | Storage path canonicalisation (`lib/storage-path.ts`) | FORCE RLS on tenant tables; new objects under `{tenant_id}/` with storage tests (S4); sealed share function with a column allow-list equal to decision 5 (S7) | **M** after S4: legacy Storage objects stay in place under policy |
 | D | Supabase Free quotas (DB 500 MB, egress, MAU) exhausted; project paused | Scheduled crons in `vercel.json` touch the database daily, which keeps a Free project from pausing | Quota alarms at 60% (S1); Pro only when a trigger fires | **M** |
-| E | **New table created without RLS**, so default grants expose it to the anon key | None that enforces it: a written rule only (RLS plus `REVOKE ALL` on every new table). The migration lints (`scripts/check-migration-names.mjs`, `scripts/check-migration-security.mjs`) check names and SECURITY DEFINER sealing, not RLS; `supabase/tests/security_checks.sql` checks definers only. `supabase/baseline.sql` sets `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon` (and the same for `authenticated` and for role `supabase_admin`), so a new public table that forgets `ENABLE ROW LEVEL SECURITY` is readable and writable with the public anon key | Refuse a `CREATE TABLE` without `ENABLE ROW LEVEL SECURITY` and a `REVOKE` in `scripts/check-migration-security.mjs` (proposed, not yet in the plan; add to S2); `supabase db advisors` in CI flags RLS-disabled tables (S2); stop default privileges granting to anon and authenticated alongside the grant revoke (S0); generated pgTAP requires RLS on every table, with the table registry `lib/tenancy/registry.ts` and `scripts/check-migration-tenancy.mjs` (S3) | **H** until a lint or advisor check enforces RLS and `REVOKE` on every `CREATE TABLE`; **L** after |
+| E | **New table created without RLS**, so default grants expose it to the anon key | RLS is enforced; `REVOKE` is not. `scripts/check-migration-tenancy.mjs` (run by `npm run lint:migrations` and `prebuild`) reads every table from `supabase/baseline.sql` plus the migrations and fails when any table lacks `ENABLE ROW LEVEL SECURITY` or is missing from the table registry `lib/tenancy/registry.ts` (S3). `scripts/check-migration-names.mjs` and `scripts/check-migration-security.mjs` check names and SECURITY DEFINER sealing only; `supabase/tests/security_checks.sql` checks definers only. Nothing yet checks the `REVOKE ALL` the written rule asks for. `supabase/baseline.sql` sets `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon` (and the same for `authenticated` and for role `supabase_admin`), so a new public table that forgets `ENABLE ROW LEVEL SECURITY` is readable and writable with the public anon key | Refuse a `CREATE TABLE` without a `REVOKE` in `scripts/check-migration-security.mjs` (proposed, not yet in the plan; add to S2); `supabase db advisors` in CI flags RLS-disabled tables (S2); stop default privileges granting to anon and authenticated alongside the grant revoke (S0); generated pgTAP (`scripts/gen-tenancy-pgtap.mjs`) requires RLS on every table in the database itself, not just in the migration text (S3) | **M** while RLS is linted but `REVOKE` is not (an RLS-enabled table with no policy denies anon, but a permissive policy plus the default grant still exposes it); **L** once `REVOKE` is enforced too |
 
 ### 6.6 TB6 App ↔ Clerk
 
@@ -326,7 +326,7 @@ Ranked by current residual. "Accepted" means the owner has knowingly taken the r
 | R2 | No MFA for staff; phished admin = full access | H | L (S6) | Owner: interim step-up; Clerk Pro before first tenant admin |
 | R3 | Hobby meters can pause production during a live event | H | L | Owner: Vercel Pro on contract (G1) |
 | R4 | ~102 anon table grants and plaintext health data in `audit_log` | H | L | S0 items still to land |
-| R4a | Default privileges grant anon ALL on every new table, and no lint enforces RLS on `CREATE TABLE` | H | L | Migration-lint RLS check (proposed for S2); advisors in CI (S2); default-privilege change with the S0 revoke |
+| R4a | Default privileges grant anon ALL on every new table; the tenancy lint now fails a table without RLS (S3), but nothing enforces `REVOKE` | M | L | Migration-lint `REVOKE` check (proposed for S2); advisors in CI (S2); default-privilege change with the S0 revoke |
 | R4b | Printful webhook authenticated by a secret in the URL | M | L | Header-only secret and rotation (proposed for S1) |
 | R5 | Isolation rests on app code (service-role everywhere) | H (for tenancy) | L | S3–S5 |
 | R6 | CSP is Report-Only | M | L | S5 enforcing CSP |
@@ -345,10 +345,7 @@ These files are named by the plan and cited above as future controls. They are l
 
 - `lib/authz.ts` (S5)
 - `lib/tenancy/db.ts` (S4)
-- `lib/tenancy/registry.ts` (S3)
 - `lib/field-crypto.ts` (S4)
-- `lib/events/repo.ts` (S3)
-- `scripts/check-migration-tenancy.mjs` (S3)
 
 ---
 
@@ -358,3 +355,4 @@ These files are named by the plan and cited above as future controls. They are l
 |---|---|---|
 | 4 Nov 2026 | First version, S2 docs lane | agent, for owner review |
 | 4 Nov 2026 | Review fixes: TB5 "new table without RLS" had no real existing control (default privileges grant anon ALL), now H; Checkr and Printful are not Svix, Printful's URL secret rated M; `agent_readonly` moved from Existing to Planned in §7.2 I. Probes for each claim added to `test/threat-model.test.ts` | agent, for owner review |
+| 4 Nov 2026 | S2+S3 integration: `lib/tenancy/registry.ts`, `lib/events/repo.ts` and `scripts/check-migration-tenancy.mjs` landed, moved out of §10; TB5 E now cites the tenancy lint's RLS check as Existing, residual H to M (`REVOKE` still unenforced) | agent, for owner review |

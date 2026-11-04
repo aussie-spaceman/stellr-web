@@ -5,6 +5,13 @@
  *   npx tsx scripts/backfill-events-mirror.ts                 # dry run (default): reports, writes nothing
  *   npx tsx scripts/backfill-events-mirror.ts --apply         # writes to the project in .env.local
  *   npx tsx scripts/backfill-events-mirror.ts --apply --production   # owner only: writes to production
+ *   npx tsx scripts/backfill-events-mirror.ts --check         # read-only; exit 2 if the mirror lags Sanity
+ *
+ * --check is the reconcile probe the enforce cut-over depends on: in enforce
+ * mode, a published event missing from the mirror makes every registration
+ * for it fail. It writes nothing, and exits 2 on drift (missing or stale
+ * events, slug conflicts) so a scheduled run can alert. See
+ * docs/TENANCY-S3.md, "Enforce cut-over".
  *
  * The event webhook keeps the mirror current from here on
  * (app/api/admin/sanity/event-sync → lib/events/sync.ts); this is the one-off
@@ -26,7 +33,7 @@ import * as fs from 'fs'
 import { supabaseServer } from '../lib/supabase'
 import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 import { MIRROR_PROJECTION, upsertEventRows, type SanityEventDoc } from '../lib/events/sync'
-import { planMirrorBackfill, type ExistingMirrorRow } from '../lib/events/backfill'
+import { planMirrorBackfill, mirrorDrift, type ExistingMirrorRow } from '../lib/events/backfill'
 import { PRODUCTION_SUPABASE_REF } from './production-guard.mjs'
 
 // Static imports above read no env at module scope (lib/supabase reads it
@@ -35,7 +42,8 @@ import { PRODUCTION_SUPABASE_REF } from './production-guard.mjs'
 const envPath = path.resolve(process.cwd(), '.env.local')
 dotenv.config(fs.existsSync(envPath) ? { path: envPath } : {})
 
-const APPLY = process.argv.includes('--apply')
+const CHECK = process.argv.includes('--check')
+const APPLY = process.argv.includes('--apply') && !CHECK
 const PRODUCTION_OK = process.argv.includes('--production')
 
 const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
@@ -69,7 +77,7 @@ async function main() {
     console.error('Refusing to write to PRODUCTION without --production (an owner action: docs/TENANCY-S3.md).')
     process.exit(1)
   }
-  console.log(`${APPLY ? 'APPLY' : 'DRY RUN'} against ${isProduction ? 'PRODUCTION' : 'a non-production project'}\n`)
+  console.log(`${APPLY ? 'APPLY' : CHECK ? 'CHECK' : 'DRY RUN'} against ${isProduction ? 'PRODUCTION' : 'a non-production project'}\n`)
 
   const docs = await fetchAllEvents()
   const db = supabaseServer()
@@ -94,6 +102,18 @@ async function main() {
   for (const r of plan.insert) console.log(`  + ${r.slug}  (${r.country}, ${r.time_zone}${r.starts_at ? `, ${r.starts_at.slice(0, 10)}` : ''})`)
   for (const r of plan.update) console.log(`  ~ ${r.slug}`)
 
+  if (CHECK) {
+    const drift = mirrorDrift(plan)
+    if (drift.ok) {
+      console.log('\nCheck: the mirror matches Sanity.')
+      return
+    }
+    console.error(
+      `\nCheck FAILED: the mirror lags Sanity (missing ${drift.missing.length}, stale ${drift.stale.length}, conflicts ${drift.conflicts.length}).` +
+        '\nIn enforce mode, registrations for a missing event are refused. Run with --apply (owner: --production) and fix any conflict.',
+    )
+    process.exit(2)
+  }
   if (!APPLY) {
     console.log('\nDry run: nothing written. Re-run with --apply to write.')
     return

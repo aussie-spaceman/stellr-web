@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
-import { planMirrorBackfill } from './backfill'
+import { planMirrorBackfill, mirrorDrift } from './backfill'
 import { toEventRow, type SanityEventDoc } from './sync'
 
 const NOW = new Date('2026-11-04T12:00:00Z')
@@ -54,5 +54,37 @@ describe('planMirrorBackfill', () => {
       { slug: 'taken', sanityIds: ['c', 'z'] },
     ])
     expect(plan.insert.map((r) => r.slug)).toEqual(['fine'])
+  })
+})
+
+describe('mirrorDrift (--check)', () => {
+  it('is clean only when nothing would be inserted, updated or held back', () => {
+    const a = doc('a', 'event-a')
+    const inSync = planMirrorBackfill([a], [toEventRow(a, undefined, NOW)!], undefined, NOW)
+    expect(mirrorDrift(inSync)).toEqual({ ok: true, missing: [], stale: [], conflicts: [] })
+  })
+
+  it('reports a published event the mirror is missing (the enforce-mode failure)', () => {
+    const plan = planMirrorBackfill(
+      [doc('a', 'event-a'), doc('b', 'new-event')],
+      [toEventRow(doc('a', 'event-a'), undefined, NOW)!],
+      undefined,
+      NOW,
+    )
+    expect(mirrorDrift(plan)).toEqual({ ok: false, missing: ['new-event'], stale: [], conflicts: [] })
+  })
+
+  it('reports a stale row (a renamed slug the webhook missed) and slug conflicts', () => {
+    const plan = planMirrorBackfill(
+      [doc('a', 'renamed'), doc('b', 'dup'), doc('c', 'dup')],
+      [toEventRow(doc('a', 'old-slug'), undefined, NOW)!],
+      undefined,
+      NOW,
+    )
+    expect(mirrorDrift(plan)).toEqual({ ok: false, missing: [], stale: ['renamed'], conflicts: ['dup'] })
+  })
+
+  it('does not count drafts or slugless documents as drift', () => {
+    expect(mirrorDrift(planMirrorBackfill([doc('drafts.a', 'x')], [], undefined, NOW)).ok).toBe(true)
   })
 })

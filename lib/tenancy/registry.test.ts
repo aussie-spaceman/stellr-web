@@ -2,9 +2,9 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { TABLE_REGISTRY, derivedTables, entryProblems, type TableEntry } from './registry'
-import { STELLR_TENANT_ID } from './constants'
-import { readSchemaTables, applySql } from '../../scripts/lib/schema-tables.mjs'
-import { checkTenancy } from '../../scripts/check-migration-tenancy.mjs'
+import { STELLR_TENANT_ID, S3_FIRST_MIGRATION } from './constants'
+import { readSchemaTables, readSchemaInventory, applySql } from '../../scripts/lib/schema-tables.mjs'
+import { checkTenancy, UNPARSED_ALLOWLIST } from '../../scripts/check-migration-tenancy.mjs'
 import { generate, OUTPUT } from '../../scripts/gen-tenancy-pgtap.mjs'
 
 type Table = {
@@ -13,8 +13,9 @@ type Table = {
   columns: Set<string>
   rls: boolean
   indexed: Set<string>
-  triggers: Map<string, { function: string; args: string[] }>
+  triggers: Map<string, { function: string; args: string[]; enabled?: boolean }>
 }
+type Issue = { source: string; kind: string; statement: string }
 
 const tables: Map<string, Table> = readSchemaTables()
 
@@ -45,8 +46,12 @@ describe('table registry (S3)', () => {
     expect(problems).toEqual([])
   })
 
-  it('passes the migration tenancy lint on the real schema', () => {
+  it('passes the migration tenancy lint on the real schema, strict mode included', () => {
     expect(checkTenancy(tables)).toEqual([])
+    const { tables: strictTables, issues } = readSchemaInventory('.', S3_FIRST_MIGRATION)
+    // The only statement S3 itself needs an allowlist for is the backfill's trigger switching.
+    expect(issues.map((i: Issue) => `${i.source}:${i.kind}`)).toEqual(['20261104140000_tenant_id_backfill.sql:ddl-in-plpgsql'])
+    expect(checkTenancy(strictTables, TABLE_REGISTRY, issues)).toEqual([])
   })
 
   it('derives tenant_id on exactly the tables that carry an event key', () => {
@@ -60,18 +65,18 @@ describe('table registry (S3)', () => {
     expect(derivedTables().filter((d) => d.kind === 'sanity_id')).toHaveLength(5)
   })
 
-  it('lists the same tables in the expand and backfill migrations as the registry', () => {
+  it('expands the same tables as the registry, and the backfill follows the triggers', () => {
     const dir = 'supabase/migrations'
     const expand = readFileSync(`${dir}/20261104130000_tenant_id_expand.sql`, 'utf8')
     const backfill = readFileSync(`${dir}/20261104140000_tenant_id_backfill.sql`, 'utf8')
     const fromExpand = [...expand.matchAll(/ADD COLUMN IF NOT EXISTS tenant_id[^;]*;\s*\n?/g)].length
     expect(fromExpand).toBe(derivedTables().length)
-    const tuples = [...backfill.matchAll(/\('([a-z_]+)', '([a-z_]+)', '(slug|sanity_id)'\)/g)].map((m) => ({
-      table: `public.${m[1]}`,
-      column: m[2],
-      kind: m[3],
-    }))
-    expect(tuples.sort((a, b) => a.table.localeCompare(b.table))).toEqual(derivedTables())
+    // The backfill reads its table list from the catalog (every table with the
+    // derivation trigger), so it cannot drift; pgTAP section 6 checks the set.
+    expect(backfill).toMatch(/t\.tgname = 'zz_tenancy_derive_tenant_id'/)
+    expect(backfill).toMatch(/SELECT tbl, rows_updated FROM public\.tenancy_backfill_tenant_ids\(\);/)
+    // The expand migration stamps its real apply time for the 7-day gate.
+    expect(expand).toMatch(/SET expand_applied_at = COALESCE\(expand_applied_at, now\(\)\)/)
   })
 
   it('hard-codes the same Stellr tenant id in every S3 migration as lib/tenancy/constants.ts', () => {
@@ -162,11 +167,96 @@ describe('checkTenancy — each rule can fail', () => {
     expect(problems).not.toMatch(/old_kid/)
   })
 
+  it('flags a derivation trigger that is disabled, in any migration', () => {
+    const t = base()
+    applySql(t, 'ALTER TABLE public.parent_t DISABLE TRIGGER zz_tenancy_derive_tenant_id;', '20261001000000_x.sql')
+    expect(checkTenancy(t, reg()).join('\n')).toMatch(/parent_t: zz_tenancy_derive_tenant_id is disabled/)
+    applySql(t, 'ALTER TABLE public.parent_t ENABLE TRIGGER zz_tenancy_derive_tenant_id;', '20261002000000_x.sql')
+    expect(checkTenancy(t, reg())).toEqual([])
+    applySql(t, 'ALTER TABLE public.parent_t DISABLE TRIGGER ALL;', '20261003000000_x.sql')
+    expect(checkTenancy(t, reg()).join('\n')).toMatch(/is disabled/)
+  })
+
   it('follows renames and drops', () => {
     const t = base()
     applySql(t, 'CREATE TABLE public.a_t (id uuid); ALTER TABLE public.a_t RENAME TO b_t; CREATE TABLE public.c_t (id uuid); DROP TABLE IF EXISTS public.c_t;', 'x.sql')
     expect(t.has('public.a_t')).toBe(false)
     expect(t.has('public.b_t')).toBe(true)
     expect(t.has('public.c_t')).toBe(false)
+  })
+})
+
+describe('tenancy lint fails closed on statements it cannot follow (strict, S3 and later)', () => {
+  const FILE = '20261201000000_x.sql'
+  const strictIssues = (sql: string, source = FILE) => {
+    const t = new Map<string, Table>()
+    applySql(t, 'CREATE TABLE public.members (id uuid, email text, date_of_birth date); ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;', 'supabase/baseline.sql')
+    applySql(t, `CREATE TABLE public.registrations (id uuid, event_slug text, tenant_id uuid);
+      CREATE TRIGGER zz_tenancy_derive_tenant_id BEFORE INSERT ON public.registrations
+        FOR EACH ROW EXECUTE FUNCTION public.tenancy_derive_tenant_id('event_slug', 'slug');`, 'supabase/baseline.sql')
+    const issues: Issue[] = []
+    applySql(t, sql, source, { strict: true, issues })
+    return issues
+  }
+  const kinds = (sql: string, source?: string) => strictIssues(sql, source).map((i) => i.kind)
+
+  // The reviewer's probe, statement by statement: each passed the lint before.
+  it.each([
+    ['CREATE TABLE … AS SELECT', 'CREATE TABLE public.probe_ctas AS SELECT id, email, date_of_birth FROM public.members;', 'create-table-form'],
+    ['CREATE TABLE … (cols) AS SELECT', 'CREATE TABLE public.probe_ctas2 (a, b) AS SELECT id, email FROM public.members;', 'create-table-form'],
+    ['PARTITION OF', 'CREATE TABLE public.probe_part PARTITION OF public.registrations DEFAULT;', 'create-table-form'],
+    ['INHERITS', 'CREATE TABLE public.probe_inh (x int) INHERITS (public.registrations);', 'create-table-form'],
+    ['dynamic CREATE TABLE in a DO block', "DO $$ BEGIN EXECUTE 'CREATE TABLE public.probe_dyn (id int, event_slug text)'; END $$;", 'ddl-in-plpgsql'],
+    ['dynamic DISABLE RLS in a DO block', "DO $$ BEGIN EXECUTE 'ALTER TABLE public.members DISABLE ROW LEVEL SECURITY'; END $$;", 'ddl-in-plpgsql'],
+    ['static DDL in a DO block', 'DO $$ BEGIN ALTER TABLE public.members DISABLE ROW LEVEL SECURITY; END $$;', 'ddl-in-plpgsql'],
+    ['DDL in a function body', "CREATE OR REPLACE FUNCTION public.f() RETURNS void LANGUAGE plpgsql AS $f$ BEGIN EXECUTE format('CREATE TABLE public.%I (id int)', 'x'); END $f$;", 'ddl-in-plpgsql'],
+    ['DISABLE TRIGGER never re-enabled', 'ALTER TABLE public.registrations DISABLE TRIGGER zz_tenancy_derive_tenant_id;', 'trigger-left-disabled'],
+    ['DISABLE TRIGGER ALL never re-enabled', 'ALTER TABLE public.registrations DISABLE TRIGGER ALL;', 'trigger-left-disabled'],
+    ['SELECT … INTO', 'SELECT id, email INTO public.probe_into FROM public.members;', 'select-into'],
+    ['session_replication_role', "SET session_replication_role = 'replica';", 'session-replication-role'],
+    ['materialized view', 'CREATE MATERIALIZED VIEW public.mv AS SELECT * FROM public.members;', 'materialized-view'],
+    ['ALTER TRIGGER', 'ALTER TRIGGER zz_tenancy_derive_tenant_id ON public.registrations RENAME TO off;', 'alter-trigger'],
+    ['SET SCHEMA', 'ALTER TABLE private.stash SET SCHEMA public;', 'alter-table-form'],
+    ['dropping a tenant_id index', 'DROP INDEX IF EXISTS public.registrations_tenant_id_idx;', 'drop-tenant-index'],
+  ])('%s', (_label, sql, kind) => {
+    expect(kinds(sql)).toContain(kind)
+    const t = new Map<string, Table>()
+    const issues: Issue[] = []
+    applySql(t, sql, FILE, { strict: true, issues })
+    expect(checkTenancy(t, {}, issues).join('\n')).toMatch(/fails closed/)
+  })
+
+  it('accepts the shapes it does understand', () => {
+    expect(kinds(`CREATE TABLE IF NOT EXISTS public.ok_t (id uuid PRIMARY KEY, tenant_id uuid) PARTITION BY HASH (id);
+      CREATE TEMP TABLE scratch AS SELECT 1;
+      CREATE TABLE public.like_t (LIKE public.members);
+      INSERT INTO public.ok_t (id) SELECT id FROM public.members;
+      WITH x AS (SELECT 1) INSERT INTO public.ok_t (id) SELECT gen_random_uuid() FROM x;
+      CREATE INDEX ok_t_tenant_id_idx ON public.ok_t (tenant_id);
+      DROP INDEX IF EXISTS public.ok_t_other_idx;
+      DO $$ BEGIN CREATE POLICY p ON public.ok_t FOR ALL TO service_role USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+      CREATE OR REPLACE FUNCTION public.g() RETURNS int LANGUAGE sql AS $g$ SELECT 1 $g$;
+      ALTER TABLE public.registrations DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+      UPDATE public.registrations SET event_slug = event_slug;
+      ALTER TABLE public.registrations ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+      ALTER TABLE public.registrations DISABLE TRIGGER ALL;
+      ALTER TABLE public.registrations ENABLE TRIGGER ALL;`)).toEqual([])
+  })
+
+  it('is not strict for migrations before S3 unless asked', () => {
+    const t = new Map<string, Table>()
+    const issues: Issue[] = []
+    applySql(t, 'CREATE TABLE public.old_ctas AS SELECT 1;', '20261001000000_x.sql', { issues })
+    expect(issues).toEqual([])
+  })
+
+  it('an allowlist entry covers only its own file and kind', () => {
+    const backfill = 'DO $$ BEGIN EXECUTE format(\'ALTER TABLE public.%I DISABLE TRIGGER %I\', \'a\', \'b\'); END $$;'
+    const allowed = strictIssues(backfill, '20261104140000_tenant_id_backfill.sql')
+    expect(checkTenancy(new Map(), {}, allowed)).toEqual([])
+    expect(checkTenancy(new Map(), {}, strictIssues(backfill, FILE)).join('\n')).toMatch(/ddl-in-plpgsql/)
+    const otherKind = strictIssues('CREATE TABLE public.c AS SELECT 1;', '20261104140000_tenant_id_backfill.sql')
+    expect(checkTenancy(new Map(), {}, otherKind).join('\n')).toMatch(/create-table-form/)
+    expect(Object.keys(UNPARSED_ALLOWLIST)).toEqual(['20261104140000_tenant_id_backfill.sql'])
   })
 })

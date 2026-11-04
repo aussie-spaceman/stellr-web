@@ -14,10 +14,10 @@ e-sign and uploads behave exactly as before. The Clerk `role` claim,
 | `events` (Postgres mirror of Sanity events) | `20261104110000_events_mirror.sql` | Records which tenant owns each event. Sanity stays the source of truth. |
 | `tenancy_settings`, `tenancy_derivation_log`, `tenancy_derive_tenant_id()` | `20261104120000_tenancy_derivation.sql` | Derives `tenant_id` from the event key. Log mode by default. |
 | Nullable `tenant_id`, an index and the trigger on 32 tables | `20261104130000_tenant_id_expand.sql` | The expand step: 27 `event_slug` tables and 5 tables keyed by a Sanity `_id`. |
-| Backfill of existing rows to Stellr | `20261104140000_tenant_id_backfill.sql` | Safe, because every row today is Stellr's. |
+| Backfill of existing rows to Stellr | `20261104140000_tenant_id_backfill.sql` | Safe, because every row today is Stellr's. The work is `tenancy_backfill_tenant_ids()`, which pgTAP also runs on real NULL rows. |
 | Events sync | `lib/events/sync.ts` | Called from the existing event webhook (`/api/admin/sanity/event-sync`), last and inside try/catch. |
 | Events facade | `lib/events/repo.ts` | Reads Sanity as today. `{ mirror: true }` syncs a missing event after the response and is never awaited. |
-| Mirror backfill | `scripts/backfill-events-mirror.ts` | Dry run by default. |
+| Mirror backfill | `scripts/backfill-events-mirror.ts` | Dry run by default. `--check` is read-only and exits 2 when the mirror lags Sanity. |
 | Table registry | `lib/tenancy/registry.ts` | Classifies every table: tenant_scoped, event_scoped, platform, stellr_only, identity or system. |
 | Migration lint | `scripts/check-migration-tenancy.mjs` | Runs in `npm run lint:migrations`, in prebuild and as a CI step. |
 | Role mapping | `lib/tenancy/role-mapping.ts`, `scripts/map-tenancy-roles.ts` | Writes data only. Platform admins are an owner action. |
@@ -31,20 +31,53 @@ of the event key or `tenant_id`. It looks the row's event key up in
 `public.events`, by `slug` or by `sanity_id`.
 
 **Log mode** (`tenancy_settings.derivation_mode = 'log'`, the default) never
-blocks a write. When it cannot derive a tenant, it sets Stellr's id (unless a
-`tenant_id` was supplied) and adds one to a daily counter in
-`tenancy_derivation_log`. The counter is keyed by table, reason and UTC day.
-Every exception is caught. The reasons are:
+blocks a write. It logs exactly the writes that enforce mode would refuse, and
+gives them Stellr's id. Every exception is caught. The reasons are:
 
-- `no_key`: the event key is null. This is expected on tables where the event
-  is optional: `store_orders`, `member_groups`, `refund_policies`,
-  `community_resources`, `community_spaces`, `mentoring_cohorts` and
-  `training_modules`.
-- `no_event`: the key is set, but the mirror has no such event. **Orphan.**
-- `mismatch`: a supplied `tenant_id` disagrees with the event's tenant. The
+- `no_key`: the event key is null and the row has no `tenant_id`. Enforce
+  refuses these. They are expected on tables where the event is optional:
+  `store_orders`, `member_groups`, `refund_policies`, `community_resources`,
+  `community_spaces`, `mentoring_cohorts` and `training_modules`. The app must
+  write an explicit `tenant_id` on those tables before enforce (S5).
+- `no_event`: the key is set, the mirror has no such event, and the row has
+  no `tenant_id`. **Orphan.**
+- `mismatch`: a `tenant_id` on the row disagrees with the event's tenant. The
   derived value wins. **Orphan.**
 - `error`: something raised. Only the SQLSTATE is stored, never the message.
   **Orphan.**
+- `kept`: informational, not an orphan. The row already has a `tenant_id`, but
+  the mirror does not know its key yet. Enforce keeps these rows too. This is
+  the slug-rename path: the event webhook runs `rename_event_slug()` (in
+  `syncEventSpace`) before it syncs the mirror, so for a moment every repaired
+  row carries a slug that the mirror doesn't have. Those rows were stamped by
+  the backfill or at insert, so a rename neither counts as an orphan nor
+  restarts the 7-day window. In enforce mode the rename is not refused.
+
+`tenancy_derivation_log` is **append-only**: one row per logged write
+(`count = 1`), with no unique key. A shared daily counter row (an upsert) would
+make every concurrent writer to a table queue on one row lock until commit.
+Until the mirror is backfilled, that means every registration write. The log
+writer also caps any lock wait at 250 ms (`lock_timeout` on the function). A
+timeout is caught, so the live write goes through uncounted rather than
+waiting. Readers use `sum(count)`. To keep the table small, roll up old days
+from time to time (owner, SQL editor, outside event hours):
+
+```sql
+BEGIN;
+LOCK TABLE public.tenancy_derivation_log IN SHARE ROW EXCLUSIVE MODE;
+WITH old AS (
+  DELETE FROM public.tenancy_derivation_log
+  WHERE day < (now() AT TIME ZONE 'UTC')::date - 30
+  RETURNING table_name, reason, day, count, sample_key, sqlstate, first_seen, last_seen
+)
+INSERT INTO public.tenancy_derivation_log (table_name, reason, day, count, sample_key, sqlstate, first_seen, last_seen)
+SELECT table_name, reason, day, sum(count), max(sample_key), max(sqlstate), min(first_seen), max(last_seen)
+FROM old GROUP BY table_name, reason, day;
+COMMIT;
+```
+
+While the roll-up holds its lock, live writes skip logging after 250 ms. They
+are never blocked.
 
 **Enforce mode** refuses a row whose tenant cannot be established:
 
@@ -79,7 +112,22 @@ These rules are enforced by `npm run lint:migrations` and
 4. A `derived` table has the trigger, with arguments that match its event key.
 5. Any table with an `event_slug`, `event_ref` or `sanity_event_id` column must
    be `event_scoped` / `derived`.
-6. Every table has RLS.
+6. Every table has RLS, and no derived table's trigger is disabled.
+7. **Fail closed.** In a migration at or after S3, the lint fails on any
+   statement whose effect on tables it cannot follow:
+   - `CREATE TABLE … AS`, `PARTITION OF`, `OF type` or `INHERITS`;
+   - `SELECT … INTO` and materialized views;
+   - DDL inside a DO block or a function body, whether run through `EXECUTE`
+     or written statically;
+   - `session_replication_role`, `ALTER TRIGGER`, and `ALTER TABLE … SET
+     SCHEMA` / `INHERIT` / `ATTACH PARTITION`;
+   - dropping a `tenant_id` index;
+   - a trigger the migration disables and does not re-enable.
+
+   If such a statement is really needed, add its file and kind to
+   `UNPARSED_ALLOWLIST` in `scripts/check-migration-tenancy.mjs`, with the
+   reason it is safe. Today the list has one entry: the backfill's trigger
+   switching.
 
 **When you add a table:** add it to `lib/tenancy/registry.ts` in the same PR.
 Then regenerate the pgTAP file:
@@ -102,8 +150,9 @@ dump. There is no point-in-time recovery on this plan.
    `lock_timeout = 5s`, so a held lock fails fast instead of queueing writers.
 4. Run `supabase/tests/security_checks.sql` and the pgTAP files in
    `supabase/tests/database/`. Every test must pass.
-5. Run section D of `supabase/tests/tenancy_cutover_checks.sql`. It must show 0
-   rows with a NULL `tenant_id`.
+5. Run sections C, D and H of `supabase/tests/tenancy_cutover_checks.sql`. C
+   must show `expand_applied_at` set to the time you applied the migration. D
+   must show 0 rows with a NULL `tenant_id`. H must show 0 `mismatch_rows`.
 6. Spot-check that the backfill left `updated_at` alone. Compare
    `registrations.updated_at` before and after: it must be unchanged.
 7. Point a local app at the scratch copy (never at production). Run a test
@@ -112,7 +161,10 @@ dump. There is no point-in-time recovery on this plan.
 
 This lane checked steps 3–6 on PGlite (Postgres 17), against the baseline plus
 every migration, with historic rows inserted before S3. It has not rehearsed on
-a production restore. That is the owner's step.
+a production restore. That is the owner's step. The CI `db` job builds an
+empty database, so pgTAP section 6 creates its own pre-S3 rows (NULL
+`tenant_id`, written with the trigger off). It then runs the migration's own
+`tenancy_backfill_tenant_ids()` on them before it asserts NOT NULL-readiness.
 
 **Do not apply to production on an event day** (Nevada, 6 Nov). Apply outside
 event hours.
@@ -120,7 +172,12 @@ event hours.
 ## Enforce cut-over checklist
 
 Do not flip to `enforce` until every box is ticked. Use
-`supabase/tests/tenancy_cutover_checks.sql`, sections A–F.
+`supabase/tests/tenancy_cutover_checks.sql`, sections A–H.
+
+In enforce mode, a registration or agreement for an event the mirror doesn't
+have is **refused**. The webhook's mirror sync is best-effort: it makes one
+try, gives up after 8 s and records failures in `app_errors`. So the
+reconcile items below are hard gates, not nice-to-haves.
 
 - [ ] All five S3 migrations are applied to production through the Production
       migration Action, and `npm run db:status -- --prod` shows them.
@@ -130,17 +187,36 @@ Do not flip to `enforce` until every box is ticked. Use
 - [ ] The event webhook is confirmed to write the mirror. Publish a test edit in
       Sanity, then check that `events.synced_at` moved and the webhook JSON says
       `"mirror":"synced"`.
+- [ ] **Reconcile is scheduled.** `npx tsx scripts/backfill-events-mirror.ts
+      --check` runs on a schedule against production, at least daily and on
+      any publish day. It exits 2 on drift, and someone is alerted. Today it is
+      a manual owner action, so this box stays unticked until it is automated
+      (an owner decision: a Hobby cron costs Active CPU).
+- [ ] **Webhook mirror failures alert.** `app_errors` rows from the mirror
+      sync (status `timeout` / `error`) reach the admin alert path, and there
+      were none unresolved in the last 7 days.
+- [ ] **Publish → mirror before registration opens.** Every new event's
+      runbook includes running `--check` (or reading `public.events` for the
+      slug) before its registration link is shared.
 - [ ] **7 consecutive days of production traffic in log mode with trigger-derived
-      ids.** Section C shows at least 7 days since the expand migration, and new
-      rows in the derived tables carry a `tenant_id`.
+      ids.** Section C shows `ok = true`. It counts from
+      `tenancy_settings.expand_applied_at`, which the expand migration stamps
+      when it runs, and restarts whenever the settings row changes. Section G
+      shows `derived_rows > 0` for registrations, with `written_rows =
+      derived_rows`.
 - [ ] **0 orphans:** section B returns no rows for the last 7 days (no
-      `no_event`, `mismatch` or `error`).
-- [ ] Section D shows 0 NULL `tenant_id` in all 32 tables.
+      `no_event`, `mismatch` or `error`). `kept` is not an orphan.
+- [ ] Section D shows 0 NULL `tenant_id` in all 32 tables. This shows the
+      backfill finished and nothing bypassed the trigger. It does not prove
+      derivation, because log mode always writes a value. G and H do that.
 - [ ] Section E returns no rows: every event key used in the last 7 days is in
       the mirror.
-- [ ] Section F has been reviewed. `no_key` appears only on the optional-event
-      tables listed above. The app writes an explicit `tenant_id` on those
-      tables before enforce (S5), or the cut-over leaves them out.
+- [ ] Section H shows 0 `mismatch_rows` in every table. Each
+      `unknown_key_rows` count is explained (for example, historic rows for an
+      event deleted from Sanity).
+- [ ] Section F has been reviewed. Enforce refuses `no_key` writes, so each
+      table listed there either gets an explicit `tenant_id` from the app
+      first (S5), or the cut-over waits.
 - [ ] No live event falls in the cut-over window.
 - [ ] The owner approves the flip.
 
@@ -162,6 +238,7 @@ enforce mode (S4).
    migration Action, after the rehearsal above. Not on 6 Nov.
 2. **Backfill the mirror:** run `npx tsx scripts/backfill-events-mirror.ts` as
    a dry run first, then with `--apply` (add `--production` for production).
+   Afterwards, `--check` must exit 0.
 3. **Map roles.** Run `npx tsx scripts/map-tenancy-roles.ts` as a dry run and
    read the platform-admin list. Then run it with `--apply` to write Stellr
    memberships. Only the owner adds `--platform-admins`, which writes

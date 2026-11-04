@@ -7,11 +7,21 @@
  * (001–148) are historical and cannot rebuild the schema
  * (docs/SCHEMA-BASELINE.md), so they are not read here.
  *
- * For each table this records the columns, whether RLS is enabled and which
- * columns lead an index. It is a regex/statement parser, not a SQL engine: it
- * understands the shapes this repo actually uses (CREATE TABLE, ALTER TABLE …
- * ADD COLUMN / RENAME TO / ENABLE ROW LEVEL SECURITY, DROP TABLE, CREATE
+ * For each table this records the columns, whether RLS is enabled, which
+ * columns lead an index and its triggers (enabled or not). It is a
+ * regex/statement parser, not a SQL engine: it understands the shapes this
+ * repo actually uses (CREATE TABLE, ALTER TABLE … ADD COLUMN / RENAME TO /
+ * ENABLE ROW LEVEL SECURITY / ENABLE|DISABLE TRIGGER, DROP TABLE, CREATE
  * [UNIQUE] INDEX, PRIMARY KEY / UNIQUE constraints).
+ *
+ * FAIL CLOSED for new migrations. A parser that silently skips what it does
+ * not understand is a gate with a hole in it: `CREATE TABLE … AS SELECT`,
+ * `PARTITION OF`, DDL run from a DO block or a function (`EXECUTE '…'` or
+ * static), `SELECT … INTO`, `session_replication_role`, a trigger disabled
+ * and never re-enabled. With `strict` (the caller sets it for migrations at
+ * or after S3), every such statement is reported in `issues` instead of
+ * being ignored; scripts/check-migration-tenancy.mjs turns each into a
+ * failure unless it is allowlisted there with a reason.
  *
  * Used by scripts/check-migration-tenancy.mjs and lib/tenancy/registry.test.ts
  * (multi-tenancy plan S3). Dependency-free so Node runs it directly.
@@ -62,13 +72,81 @@ function newTable(name, source) {
 }
 
 /**
+ * DDL that, inside a DO block or a function body, the parser cannot follow —
+ * whether it runs through EXECUTE or as a static plpgsql statement.
+ */
+const PLPGSQL_DDL = new RegExp(
+  [
+    String.raw`create\s+(?:unlogged\s+)?table`,
+    String.raw`create\s+materialized\s+view`,
+    String.raw`alter\s+table`,
+    String.raw`drop\s+table`,
+    String.raw`alter\s+trigger`,
+    String.raw`(?:enable|disable)\s+(?:always\s+|replica\s+)?trigger`,
+    String.raw`row\s+level\s+security`,
+    String.raw`session_replication_role`,
+    String.raw`drop\s+index`,
+  ].map((r) => String.raw`\b${r}\b`).join('|'),
+  'i',
+)
+
+/** Index of the parenthesis closing the one at `open`. */
+function closingParen(s, open) {
+  let depth = 0
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '(') depth++
+    if (s[i] === ')') depth--
+    if (depth === 0) return i
+  }
+  return s.length
+}
+
+/**
+ * The statement shapes a strict (S3-or-later) migration may not use without
+ * an allowlist entry, because the inventory cannot follow them. Returns an
+ * issue kind, or null. Checked before the statement is applied.
+ */
+export function unparsedKind(s) {
+  if (/^do\b/i.test(s) || /^create\s+(?:or\s+replace\s+)?(?:function|procedure)\b/i.test(s)) {
+    return PLPGSQL_DDL.test(s) ? 'ddl-in-plpgsql' : null
+  }
+  if (/\bsession_replication_role\b/i.test(s)) return 'session-replication-role'
+  if (/^create\s+(?:(?:global|local)\s+)?(?:temp|temporary)\s+table\b/i.test(s)) return null
+  if (/^create\s+(?:unlogged\s+)?table\b/i.test(s)) {
+    const m = new RegExp(String.raw`^create\s+(?:unlogged\s+)?table\s+(?:if\s+not\s+exists\s+)?${QUALIFIED}\s*\(`, 'i').exec(s)
+    if (!m) return 'create-table-form' // AS SELECT, PARTITION OF, OF type, …
+    const tail = s.slice(closingParen(s, m.index + m[0].length - 1) + 1)
+    if (/\b(?:as|inherits|partition\s+of)\b/i.test(tail)) return 'create-table-form'
+    return null
+  }
+  if (/^create\s+materialized\s+view\b/i.test(s)) return 'materialized-view'
+  if (/^(?:select|with)\b/i.test(s) && /(?<!\b(?:insert|merge)\s+)\binto\b/i.test(s)) return 'select-into'
+  if (/^alter\s+trigger\b/i.test(s)) return 'alter-trigger'
+  if (/^alter\s+table\b/i.test(s) && /\b(?:set\s+schema|inherit|attach\s+partition)\b/i.test(s)) return 'alter-table-form'
+  if (/^drop\s+index\b/i.test(s) && /tenant_id/i.test(s)) return 'drop-tenant-index'
+  return null
+}
+
+/**
  * Apply one SQL file's statements to the inventory (a Map name -> table).
  * `source` is recorded on tables the file creates.
+ *
+ * opts.strict: report every statement the inventory cannot follow, and every
+ * trigger the file disables without re-enabling, into opts.issues as
+ * `{ source, kind, statement }`.
  */
-export function applySql(tables, sql, source) {
+export function applySql(tables, sql, source, opts = {}) {
+  const { strict = false, issues = [] } = opts
+  /** Triggers this file disabled: `table|name` (name '*' for ALL/USER). */
+  const disabledHere = new Map()
   for (const { text } of splitStatements(sql)) {
     const s = text.replace(/\s+/g, ' ').trim()
     let m
+
+    if (strict) {
+      const kind = unparsedKind(s)
+      if (kind) issues.push({ source, kind, statement: s.length > 160 ? `${s.slice(0, 157)}...` : s })
+    }
 
     // DO $$ … FOREACH t IN ARRAY ARRAY['a', 'b'] LOOP EXECUTE format('ALTER
     // TABLE public.%I ENABLE ROW LEVEL SECURITY', t) … $$ — the post-event
@@ -122,6 +200,7 @@ export function applySql(tables, sql, source) {
           function: qualify(m[4], m[5]),
           args: m[6].split(',').map((a) => a.trim().replace(/^'|'$/g, '')).filter(Boolean),
           definition: s,
+          enabled: true,
         })
       }
       continue
@@ -162,6 +241,31 @@ export function applySql(tables, sql, source) {
         }
         continue
       }
+      // [ENABLE [ALWAYS|REPLICA] | DISABLE] TRIGGER name|ALL|USER (one or more
+      // actions). Tracked even on a table the inventory does not know, so a
+      // strict file cannot switch a trigger off unseen.
+      for (const tr of rest.matchAll(new RegExp(`\\b(enable|disable)\\s+(?:always\\s+|replica\\s+)?trigger\\s+(${IDENT})`, 'gi'))) {
+        const on = tr[1].toLowerCase() === 'enable'
+        const which = unquote(tr[2])
+        const all = which === 'all' || which === 'user'
+        if (t) {
+          for (const tname of all ? [...t.triggers.keys()] : [which]) {
+            const trg = t.triggers.get(tname)
+            if (trg) trg.enabled = on
+          }
+        }
+        const key = `${name}|${all ? '*' : which}`
+        if (!on) {
+          disabledHere.set(key, s)
+        } else if (all) {
+          // ENABLE TRIGGER ALL/USER re-enables everything this file disabled on the table.
+          for (const k of [...disabledHere.keys()]) {
+            if (k.startsWith(`${name}|`)) disabledHere.delete(k)
+          }
+        } else {
+          disabledHere.delete(key)
+        }
+      }
       if (!t) continue
       if (/enable\s+row\s+level\s+security/i.test(rest)) t.rls = true
       if (/disable\s+row\s+level\s+security/i.test(rest)) t.rls = false
@@ -189,6 +293,11 @@ export function applySql(tables, sql, source) {
       }
     }
   }
+  if (strict) {
+    for (const [key, statement] of disabledHere) {
+      issues.push({ source, kind: 'trigger-left-disabled', statement: `${key.replace('|', ': trigger ')} — ${statement}` })
+    }
+  }
   return tables
 }
 
@@ -203,12 +312,28 @@ export function schemaSources(root = '.') {
   ]
 }
 
-/** The current table inventory (Map `schema.table` -> table) for `SCHEMAS`. */
-export function readSchemaTables(root = '.') {
+/**
+ * The current table inventory (Map `schema.table` -> table) for `SCHEMAS`,
+ * plus the statements it could not follow in migrations whose 14-digit
+ * version is >= `strictFrom` (none when it is omitted).
+ *
+ * @param {string} [root]
+ * @param {string | null} [strictFrom]
+ */
+export function readSchemaInventory(root = '.', strictFrom = null) {
   const tables = new Map()
-  for (const { name, sql } of schemaSources(root)) applySql(tables, sql, name)
+  const issues = []
+  for (const { name, sql } of schemaSources(root)) {
+    const strict = strictFrom != null && TIMESTAMPED.test(name) && name.slice(0, 14) >= strictFrom
+    applySql(tables, sql, name, { strict, issues })
+  }
   for (const key of [...tables.keys()]) {
     if (!SCHEMAS.includes(key.split('.')[0])) tables.delete(key)
   }
-  return tables
+  return { tables, issues }
+}
+
+/** The current table inventory (Map `schema.table` -> table) for `SCHEMAS`. */
+export function readSchemaTables(root = '.') {
+  return readSchemaInventory(root).tables
 }

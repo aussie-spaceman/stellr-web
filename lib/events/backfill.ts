@@ -77,3 +77,18 @@ export function planMirrorBackfill(
   }
   return plan
 }
+
+/**
+ * Whether the mirror matches Sanity (scripts/backfill-events-mirror.ts
+ * --check). In enforce mode a published event missing from the mirror makes
+ * every registration and agreement insert for it fail, and the webhook sync is
+ * best-effort (one try, 8 s cap), so the cut-over requires this to be clean
+ * and run on a schedule (docs/TENANCY-S3.md). Invalid documents (drafts, no
+ * slug) cannot be registered for, so they are not drift.
+ */
+export function mirrorDrift(plan: BackfillPlan): { ok: boolean; missing: string[]; stale: string[]; conflicts: string[] } {
+  const missing = plan.insert.map((r) => r.slug)
+  const stale = plan.update.map((r) => r.slug)
+  const conflicts = plan.conflicts.map((c) => c.slug)
+  return { ok: !missing.length && !stale.length && !conflicts.length, missing, stale, conflicts }
+}

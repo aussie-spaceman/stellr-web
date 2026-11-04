@@ -21,7 +21,9 @@
 --     table rewrite;
 --   * nothing in the app reads or writes tenant_id;
 --   * the trigger is in 'log' mode and catches every exception, so it cannot
---     fail a registration, check-in, payment, e-sign or upload write;
+--     fail a registration, check-in, payment, e-sign or upload write; its log
+--     is append-only (no shared counter row, so no writer waits on another)
+--     and its one possible lock wait is capped at 250 ms and caught;
 --   * BEFORE UPDATE fires only when the event key or tenant_id is in the SET
 --     list, so ordinary updates do not run it.
 -- The trigger is named zz_… so it runs after the tables' other BEFORE
@@ -324,3 +326,10 @@ CREATE TRIGGER zz_tenancy_derive_tenant_id
   BEFORE INSERT OR UPDATE OF event_slug, tenant_id ON public.volunteer_event_interest
   FOR EACH ROW EXECUTE FUNCTION public.tenancy_derive_tenant_id('event_slug', 'slug');
 
+
+-- When this migration actually ran: the start of the 7-day log-mode window
+-- for the enforce cut-over (supabase/tests/tenancy_cutover_checks.sql,
+-- section C). Kept on a re-run, so the window never restarts silently.
+UPDATE public.tenancy_settings
+   SET expand_applied_at = COALESCE(expand_applied_at, now())
+ WHERE id;

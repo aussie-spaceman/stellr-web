@@ -7,12 +7,15 @@
 --   tenancy_settings         one row. derivation_mode = 'log' (default) or
 --                            'enforce'. Flipping it is the S3 cut-over, an
 --                            owner action gated by docs/TENANCY-S3.md.
---   tenancy_derivation_log   counts, by table, reason and UTC day, of rows the
---                            trigger could NOT derive from an events row.
---                            Bounded: one row per (table, reason, day), never
---                            one per write. sample_key is the last event key
---                            seen (an event slug or Sanity id — never personal
---                            data).
+--   tenancy_derivation_log   append-only: one row per write the trigger could
+--                            NOT derive from an events row (count = 1), keyed
+--                            by table, reason and UTC day. Append-only on
+--                            purpose: a shared per-day counter row would make
+--                            every concurrent writer to a table queue on one
+--                            row lock until commit. Readers sum(count); old
+--                            days can be rolled up (docs/TENANCY-S3.md).
+--                            sample_key is the event key seen (an event slug
+--                            or Sanity id — never personal data).
 --   tenancy_derive_tenant_id()  the BEFORE INSERT/UPDATE trigger function.
 --
 -- ── What the trigger does ────────────────────────────────────────────────────
@@ -21,12 +24,19 @@
 -- It looks the key up in public.events and sets NEW.tenant_id to that event's
 -- tenant.
 --
--- In 'log' mode it NEVER blocks a write. When it cannot derive — the key is
--- null ('no_key'), no events row has it ('no_event'), a supplied tenant_id
--- disagrees with the event's ('mismatch'), or anything at all raises
--- ('error') — it sets Stellr's tenant id (unless one was supplied) and counts
--- the case in tenancy_derivation_log. Every exception is caught. Nothing reads
--- tenant_id in S3, so the value it writes changes no behaviour.
+-- In 'log' mode it NEVER blocks a write. It counts, in tenancy_derivation_log,
+-- exactly the writes 'enforce' would refuse — the orphans that gate the
+-- cut-over — and sets Stellr's tenant id on them:
+--   'no_key'    the key is null and no tenant_id is set;
+--   'no_event'  no events row has the key and no tenant_id is set;
+--   'mismatch'  a set tenant_id disagrees with the event's (derived wins);
+--   'error'     anything at all raised (SQLSTATE only).
+-- A row that already carries a tenant_id but whose key the mirror does not
+-- know (yet) is NOT an orphan — enforce keeps it too. That is the slug-rename
+-- path: rename_event_slug() rewrites event_slug on rows the backfill already
+-- stamped, before the webhook has synced the new slug into the mirror. It is
+-- counted as the informational reason 'kept'. Every exception is caught.
+-- Nothing reads tenant_id in S3, so the value it writes changes no behaviour.
 --
 -- In 'enforce' mode a row whose tenant cannot be established raises instead:
 -- no events row and no tenant_id supplied, or a supplied tenant_id that
@@ -52,6 +62,10 @@ CREATE TABLE IF NOT EXISTS public.tenancy_settings (
   id               boolean PRIMARY KEY DEFAULT true CHECK (id),
   derivation_mode  text NOT NULL DEFAULT 'log' CHECK (derivation_mode IN ('log', 'enforce')),
   updated_at       timestamptz NOT NULL DEFAULT now(),
+  -- Stamped by the expand migration (20261104130000) when it actually runs,
+  -- so the 7-day cut-over gate counts days of real traffic, not days since
+  -- the migration file's version date (schema_migrations has no applied-at).
+  expand_applied_at timestamptz,
   -- Free text: who flipped it and why (a role, never a name or email).
   note             text CHECK (note IS NULL OR char_length(note) <= 500)
 );
@@ -75,22 +89,23 @@ END $$;
 -- ── tenancy_derivation_log ───────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.tenancy_derivation_log (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   table_name  text NOT NULL CHECK (char_length(table_name) <= 130),
-  reason      text NOT NULL CHECK (reason IN ('no_key', 'no_event', 'mismatch', 'error')),
+  reason      text NOT NULL CHECK (reason IN ('no_key', 'no_event', 'mismatch', 'error', 'kept')),
   day         date NOT NULL DEFAULT ((now() AT TIME ZONE 'UTC')::date),
   count       bigint NOT NULL DEFAULT 1 CHECK (count >= 1),
   sample_key  text CHECK (sample_key IS NULL OR char_length(sample_key) <= 200),
   -- For 'error': the SQLSTATE only, never the message (which can carry values).
   sqlstate    text CHECK (sqlstate IS NULL OR char_length(sqlstate) <= 5),
   first_seen  timestamptz NOT NULL DEFAULT now(),
-  last_seen   timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (table_name, reason, day)
+  last_seen   timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS tenancy_derivation_log_day_idx ON public.tenancy_derivation_log (day DESC);
+-- Not unique: no writer ever waits on another writer's row.
+CREATE INDEX IF NOT EXISTS tenancy_derivation_log_day_idx ON public.tenancy_derivation_log (day DESC, table_name, reason);
 
 COMMENT ON TABLE public.tenancy_derivation_log IS
-  'Daily counts of rows whose tenant_id could not be derived from public.events (S3 log mode). 0 no_event/mismatch/error for 7 days gates the enforce cut-over.';
+  'Append-only: one row per write whose tenant_id could not be derived from public.events (S3 log mode); sum(count) by day. 0 no_event/mismatch/error for 7 days gates the enforce cut-over.';
 
 ALTER TABLE public.tenancy_derivation_log ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.tenancy_derivation_log FROM PUBLIC, anon, authenticated;
@@ -104,6 +119,12 @@ END $$;
 -- ── The log writer ───────────────────────────────────────────────────────────
 -- Internal: called only by tenancy_derive_tenant_id() (which runs as the
 -- owner). SECURITY INVOKER, EXECUTE revoked from every API role.
+--
+-- A plain INSERT, never an upsert: an append takes no lock another writer
+-- holds, so a live write never queues behind a concurrent one here. The
+-- lock_timeout bounds the one wait left (someone holding an exclusive lock
+-- on the log table itself, e.g. a roll-up); 55P03 is caught by the trigger,
+-- so the live write goes through uncounted rather than waiting.
 
 CREATE OR REPLACE FUNCTION public.tenancy_log_derivation(
   p_table text,
@@ -111,15 +132,13 @@ CREATE OR REPLACE FUNCTION public.tenancy_log_derivation(
   p_key text,
   p_sqlstate text DEFAULT NULL
 )
-RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public, pg_temp
+SET lock_timeout = '250ms'
+AS $$
 BEGIN
   INSERT INTO public.tenancy_derivation_log (table_name, reason, sample_key, sqlstate)
-    VALUES (left(p_table, 130), p_reason, left(p_key, 200), left(p_sqlstate, 5))
-    ON CONFLICT (table_name, reason, day) DO UPDATE
-      SET count = tenancy_derivation_log.count + 1,
-          sample_key = COALESCE(EXCLUDED.sample_key, tenancy_derivation_log.sample_key),
-          sqlstate = COALESCE(EXCLUDED.sqlstate, tenancy_derivation_log.sqlstate),
-          last_seen = now();
+    VALUES (left(p_table, 130), p_reason, left(p_key, 200), left(p_sqlstate, 5));
 END $$;
 
 REVOKE EXECUTE ON FUNCTION public.tenancy_log_derivation(text, text, text, text) FROM PUBLIC, anon, authenticated;
@@ -180,7 +199,9 @@ BEGIN
   BEGIN
     key_value := to_jsonb(NEW) ->> key_col;
     IF key_value IS NULL THEN
-      NEW.tenant_id := COALESCE(supplied, stellr);
+      -- A set tenant_id with no key: enforce keeps it, so not an orphan.
+      IF supplied IS NOT NULL THEN RETURN NEW; END IF;
+      NEW.tenant_id := stellr;
       IF NOT quiet THEN PERFORM public.tenancy_log_derivation(tbl, 'no_key', NULL); END IF;
       RETURN NEW;
     END IF;
@@ -190,7 +211,13 @@ BEGIN
       SELECT e.tenant_id INTO derived FROM public.events e WHERE e.slug = key_value;
     END IF;
     IF derived IS NULL THEN
-      NEW.tenant_id := COALESCE(supplied, stellr);
+      IF supplied IS NOT NULL THEN
+        -- Already stamped (e.g. a slug rename that reached this row before
+        -- the mirror learned the new slug). Enforce keeps it too: informational.
+        IF NOT quiet THEN PERFORM public.tenancy_log_derivation(tbl, 'kept', key_value); END IF;
+        RETURN NEW;
+      END IF;
+      NEW.tenant_id := stellr;
       IF NOT quiet THEN PERFORM public.tenancy_log_derivation(tbl, 'no_event', key_value); END IF;
       RETURN NEW;
     END IF;

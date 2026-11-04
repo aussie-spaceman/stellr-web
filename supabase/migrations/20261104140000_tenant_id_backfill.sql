@@ -23,11 +23,25 @@
 --
 -- If the mirror has been backfilled first (scripts/backfill-events-mirror.ts),
 -- the lookup uses it; it does not need to be.
+--
+-- The work is a function, public.tenancy_backfill_tenant_ids(), so the same
+-- code the migration runs is exercised by pgTAP against real NULL rows
+-- (supabase/tests/database/tenancy.test.sql, section 6) — the CI database is
+-- empty when this migration runs there. It finds its tables from the
+-- catalog: every table carrying the zz_tenancy_derive_tenant_id trigger, with
+-- the event key column and kind read from the trigger's own arguments, so it
+-- cannot drift from the expand migration. SECURITY INVOKER: ALTER TABLE …
+-- DISABLE TRIGGER needs the table owner, so only the migration role (or the
+-- owner in the SQL editor) can run it; EXECUTE is revoked from every API role.
 
 SET LOCAL lock_timeout = '5s';
-SET LOCAL stellr.tenancy_backfill = 'on';
 
-DO $$
+CREATE OR REPLACE FUNCTION public.tenancy_backfill_tenant_ids()
+RETURNS TABLE (tbl text, rows_updated bigint)
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public, pg_temp
+SET stellr.tenancy_backfill = 'on'
+AS $fn$
 DECLARE
   stellr constant uuid := '00000000-0000-4000-8000-000000000001';
   spec   record;
@@ -38,74 +52,58 @@ DECLARE
   n      bigint;
 BEGIN
   FOR spec IN
-    SELECT * FROM (VALUES
-      ('agreements', 'event_slug', 'slug'),
-      ('community_resources', 'event_ref', 'sanity_id'),
-      ('community_spaces', 'sanity_event_id', 'sanity_id'),
-      ('credentials', 'event_slug', 'slug'),
-      ('event_award_assignments', 'event_slug', 'slug'),
-      ('event_badge_templates', 'event_slug', 'slug'),
-      ('event_certificate_templates', 'event_slug', 'slug'),
-      ('event_companies', 'event_slug', 'slug'),
-      ('event_email_sends', 'event_slug', 'slug'),
-      ('event_emails', 'event_slug', 'slug'),
-      ('event_manager_assignments', 'event_slug', 'slug'),
-      ('event_participations', 'event_slug', 'slug'),
-      ('event_refunds', 'event_slug', 'slug'),
-      ('event_settings', 'event_slug', 'slug'),
-      ('event_store_offerings', 'event_slug', 'slug'),
-      ('group_invoices', 'event_slug', 'slug'),
-      ('group_join_tokens', 'event_slug', 'slug'),
-      ('member_groups', 'event_slug', 'slug'),
-      ('mentoring_cohorts', 'sanity_event_id', 'sanity_id'),
-      ('merch_batches', 'event_slug', 'slug'),
-      ('refund_policies', 'event_slug', 'slug'),
-      ('registrations', 'event_slug', 'slug'),
-      ('scholarship_applications', 'event_slug', 'slug'),
-      ('store_event_discounts', 'event_slug', 'slug'),
-      ('store_orders', 'event_slug', 'slug'),
-      ('survey_access_log', 'event_slug', 'slug'),
-      ('survey_distributions', 'event_slug', 'slug'),
-      ('survey_responses', 'event_slug', 'slug'),
-      ('team_profiles', 'event_slug', 'slug'),
-      ('training_assignments', 'event_ref', 'sanity_id'),
-      ('training_modules', 'event_ref', 'sanity_id'),
-      ('volunteer_event_interest', 'event_slug', 'slug')
-    ) AS t(tbl, key_col, key_kind)
+    SELECT c.relname::text AS rel,
+           split_part(encode(t.tgargs, 'escape'), '\000', 1) AS key_col,
+           COALESCE(NULLIF(split_part(encode(t.tgargs, 'escape'), '\000', 2), ''), 'slug') AS key_kind
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace ns ON ns.oid = c.relnamespace
+    WHERE ns.nspname = 'public'
+      AND t.tgname = 'zz_tenancy_derive_tenant_id'
+      AND t.tgfoid = 'public.tenancy_derive_tenant_id()'::regprocedure
+    ORDER BY c.relname
   LOOP
     saved := ARRAY[]::text[];
     modes := ARRAY[]::text[];
     FOR trg IN
       SELECT t.tgname, t.tgenabled
       FROM pg_trigger t
-      WHERE t.tgrelid = format('public.%I', spec.tbl)::regclass
+      WHERE t.tgrelid = format('public.%I', spec.rel)::regclass
         AND NOT t.tgisinternal
         AND t.tgenabled IN ('O', 'A', 'R')
     LOOP
       saved := saved || trg.tgname::text;
       modes := modes || trg.tgenabled::text;
-      EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', spec.tbl, trg.tgname);
+      EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', spec.rel, trg.tgname);
     END LOOP;
 
     EXECUTE format(
       'UPDATE public.%1$I x SET tenant_id = COALESCE('
       || '(SELECT e.tenant_id FROM public.events e WHERE e.%2$I = x.%3$I), %4$L::uuid) '
       || 'WHERE x.tenant_id IS NULL',
-      spec.tbl,
+      spec.rel,
       CASE spec.key_kind WHEN 'sanity_id' THEN 'sanity_id' ELSE 'slug' END,
       spec.key_col,
       stellr
     );
     GET DIAGNOSTICS n = ROW_COUNT;
-    RAISE NOTICE 'tenancy backfill: public.% — % row(s)', spec.tbl, n;
+    RAISE NOTICE 'tenancy backfill: public.% — % row(s)', spec.rel, n;
 
     FOR i IN 1 .. coalesce(array_length(saved, 1), 0) LOOP
       EXECUTE format(
         'ALTER TABLE public.%I ENABLE %s TRIGGER %I',
-        spec.tbl,
+        spec.rel,
         CASE modes[i] WHEN 'A' THEN 'ALWAYS' WHEN 'R' THEN 'REPLICA' ELSE '' END,
         saved[i]
       );
     END LOOP;
+
+    tbl := spec.rel;
+    rows_updated := n;
+    RETURN NEXT;
   END LOOP;
-END $$;
+END $fn$;
+
+REVOKE EXECUTE ON FUNCTION public.tenancy_backfill_tenant_ids() FROM PUBLIC, anon, authenticated;
+
+SELECT tbl, rows_updated FROM public.tenancy_backfill_tenant_ids();

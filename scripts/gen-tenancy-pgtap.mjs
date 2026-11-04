@@ -55,8 +55,10 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
 );`,
   )
 
-  // ── 2. Tenant tables: column, index, RLS, NOT NULL-ready ─────────────────
-  lines.push('', '-- 2. Tenant/event tables: tenant_id, an index led by it, RLS, and no NULLs left.')
+  // ── 2. Tenant tables: column, index, RLS ─────────────────────────────────
+  // (NOT NULL-readiness is asserted in section 6, after the backfill has run
+  // on real rows — the CI database is empty when the migrations apply.)
+  lines.push('', '-- 2. Tenant/event tables: tenant_id, an index led by it, RLS.')
   for (const n of withColumn) {
     const [schema, table] = n.split('.')
     t(`SELECT has_column(${lit(schema)}, ${lit(table)}, 'tenant_id', ${lit(`${n} has tenant_id`)});`)
@@ -67,7 +69,6 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
 ), ${lit(`${n} has an index led by tenant_id`)});`,
     )
     t(`SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = ${lit(n)}::regclass), ${lit(`${n} has RLS enabled`)});`)
-    t(`SELECT is((SELECT count(*)::int FROM ${n} WHERE tenant_id IS NULL), 0, ${lit(`${n}: no NULL tenant_id (NOT NULL-ready)`)});`)
   }
   for (const n of own) {
     const [schema, table] = n.split('.')
@@ -93,7 +94,11 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
     t(`SELECT ok(NOT has_table_privilege('authenticated', ${lit(n)}, 'SELECT'), ${lit(`authenticated cannot read ${n}`)});`)
     t(`SELECT ok(has_table_privilege('service_role', ${lit(n)}, 'SELECT'), ${lit(`service_role can read ${n}`)});`)
   }
-  for (const fn of ['public.tenancy_derive_tenant_id()', 'public.tenancy_log_derivation(text, text, text, text)']) {
+  for (const fn of [
+    'public.tenancy_derive_tenant_id()',
+    'public.tenancy_log_derivation(text, text, text, text)',
+    'public.tenancy_backfill_tenant_ids()',
+  ]) {
     t(`SELECT ok(NOT has_function_privilege('anon', ${lit(fn)}, 'EXECUTE'), ${lit(`anon cannot execute ${fn}`)});`)
     t(`SELECT ok(NOT has_function_privilege('authenticated', ${lit(fn)}, 'EXECUTE'), ${lit(`authenticated cannot execute ${fn}`)});`)
   }
@@ -108,6 +113,20 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
 );`,
   )
   t(`SELECT is((SELECT derivation_mode FROM public.tenancy_settings), 'log', 'derivation starts in log mode');`)
+  t(
+    `SELECT ok((SELECT expand_applied_at IS NOT NULL AND expand_applied_at <= now() FROM public.tenancy_settings),
+  'the expand migration stamped when it actually ran (the 7-day gate counts from here, not from its version date)');`,
+  )
+  t(
+    `SELECT ok(NOT EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
+  WHERE i.indrelid = 'public.tenancy_derivation_log'::regclass AND i.indisunique AND a.attname = 'day'
+), 'the derivation log is append-only: no unique key per day, so no writer waits on a shared counter row');`,
+  )
+  t(
+    `SELECT ok((SELECT proconfig FROM pg_proc WHERE oid = 'public.tenancy_log_derivation(text, text, text, text)'::regprocedure) @> ARRAY['lock_timeout=250ms'],
+  'the log writer caps any lock wait at 250 ms');`,
+  )
   t(
     `SELECT throws_ok(
   $q$INSERT INTO public.tenants (slug, legal_name, display_name, country, payment_region, currency, time_zone, min_participant_age)
@@ -152,7 +171,9 @@ DELETE FROM public.tenancy_derivation_log;`,
     `(SELECT tenant_id FROM public.event_manager_assignments WHERE clerk_user_id = ${lit(user)})`
   const mod = (title) => `(SELECT tenant_id FROM public.training_modules WHERE title = ${lit(title)})`
   const logCount = (table, reason) =>
-    `(SELECT count::int FROM public.tenancy_derivation_log WHERE table_name = ${lit(table)} AND reason = ${lit(reason)})`
+    `(SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE table_name = ${lit(table)} AND reason = ${lit(reason)})`
+  const orphans = () =>
+    `(SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE reason IN ('no_key', 'no_event', 'mismatch', 'error'))`
   // A write, then one assertion on its result (pgTAP cannot nest a data-modifying CTE).
   const writeThenIs = (write, got, want, desc) => {
     lines.push(write)
@@ -190,6 +211,21 @@ DELETE FROM public.tenancy_derivation_log;`,
 INSERT INTO public.event_manager_assignments (clerk_user_id, event_slug) VALUES ('user_pgtap_4', 'pgtap-no-such-event');
 SELECT set_config('stellr.tenancy_backfill', '', true);`)
   t(`SELECT is(${logCount('public.event_manager_assignments', 'no_event')}, 1, 'backfill flag: writes during the backfill are not counted');`)
+  writeThenIs(
+    `INSERT INTO public.event_manager_assignments (clerk_user_id, event_slug) VALUES ('user_pgtap_8', 'pgtap-no-such-event');
+INSERT INTO public.event_manager_assignments (clerk_user_id, event_slug) VALUES ('user_pgtap_9', 'pgtap-no-such-event');`,
+    `(SELECT count(*)::int FROM public.tenancy_derivation_log WHERE table_name = 'public.event_manager_assignments' AND reason = 'no_event')`,
+    3, 'log mode: each orphan write appends its own row (no shared counter row to lock)',
+  )
+
+  // A slug rename in Sanity: the event webhook runs rename_event_slug() before
+  // it syncs the mirror, so every repaired row briefly carries a slug the
+  // mirror does not know. The rows already have a tenant — not orphans.
+  lines.push(`DELETE FROM public.tenancy_derivation_log;
+SELECT count(*) FROM public.rename_event_slug('pgtap-event', 'pgtap-event-renamed');`)
+  t(`SELECT is(${ema('user_pgtap_1')}, ${AU}, 'slug rename before the mirror sync: the row keeps its tenant');`)
+  t(`SELECT is(${orphans()}, 0, 'slug rename before the mirror sync: no orphan is counted (the 7-day window is not reset)');`)
+  t(`SELECT ok(${logCount('public.event_manager_assignments', 'kept')} >= 1, 'slug rename before the mirror sync: counted as the informational reason kept');`)
 
   lines.push('', "UPDATE public.tenancy_settings SET derivation_mode = 'enforce';")
   t(
@@ -215,7 +251,62 @@ SELECT set_config('stellr.tenancy_backfill', '', true);`)
   '23502', NULL, 'enforce mode: no event key and no tenant_id is refused'
 );`,
   )
+  t(
+    `SELECT lives_ok(
+  $q$SELECT * FROM public.rename_event_slug('pgtap-event-renamed', 'pgtap-event-renamed-2')$q$,
+  'enforce mode: a slug rename that reaches rows before the mirror sync is not refused'
+);`,
+  )
   lines.push("UPDATE public.tenancy_settings SET derivation_mode = 'log';")
+
+  // ── 6. The backfill, on real rows ────────────────────────────────────────
+  // The CI database is empty when 20261104140000 runs, so its UPDATE touches
+  // nothing there. Recreate the pre-S3 state — rows with a NULL tenant_id,
+  // written with the derivation trigger off — and run the migration's own
+  // function on them.
+  const fixtures = ['event_settings', 'survey_access_log', 'event_manager_assignments', 'training_modules']
+  lines.push(
+    '',
+    '-- 6. The backfill (20261104140000) on rows that predate S3, then NOT NULL-readiness everywhere.',
+    ...fixtures.map((f) => `ALTER TABLE public.${f} DISABLE TRIGGER zz_tenancy_derive_tenant_id;`),
+    `INSERT INTO public.event_settings (event_slug, updated_at) VALUES ('pgtap-historic', '2026-01-01T00:00:00Z');
+INSERT INTO public.event_settings (event_slug, updated_at) VALUES ('pgtap-event', '2026-01-01T00:00:00Z');
+INSERT INTO public.survey_access_log (actor, action, event_slug) VALUES ('staff', 'view', 'pgtap-historic');
+INSERT INTO public.event_manager_assignments (clerk_user_id, event_slug) VALUES ('user_pgtap_hist', 'pgtap-event');
+INSERT INTO public.training_modules (title) VALUES ('PgTap historic module');`,
+    ...fixtures.map((f) => `ALTER TABLE public.${f} ENABLE TRIGGER zz_tenancy_derive_tenant_id;`),
+    'DELETE FROM public.tenancy_derivation_log;',
+  )
+  const fixtureNulls = `(SELECT count(*)::int FROM public.event_settings WHERE event_slug IN ('pgtap-historic', 'pgtap-event') AND tenant_id IS NULL)`
+  t(`SELECT is(${fixtureNulls}, 2, 'fixture: the pre-S3 rows start with a NULL tenant_id');`)
+  lines.push('CREATE TEMP TABLE pgtap_backfill ON COMMIT DROP AS SELECT * FROM public.tenancy_backfill_tenant_ids();')
+  t(`SELECT is(${fixtureNulls}, 0, 'backfill: the NULL rows now carry a tenant');`)
+  t(
+    `SELECT set_eq('SELECT tbl FROM pgtap_backfill', ARRAY[
+${derived.map((n) => `    ${lit(n.split('.')[1])}`).join(',\n')}
+  ]::text[], 'the backfill finds every derived table from its trigger');`,
+  )
+  t(`SELECT is((SELECT rows_updated FROM pgtap_backfill WHERE tbl = 'event_settings'), 2::bigint, 'the backfill updated both NULL event_settings rows');`)
+  t(`SELECT is((SELECT tenant_id FROM public.event_settings WHERE event_slug = 'pgtap-historic'), ${STELLR}, 'backfill: an event the mirror does not know gets Stellr');`)
+  t(`SELECT is((SELECT tenant_id FROM public.event_settings WHERE event_slug = 'pgtap-event'), ${AU}, 'backfill: an event the mirror knows gets its tenant');`)
+  t(`SELECT is((SELECT updated_at FROM public.event_settings WHERE event_slug = 'pgtap-historic'), '2026-01-01T00:00:00Z'::timestamptz, 'backfill: updated_at is untouched');`)
+  t(`SELECT is((SELECT tenant_id FROM public.survey_access_log WHERE event_slug = 'pgtap-historic'), ${STELLR}, 'backfill: the append-only survey_access_log is backfilled');`)
+  t(`SELECT is(${ema('user_pgtap_hist')}, ${AU}, 'backfill: an event_slug row takes the mirror event tenant');`)
+  t(`SELECT is(${mod('PgTap historic module')}, ${STELLR}, 'backfill: a row with no event key gets Stellr');`)
+  t(`SELECT is((SELECT count(*)::int FROM public.tenancy_derivation_log), 0, 'backfill: nothing is logged (the orphan window is not swamped)');`)
+  t(
+    `SELECT is((SELECT string_agg(DISTINCT tgenabled::text, '') FROM pg_trigger
+  WHERE tgname = 'zz_tenancy_derive_tenant_id' AND tgrelid IN (${fixtures.map((f) => lit(`public.${f}`) + '::regclass').join(', ')})),
+  'O', 'backfill: the derivation triggers are enabled again');`,
+  )
+  t(
+    `SELECT throws_ok($q$UPDATE public.survey_access_log SET actor = 'x' WHERE event_slug = 'pgtap-historic'$q$,
+  NULL, NULL, 'backfill: survey_access_log still refuses updates afterwards');`,
+  )
+  t(`SELECT is((SELECT COALESCE(sum(rows_updated), 0)::int FROM public.tenancy_backfill_tenant_ids()), 0, 'backfill: re-running it changes nothing');`)
+  for (const n of withColumn) {
+    t(`SELECT is((SELECT count(*)::int FROM ${n} WHERE tenant_id IS NULL), 0, ${lit(`${n}: no NULL tenant_id after the backfill (NOT NULL-ready)`)});`)
+  }
 
   const header = `-- GENERATED by scripts/gen-tenancy-pgtap.mjs from lib/tenancy/registry.ts.
 -- Do not edit by hand: change the registry and regenerate

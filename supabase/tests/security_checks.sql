@@ -8,7 +8,8 @@
 --   • authenticated may execute only the RLS helpers named below, which
 --     authenticated SELECT policies call (they fail closed without the grant).
 -- Keep the allow-list in step with FROZEN_RLS_HELPERS and the `rls-helper`
--- annotations in scripts/check-migration-security.mjs.
+-- annotations in scripts/check-migration-security.mjs, and with its pgTAP
+-- twin supabase/tests/database/security.test.sql (run by CI's `db` job).
 SELECT n.nspname AS schema,
        p.proname AS function,
        pg_get_function_identity_arguments(p.oid) AS args,

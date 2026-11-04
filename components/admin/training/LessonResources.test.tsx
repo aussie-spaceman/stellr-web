@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -12,7 +13,7 @@ vi.mock('@/lib/upload-client', async (importOriginal) => ({
   uploadDirectToStorage,
 }))
 
-import { LessonResources } from './LessonResources'
+import { LessonResources, attachPendingResources, type PendingResource } from './LessonResources'
 
 const RESOURCES = '/api/admin/community/training/resources'
 const json = (body: unknown, status = 200) =>
@@ -115,5 +116,45 @@ describe('LessonResources — refusals are shown', () => {
     expect(await screen.findByText('No resources attached.')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(lists).toBeGreaterThan(listed)
+  })
+})
+
+describe('a lesson that does not exist yet', () => {
+  function Draft({ onChange }: { onChange: (p: PendingResource[]) => void }) {
+    const [pending, setPending] = useState<PendingResource[]>([])
+    return <LessonResources pending={pending} onPendingChange={(p) => { setPending(p); onChange(p) }} />
+  }
+
+  it('holds a link without calling the API, and can remove it again', async () => {
+    const user = userEvent.setup()
+    const seen = vi.fn()
+    render(<Draft onChange={seen} />)
+    await user.click(screen.getByRole('button', { name: 'Add resource' }))
+    await user.type(screen.getByPlaceholderText('Title'), 'Rover guide')
+    await user.type(screen.getByPlaceholderText('https://…'), 'https://example.com/g')
+    await user.click(screen.getByRole('button', { name: 'Add resource' }))
+
+    expect(screen.getByText('Rover guide')).toBeTruthy()
+    expect(screen.getByText('These attach when you add the lesson.')).toBeTruthy()
+    expect(posts).toEqual([])
+    expect(lists).toBe(0)
+
+    await user.click(screen.getByRole('button', { name: 'Remove resource' }))
+    expect(screen.queryByText('Rover guide')).toBeNull()
+  })
+
+  it('attachPendingResources posts each kind and reports only what failed', async () => {
+    uploadDirectToStorage.mockResolvedValue({ error: 'Refused' })
+    const file = new File(['x'], 'g.pdf', { type: 'application/pdf' })
+    const failed = await attachPendingResources('lesson-1', [
+      { key: '1', kind: 'link', title: 'Link', url: 'https://example.com' },
+      { key: '2', kind: 'file', title: 'Bad file', file },
+      { key: '3', kind: 'existing', title: 'Handbook', resourceId: 'cat-1' },
+    ])
+    expect(failed).toEqual(['Bad file'])
+    expect(posts).toEqual([
+      { itemId: 'lesson-1', kind: 'link', title: 'Link', externalUrl: 'https://example.com' },
+      { itemId: 'lesson-1', kind: 'existing', resourceId: 'cat-1' },
+    ])
   })
 })

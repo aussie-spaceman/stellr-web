@@ -11,6 +11,7 @@ import { CourseBuilder } from '@/components/admin/training/CourseBuilder'
 import type { AdminModule } from '@/components/admin/community/TrainingManager'
 import type { AdminTier } from '@/components/admin/training/ObjectAssignments'
 import { requireAdminPage } from '@/lib/admin-auth'
+import { recordingView, type OffloadRow, type RecordingPhase } from '@/lib/recording-view'
 
 export const metadata = { title: 'Admin — Training' }
 
@@ -23,7 +24,7 @@ const TITLES: Record<AdminTab, string> = {
 
 async function builderContent(initialCourseId?: string) {
   const db = supabaseServer()
-  const [{ data: modules }, { data: tierRows }, objects] = await Promise.all([
+  const [{ data: modules }, { data: tierRows }, objects, { data: offloads }] = await Promise.all([
     db
       .from('training_modules')
       .select(
@@ -35,9 +36,21 @@ async function builderContent(initialCourseId?: string) {
       .order('display_order', { ascending: true }),
     db.from('membership_tiers').select('id, name, age_bracket, sort_order').order('sort_order'),
     listTrainableObjects('all'),
+    db
+      .from('recording_offloads')
+      .select('target_id, status, source_url, source_expires_at, error, size_bytes, updated_at')
+      .eq('target_kind', 'training')
+      .neq('status', 'saved'),
   ])
+  // Each row read the way the lesson editor reads it, timeouts included, so the
+  // list and the editor cannot disagree. The list only needs the phase.
+  const recordingPhases: Record<string, RecordingPhase> = {}
+  for (const row of offloads ?? []) {
+    recordingPhases[row.target_id as string] = recordingView({}, row as unknown as OffloadRow).phase
+  }
   return (
     <CourseBuilder
+      recordingPhases={recordingPhases}
       courses={(modules ?? []) as unknown as AdminModule[]}
       objects={objects}
       tiers={(tierRows ?? []) as AdminTier[]}

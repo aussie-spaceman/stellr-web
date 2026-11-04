@@ -413,9 +413,13 @@
       "query": [
         "itemId"
       ],
-      "body": [],
+      "body": [
+        "itemId"
+      ],
       "methods": {
-        "GET": "refused"
+        "DELETE": "refused",
+        "GET": "refused",
+        "POST": "refused"
       }
     },
     "app/api/admin/community/training/resources/route.ts": {

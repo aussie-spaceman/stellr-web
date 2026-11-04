@@ -127,12 +127,15 @@ export const RESOURCES_BUCKET = 'community-resources'
 
 // Signed URL TTL for downloads — short enough to prevent sharing, long enough for slow connections.
 const SIGNED_URL_TTL_SECONDS = 120
+// A player requests a video in ranges for as long as someone is watching, so a
+// pause or a seek after a two-minute URL has expired would break playback.
+export const VIDEO_SIGNED_URL_TTL_SECONDS = 4 * 60 * 60
 
 /**
  * Generate a short-lived signed download URL for a private resource.
  * Only call this after a server-side tier check (FR-COM-03).
  */
-export async function signedDownloadUrl(storagePath: string): Promise<string | null> {
+export async function signedDownloadUrl(storagePath: string, ttlSeconds = SIGNED_URL_TTL_SECONDS): Promise<string | null> {
   // deep review MEM-1: this helper is shared by every download route and signs
   // with the service_role key, so it fails closed on any path that could escape
   // its intended prefix. storage-js and the WHATWG URL parser normalise `..`/`//`
@@ -146,7 +149,7 @@ export async function signedDownloadUrl(storagePath: string): Promise<string | n
   const db = supabaseServer()
   const { data, error } = await db.storage
     .from(RESOURCES_BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS)
+    .createSignedUrl(storagePath, ttlSeconds)
   if (error) {
     console.error('[community] signed URL error:', error)
     return null

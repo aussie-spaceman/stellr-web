@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { createCoachingRequest } from '@/lib/coaching-requests'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberIsMinor } from '@/lib/community'
+import { memberIsMinor } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 
 interface MemberRel {
   first_name: string | null
@@ -17,7 +18,7 @@ interface MemberRel {
 // opted-in members is small, so we filter the names in memory like the directory
 // page does, rather than building a join-table ilike query.
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ members: [] }, { status: 401 })
 
   const q = (new URL(req.url).searchParams.get('q') ?? '').trim().toLowerCase()

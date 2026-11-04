@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { notifyMember } from '@/lib/notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { escapeHtml } from '@/lib/email-layout'
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const teacher = await getCurrentMember()
+  const teacher = await getOnboardedMember()
   if (!teacher) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (teacher.event_role !== 'teacher') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

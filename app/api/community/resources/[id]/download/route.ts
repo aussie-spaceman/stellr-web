@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
+import { signedDownloadUrl } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getSpaceAccessById } from '@/lib/spaces'
 
 // GET /api/community/resources/[id]/download
@@ -10,7 +11,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { id } = await params

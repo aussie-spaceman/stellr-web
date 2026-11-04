@@ -6,16 +6,21 @@ import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
+import { safeNext } from '@/lib/safe-next'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
 // Competitions admin (formerly /admin/events — the old path 307s in next.config).
 const isAdminEventsRoute = createRouteMatcher(['/admin/competitions(.*)', '/admin/events(.*)'])
 // Member-only app surfaces that require a signed-in user (Home dashboard + the
-// community portal). Unauthenticated hits are bounced to sign-in (sign-up is
-// invite-only).
+// community portal). Unauthenticated hits are bounced to sign-in, whose card
+// links on to sign-up: anyone can create an account (decision 24).
 const isCommunityRoute = createRouteMatcher(['/community(.*)', '/home(.*)'])
+// Community pages meant for people who are new to Stellr (the /academy
+// "Book a mentoring session" CTA deep-links here). Guests go straight to
+// sign-up, whose card links back to sign-in.
+const isNewMemberRoute = createRouteMatcher(['/community/mentoring/discover'])
 const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
 
 // Pages that live on www only — redirect away from app subdomain
@@ -169,16 +174,23 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   }
 
   if (isAuthRoute(req) && userId) {
-    return NextResponse.redirect(new URL('/home', req.url))
+    // Already signed in. With a ?next, go through onboarding, which sends an
+    // onboarded member straight on to it and makes anyone else finish their
+    // profile (and its age checks) first. That is the case of a form that read
+    // a community API's 401 as "guest": the API refuses an account that has
+    // not onboarded (lib/onboarded-member). Without ?next, /home as before.
+    const next = safeNext(url.searchParams.get('next'))
+    return NextResponse.redirect(new URL(next ? `/account/onboarding?next=${encodeURIComponent(next)}` : '/home', req.url))
   }
 
   if (isCommunityRoute(req) && !userId) {
-    // Sign-up is invite-only (Clerk Restricted mode, 3 Nov 2026), so guests go
-    // to sign-in, not sign-up. Preserve the intended destination so they resume
-    // here after signing in (e.g. an /academy "Book a mentoring session" CTA
-    // deep-links straight into /community/mentoring/discover). The sign-in
-    // page validates ?next with safeNext (same-origin relative paths only).
-    return NextResponse.redirect(new URL(signInPath(url.pathname + url.search), req.url))
+    // Anyone can create an account (decision 24, 3 Nov 2026). Guests get a page
+    // that offers both: Clerk's sign-in card with its "Sign up" link, or the
+    // sign-up card (linking back to sign-in) for pages meant for new members.
+    // Preserve the intended destination so they resume here afterwards. The
+    // auth pages validate ?next with safeNext (same-origin relative paths only).
+    const mode = isNewMemberRoute(req) ? 'sign-up' : 'sign-in'
+    return NextResponse.redirect(new URL(authPath(url.pathname + url.search, mode), req.url))
   }
 
   if (isProtectedRoute(req)) {

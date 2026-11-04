@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
 import { getMentoringCredits, listOpenCohorts } from '@/lib/mentoring'
 import { CREDIT_PACK_PRICE_CENTS } from '@/lib/mentoring-format'
 import { DiscoverGrid, type DiscoverCohort } from '@/components/community/mentoring/DiscoverGrid'
@@ -13,8 +13,10 @@ export const metadata = { title: 'Mentoring · Find a cohort' }
 export default async function DiscoverPage() {
   const member = await getCurrentMember()
   // Fallback guest gate (middleware normally handles this first). Preserve the
-  // return path so guests resume into discovery after signing in.
-  if (!member) redirect(signInPath('/community/mentoring/discover'))
+  // return path so guests resume into discovery after sign-up + onboarding.
+  // This page is meant for people new to Stellr, so guests go to sign-up (its
+  // card links back to sign-in).
+  if (!member) redirect(authPath('/community/mentoring/discover', 'sign-up'))
 
   const [credits, open] = await Promise.all([getMentoringCredits(member), listOpenCohorts(member)])
   const creditPriceCents = Number(process.env.MENTORING_CREDIT_PRICE_CENTS) || CREDIT_PACK_PRICE_CENTS

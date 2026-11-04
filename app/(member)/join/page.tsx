@@ -6,13 +6,13 @@ import { getMonthlyPriceMap } from '@/lib/membership-monthly'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
 import { JoinCheckout } from '@/components/membership/JoinCheckout'
 import { impersonatedMemberId } from '@/lib/impersonation'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
 
 export const metadata = { title: 'Join Stellr' }
 
 // Resume-safe join orchestrator. Reached from a priced membership card
 // (/join?tier=catalyst). Walks the visitor through whatever step they're missing
-// — sign in, complete onboarding — then presents the payment choice. Already
+// — sign up (or sign in), complete onboarding — then presents the payment choice. Already
 // signed-in, onboarded members land straight on payment.
 export default async function JoinPage({
   searchParams,
@@ -30,8 +30,9 @@ export default async function JoinPage({
   const selfPath = `/join?tier=${tier.id}${wantMonthly ? '&interval=monthly' : ''}`
 
   const { userId } = await auth()
-  // Sign-up is invite-only, so a guest signs in and comes back here.
-  if (!userId) redirect(signInPath(selfPath))
+  // A guest here is usually new, so they create an account (the sign-up card
+  // links back to sign-in) and come back here after onboarding.
+  if (!userId) redirect(authPath(selfPath, 'sign-up'))
 
   // Admin view-as: resolve the member being viewed, not the admin.
   const viewAsId = await impersonatedMemberId()

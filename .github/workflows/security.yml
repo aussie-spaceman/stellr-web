@@ -1,0 +1,222 @@
+name: Security
+
+# Multi-tenant plan, S2 (assurance harness): static analysis, supply chain and
+# migration review, all on $0 tools. Kept apart from ci.yml so none of it can
+# delay or cancel the required verify/e2e gates.
+#
+# Blocking or report-only, job by job:
+#   semgrep          report-only until the repo variable SEMGREP_ENFORCE=true.
+#                    Only ERROR rules can gate; WARNING rules (unscoped event
+#                    queries) are a worklist in the job summary.
+#   osv-scanner      report-only until OSV_ENFORCE=true. Four advisories in
+#                    transitive dev/build dependencies were open when it landed.
+#   gitleaks         report-only until GITLEAKS_ENFORCE=true (not yet seen run).
+#   supply-chain     BLOCKING: lockfile-lint and `npm audit signatures` passed
+#                    cleanly when they landed.
+#   migration-report never fails; writes the plain-English report and its RED
+#                    FLAGS to the job summary of a PR that touches migrations.
+# A report-only job still shows red on the PR; it just cannot fail the run.
+#
+# Every action and container is pinned to a commit SHA or image digest; the
+# tag beside it is for humans. Bump by resolving the new tag to its SHA/digest.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Nothing here writes back to GitHub.
+permissions:
+  contents: read
+
+jobs:
+  # Semgrep CE with the repo's own rules (.semgrep/*.yml), in the official
+  # container. No registry rules and no login, so no code leaves the runner;
+  # --metrics=off stops the anonymous usage ping.
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: ${{ vars.SEMGREP_ENFORCE != 'true' }}
+    container:
+      image: semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b # 1.181.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Each rule file has a test (.semgrep/tests/<name>.ts[x]) with `ruleid:`
+      # and `ok:` annotations; a rule that stops matching fails here.
+      - name: Rule tests
+        run: sh scripts/semgrep-rule-tests.sh
+
+      # The full report, every severity, into the job summary. Never fails.
+      - name: Scan (report)
+        run: |
+          semgrep scan --config .semgrep --metrics=off --json --output semgrep.json . || true
+          semgrep scan --config .semgrep --metrics=off --text . | tail -n 400 || true
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import collections, json
+          d = json.load(open("semgrep.json"))
+          rows = collections.Counter((r["extra"]["severity"], r["check_id"].split(".")[-1]) for r in d["results"])
+          print("### Semgrep\n")
+          if not rows:
+              print("No findings.")
+          else:
+              print("| Severity | Rule | Findings |\n|---|---|---|")
+              for (sev, rule), n in sorted(rows.items()):
+                  print(f"| {sev} | `{rule}` | {n} |")
+              errors = [r for r in d["results"] if r["extra"]["severity"] == "ERROR"]
+              if errors:
+                  print("\n**ERROR findings**\n")
+                  for r in errors[:100]:
+                      print(f"- `{r['path']}:{r['start']['line']}` {r['check_id'].split('.')[-1]}")
+          print("\nWARNING findings are a worklist, not a gate. Full list: the job log.")
+          PY
+
+      # The gate: ERROR-severity rules only. Fails the job on any finding; the
+      # job fails the workflow only once SEMGREP_ENFORCE=true.
+      - name: Gate (ERROR rules)
+        run: semgrep scan --config .semgrep --metrics=off --severity ERROR --error .
+
+  # Known vulnerabilities in the locked dependency tree (OSV.dev data).
+  osv-scanner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: ${{ vars.OSV_ENFORCE != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            package.json
+            package-lock.json
+          sparse-checkout-cone-mode: false
+
+      - name: Scan package-lock.json
+        env:
+          IMAGE: ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0 # v2.7.0
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/src:ro" "$IMAGE" scan source --lockfile=/src/package-lock.json --format=markdown > osv.md
+          code=$?
+          set -e
+          cat osv.md
+          { echo "### OSV-Scanner (package-lock.json)"; echo ""; cat osv.md; } >> "$GITHUB_STEP_SUMMARY"
+          # 0: nothing found; 1: vulnerabilities found; anything else: the scan failed.
+          exit "$code"
+
+  # Secrets in the commits this change adds — not the whole history, which
+  # holds ~1 GB of old video blobs (see ci.yml `changes`).
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: ${{ vars.GITLEAKS_ENFORCE != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Commit range
+        id: range
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            # The checkout is GitHub's merge commit: parent 1 is the base,
+            # parent 2 the PR head, so this is exactly the PR's commits.
+            range="HEAD^1..HEAD^2"
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -qE '^0+$' \
+               && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..$AFTER"
+          else
+            range="$AFTER^..$AFTER"
+          fi
+          echo "range=$range" >> "$GITHUB_OUTPUT"
+          echo "Scanning $range ($(git rev-list --count "$range") commits)"
+          # Fetch the blobs those commits touch now, with the checkout's
+          # credentials, so the container below reads them offline.
+          git log -p --format= "$range" > /dev/null
+
+      - name: Scan the commits
+        env:
+          IMAGE: ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
+          RANGE: ${{ steps.range.outputs.range }}
+        # --redact: findings name the file, line and rule, never the value
+        # (this repository's logs are public). The container runs as root on a
+        # checkout owned by the runner user, hence safe.directory.
+        run: |
+          docker run --rm -v "$PWD:/repo" \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            "$IMAGE" git /repo --log-opts="$RANGE" --config /repo/.gitleaks.toml \
+            --redact --no-banner --verbose --exit-code 1
+
+  # lockfile-lint: every package resolves from registry.npmjs.org over https
+  # with a sha512 integrity hash, and its name matches the tarball (the two
+  # npm aliases in the tree are named). npm audit signatures: every installed
+  # package carries a valid registry signature. Installed with --ignore-scripts
+  # so no package code runs before the lockfile is checked.
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: lockfile-lint
+        run: npm run lint:lockfile
+
+      - name: npm audit signatures
+        run: npm audit signatures
+
+  # Plain-English report on the migrations a PR adds or changes, with a
+  # deterministic RED FLAGS section (scripts/migration-report.mjs). Written to
+  # the job summary; a flag raises a warning annotation, never a failure.
+  migration-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - id: scope
+        run: |
+          # The checkout is GitHub's merge commit: parent 1 is the base.
+          if git diff --name-only --no-renames HEAD^1 HEAD -- supabase/migrations | grep -q .; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No change under supabase/migrations: no migration report." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+
+      # Node built-ins only, so no npm ci. The base is the PR's target branch.
+      - if: steps.scope.outputs.run == 'true'
+        name: Migration report
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          node scripts/migration-report.mjs --base "origin/$BASE_REF" --out migration-report.md
+          cat migration-report.md
+          cat migration-report.md >> "$GITHUB_STEP_SUMMARY"
+          if ! grep -q '^### RED FLAGS (0)$' migration-report.md; then
+            echo "::warning::The migration report has RED FLAGS. Read them in this job's summary before merging."
+          fi

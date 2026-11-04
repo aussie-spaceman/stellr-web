@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { expectWithin } from '@/test/time-budget'
 
 const authMock = vi.fn()
 const getCurrentMemberMock = vi.fn()
@@ -724,7 +725,7 @@ describe('signUpload — names', () => {
     for (const run of [' ', '.']) {
       const started = performance.now()
       expect(await sign('admin-resource', `a${run.repeat(1024 * 1024)}x`)).toMatchObject({ status: 400 })
-      expect(performance.now() - started).toBeLessThan(500)
+      expectWithin(started, 500)
     }
     expect(createSignedUploadUrl).toHaveBeenCalledTimes(1)
   })
@@ -1014,7 +1015,7 @@ describe('claimUpload — PDF page cap', () => {
     stored(crafted(), 'application/pdf')
     const started = performance.now()
     const result = await claimUpload({ purpose: 'campaign-proposal', storagePath: 'nevada/r1/1-proposal.pdf' })
-    expect(performance.now() - started).toBeLessThan(1000)
+    expectWithin(started, 1000)
     expect([PDF_TOO_MANY_PAGES, PDF_PAGES_UNKNOWN]).toContain((result as { error: string }).error)
     expect(remove).toHaveBeenCalledWith(['nevada/r1/1-proposal.pdf'])
   })

@@ -1,0 +1,39 @@
+# Semgrep CE rule: the service-role Supabase client in a 'use client' module
+# (multi-tenant plan, S2). Companion to service-role.yml, kept in its own file
+# so each has its own rule test (.semgrep/tests/<same name>).
+#
+# Anywhere — including the directories service-role.yml allow-lists — a
+# 'use client' module must never import supabaseServer / supabaseServerTyped:
+# Next would bundle the secret-key client for the browser, and it bypasses RLS.
+# Test files are exempt (they run in Node).
+#
+# Rule tests: semgrep --test --config .semgrep/ .semgrep/tests/
+rules:
+  - id: stellr-service-role-in-client-module
+    severity: ERROR
+    languages: [typescript, javascript]
+    message: >-
+      A 'use client' module imports the service-role Supabase client. It would
+      ship to the browser and bypasses RLS. Fetch through a route handler or a
+      server action instead.
+    metadata:
+      category: security
+      cwe: 'CWE-284: Improper Access Control'
+      plan: multi-tenant S2 static analysis
+    paths:
+      exclude:
+        - '*.test.ts'
+        - '*.test.tsx'
+    patterns:
+      - pattern-inside: |
+          'use client'
+          ...
+      - pattern-either:
+          - pattern: import { supabaseServer } from "$MOD"
+          - pattern: import { supabaseServer as $ALIAS } from "$MOD"
+          - pattern: import { supabaseServerTyped } from "$MOD"
+          - pattern: import { supabaseServerTyped as $ALIAS } from "$MOD"
+          - pattern: import * as $NS from "$MOD"
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(@/lib/supabase|(\.\./)+lib/supabase|\./supabase)$

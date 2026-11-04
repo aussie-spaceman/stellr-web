@@ -14,6 +14,7 @@ import {
 import { MAX_MEMBER_PDF_PAGES, checkPdfPageLimit, scanPdfPages } from './pdf-page-count'
 import { GB, MB, bombPdf } from './pdf-bombs.test.helper'
 import { WATERMARK_MARKER } from './watermark/config'
+import { expectWithin } from '@/test/time-budget'
 
 // The sandbox (lib/pdf-sandbox.ts) is the bound on what a member's PDF can make
 // pdf-lib do: a worker thread with a heap limit and a wall-clock timeout. These
@@ -155,7 +156,7 @@ describe('memory outside the heap', () => {
     expect(result).toMatchObject({ ok: false, reason: 'memory' })
     if (!result.ok) expect(result.detail).toMatch(/watchdog/)
     // Long before the timeout: ~64 MB at 1 MB every 2 ms, then one poll.
-    expect(performance.now() - started).toBeLessThan(5_000)
+    expectWithin(started, 5_000)
   }, 30_000)
 
   it('the bomb is real: pdf-lib, unscanned, grows past the watchdog, which stops it', async () => {
@@ -168,7 +169,7 @@ describe('memory outside the heap', () => {
     })
     expect(result).toMatchObject({ ok: false, reason: 'memory' })
     if (!result.ok) expect(result.detail).toMatch(/watchdog/)
-    expect(performance.now() - started).toBeLessThan(10_000)
+    expectWithin(started, 10_000)
   }, 30_000)
 
   it('the worker’s own scan refuses the 4 GB bomb before pdf-lib opens it', async () => {
@@ -176,7 +177,7 @@ describe('memory outside the heap', () => {
     for (const run of [stampPdfSandboxed, (b: Uint8Array) => countPdfPagesSandboxed(b, 50)]) {
       expect(await run(bombPdf(4 * GB))).toMatchObject({ ok: false, reason: 'refused' })
     }
-    expect(performance.now() - started).toBeLessThan(5_000)
+    expectWithin(started, 5_000)
     // And the upload check never gets that far.
     expect(await checkPdfPageLimit(bombPdf(4 * GB), MAX_MEMBER_PDF_PAGES)).toBe('unknown')
   }, 30_000)
@@ -193,7 +194,7 @@ describe('waiting for a worker', () => {
     const started = performance.now()
     const queued = await stampPdfSandboxed(await textPdf(1, false), { queueWaitMs: 300 })
     expect(queued).toMatchObject({ ok: false, reason: 'busy' })
-    expect(performance.now() - started).toBeLessThan(1_500)
+    expectWithin(started, 1_500)
     expect((await Promise.all(hangs)).map((r) => r.ok)).toEqual([false, false])
     // The slots are free again.
     expect((await stampPdfSandboxed(await textPdf(1, false))).ok).toBe(true)

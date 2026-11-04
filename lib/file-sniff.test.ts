@@ -30,6 +30,7 @@ import {
   workbookStream,
   zipOf,
 } from '@/test/file-fixtures'
+import { expectWithin } from '@/test/time-budget'
 
 const FORMATS = Object.keys(FORMAT_SAMPLES) as FileFormat[]
 
@@ -224,7 +225,7 @@ describe('sniffFileFormat — Compound Files', () => {
     const sample = sharedChainCompoundFile(16384, 8192) // about 6MB
     const started = performance.now()
     expect(sniffFileFormat(sample)).toBeNull()
-    expect(performance.now() - started).toBeLessThan(500)
+    expectWithin(started, 500)
   })
 
   it('holds streams in the mini stream to the same budget', () => {
@@ -579,7 +580,7 @@ describe('names', () => {
     ]) {
       const started = performance.now()
       fileExtension(name)
-      expect(performance.now() - started).toBeLessThan(500)
+      expectWithin(started, 500)
     }
     expect(fileExtension(`a${' '.repeat(run)}x`)).toBe('')
     expect(fileExtension(`a.${' '.repeat(run)}pdf`)).toBe(`${' '.repeat(run)}pdf`)

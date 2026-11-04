@@ -40,6 +40,51 @@ export function encryptBackup(plain: Uint8Array, key = backupKey()): Buffer {
   return Buffer.concat([MAGIC, iv, cipher.getAuthTag(), body])
 }
 
+// ── AES-256-GCM with associated data (shared with lib/field-crypto.ts) ──────
+//
+// The same cipher as the backup format above, exposed as a primitive that
+// binds associated data (AAD): the AAD is authenticated but not stored, so a
+// ciphertext only opens when the caller supplies the exact context it was
+// sealed for (field encryption binds tenant, table, column and row). A wrong
+// key, wrong AAD or any tampered byte fails with GcmOpenError, which never
+// carries key material, plaintext or the underlying OpenSSL message.
+
+export const GCM_IV_BYTES = IV_BYTES
+export const GCM_TAG_BYTES = TAG_BYTES
+export const GCM_KEY_BYTES = 32
+
+export class GcmOpenError extends Error {
+  constructor() {
+    super('Ciphertext could not be authenticated')
+    this.name = 'GcmOpenError'
+  }
+}
+
+/** Seal `plain` under a 32-byte key with `aad`. Returns IV | tag | ciphertext. */
+export function sealGcm(key: Uint8Array, plain: Uint8Array, aad: Uint8Array): Buffer {
+  if (key.length !== GCM_KEY_BYTES) throw new RangeError('AES-256-GCM needs a 32-byte key')
+  const iv = randomBytes(IV_BYTES)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  cipher.setAAD(aad)
+  const body = Buffer.concat([cipher.update(plain), cipher.final()])
+  return Buffer.concat([iv, cipher.getAuthTag(), body])
+}
+
+/** Open what sealGcm produced. Throws GcmOpenError on any mismatch. */
+export function openGcm(key: Uint8Array, sealed: Uint8Array, aad: Uint8Array): Buffer {
+  if (key.length !== GCM_KEY_BYTES) throw new RangeError('AES-256-GCM needs a 32-byte key')
+  const buf = Buffer.from(sealed)
+  if (buf.length < IV_BYTES + TAG_BYTES) throw new GcmOpenError()
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(0, IV_BYTES), { authTagLength: TAG_BYTES })
+    decipher.setAAD(aad)
+    decipher.setAuthTag(buf.subarray(IV_BYTES, IV_BYTES + TAG_BYTES))
+    return Buffer.concat([decipher.update(buf.subarray(IV_BYTES + TAG_BYTES)), decipher.final()])
+  } catch {
+    throw new GcmOpenError()
+  }
+}
+
 export function decryptBackup(sealed: Uint8Array, key = backupKey()): Buffer {
   const buf = Buffer.from(sealed)
   if (buf.length < MAGIC.length + IV_BYTES + TAG_BYTES || !buf.subarray(0, 4).equals(MAGIC)) {

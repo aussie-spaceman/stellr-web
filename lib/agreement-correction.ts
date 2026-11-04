@@ -3,6 +3,7 @@ import type { EnvelopeRecipient } from './docusign'
 import { syncEnvelopeRecipients } from './docusign-recipients'
 import { correctRecipientRow, fetchEnvelopeRecipients } from './esign/operations'
 import { CorrectionRefusedError } from './esign/types'
+import { shadowSyncFields } from './field-crypto-shadow'
 
 // "Correct email" for one signer on a live agreement: the roster, the admin
 // agreements table and the member panel all come through here, as does the
@@ -147,7 +148,11 @@ export async function correctAgreementRecipient(
     if (!held || normaliseEmail(held) === was) {
       const { error } = await db.from('participants').update({ [field]: email }).eq('id', row.participant_id)
       if (error) participantSkipped = `the participant record could not be updated (${error.message})`
-      else participantField = field
+      else {
+        participantField = field
+        // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+        shadowSyncFields('participants', [row.participant_id as string])
+      }
     } else if (normaliseEmail(held) !== email) {
       participantSkipped = `the participant record holds a different address and was left as it is`
     }

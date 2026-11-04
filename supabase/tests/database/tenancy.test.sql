@@ -9,7 +9,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(245);
+SELECT plan(250);
 
 -- 1. Every table in public and entitlements is classified, and nothing else is.
 SELECT set_eq(
@@ -154,6 +154,7 @@ SELECT set_eq(
     'public.team_profiles',
     'public.tenancy_derivation_log',
     'public.tenancy_settings',
+    'public.tenant_data_keys',
     'public.tenant_domains',
     'public.tenant_memberships',
     'public.tenants',
@@ -353,6 +354,12 @@ SELECT ok(EXISTS (
   WHERE i.indrelid = 'public.team_profiles'::regclass AND a.attname = 'tenant_id'
 ), 'public.team_profiles has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.team_profiles'::regclass), 'public.team_profiles has RLS enabled');
+SELECT has_column('public', 'tenant_data_keys', 'tenant_id', 'public.tenant_data_keys has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.tenant_data_keys'::regclass AND a.attname = 'tenant_id'
+), 'public.tenant_data_keys has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.tenant_data_keys'::regclass), 'public.tenant_data_keys has RLS enabled');
 SELECT has_column('public', 'tenant_domains', 'tenant_id', 'public.tenant_domains has tenant_id');
 SELECT ok(EXISTS (
   SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
@@ -384,6 +391,7 @@ SELECT ok(EXISTS (
 ), 'public.volunteer_event_interest has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.volunteer_event_interest'::regclass), 'public.volunteer_event_interest has RLS enabled');
 SELECT col_not_null('public', 'events', 'tenant_id', 'public.events.tenant_id is NOT NULL');
+SELECT col_not_null('public', 'tenant_data_keys', 'tenant_id', 'public.tenant_data_keys.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'tenant_domains', 'tenant_id', 'public.tenant_domains.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'tenant_memberships', 'tenant_id', 'public.tenant_memberships.tenant_id is NOT NULL');
 SELECT ok(EXISTS (
@@ -827,6 +835,7 @@ SELECT is((SELECT count(*)::int FROM public.survey_access_log WHERE tenant_id IS
 SELECT is((SELECT count(*)::int FROM public.survey_distributions WHERE tenant_id IS NULL), 0, 'public.survey_distributions: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.survey_responses WHERE tenant_id IS NULL), 0, 'public.survey_responses: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.team_profiles WHERE tenant_id IS NULL), 0, 'public.team_profiles: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.tenant_data_keys WHERE tenant_id IS NULL), 0, 'public.tenant_data_keys: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.tenant_domains WHERE tenant_id IS NULL), 0, 'public.tenant_domains: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.tenant_memberships WHERE tenant_id IS NULL), 0, 'public.tenant_memberships: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.training_assignments WHERE tenant_id IS NULL), 0, 'public.training_assignments: no NULL tenant_id after the backfill (NOT NULL-ready)');

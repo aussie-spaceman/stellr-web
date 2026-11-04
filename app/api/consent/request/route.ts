@@ -5,6 +5,7 @@ import { normalizeEmail } from '@/lib/member-enums'
 import { voidEnvelopeRow, remindEnvelopeRow } from '@/lib/esign/operations'
 import { logActivity } from '@/lib/activity-log'
 import { MEMBERSHIP_SLUG } from '@/lib/membership-agreement'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import {
   RESEND_INTERVAL_MS, getPendingConsent, isPlausibleEmail, markConsentRequestSent, openPendingConsent,
   sendConsentRequest, settlePendingConsent, signedInMemberForConsent,
@@ -107,6 +108,8 @@ export async function POST(req: Request) {
     if (pending.band === 'teen') {
       // The teen's emergency contact is the guardian the form goes to.
       await db.from('members').update({ ec_email: guardianEmail }).eq('id', member.id)
+      // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+      shadowSyncFields('members', [member.id])
     }
     await logActivity({
       memberId: member.id,

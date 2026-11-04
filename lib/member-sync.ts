@@ -8,6 +8,7 @@ import {
   normalizeEmail,
 } from '@/lib/member-enums'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 export interface MemberUpsertInput {
   email: string
@@ -194,6 +195,9 @@ export async function upsertMember(
     }
     memberId = data?.id ?? null
   }
+
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  if (memberId) shadowSyncFields('members', [memberId])
 
   // Keep the unified member_roles table current with the registration classification.
   if (memberId) await syncMemberClassificationRole(db, memberId, effectiveRole)

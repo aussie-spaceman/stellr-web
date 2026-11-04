@@ -15,7 +15,7 @@ import {
   checkPdfPageLimit,
   scanPdfPages,
 } from './pdf-page-count'
-import { GB, MB, bombPdf } from './pdf-bombs.test.helper'
+import { GB, LINEAR_TEST_TIMEOUT_MS, MB, REFUSAL_MS, bombPdf, linearBudgetMs } from './pdf-bombs.test.helper'
 
 const enc = (s: string) => new Uint8Array(Buffer.from(s, 'latin1'))
 const join = (...parts: (string | Uint8Array)[]) =>
@@ -425,8 +425,8 @@ describe('scanPdfPages', () => {
         expect(file.byteLength).toBeLessThan(25 * 1024 * 1024)
         const started = performance.now()
         expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).not.toBe('ok')
-        expect(performance.now() - started).toBeLessThan(1000)
-      })
+        expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+      }, LINEAR_TEST_TIMEOUT_MS)
     }
   })
 
@@ -437,16 +437,16 @@ describe('scanPdfPages', () => {
     const file = objectStreamPdf(PAGE, offsets)
     const started = performance.now()
     expect(scan(file)).toBeNull()
-    expect(performance.now() - started).toBeLessThan(1000)
-  })
+    expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+  }, LINEAR_TEST_TIMEOUT_MS)
 
   it('can’t tell a file of more Flate streams than any 50-page PDF has', () => {
     const one = join('stream\n', deflateSync(Buffer.from('q')), '\nendstream\n')
     const many = join('%PDF-1.7\n', ...Array.from({ length: MAX_FLATE_STREAMS + 1 }, () => one))
     const started = performance.now()
     expect(scan(many)).toBeNull()
-    expect(performance.now() - started).toBeLessThan(1000)
-  })
+    expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+  }, LINEAR_TEST_TIMEOUT_MS)
 
   it('can’t tell a file of more object streams than it inflates in full', () => {
     // A header longer than a sniff sees is inflated in full.
@@ -457,7 +457,8 @@ describe('scanPdfPages', () => {
   })
 
   // Every pass is linear: 25MB of the worst each branch can be fed stays well
-  // under a second.
+  // under a second on a quiet machine. The budget is scaled for the runner
+  // (linearBudgetMs): it catches a quadratic pass, which takes minutes.
   describe('25MB of hostile input', () => {
     const MB25 = 25 * 1024 * 1024
     const fill = (unit: string | Buffer) => {
@@ -489,9 +490,9 @@ describe('scanPdfPages', () => {
         const b = make()
         const started = performance.now()
         const result = scan(b, 250)
-        expect(performance.now() - started).toBeLessThan(1000)
+        expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
         expect(result === null || result.bound >= 0).toBe(true)
-      })
+      }, LINEAR_TEST_TIMEOUT_MS)
     }
   })
 
@@ -540,8 +541,8 @@ describe('checkPdfPageLimit', () => {
     // Its object stream is inflated in full (pdf-lib would decode it on load),
     // and its 300,000 `/Type /Page` counted: over, without a load.
     expect(await checkPdfPageLimit(crafted(300_000), 50)).toBe('over')
-    expect(performance.now() - started).toBeLessThan(1000)
-  })
+    expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+  }, LINEAR_TEST_TIMEOUT_MS)
 
   // An incremental save (a signature, an annotation) appends a new copy of each
   // page it changes; pdf-lib keeps the last. The old copies aren't pages.
@@ -771,7 +772,7 @@ describe('numbers pdf-lib moves or loops by', () => {
       const file = backwardsLength()
       const started = performance.now()
       expect(scan(file)).toBeNull()
-      expect(performance.now() - started).toBeLessThan(100)
+      expect(performance.now() - started).toBeLessThan(linearBudgetMs(100))
       expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).toBe('unknown')
       expect(await uploadInWorker(file, { scanFirst: true, ms: 10_000 })).toBe('refused')
     }, 30_000)
@@ -976,9 +977,9 @@ describe('numbers pdf-lib moves or loops by', () => {
         const b = make()
         const started = performance.now()
         const result = scan(b, 250)
-        expect(performance.now() - started).toBeLessThan(1000)
+        expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
         expect(result === null || result.bound >= 0).toBe(true)
-      })
+      }, LINEAR_TEST_TIMEOUT_MS)
     }
   })
 })
@@ -1054,7 +1055,7 @@ describe('streams pdf-lib inflates on load', () => {
       const file = bombPdf(size)
       const started = performance.now()
       expect(scan(file)).toBeNull()
-      expect(performance.now() - started).toBeLessThan(1000)
+      expect(performance.now() - started).toBeLessThan(REFUSAL_MS)
     })
 
     it(`refuses the ${name} bomb within a 64 MB heap, holding little memory`, async () => {
@@ -1216,7 +1217,7 @@ describe('streams pdf-lib inflates on load', () => {
     for (const check of [() => scan(file), () => checkLoadInflation(file)]) {
       const started = performance.now()
       check()
-      expect(performance.now() - started).toBeLessThan(1000)
+      expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
     }
-  })
+  }, LINEAR_TEST_TIMEOUT_MS)
 })

@@ -86,11 +86,14 @@ interface Props {
   /** `billingMessage`: what adding the participant did to the group's invoice, if anything. */
   onSaved: (billingMessage?: string | null) => void
   onCancel: () => void
+  /** Where a NEW participant is posted. Defaults to the organiser's Teams route;
+   *  the admin event roster passes its own (staff add, same shared logic). */
+  createUrl?: string
 }
 
 // An adult is entering someone else's details here, so every field opts out of
 // autofill: the browser would otherwise offer the adult's own name and email.
-export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: Props) {
+export function ParticipantForm({ registrationId, initial, onSaved, onCancel, createUrl }: Props) {
   // Roles are the members enum values; legacy rows may still hold 'student'.
   const [form, setForm] = useState<ParticipantData>(() =>
     initial
@@ -149,7 +152,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
     const isEdit = Boolean(initial?.id)
     const url = isEdit
       ? `/api/members/teams/${registrationId}/participants/${initial!.id}`
-      : `/api/members/teams/${registrationId}/participants`
+      : createUrl ?? `/api/members/teams/${registrationId}/participants`
 
     const res = await fetch(url, {
       method: isEdit ? 'PATCH' : 'POST',

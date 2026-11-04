@@ -1,20 +1,9 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { upsertMember } from '@/lib/member-sync'
-import { linkMembersToRegistrationSchool } from '@/lib/school-link'
-import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
-import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
-import { dispatchAgreement } from '@/lib/docusign-agreements'
-import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
-import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { shadowSyncFields } from '@/lib/field-crypto-shadow'
-import { applyRosterChange } from '@/lib/group-billing'
-import { stripeClient } from '@/lib/stripe'
-import { checkRegistrationAge } from '@/lib/registration-eligibility'
-import { resolveEmailPair } from '@/lib/member-email'
+import { addParticipantToGroup, GROUP_FOR_ADD_COLUMNS } from '@/lib/group-participant-add'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -43,7 +32,7 @@ export async function POST(
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, teacher_email, teacher_poc_email, event_slug, event_title, school_name, school_address_state')
+    .select(`teacher_member_id, teacher_email, teacher_poc_email, ${GROUP_FOR_ADD_COLUMNS}`)
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
@@ -59,180 +48,8 @@ export async function POST(
 
   const body = await req.json()
 
-  const allowed = [
-    'membership_id',
-    'first_name', 'last_name', 'nickname', 'email', 'phone', 'date_of_birth',
-    'grade', 'gender', 'ethnicity', 't_shirt_size', 'school_name', 'age_bracket',
-    'event_role', 'dietary_requirements', 'health_conditions',
-    'emergency_contact_first_name', 'emergency_contact_last_name',
-    'emergency_contact_email', 'emergency_contact_phone',
-    'emergency_contact_relationship',
-  ]
-  const insert: Record<string, unknown> = { registration_id: registrationId }
-  for (const key of allowed) {
-    if (key in body) insert[key] = body[key]
-  }
-  // Roster filters (Companies auto-assign, studentCount) match enum values.
-  if ('event_role' in insert) insert.event_role = normalizeEventRole(insert.event_role)
-  // Personal takes primacy: with only a school address, it is the primary.
-  const emails = resolveEmailPair({ email: body.email, school_email: body.school_email })
-  insert.email = emails.email
-  insert.school_email = emails.school_email
-
-  // Duplicate guard — the optional Member ID lets the organiser catch someone
-  // who is already on the roster (e.g. added via the sheet) before re-adding
-  // them. Match on membership_id when supplied, otherwise on email.
-  const membershipId = (body.membership_id ?? '').toString().trim()
-  const email = emails.email
-  if (membershipId || email) {
-    const { data: dupe } = await db
-      .from('participants')
-      .select('id')
-      .eq('registration_id', registrationId)
-      .or(membershipId ? `membership_id.eq.${membershipId},email.eq.${email}` : `email.eq.${email}`)
-      .maybeSingle()
-    if (dupe) {
-      return NextResponse.json({ error: 'This person is already on the team roster.' }, { status: 409 })
-    }
-  }
-
-  // Member-ID-linked: build from the existing member's on-file record, reuse
-  // their member (never overwrite), and skip the upsert below — same contract as
-  // the group registration route.
-  let linkedMemberId: string | null = null
-  if (body.linked && membershipId) {
-    const onFile = await getMemberOnFileByMembershipId(db, membershipId)
-    if (onFile) {
-      linkedMemberId = onFile.memberId
-      Object.assign(insert, {
-        first_name: onFile.first_name, last_name: onFile.last_name, nickname: onFile.nickname,
-        email: onFile.email, phone: onFile.phone, date_of_birth: onFile.date_of_birth,
-        grade: onFile.grade, gender: onFile.gender, t_shirt_size: onFile.t_shirt_size,
-        ethnicity: onFile.ethnicity, dietary_requirements: onFile.dietary_requirements,
-        health_conditions: onFile.health_conditions,
-        emergency_contact_first_name: onFile.emergency_contact_first_name,
-        emergency_contact_last_name: onFile.emergency_contact_last_name,
-        emergency_contact_email: onFile.emergency_contact_email,
-        emergency_contact_phone: onFile.emergency_contact_phone,
-        emergency_contact_relationship: onFile.emergency_contact_relationship,
-        event_role: normalizeEventRole(onFile.event_role ?? insert.event_role),
-        member_id: onFile.memberId,
-      })
-    }
-  }
-
-  // S0 (2 Nov 2026): the same date-of-birth check as the registration routes,
-  // before anything is written. A typo (a future date, an unreadable one) used
-  // to reach the member row and the agreement, and the person was then swept
-  // for a login. Age is taken on today's date; this route has no event date.
-  const ageCheck = checkRegistrationAge(insert.date_of_birth, {
-    name: [insert.first_name, insert.last_name].filter(Boolean).join(' ').trim() || 'this person',
-  })
-  if (!ageCheck.ok) {
-    const error = !linkedMemberId
-      ? ageCheck.error
-      : ageCheck.reason === 'dob_missing'
-        ? "We don't have a date of birth on file for this Stellr Member ID. Ask them to add it to their profile, or enter their details by hand."
-        : "The date of birth on file for this Stellr Member ID doesn't look right. Ask them to contact Stellr to correct it, or enter their details by hand."
-    return NextResponse.json({ code: ageCheck.reason, error }, { status: 400 })
-  }
-  insert.date_of_birth = ageCheck.dateOfBirth
-  // A minor takes part as a student, whatever role and bracket were picked —
-  // the registration routes' rule (a school student manager stays one).
-  if (ageCheck.isMinor) {
-    if (insert.event_role !== 'school_student_manager') insert.event_role = 'participant'
-    insert.age_bracket = 'high_school'
-  }
-
-  // Upsert a member row (non-fatal) so the person gets a member account, can be
-  // linked to a school, and shows on admin member pages — parity with the
-  // registration routes. The participant is saved regardless of the outcome.
-  // S0 (2 Nov 2026): an existing member is linked, never rewritten
-  // (`onExisting: 'skip'`), as on the group route and the join link. The
-  // organiser is not the authority on another person's date of birth, role or
-  // guardian, and the COPPA guard reads the member row's date of birth first.
-  const memberId = linkedMemberId ?? await upsertMember(db, {
-    email: emails.email,
-    school_email: emails.school_email,
-    first_name: body.first_name,
-    last_name: body.last_name,
-    nickname: body.nickname,
-    phone: body.phone,
-    date_of_birth: ageCheck.dateOfBirth,
-    gender: body.gender,
-    grade: body.grade,
-    t_shirt_size: body.t_shirt_size,
-    age_bracket: insert.age_bracket,
-    event_role: insert.event_role,
-  }, { onExisting: 'skip' })
-  if (memberId) insert.member_id = memberId
-
-  const { data: participant, error } = await db
-    .from('participants')
-    .insert(insert)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('[teams/participants] Insert error:', error)
-    return NextResponse.json({ error: 'Failed to add participant' }, { status: 500 })
-  }
-  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
-  shadowSyncFields('participants', [participant.id as string])
-
-  // Link the new member to the group's school (from the registration record),
-  // and record the event in their Event Activity (event_participations).
-  if (memberId) {
-    await linkMembersToRegistrationSchool(db, registrationId, [memberId])
-    await recordEventParticipationForRegistration(db, registrationId, [memberId])
-  }
-
-  // Issue the correct DocuSign agreement — same paperwork flow as the join link.
-  // Non-fatal: the participant is saved regardless of DocuSign's outcome.
-  await dispatchAgreement(db, {
-    participantId:     participant.id,
-    memberId,
-    eventSlug:         registration.event_slug,
-    eventTitle:        registration.event_title,
-    firstName:         participant.first_name,
-    lastName:          participant.last_name,
-    email:             participant.email,
-    phone:             participant.phone,
-    dateOfBirth:       participant.date_of_birth,
-    eventRole:         participant.event_role,
-    schoolName:        participant.school_name ?? registration.school_name ?? undefined,
-    schoolState:       registration.school_address_state ?? undefined,
-    guardianFirstName: participant.emergency_contact_first_name ?? undefined,
-    guardianLastName:  participant.emergency_contact_last_name ?? undefined,
-    guardianEmail:     participant.emergency_contact_email ?? undefined,
-    guardianPhone:     participant.emergency_contact_phone ?? undefined,
-    relationship:      participant.emergency_contact_relationship ?? undefined,
-    grade:             participant.grade ?? undefined,
-  })
-
-  // Individual payment link (or free-event "no payment required" notice), same
-  // as every other way into the group. No-op unless the group pays individually.
-  // Without this an organiser-added participant was never billed and stayed
-  // invisible to the webhook's "has the whole group paid?" check.
-  await ensureIndividualPayments(db, registrationId, [{
-    participantId: participant.id,
-    email:         participant.email,
-    firstName:     participant.first_name,
-    lastName:      participant.last_name,
-  }])
-
-  // Beyond the group's places, the group grows: an unpaid invoice is revised,
-  // a paid group is invoiced for the extra place (lib/group-billing.ts).
-  const billing = await applyRosterChange(db, stripeClient(), {
-    registrationId,
-    change: { kind: 'added', count: 1 },
-    eventRole: participant.event_role,
-    participantIds: [participant.id],
-    actor: { memberId: member.id, label: 'organiser' },
-  }).catch((err) => {
-    console.error('[teams/participants] billing update error:', err)
-    return null
-  })
-
-  return NextResponse.json({ participant, billing: { message: billing?.message ?? null, action: billing?.action ?? 'none' } }, { status: 201 })
+  // Everything after the ownership check is shared with the admin event roster
+  // (lib/group-participant-add.ts), so both paths add a person identically.
+  const result = await addParticipantToGroup(db, registration, body, { memberId: member.id, label: 'organiser' })
+  return NextResponse.json(result.body, { status: result.status })
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember } from '@/lib/community'
 import { requestSession } from '@/lib/coaching'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -13,6 +13,9 @@ export async function POST(req: Request) {
 
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'request')
+  if (restricted) return restricted
 
   const { workshopId, preferredDate, preferredTime, note } = await req.json().catch(() => ({}))
   if (!workshopId) return NextResponse.json({ error: 'workshopId is required' }, { status: 400 })

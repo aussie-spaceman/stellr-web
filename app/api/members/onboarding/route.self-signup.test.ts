@@ -397,3 +397,64 @@ describe('flag ON — review regressions', () => {
     expect(state.sequence).not.toContain('email:confirmation')
   })
 })
+
+// Review (3 Nov 2026, verify pass): a date of birth on file is never swapped
+// for a younger one, and the profile the Clerk webhook no longer keeps comes
+// from the login once the age is known.
+describe('flag ON — a date of birth on file, and the profile from the login', () => {
+  beforeEach(() => { process.env.MINOR_SELF_SIGNUP_ENABLED = 'true' })
+  const onboardedAdult = () => {
+    state.byClerk = { id: 'm-1', is_active: true, date_of_birth: yearsAgo(40), gender: 'female', clerk_user_id: 'clerk-1' }
+  }
+  const FILE_403 = 'Your date of birth is already on file and cannot be changed here. Please contact Stellr.'
+
+  it('an onboarded adult posting an under-13 date straight to onboarding gets the 403, never the pending path', async () => {
+    onboardedAdult()
+    const res = await post({ date_of_birth: yearsAgo(12), first_name: 'Sam', parent_email: 'parent@example.test' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe(FILE_403)
+    expect(memberWrites()).toEqual([])
+    expect(state.opened).toEqual([])
+    expect(state.sent).toEqual([])
+  })
+
+  it('so does the age screen: no pending row is opened for an adult on file', async () => {
+    onboardedAdult()
+    const res = await post({ stage: 'age', date_of_birth: yearsAgo(12) })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe(FILE_403)
+    expect(state.screened).toEqual([])
+    expect(memberWrites()).toEqual([])
+  })
+
+  it('an adult on file cannot become a pending teen either, nor a teen on file a child', async () => {
+    onboardedAdult()
+    expect((await post(student(yearsAgo(15)))).status).toBe(403)
+    state.byClerk = { id: 'm-1', is_active: true, date_of_birth: yearsAgo(15), clerk_user_id: 'clerk-1' }
+    expect((await post({ date_of_birth: yearsAgo(12), first_name: 'Sam', parent_email: 'parent@example.test' })).status).toBe(403)
+    expect(state.opened).toEqual([])
+    expect(memberWrites()).toEqual([])
+  })
+
+  it('the same adult re-saving their own date is unchanged', async () => {
+    state.byClerk = { id: 'm-1', is_active: true, date_of_birth: ADULT.date_of_birth, clerk_user_id: 'clerk-1' }
+    expect((await post(ADULT)).status).toBe(200)
+  })
+
+  it("a sign-up row with no name gets the login's name once the date of birth says 13 or over", async () => {
+    expect((await post(ADULT)).status).toBe(200)
+    expect(memberWrites()[0].payload).toMatchObject({ first_name: 'Sam', last_name: 'Surname' })
+  })
+
+  it('a name already on the row (a registration, an admin) is never overwritten', async () => {
+    state.byClerk = { id: 'm-1', is_active: true, date_of_birth: null, first_name: 'Samantha', last_name: 'Lee', clerk_user_id: 'clerk-1' }
+    expect((await post(ADULT)).status).toBe(200)
+    expect(memberWrites()[0].payload).not.toHaveProperty('first_name')
+    expect(memberWrites()[0].payload).not.toHaveProperty('last_name')
+  })
+
+  it("an adult who sends no bracket is 'adult' (the sign-up row no longer carries one)", async () => {
+    expect((await post({ ...ADULT, age_bracket: '' })).status).toBe(200)
+    expect(memberWrites()[0].payload).toMatchObject({ age_bracket: 'adult' })
+  })
+})

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { applyGrantTrigger } from '@/lib/membership-grants'
-import { normalizeEmail } from '@/lib/member-enums'
+import { normalizeAgeBracket, normalizeEmail } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
 import { grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
@@ -11,7 +11,7 @@ import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboardi
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
-import { isKnownMinorOn, isMinorOn } from '@/lib/age'
+import { isKnownMinorOn, isMinorOn, isUnder13On, isValidDob } from '@/lib/age'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { mayLinkLogin, memberAgeFacts, youngestDob } from '@/lib/guardian-consent'
 import {
@@ -61,6 +61,11 @@ export async function POST(req: Request) {
     const db = supabaseServer()
     const prior = await findPriorRow(db, userId)
     if (prior.row?.is_active === false) return accountClosed()
+    // A date of birth on file is never swapped for a younger one here, in
+    // either direction: an adult already on file who posts an under-13 date
+    // gets the same answer as a minor posting an adult one, never the pending
+    // path (which would wipe their profile and queue the account for purge).
+    if (youngerThanOnFile(prior.row?.date_of_birth, early.dateOfBirth)) return dobOnFile()
     // COPPA: under 13 (the younger of this date and any on file), and no
     // parent's agreement on file — the pending path, not the full profile.
     const coppa = await mayLinkLogin(db, prior.row, early.dateOfBirth)
@@ -134,7 +139,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Stellr volunteers must be 18 or older' }, { status: 400 })
   }
   // A minor is a high-school participant whatever they selected.
-  const resolvedBracket = required.isMinor ? 'high_school' : age_bracket
+  // An adult picks their bracket on the role step. A sign-up row no longer
+  // carries an 'adult' default from the Clerk webhook (its age is not known
+  // then), so a blank or unknown answer from an adult is 'adult', never ''.
+  const resolvedBracket = required.isMinor ? 'high_school' : normalizeAgeBracket(age_bracket)
   const resolvedRole = required.isMinor ? 'participant' : event_role
 
   // deep review MEM-3: onboarding is a POST anyone signed in can re-run, and it
@@ -293,9 +301,24 @@ export async function POST(req: Request) {
   // (webhook may not have fired yet in local dev)
   const { data: existingMember } = await db
     .from('members')
-    .select('id, email, first_name, last_name')
+    .select('id, email, first_name, last_name, profile_photo_url')
     .eq('clerk_user_id', userId)
     .maybeSingle()
+
+  // The Clerk webhook keeps no name or photo for a self sign-up (its age is not
+  // known then, COPPA data minimisation). They come from the login here, now
+  // the date of birth is: a name for everyone on this path, and the photo for
+  // 13 and over. Only where the row has none, so a name a registration or an
+  // admin entered is never overwritten. (An under-13 with no parent's
+  // agreement never gets here: childPendingSignup keeps only a first name.)
+  const loginFirst = guardClerkUser?.firstName?.trim() || ''
+  const loginLast = guardClerkUser?.lastName?.trim() || ''
+  const loginPhoto = isUnder13On(dobCheck.dateOfBirth) ? null : guardClerkUser?.imageUrl ?? null
+  const fillFromLogin = (row: { first_name?: string | null; last_name?: string | null; profile_photo_url?: string | null }) => ({
+    ...(!row.first_name?.trim() && loginFirst ? { first_name: loginFirst } : {}),
+    ...(!row.last_name?.trim() && loginLast ? { last_name: loginLast } : {}),
+    ...(!row.profile_photo_url && loginPhoto ? { profile_photo_url: loginPhoto } : {}),
+  })
 
   const profileUpdates = {
     clerk_user_id: userId,
@@ -341,7 +364,7 @@ export async function POST(req: Request) {
   if (existingMember) {
     const { error } = await db
       .from('members')
-      .update(profileUpdates)
+      .update({ ...profileUpdates, ...fillFromLogin(existingMember) })
       .eq('id', existingMember.id)
     memberError = error
     memberId = existingMember.id
@@ -354,7 +377,7 @@ export async function POST(req: Request) {
     const primaryEmail = normalizeEmail(primary?.emailAddress)
 
     const { data: byEmail } = primaryEmail
-      ? await db.from('members').select('id, clerk_user_id').eq('email', primaryEmail).maybeSingle()
+      ? await db.from('members').select('id, clerk_user_id, first_name, last_name, profile_photo_url').eq('email', primaryEmail).maybeSingle()
       : { data: null }
 
     if (byEmail) {
@@ -376,7 +399,7 @@ export async function POST(req: Request) {
       // Only while still unlinked, so a link made in the meantime is never overwritten.
       const { data: linked, error } = await db
         .from('members')
-        .update(profileUpdates)
+        .update({ ...profileUpdates, ...fillFromLogin(byEmail) })
         .eq('id', byEmail.id)
         .is('clerk_user_id', null)
         .select('id')
@@ -393,6 +416,7 @@ export async function POST(req: Request) {
         ...profileUpdates,
         first_name: clerkUser?.firstName ?? '',
         last_name: clerkUser?.lastName ?? '',
+        profile_photo_url: loginPhoto,
         email: primaryEmail,
       }).select('id').single()
       memberError = error
@@ -629,6 +653,25 @@ function guardianConsentRequired() {
   )
 }
 
+function dobOnFile() {
+  return NextResponse.json(
+    { error: 'Your date of birth is already on file and cannot be changed here. Please contact Stellr.' },
+    { status: 403 },
+  )
+}
+
+const BAND_RANK = { child: 0, teen: 1, adult: 2 } as const
+
+/**
+ * Whether `submitted` puts the member in a younger age band than the usable
+ * date of birth on their own row. Nothing on file (or an unreadable date)
+ * decides nothing: there is no older answer to protect.
+ */
+function youngerThanOnFile(onFile: string | null | undefined, submitted: string): boolean {
+  if (!isValidDob(onFile)) return false
+  return BAND_RANK[ageBand(submitted)] < BAND_RANK[ageBand(onFile)]
+}
+
 function tryAgain() {
   return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
 }
@@ -682,12 +725,10 @@ async function ageStage(userId: string, dateOfBirth: unknown) {
   const prior = await findPriorRow(db, userId)
   if (prior.row?.is_active === false) return accountClosed()
   const onFile = prior.row ? (await memberAgeFacts(db, prior.row)).youngestDateOfBirth : null
-  if (isKnownMinorOn(onFile) && !isMinorOn(dobCheck.dateOfBirth)) {
-    return NextResponse.json(
-      { error: 'Your date of birth is already on file and cannot be changed here. Please contact Stellr.' },
-      { status: 403 },
-    )
-  }
+  if (isKnownMinorOn(onFile) && !isMinorOn(dobCheck.dateOfBirth)) return dobOnFile()
+  // Nor an older date on file for a younger one: an adult's account must not be
+  // opened as a pending child (inactive, then purged after 30 days).
+  if (youngerThanOnFile(prior.row?.date_of_birth, dobCheck.dateOfBirth)) return dobOnFile()
   const band = ageBand(youngestDob([dobCheck.dateOfBirth, onFile]))
   // Nothing is recorded for an adult, or before this login has its own row.
   if (band === 'adult' || !prior.row || !prior.linked) return NextResponse.json({ band, consented: false })

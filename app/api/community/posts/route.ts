@@ -163,6 +163,10 @@ export async function PATCH(req: Request) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'moderate')
+  if (restricted) return restricted
+
   const body = await req.json().catch(() => ({}))
   const postId = typeof body.postId === 'string' ? body.postId : null
   if (!postId || body.action !== 'toggle-announcement') {

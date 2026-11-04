@@ -12,12 +12,14 @@ through an invite, an event registration or a consent envelope.
 | Age on the day they register | What happens |
 |---|---|
 | 18 or over | Registers at once, as today. |
-| 13–17 | Registers, gives a parent or legal guardian's name and email (as their emergency contact). The guardian is sent the Participation Agreement — Student / Minor on Stellr signing. Until it is signed the account is **pending**: the student can read public content, their own profile and their own registrations; they cannot post, comment, chat, react, upload, contribute resources, join a Space, or appear in the member directory or @mention search. |
+| 13–17 | Registers, gives a parent or legal guardian's name and email (as their emergency contact). The guardian is sent the Participation Agreement — Student / Minor on Stellr signing. Until it is signed the account is **pending**: the student can read public content, their own profile and their own registrations; they cannot post, comment, chat, react, upload, contribute resources, join a Space, cohort or workshop, request or book coaching, buy session credits, host, message other members, or appear in the member directory or @mention search. They can still report content to moderators and delete their own messages. |
 | Under 13 | Gives only a first name, date of birth and a parent's email (their login email is held by the sign-in provider). The parent is sent the same agreement. The account is **inactive** until the parent signs: no community (reading included), no member pages, no event or group registration, and no other profile field can be added. After consent: never listed in the directory or mention search, no direct messages (none exist), and no posting, comments or chat, because Stellr has no pre-moderated space yet. Reactions and joining a Space are allowed. |
-| Date of birth missing or not a real date | Refused at the age screen. Anywhere a stored date is unreadable, the account is treated as under 13. |
+| Date of birth missing or not a real date | Refused at the age screen. Anywhere a stored date is unreadable, the account is treated as under 18: restricted, as a pending 13–17 account is, until a parent or guardian consents. |
 
 - The age screen asks for the date of birth on its own, first, and does not mention any age threshold.
 - A date of birth on file that says the person is a minor cannot be changed by them to an adult one.
+- Until the date of birth is given, a new sign-up's record holds only the login email and its sign-in ID: no name, no photo and no age bracket. Onboarding then keeps what the age band allows (under 13: first name, date of birth, parent's email; 13 and over: the name and photo from their login).
+- A date of birth on file cannot be changed by the member to a younger one either: an adult on file who gives an under-13 date is told to contact Stellr.
 - Marketing consent is set off for everyone under 18 at onboarding.
 - Only **self**-registration is pending. A minor an adult brought to Stellr (an admin invite, an event or group registration, an event's consent form) keeps today's path: their event's own consent form, no pending state, no 30-day deletion.
 - The 30-day clock starts when the date of birth is given on the age screen, so a sign-up abandoned there is deleted too.

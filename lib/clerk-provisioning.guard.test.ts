@@ -192,7 +192,7 @@ describe('every Clerk account sits behind the COPPA guard', () => {
     expect(webhook.lastIndexOf('mayLinkLogin(', link)).toBeGreaterThan(webhook.indexOf("type === 'user.created'"))
 
     const onboarding = code(read('app/api/members/onboarding/route.ts'))
-    const byEmail = onboarding.indexOf('.update(profileUpdates)\n        .eq(\'id\', byEmail.id)')
+    const byEmail = onboarding.indexOf('.update({ ...profileUpdates, ...fillFromLogin(byEmail) })\n        .eq(\'id\', byEmail.id)')
     expect(byEmail).toBeGreaterThan(0)
     const gate = onboarding.indexOf('mayLinkLogin(')
     expect(gate).toBeGreaterThan(0)

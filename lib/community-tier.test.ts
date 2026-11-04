@@ -39,7 +39,10 @@ const yearsAgo = (n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
-const WRITES = ['post', 'comment', 'chat', 'react', 'upload', 'contribute', 'join'] as const
+const WRITES = [
+  'post', 'comment', 'chat', 'react', 'upload', 'contribute', 'join',
+  'request', 'purchase', 'host', 'message', 'moderate',
+] as const
 const before = process.env.MINOR_SELF_SIGNUP_ENABLED
 
 beforeEach(() => {
@@ -101,12 +104,12 @@ describe('memberCommunityTier', () => {
 })
 
 describe('tierAllows / communityWriteBlock', () => {
-  it('full allows every write; consent_pending none; child only react and join', () => {
+  it('full allows every write; consent_pending none; child only react, join and purchase', () => {
     for (const w of WRITES) {
       expect(tierAllows('full', w)).toBe(true)
       expect(tierAllows('consent_pending', w)).toBe(false)
       expect(tierAllows('inactive', w)).toBe(false)
-      expect(tierAllows('child', w), w).toBe(w === 'react' || w === 'join')
+      expect(tierAllows('child', w), w).toBe(w === 'react' || w === 'join' || w === 'purchase')
     }
   })
 

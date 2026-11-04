@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember } from '@/lib/community'
 import { canRenameAttachment } from '@/lib/resources-catalogue'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -16,6 +16,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'upload')
+  if (restricted) return restricted
 
   const { id } = await params
   const owner = await canRenameAttachment(member, id)

@@ -66,9 +66,32 @@ export async function memberCommunityTier(
   return 'full'
 }
 
-export type CommunityWrite = 'post' | 'comment' | 'chat' | 'react' | 'upload' | 'contribute' | 'join'
+/**
+ * The kinds of member-initiated community write. Every POST/PUT/PATCH/DELETE
+ * handler under app/api/community asks communityWriteBlock with one of these,
+ * or is named with its reason in COMMUNITY_WRITE_EXEMPT
+ * (app/api/community/write-gate.test.ts fails the build otherwise).
+ *
+ *   post, comment, chat — content other members read
+ *   react               — a reaction on someone's post
+ *   upload, contribute  — a file into a post, a Space or a resource container
+ *   join                — joining a Space, cohort or workshop (or accepting an invite to one)
+ *   request             — asking for, or booking, a coaching session with a coach
+ *   purchase            — buying session credits
+ *   host                — running a cohort or workshop: schedules, actions, attendees
+ *   message             — contacting other members directly (a teacher's nudge)
+ *   moderate            — moderator actions on other members' posts
+ */
+export type CommunityWrite =
+  | 'post' | 'comment' | 'chat' | 'react' | 'upload' | 'contribute' | 'join'
+  | 'request' | 'purchase' | 'host' | 'message' | 'moderate'
 
-const CHILD_ALLOWED: ReadonlySet<CommunityWrite> = new Set(['react', 'join'])
+/**
+ * What a consented under-13 may do. Joining (a Space, a cohort) and reacting,
+ * as before, and buying the credits a cohort costs. Never one-to-one coaching
+ * with an adult, hosting, messaging or moderating.
+ */
+const CHILD_ALLOWED: ReadonlySet<CommunityWrite> = new Set(['react', 'join', 'purchase'])
 
 /** Whether a member of `tier` may make this kind of community write. */
 export function tierAllows(tier: CommunityTier, action: CommunityWrite): boolean {

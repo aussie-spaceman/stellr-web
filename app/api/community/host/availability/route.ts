@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { getHostCaps } from '@/lib/sessions'
 
 // Host weekly availability (FR-COM-11/12): coaches/mentors set when they're free.
 
-async function requireHost() {
-  const member = await getCurrentMember()
-  if (!member) return null
-  const caps = await getHostCaps(member.id)
-  if (!caps.canCoach && !caps.canMentor) return null
-  return member
+async function isHost(memberId: string): Promise<boolean> {
+  const caps = await getHostCaps(memberId)
+  return caps.canCoach || caps.canMentor
 }
 
 // POST — add a window. Body: { weekday, startMinute, endMinute, sessionType? }
@@ -21,8 +18,12 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await requireHost()
+  const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'host')
+  if (restricted) return restricted
+  if (!(await isHost(member.id))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (
@@ -57,8 +58,12 @@ export async function DELETE(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await requireHost()
+  const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'host')
+  if (restricted) return restricted
+  if (!(await isHost(member.id))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await req.json().catch(() => ({}))
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()

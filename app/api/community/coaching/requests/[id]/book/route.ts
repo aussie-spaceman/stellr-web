@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock, getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { getRequestById, scheduleFromRequest } from '@/lib/coaching-requests'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
@@ -24,6 +24,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'request')
+  if (restricted) return restricted
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))

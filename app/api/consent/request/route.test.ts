@@ -14,6 +14,10 @@ const { state } = vi.hoisted(() => ({
     reminded: [] as string[],
     sent: 0,
     opened: [] as Array<Record<string, unknown>>,
+    /** Calls to markConsentRequestSent, and the order of sends and stamps. */
+    stamped: 0,
+    sequence: [] as string[],
+    outcome: 'issued',
   },
 }))
 
@@ -45,8 +49,8 @@ vi.mock('@/lib/pending-consent', async (orig) => ({
   getPendingConsent: async () => state.pending,
   settlePendingConsent: async () => state.consented,
   openPendingConsent: async (_db: unknown, input: Record<string, unknown>) => { state.opened.push(input) },
-  sendConsentRequest: async () => { state.sent += 1; return { outcome: 'issued' } },
-  markConsentRequestSent: async () => {},
+  sendConsentRequest: async () => { state.sent += 1; state.sequence.push('send'); return { outcome: state.outcome } },
+  markConsentRequestSent: async () => { state.stamped += 1; state.sequence.push('stamp') },
 }))
 
 const { POST } = await import('./route')
@@ -61,6 +65,9 @@ beforeEach(() => {
   state.reminded = []
   state.sent = 0
   state.opened = []
+  state.stamped = 0
+  state.sequence = []
+  state.outcome = 'issued'
 })
 
 describe('POST /api/consent/request', () => {
@@ -122,5 +129,35 @@ describe('POST /api/consent/request', () => {
     expect((await post({ guardian_email: 'kid@example.test' })).status).toBe(400)
     expect((await post({ guardian_email: 'nope' })).status).toBe(400)
     expect(state.voided).toEqual([])
+  })
+})
+
+// Review (3 Nov 2026, verify pass): only an 'issued' envelope stamped
+// last_sent_at, so any other answer left the hourly limit open.
+describe('POST /api/consent/request — every send attempt starts the hourly clock', () => {
+  it.each(['in_flight', 'failed', 'not_required'])("a fresh send answered '%s' is stamped, before the send", async (outcome) => {
+    state.open = []
+    state.outcome = outcome
+    await post()
+    expect(state.stamped).toBe(1)
+    expect(state.sequence).toEqual(['stamp', 'send'])
+  })
+
+  it('a reminder is stamped', async () => {
+    await post()
+    expect(state.reminded).toEqual(['env-1'])
+    expect(state.stamped).toBe(1)
+  })
+
+  it('a corrected address is stamped before the new form goes', async () => {
+    await post({ guardian_email: 'parent2@example.test' })
+    expect(state.sequence).toEqual(['stamp', 'send'])
+  })
+
+  it('a refusal (too soon, own address) is not an attempt and stamps nothing', async () => {
+    await post({ guardian_email: 'kid@example.test' })
+    state.pending = { ...state.pending, last_sent_at: new Date().toISOString() }
+    await post()
+    expect(state.stamped).toBe(0)
   })
 })

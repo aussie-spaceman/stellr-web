@@ -85,6 +85,12 @@ export async function POST(req: Request) {
     .in('status', ['created', 'sent', 'delivered'])
   const openRows = (open ?? []) as Array<{ id: string; envelope_id: string; provider: string | null }>
 
+  // The hourly limit counts every send ATTEMPT, whatever comes of it. Stamped
+  // before anything goes out: sendConsentRequest stamps only an 'issued'
+  // envelope, so an answer such as 'in flight', or a send that failed, left the
+  // clock where it was and the next request could send again at once.
+  await markConsentRequestSent(db, member.id)
+
   if (changing && guardianEmail !== pending.guardian_email) {
     for (const row of openRows) {
       try {
@@ -116,7 +122,6 @@ export async function POST(req: Request) {
 
   if (openRows.length) {
     await remindEnvelopeRow(db, openRows[0])
-    await markConsentRequestSent(db, member.id)
     return NextResponse.json({ state: 'sent', outcome: 'reminded' })
   }
   const result = await sendConsentRequest(db, member.id)

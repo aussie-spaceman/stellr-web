@@ -41,6 +41,19 @@ const ROUTES: Array<{ name: string; path: string; action: string }> = [
   { name: 'media upload', path: './media/upload/route', action: 'upload' },
   { name: 'resource contribution', path: './resources/contribute/route', action: 'contribute' },
   { name: 'space join', path: './spaces/join/route', action: 'join' },
+  // Review (3 Nov 2026): the first version left every write below open.
+  { name: 'coaching session request', path: './coaching/request/route', action: 'request' },
+  { name: 'coaching request', path: './coaching/requests/route', action: 'request' },
+  { name: 'coaching top-up', path: './coaching/topup/route', action: 'purchase' },
+  { name: 'coaching manage', path: './coaching/manage/route', action: 'host' },
+  { name: 'mentoring sign-up', path: './mentoring/register/route', action: 'join' },
+  { name: 'mentoring top-up', path: './mentoring/topup/route', action: 'purchase' },
+  { name: 'mentoring cohort create', path: './mentoring/cohorts/route', action: 'host' },
+  { name: 'mentoring manage', path: './mentoring/manage/route', action: 'host' },
+  { name: 'host sessions', path: './host/sessions/route', action: 'host' },
+  { name: 'host availability', path: './host/availability/route', action: 'host' },
+  { name: 'space attachment', path: './resources/attach/route', action: 'upload' },
+  { name: 'teacher nudge', path: './training/group-nudge/route', action: 'message' },
 ]
 
 const modules: Record<string, { POST: (req: Request) => Promise<Response> }> = {
@@ -51,7 +64,23 @@ const modules: Record<string, { POST: (req: Request) => Promise<Response> }> = {
   './media/upload/route': await import('./media/upload/route'),
   './resources/contribute/route': await import('./resources/contribute/route'),
   './spaces/join/route': await import('./spaces/join/route'),
+  './coaching/request/route': await import('./coaching/request/route'),
+  './coaching/requests/route': await import('./coaching/requests/route'),
+  './coaching/topup/route': await import('./coaching/topup/route'),
+  './coaching/manage/route': await import('./coaching/manage/route'),
+  './mentoring/register/route': await import('./mentoring/register/route'),
+  './mentoring/topup/route': await import('./mentoring/topup/route'),
+  './mentoring/cohorts/route': await import('./mentoring/cohorts/route'),
+  './mentoring/manage/route': await import('./mentoring/manage/route'),
+  './host/sessions/route': await import('./host/sessions/route'),
+  './host/availability/route': await import('./host/availability/route'),
+  './resources/attach/route': await import('./resources/attach/route'),
+  './training/group-nudge/route': await import('./training/group-nudge/route'),
 }
+const cohortRespond = await import('./cohorts/respond/route')
+const posts = await import('./posts/route')
+const bookRequest = await import('./coaching/requests/[id]/book/route')
+const renameAttachment = await import('./resources/attachment/[id]/route')
 const inviteRespond = await import('./spaces/invite/respond/route')
 
 beforeEach(() => {
@@ -93,5 +122,43 @@ describe('Space invite respond', () => {
     const res = await respond('decline')
     expect(res.status).toBe(200)
     expect(state.calls).toEqual([])
+  })
+})
+
+describe('the other community writes (review, 3 Nov 2026)', () => {
+  const post = (body: unknown, method = 'POST') =>
+    new Request('http://localhost/api/community', { method, body: JSON.stringify(body) })
+
+  it('accepting a cohort invite is a join; declining stays open', async () => {
+    const res = await cohortRespond.POST(post({ cohortId: 'c-1', action: 'accept' }))
+    expect(res.status).toBe(403)
+    expect(state.calls).toEqual(['join'])
+    expect(state.dbTouched).toBe(0)
+
+    state.calls = []
+    state.block = false
+    await cohortRespond.POST(post({ cohortId: 'c-1', action: 'decline' })).catch(() => null)
+    expect(state.calls).toEqual([])
+  })
+
+  it('pinning an announcement is a moderator write', async () => {
+    const res = await posts.PATCH(post({ postId: 'p-1', action: 'toggle-announcement' }, 'PATCH'))
+    expect(res.status).toBe(403)
+    expect(state.calls).toEqual(['moderate'])
+    expect(state.dbTouched).toBe(0)
+  })
+
+  it('booking a matched coaching request is a request', async () => {
+    const res = await bookRequest.POST(post({ start: '2099-01-01T10:00:00Z' }), { params: Promise.resolve({ id: 'r-1' }) })
+    expect(res.status).toBe(403)
+    expect(state.calls).toEqual(['request'])
+    expect(state.dbTouched).toBe(0)
+  })
+
+  it('renaming a space attachment is an upload write', async () => {
+    const res = await renameAttachment.PATCH(post({ name: 'x' }, 'PATCH'), { params: Promise.resolve({ id: 'a-1' }) })
+    expect(res.status).toBe(403)
+    expect(state.calls).toEqual(['upload'])
+    expect(state.dbTouched).toBe(0)
   })
 })

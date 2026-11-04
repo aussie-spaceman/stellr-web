@@ -10,7 +10,12 @@
  *    (node_modules/.cache/idor-canary/, so imports still resolve), deletes the
  *    one line that carries the isolation guard, points the suite at the copy
  *    through an env var, and runs it. The suite must FAIL, and fail for the
- *    right reason (a `leak` or `honey_write` outcome), not a syntax error.
+ *    right reason: the mutated case itself must record a `leak`, `honey_write`
+ *    or `oracle` outcome in the machine-readable results file
+ *    (IDOR_RESULTS_FILE, written by test/idor/harness.ts). Text in Vitest's
+ *    output does not count: a failure's code frame quotes the test source,
+ *    which names those outcomes, so a mutation that only crashes the handler
+ *    would otherwise look caught.
  *
  * Exits 0 when every mutation was caught, 1 when one survived (the suite could
  * not see a missing guard), 2 when the canary itself is broken (a guard line
@@ -35,18 +40,42 @@ const ROUTE_SUITE = 'test/idor/idor-routes.test.ts'
  *   route:   the copy replaces one real route in the generated suite (IDOR_ROUTE_OVERRIDE)
  */
 export const MUTATIONS = [
-  { name: 'fixture: owner filter removed from the query', kind: 'fixture', file: FIXTURES, line: /CANARY:owner-filter/ },
-  { name: 'fixture: owner check removed after the read', kind: 'fixture', file: FIXTURES, line: /CANARY:owner-check/ },
-  { name: 'fixture: admin guard removed', kind: 'fixture', file: FIXTURES, line: /CANARY:admin-guard/ },
-  { name: 'fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, line: /CANARY:tenant-filter/ },
-  { name: 'fixture: owner filter removed from an update', kind: 'fixture', file: FIXTURES, line: /CANARY:write-filter/ },
+  { name: 'fixture: owner filter removed from the query', kind: 'fixture', file: FIXTURES, label: 'ownerFiltered', line: /CANARY:owner-filter/ },
+  { name: 'fixture: owner check removed after the read', kind: 'fixture', file: FIXTURES, label: 'ownerChecked', line: /CANARY:owner-check/ },
+  { name: 'fixture: admin guard removed', kind: 'fixture', file: FIXTURES, label: 'adminGuarded', line: /CANARY:admin-guard/ },
+  { name: 'fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, label: 'tenantFiltered', line: /CANARY:tenant-filter/ },
+  { name: 'fixture: owner filter removed from an update', kind: 'fixture', file: FIXTURES, label: 'scopedWrite', line: /CANARY:write-filter/ },
   {
     name: 'real route: member filter removed from DELETE /api/members/event-participations/[id]',
     kind: 'route',
     file: 'app/api/members/event-participations/[id]/route.ts',
+    label: 'app/api/members/event-participations/[id]/route.ts',
     line: /^\s*\.eq\('member_id', member\.id\)\s*$/,
   },
 ]
+
+/** Outcomes that prove the suite saw the missing guard. */
+export const CAUGHT_OUTCOMES = ['leak', 'honey_write', 'oracle']
+
+/**
+ * Was the mutation caught for the right reason? The run failed AND the
+ * mutated case (by label) recorded a failing outcome in the results file.
+ * `results` is the file's text: one JSON object per line.
+ */
+export function caughtFor(exitCode, results, label) {
+  if (exitCode === 0) return false
+  return results
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => {
+      try {
+        return JSON.parse(l)
+      } catch {
+        return null
+      }
+    })
+    .some((r) => r && r.label === label && CAUGHT_OUTCOMES.includes(r.outcome))
+}
 
 function vitest(file, env) {
   const r = spawnSync('npx', ['vitest', 'run', file], {
@@ -90,11 +119,13 @@ function main() {
       }
       const copy = path.join(dir, path.basename(m.file))
       writeFileSync(copy, text)
+      const resultsFile = path.join(dir, 'results.jsonl')
+      writeFileSync(resultsFile, '')
       const r =
         m.kind === 'fixture'
-          ? vitest(FIXTURE_SUITE, { IDOR_FIXTURE_DIR: dir })
-          : vitest(ROUTE_SUITE, { IDOR_ROUTE_OVERRIDE: `${m.file}=${copy}` })
-      const caught = r.code !== 0 && /\b(leak|honey_write)\b/.test(r.out)
+          ? vitest(FIXTURE_SUITE, { IDOR_FIXTURE_DIR: dir, IDOR_RESULTS_FILE: resultsFile })
+          : vitest(ROUTE_SUITE, { IDOR_ROUTE_OVERRIDE: `${m.file}=${copy}`, IDOR_RESULTS_FILE: resultsFile })
+      const caught = caughtFor(r.code, readFileSync(resultsFile, 'utf8'), m.label)
       if (caught) console.log(`  ✓ caught: ${m.name}`)
       else {
         survived.push(m.name)

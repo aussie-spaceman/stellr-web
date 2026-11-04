@@ -4,7 +4,7 @@
 // and the canary workflow's shape.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { CANARY_TENANT, HONEYTOKENS, HONEYTOKEN_VALUES, honeytokenFor, scanForHoneytokens } from '@/lib/testing/honeytokens'
+import { CANARY_TENANT, HONEYTOKENS, HONEYTOKEN_VALUES, honeyColumnId, honeytokenFor, isCanaryId, scanForHoneytokens } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { isIdLikeName, requestIdInputs } from '@/lib/security/route-ast'
 import { idorTargetFor, segmentsOf, urlPatternOf } from '@/lib/security/idor-targets'
@@ -52,6 +52,20 @@ describe('honeytokens', () => {
     expect(honeytokenFor('number')).toBe(HONEYTOKENS.credentialNumber)
     expect(honeytokenFor('memberIds')).toEqual([HONEYTOKENS.id])
     expect(honeytokenFor('...path')).toEqual([HONEYTOKENS.storagePath])
+    expect(honeytokenFor('storagePath')).toBe(HONEYTOKENS.storagePath)
+    expect(honeytokenFor('guardian_email')).toBe(HONEYTOKENS.email)
+    expect(honeytokenFor('items[].variantId')).toBe(HONEYTOKENS.id)
+  })
+
+  it('column ids are valid uuids, distinct per column, recognised as Canary and never the sent id', () => {
+    const a = honeyColumnId('event_id')
+    const b = honeyColumnId('team_id')
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(a).not.toBe(b)
+    expect(a).not.toBe(HONEYTOKENS.id)
+    expect(isCanaryId(a) && isCanaryId(HONEYTOKENS.id) && isCanaryId(HONEYTOKENS.memberId)).toBe(true)
+    expect(isCanaryId('00000000-0000-4000-8000-00000000a001')).toBe(false)
+    expect(scanForHoneytokens({ event_id: a }, { sent: [HONEYTOKENS.id] }).length).toBe(1)
   })
 })
 
@@ -66,7 +80,7 @@ describe('requestIdInputs', () => {
         const sp = req.nextUrl.searchParams
         const t = sp.get('teamId'); const all = sp.getAll('memberIds')
       }`
-    expect(requestIdInputs(f, src)).toEqual({ query: ['id', 'memberIds', 'teamId'], body: [] })
+    expect(requestIdInputs(f, src)).toEqual({ query: ['id', 'memberIds', 'teamId'], body: [], fill: [] })
   })
   it('reads body ids from destructuring, property reads, formData and zod keys', () => {
     const src = `
@@ -78,14 +92,22 @@ describe('requestIdInputs', () => {
         const { token } = body
         const form = await req.formData(); form.get('spaceId')
       }`
-    expect(requestIdInputs(f, src)).toEqual({ query: [], body: ['cohortId', 'event_slug', 'memberId', 'registrationId', 'spaceId', 'token'] })
+    expect(requestIdInputs(f, src)).toEqual({
+      query: [],
+      body: ['cohortId', 'event_slug', 'memberId', 'registrationId', 'spaceId', 'token'],
+      fill: ['name', 'note'],
+    })
   })
   it('ignores zod keys in a file that reads no body, and non-id names', () => {
-    expect(requestIdInputs(f, `const S = z.object({ teamId: z.string() }); export function GET() {}`)).toEqual({ query: [], body: [] })
+    expect(requestIdInputs(f, `const S = z.object({ teamId: z.string() }); export function GET() {}`)).toEqual({ query: [], body: [], fill: [] })
     expect(isIdLikeName('name')).toBe(false)
     expect(isIdLikeName('limit')).toBe(false)
     expect(isIdLikeName('workshopId')).toBe(true)
     expect(isIdLikeName('school_id')).toBe(true)
+    for (const n of ['storagePath', 'path', 'pdfPath', 'ref', 'objectRef', 'email', 'guardian_email', 'items[].variantId']) {
+      expect(isIdLikeName(n), n).toBe(true)
+    }
+    expect(isIdLikeName('items[].qty')).toBe(false)
   })
 })
 
@@ -148,6 +170,46 @@ describe('honey database', () => {
     await run(client.from('team_members').insert({ team_id: HONEYTOKENS.id, member_id: 'me' }))
     await run(client.from('audit_log').insert({ target: HONEYTOKENS.id }))
     expect(state.writes.map((w) => `${w.table}:${w.op}`)).toEqual(['teams:update', 'team_members:insert'])
+  })
+  it('uuid columns show a per-column Canary id unless the query pinned them', async () => {
+    const { client } = db()
+    const { data } = await run((client.from('registrations').select('id, event_id, team_id') as any).eq('event_id', HONEYTOKENS.id).single())
+    const row = data as Record<string, string>
+    expect(row.event_id).toBe(HONEYTOKENS.id)
+    expect(row.id).toBe(honeyColumnId('id'))
+    expect(row.team_id).toBe(honeyColumnId('team_id'))
+    expect(row.team_id).not.toBe(row.id)
+    expect(scanForHoneytokens({ id: row.id }, { sent: [HONEYTOKENS.id] })).toHaveLength(1)
+  })
+  it('an owner column matches the sent id, the Canary member id and a column id', async () => {
+    for (const v of [HONEYTOKENS.id, HONEYTOKENS.memberId, honeyColumnId('member_id')]) {
+      const { client } = db()
+      const { data } = await run((client.from('event_participations').select('*') as any).eq('member_id', v))
+      expect((data as unknown[]).length, v).toBe(1)
+    }
+  })
+  it('an rpc carrying a Canary value is a honey write; storage and filters mark the db touched', async () => {
+    const { client, state } = db()
+    expect(state.touched).toBe(false)
+    await run((client as any).rpc('withdraw_registration', { p_registration_id: HONEYTOKENS.id }))
+    expect(state.writes.map((w) => w.table)).toEqual(['rpc:withdraw_registration'])
+    expect(state.touched).toBe(true)
+    const other = db()
+    await run((other.client as any).rpc('count_things', { p_member_id: 'me' }))
+    expect(other.state.writes).toEqual([])
+    expect(other.state.touched).toBe(false)
+  })
+  it('an inserted email the caller typed is not a honey write; an inserted Canary id is', async () => {
+    const { client, state } = db()
+    await run(client.from('contact_enquiries').insert({ email: HONEYTOKENS.email, message: 'hi' }))
+    expect(state.writes).toEqual([])
+    expect(state.touched).toBe(true)
+  })
+  it('honeyAbsent removes the honey row (the differential run)', async () => {
+    const state = newHoneyDbState({}, { honeyAbsent: true })
+    const client = honeyClient(state) as { from: (t: string) => any }
+    const { data } = await run(client.from('teams').select('*').eq('id', HONEYTOKENS.id).maybeSingle())
+    expect(data).toBeNull()
   })
   it('unknown builder methods chain instead of throwing', async () => {
     const { client } = db()

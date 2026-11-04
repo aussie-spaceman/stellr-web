@@ -7,8 +7,9 @@
 //
 // A route handler is id-bearing when a caller can name a record with it:
 //   - its path has a dynamic segment (`[id]`, `[slug]`, `[...path]`), or
-//   - it reads an id-like query parameter or body field, found by parsing the
-//     file (route-ast.ts requestIdInputs).
+//   - it reads an id-like query parameter or body field (an id, slug, token,
+//     storage path, reference or email, top-level or in a body array), found
+//     by parsing the file (route-ast.ts requestIdInputs).
 // Pages are not targets yet: they render, they do not return data, and the
 // data they read goes through the same lib code the handlers use. S5 adds a
 // page pass when tenant hosts exist (docs/SECURITY-route-manifest.md).
@@ -26,8 +27,10 @@ export interface IdorTarget {
   segments: string[]
   /** Id-like query parameters the handler reads. */
   query: string[]
-  /** Id-like body fields the handler reads. */
+  /** Id-like body fields the handler reads (`items[].variantId` for a nested one). */
   body: string[]
+  /** The other body fields it reads: filled in so request validation lets the ids through. */
+  fill: string[]
   /** The exported HTTP method handlers. */
   methods: string[]
 }
@@ -51,13 +54,13 @@ export function segmentsOf(file: string): string[] {
 
 export function idorTargetFor(file: string, cls: RouteClass, src: string): IdorTarget | null {
   const segments = segmentsOf(file)
-  const { query, body } = requestIdInputs(file, src)
+  const { query, body, fill } = requestIdInputs(file, src)
   if (segments.length === 0 && query.length === 0 && body.length === 0) return null
   const methods = analyzeRoute(file, src)
     .handlers.map((h) => h.name)
     .filter((m) => (HTTP_METHODS as readonly string[]).includes(m) && m !== 'HEAD' && m !== 'OPTIONS')
   if (methods.length === 0) return null
-  return { file, cls, urlPattern: urlPatternOf(file), segments, query, body, methods: [...new Set(methods)].sort() }
+  return { file, cls, urlPattern: urlPatternOf(file), segments, query, body, fill, methods: [...new Set(methods)].sort() }
 }
 
 /** Every id-bearing route handler file in the manifest, sorted by file. */

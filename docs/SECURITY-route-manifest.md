@@ -85,26 +85,28 @@ The route manifest says *who* may call a route. The IDOR suite checks *which rec
 
 ### What runs
 
-- **Targets.** `lib/security/idor-targets.ts` takes every route handler in the manifest that a caller can point at a record: a dynamic path segment (`[id]`, `[slug]`, `[...path]`), or an id-like query parameter or body field. The fields come from `requestIdInputs()` in `lib/security/route-ast.ts`, which parses the file (`searchParams.get('teamId')`, `const { memberId } = await req.json()`, `body.event_slug`, `form.get('spaceId')`, and the keys of a `z.object({…})` in a file that reads a body). On 4 Nov 2026: 211 routes (127 `stellr_only`, 60 `participant`, 22 `public`, 2 `webhook`). Pages are not targets yet; S5 adds a page pass with tenant hosts.
-- **Cases.** `test/idor/idor-routes.test.ts` emits one case per target and runs every exported method of the real handler. Each id input carries a **honeytoken**: a fake id or value of the canary tenant "Canary Academy" (AU/AUD), from `lib/testing/honeytokens.ts`.
+- **Targets.** `lib/security/idor-targets.ts` takes every route handler in the manifest that a caller can point at a record: a dynamic path segment (`[id]`, `[slug]`, `[...path]`), or an id-like query parameter or body field. The fields come from `requestIdInputs()` in `lib/security/route-ast.ts`, which parses the file (`searchParams.get('teamId')`, `const { memberId } = await req.json()`, `body.event_slug`, `form.get('spaceId')`, the keys of a `z.object({…})` in a file that reads a body, and fields of a body array's elements such as `items[].variantId`). An input counts as an id when it names a record: an id, slug, token or number, a storage path (`storagePath`, `pdfPath`), a reference (`ref`, `objectRef`) or an email. On 4 Nov 2026: 226 routes (130 `stellr_only`, 64 `participant`, 30 `public`, 2 `webhook`). Pages are not targets yet; S5 adds a page pass with tenant hosts.
+- **Cases.** `test/idor/idor-routes.test.ts` emits one case per target and runs every exported method of the real handler. Each id input carries a **honeytoken**: a fake id or value of the canary tenant "Canary Academy" (AU/AUD), from `lib/testing/honeytokens.ts`. The other body fields the handler reads are filled with plausible values (`fillerFor()` in the harness), so request validation lets the id through. An id the route parses out of a larger string gets its format from `INPUT_FORMATS` (`ref=tr:<id>`).
 - **Boundaries.** Auth and the database are mocked at the module boundary (`test/idor/mocks.ts`, `test/idor/harness.ts`): `@clerk/nextjs/server` answers as the tenant-A participant, `@supabase/supabase-js` returns `test/idor/honey-db.ts`, Stripe rejects, global `fetch` returns 503 and raw sockets refuse to connect. No network, no real database, no secrets. The whole suite takes a few seconds.
-- **The honey database.** Every table holds one Canary row, plus the caller's own `members` row. The Canary row matches **every filter except one on an identity column** (an id, an owner such as `member_id` or `created_by`, an email, a slug, a token, `tenant_id`). So a query misses it only when it is scoped to the caller. Updates and deletes that match it, and inserts or storage writes that carry a Canary value (joining B's team, say), are recorded as honey writes.
+- **The honey database.** Every table holds one Canary row, plus the caller's own `members` row. The Canary row matches **every filter except one on an identity column** (an id, an owner such as `member_id` or `created_by`, an email, a slug, a token, `tenant_id`). So a query misses it only when it is scoped to the caller. A uuid column (`id`, `event_id`, `member_id`, `coach_id`, …) matches any Canary id, so `.eq('member_id', <the memberId the caller sent>)` finds the row too. When read, a uuid column shows the value the query pinned it to, and otherwise a distinct per-column Canary id (`honeyColumnId()`) that the caller never sent, so a response of bare ids, foreign keys and a status is still visibly tenant B's. Updates and deletes that match the row, inserts, `rpc()` calls and storage writes that carry a Canary id, slug, path or token (joining B's team, say), are recorded as honey writes. An inserted email the caller typed is not one. Writes made after the response count: `after()` callbacks run and stray promises settle before the case is judged.
 
 ### Outcomes and what fails
 
 | Outcome | Meaning | Result |
 |---|---|---|
 | `leak` | the response holds a honeytoken the caller did not send | fails, unless the snapshot records a reviewed reason |
-| `honey_write` | a write touched or referenced a Canary row | fails, unless the snapshot records a reviewed reason |
+| `honey_write` | a write touched or referenced a Canary row, or an `rpc()` got a Canary value (its SQL is not modelled) | fails, unless the snapshot records a reviewed reason |
+| `oracle` | a 2xx whose status or body changes when the Canary row is removed (a second, differential run): an existence oracle such as `{ exists: !!row }` | fails, unless the snapshot records a reviewed reason |
 | `refused` | 4xx, a redirect, `notFound()` | passes |
-| `ok` | 2xx with none of tenant B's data and no honey write | passes |
+| `unexercised` | 400, 405, 413, 415 or 422 and no Canary value ever reached the database: validation refused before the id was used, so the case proved nothing | pinned in the snapshot and capped (`MAX_UNEXERCISED`, 16 on 4 Nov 2026; lower it, never raise it) |
+| `ok` | 2xx with none of tenant B's data, no honey write, and the same response without the Canary row | passes |
 | `error` | 5xx, a throw, or no answer in 5 s (the harness could not model the path) | pinned in the snapshot |
 
 On top of that:
 
 - a `stellr_only` route must refuse the participant with 401, 403 or 404. That holds by construction (its admin guard runs first), so a change here means a guard moved;
 - every outcome must equal the one in **`test/idor/idor-snapshot.json`**;
-- the case count must equal the number of id-bearing routes, with a floor of 200, and the snapshot must list exactly those routes. **A new id-bearing route that is not in the snapshot fails the suite.**
+- the case count must equal the number of id-bearing routes, with a floor of 215, and the snapshot must list exactly those routes. **A new id-bearing route that is not in the snapshot fails the suite.**
 
 ### Adding or changing an id-bearing route
 
@@ -114,11 +116,11 @@ On top of that:
 
 Five outcomes are accepted today, each with its reason in the snapshot: the view-as `DELETE` (it only clears the caller's cookie), the unsubscribe token (the token is the authority), two community notifications (community is Stellr-only and kept off tenant hosts in S5), and `members/me` writing references to the allergy and ethnicity catalogues. The two community entries are marked `TODO(S5)`.
 
-**What the suite does not prove yet.** Every route is Stellr-only today, so there is no tenant-staff caller to test. When S5 moves the first route to `tenant_staff` or `platform_admin`, the suite's first case fails on purpose; add a tenant-A admin persona for those routes then. Values a route builds without a query (a signed URL from a stored path, say) count only when they carry a honeytoken.
+**What the suite does not prove yet.** Every route is Stellr-only today, so there is no tenant-staff caller to test. When S5 moves the first route to `tenant_staff` or `platform_admin`, the suite's first case fails on purpose; add a tenant-A admin persona for those routes then. Values a route builds without a query (a signed URL from a stored path, say) count only when they carry a honeytoken. The 16 `unexercised` cases (listed in the snapshot) stop at request validation or at a precondition the caller lacks, such as an existing licence row, so their id paths are untested. The 9 `error` cases stop at an unconfigured integration (Stripe, a webhook secret) or a 5xx. Use `IDOR_DEBUG=<part of a route path>` to print what each method of a route did.
 
 ### Canary fault injection
 
-`scripts/idor-canary.mjs` (`npm run idor:canary`, and the **IDOR canary** workflow, `.github/workflows/idor-canary.yml`) proves the suites can fail. It runs them intact, then, one at a time in a temp copy under `node_modules/.cache/idor-canary/`, deletes one isolation guard and expects a failure caused by a `leak` or `honey_write`:
+`scripts/idor-canary.mjs` (`npm run idor:canary`, and the **IDOR canary** workflow, `.github/workflows/idor-canary.yml`) proves the suites can fail. It runs them intact, then, one at a time in a temp copy under `node_modules/.cache/idor-canary/`, deletes one isolation guard and expects a failure caused by a `leak`, `honey_write` or `oracle`. "Caused by" is checked from a machine-readable results file (`IDOR_RESULTS_FILE`, one JSON line per case), not Vitest's text: the mutated case itself must record a failing outcome. A mutation that only crashes the handler (`error`) counts as survived.
 
 - the five guard styles in `test/idor/fixtures/handlers.ts`, each line marked `CANARY:<name>`: owner filter, owner check after the read, admin guard, tenant filter, owner filter on an update. `test/idor/fixtures.test.ts` runs them through the same harness;
 - one real route: the `member_id` filter of `DELETE /api/members/event-participations/[id]`, through `IDOR_ROUTE_OVERRIDE` in the generated suite.

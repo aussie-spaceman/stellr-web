@@ -10,15 +10,34 @@
 //   .from('teams').select('*').eq('id', <honey id>)                 → honey row (LEAK if returned)
 //   .from('teams').select('*').eq('id', <honey id>).eq('owner_member_id', me) → nothing
 //
+// Uuid columns (`id`, `event_id`, `member_id`, …) match ANY Canary id on the
+// honey row: the id the caller sent, the Canary member id, or a Canary column
+// id. So `.eq('member_id', <sent memberId>)` finds it just as `.eq('id', …)`
+// does. When read, a uuid column shows the value it was filtered on (an echo
+// tells the caller nothing), and otherwise a distinct per-column Canary id
+// (`honeyColumnId`) the caller never sent: a response of bare ids and foreign
+// keys is still visibly tenant B's.
+//
 // Writes are recorded: an update or delete whose filters match the honey row,
-// or an insert/upsert whose payload carries a honeytoken (joining B's team, a
-// registration for B's event), is a HONEY WRITE and fails the case.
+// an insert/upsert whose payload carries a honeytoken (joining B's team, a
+// registration for B's event), an rpc() whose arguments carry one, or a
+// storage write under a Canary path, is a HONEY WRITE and fails the case. An
+// rpc runs SQL the harness cannot see, so a Canary value reaching one counts
+// as a write until a reviewer accepts it.
+//
+// `touched` records whether a Canary value reached the database at all (a
+// filter, a payload, an rpc argument, a storage path). A 400 with nothing
+// touched means request validation refused before the id was used: the case
+// proved nothing, and the harness says so (`unexercised`).
+//
+// `honeyAbsent` empties the tables of the honey row, for the differential run
+// that catches an existence oracle (a 2xx whose body changes with B's row).
 //
 // Not a PostgREST implementation. Unknown builder methods are accepted and
 // ignored (they cannot widen a match: only filters narrow it), so a new query
-// shape cannot crash the harness into a false pass. Storage, rpc, auth.admin
-// and realtime are inert.
-import { CANARY_TENANT, HONEYTOKEN_VALUES, HONEYTOKENS } from '@/lib/testing/honeytokens'
+// shape cannot crash the harness into a false pass. auth.admin and realtime
+// are inert.
+import { CANARY_TENANT, HONEYTOKEN_VALUES, HONEYTOKENS, honeyColumnId, isCanaryId } from '@/lib/testing/honeytokens'
 
 type Row = Record<string, unknown>
 
@@ -35,15 +54,23 @@ export interface HoneyDbState {
   honeyReads: string[]
   /** The tenant-A caller's own rows, by table. */
   callerRows: Record<string, Row[]>
+  /** A Canary value reached a filter, payload, rpc argument or storage path. */
+  touched: boolean
+  /** The differential run: no table holds the honey row. */
+  honeyAbsent: boolean
+  /** Ids handed to inserted rows, per run so two runs are comparable. */
+  insertSeq: number
 }
 
-export function newHoneyDbState(callerRows: Record<string, Row[]> = {}): HoneyDbState {
-  return { writes: [], honeyReads: [], callerRows }
+export function newHoneyDbState(callerRows: Record<string, Row[]> = {}, opts: { honeyAbsent?: boolean } = {}): HoneyDbState {
+  return { writes: [], honeyReads: [], callerRows, touched: false, honeyAbsent: opts.honeyAbsent === true, insertSeq: 0 }
 }
 
 // ── column classification ────────────────────────────────────────────────────
 
 const WILDCARD = Symbol('wildcard')
+/** A uuid column on the honey row: equal to any Canary id. */
+const CANARY_ID = Symbol('canary-id')
 
 const OWNER =
   /(^|_)(member|members|user|clerk|owner|author|creator|created_by|submitted_by|uploaded_by|requested_by|recipient|signer|holder|participant|guardian|parent|student|mentor|coach|coachee|teacher|host|requester|reporter|invitee|inviter|buyer|customer|contact|person|account)(_|$)/
@@ -55,10 +82,10 @@ const OWNER =
 function identityValue(col: string): unknown {
   const c = col.toLowerCase()
   if (c === 'tenant_id') return CANARY_TENANT.id
-  if (c === 'id' || c === 'uuid') return HONEYTOKENS.id
+  if (c === 'id' || c === 'uuid') return CANARY_ID
   if (c === 'clerk_user_id' || c === 'user_id' || c.endsWith('clerk_id') || c.endsWith('clerk_user_id')) return HONEYTOKENS.clerkUserId
-  if (c.endsWith('_ids')) return [OWNER.test(c) ? HONEYTOKENS.memberId : HONEYTOKENS.id]
-  if (c.endsWith('_id') || c.endsWith('_uuid')) return OWNER.test(c) ? HONEYTOKENS.memberId : HONEYTOKENS.id
+  if (c.endsWith('_ids')) return [CANARY_ID]
+  if (c.endsWith('_id') || c.endsWith('_uuid')) return CANARY_ID
   if (c.includes('email')) return HONEYTOKENS.email
   if (c.includes('slug') || c === 'event' || c === 'event_ref' || c === 'event_key') return HONEYTOKENS.eventSlug
   if (c.includes('sanity')) return HONEYTOKENS.sanityId
@@ -86,9 +113,16 @@ function displayValue(col: string): unknown {
   return HONEYTOKENS.text
 }
 
-function honeyColumnValue(col: string): unknown {
+/** Columns a query pinned with eq / in / match, and the value it pinned. */
+type Echo = Record<string, unknown>
+
+function honeyColumnValue(col: string, echo: Echo = {}): unknown {
   const v = identityValue(col)
-  return v === WILDCARD ? displayValue(col) : v
+  if (v === WILDCARD) return displayValue(col)
+  if (col in echo) return Array.isArray(v) ? [echo[col]] : echo[col]
+  if (v === CANARY_ID) return honeyColumnId(col)
+  if (Array.isArray(v) && v[0] === CANARY_ID) return [honeyColumnId(col)]
+  return v
 }
 
 const DEFAULT_COLUMNS = [
@@ -101,9 +135,9 @@ const DEFAULT_COLUMNS = [
  * relations in the select (`participants(*)`, `event:events(title)`) are filled
  * with nested honey rows: an array for a plural name, an object otherwise.
  */
-function honeyRow(cols?: string): Row {
+function honeyRow(cols?: string, echo: Echo = {}): Row {
   const target: Row = {}
-  for (const c of DEFAULT_COLUMNS) target[c] = honeyColumnValue(c)
+  for (const c of DEFAULT_COLUMNS) target[c] = honeyColumnValue(c, echo)
   for (const part of splitTop((cols ?? '').replace(/\s+/g, ''))) {
     const m = part.match(/^(?:(\w+):)?(\w+)(?:![\w]+)?\((.*)\)$/)
     if (!m) continue
@@ -116,7 +150,7 @@ function honeyRow(cols?: string): Row {
       if (typeof prop !== 'string' || prop === 'then' || prop === 'toJSON' || prop === 'constructor') {
         return Reflect.get(t, prop, recv)
       }
-      if (!(prop in t)) t[prop] = honeyColumnValue(prop)
+      if (!(prop in t)) t[prop] = honeyColumnValue(prop, echo)
       return t[prop]
     },
   })
@@ -153,6 +187,7 @@ function likeToRegExp(p: string, flags: string): RegExp {
 
 function same(a: unknown, b: unknown): boolean {
   if (Array.isArray(a)) return a.some((x) => same(x, b))
+  if (a === CANARY_ID) return isCanaryId(b)
   if (a === b) return true
   if (a == null || b == null) return false
   return String(a) === String(b)
@@ -160,8 +195,10 @@ function same(a: unknown, b: unknown): boolean {
 
 function opPred(col: string, op: string, value: unknown): Pred {
   return (row, kind) => {
-    const v = matchValue(row, kind, col)
-    if (v === WILDCARD) return true
+    const raw = matchValue(row, kind, col)
+    if (raw === WILDCARD) return true
+    // Ordering and pattern operators compare a uuid column as the sent id.
+    const v = raw === CANARY_ID && !['eq', 'neq', 'in', 'is'].includes(op) ? HONEYTOKENS.id : raw
     switch (op) {
       case 'eq':
         return same(v, value)
@@ -246,21 +283,22 @@ function notPred(col: string, p: Pred): Pred {
 
 const AUDIT_TABLE = /(audit|(^|_)logs?$|_log_|errors?$|rate_limit|webhook_events|security_events|tenancy_derivation)/
 
-function carriesHoneytoken(v: unknown): string | null {
+function carriesHoneytoken(v: unknown, ignore: readonly string[] = []): string | null {
   if (v == null) return null
-  if (typeof v === 'string') return HONEYTOKEN_VALUES.find((h) => v.includes(h)) ?? null
+  if (typeof v === 'string') {
+    const s = v.toLowerCase()
+    return HONEYTOKEN_VALUES.find((h) => !ignore.includes(h) && s.includes(h.toLowerCase())) ?? null
+  }
   if (Array.isArray(v)) {
     for (const x of v) {
-      const hit = carriesHoneytoken(x)
+      const hit = carriesHoneytoken(x, ignore)
       if (hit) return hit
     }
     return null
   }
-  if (typeof v === 'object') return carriesHoneytoken(Object.values(v as Row))
+  if (typeof v === 'object') return carriesHoneytoken(Object.values(v as Row), ignore)
   return null
 }
-
-let insertSeq = 0
 
 class Query {
   op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' | 'rpc' = 'select'
@@ -272,6 +310,8 @@ class Query {
   count: string | undefined
   returning = false
   cols: string | undefined
+  /** eq / in / match pins, echoed back by the honey row's columns. */
+  echo: Echo = {}
 
   constructor(
     private db: HoneyDbState,
@@ -305,29 +345,40 @@ class Query {
     this.op = 'delete'
     return this
   }
-  eq(c: string, v: unknown) { return this.add(opPred(c, 'eq', v)) }
-  neq(c: string, v: unknown) { return this.add(opPred(c, 'neq', v)) }
-  gt(c: string, v: unknown) { return this.add(opPred(c, 'gt', v)) }
-  gte(c: string, v: unknown) { return this.add(opPred(c, 'gte', v)) }
-  lt(c: string, v: unknown) { return this.add(opPred(c, 'lt', v)) }
-  lte(c: string, v: unknown) { return this.add(opPred(c, 'lte', v)) }
-  like(c: string, v: unknown) { return this.add(opPred(c, 'like', v)) }
-  ilike(c: string, v: unknown) { return this.add(opPred(c, 'ilike', v)) }
-  is(c: string, v: unknown) { return this.add(opPred(c, 'is', v)) }
-  in(c: string, v: unknown) { return this.add(opPred(c, 'in', v)) }
-  contains(c: string, v: unknown) { return this.add(opPred(c, 'contains', v)) }
-  overlaps(c: string, v: unknown) { return this.add(opPred(c, 'overlaps', v)) }
+  eq(c: string, v: unknown) { return this.pin(c, v).add(opPred(c, 'eq', v), v) }
+  neq(c: string, v: unknown) { return this.add(opPred(c, 'neq', v), v) }
+  gt(c: string, v: unknown) { return this.add(opPred(c, 'gt', v), v) }
+  gte(c: string, v: unknown) { return this.add(opPred(c, 'gte', v), v) }
+  lt(c: string, v: unknown) { return this.add(opPred(c, 'lt', v), v) }
+  lte(c: string, v: unknown) { return this.add(opPred(c, 'lte', v), v) }
+  like(c: string, v: unknown) { return this.add(opPred(c, 'like', v), v) }
+  ilike(c: string, v: unknown) { return this.add(opPred(c, 'ilike', v), v) }
+  is(c: string, v: unknown) { return this.add(opPred(c, 'is', v), v) }
+  in(c: string, v: unknown) {
+    const canary = asList(v).find((x) => isCanaryId(x) || carriesHoneytoken(x))
+    if (canary !== undefined) this.pin(c, canary)
+    return this.add(opPred(c, 'in', v), v)
+  }
+  contains(c: string, v: unknown) { return this.add(opPred(c, 'contains', v), v) }
+  overlaps(c: string, v: unknown) { return this.add(opPred(c, 'overlaps', v), v) }
   match(obj: Row) {
-    for (const [c, v] of Object.entries(obj ?? {})) this.add(opPred(c, 'eq', v))
+    for (const [c, v] of Object.entries(obj ?? {})) this.eq(c, v)
     return this
   }
   filter(c: string, op: string, v: unknown) {
-    return op.startsWith('not.') ? this.add(notPred(c, opPred(c, op.slice(4), v))) : this.add(opPred(c, op, v))
+    if (op === 'eq') this.pin(c, v)
+    return op.startsWith('not.') ? this.add(notPred(c, opPred(c, op.slice(4), v)), v) : this.add(opPred(c, op, v), v)
   }
-  not(c: string, op: string, v: unknown) { return this.add(notPred(c, opPred(c, op, v))) }
+  not(c: string, op: string, v: unknown) { return this.add(notPred(c, opPred(c, op, v)), v) }
   or(expr: string) {
     const parts = splitTop(expr).map(parseClause)
-    return this.add((r, k) => parts.some((p) => p(r, k)))
+    return this.add((r, k) => parts.some((p) => p(r, k)), expr)
+  }
+  /** A row returned under `col = v` has `col = v`: showing it back tells the caller nothing. */
+  private pin(c: string, v: unknown) {
+    const base = c.split('->')[0].split('.')[0]
+    if (typeof v === 'string' || typeof v === 'number') this.echo[base] = v
+    return this
   }
   single() {
     this.wantSingle = true
@@ -337,26 +388,42 @@ class Query {
     this.wantMaybe = true
     return this
   }
-  private add(p: Pred) {
+  private add(p: Pred, value?: unknown) {
+    if (isCanaryId(value) || carriesHoneytoken(value)) this.db.touched = true
     this.preds.push(p)
     return this
   }
 
   private rows(): { row: Row; kind: Kind }[] {
     const caller = (this.db.callerRows[this.table] ?? []).map((r) => ({ row: { ...r }, kind: 'caller' as Kind }))
-    const all = [...caller, { row: honeyRow(this.cols), kind: 'honey' as Kind }]
+    const all = this.db.honeyAbsent ? caller : [...caller, { row: honeyRow(this.cols, this.echo), kind: 'honey' as Kind }]
     return all.filter(({ row, kind }) => this.preds.every((p) => p(row, kind)))
   }
 
   exec(): { data: unknown; error: unknown; count?: number | null; status: number } {
-    if (this.op === 'rpc') return { data: null, error: null, status: 200 }
+    if (this.op === 'rpc') {
+      const hit = carriesHoneytoken(this.values)
+      if (hit) {
+        this.db.touched = true
+        this.db.writes.push({
+          table: `rpc:${this.table}`,
+          op: 'rpc',
+          detail: `arguments carry the Canary value ${hit} (the function's SQL is not modelled, so this counts as a write)`,
+        })
+      }
+      return { data: null, error: null, status: 200 }
+    }
     if (this.op === 'insert' || this.op === 'upsert') {
       const list = (Array.isArray(this.values) ? this.values : [this.values]) as Row[]
-      const hit = carriesHoneytoken(list)
+      if (carriesHoneytoken(list)) this.db.touched = true
+      // Storing an email address the caller typed (a contact form, an invite)
+      // is the form's purpose, not a write to tenant B: only ids, slugs, paths
+      // and tokens in a payload count. Filters on an email still do.
+      const hit = carriesHoneytoken(list, [HONEYTOKENS.email])
       if (hit && !AUDIT_TABLE.test(this.table)) {
         this.db.writes.push({ table: this.table, op: this.op, detail: `payload carries the Canary value ${hit}` })
       }
-      const out = list.map((r) => ({ id: `00000000-0000-4000-8000-${String(++insertSeq).padStart(12, '0')}`, ...(r ?? {}) }))
+      const out = list.map((r) => ({ id: `00000000-0000-4000-8000-${String(++this.db.insertSeq).padStart(12, '0')}`, ...(r ?? {}) }))
       return this.shape(out)
     }
     const matched = this.rows()
@@ -435,15 +502,24 @@ function inert(): unknown {
 }
 
 function storageBucket(db: HoneyDbState, bucket: string) {
-  const honeyPath = (p: unknown) => carriesHoneytoken(p)
+  const honeyPath = (p: unknown) => {
+    const hit = carriesHoneytoken(p)
+    if (hit) db.touched = true
+    return hit
+  }
   const write = (op: string, p: unknown) => {
     const hit = honeyPath(p)
     if (hit) db.writes.push({ table: `storage:${bucket}`, op, detail: `object path carries ${hit}` })
   }
   return {
     download: async (p: string) =>
-      honeyPath(p) ? { data: new Blob([HONEYTOKENS.text]), error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } },
-    createSignedUrl: async (p: string) => ({ data: { signedUrl: `https://storage.idor.invalid/${bucket}/${p}?token=signed` }, error: null }),
+      honeyPath(p) && !db.honeyAbsent
+        ? { data: new Blob([HONEYTOKENS.text]), error: null }
+        : { data: null, error: { message: 'Object not found', statusCode: '404' } },
+    createSignedUrl: async (p: string) => {
+      honeyPath(p)
+      return { data: { signedUrl: `https://storage.idor.invalid/${bucket}/${p}?token=signed` }, error: null }
+    },
     createSignedUrls: async (ps: string[]) => ({
       data: ps.map((p) => ({ path: p, signedUrl: `https://storage.idor.invalid/${bucket}/${p}?token=signed`, error: null })),
       error: null,
@@ -484,9 +560,10 @@ export function honeyClient(db: HoneyDbState): unknown {
   const client = {
     from: (table: string) => chain(new Query(db, table)),
     schema: () => client,
-    rpc: (_fn: string, _args?: unknown) => {
-      const q = new Query(db, 'rpc')
+    rpc: (fn: string, args?: unknown) => {
+      const q = new Query(db, String(fn))
       q.op = 'rpc'
+      q.values = args
       return chain(q)
     },
     storage: { from: (bucket: string) => storageBucket(db, bucket) },

@@ -66,12 +66,36 @@ export const HONEYTOKENS = {
   text: `${'HONEYTOKEN-CANARY'} Canary Academy private record`,
 } as const
 
+/**
+ * Every uuid column of a Canary row OTHER than the one a query filtered on
+ * (its primary key, `event_id`, `team_id`, …) holds a distinct id under this
+ * prefix (`honeyColumnId`). The caller never sends one, so a response that
+ * carries only ids, foreign keys and a status still shows a Canary value the
+ * caller did not supply: the leak is visible even with no name or text field.
+ */
+export const HONEYTOKEN_COLUMN_ID_PREFIX = '00000000-0000-4000-8000-0000ca4af'
+
+/** The Canary row's id in column `col`: a valid uuid unique to that column. */
+export function honeyColumnId(col: string): string {
+  let h = 0
+  for (const ch of col.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return HONEYTOKEN_COLUMN_ID_PREFIX + (h % 4096).toString(16).padStart(3, '0')
+}
+
+/** True for any uuid that names a Canary record (sent, owner or column id). */
+export function isCanaryId(v: unknown): boolean {
+  if (typeof v !== 'string') return false
+  const s = v.toLowerCase()
+  return s === HONEYTOKENS.id || s === HONEYTOKENS.memberId || s.startsWith(HONEYTOKEN_COLUMN_ID_PREFIX)
+}
+
 /** Every value that must never reach a tenant-A response. */
 export const HONEYTOKEN_VALUES: readonly string[] = [
   CANARY_TENANT.id,
   CANARY_TENANT.legal_name,
   CANARY_TENANT.host,
   HONEYTOKEN_MARKER,
+  HONEYTOKEN_COLUMN_ID_PREFIX,
   ...Object.values(HONEYTOKENS),
 ]
 
@@ -81,7 +105,8 @@ export const HONEYTOKEN_VALUES: readonly string[] = [
  * (`teamId`). Plural names (`ids`, `memberIds`) get an array.
  */
 export function honeytokenFor(name: string): string | string[] {
-  const n = name.replace(/^\.\.\./, '')
+  // A nested body field (`items[].variantId`) is named by its last part.
+  const n = name.replace(/^\.\.\./, '').split('.').pop() ?? name
   const lower = n.toLowerCase()
   let value: string
   if (lower.includes('slug') || lower === 'event' || lower === 'eventkey') value = HONEYTOKENS.eventSlug

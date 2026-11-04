@@ -13,12 +13,15 @@
 //
 // A case FAILS when:
 //   - the response carries a Canary honeytoken the caller did not send (leak),
-//     or a write touched or referenced a Canary row (honey_write), unless the
-//     snapshot records a reviewed `accepted` reason;
+//     a write touched or referenced a Canary row (honey_write), or a 2xx
+//     changed when the Canary row was removed (oracle), unless the snapshot
+//     records a reviewed `accepted` reason;
 //   - a stellr_only route does anything but refuse (401/403/404);
 //   - the outcome differs from test/idor/idor-snapshot.json.
 // And the suite fails when the case count differs from the manifest's count of
-// id-bearing routes, or a new id-bearing route is not in the snapshot.
+// id-bearing routes, when a new id-bearing route is not in the snapshot, and
+// when more cases are `unexercised` (request validation refused before the id
+// was used) than MAX_UNEXERCISED.
 //
 // Regenerate after adding or changing an id-bearing route, then REVIEW the diff:
 //   npm run idor:snapshot
@@ -29,7 +32,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { idorTargets, type IdorTarget } from '@/lib/security/idor-targets'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
-import { installNetworkGuard, runIdorCase, targetInput, type CaseResult, type Outcome } from './harness'
+import { FAILING_OUTCOMES, installNetworkGuard, runIdorCase, targetInput, type CaseResult, type Outcome } from './harness'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.idor.invalid'
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_idorharness'
@@ -40,9 +43,16 @@ const UPDATE = process.env.IDOR_UPDATE_SNAPSHOT === '1'
 const TODO = 'TODO: review'
 
 // Floor, so an emptied manifest or a broken analyser cannot pass with a small
-// count. 4 Nov 2026: 211 id-bearing route files (127 stellr_only, 60
-// participant, 22 public, 2 webhook).
-const MIN_TARGETS = 200
+// count. 4 Nov 2026: 226 id-bearing route files (130 stellr_only, 64
+// participant, 30 public, 2 webhook).
+const MIN_TARGETS = 215
+
+// Cases whose request the handler refused as invalid before any Canary value
+// reached the database: they prove nothing about isolation. The harness fills
+// non-id body fields with plausible values to get past validation; what is
+// left is pinned in the snapshot as `unexercised` and capped here, so the
+// number can only go down. Lower it when a route starts being exercised.
+const MAX_UNEXERCISED = 16
 
 type MethodEntry = Outcome | { outcome: Outcome; accepted: string }
 interface SnapshotTarget {
@@ -84,6 +94,7 @@ function describeResult(r: CaseResult): string {
   const parts = [`${r.method} → ${r.status} ${r.outcome}`]
   for (const l of r.leaks) parts.push(`  leaked ${l.value} in …${l.context}…`)
   for (const w of r.writes) parts.push(`  wrote ${w.table} (${w.op}): ${w.detail}`)
+  if (r.oracle) parts.push(`  oracle: ${r.oracle}`)
   if (r.error) parts.push(`  error: ${r.error}`)
   return parts.join('\n')
 }
@@ -103,8 +114,12 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
       ran++
       const mod = (await (OVERRIDE?.file === t.file ? import(OVERRIDE.path) : import(`../../${t.file}`))) as Record<string, unknown>
       const results: Record<string, CaseResult> = {}
-      for (const m of t.methods) results[m] = await runIdorCase(mod, targetInput(t), m)
+      for (const m of t.methods) results[m] = await runIdorCase(mod, targetInput(t), m, 'participant', t.file)
       observed.set(t.file, results)
+      // IDOR_DEBUG=<substring of a route file>: print what each method did.
+      if (process.env.IDOR_DEBUG && t.file.includes(process.env.IDOR_DEBUG)) {
+        console.log(`${t.file}\n${Object.values(results).map(describeResult).join('\n')}`)
+      }
       if (UPDATE) return
       checkTarget(t, results)
     })
@@ -123,6 +138,16 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
     expect(unclassified, `new id-bearing routes not in ${SNAPSHOT_FILE}: run \`npm run idor:snapshot\` and review`).toEqual([])
     expect(stale, `routes in ${SNAPSHOT_FILE} that are gone or no longer id-bearing: run \`npm run idor:snapshot\``).toEqual([])
     expect(snapshot.count).toBe(targets.length)
+  })
+
+  it(`no more than ${MAX_UNEXERCISED} cases are unexercised (refused as invalid before the id was used)`, () => {
+    if (UPDATE) return
+    const unexercised = [...observed.entries()].flatMap(([file, rs]) =>
+      Object.values(rs)
+        .filter((r) => r.outcome === 'unexercised')
+        .map((r) => `${r.method} ${file}`),
+    )
+    expect(unexercised.length, unexercised.join('\n')).toBeLessThanOrEqual(MAX_UNEXERCISED)
   })
 })
 
@@ -145,7 +170,7 @@ function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
       expect(accepted, `${detail}\nthe snapshot's accepted reason is still a TODO`).not.toBe(TODO)
       expect(accepted.length, `${detail}\nan accepted outcome needs a reason`).toBeGreaterThan(20)
     }
-    if (r.outcome === 'leak' || r.outcome === 'honey_write') {
+    if (FAILING_OUTCOMES.includes(r.outcome)) {
       expect(accepted, `${detail}\ntenant-B data reached a tenant-A caller, and the snapshot does not accept it`).toBeDefined()
     }
     if (t.cls === 'stellr_only' && accepted === undefined) {
@@ -172,7 +197,7 @@ function writeSnapshot() {
       if (!r) throw new Error(`no result for ${t.file} ${m}`)
       const prevEntry = prev?.methods[m]
       const keep = acceptedOf(prevEntry)
-      const needsReason = r.outcome === 'leak' || r.outcome === 'honey_write' || (t.cls === 'stellr_only' && ![401, 403, 404].includes(r.status))
+      const needsReason = FAILING_OUTCOMES.includes(r.outcome) ||(t.cls === 'stellr_only' && ![401, 403, 404].includes(r.status))
       if (keep !== undefined && prevEntry && outcomeOf(prevEntry) === r.outcome) methods[m] = { outcome: r.outcome, accepted: keep }
       else if (needsReason) methods[m] = { outcome: r.outcome, accepted: TODO }
       else methods[m] = r.outcome

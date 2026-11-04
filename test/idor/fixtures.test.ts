@@ -41,7 +41,7 @@ describe(`IDOR fixtures (${process.env.IDOR_FIXTURE_DIR ? 'canary copy' : 'intac
   for (const [name, method] of CASES) {
     it(`${name} refuses a tenant-B honeytoken id`, async () => {
       const mod = (await import(path.join(dir, 'handlers.ts'))) as { FIXTURES: Record<string, Record<string, unknown>> }
-      const r = await runIdorCase(mod.FIXTURES[name], input, method)
+      const r = await runIdorCase(mod.FIXTURES[name], input, method, 'participant', name)
       expect(r.outcome, explain(r)).not.toBe('leak')
       expect(r.outcome, explain(r)).not.toBe('honey_write')
       expect(r.outcome, explain(r)).not.toBe('error')

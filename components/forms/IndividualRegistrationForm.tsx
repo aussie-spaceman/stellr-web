@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useId, type RefObject } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
+import { SCHOOL_EMAIL_LABEL, showsSchoolEmail } from '@/lib/member-email'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
@@ -30,7 +32,10 @@ const schema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
   nickname: z.string().optional(),
-  email: z.string().email('Valid email required'),
+  // Checked in nextStep(): under 18, a personal OR a school address will do
+  // (lib/member-email). A static rule here can't see the date of birth.
+  email: z.string(),
+  school_email: z.string().optional(),
   phone: z.string().min(7, 'Valid phone required'),
   date_of_birth: z.string().min(1, 'Required'),
   // Student-only — required for students, dropped for adult members. Enforced
@@ -188,6 +193,7 @@ export default function IndividualRegistrationForm({
       last_name: prefill?.last_name ?? scholarship?.lastName ?? '',
       nickname: prefill?.nickname ?? '',
       email: prefill?.email ?? scholarship?.email ?? '',
+      school_email: prefill?.school_email ?? '',
       phone: prefill?.phone ?? '',
       date_of_birth: prefill?.date_of_birth ?? '',
       grade: prefill?.grade ?? '',
@@ -250,6 +256,13 @@ export default function IndividualRegistrationForm({
       'gender', 't_shirt_size',
     ]
     let valid = await trigger(step === 1 ? step1Fields : undefined)
+    const emailError = emailPairError(getValues('date_of_birth'), getValues('email') ?? '', getValues('school_email') ?? '')
+    if (emailError) {
+      setFieldError('email', { type: 'manual', message: emailError === 'Required' ? 'Valid email required' : emailError })
+      valid = false
+    } else {
+      clearErrors('email')
+    }
     // Grade is required for students only; adult registrants don't see the field.
     if (!isAdult && !getValues('grade')) {
       setFieldError('grade', { type: 'manual', message: 'Required' })
@@ -434,26 +447,6 @@ export default function IndividualRegistrationForm({
               <Input {...register('nickname')} autoComplete="nickname" placeholder="Optional" />
             </Field>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field
-                label="Email Address"
-                required
-                hint={emailLocked ? 'Linked to your Stellr account.' : undefined}
-                error={emailLocked ? undefined : errors.email?.message}
-              >
-                <Input
-                  {...register('email')}
-                  type="email"
-                  autoComplete="email"
-                  placeholder="jane@example.com"
-                  readOnly={emailLocked}
-                  aria-readonly={emailLocked}
-                />
-              </Field>
-              <Field label="Phone Number" required error={errors.phone?.message}>
-                <Input {...register('phone')} type="tel" autoComplete="tel" placeholder="+1 555 000 0000" />
-              </Field>
-            </div>
 
             {/* School is captured before DOB/Grade so its State can drive the
                 entry cutoff used to pre-fill the Grade field. */}
@@ -490,6 +483,35 @@ export default function IndividualRegistrationForm({
                   </Select>
                 </Field>
               )}
+            </div>
+
+            {/* Email after date of birth: under 18 asks for a personal and a
+                school address (lib/member-email). */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {emailLocked ? (
+                <Field label="Email Address" required hint="Linked to your Stellr account.">
+                  <Input {...register('email')} type="email" autoComplete="email" readOnly aria-readonly />
+                </Field>
+              ) : (
+                <MemberEmailFields
+                  dateOfBirth={dob}
+                  email={watch('email') ?? ''}
+                  schoolEmail={watch('school_email') ?? ''}
+                  onEmailChange={(v) => { setValue('email', v); clearErrors('email') }}
+                  onSchoolEmailChange={(v) => { setValue('school_email', v); clearErrors('email') }}
+                  error={errors.email?.message}
+                  label="Email Address"
+                  emailName="email"
+                />
+              )}
+              {emailLocked && showsSchoolEmail(dob) && (
+                <Field label={SCHOOL_EMAIL_LABEL} hint="Optional. Nothing is sent here while your personal email is on file.">
+                  <Input {...register('school_email')} type="email" autoComplete="off" />
+                </Field>
+              )}
+              <Field label="Phone Number" required error={errors.phone?.message}>
+                <Input {...register('phone')} type="tel" autoComplete="tel" placeholder="+1 555 000 0000" />
+              </Field>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

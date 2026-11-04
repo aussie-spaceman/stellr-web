@@ -54,14 +54,30 @@ export async function cleanupClerkForMember(memberId: string): Promise<ExternalR
       .eq('id', memberId)
       .maybeSingle()
     const clerkUserId = member?.clerk_user_id as string | null | undefined
+    return await deleteUnsharedClerkLogin(clerkUserId ?? null, memberId)
+  } catch (e) {
+    return { kind: 'clerk', ok: false, detail: e instanceof Error ? e.message : 'Clerk cleanup failed' }
+  }
+}
+
+// Deletes a Clerk login unless another member row (other than `exceptMemberId`)
+// is linked to it, or it is a staff account. Shared with the member merge,
+// which calls it after the dropped row is already gone.
+export async function deleteUnsharedClerkLogin(
+  clerkUserId: string | null,
+  exceptMemberId?: string,
+): Promise<ExternalResult> {
+  try {
     if (!clerkUserId) return { kind: 'clerk', ok: true, detail: 'No Clerk login linked' }
+    const db = supabaseServer()
 
     // The login is only this member's to remove if no other row is linked to it.
-    const { count } = await db
+    let others = db
       .from('members')
       .select('id', { count: 'exact', head: true })
       .eq('clerk_user_id', clerkUserId)
-      .neq('id', memberId)
+    if (exceptMemberId) others = others.neq('id', exceptMemberId)
+    const { count } = await others
     if ((count ?? 0) > 0) {
       return { kind: 'clerk', ok: false, detail: `Clerk login ${clerkUserId} is linked to another member; left in place` }
     }

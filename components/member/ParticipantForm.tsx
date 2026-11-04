@@ -3,6 +3,7 @@
 import { useId, useState } from 'react'
 import { Choice, Dialog, Field, Fieldset, Input, Select, Textarea } from '@stellr/web-ui'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
+import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 
 interface ParticipantData {
   id?: string
@@ -14,6 +15,8 @@ interface ParticipantData {
   last_name: string
   nickname: string
   email: string
+  /** Optional school address (under 18). `email` is the personal one. */
+  school_email?: string
   phone: string
   date_of_birth: string
   gender: string
@@ -34,7 +37,7 @@ type FieldErrors = Partial<Record<keyof ParticipantData, string>>
 
 const EMPTY: ParticipantData = {
   membership_id: '', linked: false,
-  first_name: '', last_name: '', nickname: '', email: '', phone: '',
+  first_name: '', last_name: '', nickname: '', email: '', school_email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
   event_role: 'participant', ethnicity: [], dietary_requirements: [],
   health_conditions: '', emergency_contact_first_name: '',
@@ -65,7 +68,8 @@ function validate(form: ParticipantData, isStudent: boolean): FieldErrors {
   const errors: FieldErrors = {}
   if (!form.first_name.trim()) errors.first_name = 'Enter a first name.'
   if (!form.last_name.trim()) errors.last_name = 'Enter a last name.'
-  if (!EMAIL_RE.test(form.email.trim())) errors.email = 'Enter an email address.'
+  const emailError = emailPairError(form.date_of_birth, form.email, form.school_email ?? '')
+  if (emailError) errors.email = emailError === 'Required' ? 'Enter an email address.' : emailError
   if (isStudent) {
     if (!form.emergency_contact_first_name.trim()) errors.emergency_contact_first_name = 'Enter their first name.'
     if (!form.emergency_contact_last_name.trim()) errors.emergency_contact_last_name = 'Enter their last name.'
@@ -256,28 +260,8 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
           />
         </Field>
 
-        {/* Email & Phone */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Email" required error={fieldErrors.email}>
-            <Input
-              id={fid('email')}
-              type="email"
-              autoComplete="off"
-              value={form.email}
-              onChange={e => set('email', e.target.value)}
-            />
-          </Field>
-          <Field label="Phone">
-            <Input
-              type="tel"
-              autoComplete="off"
-              value={form.phone}
-              onChange={e => set('phone', e.target.value)}
-            />
-          </Field>
-        </div>
-
-        {/* DOB, Gender, T-Shirt */}
+        {/* DOB, Gender, T-Shirt — date of birth first: it decides whether the
+            personal + school email pair is asked for. */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Date of birth">
             <Input
@@ -298,6 +282,29 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
               <option value="">Select…</option>
               {T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
             </Select>
+          </Field>
+        </div>
+
+        {/* Email(s) & Phone */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <MemberEmailFields
+            dateOfBirth={form.date_of_birth}
+            email={form.email}
+            schoolEmail={form.school_email ?? ''}
+            onEmailChange={v => set('email', v)}
+            onSchoolEmailChange={v => set('school_email', v)}
+            error={fieldErrors.email}
+            audience="other"
+            autoComplete="off"
+            emailId={fid('email')}
+          />
+          <Field label="Phone">
+            <Input
+              type="tel"
+              autoComplete="off"
+              value={form.phone}
+              onChange={e => set('phone', e.target.value)}
+            />
           </Field>
         </div>
 

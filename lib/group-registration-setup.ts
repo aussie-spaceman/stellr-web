@@ -44,6 +44,7 @@ type Part = {
   grade: string | null; gender: string | null; t_shirt_size: string | null; dietary_requirements: string[] | null
   health_conditions: string | null; emergency_contact_first_name: string | null; emergency_contact_last_name: string | null
   emergency_contact_email: string | null; emergency_contact_phone: string | null; emergency_contact_relationship: string | null
+  school_email?: string | null
 }
 
 async function load(db: SupabaseClient, registrationId: string) {
@@ -60,7 +61,7 @@ async function load(db: SupabaseClient, registrationId: string) {
     .from('participants')
     .select(`id, member_id, first_name, last_name, email, phone, date_of_birth, event_role, school_name, grade, gender,
       t_shirt_size, dietary_requirements, health_conditions, emergency_contact_first_name, emergency_contact_last_name,
-      emergency_contact_email, emergency_contact_phone, emergency_contact_relationship`)
+      emergency_contact_email, emergency_contact_phone, emergency_contact_relationship, school_email`)
     .eq('registration_id', registrationId)
     .order('created_at', { ascending: true })
   return { reg: reg as Reg, parts: (parts ?? []) as Part[] }
@@ -160,6 +161,7 @@ export async function finishGroupSetup(
           ec_first_name: p.emergency_contact_first_name ?? '', ec_last_name: p.emergency_contact_last_name ?? '',
           ec_email: p.emergency_contact_email ?? '', ec_phone: p.emergency_contact_phone ?? '',
           ec_relationship: p.emergency_contact_relationship ?? '',
+          school_email: p.school_email ?? '',
         })
         const enteredStudents = others.filter((p) => STUDENT_ROLES.has(p.event_role ?? '')).length
         const enteredAdults = others.length - enteredStudents

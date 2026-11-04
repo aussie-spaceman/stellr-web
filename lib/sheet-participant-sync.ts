@@ -89,7 +89,10 @@ async function syncFromSheet(
     // member record, so normalise it once here. Matching on the raw sheet value
     // was case-sensitive: "Jane@x.com" typed over an existing "jane@x.com" row
     // missed the match and added a duplicate participant.
-    const email = normalizeEmail(row.email)
+    // Personal takes primacy (lib/member-email): a row with only a School
+    // Email (column R) uses it as the primary address.
+    const email = normalizeEmail(row.email) || normalizeEmail(row.school_email)
+    const schoolEmail = normalizeEmail(row.school_email) || null
 
     // deep review INT-4: skip rows without a syntactically valid email. A Drive
     // push fires while the organiser is still typing a row, so a name-only row
@@ -136,6 +139,7 @@ async function syncFromSheet(
     // the participant row below.
     const memberId = await upsertMember(db, {
       email,
+      school_email: schoolEmail,
       first_name: row.first_name,
       last_name: row.last_name,
       phone: row.phone,
@@ -158,6 +162,7 @@ async function syncFromSheet(
       first_name: row.first_name,
       last_name: row.last_name,
       email,
+      school_email: schoolEmail,
       phone: row.phone,
       date_of_birth: dob,
       gender: row.gender,

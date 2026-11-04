@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, studentLeftTeamEmail } from '@/lib/email'
+import { resolveEmailPair } from '@/lib/member-email'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
@@ -64,6 +65,15 @@ export async function PATCH(
   }
   // Roster filters (Companies auto-assign, studentCount) match enum values.
   if ('event_role' in updates) updates.event_role = normalizeEventRole(updates.event_role)
+  // Personal takes primacy: with only a school address, it is the primary.
+  if ('email' in body || 'school_email' in body) {
+    const emails = resolveEmailPair({ email: body.email, school_email: body.school_email })
+    if ('email' in body) {
+      if (!emails.email) return NextResponse.json({ error: 'Enter an email address.' }, { status: 400 })
+      updates.email = emails.email
+    }
+    updates.school_email = emails.school_email
+  }
 
   // S0 (2 Nov 2026): an edited date of birth gets the same check as one added
   // (POST, and the registration routes): a cleared, unreadable or future date

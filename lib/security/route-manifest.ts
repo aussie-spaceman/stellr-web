@@ -159,6 +159,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/admin/members/[id]/volunteer/route.ts': 'stellr_only',
   'app/api/admin/members/export/route.ts': 'stellr_only',
   'app/api/admin/members/route.ts': 'stellr_only',
+  'app/api/admin/members/merge/route.ts': 'stellr_only',
   'app/api/admin/members/search/route.ts': 'stellr_only',
   'app/api/admin/membership/rules/route.ts': 'stellr_only',
   'app/api/admin/pd-certificate/preview/route.ts': 'stellr_only',

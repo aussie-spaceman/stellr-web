@@ -10,7 +10,10 @@ import {
 import { syncMemberClassificationRole } from '@/lib/member-roles'
 
 export interface MemberUpsertInput {
+  /** The personal (primary) address. */
   email: string
+  /** Optional school address (members under 18). */
+  school_email?: string | null
   first_name: string
   last_name: string
   nickname?: string | null
@@ -99,21 +102,38 @@ export async function upsertMember(
   input: MemberUpsertInput,
   opts: UpsertMemberOptions = {},
 ): Promise<string | null> {
-  const email = normalizeEmail(input.email)
+  // Personal takes primacy (lib/member-email): the primary address is the
+  // personal one, else the school one.
+  const personal = normalizeEmail(input.email)
+  const school = normalizeEmail(input.school_email) || null
+  const email = personal || school
   if (!email) return null
 
   const eventRole = normalizeEventRole(input.event_role)
 
   // Cross-reference against the existing membership database by email.
-  const { data: existing, error: lookupError } = await db
+  const { data: byEmail, error: lookupError } = await db
     .from('members')
-    .select('id')
+    .select('id, email')
     .eq('email', email)
     .maybeSingle()
 
   if (lookupError) {
     console.error('[member-sync] Member lookup error (non-fatal):', lookupError)
     return null
+  }
+
+  // Then by the other address (4 Nov 2026): a student first entered under a
+  // school address and later under a personal one (or the reverse) is the same
+  // member. Without this the second entry created a duplicate record.
+  let existing = byEmail as { id: string; email: string } | null
+  if (!existing && school && school !== email) {
+    const { data } = await db.from('members').select('id, email').eq('email', school).limit(1).maybeSingle()
+    existing = (data as { id: string; email: string } | null) ?? null
+  }
+  if (!existing) {
+    const { data } = await db.from('members').select('id, email').eq('school_email', email).limit(1).maybeSingle()
+    existing = (data as { id: string; email: string } | null) ?? null
   }
 
   // Untrusted input must not touch an existing member (C-3). Hand back the id so
@@ -148,6 +168,12 @@ export async function upsertMember(
       ec_phone: submitted(input.ec_phone) ? input.ec_phone : undefined,
       ec_relationship: submitted(input.ec_relationship) ? input.ec_relationship : undefined,
       is_active: true,
+      // A newly given personal address becomes the primary, and the address it
+      // replaces is kept as the school one. Matched only on the school address
+      // or by email already, so this never moves a stranger's address.
+      ...(personal && existing.email && existing.email !== personal
+        ? { email: personal, school_email: school ?? existing.email }
+        : school && school !== existing.email ? { school_email: school } : {}),
     })
 
     if (!submitted(input.event_role)) {
@@ -167,6 +193,7 @@ export async function upsertMember(
       .from('members')
       .insert({
         email,
+        school_email: school,
         first_name: input.first_name,
         last_name: input.last_name,
         nickname: input.nickname || null,

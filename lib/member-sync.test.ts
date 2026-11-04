@@ -15,6 +15,7 @@ function makeDb(existingMember: { id: string; event_role?: string } | null) {
       const chain = {
         select: () => chain,
         eq: () => chain,
+        limit: () => chain,
         maybeSingle: async () => ({
           data: q.mode === 'insert' ? { id: 'new-id' } : existingMember, error: null,
         }),
@@ -177,5 +178,30 @@ describe('fillBlanksFromStored — batched upsert keeps its merge guarantee', ()
     const payload: Record<string, unknown> = { email: 'new@example.com', phone: null }
     fillBlanksFromStored(payload, { email: 'new@example.com', phone: null })
     expect(payload.phone).toBeNull()
+  })
+})
+
+describe('upsertMember — personal and school email (4 Nov 2026)', () => {
+  it('a newly given personal address becomes primary; the old one is kept as school', async () => {
+    const { db, calls } = makeDb({ id: 'existing-2', event_role: 'participant', email: 'sam@nv.ccsd.net' } as never)
+    const id = await upsertMember(db, {
+      email: 'Sam@Gmail.com', school_email: 'sam@nv.ccsd.net', first_name: 'Sam', last_name: 'S',
+      event_role: 'participant',
+    })
+    expect(id).toBe('existing-2')
+    expect(calls.updates[0]).toMatchObject({ email: 'sam@gmail.com', school_email: 'sam@nv.ccsd.net' })
+  })
+
+  it('a new member given only a school address has it as the primary', async () => {
+    const { db, calls } = makeDb(null)
+    await upsertMember(db, { email: '', school_email: 'Sam@nv.ccsd.net', first_name: 'Sam', last_name: 'S' })
+    expect(calls.inserts[0]).toMatchObject({ email: 'sam@nv.ccsd.net', school_email: 'sam@nv.ccsd.net' })
+  })
+
+  it('an untrusted caller links to the existing member and changes nothing', async () => {
+    const { db, calls } = makeDb({ id: 'existing-3', email: 'sam@nv.ccsd.net' } as never)
+    const id = await upsertMember(db, { email: 'sam@gmail.com', school_email: 'sam@nv.ccsd.net', first_name: 'Sam', last_name: 'S' }, { onExisting: 'skip' })
+    expect(id).toBe('existing-3')
+    expect(calls.updates).toHaveLength(0)
   })
 })

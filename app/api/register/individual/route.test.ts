@@ -40,7 +40,7 @@ vi.mock('@/lib/supabase', () => ({
         return { data: null, error: null }
       }
       const chain: Record<string, unknown> = {
-        select: () => chain, eq: () => chain, in: () => chain, is: () => chain,
+        select: () => chain, eq: () => chain, in: () => chain, is: () => chain, limit: () => chain,
         maybeSingle: async () => result(), single: async () => result(),
         insert: (p: unknown) => {
           op = 'insert'

@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getAllEvents, getAllCampaigns, getEventsBySlugs } from '@/lib/sanity'
 import type { ObjectType } from '@/lib/training-portal'
+import { audienceIncludes, eventVolunteers, normalizeAudience, type Audience, type RosterKind } from '@/lib/training-audience'
 export type { ObjectType }
 
 // Admin-side Training data: the trainable-Object catalogue, completion tracking
@@ -86,12 +87,15 @@ export interface EventTracking {
   summary: { complete: number; in_progress: number; not_started: number; overdue: number }
 }
 
-type TrackCourse = { moduleId: string; title: string; dueAt: string | null }
+// audience: who on an event roster the course is for ('all' outside events).
+type TrackCourse = { moduleId: string; title: string; dueAt: string | null; audience: Audience }
 interface Participant {
   memberId: string
   name: string
   ageBracket: string | null
   group: string
+  /** Event Objects only: the person's place on the roster. */
+  kind?: RosterKind
 }
 
 const moduleTitle = (row: { training_modules?: unknown }) => {
@@ -106,14 +110,15 @@ async function mandatoryCoursesForEvent(refs: string[]): Promise<TrackCourse[]> 
   const cols = new Map<string, TrackCourse>()
   const [{ data: legacy }, { data: rich }] = await Promise.all([
     db.from('training_assignments').select('module_id, due_at, training_modules(title)').in('event_ref', refs).eq('is_mandatory', true),
-    db.from('course_object_assignments').select('module_id, due_at, default_requirement, tier_requirements, training_modules(title)').in('object_ref', refs),
+    db.from('course_object_assignments').select('module_id, due_at, default_requirement, tier_requirements, audience, training_modules(title)').in('object_ref', refs),
   ])
+  // Legacy rows were only ever tracked against registered students; keep that.
   for (const a of legacy ?? [])
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: 'participants' })
   for (const a of rich ?? []) {
     const tr = (a.tier_requirements as Record<string, string> | null) ?? {}
     if (a.default_requirement !== 'mandatory' && !Object.values(tr).includes('mandatory')) continue
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: normalizeAudience(a.audience) })
   }
   return [...cols.values()]
 }
@@ -129,10 +134,10 @@ async function mandatoryCoursesForCohort(cohortId: string): Promise<TrackCourse[
   for (const a of rich ?? []) {
     const tr = (a.tier_requirements as Record<string, string> | null) ?? {}
     if (a.default_requirement !== 'mandatory' && !Object.values(tr).includes('mandatory')) continue
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: 'all' })
   }
   for (const a of links ?? [])
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: 'all' })
   return [...cols.values()]
 }
 
@@ -155,8 +160,21 @@ async function eventParticipants(slug: string): Promise<Participant[]> {
       name: [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Participant',
       ageBracket: (m as { age_bracket?: string } | null)?.age_bracket ?? null,
       group: groupByReg.get(p.registration_id as string) ?? 'Group',
+      kind: 'participant' as const,
     }
   })
+}
+
+/** Volunteers on an event Object (its Volunteers panel), grouped together. */
+async function eventVolunteerParticipants(slug: string): Promise<Participant[]> {
+  const vols = await eventVolunteers(supabaseServer(), slug)
+  return vols.map((v) => ({
+    memberId: v.memberId,
+    name: [v.firstName, v.lastName].filter(Boolean).join(' ') || 'Volunteer',
+    ageBracket: v.ageBracket,
+    group: 'Volunteers',
+    kind: 'volunteer' as const,
+  }))
 }
 
 /**
@@ -271,11 +289,16 @@ async function computeTracking(
   }
 
   const now = Date.now()
-  let rows: TrackingRow[] = participants.map((p) => {
+  // Each person is scored only on the courses whose audience includes them; a
+  // person with none (a student beside a volunteers-only course) is not listed.
+  const scored = participants
+    .map((p) => ({ p, mine: courses.filter((c) => audienceIncludes(c.audience, p.kind ? [p.kind] : [])) }))
+    .filter((x) => x.mine.length > 0)
+  let rows: TrackingRow[] = scored.map(({ p, mine }) => {
     const completed = completedByMember.get(p.memberId) ?? new Set<string>()
     const started = startedByMember.get(p.memberId) ?? new Set<string>()
     let anyOverdue = false, anyStarted = false, allComplete = true
-    for (const c of courses) {
+    for (const c of mine) {
       const ids = itemsByModule.get(c.moduleId) ?? []
       const done = ids.filter((id) => completed.has(id)).length
       const complete = ids.length > 0 && done >= ids.length
@@ -305,8 +328,9 @@ async function computeTracking(
 
 /**
  * Per-participant completion of an Object's mandatory training, one aggregate
- * status each. Dispatches on Object type: event/campaign use registrations;
- * cohort/workshop/space use cohort membership. Age-bracket + outstanding filters.
+ * status each. Dispatches on Object type: event/campaign use registrations plus
+ * the Volunteers panel (each scored on the courses whose audience includes
+ * them); cohort/workshop/space use cohort membership. Age-bracket + outstanding filters.
  */
 export async function getObjectTracking(
   objectType: ObjectType,
@@ -316,7 +340,10 @@ export async function getObjectTracking(
   if (objectType === 'competition' || objectType === 'campaign') {
     const meta = await getEventsBySlugs([objectRef])
     const courses = await mandatoryCoursesForEvent([objectRef, ...meta.map((m) => m._id)])
-    const participants = await eventParticipants(objectRef)
+    const [students, volunteers] = await Promise.all([eventParticipants(objectRef), eventVolunteerParticipants(objectRef)])
+    // A registered student who is also on the Volunteers panel is listed once.
+    const studentIds = new Set(students.map((p) => p.memberId))
+    const participants = [...students, ...volunteers.filter((v) => !studentIds.has(v.memberId))]
     return computeTracking(courses, participants, opts)
   }
   const courses = await mandatoryCoursesForCohort(objectRef)

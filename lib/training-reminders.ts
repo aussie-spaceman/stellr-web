@@ -3,6 +3,7 @@ import { formatDateShort } from '@/lib/utils'
 import { getEventsByIds } from '@/lib/sanity'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
+import { audienceIncludes, eventVolunteers } from '@/lib/training-audience'
 
 // Training reminder + escalation engine (FR-COM-10), run daily by the cron.
 // Processes BOTH assignment sources:
@@ -257,7 +258,7 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
   /* ── Pass 2: new per-Object assignments (course_object_assignments) ── */
   const { data: rich } = await db
     .from('course_object_assignments')
-    .select('id, module_id, object_type, object_ref, default_requirement, tier_requirements, due_at')
+    .select('id, module_id, object_type, object_ref, default_requirement, tier_requirements, due_at, audience')
     .not('due_at', 'is', null)
 
   if (rich?.length) {
@@ -282,28 +283,51 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
 
       if (isEvent) {
         const slug = a.object_ref as string
-        const { data: regs } = await db.from('registrations').select('id, teacher_email, teacher_first_name').eq('event_slug', slug)
-        const regById = new Map((regs ?? []).map((r) => [r.id as string, r]))
-        const regIds = [...regById.keys()]
-        if (regIds.length === 0) continue
-        const { data: parts } = await db.from('participants').select('member_id, first_name, last_name, event_role, registration_id').in('registration_id', regIds).not('member_id', 'is', null)
-        if (!parts?.length) continue
-        const smByReg = new Map<string, string[]>()
-        for (const p of parts) if (p.event_role === 'school_student_manager') {
-          const arr = smByReg.get(p.registration_id as string) ?? []; arr.push(p.member_id as string); smByReg.set(p.registration_id as string, arr)
-        }
-        const tiers = await memberTierIds(db, parts.map((p) => p.member_id as string))
-        people = parts.map((p) => {
-          const reg = regById.get(p.registration_id as string) as { teacher_email?: string; teacher_first_name?: string } | undefined
-          return {
-            memberId: p.member_id as string,
-            name: `${p.first_name} ${p.last_name}`,
-            tierIds: tiers.get(p.member_id as string) ?? [],
-            teacherEmail: reg?.teacher_email,
-            teacherName: reg?.teacher_first_name,
-            supervisorIds: (smByReg.get(p.registration_id as string) ?? []).filter((id) => id !== p.member_id),
+        // Students (registrations) when the audience includes participants.
+        if (audienceIncludes(a.audience, ['participant'])) {
+          const { data: regs } = await db.from('registrations').select('id, teacher_email, teacher_first_name').eq('event_slug', slug)
+          const regById = new Map((regs ?? []).map((r) => [r.id as string, r]))
+          const regIds = [...regById.keys()]
+          const { data: parts } = regIds.length > 0
+            ? await db.from('participants').select('member_id, first_name, last_name, event_role, registration_id').in('registration_id', regIds).not('member_id', 'is', null)
+            : { data: [] as { member_id: string; first_name: string; last_name: string; event_role: string; registration_id: string }[] }
+          if (parts?.length) {
+            const smByReg = new Map<string, string[]>()
+            for (const p of parts) if (p.event_role === 'school_student_manager') {
+              const arr = smByReg.get(p.registration_id as string) ?? []; arr.push(p.member_id as string); smByReg.set(p.registration_id as string, arr)
+            }
+            const tiers = await memberTierIds(db, parts.map((p) => p.member_id as string))
+            people = parts.map((p) => {
+              const reg = regById.get(p.registration_id as string) as { teacher_email?: string; teacher_first_name?: string } | undefined
+              return {
+                memberId: p.member_id as string,
+                name: `${p.first_name} ${p.last_name}`,
+                tierIds: tiers.get(p.member_id as string) ?? [],
+                teacherEmail: reg?.teacher_email,
+                teacherName: reg?.teacher_first_name,
+                supervisorIds: (smByReg.get(p.registration_id as string) ?? []).filter((id) => id !== p.member_id),
+              }
+            })
           }
-        })
+        }
+        // Volunteers (the event's Volunteers panel) when the audience includes
+        // them. No teacher or student manager to escalate to.
+        if (audienceIncludes(a.audience, ['volunteer'])) {
+          const have = new Set(people.map((p) => p.memberId))
+          const vols = (await eventVolunteers(db, slug)).filter((v) => !have.has(v.memberId))
+          if (vols.length > 0) {
+            const tiers = await memberTierIds(db, vols.map((v) => v.memberId))
+            for (const v of vols) {
+              people.push({
+                memberId: v.memberId,
+                name: [v.firstName, v.lastName].filter(Boolean).join(' ') || 'Volunteer',
+                tierIds: tiers.get(v.memberId) ?? [],
+                supervisorIds: [],
+              })
+            }
+          }
+        }
+        if (people.length === 0) continue
       } else {
         // cohort / workshop / space — members + the cohort mentor as supervisor.
         const cohortId = a.object_ref as string

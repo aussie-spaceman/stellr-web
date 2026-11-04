@@ -8,38 +8,51 @@
 // kind. Adding a new guard helper therefore means listing it here, which is a
 // visible, reviewed step, and the test checks the claim.
 import type { RouteClass } from './route-manifest'
+import { fileModule, type HandlerFacts } from './route-ast'
 
 export type GuardKind = 'session' | 'admin' | 'webhook' | 'cron' | 'rate_limit'
 
-/** Calls that ARE the check. Matched by the final name of the callee. */
-export const BASE_GUARDS: Record<GuardKind, readonly string[]> = {
-  // Clerk's server helpers (`auth as clerkAuth` is resolved to auth).
-  session: ['auth', 'currentUser'],
-  // Predicates over the Clerk session claims. The inline `….role === 'admin'`
-  // comparison also counts as an admin check (the analyser detects it).
-  admin: ['isAdminClaims', 'hasAdminPortalAccess'],
-  // Signature or shared-secret verification. Library calls (svix `verify`,
-  // Stripe `constructEvent`, next-sanity `parseBody`) and node's
-  // `timingSafeEqual`, plus the repo's provider-specific verifiers.
-  webhook: [
-    'verify',
-    'constructEvent',
-    'parseBody',
-    'timingSafeEqual',
-    'safeStrEqual',
-    'verifyConnectHmac',
-    'verifyWebhook',
-    'verifyJaasSignature',
-    'verifyPrintfulWebhook',
-  ],
-  cron: ['guardCron'],
-  rate_limit: ['checkRateLimit'],
+/** The facts satisfies() reads (a HandlerFacts, or a slice of one). */
+export type CallFacts = Pick<HandlerFacts, 'calls' | 'origins' | 'comparesRoleToAdmin'>
+
+const CLERK = '@clerk/nextjs/server'
+
+/**
+ * Calls that ARE the check, each with the origins it is accepted from (see
+ * lib/security/route-ast.ts). A bare call's origin is the module it was
+ * imported from (`auth as clerkAuth` is resolved to auth); a method call's is
+ * its receiver's root, so `wh.verify()` counts only when `wh` is a svix
+ * `new Webhook(…)`, and `stripe.webhooks.constructEvent()` only when `stripe`
+ * comes from lib/stripe. A library's own export called inside that library
+ * has the library as its origin.
+ */
+export const BASE_GUARDS: Record<GuardKind, Record<string, readonly string[]>> = {
+  session: { auth: [CLERK], currentUser: [CLERK] },
+  // Predicates over the Clerk session claims. An inline `role === 'admin'`
+  // comparison also counts, but only when the role is read from the session
+  // claims AND Clerk's auth()/currentUser() is called (see baseKinds()).
+  admin: { isAdminClaims: ['lib/admin-auth'], hasAdminPortalAccess: ['lib/admin-auth'] },
+  // Signature or shared-secret verification: library verifiers, node's
+  // timingSafeEqual, and the repo's provider-specific verifiers.
+  webhook: {
+    verify: ['svix'],
+    constructEvent: ['stripe', 'lib/stripe'],
+    parseBody: ['next-sanity/webhook'],
+    timingSafeEqual: ['crypto', 'node:crypto'],
+    safeStrEqual: ['lib/secret-compare'],
+    verifyConnectHmac: ['lib/docusign'],
+    verifyWebhook: ['lib/background-provider'],
+    verifyPrintfulWebhook: ['lib/store/printful'],
+  },
+  cron: { guardCron: ['lib/cron'] },
+  rate_limit: { checkRateLimit: ['lib/rate-limit'] },
 }
 
 /**
  * Shared helpers trusted as a guard of the listed kinds. The test reads each
  * one from `file` and fails unless it reaches a base idiom (or another
- * delegate) of every kind listed. An admin helper also authenticates, so it
+ * delegate) of every kind listed. A handler's call counts only when the helper
+ * is imported from `file`. An admin helper also authenticates, so it
  * satisfies `session` as well (see satisfies() below).
  */
 export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[] }> = {
@@ -86,21 +99,79 @@ export const CLASS_REQUIREMENTS: Record<RouteClass, { kinds: GuardKind[]; firstS
   public: { kinds: ['rate_limit'] },
 }
 
+/** The facts reach `name`, called from one of the `allowed` origins. */
+export function calledFrom(f: Pick<CallFacts, 'calls' | 'origins'>, name: string, allowed: readonly string[]): boolean {
+  if (!f.calls.has(name)) return false
+  const got = f.origins.get(name)
+  return !!got && allowed.some((o) => got.has(o))
+}
+
+/** The facts call Clerk's own auth() or currentUser(). */
+export function callsClerkSession(f: Pick<CallFacts, 'calls' | 'origins'>): boolean {
+  return calledFrom(f, 'auth', [CLERK]) || calledFrom(f, 'currentUser', [CLERK])
+}
+
+/** The kinds the base idioms alone give (no delegates). An admin check implies a session. */
+export function baseKinds(f: CallFacts): Set<GuardKind> {
+  const out = new Set<GuardKind>()
+  for (const [kind, guards] of Object.entries(BASE_GUARDS) as [GuardKind, Record<string, readonly string[]>][]) {
+    if (Object.entries(guards).some(([name, from]) => calledFrom(f, name, from))) out.add(kind)
+  }
+  // The inline check counts only for a role read from the session claims
+  // (route-ast.ts), in code that also calls Clerk. A role read from a request
+  // body or a database row never counts.
+  if (f.comparesRoleToAdmin && callsClerkSession(f)) out.add('admin')
+  if (out.has('admin')) out.add('session')
+  return out
+}
+
+/** The facts call the listed delegate, imported from its own file. */
+export function callsDelegate(f: Pick<CallFacts, 'calls' | 'origins'>, name: string): boolean {
+  const d = DELEGATE_GUARDS[name]
+  return !!d && calledFrom(f, name, [fileModule(d.file)])
+}
+
 /**
  * The kinds a set of calls satisfies, given the delegates' (verified) kinds.
  * An admin check implies a session: it cannot pass without a signed-in user.
  */
-export function satisfies(calls: Set<string>, comparesRoleToAdmin: boolean): Set<GuardKind> {
-  const out = new Set<GuardKind>()
-  for (const [kind, names] of Object.entries(BASE_GUARDS) as [GuardKind, readonly string[]][]) {
-    if (names.some((n) => calls.has(n))) out.add(kind)
-  }
+export function satisfies(f: CallFacts): Set<GuardKind> {
+  const out = baseKinds(f)
   for (const [name, { kinds }] of Object.entries(DELEGATE_GUARDS)) {
-    if (calls.has(name)) for (const k of kinds) out.add(k)
+    if (callsDelegate(f, name)) for (const k of kinds) out.add(k)
   }
-  if (comparesRoleToAdmin) out.add('admin')
   if (out.has('admin')) out.add('session')
   return out
+}
+
+/**
+ * Database clients. A public metadata route (a share card, an icon, the
+ * sitemap) that reaches one of these must be listed in PUBLIC_DATA_GATES.
+ */
+export const DATA_READERS: Record<string, readonly string[]> = {
+  supabaseServer: ['lib/supabase'],
+  supabaseServerTyped: ['lib/supabase'],
+  supabase: ['lib/supabase'],
+  createClient: ['@supabase/supabase-js'],
+}
+
+/**
+ * Public metadata routes that read the database, and the checks each must
+ * reach before it shows any personal data. Keyed `<file>#default`. The test
+ * fails when such a route is not listed here, or no longer reaches a listed
+ * call or comparison (`prop=literal`, as route-ast.ts records it).
+ */
+export const PUBLIC_DATA_GATES: Record<
+  string,
+  { calls: Record<string, readonly string[]>; compares: readonly string[]; why: string }
+> = {
+  'app/(public)/credentials/[number]/opengraph-image.tsx#default': {
+    calls: { ageBlock: ['lib/credentials-core'], credentialState: ['lib/credentials-core'] },
+    compares: ['visibility=public'],
+    why:
+      'the share card names the holder, who may be a minor: only a public credential that is not withdrawn, ' +
+      'of a holder not under 13 or of unknown age (ogCardFor, deep review MP-4)',
+  },
 }
 
 /**

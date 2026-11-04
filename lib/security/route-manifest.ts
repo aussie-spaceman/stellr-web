@@ -1,5 +1,5 @@
-// The route manifest (S2, multi-tenant plan): every route handler and every
-// page under app/, each in exactly one access class. test/route-manifest.test.ts
+// The route manifest (S2, multi-tenant plan): every route handler, every
+// metadata route and every page under app/, each in one access class. test/route-manifest.test.ts
 // fails when a file is missing from this list, when an entry names a file that
 // no longer exists, and when a handler does not call the guard its class needs.
 // How to classify a new route: docs/SECURITY-route-manifest.md.
@@ -347,7 +347,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/webhooks/sanity/route.ts': 'webhook',
   'app/api/white-paper/route.ts': 'public',
 
-  // ── Other route handlers (metadata and file routes) (4) ─────────────
+  // ── Other route handlers (file routes) (4) ───────────────────────────
   'app/(public)/credentials/[number]/badge/route.tsx': 'public',
   'app/app.webmanifest/route.ts': 'public',
   'app/indexnow-key.txt/route.ts': 'public',
@@ -512,4 +512,14 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/(public)/volunteer/page.tsx': 'public',
   'app/(public)/why-stellr/page.tsx': 'public',
   'app/studio/[[...tool]]/page.tsx': 'stellr_only',
+
+  // ── Metadata routes (5) ───────────────────────────────────────────────
+  // Next serves these as GET route handlers: crawlers, unfurlers and browsers
+  // fetch them with no session, so every one is public. One that reads the
+  // database must also be listed in PUBLIC_DATA_GATES (route-guards.ts).
+  'app/(public)/credentials/[number]/opengraph-image.tsx': 'public',
+  'app/(public)/lp/[slug]/opengraph-image.tsx': 'public',
+  'app/manifest.ts': 'public',
+  'app/robots.ts': 'public',
+  'app/sitemap.ts': 'public',
 }

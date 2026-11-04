@@ -1,9 +1,16 @@
 # Route manifest and AST guard check
 
-Stage 2 of the multi-tenant plan. Every route handler (`route.ts`/`route.tsx`) and every page (`page.tsx`) under `app/` is listed in **`lib/security/route-manifest.ts`** with one access class. **`test/route-manifest.test.ts`** fails when:
+Stage 2 of the multi-tenant plan. Every file under `app/` that Next serves as code is listed in **`lib/security/route-manifest.ts`** with one access class:
 
-- a route or page file is not in the manifest, or an entry names a file that is gone (the 100% classification gate);
+- route handlers (`route.ts`/`route.tsx`);
+- metadata routes, which Next serves as GET route handlers: `opengraph-image`, `twitter-image`, `icon` and `apple-icon` (`.ts`/`.tsx`), and `sitemap.ts`, `robots.ts` and `manifest.ts`;
+- pages (`page.tsx`).
+
+**`test/route-manifest.test.ts`** fails when:
+
+- one of those files is not in the manifest, or an entry names a file that is gone (the 100% classification gate);
 - a handler does not call the guard its class needs, found by parsing the file with the TypeScript compiler (`lib/security/route-ast.ts`), not by regex;
+- a public metadata route reads the database without being listed in `PUBLIC_DATA_GATES`, or no longer reaches the checks listed for it;
 - a shared guard helper no longer reaches the check it is trusted for;
 - the exceptions list changes size without the pinned count changing too, or an exception is no longer needed.
 
@@ -34,7 +41,7 @@ Community routes are `participant`. That they must never be reachable on a tenan
 1. Create the file. `npx vitest run test/route-manifest.test.ts` now fails with "add these to lib/security/route-manifest.ts".
 2. Add one line to the right section of `ROUTE_MANIFEST`, choosing the class with the table above. Decide by **who calls it**, not by the folder it sits in: a route under `/api/members` that anyone can call is `public`.
 3. Call the guard for that class in every exported handler (`GET`, `POST`, …), either directly or through a function in the same file. For a page, the default-exported component must call it.
-   - Admin check: `requireAdminPage`, `isAdminClaims`, `currentUserIsAdmin`, `currentUserHasScope`, `requireEventAccess`, `requireScholarshipAdmin`, `requireSurveyAdmin`, `canManageStoreCatalog`, or `….role === 'admin'`.
+   - Admin check: `requireAdminPage`, `isAdminClaims`, `currentUserIsAdmin`, `currentUserHasScope`, `requireEventAccess`, `requireScholarshipAdmin`, `requireSurveyAdmin`, `canManageStoreCatalog`, or an inline `role === 'admin'` where the role is read from `sessionClaims` and the handler calls Clerk's `auth()` or `currentUser()`. A role from the request body or a database row does not count.
    - Session check: `auth()`, `currentUser()`, `getCurrentMember`, `getSignedInMember`, `getOnboardedMember`, `currentStoreMember`, `resolveRequestMember`, and the other helpers in `DELEGATE_GUARDS`.
    - Rate limit: `rateLimitGuard` or `checkRateLimit` (the e-sign routes use `throttle`).
    - Webhook: the provider's verifier (`constructEvent`, svix `verify`, `verifyConnectHmac`, …) or `timingSafeEqual`/`safeStrEqual` against the shared secret.
@@ -43,9 +50,22 @@ Community routes are `participant`. That they must never be reachable on a tenan
 
 The full list of recognised calls is `BASE_GUARDS` and `DELEGATE_GUARDS` in **`lib/security/route-guards.ts`**.
 
+### How a call is recognised
+
+A guard counts only when it comes from where the guard really lives, not by its name alone:
+
+- **Imported calls** count only from the listed module. `getOnboardedMember` must come from `lib/onboarded-member` (`@/lib/onboarded-member` and a relative path both resolve to it), `auth` from `@clerk/nextjs/server`, `guardCron` from `lib/cron`. A destructured dynamic import (`const { auth } = await import('@clerk/nextjs/server')`) counts the same way.
+- **Method calls** count only on the provider's object. `wh.verify()` counts when `wh` is a svix `new Webhook(…)`. `stripe.webhooks.constructEvent()` counts when `stripe` comes from `lib/stripe`. `crypto.timingSafeEqual()` counts when `crypto` is node's. A method of the same name on any other object (an object literal, the request body, `URLSearchParams`) does not count.
+- **Same-file functions** are followed into, but their names are never trusted. This applies at the top level and nested inside the handler.
+- **Reachable code only.** Statements after an unconditional `return` or `throw` in a block do not count. A nested function counts only when it runs: called on the spot, passed to a call as a callback, or bound to a name that is referenced. A closure that is declared and never used does not count.
+
+## A public metadata route that reads data
+
+Metadata routes are always `public`: crawlers and link unfurlers fetch them with no session, and they have no rate-limit requirement. If one reaches a database client (`DATA_READERS`: `supabaseServer`, `supabaseServerTyped`, `supabase`, or `createClient`), list it in `PUBLIC_DATA_GATES` in `lib/security/route-guards.ts`. Give the calls and the `prop=literal` comparisons it must reach before it shows personal data, and say why. `EXPECTED_DATA_GATES` in the test pins the count. The credential share card is the one entry today. It shows the holder's name, who may be a minor, so it must call `ageBlock` and `credentialState` and check `visibility === 'public'` (`ogCardFor`). If any of those is dropped, the test fails.
+
 ## A new guard helper
 
-Add it to `DELEGATE_GUARDS` with its file and the kinds it provides. The test reads the helper's source and fails unless it really reaches a base check of those kinds (directly, or through another listed helper). A same-file function that merely borrows a guard's name (`function getCurrentMember() {}` inside a route) is not trusted.
+Add it to `DELEGATE_GUARDS` with its file and the kinds it provides. The test reads the helper's source and fails unless it really reaches a base check of those kinds (directly, or through another listed helper). A route's call counts only when the helper is imported from that file. A function that merely borrows a guard's name is not trusted. That covers a same-file function at any depth, a method on another object, and an import of the same name from another module.
 
 ## Exceptions
 
@@ -53,7 +73,8 @@ Add it to `DELEGATE_GUARDS` with its file and the kinds it provides. The test re
 
 ## What the check does not prove
 
-- That the guard's result is acted on. It proves the call is made, not that a `false` leads to a 401.
+- That the guard's result is acted on. It proves the call is reached, not that a `false` leads to a 401. A call under a condition that never holds (`if (false) await auth()`) still counts.
+- That a nested function passed to a call is really invoked. Any callback counts.
 - Object-level authorisation (that member A cannot read member B's row). That is the S2 cross-tenant and IDOR generator's job.
 - Guards in `proxy.ts`. Middleware is a second layer; pages and handlers must still guard themselves (deep review C-2, AUTH-1).
-- Metadata routes (`robots.ts`, `sitemap.ts`, `manifest.ts`) and layouts are not listed: they are not route handlers or pages.
+- Layouts and static metadata files (`icon.png`, `apple-icon.png`) are not listed. Layouts are not entry points, and static files run no code.

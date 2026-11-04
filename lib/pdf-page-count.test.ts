@@ -103,7 +103,67 @@ function commentAlias(n: number): Uint8Array {
 
 /** The pages pdf-lib builds from a file. */
 async function pdfLibPages(file: Uint8Array): Promise<number> {
-  return (await PDFDocument.load(file, { updateMetadata: false })).getPageCount()
+  return (await PDFDocument.load(file, { updateMetadata: false, ignoreEncryption: true })).getPageCount()
+}
+
+/**
+ * One object stream as an indirect object `num 0 obj`, holding `objects`
+ * ([object number, source] pairs). `dict` fills {N}, {F} and {L}; `encode`
+ * turns the raw stream into its data (Flate by default).
+ */
+function objStmObject(
+  num: number,
+  objects: [number, string][],
+  dict = '<< /Type /ObjStm /N {N} /First {F} /Filter /FlateDecode /Length {L} >>',
+  encode: (raw: Buffer) => Buffer = (raw) => deflateSync(raw),
+): Uint8Array {
+  const offsets: number[] = []
+  let body = ''
+  for (const [, o] of objects) {
+    offsets.push(body.length)
+    body += `${o}\n`
+  }
+  const header = objects.map(([n], i) => `${n} ${offsets[i]}`).join(' ')
+  const data = encode(Buffer.from(`${header}\n${body}`, 'latin1'))
+  const filled = dict
+    .replace('{N}', String(objects.length))
+    .replace('{F}', String(header.length + 1))
+    .replace('{L}', String(data.length))
+  return join(`${num} 0 obj\n${filled}\nstream\n`, data, '\nendstream\nendobj\n')
+}
+
+/** `n` page objects numbered from `from`, each a leaf of tree `parent`. */
+const pageObjects = (n: number, from: number, parent = 3): [number, string][] =>
+  Array.from({ length: n }, (_, i) => [from + i, `<< /Type /Page /Parent ${parent} 0 R /MediaBox [0 0 10 10] >>`])
+
+/** A page tree object `num` whose kids are objects `from`…`from + n - 1`, claiming `count`. */
+const treeObject = (num: number, n: number, from: number, count = n): [number, string] => [
+  num,
+  `<< /Type /Pages /Count ${count} /Kids [${kids(n, from)}] >>`,
+]
+
+const top = ([num, src]: [number, string]) => `${num} 0 obj\n${src}\nendobj\n`
+const CATALOG = '%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 3 0 R >>\nendobj\n'
+const TRAILER = 'trailer\n<< /Root 1 0 R >>\n%%EOF\n'
+const hexEncode = (raw: Buffer) => Buffer.from(`${raw.toString('hex')}>`, 'latin1')
+
+/**
+ * The review finding: an object stream under /ASCIIHexDecode whose /Filter is
+ * `filter`, the name /ASCIIHexDecode written only as object 9 inside a small
+ * Flate object stream the scan sniffs but doesn't read.
+ */
+function hiddenFilter(pages: number, filter: string, extraDict = ''): Uint8Array {
+  return join(
+    CATALOG,
+    objStmObject(2, [[9, '/ASCIIHexDecode'], [8, '[/ASCIIHexDecode]']]),
+    objStmObject(
+      5,
+      [treeObject(3, pages, 10), ...pageObjects(pages, 10)],
+      `<< /Type /ObjStm /N {N} /First {F} /Filter ${filter}${extraDict} /Length {L} >>`,
+      hexEncode,
+    ),
+    TRAILER,
+  )
 }
 
 describe('scanPdfPages', () => {
@@ -254,6 +314,97 @@ describe('scanPdfPages', () => {
     for (const file of files) expect(scan(file)?.bound).toBeGreaterThanOrEqual(await pdfLibPages(file))
   })
 
+  // Review finding (HIGH): /Filter 9 0 R, object 9 the name /ASCIIHexDecode
+  // inside another object stream, skipped the scan — 2,000 pages passed as 1.
+  describe('a /Filter the scan can’t read where it is written', () => {
+    const cases: [string, string, string?][] = [
+      ['a reference', '9 0 R'],
+      ['a reference to an array', '8 0 R'],
+      ['a reference in an array', '[9 0 R]'],
+      ['a reference after Flate in an array', '[/FlateDecode 9 0 R]'],
+      ['a signed reference', '+9 0 R'],
+      ['a reference written 9.', '9. 0 R'],
+      ['a value behind a comment', '%x\n/ASCIIHexDecode'],
+      ['a comment in an array', '[%x\n/ASCIIHexDecode]'],
+      ['a value past the window', `${' '.repeat(80)}/ASCIIHexDecode`],
+      ['an array past the window', `[${'/FlateDecode '.repeat(6)}]`],
+      ['a nested array', '[[/ASCIIHexDecode]]'],
+    ]
+    for (const [name, filter] of cases) {
+      it(name, async () => {
+        const file = hiddenFilter(2000, filter)
+        expect(scan(file)).toBeNull()
+        expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).toBe('unknown')
+      })
+    }
+
+    it('a /DecodeParms that is a reference or hidden', () => {
+      for (const parms of ['9 0 R', '+9 0 R', '%x\n<< >>', `${' '.repeat(40)}<< >>`]) {
+        const file = join(
+          CATALOG,
+          objStmObject(5, [treeObject(3, 3, 10), ...pageObjects(3, 10)], `<< /Type /ObjStm /N {N} /First {F} /Filter /FlateDecode /DecodeParms ${parms} >>`),
+          TRAILER,
+        )
+        expect(scan(file)).toBeNull()
+      }
+      // Written out directly, as xref streams write theirs: read as before.
+      for (const parms of ['<< /Predictor 12 /Columns 4 >>', '[<< >>]', 'null']) {
+        const file = join(
+          CATALOG,
+          objStmObject(5, [treeObject(3, 3, 10), ...pageObjects(3, 10)], `<< /Type /ObjStm /N {N} /First {F} /Filter /FlateDecode /DecodeParms ${parms} >>`),
+          TRAILER,
+        )
+        expect(scan(file)?.bound).toBe(4)
+      }
+    })
+
+    it('is a bypass pdf-lib really builds', async () => {
+      expect(await pdfLibPages(hiddenFilter(2000, '9 0 R'))).toBe(2000)
+      expect(await pdfLibPages(hiddenFilter(2000, '[9 0 R]'))).toBe(2000)
+      expect(await pdfLibPages(hiddenFilter(2000, '+9 0 R'))).toBe(2000)
+    })
+
+    it('is refused even in a file that names no object stream', () => {
+      expect(scan(enc('%PDF-1.7\n4 0 obj\n<< /Filter 9 0 R >>\nstream\nxx\nendstream\nendobj\n'))).toBeNull()
+    })
+
+    it('reads filters written out directly as before', async () => {
+      for (const filter of ['/FlateDecode', '[/FlateDecode]', '[ /FlateDecode ]', '/Fl#61teDecode']) {
+        const file = join(CATALOG, objStmObject(5, [treeObject(3, 3, 10), ...pageObjects(3, 10)], `<< /Type /ObjStm /N {N} /First {F} /Filter ${filter} >>`), TRAILER)
+        expect(scan(file)?.bound).toBe(4)
+        expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).toBe('ok')
+      }
+    })
+  })
+
+  // A /Type that may be a reference marks the file as one that could hold an
+  // object stream, so a filter pdf-lib decodes and the scan doesn't refuses it.
+  it('treats a signed or hidden /Type as a reference', () => {
+    for (const type of ['+9 0 R', '9. 0 R', '-9 0 R', '%x\n/ObjStm']) {
+      const file = enc(`%PDF-1.7\n4 0 obj\n<< /Type ${type} /Filter /ASCIIHexDecode >>\nstream\n20>\nendstream\nendobj\n`)
+      expect(scan(file)).toBeNull()
+    }
+  })
+
+  // pdf-lib throws on a filter it doesn't decode, so no object comes out of
+  // that stream: a photo (DCTDecode) is no reason to refuse a file.
+  it('lets through a filter pdf-lib won’t decode, which builds nothing', async () => {
+    const file = join(
+      CATALOG,
+      top(treeObject(3, 0, 10)),
+      objStmObject(5, [treeObject(3, 60, 10), ...pageObjects(60, 10)], '<< /Type /ObjStm /N {N} /First {F} /Filter /DCTDecode >>', (raw) => raw),
+      TRAILER,
+    )
+    expect(scan(file)).not.toBeNull()
+    expect(await pdfLibPages(file)).toBe(0)
+
+    const photo = Buffer.from(await pdfOf(3, true)).toString('latin1')
+    const withJpeg = enc(
+      `${photo}9 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /Filter /DCTDecode /Length 4 >>\nstream\n\xff\xd8\xff\xd9\nendstream\nendobj\n`,
+    )
+    expect(await checkPdfPageLimit(withJpeg, MAX_MEMBER_PDF_PAGES)).toBe('ok')
+  })
+
   // The case this exists for: 300,000 pages compressed into a few MB.
   describe('300,000 pages, refused quickly', () => {
     const cases: [string, () => Uint8Array][] = [
@@ -322,6 +473,9 @@ describe('scanPdfPages', () => {
       ['Flate streams one after another', () => fill(zlibStream)],
       ['zlib headers after stream keywords', () => fill('stream\nx\x9c')],
       ['slashes', () => fill('/')],
+      ['nothing but /Filter', () => fill('/Filter ')],
+      ['filter arrays that run to the window', () => fill(`/Filter [${'/A '.repeat(20)}`)],
+      ['nothing but /DecodeParms', () => fill('/DecodeParms ')],
     ]
     for (const [name, make] of cases) {
       it(name, () => {
@@ -407,6 +561,113 @@ describe('checkPdfPageLimit', () => {
     const file = objectStreamPdf(body, offsets)
     expect(scan(file)?.objects).toBeGreaterThan(LOAD_OBJECT_LIMIT)
     expect(await checkPdfPageLimit(file, 50)).toBe('unknown')
+  })
+
+  // /Count is never read: what counts is what pdf-lib builds.
+  it('ignores what /Count claims', async () => {
+    const file = (pages: number, count: number) =>
+      join(CATALOG, top(treeObject(3, pages, 10, count)), ...pageObjects(pages, 10).map(top), TRAILER)
+    expect(await checkPdfPageLimit(file(60, 1), 50)).toBe('over')
+    expect(await checkPdfPageLimit(file(60, 0), 50)).toBe('over')
+    expect(await pdfLibPages(file(60, 1))).toBe(60)
+    expect(await checkPdfPageLimit(file(50, 5000), 50)).toBe('ok')
+  })
+
+  // Only the catalog's tree is the document; a second tree is pages pdf-lib
+  // never builds, and the catalog's tree is never missed.
+  it('counts the tree the catalog names, of several', async () => {
+    const twoTrees = (catalogTree: number) =>
+      join(
+        `%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages ${catalogTree} 0 R >>\nendobj\n`,
+        top(treeObject(3, 10, 100)),
+        top(treeObject(4, 60, 200, 60)),
+        ...pageObjects(10, 100, 3).map(top),
+        ...pageObjects(60, 200, 4).map(top),
+        TRAILER,
+      )
+    expect(await pdfLibPages(twoTrees(3))).toBe(10)
+    expect(await checkPdfPageLimit(twoTrees(3), 50)).toBe('ok')
+    expect(await pdfLibPages(twoTrees(4))).toBe(60)
+    expect(await checkPdfPageLimit(twoTrees(4), 50)).toBe('over')
+  })
+
+  // An update appended to a file (its own xref section and trailer) can add
+  // pages, swap the catalog to another tree, or carry pages in an object
+  // stream; pdf-lib parses every section forwards, and so does the scan.
+  describe('incremental updates', () => {
+    const base = join(
+      CATALOG,
+      top(treeObject(3, 40, 10)),
+      ...pageObjects(40, 10).map(top),
+      'xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 50 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n',
+    )
+    const update = (...body: (string | Uint8Array)[]) =>
+      join(base, ...body, 'xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 300 /Root 1 0 R /Prev 0 >>\nstartxref\n0\n%%EOF\n')
+
+    it('adds pages', async () => {
+      const file = update(top([3, `<< /Type /Pages /Count 60 /Kids [${kids(40, 10)} ${kids(20, 100)}] >>`]), ...pageObjects(20, 100).map(top))
+      expect(await pdfLibPages(file)).toBe(60)
+      expect(await checkPdfPageLimit(file, 50)).toBe('over')
+    })
+
+    it('moves the catalog to another tree', async () => {
+      const file = update(
+        '1 0 obj\n<< /Type /Catalog /Pages 4 0 R >>\nendobj\n',
+        top(treeObject(4, 60, 100)),
+        ...pageObjects(60, 100, 4).map(top),
+      )
+      expect(await pdfLibPages(file)).toBe(60)
+      expect(await checkPdfPageLimit(file, 50)).toBe('over')
+    })
+
+    it('carries pages in an object stream', async () => {
+      const file = update(
+        objStmObject(7, [[3, `<< /Type /Pages /Count 60 /Kids [${kids(40, 10)} ${kids(20, 100)}] >>`], ...pageObjects(20, 100)]),
+      )
+      expect(await pdfLibPages(file)).toBe(60)
+      expect(await checkPdfPageLimit(file, 50)).toBe('over')
+    })
+
+    it('replaces pages without adding any', async () => {
+      const file = update(...pageObjects(40, 10).map(top))
+      expect(await pdfLibPages(file)).toBe(40)
+      expect(await checkPdfPageLimit(file, 50)).toBe('ok')
+    })
+  })
+
+  // A hybrid file: a classic xref whose trailer points at an xref stream as
+  // well (/XRefStm). Neither is what pdf-lib reads objects by.
+  it('reads a hybrid-xref file’s object streams', async () => {
+    const xrefRows = Buffer.from(Array.from({ length: 64 }, (_, i) => [1, 0, i, 0]).flat())
+    const file = join(
+      CATALOG,
+      objStmObject(5, [treeObject(3, 60, 10), ...pageObjects(60, 10)]),
+      `6 0 obj\n<< /Type /XRef /W [1 2 1] /Size 64 /Filter /FlateDecode /DecodeParms << /Columns 4 /Predictor 12 >> /Root 1 0 R >>\nstream\n`,
+      deflateSync(xrefRows),
+      '\nendstream\nendobj\n',
+      'xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 64 /Root 1 0 R /XRefStm 0 >>\nstartxref\n0\n%%EOF\n',
+    )
+    expect(await pdfLibPages(file)).toBe(60)
+    expect(scan(file)?.bound).toBeGreaterThanOrEqual(60)
+    expect(await checkPdfPageLimit(file, 50)).toBe('over')
+  })
+
+  // pdf-lib never decrypts: it reads an encrypted file's streams as the bytes
+  // they are, and so does the scan. Pages in plain bytes are counted; bytes
+  // that only look like Flate and won't inflate are "can't tell".
+  it('reads an encrypted file as pdf-lib does', async () => {
+    const encrypted = (stream: Uint8Array) =>
+      join(CATALOG, stream, 'trailer\n<< /Root 1 0 R /Encrypt << /Filter /Standard /V 2 /R 3 /Length 128 /P -4 >> /ID [<00> <00>] >>\n%%EOF\n')
+    const plain = encrypted(objStmObject(5, [treeObject(3, 60, 10), ...pageObjects(60, 10)]))
+    expect(await pdfLibPages(plain)).toBe(60)
+    expect(await checkPdfPageLimit(plain, 50)).toBe('over')
+
+    const cipher = (raw: Buffer) => {
+      const z = Buffer.from(deflateSync(raw))
+      for (let i = 2; i < z.length; i++) z[i] ^= 0x5a
+      return z
+    }
+    expect(scan(encrypted(objStmObject(5, [treeObject(3, 60, 10), ...pageObjects(60, 10)], undefined, cipher)))).toBeNull()
   })
 
   it('reports what it can’t tell', async () => {

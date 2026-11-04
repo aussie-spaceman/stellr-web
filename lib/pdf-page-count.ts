@@ -37,7 +37,20 @@ import { constants as zlibConstants, inflateSync } from 'node:zlib'
 //   - Unfiltered data is read where it lies, header entries counted.
 //   - pdf-lib also decodes LZW, ASCII85, ASCIIHex and RunLength. A file that
 //     names any of them and could hold an object stream (it names /ObjStm, or a
-//     /Type is a reference) is "can't tell".
+//     /Type is a reference or hidden) is "can't tell".
+//   - pdf-lib looks a /Filter up, so its name can sit in another object —
+//     even inside an object stream the scan only sniffed. Any /Filter whose
+//     value isn't a name or an array of names written right there (a
+//     reference, a comment, a value past a short window), and any /DecodeParms
+//     that is a reference or hidden, makes the file "can't tell".
+//
+// Nothing else in a file can add pages. pdf-lib parses the top level forwards
+// whatever its xref sections say (incremental updates, xref streams, hybrid
+// files: later copies replace earlier ones, never add), never decrypts
+// (an encrypted file's streams are read as the bytes they are, as here),
+// builds a page only from a leaf it reaches by reference (a page dictionary
+// written inline in /Kids throws), and never trusts /Count. Which of several
+// /Pages trees is the document's is settled by the load, as it is for pdf-lib.
 //
 // Anything that can't be read that way (damaged or encrypted Flate, a spent
 // budget, too many streams) is "can't tell", which the caller refuses: a file
@@ -176,25 +189,86 @@ type Flags = {
   markers: number
   /** The name /ObjStm seen, anywhere. */
   objStm: boolean
-  /** A /Type whose value is a number (a reference pdf-lib would look up). */
+  /** A /Type whose value may be a reference pdf-lib would look up (or is hidden). */
   typeRef: boolean
   /** A filter pdf-lib decodes and this scan doesn't. */
   otherFilter: boolean
+  /** A /Filter or /DecodeParms whose value isn't written out directly. */
+  unresolvedFilter: boolean
 }
 
 const OTHER_FILTERS = ['LZWDecode', 'ASCII85Decode', 'ASCIIHexDecode', 'RunLengthDecode']
 
+/** What pdf-lib starts a number, and so a reference, with: a digit, + - or `.` */
+const isNumeric = (c: number) => isDigit(c) || c === 0x2b || c === 0x2d || c === 0x2e
+const LBRACKET = 0x5b
+const RBRACKET = 0x5d
+
 /**
- * What a /Type's value says. A page when the value is the name /Page, or when
- * a comment or a long run of whitespace hides it (counted, not risked).
+ * What a /Type's value says. A page when the value is the name /Page. When a
+ * comment or a long run of whitespace hides it, it is 'hidden': counted as a
+ * page and treated as a possible reference, both (counted, not risked).
  */
-function typeValue(b: Uint8Array, nameStop: number): 'page' | 'ref' | 'other' {
+function typeValue(b: Uint8Array, nameStop: number): 'page' | 'ref' | 'hidden' | 'other' {
   const v = skipWs(b, nameStop)
-  if (v < 0) return 'page'
+  if (v < 0) return 'hidden'
   const c = b[v]
-  if (c === PERCENT) return 'page'
+  if (c === PERCENT) return 'hidden'
   if (c === SLASH) return nameIs(b, v + 1, nameEnd(b, v), 'Page') ? 'page' : 'other'
-  return isDigit(c) ? 'ref' : 'other'
+  // `+9 0 R` and `9. 0 R` are references to pdf-lib as much as `9 0 R` is.
+  return isNumeric(c) ? 'ref' : 'other'
+}
+
+/**
+ * How far past a /Filter the scan reads its value. Long enough for any filter
+ * a writer emits ([/FlateDecode /FlateDecode] is 27 bytes); a value that runs
+ * past it is not "written out directly". Short, so a file of nothing but
+ * /Filter keeps the scan linear.
+ */
+const FILTER_WINDOW = 64
+
+/**
+ * Whether a /Filter's value is written out directly: one name, or an array of
+ * names. pdf-lib looks a /Filter up — a reference, or a reference in its
+ * array, is followed to wherever the object lies, which can be inside another
+ * object stream this scan has only sniffed. So a reference, a comment, or
+ * anything else this can't read in FILTER_WINDOW is not, and the file is
+ * "can't tell".
+ *
+ * A name pdf-lib doesn't decode (DCTDecode, JPXDecode, Crypt, …) is fine:
+ * pdf-lib throws on it (core/streams/decode), so no object comes out of that
+ * stream. FlateDecode is read by this scan, and the four other filters pdf-lib
+ * decodes set `otherFilter` where the name is read.
+ */
+function filterResolved(b: Uint8Array, nameStop: number): boolean {
+  const stop = Math.min(b.length, nameStop + FILTER_WINDOW)
+  let j = nameStop
+  while (j < stop && WS[b[j]]) j++
+  if (j >= stop) return false
+  if (b[j] === SLASH) return true
+  if (b[j] !== LBRACKET) return false
+  j++
+  for (;;) {
+    while (j < stop && WS[b[j]]) j++
+    if (j >= stop) return false
+    if (b[j] === RBRACKET) return true
+    if (b[j] !== SLASH) return false
+    j++
+    while (j < stop && !ENDS_NAME[b[j]]) j++
+  }
+}
+
+/**
+ * Whether a /DecodeParms is written out directly (a dictionary, an array, a
+ * name or null). pdf-lib only reads it for LZW, which this scan refuses
+ * anyway; a reference or a hidden value is refused all the same, so no
+ * filter's inputs come from where the scan can't see.
+ */
+function parmsResolved(b: Uint8Array, nameStop: number): boolean {
+  const v = skipWs(b, nameStop)
+  if (v < 0) return false
+  const c = b[v]
+  return c === 0x3c || c === LBRACKET || c === SLASH || c === 0x6e /* null */
 }
 
 /** Read the name whose `/` is at `i` into `flags`; returns where it ends. */
@@ -208,6 +282,14 @@ function readName(b: Uint8Array, i: number, flags: Flags): number {
     const value = typeValue(b, end)
     if (value === 'page') flags.markers++
     else if (value === 'ref') flags.typeRef = true
+    else if (value === 'hidden') {
+      flags.markers++
+      flags.typeRef = true
+    }
+  } else if ((first === 0x46 || escaped) && nameIs(b, i + 1, end, 'Filter')) {
+    if (!filterResolved(b, end)) flags.unresolvedFilter = true
+  } else if ((first === 0x44 || escaped) && nameIs(b, i + 1, end, 'DecodeParms')) {
+    if (!parmsResolved(b, end)) flags.unresolvedFilter = true
   } else if ((first === 0x4f || escaped) && nameIs(b, i + 1, end, 'ObjStm')) {
     flags.objStm = true
   } else if (
@@ -289,7 +371,7 @@ const UNKNOWN = null
  */
 export function scanPdfPages(bytes: Uint8Array, stopAbove = Infinity): PdfPageScan | null {
   const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const flags: Flags = { markers: 0, objStm: false, typeRef: false, otherFilter: false }
+  const flags: Flags = { markers: 0, objStm: false, typeRef: false, otherFilter: false, unresolvedFilter: false }
   let topMarkers = 0
   let streamEntries = 0
   let topObjects = 0
@@ -409,6 +491,10 @@ export function scanPdfPages(bytes: Uint8Array, stopAbove = Infinity): PdfPageSc
     i += STREAM.length - 1
   }
 
+  // A filter whose name lies somewhere else: it could be one this scan can't
+  // read, hidden where the scan didn't look. Refused whatever else the file
+  // holds — no writer needs it.
+  if (flags.unresolvedFilter) return UNKNOWN
   // An object stream under a filter this scan can't read.
   if (flags.otherFilter && (flags.objStm || flags.typeRef)) return UNKNOWN
   return result()

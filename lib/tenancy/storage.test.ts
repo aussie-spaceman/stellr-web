@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { tenantObjectPath, objectTenantId, objectVisibleToTenant } from './storage'
+import { tenantObjectPath, objectTenantId, objectVisibleToTenant, assertTenantObjectPath } from './storage'
 import { STELLR_TENANT_ID } from './constants'
 
 const CANARY = 'c0ffee00-0000-4000-8000-0000000000b2'
@@ -51,6 +51,32 @@ describe('objectTenantId: the same cases the database function is tested on', ()
     expect(objectVisibleToTenant(`${MEMBER}/x.pdf`, CANARY, TENANTS)).toBe(false)
     expect(objectVisibleToTenant(`${CANARY}/x.pdf`, CANARY, TENANTS)).toBe(true)
     expect(objectVisibleToTenant(`${CANARY}/x.pdf`, STELLR_TENANT_ID, TENANTS)).toBe(false)
+  })
+
+  it('assertTenantObjectPath accepts only paths inside the tenant\'s own folder', () => {
+    expect(assertTenantObjectPath(CANARY, `${CANARY}/event-artwork/a.png`)).toBe(`${CANARY}/event-artwork/a.png`)
+    expect(assertTenantObjectPath(CANARY.toUpperCase(), `${CANARY}/a.png`)).toBe(`${CANARY}/a.png`)
+    for (const bad of [
+      `${STELLR_TENANT_ID}/a.png`, // another tenant's folder
+      `${MEMBER}/licence.pdf`, // a legacy path
+      'event-artwork/a.png', // a legacy named prefix
+      `${CANARY}`, // the folder itself
+      `${CANARY}/`, // the folder itself
+      `${CANARY}/../${STELLR_TENANT_ID}/a.png`, // traversal
+      `${CANARY.toUpperCase()}/a.png`, // non-canonical id
+    ]) {
+      expect(() => assertTenantObjectPath(CANARY, bad), bad).toThrow(/assertTenantObjectPath/)
+    }
+    expect(() => assertTenantObjectPath('', `${CANARY}/a.png`)).toThrow(/tenant id/)
+  })
+
+  it('designs no storage.objects policy TO tenant_app: Storage API traffic never runs as that role (review finding, S4)', () => {
+    const doc = readFileSync('docs/TENANCY-S4.md', 'utf8')
+    expect(doc).not.toMatch(/ON storage\.objects[^;]*TO tenant_app/)
+    const migration = readFileSync('supabase/migrations/20261104210000_storage_tenant_prefix.sql', 'utf8')
+    const code = migration.replace(/--[^\n]*/g, '')
+    expect(code).not.toMatch(/CREATE\s+POLICY[^;]*ON\s+storage\.objects/i)
+    expect(migration).not.toMatch(/storage\.objects policies \(S5\)/)
   })
 
   it('the pgTAP storage section asserts the same rule against public.storage_object_tenant_id()', () => {

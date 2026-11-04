@@ -12,8 +12,14 @@
 // public.storage_object_tenant_id() (20261104210000) apply the same rule, and
 // lib/tenancy/storage.test.ts holds them to the same cases.
 //
-// Nothing calls these on a live flow yet; S5 routes tenant uploads through
-// tenantObjectPath and adds the storage.objects policies (docs/TENANCY-S4.md).
+// Where the rule is enforced (docs/TENANCY-S4.md, "Storage"): in server code,
+// not in a storage.objects policy. The app reaches Storage through the
+// Storage HTTP API with the secret key, which runs as service_role and
+// bypasses RLS; a browser would run as anon or authenticated. No request ever
+// runs as tenant_app, so a policy TO tenant_app would never apply. S5's
+// tenant upload and signing code builds every path with tenantObjectPath and
+// checks every path it signs or reads with assertTenantObjectPath. Nothing
+// calls these on a live flow yet.
 
 import { STELLR_TENANT_ID } from './constants'
 import { assertTenantId } from './tenant-id'
@@ -52,7 +58,27 @@ export function objectTenantId(path: string | null | undefined, tenantIds: Itera
   return STELLR_TENANT_ID
 }
 
-/** Whether `tenantId` may read the object at `path` (the policy S5 puts on storage.objects). */
+/**
+ * The check tenant code runs before it signs, reads, replaces or deletes an
+ * object with the secret key (which no storage.objects policy can stop):
+ * returns the path when it sits inside `tenantId`'s own folder, and throws
+ * otherwise — a legacy path, another tenant's folder, or a path that is not
+ * literal. Stellr's existing upload code keeps its own legacy paths and does
+ * not call this.
+ */
+export function assertTenantObjectPath(tenantId: string, path: string): string {
+  const id = assertTenantId(tenantId)
+  if (typeof path !== 'string' || !isLiteralStoragePath(path)) {
+    throw new Error('assertTenantObjectPath: not a literal storage path')
+  }
+  const slash = path.indexOf('/')
+  if (slash <= 0 || path.slice(0, slash) !== id || slash === path.length - 1) {
+    throw new Error("assertTenantObjectPath: the object is not in this tenant's folder")
+  }
+  return path
+}
+
+/** Whether `tenantId` may read the object at `path` under the ownership rule. */
 export function objectVisibleToTenant(path: string, tenantId: string, tenantIds: Iterable<string>): boolean {
   return objectTenantId(path, tenantIds) === assertTenantId(tenantId)
 }

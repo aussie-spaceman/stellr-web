@@ -21,13 +21,22 @@
 // Guarantees enforced here:
 //   * no tenant, no query: tenantDb() throws on a missing, malformed or nil
 //     tenant id before anything touches the database;
-//   * values are always bound ($1, $2, …), never spliced into SQL;
+//   * values are always bound ($1, $2, …), never spliced into SQL, and only
+//     statements tenantSql built (frozen, remembered in a WeakSet) reach the
+//     driver;
 //   * caller SQL is one SELECT/INSERT/UPDATE/DELETE/WITH/VALUES/MERGE
-//     statement and never calls set_config(): it cannot change the role or
-//     re-pin the tenant (refusedSql) — that belongs to this module;
-//   * the pin is read back before the caller's first statement; a connection
-//     that is not tenant_app, or a tenant that did not stick, aborts the
-//     transaction;
+//     statement with no comments, no U& escapes, and no mention — quoted,
+//     qualified or otherwise — of set_config, pg_settings or a core function
+//     that runs SQL text (refusedSql). Pinning belongs to this module;
+//   * the pin is read back before the caller's first statement AND after
+//     every caller statement, before its rows are returned. A connection that
+//     is not tenant_app, a tenant that did not stick, or a statement that
+//     moved either, aborts the transaction (writes included).
+//     What remains (docs/TENANCY-S4.md, "What tenantDb does and does not
+//     stop"): a path refusedSql does not know that re-pins AND restores the
+//     pin inside one statement would pass the read-back. Bound values cannot
+//     do it (they are never SQL), so it takes SQL written in an allow-listed
+//     file, which review and the denylist are there to catch;
 //   * it is off unless TENANT_DB_ENABLED is 'true' and a driver is
 //     registered. Nothing in the app registers one yet: S5 wires it, one
 //     feature area per PR, and the allow-list in lib/tenancy/db-callers.ts
@@ -56,18 +65,48 @@ export const TENANT_DB_FLAG = 'TENANT_DB_ENABLED'
 const ALLOWED_START = /^\s*(?:select|insert|update|delete|with|values|merge)\b/i
 
 /**
+ * Text that may not appear anywhere in caller SQL, in any spelling Postgres
+ * would accept. Matched as a plain substring, case-insensitively, so quoting
+ * ("set_config"), schema-qualifying (pg_catalog.set_config) or splitting with
+ * whitespace before the bracket does not get past it; comments and U& escapes
+ * — the two ways to spell an identifier without its letters in a row — are
+ * refused outright. Over-refusing (say, a string literal that mentions one of
+ * these) costs a caller nothing: the value belongs in a bound parameter.
+ */
+const FORBIDDEN_TEXT: readonly [RegExp, string][] = [
+  [/--|\/\*/, 'no comments in tenant SQL'],
+  [/u&["']/i, 'no U& escapes in tenant SQL'],
+  // The function that sets a setting: it could re-pin the tenant, or set
+  // 'role' to drop tenant_app for the login role.
+  [/set_config/i, 'set_config() belongs to tenantDb'],
+  // pg_settings is updatable by PUBLIC: UPDATE pg_settings is set_config.
+  [/pg_settings/i, 'pg_settings belongs to tenantDb'],
+  // Core functions that execute SQL text, which could carry any of the above
+  // (or arrive as a bound value): query_to_xml and the rest of the *_to_xml
+  // family, ts_stat and ts_rewrite. Extensions that run SQL text (dblink and
+  // the like) are not granted to tenant_app.
+  [/_to_xml/i, 'functions that run SQL text are not allowed'],
+  [/\bts_stat\b|\bts_rewrite\b/i, 'functions that run SQL text are not allowed'],
+]
+
+/**
  * Why a caller's SQL is refused, or null. Checked on the code the caller
  * wrote (a template's literal parts), never on bound values. Refused: more
  * than one statement; anything but SELECT/INSERT/UPDATE/DELETE/WITH/VALUES/
  * MERGE (so no SET or RESET ROLE, SET SESSION AUTHORIZATION, DO, CALL,
- * COMMIT, DDL); and set_config(), the one function that could re-pin the
- * tenant from inside a query.
+ * COMMIT, DDL); and anything in FORBIDDEN_TEXT.
+ *
+ * This is the first line, not the only one: after every caller statement
+ * tenantDb reads the role and the tenant back and rolls the transaction back
+ * if either moved (see verifyPin), so a path this list does not know about
+ * cannot leave a re-pinned tenant or a dropped role behind it.
  */
 export function refusedSql(literal: string): string | null {
+  if (typeof literal !== 'string') return 'not SQL text'
   const body = literal.trim().replace(/;\s*$/, '')
   if (body.includes(';')) return 'one statement per call'
   if (!ALLOWED_START.test(body)) return 'only SELECT, INSERT, UPDATE, DELETE, WITH, VALUES or MERGE'
-  if (/\bset_config\s*\(/i.test(body)) return 'set_config() belongs to tenantDb'
+  for (const [re, why] of FORBIDDEN_TEXT) if (re.test(body)) return why
   return null
 }
 
@@ -89,23 +128,37 @@ export interface TenantSqlDriver {
 
 /** A statement built from a tagged template: literal SQL with $n placeholders, values bound. */
 export interface TenantStatement {
-  text: string
-  values: unknown[]
+  readonly text: string
+  readonly values: readonly unknown[]
 }
+
+/** Statements tenantSql built. run() takes nothing else, so a hand-made {text, values} cannot reach the driver. */
+const MINTED = new WeakSet<object>()
 
 /**
  * Build a statement from a tagged template. Every interpolation becomes a
- * bound parameter; the literal parts are checked against FORBIDDEN_SQL.
+ * bound parameter; the literal parts are checked by refusedSql. The result
+ * is frozen and remembered, so it cannot be edited after the check.
  */
 export function tenantSql(strings: TemplateStringsArray, ...values: unknown[]): TenantStatement {
-  if (!Array.isArray(strings) || !('raw' in strings)) {
+  // A real template strings array, and its .raw, are frozen by the language.
+  if (
+    !Array.isArray(strings) ||
+    !Object.isFrozen(strings) ||
+    !Array.isArray((strings as { raw?: unknown }).raw) ||
+    !Object.isFrozen(strings.raw) ||
+    strings.length !== values.length + 1 ||
+    !strings.every((s) => typeof s === 'string')
+  ) {
     throw new TenantContextError('tenantSql must be used as a tagged template (tenantSql`…`), so values are bound')
   }
   const refused = refusedSql(strings.join(' '))
   if (refused) throw new TenantContextError(`tenantDb refused the SQL: ${refused}`)
   let text = strings[0]
   for (let i = 0; i < values.length; i++) text += `$${i + 1}${strings[i + 1]}`
-  return { text, values }
+  const statement: TenantStatement = Object.freeze({ text, values: Object.freeze([...values]) })
+  MINTED.add(statement)
+  return statement
 }
 
 /** What a tenantDb transaction callback receives. */
@@ -144,17 +197,21 @@ export interface TenantDbOptions {
   env?: Record<string, string | undefined>
 }
 
+/** The read-back: which role the transaction runs as and which tenant app_tenant_id() returns. */
+export const PIN_CHECK_SQL = 'SELECT current_user AS role, public.app_tenant_id()::text AS tenant'
+
+/** Throws unless the transaction still runs as tenant_app with exactly `tenantId` pinned. */
+async function verifyPin(tx: TenantSqlTx, tenantId: string, message: string): Promise<void> {
+  const check = await tx.query<{ role: unknown; tenant: unknown }>(PIN_CHECK_SQL)
+  const row = check.rows[0]
+  if (!row || row.role !== TENANT_ROLE || row.tenant !== tenantId) throw new TenantContextError(message)
+}
+
 /** Pin the tenant on an open transaction and prove it took. */
 async function pin(tx: TenantSqlTx, tenantId: string): Promise<void> {
   await tx.query(`SET LOCAL ROLE ${TENANT_ROLE}`)
   await tx.query(`SELECT set_config('${TENANT_SETTING}', $1, true)`, [tenantId])
-  const check = await tx.query<{ role: unknown; tenant: unknown }>(
-    'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
-  )
-  const row = check.rows[0]
-  if (!row || row.role !== TENANT_ROLE || row.tenant !== tenantId) {
-    throw new TenantContextError('tenantDb could not pin the tenant on this connection; the transaction was rolled back')
-  }
+  await verifyPin(tx, tenantId, 'tenantDb could not pin the tenant on this connection; the transaction was rolled back')
 }
 
 /**
@@ -176,13 +233,18 @@ export function tenantDb(tenantId: string, opts: TenantDbOptions = {}): TenantDb
   const transaction = async <T>(fn: (q: TenantQuery) => Promise<T>): Promise<T> =>
     driver().transaction(async (tx) => {
       await pin(tx, id)
-      const run = <R>(statement: TenantStatement) => {
-        if (!statement || typeof statement.text !== 'string' || !Array.isArray(statement.values)) {
+      const run = async <R>(statement: TenantStatement) => {
+        if (!statement || typeof statement !== 'object' || !MINTED.has(statement)) {
           throw new TenantContextError('tenantDb runs only statements built with tenantSql')
         }
         const refused = refusedSql(statement.text)
         if (refused) throw new TenantContextError(`tenantDb refused the SQL: ${refused}`)
-        return tx.query<R>(statement.text, statement.values)
+        const result = await tx.query<R>(statement.text, statement.values)
+        // Before the caller sees a row: if the statement moved the role or the
+        // tenant by any path refusedSql does not know, throw, and the driver
+        // rolls the whole transaction back (its writes and the move with it).
+        await verifyPin(tx, id, 'a statement changed the tenant pin or the role; tenantDb rolled the transaction back')
+        return result
       }
       const q: TenantQuery = {
         run,

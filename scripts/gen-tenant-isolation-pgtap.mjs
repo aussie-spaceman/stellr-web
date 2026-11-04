@@ -22,7 +22,16 @@
  *   4. with no tenant pinned, or garbage pinned, tenant_app sees and writes
  *      nothing (fail closed);
  *   5. afterwards, as the owner, every tenant still has exactly its rows
- *      (seed + its own insert): nothing moved, nothing was deleted.
+ *      (seed + its own inserts): nothing moved, nothing was deleted.
+ * Beyond its own rows (lib/tenancy/tenant-role.ts):
+ *   * routing, ownership and role tables (events, tenant_domains,
+ *     tenant_memberships) are read-only to tenant_app: INSERT, UPDATE and
+ *     DELETE are refused even on its own rows;
+ *   * a row it writes may not point at the other tenant's parent row, nor at
+ *     an id that does not exist (the same refusal, so no existence oracle),
+ *     nor at an event its tenant does not have; the same row pointing at its
+ *     own parent works. The set of foreign keys between tenant tables is
+ *     checked against TENANT_PARENT_REFS, so a new one cannot go unguarded.
  * tenant_app cannot call pgTAP itself (pgTAP keeps its state in tables only
  * the owner can write), so each observation is recorded into a temp table as
  * tenant_app and asserted after RESET ROLE.
@@ -35,6 +44,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { TABLE_REGISTRY } from '../lib/tenancy/registry.ts'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants.ts'
+import { TENANT_APP_READ_ONLY_TABLES, TENANT_PARENT_REFS } from '../lib/tenancy/tenant-role.ts'
 
 export const OUTPUT = 'supabase/tests/database/tenant_isolation.test.sql'
 
@@ -74,6 +84,18 @@ const MEMBER = 'c0000000-0000-4000-8000-000000000001'
 const PRODUCT = 'c0000000-0000-4000-8000-000000000002'
 const VARIANT = 'c0000000-0000-4000-8000-000000000003'
 const DEFINITION = 'c0000000-0000-4000-8000-000000000004'
+/** An id no row has: referencing it must be refused exactly like another tenant's id. */
+const MISSING = 'd0000000-0000-4000-8000-00000000dead'
+
+/** The event a ref check writes into: one per (tenant, ref), so one-row-per-event keys never collide. */
+const refEvent = (tag, k) => ({ slug: `iso-${tag}-ref-${k}`, sanity: `iso-${tag}-ref-sanity-${k}` })
+/** An event no tenant has. */
+const UNKNOWN_EVENT = { slug: 'iso-unknown-event', sanity: 'iso-unknown-sanity' }
+/** Columns a ref row needs beyond its fixture (a table CHECK ties them to the ref). */
+const REF_EXTRA = {
+  'public.event_badge_templates.company_id': { audience: lit('company') },
+}
+const extraFor = (r) => REF_EXTRA[`${r.table}.${r.column}`] ?? {}
 
 /**
  * One row per tenant table. `f(c)` returns column -> SQL expression, where
@@ -175,6 +197,12 @@ function seedOrder(tables, fixtures) {
   return [...parents, ...tables.filter((t) => !parents.includes(t))]
 }
 
+/** Foreign keys from a tenant table to a tenant table that tenant_app can see (not via_parent). */
+export function checkedRefs(registry = TABLE_REGISTRY, refs = TENANT_PARENT_REFS) {
+  const via = new Set(viaParentTables(registry))
+  return refs.filter((r) => !via.has(r.parent))
+}
+
 function insertSql(table, cols) {
   const names = Object.keys(cols)
   return `INSERT INTO ${table} (${names.join(', ')}) VALUES (${names.map((n) => cols[n]).join(', ')})`
@@ -185,8 +213,16 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
   if (problems.length) throw new Error(problems.join('\n'))
   const tables = tenantTables(registry)
   const own = new Set(tables.filter((n) => registry[n].tenantColumn === 'own'))
-  const row = (table, tag, ev, s, seed) =>
-    insertSql(table, fixtures[table]({ tag, t: TENANTS[tag], ev: TENANTS[tag][ev], s: `${tag}-${s}`, seed }))
+  const readOnly = new Set(TENANT_APP_READ_ONLY_TABLES)
+  const via = new Set(viaParentTables(registry))
+  const refs = TENANT_PARENT_REFS.map((r, k) => ({ ...r, k, checked: !via.has(r.parent) }))
+  const row = (table, tag, ev, s, seed, extra = {}) =>
+    insertSql(table, {
+      ...fixtures[table]({ tag, t: TENANTS[tag], ev: typeof ev === 'string' ? TENANTS[tag][ev] : ev, s: `${tag}-${s}`, seed }),
+      ...extra,
+    })
+  /** Rows the tenant itself adds to `table` in the matrix: its insert_own (if writable) plus one per checked ref. */
+  const ownAdds = (n) => (readOnly.has(n) ? 0 : 1) + refs.filter((r) => r.table === n && r.checked).length
 
   const lines = []
   let tests = 0
@@ -219,17 +255,57 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
     `SELECT is((SELECT provolatile::text || prosecdef::text FROM pg_proc WHERE oid = 'public.app_tenant_id()'::regprocedure), 'sfalse',
   'app_tenant_id() is STABLE and SECURITY INVOKER');`,
   )
+  const selfRef = `'public.tenant_self_ref_visible(text, uuid)'`
+  t(
+    `SELECT ok(NOT has_function_privilege('anon', ${selfRef}, 'EXECUTE') AND NOT has_function_privilege('authenticated', ${selfRef}, 'EXECUTE')
+  AND (SELECT NOT prosecdef FROM pg_proc WHERE oid = ${selfRef}::regprocedure),
+  'tenant_self_ref_visible() is SECURITY INVOKER (RLS limits it) and anon/authenticated cannot execute it');`,
+  )
   for (const n of tables) {
     t(
       `SELECT is((SELECT string_agg(permissive || ':' || array_to_string(roles, ','), ' ' ORDER BY permissive)
   FROM pg_policies WHERE schemaname || '.' || tablename = ${lit(n)} AND policyname IN ('tenant_isolation', 'tenant_isolation_guard')),
   ${lit(`PERMISSIVE:${ROLE} RESTRICTIVE:${ROLE}`)}, ${lit(`${n}: tenant_isolation (permissive) and tenant_isolation_guard (restrictive), TO ${ROLE} only`)});`,
     )
-    t(
-      `SELECT ok(has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'SELECT, INSERT, UPDATE, DELETE')
+    if (readOnly.has(n)) {
+      t(
+        `SELECT ok(has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'SELECT')
+  AND NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'INSERT, UPDATE, DELETE, TRUNCATE')
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid = ${lit(n)}::regclass), ${lit(`${n}: RLS on, and ${ROLE} may read it but never write it (platform-written)`)});`,
+      )
+    } else {
+      t(
+        `SELECT ok(${['SELECT', 'INSERT', 'UPDATE', 'DELETE'].map((p) => `has_table_privilege(${lit(ROLE)}, ${lit(n)}, '${p}')`).join(' AND ')}
+  AND NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'TRUNCATE')
   AND (SELECT relrowsecurity FROM pg_class WHERE oid = ${lit(n)}::regclass), ${lit(`${n}: RLS on and ${ROLE} holds the table privileges the policies gate`)});`,
-    )
+      )
+    }
+    const entry = registry[n]
+    const mustMention = [
+      ...(entry.tenantColumn === 'derived' && entry.eventKey ? [entry.eventKey.column] : []),
+      ...refs.filter((r) => r.table === n).map((r) => r.column),
+    ]
+    if (mustMention.length) {
+      t(
+        `SELECT ok((SELECT ${mustMention.map((c) => `with_check ~ ${lit(`\\m${c}\\M`)}`).join(' AND ')}
+  FROM pg_policies WHERE schemaname || '.' || tablename = ${lit(n)} AND policyname = 'tenant_isolation_guard'),
+  ${lit(`${n}: the guard's WITH CHECK confines ${mustMention.join(', ')} to the tenant's own rows`)});`,
+      )
+    }
   }
+  const tenantSet = [...tables, ...viaParentTables(registry)]
+  t(
+    `SELECT is(
+  (SELECT string_agg(src || '.' || col || '->' || dst, ' ' ORDER BY src || '.' || col) FROM (
+    SELECT c.conrelid::regclass::text AS src, a.attname::text AS col, c.confrelid::regclass::text AS dst
+    FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = ANY (ARRAY[${tables.map((n) => `${lit(n)}::regclass`).join(', ')}])
+      AND c.confrelid = ANY (ARRAY[${tenantSet.map((n) => `${lit(n)}::regclass`).join(', ')}])
+  ) fk),
+  ${lit(refs.map((r) => `${r.table.replace(/^public\./, '')}.${r.column}->${r.parent.replace(/^public\./, '')}`).sort().join(' '))},
+  'every foreign key between tenant tables is listed in lib/tenancy/tenant-role.ts TENANT_PARENT_REFS (and so guarded)');`,
+  )
   for (const n of viaParentTables(registry)) {
     t(
       `SELECT ok(NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'SELECT, INSERT, UPDATE, DELETE'),
@@ -256,7 +332,7 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
   )
   for (const tag of ['a', 'b']) {
     const tn = TENANTS[tag]
-    for (const ev of [tn.primary, tn.secondary]) {
+    for (const ev of [tn.primary, tn.secondary, ...refs.filter((r) => r.checked).map((r) => refEvent(tag, r.k))]) {
       lines.push(
         `INSERT INTO public.events (tenant_id, slug, sanity_id, title, time_zone, country, currency, grade_system)
   VALUES (${lit(tn.id)}, ${lit(ev.slug)}, ${lit(ev.sanity)}, 'Iso event', 'UTC', 'US', 'usd', 'us_grades');`,
@@ -281,6 +357,11 @@ INSERT INTO public.survey_definitions (id, key, version, title, definition, defi
     ...tables.map(
       (n) => `INSERT INTO iso_expect SELECT ${lit(n)}, tenant_id, count(*)::int FROM ${n} WHERE tenant_id IS NOT NULL GROUP BY tenant_id;`,
     ),
+    '-- One seeded row of each parent table per tenant: what the ref checks point at.',
+    'CREATE TEMP TABLE iso_parent (tbl text, tenant uuid, id uuid) ON COMMIT DROP;',
+    ...[...new Set(refs.filter((r) => r.checked).map((r) => r.parent))]
+      .sort()
+      .map((p) => `INSERT INTO iso_parent SELECT ${lit(p)}, tenant_id, (array_agg(id ORDER BY id))[1] FROM ${p} WHERE tenant_id IS NOT NULL GROUP BY tenant_id;`),
     `-- What tenant_app observed: (context, table, check) -> value. Asserted after RESET ROLE.
 CREATE TEMP TABLE iso_obs (ctx text, tbl text, chk text, v text) ON COMMIT DROP;
 -- Runs one statement as the current role: its row count, or ERR:<SQLSTATE>.
@@ -294,6 +375,7 @@ EXCEPTION WHEN OTHERS THEN
   RETURN 'ERR:' || SQLSTATE;
 END $f$;
 GRANT SELECT ON iso_expect TO ${ROLE};
+GRANT SELECT ON iso_parent TO ${ROLE};
 GRANT INSERT ON iso_obs TO ${ROLE};
 GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
   )
@@ -301,6 +383,12 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
   for (const n of tables) {
     t(
       `SELECT ok(${expect(n, A)} >= 1 AND ${expect(n, B)} >= 1, ${lit(`${n}: both tenants have rows (the matrix cannot pass on an empty table)`)});`,
+    )
+  }
+  for (const p of [...new Set(refs.filter((r) => r.checked).map((r) => r.parent))].sort()) {
+    t(
+      `SELECT is((SELECT count(DISTINCT tenant)::int FROM iso_parent WHERE tbl = ${lit(p)} AND tenant IN (${lit(A)}, ${lit(B)})), 2,
+  ${lit(`fixture: both tenants have a ${p} row for the ref checks to point at`)});`,
     )
   }
   t(
@@ -334,6 +422,26 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
         // section 5 proves no row changed tenant.
         obs(ctx, n, 'move_own', `UPDATE ${n} SET tenant_id = '${them.id}' WHERE tenant_id = '${me.id}'`),
       )
+      if (readOnly.has(n)) {
+        lines.push(
+          obs(ctx, n, 'update_own', `UPDATE ${n} SET tenant_id = tenant_id WHERE tenant_id = '${me.id}'`),
+          obs(ctx, n, 'delete_own', `DELETE FROM ${n} WHERE tenant_id = '${me.id}'`),
+        )
+      }
+      if (registry[n].tenantColumn === 'derived') {
+        lines.push(obs(ctx, n, 'event_unknown', row(n, ctx, UNKNOWN_EVENT, 'unknown-event', false, { tenant_id: lit(me.id) })))
+      }
+      for (const r of refs.filter((x) => x.table === n)) {
+        const ev = r.checked ? refEvent(ctx, r.k) : 'secondary'
+        const parentOf = (tag) => `(SELECT id FROM iso_parent WHERE tbl = '${r.parent}' AND tenant = '${TENANTS[tag].id}')`
+        lines.push(obs(ctx, n, `ref_missing:${r.column}`, row(n, ctx, ev, `ref-missing-${r.k}`, false, { ...extraFor(r), [r.column]: lit(MISSING) })))
+        if (r.checked) {
+          lines.push(
+            obs(ctx, n, `ref_other:${r.column}`, row(n, ctx, ev, `ref-other-${r.k}`, false, { ...extraFor(r), [r.column]: parentOf(other) })),
+            obs(ctx, n, `ref_own:${r.column}`, row(n, ctx, ev, `ref-own-${r.k}`, false, { ...extraFor(r), [r.column]: parentOf(ctx) })),
+          )
+        }
+      }
     }
     lines.push(
       obs(ctx, 'public.tenants', 'see_all', 'SELECT 1 FROM public.tenants'),
@@ -345,10 +453,29 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
     for (const n of tables) {
       t(`SELECT is(${got(ctx, n, 'see_other')}, '0', ${lit(`${me.label} context: sees 0 ${them.label} rows of ${n}`)});`)
       t(`SELECT is(${got(ctx, n, 'see_all')}, ${expect(n, me.id)}::text, ${lit(`${me.label} context: sees exactly its own rows of ${n}`)});`)
-      t(`SELECT is(${got(ctx, n, 'update_other')}, '0', ${lit(`${me.label} context: UPDATE touches 0 ${them.label} rows of ${n}`)});`)
-      t(`SELECT is(${got(ctx, n, 'delete_other')}, '0', ${lit(`${me.label} context: DELETE touches 0 ${them.label} rows of ${n}`)});`)
+      // A read-only table refuses the statement outright (no privilege); a writable one touches 0 rows.
+      const none = readOnly.has(n) ? 'ERR:42501' : '0'
+      const how = readOnly.has(n) ? 'is refused outright' : 'touches 0'
+      t(`SELECT is(${got(ctx, n, 'update_other')}, '${none}', ${lit(`${me.label} context: UPDATE of ${them.label} rows of ${n} ${how}`)});`)
+      t(`SELECT is(${got(ctx, n, 'delete_other')}, '${none}', ${lit(`${me.label} context: DELETE of ${them.label} rows of ${n} ${how}`)});`)
       t(`SELECT is(${got(ctx, n, 'insert_other')}, 'ERR:42501', ${lit(`${me.label} context: INSERT of a ${them.label} row into ${n} is refused by RLS`)});`)
-      t(`SELECT is(${got(ctx, n, 'insert_own')}, '1', ${lit(`${me.label} context: INSERT of its own row into ${n} works`)});`)
+      if (readOnly.has(n)) {
+        for (const [chk, verb] of [['insert_own', 'INSERT into'], ['update_own', 'UPDATE its own rows of'], ['delete_own', 'DELETE its own rows of']]) {
+          t(`SELECT is(${got(ctx, n, chk)}, 'ERR:42501', ${lit(`${me.label} context: cannot ${verb} ${n} (read-only to ${ROLE}; platform code writes it)`)});`)
+        }
+      } else {
+        t(`SELECT is(${got(ctx, n, 'insert_own')}, '1', ${lit(`${me.label} context: INSERT of its own row into ${n} works`)});`)
+      }
+      if (registry[n].tenantColumn === 'derived') {
+        t(`SELECT is(${got(ctx, n, 'event_unknown')}, 'ERR:42501', ${lit(`${me.label} context: a ${n} row under an event its tenant does not have is refused, even with its own tenant_id`)});`)
+      }
+      for (const r of refs.filter((x) => x.table === n)) {
+        t(`SELECT is(${got(ctx, n, `ref_missing:${r.column}`)}, 'ERR:42501', ${lit(`${me.label} context: ${n}.${r.column} naming an id that does not exist is refused by RLS (no FK error to probe with)`)});`)
+        if (r.checked) {
+          t(`SELECT is(${got(ctx, n, `ref_other:${r.column}`)}, 'ERR:42501', ${lit(`${me.label} context: ${n}.${r.column} pointing at the ${them.label} tenant's ${r.parent} row is refused`)});`)
+          t(`SELECT is(${got(ctx, n, `ref_own:${r.column}`)}, '1', ${lit(`${me.label} context: ${n}.${r.column} pointing at its own ${r.parent} row works`)});`)
+        }
+      }
       if (own.has(n)) {
         t(`SELECT is(${got(ctx, n, 'move_own')}, 'ERR:42501', ${lit(`${me.label} context: moving its own ${n} rows to the ${them.label} tenant is refused`)});`)
       }
@@ -381,8 +508,8 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
     for (const tag of ['a', 'b']) {
       const id = TENANTS[tag].id
       t(
-        `SELECT is((SELECT count(*)::int FROM ${n} WHERE tenant_id = ${lit(id)}), ${expect(n, id)} + 1,
-  ${lit(`${n}: the ${TENANTS[tag].label} tenant kept every row and gained only its own insert`)});`,
+        `SELECT is((SELECT count(*)::int FROM ${n} WHERE tenant_id = ${lit(id)}), ${expect(n, id)} + ${ownAdds(n)},
+  ${lit(`${n}: the ${TENANTS[tag].label} tenant kept every row and gained only ${ownAdds(n) === 0 ? 'nothing (read-only to the tenant role)' : 'its own inserts'}`)});`,
       )
     }
   }

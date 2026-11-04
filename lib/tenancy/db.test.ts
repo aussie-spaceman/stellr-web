@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, dirname, normalize } from 'node:path'
 import {
   tenantDb,
   tenantSql,
@@ -14,6 +14,7 @@ import {
   TENANT_ROLE,
   TENANT_SETTING,
   TENANT_DB_FLAG,
+  PIN_CHECK_SQL,
   type TenantSqlDriver,
   type TenantSqlTx,
 } from './db'
@@ -30,7 +31,14 @@ type Call = { text: string; values?: readonly unknown[] }
  * and set_config(…, true) last for the transaction only; the read-back
  * reports them. `broken` simulates a connection where the pin does not stick.
  */
-function fakeDriver(opts: { broken?: 'role' | 'tenant'; rows?: Record<string, unknown>[] } = {}) {
+function fakeDriver(
+  opts: {
+    broken?: 'role' | 'tenant'
+    rows?: Record<string, unknown>[]
+    /** A caller statement containing this text moves the pin, the way an unknown in-statement path would. */
+    moveOn?: { text: string; to: { role?: string; tenant?: string } }
+  } = {},
+) {
   const log: { calls: Call[]; outcome: 'commit' | 'rollback' }[] = []
   const driver: TenantSqlDriver = {
     async transaction(fn) {
@@ -43,6 +51,10 @@ function fakeDriver(opts: { broken?: 'role' | 'tenant'; rows?: Record<string, un
           if (/^SET LOCAL ROLE /.test(text)) role = opts.broken === 'role' ? 'postgres' : text.slice('SET LOCAL ROLE '.length)
           else if (/set_config\('stellr\.tenant_id', \$1, true\)/.test(text)) tenant = opts.broken === 'tenant' ? null : String(values?.[0])
           else if (/current_user AS role/.test(text)) return { rows: [{ role, tenant } as never], rowCount: 1 }
+          else if (opts.moveOn && text.includes(opts.moveOn.text)) {
+            role = opts.moveOn.to.role ?? role
+            tenant = opts.moveOn.to.tenant ?? tenant
+          }
           return { rows: (opts.rows ?? []) as never[], rowCount: opts.rows?.length ?? 0 }
         },
       }
@@ -99,6 +111,7 @@ describe('tenantDb: the transaction it runs', () => {
       { text: "SELECT set_config('stellr.tenant_id', $1, true)", values: [CANARY] },
       { text: 'SELECT current_user AS role, public.app_tenant_id()::text AS tenant', values: undefined },
       { text: 'SELECT id FROM public.registrations WHERE id = $1 AND event_slug = $2', values: ['reg-1', 'ev'] },
+      { text: PIN_CHECK_SQL, values: undefined },
     ])
   })
 
@@ -121,8 +134,34 @@ describe('tenantDb: the transaction it runs', () => {
       "SELECT set_config('stellr.tenant_id', $1, true)",
       'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
       'INSERT INTO public.event_settings (event_slug) VALUES ($1)',
+      PIN_CHECK_SQL,
       'UPDATE public.event_settings SET company_count = $1 WHERE event_slug = $2',
+      PIN_CHECK_SQL,
     ])
+  })
+
+  it.each([
+    ['re-pins the tenant', { tenant: STELLR_TENANT_ID }],
+    ['drops the role back to the login', { role: 'tenant_app_login' }],
+  ])('rolls back, and returns no rows, when a statement %s by a path refusedSql does not know', async (_label, to) => {
+    const { driver, log } = fakeDriver({ rows: [{ id: 'other-tenant-row' }], moveOn: { text: 'unknown_path', to } })
+    await expect(
+      tenantDb(CANARY, { driver }).sql`SELECT unknown_path(), id FROM public.registrations`,
+    ).rejects.toThrow(/changed the tenant pin or the role; tenantDb rolled the transaction back/)
+    expect(log[0].outcome).toBe('rollback')
+    expect(log[0].calls.at(-1)?.text).toBe(PIN_CHECK_SQL)
+  })
+
+  it('stops at the first statement that moved the pin: later statements never run', async () => {
+    const { driver, log } = fakeDriver({ moveOn: { text: 'unknown_path', to: { tenant: STELLR_TENANT_ID } } })
+    await expect(
+      tenantDb(CANARY, { driver }).transaction(async (q) => {
+        await q.sql`UPDATE public.event_settings SET company_count = unknown_path() WHERE event_slug = ${'ev'}`
+        await q.sql`DELETE FROM public.event_settings WHERE event_slug = ${'ev'}`
+      }),
+    ).rejects.toThrow(/changed the tenant pin/)
+    expect(log[0].outcome).toBe('rollback')
+    expect(log[0].calls.map((c) => c.text)).not.toContain('DELETE FROM public.event_settings WHERE event_slug = $1')
   })
 
   it('a separate call is a separate transaction with its own pin', async () => {
@@ -166,13 +205,58 @@ describe('tenantDb: caller SQL cannot change the role or the tenant', () => {
     'COMMIT',
     'DROP TABLE public.registrations',
     'GRANT tenant_app TO anon',
+    // Review findings, S4: spellings of set_config the first guard missed.
+    `SELECT "set_config"('stellr.tenant_id', $1, true)`,
+    `SELECT set_config/**/('stellr.tenant_id', $1, true)`,
+    `SELECT pg_catalog."set_config"('role','none',true)`,
+    `SELECT U&"set\\005fconfig"('stellr.tenant_id', $1, true)`,
+    `SELECT u&'x'`,
+    `SELECT "SET_CONFIG"('role', 'none', true)`,
+    `SELECT 1 FROM public.events -- trailing comment`,
+    // pg_settings is updatable by PUBLIC and is set_config by another name.
+    `UPDATE pg_settings SET setting = $1 WHERE name = 'stellr.tenant_id'`,
+    `UPDATE pg_catalog."pg_settings" SET setting = 'none' WHERE name = 'role'`,
+    // Core functions that run SQL text (which could arrive as a bound value).
+    `SELECT query_to_xml($1, true, false, '')`,
+    `SELECT pg_catalog.cursor_to_xml($1, 1, true, false, '')`,
+    `SELECT * FROM ts_stat($1)`,
+    `SELECT ts_rewrite('a'::tsquery, $1)`,
   ])('refuses %j', async (sql) => {
     expect(refusedSql(sql)).not.toBeNull()
-    const strings = Object.assign([sql], { raw: [sql] }) as unknown as TemplateStringsArray
-    expect(() => tenantSql(strings)).toThrow(TenantContextError)
+    // A frozen hand-made template (shaped like the real thing) still meets refusedSql.
+    const strings = Object.freeze(Object.assign([sql], { raw: Object.freeze([sql]) })) as unknown as TemplateStringsArray
+    expect(() => tenantSql(strings)).toThrow(/refused the SQL/)
+    // And a hand-made statement object never reaches the driver at all.
     const { driver, log } = fakeDriver()
-    await expect(tenantDb(CANARY, { driver }).transaction((q) => q.run({ text: sql, values: [] }))).rejects.toThrow(/refused the SQL/)
+    await expect(tenantDb(CANARY, { driver }).transaction((q) => q.run({ text: sql, values: [] }))).rejects.toThrow(
+      /only statements built with tenantSql/,
+    )
     expect(log[0].outcome).toBe('rollback')
+    expect(log[0].calls.map((c) => c.text)).not.toContain(sql)
+  })
+
+  it('run() refuses a hand-made {text, values} even when the SQL itself is harmless (review finding, S4)', async () => {
+    const { driver, log } = fakeDriver()
+    await expect(
+      tenantDb(CANARY, { driver }).transaction((q) => q.run({ text: 'SELECT 1 FROM public.events', values: [] })),
+    ).rejects.toThrow(/only statements built with tenantSql/)
+    expect(log[0].calls.map((c) => c.text)).not.toContain('SELECT 1 FROM public.events')
+  })
+
+  it('a statement tenantSql built is frozen, so it cannot be edited after the check', () => {
+    const s = tenantSql`SELECT 1 FROM public.events WHERE slug = ${'ev'}`
+    expect(Object.isFrozen(s)).toBe(true)
+    expect(Object.isFrozen(s.values)).toBe(true)
+    expect(() => {
+      ;(s as { text: string }).text = "SELECT set_config('role', 'none', true)"
+    }).toThrow(TypeError)
+  })
+
+  it('refuses a forged, unfrozen template strings array (review finding, S4)', () => {
+    const forged = Object.assign(['SELECT 1 FROM public.events'], { raw: ['SELECT 1 FROM public.events'] })
+    expect(() => tenantSql(forged as unknown as TemplateStringsArray)).toThrow(/tagged template/)
+    const mismatched = Object.freeze(Object.assign(['SELECT ', ''], { raw: Object.freeze(['SELECT ', '']) }))
+    expect(() => tenantSql(mismatched as unknown as TemplateStringsArray)).toThrow(/tagged template/)
   })
 
   it.each([
@@ -233,9 +317,38 @@ describe('tenantDb: matches the database and stays allow-listed', () => {
     expect(migration).toContain(`current_setting('${TENANT_SETTING}', true)`)
   })
 
-  it('is imported only by the files in lib/tenancy/db-callers.ts', () => {
-    const roots = ['app', 'components', 'lib', 'packages', 'scripts', 'proxy.ts', 'instrumentation.ts']
-    const files: string[] = []
+  it('finds every way of reaching lib/tenancy/db, from anywhere in the repo (review finding, S4)', () => {
+    // The reviewer's probes, plus the other spellings: none may slip past.
+    const probes: Record<string, string> = {
+      'lib/zzprobe/evil.ts': "import { tenantDb } from '../tenancy/db'",
+      'lib/zzprobe/evil2.ts': "import { tenantDb } from '@/lib/tenancy/db.ts'",
+      'lib/zzprobe/evil3.ts': "const { tenantDb } = require('../tenancy/db.js')",
+      'lib/zzprobe/evil4.ts': "export * from '../tenancy/db'",
+      'lib/zzprobe/evil5.ts': "const m = await import('@/lib/tenancy/db')",
+      'lib/zzprobe/evil6.ts': "import '../../lib/tenancy/db'",
+      'lib/tenancy/sub/evil7.ts': "import { stellrDb } from '../db'",
+      'e2e/evil8.spec.ts': "import { tenantDb } from '../lib/tenancy/db'",
+      'test/evil9.test.ts': "vi.mock('@/lib/tenancy/db', () => ({}))",
+      'app/api/evil10/route.ts': "import * as t from '@/lib/tenancy/db/index'",
+      'lib/zzprobe/evil11.ts': "const { tenantDb: run } = await import(`@/lib/tenancy/${'db'}`)",
+      'lib/zzprobe/evil12.ts': "const sql = tenantSql`SELECT 1`",
+    }
+    const found = tenantDbImporters(Object.entries(probes).map(([path, src]) => ({ path, src })))
+    expect(found).toEqual(Object.keys(probes).sort())
+    // Things that are not importers.
+    const clean = [
+      { path: 'lib/tenancy/db-callers.ts', src: "// Every file that imports lib/tenancy/db is named here\nexport const X = ['lib/tenancy/db.test.ts']" },
+      { path: 'lib/other/db.ts', src: 'export const x = 1' },
+      { path: 'lib/other/use.ts', src: "import { x } from './db'" },
+      { path: 'lib/tenancy/tenant-id.ts', src: "throw new Error('tenantDb needs a tenant id')" },
+      { path: 'lib/tenancy/x.ts', src: "import { y } from './db-callers'" },
+    ]
+    expect(tenantDbImporters(clean)).toEqual([])
+  })
+
+  it('is imported only by the files in lib/tenancy/db-callers.ts (whole repo: app, lib, test, e2e, scripts, …)', () => {
+    const skip = new Set(['node_modules', '.next', '.git', 'coverage', 'storybook-static', 'dist', 'out', '.vercel', 'playwright-report', 'test-results', '.stryker-tmp', 'reports'])
+    const files: { path: string; src: string }[] = []
     const walk = (p: string) => {
       let st
       try {
@@ -244,21 +357,43 @@ describe('tenantDb: matches the database and stays allow-listed', () => {
         return
       }
       if (st.isDirectory()) {
-        if (p.endsWith('node_modules') || p.endsWith('.next')) return
-        for (const f of readdirSync(p)) walk(join(p, f))
-      } else if (/\.(?:ts|tsx|mts|js|mjs|cjs)$/.test(p)) files.push(p)
+        if (skip.has(p.split('/').pop() as string)) return
+        for (const f of readdirSync(p)) walk(p === '.' ? f : join(p, f))
+      } else if (/\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(p)) files.push({ path: p, src: readFileSync(p, 'utf8') })
     }
-    for (const r of roots) walk(r)
-    const importers = files
-      .filter((f) => !f.endsWith(join('lib', 'tenancy', 'db.ts')))
-      .filter((f) => /from\s+['"](?:@\/lib\/tenancy\/db|\.{1,2}\/(?:[\w.-]+\/)*db)['"]|import\(\s*['"]@\/lib\/tenancy\/db['"]\s*\)/.test(readFileSync(f, 'utf8')))
-      .filter((f) => {
-        const src = readFileSync(f, 'utf8')
-        // A relative "./db" only counts inside lib/tenancy.
-        return /@\/lib\/tenancy\/db['"]/.test(src) || relative('lib/tenancy', f).split('/').length === 1
-      })
-      .map((f) => relative('.', f))
-      .sort()
-    expect(importers).toEqual([...TENANT_DB_CALLERS].sort())
+    walk('.')
+    expect(files.length).toBeGreaterThan(500)
+    expect(tenantDbImporters(files)).toEqual([...TENANT_DB_CALLERS].sort())
   })
 })
+
+/**
+ * Files that reach lib/tenancy/db: any import / export-from / import() /
+ * require() / vi.mock() specifier that resolves to it (relative from the
+ * file's own folder, or through the "@/" alias, with or without an extension
+ * or /index), plus — as a backstop for specifiers built at run time — any
+ * file outside lib/tenancy/db.ts that calls its API by name.
+ */
+function tenantDbImporters(files: { path: string; src: string }[]): string[] {
+  const TARGET = 'lib/tenancy/db'
+  const spec = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*\(\s*)['"`]([^'"`]+)['"`]/g
+  const api = /\b(?:tenantDb|stellrDb|setTenantDbDriver)\s*\(|\btenantSql\s*`|\{[^}]*\b(?:tenantDb|stellrDb|setTenantDbDriver|tenantSql)\b[^}]*\}\s*=\s*(?:await\s+)?(?:import|require)\b|tenancy\/\$\{/
+  const resolveSpec = (from: string, s: string): string | null => {
+    let p: string
+    if (s.startsWith('@/')) p = s.slice(2)
+    else if (s.startsWith('./') || s.startsWith('../')) p = join(dirname(from), s)
+    else return null
+    return normalize(p)
+      .replace(/\\/g, '/')
+      .replace(/\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/, '')
+      .replace(/\/index$/, '')
+  }
+  const out = new Set<string>()
+  for (const f of files) {
+    const path = f.path.replace(/\\/g, '/')
+    if (path === `${TARGET}.ts`) continue
+    for (const m of f.src.matchAll(spec)) if (resolveSpec(path, m[1]) === TARGET) out.add(path)
+    if (api.test(f.src)) out.add(path)
+  }
+  return [...out].sort()
+}

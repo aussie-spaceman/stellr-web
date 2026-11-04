@@ -17,6 +17,7 @@ import {
 } from '../../scripts/gen-tenant-isolation-pgtap.mjs'
 import { isolationPolicyProblems, ISOLATION_POLICIES, S4_FIRST_MIGRATION } from '../../scripts/check-migration-tenancy.mjs'
 import { schemaSources } from '../../scripts/lib/schema-tables.mjs'
+import { TENANT_APP_READ_ONLY_TABLES, TENANT_PARENT_REFS, SELF_REF_TABLES, guardWithCheck } from './tenant-role'
 
 const MIGRATION = 'supabase/migrations/20261104200000_tenant_isolation_policies.sql'
 
@@ -70,13 +71,51 @@ describe('the S4 migration and the tenancy lint', () => {
     for (const t of tenantTables()) {
       expect(migration).toContain(`CREATE POLICY tenant_isolation ON ${t} AS PERMISSIVE FOR ALL TO tenant_app`)
       expect(migration).toContain(`CREATE POLICY tenant_isolation_guard ON ${t} AS RESTRICTIVE FOR ALL TO tenant_app`)
-      expect(migration).toContain(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${t} TO tenant_app;`)
+      if (TENANT_APP_READ_ONLY_TABLES.includes(t)) {
+        expect(migration).toContain(`GRANT SELECT ON ${t} TO tenant_app;`)
+        expect(migration).not.toMatch(new RegExp(`GRANT [^;]*(?:INSERT|UPDATE|DELETE)[^;]* ON ${t.replace('.', '\\.')} TO tenant_app`))
+      } else {
+        expect(migration).toContain(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${t} TO tenant_app;`)
+      }
     }
     const code = migration.replace(/--[^\n]*/g, '')
     expect(code).not.toMatch(/FORCE\s+ROW\s+LEVEL\s+SECURITY/i)
     expect(code.match(/CREATE\s+ROLE[^;]*/gi)).toEqual(['CREATE ROLE tenant_app NOLOGIN NOINHERIT NOBYPASSRLS'])
     expect(code).not.toMatch(/SECURITY\s+DEFINER/i)
     expect(code).not.toMatch(/ALTER\s+ROLE/i)
+  })
+
+  it("each guard's WITH CHECK is exactly what lib/tenancy/tenant-role.ts says (event key and every parent key confined to the tenant)", () => {
+    const migration = readFileSync(MIGRATION, 'utf8')
+    const via = new Set(viaParentTables())
+    for (const t of tenantTables()) {
+      const block = `CREATE POLICY tenant_isolation_guard ON ${t} AS RESTRICTIVE FOR ALL TO tenant_app
+  USING (tenant_id = (SELECT public.app_tenant_id()))
+  WITH CHECK (${guardWithCheck(t, TABLE_REGISTRY[t], via)});`
+      expect(migration, t).toContain(block)
+    }
+    // A cross-tenant reference is the case the guard exists for: spot-check two.
+    expect(guardWithCheck('public.group_join_tokens', TABLE_REGISTRY['public.group_join_tokens'], via)).toContain(
+      'EXISTS (SELECT 1 FROM public.registrations p WHERE p.id = group_join_tokens.registration_id)',
+    )
+    expect(guardWithCheck('public.training_assignments', TABLE_REGISTRY['public.training_assignments'], via)).toContain(
+      'EXISTS (SELECT 1 FROM public.training_modules p WHERE p.id = training_assignments.module_id)',
+    )
+  })
+
+  it('every parent ref is between tenant tables, and the self-ref helper covers exactly the self-referencing tables', () => {
+    const tenantish = new Set([...tenantTables(), ...viaParentTables()])
+    for (const r of TENANT_PARENT_REFS) {
+      expect(tenantTables(), r.table).toContain(r.table)
+      expect(tenantish.has(r.parent), r.parent).toBe(true)
+    }
+    const migration = readFileSync(MIGRATION, 'utf8')
+    const fn = /CREATE OR REPLACE FUNCTION public\.tenant_self_ref_visible[\s\S]*?\$\$;/.exec(migration)?.[0] ?? ''
+    const cases = [...fn.matchAll(/WHEN '(\w+)' THEN EXISTS \(SELECT 1 FROM public\.(\w+) WHERE id = p_id\)/g)]
+    expect(cases.map((m) => m[1])).toEqual(cases.map((m) => m[2]))
+    expect(cases.map((m) => `public.${m[1]}`)).toEqual([...SELF_REF_TABLES])
+    expect(fn).toMatch(/SECURITY INVOKER/)
+    expect(fn).toMatch(/SET search_path = public, pg_temp/)
   })
 
   it('the lint passes on the real migrations', () => {

@@ -15,15 +15,19 @@
 -- and registration ids are random v4 uuids drawn independently of tenant ids,
 -- so a legacy path is never mistaken for another tenant's.
 --
--- public.storage_object_tenant_id(name) answers that for one path. It is what
--- a future storage.objects policy calls:
---   USING (bucket_id = '…' AND public.storage_object_tenant_id(name) = (SELECT public.app_tenant_id()))
--- No storage.objects policy is created here: every bucket is private and the
--- app reaches Storage only with the secret key (signed URLs), so there is no
--- policy to change on a live flow, and storage.objects belongs to the Storage
--- service's own role (whether the migration role may add policies to it is an
--- owner check, docs/TENANCY-S4.md). S5 adds the policies when a tenant path
--- first writes to Storage.
+-- public.storage_object_tenant_id(name) answers that for one path, in SQL —
+-- for server-side audits and listings (which objects belong to whom) and for
+-- tenantDb reads. lib/tenancy/storage.ts applies the same rule in code.
+--
+-- Where the rule is enforced: in server code, not in a storage.objects
+-- policy. Uploads, downloads and signed URLs go through the Storage HTTP API,
+-- which runs as the role the key or JWT carries: service_role for the secret
+-- key the app uses (BYPASSRLS, so no policy applies), anon or authenticated
+-- for a browser. Nothing reaches Storage as tenant_app, so a policy TO
+-- tenant_app would never bind. S5's tenant upload code builds every path with
+-- tenantObjectPath and checks every path it signs or reads with
+-- assertTenantObjectPath (docs/TENANCY-S4.md, "Storage"). No storage.objects
+-- policy is created here, and none is changed.
 --
 -- Why SECURITY DEFINER (unavoidable): the answer needs every tenant id. As
 -- SECURITY INVOKER, tenant_app sees only its own tenants row (20261104200000),
@@ -31,7 +35,8 @@
 -- — and be Stellr's. The function returns one tenant id for a path the caller
 -- names; it cannot list tenants. search_path is pinned, EXECUTE is revoked
 -- from PUBLIC, anon and authenticated and granted to tenant_app and
--- service_role only.
+-- service_role only (a browser-facing policy would need its own design and
+-- grant: browsers do not reach Storage directly today).
 --
 -- Additive: one function, no table, no data change, no live caller.
 
@@ -52,7 +57,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.storage_object_tenant_id(text) IS
-  'Owner tenant of a Storage object path: the tenant whose id is the first path segment, else Stellr (legacy objects stay Stellr''s). For storage.objects policies (S5). docs/TENANCY-S4.md.';
+  'Owner tenant of a Storage object path: the tenant whose id is the first path segment, else Stellr (legacy objects stay Stellr''s). For server-side audits and tenantDb reads; the rule is enforced in server code (Storage API traffic never runs as tenant_app). docs/TENANCY-S4.md.';
 
 REVOKE EXECUTE ON FUNCTION public.storage_object_tenant_id(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.storage_object_tenant_id(text) TO tenant_app, service_role;

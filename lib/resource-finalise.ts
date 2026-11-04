@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { sniffFileFormat } from '@/lib/file-sniff'
 import {
   claimUpload,
   discardUpload,
@@ -91,6 +92,10 @@ export async function watermarkIfPdf(
 ): Promise<Uint8Array> {
   const name = storagePath.split('/').pop() ?? ''
   if (!isPdf(name, fileType)) return bytes
+  // The type is the browser's word. pdf-lib reads any bytes as a PDF if a
+  // `%PDF-` sits somewhere inside, so only bytes claimUpload judged a PDF —
+  // and page-counted, for a member's — ever reach it.
+  if (sniffFileFormat(bytes, ['pdf']) !== 'pdf') return bytes
 
   try {
     const stamped = new Uint8Array(await stampPdfBytes(bytes))

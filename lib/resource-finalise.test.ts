@@ -44,7 +44,7 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 
-import { finaliseStoredUpload } from './resource-finalise'
+import { finaliseStoredUpload, watermarkIfPdf } from './resource-finalise'
 
 const PATH = 'resources/members/m1/1-notes.pdf'
 const STAMPED = new Uint8Array([...FORMAT_SAMPLES.pdf, 0x0a])
@@ -87,5 +87,20 @@ describe('finaliseStoredUpload', () => {
     expect(stampPdfBytes).toHaveBeenCalledWith(claimed.bytes)
     expect(upload).toHaveBeenCalledWith(PATH, STAMPED, expect.objectContaining({ contentType: 'application/pdf' }))
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ storage_path: PATH, file_size_bytes: STAMPED.byteLength }))
+  })
+})
+
+describe('watermarkIfPdf', () => {
+  // The type and the name are the browser's word. pdf-lib reads anything with
+  // a `%PDF-` inside as a PDF, so bytes that didn't sniff as one never reach it
+  // — they skipped the page count claimUpload gives a member's PDF.
+  it('stamps only bytes that are a PDF, whatever the type says', async () => {
+    const text = new Uint8Array(Buffer.from(`notes\n${'x'.repeat(2000)}\n%PDF-1.7\n<< /Type /Page >>\n%%EOF\n`))
+    expect(await watermarkIfPdf('community-resources', PATH, text, 'application/pdf')).toBe(text)
+    expect(stampPdfBytes).not.toHaveBeenCalled()
+
+    const pdf = Uint8Array.from(FORMAT_SAMPLES.pdf)
+    expect(await watermarkIfPdf('community-resources', PATH, pdf, 'application/pdf')).toEqual(STAMPED)
+    expect(stampPdfBytes).toHaveBeenCalledWith(pdf)
   })
 })

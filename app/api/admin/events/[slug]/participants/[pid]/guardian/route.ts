@@ -5,6 +5,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { isValidEmail, normalizeEmail } from '@/lib/member-enums'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
+import { adoptOpenEnvelope } from '@/lib/docusign-agreements'
+import { classifyAgreement } from '@/lib/docusign'
 import { maskEmail } from '@/lib/utils'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
@@ -40,12 +42,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const db = supabaseServer()
   const { data: p } = await db
     .from('participants')
-    .select('id, member_id, first_name, last_name, emergency_contact_email, registrations!inner(event_slug)')
+    .select('id, member_id, first_name, last_name, emergency_contact_email, event_role, date_of_birth, registrations!inner(event_slug, school_address_state)')
     .eq('id', pid)
     .maybeSingle()
-  const reg = p ? (Array.isArray(p.registrations) ? p.registrations[0] : p.registrations) as { event_slug: string } : null
+  const reg = p ? (Array.isArray(p.registrations) ? p.registrations[0] : p.registrations) as { event_slug: string; school_address_state: string | null } : null
   if (!p || reg?.event_slug !== slug) {
     return NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
+  }
+
+  // A live form left unlinked by a removal is this person's live form: link it, so
+  // the check below sees it and no second envelope goes out.
+  if (p.member_id && reg) {
+    const type = classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null, reg.school_address_state)
+    if (type) await adoptOpenEnvelope(db, { participantId: pid, memberId: p.member_id as string, eventSlug: slug, type })
   }
 
   const { data: live } = await db
@@ -64,23 +73,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   const previous = (p.emergency_contact_email as string | null) ?? null
-  const { error: updateError } = await db.from('participants').update({ emergency_contact_email: email }).eq('id', pid)
-  if (updateError) {
-    console.error('[admin/guardian] participant update failed:', updateError)
-    return NextResponse.json({ error: 'Could not save the email' }, { status: 500 })
+  // The address on file may already be right, and the form just never went out:
+  // then there is nothing to correct, only a form to send.
+  const changed = normalizeEmail(previous) !== email
+  if (changed) {
+    const { error: updateError } = await db.from('participants').update({ emergency_contact_email: email }).eq('id', pid)
+    if (updateError) {
+      console.error('[admin/guardian] participant update failed:', updateError)
+      return NextResponse.json({ error: 'Could not save the email' }, { status: 500 })
+    }
+    // The member record carries the same contact for future events; fix it only
+    // while it still holds the old (bad) value, never over a newer one.
+    if (p.member_id) {
+      const memberUpdate = db.from('members').update({ ec_email: email }).eq('id', p.member_id as string)
+      await (previous ? memberUpdate.eq('ec_email', previous) : memberUpdate.is('ec_email', null))
+    }
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('participants', [pid])
+    shadowSyncFields('members', [p.member_id as string | null])
   }
-  // The member record carries the same contact for future events; fix it only
-  // while it still holds the old (bad) value, never over a newer one.
-  if (p.member_id) {
-    const memberUpdate = db.from('members').update({ ec_email: email }).eq('id', p.member_id as string)
-    await (previous ? memberUpdate.eq('ec_email', previous) : memberUpdate.is('ec_email', null))
-  }
-  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
-  shadowSyncFields('participants', [pid])
-  shadowSyncFields('members', [p.member_id as string | null])
 
   const actor = await actorFromAuth()
-  if (p.member_id) {
+  if (changed && p.member_id) {
     await logActivity(
       {
         memberId: p.member_id as string,

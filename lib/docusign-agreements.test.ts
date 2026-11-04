@@ -53,6 +53,7 @@ interface Filters { eq: Record<string, unknown>; ins: Record<string, unknown[]> 
 
 function makeDb(fixture: Fixture) {
   const inserts: { table: string; payload: Record<string, unknown> }[] = []
+  const updates: { table: string; values: Record<string, unknown>; filters: Filters }[] = []
 
   const db = {
     from(table: string) {
@@ -64,6 +65,11 @@ function makeDb(fixture: Fixture) {
         gte: () => chain,
         order: () => chain,
         limit: () => chain,
+        is: (col: string, val: unknown) => { filters.eq[`is:${col}`] = val; return chain },
+        update: (values: Record<string, unknown>) => {
+          updates.push({ table, values, filters })
+          return { eq: () => ({ is: async () => ({ error: null }) }) }
+        },
         maybeSingle: async () => ({ data: resolve(table, filters, fixture), error: null }),
         insert: async (payload: Record<string, unknown>) => {
           inserts.push({ table, payload })
@@ -81,7 +87,7 @@ function makeDb(fixture: Fixture) {
       return chain
     },
   }
-  return { db: db as never, inserts }
+  return { db: db as never, inserts, updates }
 }
 
 function resolve(table: string, filters: Filters, fixture: Fixture): unknown {
@@ -296,6 +302,29 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     expect(createConsent).toHaveBeenCalledTimes(1)
     const agreementInsert = inserts.find((i) => i.table === 'agreements')!
     expect(agreementInsert.payload.reused_from ?? null).toBeNull()
+  })
+
+  it('links a live envelope left unlinked by a removal to the re-added row, and sends nothing new', async () => {
+    const { db, inserts, updates } = makeDb({ openEnvelope: { id: 'env-open' } })
+    const out = await dispatchAgreement(db, {
+      ...ADULT, participantId: 'p-new', memberId: 'm-1', eventRole: 'participant', dateOfBirth: '2011-05-12',
+      guardianEmail: 'grace@example.com', guardianFirstName: 'Grace', guardianLastName: 'Lovelace',
+    })
+    expect(out).toBe('in_flight')
+    expect(createConsent).not.toHaveBeenCalled()
+    expect(inserts.filter((i) => i.table === 'agreements')).toHaveLength(0)
+    expect(updates).toHaveLength(1)
+    expect(updates[0].values.participant_id).toBe('p-new')
+  })
+
+  it('links nothing without a member id: a family address is shared between siblings', async () => {
+    const { db, updates } = makeDb({ openEnvelope: { id: 'env-open' } })
+    const out = await dispatchAgreement(db, {
+      ...ADULT, participantId: 'p-new', memberId: null, eventRole: 'participant', dateOfBirth: '2011-05-12',
+      guardianEmail: 'grace@example.com', guardianFirstName: 'Grace', guardianLastName: 'Lovelace',
+    })
+    expect(out).toBe('in_flight')
+    expect(updates).toHaveLength(0)
   })
 
   it('DOES reuse when the same-name child\'s DOB also matches (DSES-N3)', async () => {

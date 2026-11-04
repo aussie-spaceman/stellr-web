@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Button } from '@stellr/web-ui'
 import { X } from 'lucide-react'
+import { describeDispatchOutcome } from '@/lib/docusign-status'
 
 // "Fix guardian email" on a student whose consent form could not be sent (or
 // was never issued): saves the corrected parent/guardian address on the
@@ -60,8 +61,8 @@ export function FixGuardianEmailButton({
     }
     setDone(
       data.outcome === 'issued'
-        ? 'Saved. The consent form has been sent.'
-        : `Saved. No new form was sent (${String(data.outcome).replace(/_/g, ' ')}).`,
+        ? 'Done. The consent form has been sent.'
+        : describeDispatchOutcome(String(data.outcome)),
     )
   }
 
@@ -81,8 +82,8 @@ export function FixGuardianEmailButton({
             <div>
               <h2 className="font-heading text-lg font-semibold">Parent / guardian email</h2>
               <p className="mt-1 text-sm text-content-secondary">
-                For {studentName}. Saving updates their record and sends the consent form, which uses one
-                new envelope.
+                For {studentName}. Sending uses this address, updates their record if you change it, and
+                uses one new envelope.
               </p>
             </div>
             <button type="button" aria-label="Close" onClick={() => dialog.current?.close()} className="text-content-muted hover:text-ink">
@@ -103,10 +104,10 @@ export function FixGuardianEmailButton({
               <Button
                 variant="primaryStrong"
                 className="!px-4 !py-2"
-                disabled={!draft.trim() || unchanged || busy}
+                disabled={!draft.trim() || busy}
                 onClick={save}
               >
-                {busy ? 'Saving…' : 'Save and send'}
+                {busy ? 'Sending…' : unchanged ? 'Send consent form' : 'Save and send'}
               </Button>
             </div>
             {done && <p role="status" className="text-sm text-enviro-green-text">{done}</p>}

@@ -4,6 +4,7 @@ import { ageOn, isMinorOn, isUnder13On, isValidDob } from '@/lib/age'
 import { guardianAgreementOnFile } from '@/lib/guardian-consent'
 import { normalizeEmail, denormalizeGrade } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // Self-registration for minors (decision 24, 3 Nov 2026; plan S1).
 //
@@ -182,6 +183,8 @@ export async function openPendingConsent(
       .update({ band: input.band, guardian_name: input.guardianName, guardian_email: guardianEmail })
       .eq('member_id', input.memberId)
     if (error) throw new Error(`Updating the consent request failed: ${error.message}`)
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('member_pending_consent', [input.memberId])
     return
   }
   const { error } = await db.from('member_pending_consent').insert({
@@ -193,6 +196,7 @@ export async function openPendingConsent(
     purge_after: purgeAfter(now),
   })
   if (error) throw new Error(`Recording the consent request failed: ${error.message}`)
+  shadowSyncFields('member_pending_consent', [input.memberId])
 }
 
 /**

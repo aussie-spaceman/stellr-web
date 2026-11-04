@@ -10,6 +10,7 @@ import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import { applyRosterChange } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
@@ -170,6 +171,8 @@ export async function POST(
     console.error('[teams/participants] Insert error:', error)
     return NextResponse.json({ error: 'Failed to add participant' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('participants', [participant.id as string])
 
   // Link the new member to the group's school (from the registration record),
   // and record the event in their Event Activity (event_participations).

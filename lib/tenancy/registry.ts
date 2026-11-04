@@ -102,6 +102,9 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.tenancy_settings': system('derivation mode'),
   'public.tenancy_derivation_log': system('derivation orphan counts'),
 
+  // ── S4 field encryption ──────────────────────────────────────────────────
+  'public.tenant_data_keys': own('wrapped per-tenant field-encryption data keys (lib/field-crypto.ts)'),
+
   // ── Event-scoped, tenant derived from event_slug ─────────────────────────
   'public.agreements': slug('e-sign envelopes (renamed from docusign_envelopes)'),
   'public.credentials': slug(),

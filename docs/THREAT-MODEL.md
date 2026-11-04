@@ -37,7 +37,7 @@ Related documents: `docs/compliance/information-security-program.md` (the WISP),
 | ID | Asset | Where it lives (today / target) | Why it matters | Highest property at risk |
 |---|---|---|---|---|
 | A1 | **Minors' identity and contact data** (name, DOB, email, phone, school, grade, address) | `members`, `participants`, `registrations` / plus `identities`, `tenant_person_profiles` (S7) | Children, some under 13 (Stellr only). COPPA, FERPA, APPs, draft Children's Online Privacy Code. Cross-tenant leakage is the worst-case incident. | Confidentiality |
-| A2 | **Health and emergency fields** (medical conditions, allergies, dietary notes, emergency and guardian contacts) | plaintext columns on `members`/`participants`, `member_allergies`; copies in `audit_log` and `deletion_archive` / field-encrypted (S4) | Sensitive information under APP 3; never shared across tenants (decision 5). | Confidentiality |
+| A2 | **Health and emergency fields** (medical conditions, allergies, dietary notes, emergency and guardian contacts) | plaintext columns on `members`/`participants`/`member_pending_consent`, `member_allergies`; copies in `audit_log` and `deletion_archive`; S4 shadow ciphertext columns beside them, written by `lib/field-crypto.ts` only when `FIELD_CRYPTO_MODE=shadow` (off by default, `docs/FIELD-CRYPTO.md`) / reads switched to ciphertext and plaintext dropped (S4 cut-over) | Sensitive information under APP 3; never shared across tenants (decision 5). | Confidentiality |
 | A3 | **Money** (charges, refunds, transfers, payouts, fee schedule, platform balances per currency) | Stripe, `registrations`/`participants` payment columns, `group_invoices` / plus `tenant_ledger_entries` (S9) | Stellr holds tenant funds between charge and transfer. Fraud, misdirected payouts or a broken refund path are direct losses. | Integrity |
 | A4 | **Consent ledger and guardian consent** (COPPA parental consent, guardian agreements, per-tenant share grants) | agreements and e-sign tables, `members` pending-consent state / plus `consent_grants` (S7) | Legal basis for holding and sharing a minor's data. A forged or lost grant is both a privacy breach and a compliance failure. | Integrity, non-repudiation |
 | A5 | **Signed agreements and their evidence** (PDFs, audit chain, certificates) | Supabase Storage, `esign_audit_events` (hash-chained), encrypted off-site replica | Proof of consent and liability waivers for a live event. | Integrity, availability |
@@ -345,7 +345,6 @@ These files are named by the plan and cited above as future controls. They are l
 
 - `lib/authz.ts` (S5)
 - `lib/tenancy/db.ts` (S4)
-- `lib/field-crypto.ts` (S4)
 
 ---
 

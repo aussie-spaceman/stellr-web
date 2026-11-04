@@ -18,6 +18,7 @@ import {
   GUARDIAN_RELATIONSHIPS, adultRouteForMinor, ageBand, guardianConsentOnFile, isPlausibleEmail, minorSelfSignupEnabled,
   openPendingConsent, openScreenedRequest, sendConsentRequest,
 } from '@/lib/pending-consent'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -428,6 +429,8 @@ export async function POST(req: Request) {
     console.error('Member upsert error:', memberError)
     return NextResponse.json({ error: 'Failed to save member' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('members', [memberId])
 
   // A row that was not there before the write (inserted, or linked by email):
   // open the request now, before anything else happens. If it cannot be

@@ -14,11 +14,15 @@ import { describe, expect, it } from 'vitest'
 //     prerendered root layout, so no nonce: its sha256 hash is in the nonce
 //     policy (consentModeScript(); test/csp.test.ts checks the hash).
 //   components/analytics/GoogleTagManager.tsx — next/script id="gtm-init",
-//     inline. Next stamps the nonce on it; gtm.js and the tags it injects run
-//     under 'strict-dynamic' (nonce policy) or the Google hosts (host policy).
+//     inline. next/script injects it with no nonce (the App Router gives it
+//     none), so its sha256 is in the nonce policy (lib/gtm.ts holds the text;
+//     test/csp-script-nonces.test.tsx checks the hash against the injected
+//     element). gtm.js and the scripts with a src that its tags insert run
+//     under 'strict-dynamic' (nonce policy) or the named hosts (host policy).
 //   components/analytics/HubSpotTracking.tsx, HubSpotTrackingConsented.tsx —
 //     next/script loading js.hs-scripts.com, which loads further HubSpot
-//     scripts. Nonce plus 'strict-dynamic', or the HubSpot hosts.
+//     scripts. Inserted by a nonced Next chunk, so 'strict-dynamic'; or the
+//     HubSpot hosts.
 //   components/video/VideoRoom.tsx — injects the video provider's
 //     external_api.js. 'strict-dynamic' from a nonced Next chunk, or the
 //     Jitsi hosts.
@@ -26,10 +30,13 @@ import { describe, expect, it } from 'vitest'
 //     nonce.
 //
 // Outside this tree: Next.js's own inline bootstrap scripts (Next stamps the
-// nonce it reads from the policy proxy.ts puts on the request headers), Clerk's
-// clerk-js loader and Turnstile (inserted by script, so 'strict-dynamic'; the
-// Clerk Frontend API host in the host policy), and Vercel Analytics / Speed
-// Insights (same-origin /_vercel scripts).
+// nonce it reads from the policy proxy.ts puts on the request headers); Clerk's
+// clerk-js <script>, which Clerk renders in the server HTML, so it needs the
+// nonce: the Clerk layouts pass x-nonce to ClerkProvider (lib/request-nonce.ts;
+// the public header's lazily mounted ClerkProvider inserts it by script, under
+// the host policy's Clerk Frontend API host); Turnstile and clerk-js's UI
+// bundle (inserted by clerk-js, so 'strict-dynamic'); and Vercel Analytics /
+// Speed Insights (same-origin /_vercel scripts).
 //
 // A new script anywhere in app/, components/, lib/ or packages/ fails this test
 // until it is added here, with how lib/csp.ts allows it.

@@ -7,7 +7,7 @@ import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { signInPath } from '@/lib/sign-in-path'
-import { applyCsp, cspFor } from '@/lib/csp'
+import { NONCE_HEADER, applyCsp, cspFor } from '@/lib/csp'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -219,10 +219,16 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   // policy on the request headers and stamps it on its own scripts and every
   // next/script. Anything the client sent under these names is dropped first,
   // so it can't choose the nonce.
+  // The nonce also goes to the layouts as x-nonce, for the clerk-js tag Clerk
+  // renders in the HTML (lib/request-nonce.ts).
   headers.delete('content-security-policy')
   headers.delete('content-security-policy-report-only')
+  headers.delete(NONCE_HEADER)
   const csp = cspFor(url.pathname)
-  if (csp.nonce) headers.set('content-security-policy-report-only', csp.value)
+  if (csp.nonce) {
+    headers.set('content-security-policy-report-only', csp.value)
+    headers.set(NONCE_HEADER, csp.nonce)
+  }
   return applyCsp(NextResponse.next({ request: { headers } }), csp.value, req.url)
   // ── end CSP ────────────────────────────────────────────────────────────────
 })

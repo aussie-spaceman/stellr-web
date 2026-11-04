@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { consentModeScript } from '@/components/analytics/ConsentMode'
+import { gtmInitScript } from '@/lib/gtm'
 
 // ── Content-Security-Policy, Report-Only (multi-tenancy plan S1) ─────────────
 //
@@ -11,12 +12,21 @@ import { consentModeScript } from '@/components/analytics/ConsentMode'
 // 1. NONCE policy, on routes that always render per request: the (admin),
 //    (member), (auth) and (flow) route groups, plus the API. proxy.ts mints a
 //    fresh nonce per request and passes the policy to Next on the request
-//    headers; Next reads the nonce from there and stamps it on its own inline
-//    scripts and on every next/script (GTM init, HubSpot loader). Scripts those
-//    load (gtm.js, clerk-js, Turnstile, Jitsi's external_api.js, Vercel
-//    Analytics) are trusted through 'strict-dynamic'. The one hand-written
-//    inline script, ConsentMode, sits in the prerendered root layout and can't
-//    carry a nonce, so it is allowed by its hash.
+//    headers; Next reads the nonce from there and stamps it on its own
+//    bootstrap scripts and chunks. Three scripts on these routes get no nonce
+//    from Next, and 'strict-dynamic' doesn't cover them, because nothing
+//    trusted inserts them:
+//    - clerk-js, a parser-inserted <script src> Clerk renders in the HTML.
+//      proxy.ts also sends the nonce as `x-nonce` (NONCE_HEADER); the four
+//      Clerk layouts read it (lib/request-nonce.ts) and pass it to ClerkProvider.
+//    - GTM's init, which next/script injects inline with el.textContent and no
+//      nonce (the App Router gives next/script none, outside
+//      beforeInteractive). Allowed by its hash (lib/gtm.ts).
+//    - ConsentMode, inline in the prerendered root layout. Allowed by its hash.
+//    What those load (gtm.js, the HubSpot loader's src, Turnstile, Jitsi's
+//    external_api.js, Vercel Analytics, clerk-js's UI bundle) is inserted by
+//    script, so 'strict-dynamic' trusts it. Inline scripts a GTM Custom HTML
+//    tag injects are not covered and will report here.
 //
 // 2. HOST policy, everywhere else: the (public) group and Sanity Studio. Most
 //    of those pages are prerendered and served from the CDN, so their HTML is
@@ -28,14 +38,18 @@ import { consentModeScript } from '@/components/analytics/ConsentMode'
 //
 // Script inventory: test/inline-scripts.test.ts. Hosts below come from the
 // code, except the HubSpot and Google subdomains that the HubSpot loader and
-// GTM pull in themselves, taken from those vendors' published CSP lists. The
-// reports will show anything missing. Stripe: the app never loads js.stripe.com;
+// GTM pull in themselves, taken from those vendors' published CSP lists, and
+// the ad tags configured in GTM that this repo documents as live (Meta Base
+// Pixel, LinkedIn Insight, Apollo.io: docs/RUNBOOK-no-ads-students.md,
+// docs/GTM-TRACKING-SETUP.md). The reports will show anything missing. Stripe: the app never loads js.stripe.com;
 // checkout is a top-level navigation to checkout.stripe.com, which CSP doesn't
 // govern.
 
 export const CSP_HEADER = 'Content-Security-Policy-Report-Only'
 export const CSP_REPORT_PATH = '/api/csp-report'
 export const CSP_REPORT_GROUP = 'csp-endpoint'
+/** Request header carrying this request's nonce to the layouts (lib/request-nonce.ts). */
+export const NONCE_HEADER = 'x-nonce'
 
 // Route groups that always render per request (each reads the session, the
 // search params, or is force-dynamic). test/csp.test.ts checks this list
@@ -101,6 +115,12 @@ const HUBSPOT_CONNECT = [
   'https://*.hsforms.com',
   'https://*.hs-analytics.net',
 ]
+// Ad tags added in GTM as Custom HTML or templates. Meta's fbevents.js loads
+// its config from connect.facebook.net and beacons to www.facebook.com/tr;
+// LinkedIn's insight.min.js beacons to px.ads.linkedin.com; Apollo's tracker
+// loads from assets.apollo.io and calls its own API.
+const AD_TAG_SCRIPT = ['https://connect.facebook.net', 'https://snap.licdn.com', 'https://assets.apollo.io']
+const AD_TAG_CONNECT = ['https://www.facebook.com', 'https://connect.facebook.net', 'https://px.ads.linkedin.com', 'https://*.apollo.io']
 const TURNSTILE = 'https://challenges.cloudflare.com'
 const JITSI = ['https://8x8.vc', 'https://meet.jit.si']
 // Vercel Analytics / Speed Insights are same-origin (/_vercel/…) in a
@@ -113,8 +133,11 @@ function sha256(text: string): string {
 
 type Env = Record<string, string | undefined>
 
-// Built once per instance: the env and the ConsentMode text are fixed for a deployment.
+// Built once per instance: the env, the ConsentMode text and the GTM container
+// are fixed for a deployment (NEXT_PUBLIC_GTM_ID is inlined at build, in the
+// proxy and in GoogleTagManager alike).
 let defaultDirectives: string | undefined
+let defaultGtmHash: string | null | undefined
 let consentHash: string | undefined
 export function consentModeHash(): string {
   return (consentHash ??= sha256(consentModeScript()))
@@ -155,6 +178,7 @@ function shared(env: Env) {
         ...sanity,
         ...GOOGLE_CONNECT,
         ...HUBSPOT_CONNECT,
+        ...AD_TAG_CONNECT,
         VERCEL_DEV_SCRIPTS,
       ]).join(' ')}`,
       // Lesson embeds are any https URL an admin enters (YouTube, Vimeo, the
@@ -180,12 +204,30 @@ function evalSources(env: Env): string[] {
   return env.NODE_ENV === 'development' ? ["'wasm-unsafe-eval'", "'unsafe-eval'"] : ["'wasm-unsafe-eval'"]
 }
 
+/** The hash of GTM's inline init for this container, or null with no container. */
+function gtmHash(env: Env): string | null {
+  // Read literally for the real env, so Next inlines it exactly as it does in
+  // GoogleTagManager.
+  const id = env === process.env ? process.env.NEXT_PUBLIC_GTM_ID : env.NEXT_PUBLIC_GTM_ID
+  return id ? sha256(gtmInitScript(id)) : null
+}
+
 /** The policy for a route that renders per request, with this request's nonce. */
 export function noncePolicy(nonce: string, env: Env = process.env): string {
-  const directives = env === process.env ? (defaultDirectives ??= shared(env).directives.join('; ')) : shared(env).directives.join('; ')
+  const isDefault = env === process.env
+  const directives = isDefault ? (defaultDirectives ??= shared(env).directives.join('; ')) : shared(env).directives.join('; ')
+  const gtm = isDefault ? (defaultGtmHash === undefined ? (defaultGtmHash = gtmHash(env)) : defaultGtmHash) : gtmHash(env)
   // https: and 'unsafe-inline' only apply in browsers too old for nonces and
   // 'strict-dynamic'; newer ones ignore both.
-  const script = [`'nonce-${nonce}'`, "'strict-dynamic'", consentModeHash(), ...evalSources(env), 'https:', "'unsafe-inline'"]
+  const script = [
+    `'nonce-${nonce}'`,
+    "'strict-dynamic'",
+    consentModeHash(),
+    ...(gtm ? [gtm] : []),
+    ...evalSources(env),
+    'https:',
+    "'unsafe-inline'",
+  ]
   return `script-src ${script.join(' ')}; ${directives}`
 }
 
@@ -200,6 +242,7 @@ export function hostPolicy(env: Env = process.env): string {
     TURNSTILE,
     ...GOOGLE_SCRIPT,
     ...HUBSPOT_SCRIPT,
+    ...AD_TAG_SCRIPT,
     ...JITSI,
     VERCEL_DEV_SCRIPTS,
   ]

@@ -74,6 +74,20 @@ describe('Report-Only CSP from proxy.ts', () => {
     expect(nonceOf(sent)).toBeTruthy()
   })
 
+  it('hands the layouts the nonce as x-nonce, for clerk-js', async () => {
+    state.userId = null // a signed-in visitor is sent on from /sign-in
+    const res = await hit('/sign-in')
+    expect(forwarded(res, 'x-nonce')).toBe(nonceOf(res.headers.get(CSP_HEADER)))
+    expect(forwarded(res, 'x-nonce')).toBeTruthy()
+  })
+
+  it('drops an x-nonce the client sent, on every route', async () => {
+    const own = await hit('/account', { 'x-nonce': 'chosen' })
+    expect(forwarded(own, 'x-nonce')).toBe(nonceOf(own.headers.get(CSP_HEADER)))
+    const pub = await hit('/grant', { 'x-nonce': 'chosen' })
+    expect(forwarded(pub, 'x-nonce')).toBeNull()
+  })
+
   it('ignores a policy the client sent, so a visitor cannot pick the nonce', async () => {
     const res = await hit('/account', { 'content-security-policy-report-only': "script-src 'nonce-chosen'" })
     expect(forwarded(res, 'content-security-policy-report-only')).not.toContain('chosen')
@@ -122,6 +136,17 @@ describe('lib/csp policies', () => {
     expect(p).toContain('https://8x8.vc https://meet.jit.si')
     expect(p).toContain("object-src 'none'")
     expect(p).toContain("frame-ancestors 'self'")
+  })
+
+  it('names the hosts of the ad tags live in GTM (Meta, LinkedIn, Apollo; docs/RUNBOOK-no-ads-students.md)', () => {
+    const p = hostPolicy(env)
+    const directive = (name: string) => p.split('; ').find((d) => d.startsWith(`${name} `)) ?? ''
+    for (const host of ['https://connect.facebook.net', 'https://snap.licdn.com', 'https://assets.apollo.io']) {
+      expect(directive('script-src'), host).toContain(host)
+    }
+    for (const host of ['https://www.facebook.com', 'https://connect.facebook.net', 'https://px.ads.linkedin.com', 'https://*.apollo.io']) {
+      expect(directive('connect-src'), host).toContain(host)
+    }
   })
 
   it('falls back to the Clerk development host when the key is missing or odd', () => {

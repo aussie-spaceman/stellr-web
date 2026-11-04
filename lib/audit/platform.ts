@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
-import { captureRequestError, scrubMessage } from '@/lib/app-errors'
+import { captureRequestError } from '@/lib/app-errors'
 
 // The S4 platform audit log (migration 20261104300000, docs/PLATFORM-AUDIT.md).
 //
@@ -18,9 +18,9 @@ import { captureRequestError, scrubMessage } from '@/lib/app-errors'
 //     also bounded by a timeout, so a slow database cannot hold up a request.
 //   • Off unless PLATFORM_AUDIT_ENABLED=true. Until then audit() does nothing
 //     and returns { ok: false, skipped: 'disabled' }.
-//   • metadata is ids only. Keys that name personal data are dropped, values
-//     shaped like an email or a phone number are redacted, and only flat
-//     primitives (or short arrays of them) are kept. reason is scrubbed too.
+//   • metadata is ids only: string values must be shaped like an id or a short
+//     code, keys that name personal data are dropped, and only flat primitives
+//     (or short arrays of them) are kept. reason must be a short code too.
 
 export const AUDIT_FLAG = 'PLATFORM_AUDIT_ENABLED'
 
@@ -30,16 +30,29 @@ export const AUDIT_TIMEOUT_MS = 2_500
 /** Bounds that match the table's CHECK constraints. */
 export const MAX_REASON = 500
 const MAX_METADATA_KEYS = 32
-const MAX_METADATA_STRING = 200
+/** Longest id or code kept in metadata or reason. Anything longer is not an id. */
+export const MAX_CODE = 80
 const MAX_METADATA_ARRAY = 20
+export const REDACTED = '[redacted]'
 
-/** Metadata keys that would carry personal data. Matched case-insensitively, ignoring _ and -. */
-const DENIED_KEYS = new Set([
-  'email', 'emails', 'phone', 'phonenumber', 'mobile', 'name', 'firstname', 'lastname', 'fullname',
-  'dob', 'dateofbirth', 'birthdate', 'birthday', 'address', 'street', 'postcode', 'zip', 'zipcode',
-  'ip', 'ipaddress', 'useragent', 'password', 'token', 'secret', 'medical', 'allergies', 'allergy',
-  'conditions', 'emergencycontact', 'guardian', 'notes', 'comment', 'message', 'body',
+/**
+ * Words that mark a metadata key as personal data. A key is split into words
+ * (camelCase, snake_case, kebab-case) and dropped if ANY word is here, so
+ * studentName, date_of_birth_iso and medicalNote all go, while pageCount,
+ * stage and messageCount stay.
+ */
+const DENIED_WORDS = new Set([
+  'name', 'names', 'firstname', 'lastname', 'fullname', 'displayname', 'nickname', 'surname', 'username',
+  'email', 'emails', 'phone', 'phones', 'mobile', 'tel', 'telephone',
+  'dob', 'birth', 'birthdate', 'birthday', 'born', 'age', 'ages', 'grade', 'gender', 'sex', 'pronouns',
+  'address', 'street', 'city', 'postcode', 'zip', 'zipcode', 'school',
+  'ip', 'ipaddress', 'useragent', 'password', 'token', 'secret',
+  'medical', 'health', 'allergies', 'allergy', 'condition', 'conditions', 'diagnosis', 'medication',
+  'medications', 'dietary', 'disability', 'emergencycontact', 'guardian', 'parent', 'mother', 'father',
+  'note', 'notes', 'comment', 'comments', 'message', 'body', 'text', 'description', 'bio',
 ])
+/** Fragments that mark a key as personal data even inside one lower-case word ("guardianphone"). */
+const DENIED_FRAGMENTS = ['name', 'email', 'phone', 'birth', 'medical', 'allerg', 'diagnos', 'address', 'postcode', 'password', 'secret']
 
 export type ActorKind = 'user' | 'system' | 'cron'
 
@@ -83,9 +96,42 @@ export function inferActorKind(actor: string): ActorKind {
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
 /** A whole value shaped like a phone number (ids with digit runs are left alone). */
 const PHONE = /^\+?[\d\s().-]{9,24}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** A lower-case code: 'replaced', 'paid_seat', 'nevada-2026', 'ticket:4521'. */
+const CODE = /^[a-z0-9][a-z0-9_.:#-]*$/
+/** A mixed-case id must carry a digit or an underscore: 'user_2abc', 'cs_test_1'. Plain 'Jane' is not one. */
+const MIXED_ID = /^[A-Za-z0-9][A-Za-z0-9_.:#-]*$/
+/** Dates are personal data here (a date of birth); occurred_at carries the time. */
+const DATE_LIKE = /\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}/
 
-function normaliseKey(k: string): string {
-  return k.toLowerCase().replace(/[_-]/g, '')
+/** camelCase / snake_case / kebab-case → lower-case words. */
+function keyWords(k: string): string[] {
+  return k
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase())
+}
+
+/** True when a metadata key names (or may name) personal data. */
+export function isDeniedKey(k: string): boolean {
+  const words = keyWords(k)
+  if (words.some((w) => DENIED_WORDS.has(w))) return true
+  const flat = words.join('')
+  return DENIED_FRAGMENTS.some((f) => flat.includes(f))
+}
+
+/**
+ * True for a string shaped like an id or a short code, which is all metadata
+ * and reason may hold. Free text (spaces), names ('Jane'), dates, emails and
+ * phone numbers are not.
+ */
+export function isIdShaped(v: string): boolean {
+  if (v.length === 0 || v.length > MAX_CODE) return false
+  if (DATE_LIKE.test(v)) return false
+  if (UUID.test(v) || CODE.test(v)) return true
+  return MIXED_ID.test(v) && /[\d_]/.test(v)
 }
 
 function cleanValue(v: unknown): string | number | boolean | null | undefined {
@@ -96,14 +142,23 @@ function cleanValue(v: unknown): string | number | boolean | null | undefined {
     if (EMAIL.test(v)) return '[email]'
     const digits = v.replace(/\D/g, '').length
     if (PHONE.test(v) && digits >= 9 && digits <= 15) return '[phone]'
-    return v.length > MAX_METADATA_STRING ? v.slice(0, MAX_METADATA_STRING) : v
+    return isIdShaped(v) ? v : REDACTED
   }
   return undefined
 }
 
 /**
- * Keep metadata to ids, counts, flags and short codes: denied keys dropped,
- * nested objects dropped, email/phone shapes redacted, sizes bounded.
+ * Keep metadata to ids, counts, flags and short codes. It is an allow-list on
+ * values, backed by a denylist on keys:
+ *   • a key is dropped if any of its words names personal data (studentName,
+ *     dateOfBirthIso, medicalNote, age, …);
+ *   • a string is kept only if it is shaped like an id or a short code (no
+ *     spaces, no dates, at most 80 characters); anything else becomes
+ *     '[redacted]', emails '[email]', phone numbers '[phone]';
+ *   • nested objects are dropped; sizes are bounded.
+ * The table is append-only and cannot be purged, so this errs towards
+ * dropping. A lower-case single word ('asthma') still looks like a code: the
+ * key rule is what catches it, so name keys for what they hold.
  */
 export function sanitizeMetadata(input: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -111,7 +166,7 @@ export function sanitizeMetadata(input: Record<string, unknown> | null | undefin
   for (const [key, value] of Object.entries(input)) {
     if (Object.keys(out).length >= MAX_METADATA_KEYS) break
     if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)) continue
-    if (DENIED_KEYS.has(normaliseKey(key))) continue
+    if (isDeniedKey(key)) continue
     if (Array.isArray(value)) {
       const items = value.slice(0, MAX_METADATA_ARRAY).map(cleanValue).filter((x) => x !== undefined)
       out[key] = items
@@ -123,11 +178,17 @@ export function sanitizeMetadata(input: Record<string, unknown> | null | undefin
   return out
 }
 
-/** Reason text: scrubbed of emails, phones and tokens, bounded; empty → null. */
+/**
+ * reason is a short code or ticket reference ('ticket:4521', 'support_request'),
+ * never free text: the row can never be erased. Anything that is not
+ * id-shaped is stored as '[redacted]', so the event still shows a reason was
+ * given. Empty → null.
+ */
 export function cleanReason(reason: string | null | undefined): string | null {
   if (!reason) return null
-  const s = scrubMessage(reason).slice(0, MAX_REASON).trim()
-  return s || null
+  const s = reason.trim()
+  if (!s) return null
+  return isIdShaped(s) ? s : REDACTED
 }
 
 function timeout(ms: number): Promise<never> {
@@ -323,7 +384,10 @@ export async function verifyChain(
     checked += res.checked
     if (!res.ok) return { ok: false, tenantId, checked, head: res.head, firstBad: res.firstBad }
     state = { seq: res.head.seq, hash: res.head.hash }
-    if (rows.length < pageSize) return { ok: true, tenantId, checked, head: res.head }
+    // Stop only on an EMPTY page. A short page is not the end: PostgREST's
+    // Max Rows (a hosted setting, not in the repo) silently caps every page,
+    // and stopping early would report an unread tampered row as intact.
+    if (rows.length === 0) return { ok: true, tenantId, checked, head: res.head }
   }
 }
 

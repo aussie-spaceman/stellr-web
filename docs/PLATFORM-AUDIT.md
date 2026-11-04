@@ -31,8 +31,12 @@ result never changes the response.
 | `actor`, `actor_kind` | A Clerk user id (`user`), `system`, or `cron:<job>` (`cron`). A CHECK enforces the shape. |
 | `action` | A dotted lower-case name, such as `support.impersonate.start`. |
 | `target_table`, `target_id` | What the action touched. `target_id` is an id: a CHECK refuses `@` and whitespace. |
-| `reason` | Up to 500 characters, entered by staff. The helper strips emails, phone numbers and tokens. |
-| `metadata` | **Ids, counts, flags and short codes only.** Never names, emails, phone numbers, dates of birth, health details or free text about a person. The helper drops keys that name personal data (`email`, `name`, `dob`, `address`, …) and nested objects, and redacts values shaped like an email or a phone number. It is capped at 4 KB. |
+| `reason` | **A short code or ticket reference** (`ticket:4521`, `support_request`), never free text. The helper stores anything that is not id-shaped as `[redacted]`. The column allows 500 characters; the helper keeps at most 80. |
+| `metadata` | **Ids, counts, flags and short codes only.** Never names, emails, phone numbers, dates of birth, ages, health details or free text about a person. The helper allow-lists values: a string survives only if it is shaped like an id or a short code (a UUID, a lower-case code, or a mixed-case id with a digit or `_`; no spaces, no dates, at most 80 characters). Anything else becomes `[redacted]`, `[email]` or `[phone]`. It also splits each key into words and drops the key if any word names personal data (`studentName`, `dateOfBirthIso`, `medicalNote`, `age`, `messageCount`, …), and drops nested objects. A lower-case single word such as `asthma` still looks like a code, so the key rule is what catches it: name keys for what they hold. It is capped at 4 KB. |
+
+Rows can never be erased (see Limits), so personal data written here could not
+be removed for a privacy or COPPA erasure request without breaking the chain.
+That is why the helper errs towards dropping, and why callers pass ids only.
 | `occurred_at` | Set by the database, to the millisecond. |
 | `prev_hash`, `hash` | `hash = sha256(prev_hash ‖ canonical(row))`. NULL `prev_hash` only on row 1. |
 
@@ -84,7 +88,9 @@ npx tsx scripts/verify-audit-chain.ts --expect heads-2026-11-20.json      # late
 ```
 
 Exit codes: 0 means intact, 1 means a break or a moved head, and 2 means the
-check could not run. The script is read-only. Each tenant's chain is
+check could not run. Verification pages until the database returns an empty
+page, not a short one, so PostgREST's Max Rows setting (a hosted dashboard
+value, not in the repo) cannot end it early and hide an unread row. The script is read-only. Each tenant's chain is
 independent, so a tenant can verify its own chain without seeing anyone
 else's.
 

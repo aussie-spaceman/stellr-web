@@ -90,7 +90,7 @@ function chain(n: number, tenant: string | null = STELLR): StoredAuditRow[] {
 }
 
 /** A minimal supabase-js stand-in for the reads verifyChain and checkRecordedHeads make. */
-function fakeReadDb(rows: StoredAuditRow[], opts: { error?: string } = {}) {
+function fakeReadDb(rows: StoredAuditRow[], opts: { error?: string; maxRows?: number } = {}) {
   const calls: { filters: [string, string, unknown][]; limit?: number }[] = []
   const from = (table: string) => {
     expect(table).toBe('platform_audit_events')
@@ -113,7 +113,8 @@ function fakeReadDb(rows: StoredAuditRow[], opts: { error?: string } = {}) {
             return Number(val) > Number(v)
           }),
         )
-        out = out.sort((a, b) => Number(a.chain_seq) - Number(b.chain_seq)).slice(0, n)
+        // maxRows mimics PostgREST's server-side Max Rows cap, which wins over limit().
+        out = out.sort((a, b) => Number(a.chain_seq) - Number(b.chain_seq)).slice(0, Math.min(n, opts.maxRows ?? n))
         return Promise.resolve({ data: out, error: null })
       },
     }
@@ -216,7 +217,8 @@ describe('verifyChain', () => {
     const db = fakeReadDb(rows)
     const res = await verifyChain(STELLR, { db: db.client, pageSize: 3 })
     expect(res).toMatchObject({ ok: true, tenantId: STELLR, checked: 7, head: { seq: 7 } })
-    expect(db.calls.length).toBe(3)
+    // 3 + 3 + 1, then an empty page ends it: a short page is not the end.
+    expect(db.calls.length).toBe(4)
     expect(db.calls[0].filters).toContainEqual(['eq', 'tenant_id', STELLR])
   })
 
@@ -232,6 +234,21 @@ describe('verifyChain', () => {
     rows[4] = { ...rows[4], actor: 'cron:forged' }
     const res = await verifyChain(STELLR, { db: fakeReadDb(rows).client, pageSize: 2 })
     expect(res).toMatchObject({ ok: false, firstBad: { seq: 5, problem: 'hash does not match the row' }, head: { seq: 4 } })
+  })
+
+  it('does not stop at a short page: a server row cap below pageSize still reaches the tampered row', async () => {
+    // Regression: PostgREST's Max Rows (a hosted dashboard setting) caps every
+    // page. Treating a short page as the end reported a forged chain intact.
+    const rows = chain(800)
+    rows[700] = { ...rows[700], actor: 'cron:forged' }
+    const capped = fakeReadDb(rows, { maxRows: 500 })
+    const res = await verifyChain(STELLR, { db: capped.client })
+    expect(res).toMatchObject({ ok: false, firstBad: { seq: 701, problem: 'hash does not match the row' }, head: { seq: 700 } })
+  })
+
+  it('reports the true head of an intact chain under a row cap', async () => {
+    const res = await verifyChain(STELLR, { db: fakeReadDb(chain(800), { maxRows: 500 }).client })
+    expect(res).toMatchObject({ ok: true, checked: 800, head: { seq: 800 } })
   })
 
   it('throws when the rows cannot be read (a read failure is not a pass)', async () => {
@@ -293,17 +310,87 @@ describe('metadata and reason hygiene', () => {
   it('bounds strings, arrays and key count, and rejects odd keys', () => {
     const big = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`k${i}`, i]))
     expect(Object.keys(sanitizeMetadata(big)).length).toBe(32)
-    expect((sanitizeMetadata({ s: 'x'.repeat(500) }).s as string).length).toBe(200)
+    // Nothing that long is an id: it is redacted, not truncated into the log.
+    expect(sanitizeMetadata({ s: 'x'.repeat(500) }).s).toBe('[redacted]')
+    expect(sanitizeMetadata({ s: 'x'.repeat(80) }).s).toBe('x'.repeat(80))
     expect((sanitizeMetadata({ list: Array.from({ length: 30 }, (_, i) => i) }).list as number[]).length).toBe(20)
     expect(sanitizeMetadata({ 'bad key': 1, '1x': 2, ok: Number.NaN })).toEqual({})
     expect(sanitizeMetadata(null)).toEqual({})
   })
 
-  it('scrubs and bounds the reason', () => {
-    expect(cleanReason('Asked by someone@example.test')).toBe('Asked by [email]')
+  it('keeps personal data about a child out of metadata, whatever the key is called', () => {
+    // Regression: an exact-key denylist let every one of these through.
+    const out = sanitizeMetadata({
+      studentName: 'Jane Doe',
+      childName: 'Sam Smith',
+      parentName: 'Ann Doe',
+      displayName: 'Jane',
+      schoolName: 'X High',
+      age: 12,
+      ageYears: 12,
+      dateOfBirthIso: '2014-03-02',
+      medicalNote: 'asthma',
+      healthInfo: 'asthma',
+      note: 'Jane Doe is 12 and has asthma',
+      context: 'Jane Doe is 12 and has asthma',
+      guardianPhone: '+1 (555) 010-0199',
+      firstname: 'Jane',
+      when: '2014-03-02',
+      who: 'Jane',
+    })
+    const text = JSON.stringify(out)
+    for (const leak of ['Jane', 'Sam', 'Ann', 'Doe', 'High', 'asthma', '2014', '555']) expect(text).not.toContain(leak)
+    expect(out).not.toHaveProperty('age')
+    expect(out).not.toHaveProperty('ageYears')
+  })
+
+  it('still keeps ids, codes, counts and flags', () => {
+    expect(
+      sanitizeMetadata({
+        adminMemberId: 'admin1',
+        memberId: MEMBER,
+        actorClerkId: 'user_2abcDEF123',
+        sessionId: 'cs_test_12345678901',
+        reason: 'replaced',
+        status: 'exited',
+        eventSlug: 'nevada-2026',
+        pageCount: 3,
+        stage: 'paid_seat',
+        retryCount: 2,
+        dryRun: false,
+        ids: [MEMBER, 'admin1'],
+      }),
+    ).toEqual({
+      adminMemberId: 'admin1',
+      memberId: MEMBER,
+      actorClerkId: 'user_2abcDEF123',
+      sessionId: 'cs_test_12345678901',
+      reason: 'replaced',
+      status: 'exited',
+      eventSlug: 'nevada-2026',
+      pageCount: 3,
+      stage: 'paid_seat',
+      retryCount: 2,
+      dryRun: false,
+      ids: [MEMBER, 'admin1'],
+    })
+  })
+
+  it('reason is a short code or ticket reference, never free text about a person', () => {
+    expect(cleanReason('Viewing as Jane Doe (age 12) per her mother; allergic to peanuts')).toBe('[redacted]')
+    expect(cleanReason('ticket:4521')).toBe('ticket:4521')
+    expect(cleanReason('support_request')).toBe('support_request')
+    expect(cleanReason('2014-03-02')).toBe('[redacted]')
+    expect(cleanReason('x'.repeat(200))).toBe('[redacted]')
+  })
+
+  it('redacts a free-text or oversized reason and maps empty to null', () => {
+    expect(cleanReason('Asked by someone@example.test')).toBe('[redacted]')
+    expect(cleanReason('someone@example.test')).toBe('[redacted]')
     expect(cleanReason('')).toBeNull()
+    expect(cleanReason('   ')).toBeNull()
     expect(cleanReason(null)).toBeNull()
-    expect(cleanReason('r'.repeat(900))!.length).toBeLessThanOrEqual(500)
+    expect(cleanReason('r'.repeat(900))).toBe('[redacted]')
   })
 
   it('infers the actor kind', () => {
@@ -362,7 +449,7 @@ describe('audit()', () => {
       p_action: 'support.impersonate.start',
       p_target_table: 'members',
       p_target_id: MEMBER,
-      p_reason: 'Help desk, reply to [email]',
+      p_reason: '[redacted]',
       p_metadata: { adminMemberId: 'm1' },
     })
     const args = rpc.mock.calls[0][1] as Record<string, unknown>

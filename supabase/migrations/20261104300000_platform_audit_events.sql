@@ -43,8 +43,9 @@
 --
 -- PERSONAL DATA. metadata holds ids, counts, flags and short codes only, never
 -- names, emails, phone numbers, dates of birth or free text about a person.
--- lib/audit/platform.ts drops denied keys and redacts email/phone shapes before
--- the write. reason is staff-entered and bounded; the helper scrubs it too.
+-- lib/audit/platform.ts keeps only id-shaped string values and drops keys that
+-- name personal data before the write. reason is a short code; the helper
+-- redacts anything else.
 --
 -- BACKGROUND ONLY. Nothing calls platform_audit_append() unless
 -- PLATFORM_AUDIT_ENABLED=true, which is off by default. Additive: no existing

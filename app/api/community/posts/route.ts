@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, tiptapToPlainText } from '@/lib/community'
+import { tiptapToPlainText } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { getChannelPosts } from '@/lib/space-posts'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
@@ -19,7 +20,7 @@ const createPostSchema = z.object({
 // GET /api/community/posts?channelId=… — hydrated channel feed (used for the
 // realtime refetch when a live post/reply event arrives).
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const channelId = new URL(req.url).searchParams.get('channelId')
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const parsed = createPostSchema.safeParse(await req.json().catch(() => null))
@@ -157,7 +158,7 @@ export async function PATCH(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))

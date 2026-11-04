@@ -7,6 +7,7 @@ import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { authPath } from '@/lib/auth-path'
+import { safeNext } from '@/lib/safe-next'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -173,7 +174,13 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   }
 
   if (isAuthRoute(req) && userId) {
-    return NextResponse.redirect(new URL('/home', req.url))
+    // Already signed in. With a ?next, go through onboarding, which sends an
+    // onboarded member straight on to it and makes anyone else finish their
+    // profile (and its age checks) first. That is the case of a form that read
+    // a community API's 401 as "guest": the API refuses an account that has
+    // not onboarded (lib/onboarded-member). Without ?next, /home as before.
+    const next = safeNext(url.searchParams.get('next'))
+    return NextResponse.redirect(new URL(next ? `/account/onboarding?next=${encodeURIComponent(next)}` : '/home', req.url))
   }
 
   if (isCommunityRoute(req) && !userId) {

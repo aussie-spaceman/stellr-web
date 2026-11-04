@@ -75,3 +75,28 @@ describe('proxy: guests on member pages get sign-in or sign-up', () => {
     expect(res.headers.get('location')).toBeNull()
   })
 })
+
+// Community APIs answer an account that has not onboarded with 401 (lib/
+// onboarded-member). A form that treats 401 as "guest" (the academy coaching
+// intake) sends that signed-in account to /sign-up?next=…, so the auth pages
+// must pass ?next on through onboarding rather than drop it at /home.
+// Onboarding sends an already-onboarded member straight on to ?next.
+describe('proxy: a signed-in visitor on the auth pages', () => {
+  it('goes to onboarding with ?next kept', async () => {
+    state.userId = 'user_1'
+    for (const auth of ['/sign-up', '/sign-in']) {
+      const to = new URL((await hit(`${auth}?next=${encodeURIComponent('/academy/coaching?x=1')}`)).headers.get('location')!)
+      expect(to.pathname).toBe('/account/onboarding')
+      expect(to.searchParams.get('next')).toBe('/academy/coaching?x=1')
+    }
+  })
+
+  it('goes to /home with no ?next, or an unsafe one', async () => {
+    state.userId = 'user_1'
+    for (const path of ['/sign-in', '/sign-up?next=%2F%2Fevil.example']) {
+      const to = new URL((await hit(path)).headers.get('location')!)
+      expect(to.pathname).toBe('/home')
+      expect(to.search).toBe('')
+    }
+  })
+})

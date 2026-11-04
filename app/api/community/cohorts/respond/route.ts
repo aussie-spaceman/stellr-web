@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { respondToInvite } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { cohortId, action } = await req.json().catch(() => ({}))

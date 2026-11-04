@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { getHostCaps } from '@/lib/sessions'
 
 // Host weekly availability (FR-COM-11/12): coaches/mentors set when they're free.
 
 async function requireHost() {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return null
   const caps = await getHostCaps(member.id)
   if (!caps.canCoach && !caps.canMentor) return null

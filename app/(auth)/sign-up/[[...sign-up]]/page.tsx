@@ -17,6 +17,12 @@ export const metadata = { title: 'Create Account' }
 // still works. Unset, or any other value, keeps sign-up open. The registration
 // forms (individual/group/join-by-token) provision Clerk users server-side and
 // do NOT use this page.
+//
+// Whether Clerk accepts a new account at all is the instance's sign-up mode in
+// the Clerk dashboard (Public or Restricted), not this code: this page and the
+// switch only decide what we show. A new account reaches nothing in the
+// community until it has onboarded (pages redirect; APIs use
+// lib/onboarded-member).
 const SIGNUPS_OPEN = (process.env.NEXT_PUBLIC_SIGNUPS_OPEN ?? 'true') !== 'false'
 
 // safeNext (open-redirect safety) is shared — deep review AUTH-7. See lib/safe-next.

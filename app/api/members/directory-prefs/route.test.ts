@@ -48,6 +48,17 @@ describe('PATCH /api/members/directory-prefs — minor opt-in gate', () => {
     expect(state.upserts).toBe(1)
   })
 
+  // S1 sign-up review: an open self-sign-up has no DOB until onboarding, though
+  // the Clerk webhook defaults its bracket to 'adult'. memberIsMinor must still
+  // read the unknown DOB as a minor, or a possible child could opt in and show
+  // up in @mention search.
+  it('refuses an account that has not onboarded (no DOB yet), and writes nothing', async () => {
+    state.member = { id: 'new-1', date_of_birth: null, age_bracket: 'adult', needsOnboarding: true }
+    const res = await patch({ is_visible: true })
+    expect(res.status).toBe(403)
+    expect(state.upserts).toBe(0)
+  })
+
   it('still lets a minor opt OUT (is_visible:false)', async () => {
     state.member = { id: 'kid-1', date_of_birth: '2011-01-01', age_bracket: 'high_school' }
     const res = await patch({ is_visible: false })

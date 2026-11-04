@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberCanAccess } from '@/lib/community'
+import { memberCanAccess } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { autoCompleteTrainingAction } from '@/lib/sessions'
 import { ensureCertificate } from '@/lib/training-portal'
 import { assertNotImpersonating } from '@/lib/impersonation'
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { itemId, status } = await req.json().catch(() => ({}))

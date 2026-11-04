@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
+import { signedDownloadUrl } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { resolveTrainingOpen } from '@/lib/resources-catalogue'
 
 // Office documents can't render in a bare browser tab, so route them through the
@@ -38,7 +39,7 @@ button{font:inherit;font-size:14px;font-weight:600;color:#fff;background:#3C6DF6
 // anchor href so clicking a resource opens the file directly (no blank tab).
 // Without it, returns JSON { url, title, kind } for programmatic callers.
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const params = new URL(req.url).searchParams

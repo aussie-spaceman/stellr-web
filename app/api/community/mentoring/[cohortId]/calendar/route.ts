@@ -1,4 +1,4 @@
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getCohortSpace, listCohortSessions } from '@/lib/sessions'
 import { getCohortFull } from '@/lib/mentoring'
 import { buildIcsCalendar, type IcsEvent } from '@/lib/ics'
@@ -6,7 +6,7 @@ import { buildIcsCalendar, type IcsEvent } from '@/lib/ics'
 // GET — "Sync all to calendar": an .ics feed of every scheduled session in a
 // cohort, importable into Google/Outlook/Apple. Gated to the roster + mentor.
 export async function GET(_req: Request, { params }: { params: Promise<{ cohortId: string }> }) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return new Response('Unauthorised', { status: 401 })
   const { cohortId } = await params
 

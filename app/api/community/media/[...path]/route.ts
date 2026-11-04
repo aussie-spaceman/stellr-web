@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
+import { signedDownloadUrl } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 
 // GET /api/community/media/<path> — access-gated proxy for embedded post/comment
 // images. Any signed-in member may view (images live inside tier-gated spaces,
 // and the space/post gating already controls who reaches the page). Redirects to
 // a short-lived signed URL so the storage path is never exposed directly.
 export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { path } = await params

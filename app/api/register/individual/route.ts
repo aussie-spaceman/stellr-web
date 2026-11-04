@@ -11,6 +11,7 @@ import { resolveAndLinkSchool } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
+import { sessionChildAwaitingConsentBlock } from '@/lib/pending-consent'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
@@ -80,6 +81,13 @@ export async function POST(req: NextRequest) {
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
+
+    // Decision 24, COPPA: a signed-in child whose parent has not consented
+    // registers for nothing until the parent signs (lib/pending-consent).
+    // Asked before getCurrentMember, which resolves no member for them and
+    // would otherwise let the submitted email stand in for the session's.
+    const childBlock = await sessionChildAwaitingConsentBlock(supabaseServer())
+    if (childBlock) return childBlock
 
     const sessionMember = await getCurrentMember().catch(() => null)
     const email: string = normalizeEmail(sessionMember?.email ?? body.email)

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { supabaseServer } from '@/lib/supabase'
 import { assertNotImpersonating } from '@/lib/impersonation'
@@ -18,7 +18,7 @@ export async function POST(
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const db = supabaseServer()

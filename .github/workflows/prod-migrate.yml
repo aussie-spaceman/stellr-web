@@ -1,0 +1,298 @@
+# Production migration — the only route for SQL into production.
+#
+# Replaces the agent applying production SQL (Supabase MCP execute_sql /
+# apply_migration). The owner, or anyone with write access, starts it from
+# Actions → "Production migration" → Run workflow, naming ONE migration file;
+# the `apply` job then waits for the owner's approval on the `prod-migrations`
+# environment (docs/RUNBOOK-agent-controls.md §3). Nothing touches the
+# database before that approval. (Not `production`: GitHub environment names
+# ignore case, and Vercel already created an unprotected "Production"
+# environment in this repo, so `production` would bind to it, with no
+# reviewers.)
+#
+#   check  (no secrets)  file name, location, contents rules; prints the file
+#                        and its SHA-256 to the run summary for the reviewer
+#   apply  (prod-migrations)
+#                        refuses a migration already in the ledger (by version
+#                        OR name), then in ONE transaction: runs the file,
+#                        checks the transaction is still open, records the
+#                        ledger row, and runs supabase/tests/security_checks.sql
+#                        — any row returned rolls the whole thing back. Then
+#                        re-reads the ledger row by name from a new connection.
+#
+# Logs are PUBLIC (this repo is public). Postgres errors can quote production
+# row values (a CHECK or NOT NULL failure prints the failing row; a bad cast
+# quotes the value), and a migration's own SELECT prints rows. So every
+# production psql runs with VERBOSITY=sqlstate and SHOW_CONTEXT=never, and the
+# apply step writes psql's output to files: the log shows only the wrapper's
+# own "== " lines and each error's SQLSTATE. The full message is in Supabase →
+# Logs → Postgres, which only the owner can read.
+#
+# Run it from `dev` (the promote flow applies a migration before the code
+# merges to main) or `main`. Environment secret: PROD_DATABASE_URL — the
+# owner's session-pooler URI for a role that can run DDL. The agent never
+# holds it.
+name: Production migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: 'One file name in supabase/migrations, e.g. 20261103120000_add_thing.sql'
+        required: true
+        type: string
+      dry_run:
+        description: 'Run everything, then roll back (nothing is kept)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-migrate
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the migration file
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.name.outputs.version }}
+      name: ${{ steps.name.outputs.name }}
+    steps:
+      - name: Refuse other branches
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          case "$REF" in
+            refs/heads/main|refs/heads/dev) echo "Branch: $REF" ;;
+            *) echo "::error::Run this from main or dev, not $REF"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the name and location
+        id: name
+        env:
+          MIGRATION: ${{ inputs.migration }}
+        run: |
+          set -euo pipefail
+          # Timestamped migrations only (scripts/check-migration-names.mjs);
+          # the legacy 001–148 files are all applied. The pattern also rules
+          # out paths, '..', spaces and quotes, so the name is safe to use below.
+          if ! [[ "$MIGRATION" =~ ^([0-9]{14})_([a-z0-9_]+)\.sql$ ]]; then
+            echo "::error::'$MIGRATION' is not a migration file name like 20261103120000_add_thing.sql"
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          name="${BASH_REMATCH[2]}"
+          file="supabase/migrations/$MIGRATION"
+          if [ ! -f "$file" ] || [ -L "$file" ]; then
+            echo "::error::$file is not a regular file in supabase/migrations on ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          # Two files may not share a version (it is the ledger's primary key).
+          if [ "$(ls supabase/migrations | grep -c "^${version}_")" != "1" ]; then
+            echo "::error::more than one migration has version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Check the contents
+        env:
+          MIGRATION: ${{ inputs.migration }}
+        run: |
+          set -euo pipefail
+          file="supabase/migrations/$MIGRATION"
+          # The file runs inside one transaction with its ledger row and the
+          # security check. Its own transaction control (COMMIT, END, ABORT,
+          # SAVEPOINT, ..., anywhere on a line) would end that transaction
+          # early. A grep cannot tell a top-level END; from a PL/pgSQL one, so
+          # this splits the file into statements the way psql does.
+          node scripts/check-migration-transaction.mjs "$file"
+          # CONCURRENTLY cannot run inside a transaction at all. psql
+          # meta-commands (\! runs a shell command, \o writes files, \i reads
+          # them) are refused anywhere in the file: psql honours them
+          # mid-line, and no migration here has ever needed one. A backslash
+          # in a SQL string (a regex, say) is refused too; rare enough to
+          # apply that file with the owner by hand.
+          if grep -nEi '\bconcurrently\b' "$file" \
+             || grep -nE '\\[A-Za-z!?]' "$file"; then
+            echo "::error::$file has CONCURRENTLY or a backslash command (lines above). Apply it by hand with the owner instead."
+            exit 1
+          fi
+          node scripts/check-migration-security.mjs
+
+      - name: Show the file to the reviewer
+        env:
+          MIGRATION: ${{ inputs.migration }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          file="supabase/migrations/$MIGRATION"
+          {
+            echo "## Production migration: \`$MIGRATION\`"
+            echo ""
+            echo "- branch: \`${GITHUB_REF_NAME}\` at \`${GITHUB_SHA}\`"
+            echo "- sha256: \`$(sha256sum "$file" | cut -d' ' -f1)\`"
+            echo "- dry run: \`$DRY_RUN\`"
+            echo "- started by: \`${GITHUB_ACTOR}\`"
+            echo ""
+            echo "Approve the \`prod-migrations\` environment only if this is the SQL you expect."
+            echo ""
+            echo '```sql'
+            cat "$file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Apply to production
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Not `production`: see the header.
+    environment: prod-migrations
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the PostgreSQL 17 client
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Refuse a migration already in the ledger
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          VERSION: ${{ needs.check.outputs.version }}
+          NAME: ${{ needs.check.outputs.name }}
+        run: |
+          set -euo pipefail
+          [ -n "$PROD_DATABASE_URL" ] || { echo "::error::PROD_DATABASE_URL is not set on the prod-migrations environment"; exit 1; }
+          case "$PROD_DATABASE_URL" in *hwtzpfrnksksxlwwabqz*) ;; *) echo "::error::PROD_DATABASE_URL does not name the production project"; exit 1 ;; esac
+          # By version AND by name: a migration applied through the Supabase
+          # MCP is recorded under the MCP's own timestamp, not the file's.
+          found="$(psql "$PROD_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate -v SHOW_CONTEXT=never \
+            -v version="$VERSION" -v name="$NAME" <<'SQL'
+          SELECT version || ' ' || coalesce(name, '')
+            FROM supabase_migrations.schema_migrations
+           WHERE version = :'version' OR name = :'name';
+          SQL
+          )"
+          if [ -n "$found" ]; then
+            echo "::error::already in the production ledger: $found"
+            exit 1
+          fi
+          echo "Not in the ledger: $VERSION $NAME"
+
+      - name: Apply, record and check in one transaction
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          VERSION: ${{ needs.check.outputs.version }}
+          NAME: ${{ needs.check.outputs.name }}
+          MIGRATION: ${{ inputs.migration }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          export SEC_OUT="$RUNNER_TEMP/security_checks.out"
+          wrapper="$RUNNER_TEMP/apply.psql"
+          out="$RUNNER_TEMP/apply.out"
+          err="$RUNNER_TEMP/apply.err"
+          # MIGRATION and the check job's version/name passed the strict
+          # file-name pattern, so they are safe to write into the script.
+          cat > "$wrapper" <<PSQL
+          SET LOCAL lock_timeout = '15s';
+          SET LOCAL statement_timeout = '5min';
+          SET LOCAL client_min_messages = warning;
+          SELECT txid_current() AS tx_before \gset
+          \echo '== running supabase/migrations/${MIGRATION}'
+          \i supabase/migrations/${MIGRATION}
+          -- Defence in depth for check-migration-transaction.mjs: if anything
+          -- in the file ended the transaction, txid_current() is a new id,
+          -- and the ledger row is not written.
+          SELECT txid_current() = :tx_before AS same_tx \gset
+          \if :same_tx
+          \else
+            \echo '== the migration ended the transaction; stopped before the ledger row'
+            DO \$\$ BEGIN RAISE EXCEPTION 'migration ended the transaction'; END \$\$;
+          \endif
+          INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+          VALUES (:'version', :'name', ARRAY[:'body']);
+          \echo '== supabase/tests/security_checks.sql (must return no rows)'
+          \o ${SEC_OUT}
+          \i supabase/tests/security_checks.sql
+          \o
+          \set sec_lines \`wc -l < "${SEC_OUT}" | tr -d ' '\`
+          SELECT (:sec_lines > 0) AS sec_fail \gset
+          \if :sec_fail
+            \echo '== security_checks.sql returned rows; rolling back'
+            DO \$\$ BEGIN RAISE EXCEPTION 'security_checks.sql returned rows; nothing was applied'; END \$\$;
+          \endif
+          \if :dry_run
+            \echo '== dry run: rolling back'
+            ROLLBACK;
+          \endif
+          PSQL
+          dry=false; [ "$DRY_RUN" = "true" ] && dry=true
+          # Output to files, never to this public log (see the header).
+          status=0
+          psql "$PROD_DATABASE_URL" -X --single-transaction -At \
+            -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate -v SHOW_CONTEXT=never \
+            -v version="$VERSION" -v name="$NAME" -v dry_run="$dry" \
+            -v body="$(cat "supabase/migrations/$MIGRATION")" \
+            -f "$wrapper" > "$out" 2> "$err" || status=$?
+          grep '^== ' "$out" || true
+          if [ "$status" -ne 0 ]; then
+            echo "::error::psql exited $status. Nothing was kept unless a line above says the migration ended the transaction."
+            echo "SQLSTATE only; the message is in Supabase → Logs → Postgres:"
+            grep -oE '(ERROR|FATAL|PANIC):[[:space:]]+[0-9A-Z]{5}' "$err" | head -5 || true
+            # security_checks.sql rows are function names and grants, not data.
+            if [ -s "$SEC_OUT" ]; then echo "security_checks.sql rows:"; cat "$SEC_OUT"; fi
+            exit "$status"
+          fi
+
+      - name: Verify the ledger row by name
+        if: ${{ !inputs.dry_run }}
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          VERSION: ${{ needs.check.outputs.version }}
+          NAME: ${{ needs.check.outputs.name }}
+        run: |
+          set -euo pipefail
+          row="$(psql "$PROD_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate -v SHOW_CONTEXT=never \
+            -v name="$NAME" <<'SQL'
+          SELECT version FROM supabase_migrations.schema_migrations WHERE name = :'name';
+          SQL
+          )"
+          if [ "$row" != "$VERSION" ]; then
+            echo "::error::ledger row for $NAME reads '$row', expected exactly $VERSION"
+            exit 1
+          fi
+          echo "## Applied \`$VERSION\` \`$NAME\` to production; ledger row verified." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Security checks after commit
+        if: ${{ !inputs.dry_run }}
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          # Rows are function names and grants (schema metadata), safe to print.
+          out="$(psql "$PROD_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate -v SHOW_CONTEXT=never \
+            -f supabase/tests/security_checks.sql)"
+          if [ -n "$out" ]; then
+            echo "::error::security_checks.sql returned rows after commit:"
+            echo "$out"
+            exit 1
+          fi
+          echo "security_checks.sql: no rows"

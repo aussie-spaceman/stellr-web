@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
+import { signedDownloadUrl } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { resolveDownloadableAttachment } from '@/lib/resources-catalogue'
 import { logActivity } from '@/lib/activity-log'
 import { mayBeViewingAs } from '@/lib/impersonation'
@@ -15,7 +16,7 @@ import { mayBeViewingAs } from '@/lib/impersonation'
 // a read lens), but nothing is counted or logged: the row would put the admin's
 // click on the member's own timeline, as the member.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { id } = await params

@@ -64,6 +64,14 @@ export interface EntityDef {
   // Whether a member may request deletion of this entity via the Activity
   // Review Log (the three special cases). Defaults to false.
   memberRequestable?: boolean
+  // Executes as this other entity type (its external cleanups, retention and
+  // tombstone rules), while keeping its own type in results and preflight.
+  // pending_consent_member runs as 'member'.
+  actsAs?: string
+  // false: a hard delete keeps NO deletion_archive snapshot. For data held
+  // only to ask for consent (a minor's pending account), which must not
+  // outlive the request. Defaults to true.
+  archive?: boolean
 }
 
 export interface Blocker {

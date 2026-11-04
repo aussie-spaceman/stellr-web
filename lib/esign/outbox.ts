@@ -7,6 +7,9 @@ import { appendAuditQuietly } from '@/lib/esign/native/audit'
 import { mintToken, signingUrl } from '@/lib/esign/native/tokens'
 import { signatureBundleEmail, signatureRequestEmail } from '@/lib/esign/emails'
 import type { NativeRecipient } from '@/lib/esign/native/flow'
+import { escapeHtml } from '@/lib/email-layout'
+import { notifyCommunityAdmins } from '@/lib/notify'
+import { maskEmail } from '@/lib/utils'
 
 // Signing emails go through a daily budget. Resend's free plan allows 100
 // emails a day for everything Stellr sends; signing takes at most
@@ -191,7 +194,18 @@ export async function sendInvites(
     const ids = live.map(({ r }) => r.id)
 
     try {
-      const sent = await sendEmail({ to: first.r.email, ...content })
+      // Critical mail (lib/email/suppressions.ts): a signing invitation is how a
+      // guardian consents, so the suppression list never holds it back. An
+      // address Resend itself blocks still bounces, and the bounce webhook puts
+      // it on the roster as Email Bounced (lib/esign/bounces.ts).
+      const sent = await sendEmail({ to: first.r.email, ...content, critical: true })
+      if (sent.suppressed) {
+        // Not reachable while the send is critical; kept so a future change
+        // cannot turn a skipped invitation back into a silent "Sent".
+        await markSuppressed(db, live.map(({ r }) => r), live[0].env)
+        result.failed += live.length
+        continue
+      }
       await db
         .from('agreement_recipients')
         .update({ invite_sent_at: now.toISOString(), invite_email_id: sent.id, invite_error: null, invite_attempts: 0 })
@@ -222,6 +236,32 @@ export async function sendInvites(
     }
   }
   return result
+}
+
+/**
+ * A signing email the suppression list stopped: nothing reached Resend, so no
+ * bounce will ever arrive. Show it the way a bounce shows (status
+ * 'autoresponded', the roster's Email Bounced pill, with the reason) and tell
+ * staff, so Correct email can fix the address.
+ */
+async function markSuppressed(db: SupabaseClient, rows: NativeRecipient[], env: EnvelopeForEmail): Promise<void> {
+  await db
+    .from('agreement_recipients')
+    .update({
+      status: 'autoresponded',
+      invite_sent_at: null,
+      invite_email_id: null,
+      invite_error: 'Not sent: the address is on the email suppression list',
+      last_synced_at: new Date().toISOString(),
+    })
+    .in('id', rows.map((r) => r.id))
+  const about = env.minor_name || 'a participant'
+  const body = `A Stellr signing email to ${maskEmail(rows[0].email)} was not sent: the address is on the email suppression list (${rows.length > 1 ? `${rows.length} forms` : 'the form'} for ${about}${env.event_title ? `, ${env.event_title}` : ''}). Use Correct email on the event roster to fix the address; the form is sent again to the new one.`
+  await notifyCommunityAdmins({
+    type: 'action',
+    body,
+    email: { subject: 'A signing email was not sent', html: `<p>${escapeHtml(body)}</p>`, text: body },
+  }).catch(() => {})
 }
 
 /** Sends what is waiting in the outbox, oldest and guardians first. */

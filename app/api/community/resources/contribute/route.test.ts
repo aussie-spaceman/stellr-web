@@ -21,7 +21,7 @@ const { getCurrentMember, download, remove, upload, insert, stampPdfBytes, findA
   }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
-vi.mock('@/lib/community', () => ({ RESOURCES_BUCKET: 'community-resources', getCurrentMember }))
+vi.mock('@/lib/community', () => ({ RESOURCES_BUCKET: 'community-resources', getCurrentMember, communityWriteBlock: async () => null }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/spaces', () => ({ getSpaceForMember: vi.fn() }))
 vi.mock('@/lib/campaign-registrations', () => ({ getMemberCampaignRegistration: vi.fn() }))
@@ -37,7 +37,10 @@ vi.mock('@/lib/resource-upload', () => ({
 }))
 vi.mock('@/lib/watermark/pdf', () => ({
   isPdf: (name: string, mime?: string | null) => mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf'),
-  stampPdfBytes,
+}))
+// The stamp runs in the sandbox worker (lib/pdf-sandbox.ts, tested on its own).
+vi.mock('@/lib/pdf-sandbox', () => ({
+  stampPdfSandboxed: async (bytes: Uint8Array) => ({ ok: true, value: await stampPdfBytes(bytes) }),
 }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({

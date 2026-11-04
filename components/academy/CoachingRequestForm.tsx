@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check } from 'lucide-react'
 import { Field, Fieldset, Select, Textarea } from '@stellr/web-ui'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
 
 const STAGE_OPTIONS = [
   { value: 'high-school', label: 'High school student' },
@@ -92,10 +92,10 @@ export function CoachingRequestForm() {
         body: JSON.stringify(payload),
       })
       if (res.status === 401) {
-        // Guest → preserve the draft and route through sign-in (sign-up is
-        // invite-only), resuming here.
+        // Guest → preserve the draft and route through sign-up (its card links
+        // back to sign-in for existing members), resuming here.
         sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
-        window.location.href = signInPath(INTAKE_PATH)
+        window.location.href = authPath(INTAKE_PATH, 'sign-up')
         return
       }
       const data = await res.json().catch(() => ({}))

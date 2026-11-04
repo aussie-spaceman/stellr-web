@@ -9,9 +9,12 @@ const download = vi.fn()
 const remove = vi.fn()
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }))
+// The community age and consent restriction (lib/community): null lets the write through.
+const communityWriteBlockMock = vi.fn(async (_m: unknown, _action: string): Promise<Response | null> => null)
 vi.mock('@/lib/community', () => ({
   RESOURCES_BUCKET: 'community-resources',
   getCurrentMember: getCurrentMemberMock,
+  communityWriteBlock: communityWriteBlockMock,
 }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: assertNotImpersonatingMock }))
 const getSpaceForMemberMock = vi.fn()
@@ -44,6 +47,7 @@ const {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  communityWriteBlockMock.mockImplementation(async () => null)
   licenseRow.current = null
   assertNotImpersonatingMock.mockResolvedValue(null)
   createSignedUploadUrl.mockResolvedValue({ data: { path: 'p', token: 't' }, error: null })
@@ -872,5 +876,183 @@ describe('member upload folders', () => {
     const [spacePath, catalogPath] = createSignedUploadUrl.mock.calls.map((c) => c[0] as string)
     expect(spacePath.startsWith(`community-resources/${SPACE}/members/`)).toBe(false)
     expect(catalogPath.startsWith('resources/members/')).toBe(false)
+  })
+})
+
+// Review (3 Nov 2026): /api/uploads/sign signed member uploads for any account
+// getCurrentMember resolved, including one that had not finished onboarding
+// and a minor still waiting on guardian consent.
+describe('signUpload — who may upload as a member', () => {
+  const MEMBER = '3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9d8e6f'
+  const sign = (purpose: UploadPurpose, ctx: Record<string, string> = {}, fileName = 'a.png', contentType = 'image/png') =>
+    signUpload({ purpose, ctx, fileName, fileSize: 10, contentType })
+  const notOnboarded = () => getCurrentMemberMock.mockResolvedValue({ id: MEMBER, isAdmin: false, needsOnboarding: true })
+  const onboarded = () => getCurrentMemberMock.mockResolvedValue({ id: MEMBER, isAdmin: false, needsOnboarding: false })
+  const consentPending = () => communityWriteBlockMock.mockImplementation(async () =>
+    Response.json({ code: 'guardian_consent_pending', error: 'This opens up once your parent or guardian has signed your consent form.' }, { status: 403 }))
+
+  beforeEach(() => {
+    asVisitor()
+    getSpaceForMemberMock.mockResolvedValue({ id: 'space-1', access: { canAccess: true }, allowMemberUploads: true })
+    memberManagesContainerMock.mockResolvedValue(true)
+    getRegistrationMock.mockResolvedValue({ id: 'reg-1' })
+  })
+
+  it.each([
+    ['community-media', {}, 'a.png', 'image/png'],
+    ['space-attachment', { spaceSlug: 'rocketry' }, 'a.pdf', 'application/pdf'],
+    ['container-contribution', { containerId: 'c-1' }, 'a.pdf', 'application/pdf'],
+    ['compliance-document', {}, 'a.png', 'image/png'],
+  ] as const)('%s: refuses an account that has not finished onboarding', async (purpose, ctx, name, type) => {
+    notOnboarded()
+    licenseRow.current = { id: 'lic-1' }
+    expect(await sign(purpose, ctx, name, type)).toEqual({ error: 'Please finish setting up your account first.', status: 403 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['community-media', {}, 'a.png', 'image/png', 'upload'],
+    ['space-attachment', { spaceSlug: 'rocketry' }, 'a.pdf', 'application/pdf', 'upload'],
+    ['container-contribution', { containerId: 'c-1' }, 'a.pdf', 'application/pdf', 'contribute'],
+  ] as const)('%s: applies the community restriction (%s), with its answer', async (purpose, ctx, name, type, action) => {
+    onboarded()
+    consentPending()
+    expect(await sign(purpose, ctx, name, type)).toEqual({
+      error: 'This opens up once your parent or guardian has signed your consent form.', status: 403,
+    })
+    expect(communityWriteBlockMock).toHaveBeenCalledWith(expect.objectContaining({ id: MEMBER }), action)
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+    expect(getSpaceForMemberMock).not.toHaveBeenCalled()
+    expect(memberManagesContainerMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['community-media', {}, 'a.png', 'image/png'],
+    ['space-attachment', { spaceSlug: 'rocketry' }, 'a.pdf', 'application/pdf'],
+    ['container-contribution', { containerId: 'c-1' }, 'a.pdf', 'application/pdf'],
+  ] as const)('%s: signs for an onboarded member the restriction lets through', async (purpose, ctx, name, type) => {
+    onboarded()
+    expect(await sign(purpose, ctx, name, type)).toMatchObject({ token: 't' })
+  })
+
+  it('a teacher license: onboarded is enough (not a community write)', async () => {
+    onboarded()
+    consentPending()
+    licenseRow.current = { id: 'lic-1' }
+    expect(await sign('compliance-document')).toMatchObject({ token: 't' })
+    expect(communityWriteBlockMock).not.toHaveBeenCalled()
+  })
+
+  it('a campaign proposal: a registration is the gate, so it works before onboarding', async () => {
+    notOnboarded()
+    consentPending()
+    expect(await sign('campaign-proposal', { slug: 'mars-base' }, 'proposal.pdf', 'application/pdf')).toMatchObject({ token: 't' })
+    expect(communityWriteBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("an admin's own uploads are not held for onboarding", async () => {
+    getCurrentMemberMock.mockResolvedValue({ id: MEMBER, isAdmin: true, needsOnboarding: true })
+    expect(await sign('community-media')).toMatchObject({ token: 't' })
+  })
+})
+
+// A member's PDF is capped at 50 pages (owner decision, 3 Nov 2026), counted
+// before the watermark's pdf-lib opens it. Admin-only purposes keep no cap.
+const { PDFDocument } = await import('pdf-lib')
+const { deflateSync } = await import('node:zlib')
+const { MAX_MEMBER_PDF_PAGES, PDF_TOO_MANY_PAGES, PDF_PAGES_UNKNOWN } = await import('./pdf-page-count')
+
+describe('claimUpload — PDF page cap', () => {
+  const pdfOf = async (pages: number) => {
+    const doc = await PDFDocument.create()
+    for (let i = 0; i < pages; i++) doc.addPage([612, 792])
+    return doc.save()
+  }
+  // 300,000 pages in one compressed object stream: a few MB on disk.
+  const crafted = () => {
+    const objects = ['<< /Type /Pages >>', ...Array.from({ length: 300_000 }, () => '<< /Type /Page /Parent 3 0 R >>')]
+    const offsets: number[] = []
+    let body = ''
+    for (const o of objects) {
+      offsets.push(body.length)
+      body += `${o}\n`
+    }
+    const header = offsets.map((off, i) => `${i + 3} ${off}`).join(' ')
+    const data = deflateSync(Buffer.from(`${header}\n${body}`, 'latin1'))
+    return Buffer.concat([
+      Buffer.from(`%PDF-1.7\n2 0 obj\n<< /Type /ObjStm /First ${header.length + 1} /Filter /FlateDecode >>\nstream\n`),
+      data,
+      Buffer.from('\nendstream\nendobj\n%%EOF\n'),
+    ])
+  }
+
+  // Every purpose any member reaches (sign-up is open) that takes a PDF.
+  const MEMBER_PDF: [UploadPurpose, string, string?][] = [
+    ['campaign-proposal', 'nevada/r1/1-proposal.pdf'],
+    ['space-attachment', `${spaceAttachmentPrefix('s1', 'm1')}1-notes.pdf`, spaceAttachmentPrefix('s1', 'm1')],
+    ['container-contribution', `${contributionPrefix('m1')}1-notes.pdf`, contributionPrefix('m1')],
+    ['compliance-document', 'm1/1-licence.pdf'],
+  ]
+
+  it('caps every member purpose that takes a PDF, and no staff-only one', () => {
+    const capped = PURPOSES.filter((p) => UPLOAD_PURPOSES[p].maxPdfPages !== undefined).sort()
+    expect(capped).toEqual(MEMBER_PDF.map(([p]) => p).sort())
+    for (const p of capped) expect(UPLOAD_PURPOSES[p].maxPdfPages).toBe(MAX_MEMBER_PDF_PAGES)
+  })
+
+  it.each(MEMBER_PDF)('%s takes 50 pages and refuses 51', async (purpose, storagePath, expectedPrefix) => {
+    stored(await pdfOf(50), 'application/pdf')
+    expect(await claimUpload({ purpose, storagePath, expectedPrefix })).toMatchObject({ format: 'pdf' })
+    expect(remove).not.toHaveBeenCalled()
+
+    stored(await pdfOf(51), 'application/pdf')
+    expect(await claimUpload({ purpose, storagePath, expectedPrefix })).toEqual({ error: PDF_TOO_MANY_PAGES, status: 413 })
+    expect(remove).toHaveBeenCalledWith([storagePath])
+  })
+
+  it('refuses the 300,000-page file quickly, and deletes it', async () => {
+    stored(crafted(), 'application/pdf')
+    const started = performance.now()
+    const result = await claimUpload({ purpose: 'campaign-proposal', storagePath: 'nevada/r1/1-proposal.pdf' })
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect([PDF_TOO_MANY_PAGES, PDF_PAGES_UNKNOWN]).toContain((result as { error: string }).error)
+    expect(remove).toHaveBeenCalledWith(['nevada/r1/1-proposal.pdf'])
+  })
+
+  it('refuses a PDF whose pages it can’t count', async () => {
+    stored(
+      Buffer.from('%PDF-1.7\n2 0 obj\n<< /Type /ObjStm /Filter /LZWDecode >>\nstream\nxx\nendstream\nendobj\n%%EOF\n'),
+      'application/pdf',
+    )
+    expect(await claimUpload({ purpose: 'compliance-document', storagePath: 'm1/1-licence.pdf' })).toEqual({
+      error: PDF_PAGES_UNKNOWN,
+      status: 415,
+    })
+  })
+
+  it('leaves staff-only purposes at their own limits', async () => {
+    stored(await pdfOf(51), 'application/pdf')
+    expect(await claimUpload({ purpose: 'admin-resource', storagePath: 'resources/1-a.pdf' })).toMatchObject({ format: 'pdf' })
+    stored(await pdfOf(51), 'application/pdf')
+    expect(
+      await claimUpload({ purpose: 'compliance-document-admin', storagePath: 'm1/1-licence.pdf' }),
+    ).toMatchObject({ format: 'pdf' })
+  })
+
+  // Review finding: event-email attachments are staff-only and never opened
+  // with pdf-lib, so a handbook or rules pack over 50 pages still attaches.
+  it('lets an event manager attach a PDF over 50 pages to an event email', async () => {
+    stored(await pdfOf(51), 'application/pdf')
+    expect(
+      await claimUpload({ purpose: 'event-email-attachment', storagePath: 'event-email/nevada/1-handbook.pdf' }),
+    ).toMatchObject({ format: 'pdf' })
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('counts nothing for a file that isn’t a PDF', async () => {
+    stored(FORMAT_SAMPLES.png, 'image/png')
+    expect(await claimUpload({ purpose: 'compliance-document', storagePath: 'm1/1-licence.png' })).toMatchObject({
+      format: 'png',
+    })
   })
 })

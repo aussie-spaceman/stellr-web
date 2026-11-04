@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { canAccessChannel, canPostToChannel, listMessages, postMessage } from '@/lib/sessions'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -8,7 +9,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 
 // GET /api/community/chat?channelId=…  → messages
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const channelId = new URL(req.url).searchParams.get('channelId')
@@ -27,8 +28,11 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'chat')
+  if (restricted) return restricted
 
   const { channelId, body } = await req.json().catch(() => ({}))
   if (!channelId || !body) return NextResponse.json({ error: 'channelId and body required' }, { status: 400 })

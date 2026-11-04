@@ -18,7 +18,7 @@ const { state, space } = vi.hoisted(() => ({
   space: { current: null as Record<string, unknown> | null },
 }))
 
-vi.mock('@/lib/community', () => ({ getCurrentMember: async () => ({ id: 'm1', first_name: 'A', last_name: 'B', isAdmin: false }), tiptapToPlainText: () => 'body text' }))
+vi.mock('@/lib/community', () => ({ getCurrentMember: async () => ({ id: 'm1', first_name: 'A', last_name: 'B', isAdmin: false }), tiptapToPlainText: () => 'body text', communityWriteBlock: async () => null }))
 vi.mock('@/lib/spaces', () => ({
   getSpaceForMember: async () => space.current,
   canPostInSpace: (_m: unknown, policy: string, role: string | null) => policy === 'all' || role === 'admin' || role === 'moderator',

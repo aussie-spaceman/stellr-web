@@ -89,7 +89,8 @@ export async function POST(req: Request) {
     const claimed = await claimUpload({ purpose: 'training-item-resource', storagePath: uploadPath })
     if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
     // Copyright watermark on the bottom-right of every page of uploaded PDFs.
-    await watermarkIfPdf(claimed.bucket, uploadPath, claimed.bytes, uploadType)
+    const stamped = await watermarkIfPdf(claimed.bucket, uploadPath, claimed.bytes, uploadType)
+    if ('error' in stamped) return NextResponse.json({ error: stamped.error }, { status: stamped.status })
     storagePath = uploadPath
   } else {
     if (!externalUrl) return NextResponse.json({ error: 'externalUrl required for a link' }, { status: 400 })

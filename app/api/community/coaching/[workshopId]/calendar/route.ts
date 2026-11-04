@@ -1,4 +1,4 @@
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { listCohortSessions } from '@/lib/sessions'
 import { getWorkshopSpace, getWorkshopFull } from '@/lib/coaching'
 import { buildIcsCalendar, type IcsEvent } from '@/lib/ics'
@@ -6,7 +6,7 @@ import { buildIcsCalendar, type IcsEvent } from '@/lib/ics'
 // GET — "Sync all to Google Calendar": an .ics feed of every session in a
 // coaching workshop. Gated to the coachee + coach.
 export async function GET(_req: Request, { params }: { params: Promise<{ workshopId: string }> }) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return new Response('Unauthorised', { status: 401 })
   const { workshopId } = await params
 

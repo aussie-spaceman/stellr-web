@@ -31,7 +31,7 @@ interface Member {
   date_of_birth: string | null
   gender: string | null
   account_invite_sent_at: string | null
-  age_bracket: string
+  age_bracket: string | null
   event_role: string
   grade: string | null
   grade_auto_promote: boolean
@@ -153,7 +153,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     last_name: member.last_name,
     email: member.email,
     phone: member.phone ?? '',
-    age_bracket: member.age_bracket,
+    // Null for a self sign-up that has not onboarded: its age is not known yet.
+    age_bracket: member.age_bracket ?? '',
     event_role: member.event_role,
     grade: member.grade ?? '',
     grade_auto_promote: member.grade_auto_promote,
@@ -393,6 +394,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Age bracket">
                 <Select value={form.age_bracket} onChange={(e) => handleBracketChange(e.target.value)}>
+                  {!form.age_bracket && <option value="">Not known yet</option>}
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
                 </Select>
               </Field>

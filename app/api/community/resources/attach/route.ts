@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { attachSpaceResource } from '@/lib/container-sync'
@@ -33,8 +34,11 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'upload')
+  if (restricted) return restricted
 
   // The bytes went browser → storage via /api/uploads/sign; only the path lands
   // here. Vercel caps a request body at 4.5MB before the function runs, so the
@@ -99,6 +103,7 @@ export async function POST(req: Request) {
 
   // Copyright watermark on the bottom-right of every page of uploaded PDFs.
   const bytes = await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, fileType)
+  if ('error' in bytes) return NextResponse.json({ error: bytes.error }, { status: bytes.status })
 
   const { data, error } = await db
     .from('community_resources')

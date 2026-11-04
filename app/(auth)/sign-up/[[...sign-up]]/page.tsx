@@ -2,18 +2,27 @@ import { redirect } from 'next/navigation'
 import { SignUp } from '@clerk/nextjs'
 import { safeNext } from '@/lib/safe-next'
 import { clerkAppearance } from '@/lib/clerk-appearance'
+import { authPath } from '@/lib/auth-path'
 
 export const metadata = { title: 'Create Account' }
 
-// Where a Clerk invitation link lands. Sign-up is invite-only (Clerk Restricted
-// mode, 3 Nov 2026): Clerk only lets someone create an account here when the
-// URL carries their invitation ticket (__clerk_ticket). Nothing in the app
-// sends guests here any more; member pages bounce them to /sign-in.
+// Self-serve account creation. Anyone can register (decision 24, 3 Nov 2026);
+// the controls are by age, applied at onboarding, not by invitation. Guests
+// reach this page from the sign-in card's "Sign up" link, from pages meant for
+// new members (lib/auth-path 'sign-up'), from public "Join free" CTAs, and from
+// Clerk invitation links (__clerk_ticket).
 //
-// NEXT_PUBLIC_SIGNUPS_OPEN=false (the public-review switch) still sends a
-// visitor without a ticket to the login screen, but never an invitee: their
-// ticket is the only way in. The registration forms (individual/group/join-by-
-// token) provision Clerk users server-side and do NOT use this page.
+// NEXT_PUBLIC_SIGNUPS_OPEN=false (the public-review switch) sends a visitor
+// without a ticket to the login screen, but never an invitee: their ticket
+// still works. Unset, or any other value, keeps sign-up open. The registration
+// forms (individual/group/join-by-token) provision Clerk users server-side and
+// do NOT use this page.
+//
+// Whether Clerk accepts a new account at all is the instance's sign-up mode in
+// the Clerk dashboard (Public or Restricted), not this code: this page and the
+// switch only decide what we show. A new account reaches nothing in the
+// community until it has onboarded (pages redirect; APIs use
+// lib/onboarded-member).
 const SIGNUPS_OPEN = (process.env.NEXT_PUBLIC_SIGNUPS_OPEN ?? 'true') !== 'false'
 
 // safeNext (open-redirect safety) is shared — deep review AUTH-7. See lib/safe-next.
@@ -27,7 +36,7 @@ export default async function SignUpPage({
   // Carry an optional post-onboarding destination (e.g. resume a membership
   // purchase at /join?tier=…) through the hard-coded onboarding redirect.
   const next = safeNext(sp.next)
-  const signInUrl = next ? `/sign-in?next=${encodeURIComponent(next)}` : '/sign-in'
+  const signInUrl = authPath(next, 'sign-in')
 
   // Forward `next` through the gate too, so the destination survives for
   // members who sign in while self-serve signups are closed.

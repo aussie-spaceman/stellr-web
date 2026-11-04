@@ -84,7 +84,8 @@ export async function POST(req: Request) {
     // PDF documents are watermarked inline; videos are queued for the ffmpeg
     // worker (can't run in this serverless route).
     if (contentKind === 'document') {
-      await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, uploadType)
+      const stamped = await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, uploadType)
+      if ('error' in stamped) return NextResponse.json({ error: stamped.error }, { status: stamped.status })
     }
     if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, storagePath, 'training')
   }
@@ -158,7 +159,8 @@ export async function PATCH(req: Request) {
         const claimed = await claimUpload({ purpose: 'training-item', storagePath: uploadPath })
         if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
         if (contentKind === 'document') {
-          await watermarkIfPdf(claimed.bucket, uploadPath, claimed.bytes, (fields.fileType as string) ?? '')
+          const stamped = await watermarkIfPdf(claimed.bucket, uploadPath, claimed.bytes, (fields.fileType as string) ?? '')
+          if ('error' in stamped) return NextResponse.json({ error: stamped.error }, { status: stamped.status })
         }
         patch.storage_path = uploadPath
         patch.external_url = null

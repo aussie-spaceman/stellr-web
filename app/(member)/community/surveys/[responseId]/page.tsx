@@ -6,7 +6,7 @@ import { submittedResponseFor } from '@/lib/survey/member'
 import { formatDateShort } from '@/lib/utils'
 import { WithdrawMyQuote } from '@/components/survey/WithdrawMyQuote'
 import { SurveyAnswerList } from '@/components/survey/SurveyAnswerList'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
 
 export const metadata = { title: 'Survey answers' }
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 // One submitted survey, read-only (handover P2/P3). Only the member's own.
 export default async function SurveyAnswersPage({ params }: { params: Promise<{ responseId: string }> }) {
   const member = await getCurrentMember()
-  if (!member) redirect(signInPath('/community/surveys'))
+  if (!member) redirect(authPath('/community/surveys'))
   const { responseId } = await params
   if (!/^[0-9a-f-]{36}$/.test(responseId)) notFound()
   const found = await submittedResponseFor(supabaseServer(), member.id, responseId)

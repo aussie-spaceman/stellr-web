@@ -53,8 +53,11 @@ export async function executeDeletion(
   /** Scholarship offers cancelled because their registration was withdrawn. */
   scholarshipsCancelled: { id: string; percent: number | null }[]
 }> {
-  const def = getEntityDef(entity)
-  if (!def) throw new Error(`Unknown deletable entity type: ${entity}`)
+  const ownDef = getEntityDef(entity)
+  if (!ownDef) throw new Error(`Unknown deletable entity type: ${entity}`)
+  // An entity that acts as another (pending_consent_member → member) runs that
+  // type's cleanup rules below; `entity` keeps its own name in the result.
+  const def: EntityDef = ownDef.actsAs ? { ...ownDef, type: ownDef.actsAs } : ownDef
 
   const mode: DeleteMode = opts.mode === 'soft' && !def.softDelete ? 'hard' : opts.mode
 
@@ -62,6 +65,18 @@ export async function executeDeletion(
   if (!pre.canDelete) throw new DeletionBlockedError(pre.blockers)
 
   const db = supabaseServer()
+
+  // The archive-free purge is only for an account still waiting on consent:
+  // any other member goes through 'member', snapshot and all.
+  if (ownDef.type === 'pending_consent_member') {
+    const { data: pending } = await db
+      .from('member_pending_consent')
+      .select('member_id')
+      .eq('member_id', id)
+      .is('consented_at', null)
+      .maybeSingle()
+    if (!pending) throw new Error('Not an account awaiting guardian consent; delete it as a member instead')
+  }
 
   // A withdrawn student's scholarship offer ends with their registration
   // (lib/scholarship-cancel.ts). Read the offers now: a hard delete nulls
@@ -148,7 +163,7 @@ export async function executeDeletion(
   }
 
   // Hard purge: snapshot first, then delete primary + spanned rows.
-  await archiveEntity(def, id, opts.deletedBy ?? null)
+  if (ownDef.archive !== false) await archiveEntity(def, id, opts.deletedBy ?? null)
 
   // Deleting the sole attendee of an individual registration leaves an empty
   // booking behind. For individual registrations that's just clutter, so we

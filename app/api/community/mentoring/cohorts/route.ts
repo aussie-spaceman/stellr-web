@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getHostCaps } from '@/lib/sessions'
 import { createCohort } from '@/lib/mentoring'
 import { DEFAULT_TZ, type CohortTheme } from '@/lib/mentoring-format'
@@ -14,8 +15,11 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'host')
+  if (restricted) return restricted
 
   const caps = await getHostCaps(member.id)
   if (!member.isAdmin && !caps.canMentor) {

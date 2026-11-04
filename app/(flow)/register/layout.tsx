@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { clerkAppearance } from '@/lib/clerk-appearance'
+import { requestNonce } from '@/lib/request-nonce'
 
 /**
  * Registration is a transactional funnel, not content: the type chooser, the
@@ -15,9 +16,11 @@ export const metadata: Metadata = {
 
 // The registration forms use Clerk (sign-in state, the join link's sign-in),
 // so registration gets its own provider; the rest of the public site has none.
-export default function RegisterLayout({ children }: { children: React.ReactNode }) {
+// Every registration page already renders per request (each reads the
+// session), so reading the CSP nonce here costs nothing extra.
+export default async function RegisterLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider prefetchUI={false} appearance={clerkAppearance}>
+    <ClerkProvider prefetchUI={false} appearance={clerkAppearance} nonce={await requestNonce()}>
       {children}
     </ClerkProvider>
   )

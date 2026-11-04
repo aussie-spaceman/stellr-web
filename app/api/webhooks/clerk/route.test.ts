@@ -296,4 +296,53 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
     })])
     expect(syncRole).toHaveBeenCalledWith(expect.anything(), 'm-new', 'subscriber')
   })
+
+  // COPPA data minimisation (review, 3 Nov 2026): the person signing up may be
+  // a child, and nobody has asked their age yet.
+  it('a self sign-up row keeps only the login link: no name, no photo, no age bracket', async () => {
+    fakeDb()
+    existingMember = null
+    const payload = JSON.parse(created('verified'))
+    payload.data.image_url = 'https://img.clerk.test/kim.png'
+    await deliver(JSON.stringify(payload))
+    expect(writes()).toEqual([{
+      table: 'members', op: 'insert', filters: [],
+      payload: {
+        clerk_user_id: 'user_new', email: 'kim@example.com',
+        first_name: '', last_name: '', profile_photo_url: null, age_bracket: null,
+        event_role: 'subscriber', is_active: true,
+      },
+    }])
+  })
+
+  const updated = (over: Record<string, unknown> = {}) => JSON.stringify({
+    type: 'user.updated',
+    data: {
+      id: 'user_new', first_name: 'Kim', last_name: 'Lo', image_url: 'https://img.clerk.test/kim.png',
+      primary_email_address_id: 'e1',
+      email_addresses: [{ id: 'e1', email_address: 'kim@example.com' }],
+      ...over,
+    },
+  })
+
+  it('user.updated copies the name and photo only for a member whose date of birth says 13 or over', async () => {
+    fakeDb()
+    existingMember = { id: 'm-1', date_of_birth: ADULT_DOB }
+    await deliver(updated())
+    expect(writes()).toEqual([expect.objectContaining({
+      table: 'members', op: 'update',
+      payload: { email: 'kim@example.com', first_name: 'Kim', last_name: 'Lo', profile_photo_url: 'https://img.clerk.test/kim.png' },
+    })])
+  })
+
+  it('user.updated keeps a sign-up with no date of birth yet, and a child, to the email alone', async () => {
+    for (const date_of_birth of [null, yearsAgo(12), 'not a date']) {
+      fakeDb()
+      existingMember = { id: 'm-1', date_of_birth }
+      await deliver(updated())
+      expect(writes(), String(date_of_birth)).toEqual([expect.objectContaining({
+        table: 'members', op: 'update', payload: { email: 'kim@example.com' },
+      })])
+    }
+  })
 })

@@ -17,7 +17,8 @@ interface Member {
   gender: string
   grade: string | null
   tshirt_size: string | null
-  age_bracket: string
+  /** Null for a sign-up whose age is not known yet. */
+  age_bracket: string | null
   event_role: string
   profile_photo_url: string | null
   ec_first_name: string | null
@@ -157,7 +158,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         <div>
           <dt className="text-brand-muted-soft">Age bracket</dt>
           <dd className="font-medium text-brand-blue-dark capitalize">
-            {member.age_bracket.replace('_', ' ')}
+            {member.age_bracket ? member.age_bracket.replace('_', ' ') : 'Not given yet'}
           </dd>
         </div>
         {member.grade && (

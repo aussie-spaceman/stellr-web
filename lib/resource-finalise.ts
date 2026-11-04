@@ -1,5 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
-import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { isPdf } from '@/lib/watermark/pdf'
+import { stampPdfSandboxed } from '@/lib/pdf-sandbox'
+import { PDF_BUSY, PDF_UNPROCESSABLE } from '@/lib/pdf-page-count'
+import { sniffFileFormat } from '@/lib/file-sniff'
 import {
   claimUpload,
   discardUpload,
@@ -51,6 +54,7 @@ export async function finaliseStoredUpload(args: {
 
   const { bucket } = claimed
   const bytes = await watermarkIfPdf(bucket, args.storagePath, claimed.bytes, args.fileType)
+  if ('error' in bytes) return bytes
 
   const { data: resource, error: dbError } = await supabaseServer()
     .from('community_resources')
@@ -80,23 +84,42 @@ export async function finaliseStoredUpload(args: {
 
 /**
  * Copyright watermark on the bottom-right of every page of a stored PDF,
- * rewritten in place. Returns the bytes now in storage — the original on any
- * failure, since losing the upload would be worse than missing a stamp.
+ * rewritten in place. Returns the bytes now in storage — the original when
+ * pdf-lib can't read the file or the rewrite fails, since losing the upload
+ * would be worse than missing a stamp.
+ *
+ * pdf-lib runs in the sandbox (lib/pdf-sandbox.ts), never on this thread. A
+ * file the sandbox had to stop — past the timeout or the heap limit, or a
+ * worker that died, or one its own scan refused — is refused, as is one no
+ * worker came free for in time (PDF_BUSY, 503): the object is discarded and a denial
+ * returned, for the caller to send back as it sends a claimUpload denial.
  */
 export async function watermarkIfPdf(
   bucket: string,
   storagePath: string,
   bytes: Uint8Array,
   fileType: string | null,
-): Promise<Uint8Array> {
+): Promise<Uint8Array | UploadDenied> {
   const name = storagePath.split('/').pop() ?? ''
   if (!isPdf(name, fileType)) return bytes
+  // The type is the browser's word. pdf-lib reads any bytes as a PDF if a
+  // `%PDF-` sits somewhere inside, so only bytes claimUpload judged a PDF —
+  // and page-counted, for a member's — ever reach it.
+  if (sniffFileFormat(bytes, ['pdf']) !== 'pdf') return bytes
 
-  try {
-    const stamped = new Uint8Array(await stampPdfBytes(bytes))
-    if (await replaceUpload(bucket, storagePath, stamped, 'application/pdf')) return stamped
-  } catch (err) {
-    console.error('[community] watermark failed, keeping original:', err)
+  const stamped = await stampPdfSandboxed(bytes)
+  if (!stamped.ok) {
+    if (stamped.reason === 'invalid') {
+      console.error('[community] watermark failed, keeping original:', stamped.detail)
+      return bytes
+    }
+    // The sandbox has logged it (console and app_errors).
+    await discardUpload(bucket, storagePath)
+    // No worker came free in time: the file wasn't judged, so ask again later.
+    // Stored unstamped, it would be served without its mark.
+    if (stamped.reason === 'busy') return { error: PDF_BUSY, status: 503 }
+    return { error: PDF_UNPROCESSABLE, status: 422 }
   }
+  if (await replaceUpload(bucket, storagePath, stamped.value, 'application/pdf')) return stamped.value
   return bytes
 }

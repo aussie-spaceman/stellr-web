@@ -2,8 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest, type NextFetchEvent } from 'next/server'
 
-// Sign-up is invite-only (Clerk Restricted mode, 3 Nov 2026): a guest on a
-// member page is sent to /sign-in, never /sign-up, keeping ?next so they come
+// Anyone can create an account (decision 24, 3 Nov 2026). A guest on a member
+// page is sent to sign-in, whose card links on to sign-up; a guest on a page
+// meant for new members goes straight to sign-up. Both keep ?next so they come
 // back to the page they asked for. Clerk is stubbed: clerkMiddleware just runs
 // the handler with an auth() that reports the test's userId.
 
@@ -36,13 +37,13 @@ beforeEach(() => {
   state.userId = null
 })
 
-describe('proxy: guests on member pages go to sign-in', () => {
+describe('proxy: guests on member pages get sign-in or sign-up', () => {
   it('redirects a guest on /community to /sign-in with ?next', async () => {
-    const res = await hit('/community/mentoring/discover')
+    const res = await hit('/community')
     expect(res.status).toBe(307)
     const to = new URL(res.headers.get('location')!)
     expect(to.pathname).toBe('/sign-in')
-    expect(to.searchParams.get('next')).toBe('/community/mentoring/discover')
+    expect(to.searchParams.get('next')).toBe('/community')
   })
 
   it('keeps the query string in ?next and redirects /home too', async () => {
@@ -52,10 +53,19 @@ describe('proxy: guests on member pages go to sign-in', () => {
     expect(to.searchParams.get('next')).toBe('/home?tab=events')
   })
 
-  it('never sends a guest to /sign-up', async () => {
-    for (const path of ['/community', '/community/surveys', '/home']) {
-      const res = await hit(path)
-      expect(res.headers.get('location') ?? '').not.toContain('/sign-up')
+  it('sends a guest on mentoring discovery, a page for new members, to /sign-up with ?next', async () => {
+    const res = await hit('/community/mentoring/discover')
+    expect(res.status).toBe(307)
+    const to = new URL(res.headers.get('location')!)
+    expect(to.pathname).toBe('/sign-up')
+    expect(to.searchParams.get('next')).toBe('/community/mentoring/discover')
+  })
+
+  it('sends a guest on other mentoring pages to /sign-in', async () => {
+    for (const path of ['/community/mentoring', '/community/mentoring/abc', '/community/surveys']) {
+      const to = new URL((await hit(path)).headers.get('location')!)
+      expect(to.pathname).toBe('/sign-in')
+      expect(to.searchParams.get('next')).toBe(path)
     }
   })
 
@@ -63,5 +73,30 @@ describe('proxy: guests on member pages go to sign-in', () => {
     state.userId = 'user_1'
     const res = await hit('/community/mentoring/discover')
     expect(res.headers.get('location')).toBeNull()
+  })
+})
+
+// Community APIs answer an account that has not onboarded with 401 (lib/
+// onboarded-member). A form that treats 401 as "guest" (the academy coaching
+// intake) sends that signed-in account to /sign-up?next=…, so the auth pages
+// must pass ?next on through onboarding rather than drop it at /home.
+// Onboarding sends an already-onboarded member straight on to ?next.
+describe('proxy: a signed-in visitor on the auth pages', () => {
+  it('goes to onboarding with ?next kept', async () => {
+    state.userId = 'user_1'
+    for (const auth of ['/sign-up', '/sign-in']) {
+      const to = new URL((await hit(`${auth}?next=${encodeURIComponent('/academy/coaching?x=1')}`)).headers.get('location')!)
+      expect(to.pathname).toBe('/account/onboarding')
+      expect(to.searchParams.get('next')).toBe('/academy/coaching?x=1')
+    }
+  })
+
+  it('goes to /home with no ?next, or an unsafe one', async () => {
+    state.userId = 'user_1'
+    for (const path of ['/sign-in', '/sign-up?next=%2F%2Fevil.example']) {
+      const to = new URL((await hit(path)).headers.get('location')!)
+      expect(to.pathname).toBe('/home')
+      expect(to.search).toBe('')
+    }
   })
 })

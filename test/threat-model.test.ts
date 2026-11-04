@@ -11,7 +11,7 @@
 //   4. every planned control names a plan stage;
 //   5. the AI-agent section and the assets the lane must cover are present.
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = join(__dirname, '..')
@@ -143,6 +143,62 @@ describe('docs/THREAT-MODEL.md coverage', () => {
   ])('lists the %s asset', (asset) => {
     const assets = DOC.split(/^## 2\. Assets$/m)[1].split(/^## /m)[0]
     expect(assets.toLowerCase()).toContain(asset.toLowerCase())
+  })
+
+  // Review findings, 4 Nov: an Existing cell can cite a file that exists but
+  // does not do what the cell claims. These probes tie the specific claims to
+  // the code, so the claim fails when the code does not back it.
+
+  it('does not claim a migration lint enforces RLS on new tables unless one does', () => {
+    const tb5 = sections.find((s) => s.heading.startsWith('6.5 '))!
+    const row = tb5.rows.find((r) => r[0] === 'E')!
+    const lintSrc = ['scripts/check-migration-names.mjs', 'scripts/check-migration-security.mjs']
+      .map((p) => readFileSync(join(ROOT, p), 'utf8'))
+      .join('\n')
+    const lintChecksRls = /ROW LEVEL SECURITY/i.test(lintSrc)
+    if (!lintChecksRls) {
+      expect(row[2], 'TB5 E Existing cites lint:migrations, which checks no RLS').not.toMatch(/lint:migrations/)
+      expect(row[4], 'TB5 E residual must be H while nothing enforces RLS').toMatch(/^\*\*H\*\*/)
+    }
+    const baseline = readFileSync(join(ROOT, 'supabase/baseline.sql'), 'utf8')
+    if (/ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon/.test(baseline)) {
+      expect(row.join(' '), 'TB5 E must name the default-privileges grant to anon').toMatch(/DEFAULT PRIVILEGES/)
+    }
+  })
+
+  it('only says Svix for a webhook route that uses Svix', () => {
+    for (const s of sections) {
+      for (const r of s.rows) {
+        for (const cell of r) {
+          if (!/svix/i.test(cell)) continue
+          for (const m of cell.matchAll(/`(app\/[^`]+\/route\.ts)`/g)) {
+            const src = readFileSync(join(ROOT, m[1]), 'utf8')
+            expect(src.toLowerCase(), `${s.heading}: ${m[1]} is cited next to Svix`).toContain('svix')
+          }
+        }
+      }
+    }
+  })
+
+  it('rates the Printful webhook as weak while it accepts a query-string secret', () => {
+    const src = readFileSync(join(ROOT, 'lib/store/printful.ts'), 'utf8')
+    if (!/searchParams\.get\('secret'\)/.test(src)) return
+    const others = sections.find((s) => s.heading.startsWith('6.11 '))!
+    const row = others.rows.find((r) => r[0] === 'S')!
+    expect(row[4]).toContain('app/api/printful/webhook/route.ts')
+    expect(row[4]).toMatch(/\*\*M\*\*/)
+  })
+
+  it('cites agent_readonly as existing only once a migration creates it', () => {
+    const migrations = readdirSync(join(ROOT, 'supabase/migrations'))
+      .map((f) => readFileSync(join(ROOT, 'supabase/migrations', f), 'utf8'))
+      .join('\n')
+    if (/CREATE ROLE\s+agent_readonly/i.test(migrations)) return
+    for (const s of sections) {
+      for (const r of s.rows) {
+        expect(r[2], `${s.heading} ${r[0]}: agent_readonly is runbook SQL, not a live role`).not.toMatch(/agent_readonly/)
+      }
+    }
   })
 
   it('covers prompt injection via tenant-authored content and agent token scope', () => {

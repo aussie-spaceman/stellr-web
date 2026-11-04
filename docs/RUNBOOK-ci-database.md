@@ -9,6 +9,13 @@ GitHub runner, loads the schema of record, applies every migration since it, and
 runs pgTAP tests against the result. It never connects to the dev or production
 Supabase projects and holds no database credential.
 
+**Status (3 Nov 2026): written, never run.** Neither the authoring nor the
+reviewing machine had Docker or a Postgres server, so the baseline load, the
+migration replay and the pgTAP file have not been executed anywhere. The job is
+report-only (below), so the CI workflow can be green while `db` is red. Until the
+first run is read step by step, a green badge says nothing about this job. See
+"First run" below.
+
 ## What it does
 
 | Step | What happens |
@@ -18,16 +25,27 @@ Supabase projects and holds no database credential.
 | Baseline | `supabase/baseline.sql` is loaded the documented way (drop `entitlements` and `public`, load with `ON_ERROR_STOP=1`). Three kinds of line are removed first: `\restrict`/`\unrestrict`, and the `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` lines the `postgres` role cannot run. |
 | Migrations | Every timestamped file in `supabase/migrations/` (14-digit prefix), oldest first, each in its own transaction. The first failure names the file and stops the job. |
 | pgTAP | `supabase test db supabase/tests/database`. |
-| Schema diff | Runs only when the `PROD_SCHEMA_DUMP` secret is set; otherwise it prints a notice. Report-only. |
+| Schema diff | Pushes to `dev`/`main` and manual runs only, never pull requests. Runs only when the `PROD_SCHEMA_DUMP` secret is set; otherwise it prints a notice. Publishes object names and counts, never SQL. Report-only. |
 
-Expected time: about 2–4 minutes, mostly image pulls (Postgres, Auth and
-Storage; Realtime is switched off). The images are not cached: saving and
-restoring about 1 GB of images through `actions/cache` is unlikely to beat a
-pull from Supabase's registry, and the PR scope step already skips most runs.
+Time: **not measured yet.** The estimate is 2–4 minutes, mostly image pulls
+(Postgres, plus the Auth and Storage images the CLI runs once to create their
+schemas; Realtime is switched off). Record the real time of the first runs here.
+
+Caching is a deliberate choice, not an omission. Nothing is cached today:
+
+- The PR scope step already makes most PR runs take seconds.
+- The CLI download is one small release binary.
+- Saving and restoring about 1 GB of images through `actions/cache` (a
+  `docker save`/`docker load` pair keyed on `SUPABASE_CLI_VERSION`) is not
+  clearly faster than a registry pull. It would also use about a tenth of the
+  repository's 10 GB cache, shared with the npm and Next.js caches.
+
+Revisit this once there are measured timings. If the pulls dominate a run of
+more than 3 minutes, add the `docker save`/`docker load` cache and compare.
 
 ## The pgTAP tests
 
-`supabase/tests/database/security.test.sql` (47 assertions):
+`supabase/tests/database/security.test.sql` (52 assertions):
 
 - No SECURITY DEFINER function in `public` or `entitlements` is executable by
   `anon`.
@@ -35,6 +53,18 @@ pull from Supabase's registry, and the PR scope step already skips most runs.
   `can_read_space`, `can_read_chat_channel`, `survey_current_member_id`, and
   `space_unread_counts` (S0-9, still open).
 - Every table in `public` and `entitlements` has RLS enabled.
+- Every view that `anon` or `authenticated` can read is `security_invoker`. A
+  view without it runs with its owner's rights and ignores the base tables' RLS.
+  The schema's default privileges give both roles ALL on every new relation in
+  `public`, views included, so write new views as
+  `CREATE VIEW public.x WITH (security_invoker = true) AS ...`.
+- `anon` and `authenticated` cannot read any materialized view or foreign
+  table. Neither kind can have RLS. Revoke SELECT from both roles on any you
+  create.
+- Self-tests: the file plants a table without RLS, an owner-rights view, an
+  invoker view and a readable materialized view, all rolled back. It then checks
+  that each relation check reports exactly the bad object, which proves the
+  checks can fail.
 - The 14 functions sealed by `20261102220634_seal_definer_functions_db_n3`:
   `anon` cannot execute any of them; `authenticated` can execute only
   `survey_current_member_id`; `service_role` can execute all of them.
@@ -64,21 +94,27 @@ npx supabase stop --no-backup
 Do not run `supabase start` or `supabase db reset` with the defaults: both
 replay `001`–`148`, which fails at `001`.
 
-## Making it a required check
+## First run, then making it a required check
 
 The job is report-only at first: `continue-on-error` is on unless the repository
-variable `DB_CI_ENFORCE` is `true`. A failure shows red on the PR but does not
-fail the workflow.
+variable `DB_CI_ENFORCE` is `true`. A failure shows red on the `db` job but does
+not fail the workflow, so the workflow badge is no evidence either way.
 
-1. Wait for a green run on a PR that touches `supabase/` (or run the workflow by
-   hand).
-2. Settings → Secrets and variables → Actions → Variables: add
+1. Run the workflow by hand (Actions → CI → Run workflow, on `dev`), or let a PR
+   that touches `supabase/` run it. Open the `db` job and read every step's
+   outcome. "Start the local database", "Load the baseline schema", "Apply
+   migrations since the baseline" and "pgTAP tests" must each be green. The
+   pgTAP log must end with `All tests successful` and `Tests=52`. A skipped step
+   does not count.
+2. Record the job's duration in "What it does" above, and the date of the first
+   green run in the status line at the top.
+3. Settings → Secrets and variables → Actions → Variables: add
    `DB_CI_ENFORCE` = `true`.
-3. Add `db` to the required status checks in the `dev` and `main` rulesets.
+4. Add `db` to the required status checks in the `dev` and `main` rulesets.
 
 If the first run fails at the baseline or a migration, that is the finding this
 job exists for: the repository cannot rebuild production. Fix the baseline or
-the migration (never edit an applied migration; add a new one) before step 2.
+the migration (never edit an applied migration; add a new one) before step 3.
 
 ## The schema diff against production
 
@@ -107,21 +143,57 @@ to CI as a secret.
 
 3. Settings → Secrets and variables → Actions → Secrets: set `PROD_SCHEMA_DUMP`
    to the contents of `prod-schema.b64` (`gh secret set PROD_SCHEMA_DUMP < prod-schema.b64`).
-   Delete the local files afterwards.
 4. Refresh the secret whenever a migration is applied to production.
 
 The step accepts xz, gzip or plain SQL, base64-encoded. It loads the dump into a
 scratch database in the same Postgres (with the extensions it uses and stubs of
 `auth.jwt()`/`auth.uid()`), dumps both databases with the same `pg_dump`, and
-diffs them. `-` lines exist only in production; `+` lines only in the
-repository. Drift marks the step with a warning and puts the diff in the job
-summary; it does not fail the job.
+compares them object by object, using `pg_dump`'s own `-- Name:` headers.
 
-The diff appears in CI logs, which are public for this repository. That reveals
-no more than `supabase/baseline.sql` already does (the same kind of schema-only
-dump), but take a fresh dump and read it before setting the secret.
+### What reaches the public log
 
-Fork PRs get no secrets, so they skip the diff with a notice.
+CI logs and job summaries are public for this repository. Drift is, by
+definition, production SQL that was never reviewed here. That includes functions
+written in the SQL editor, policies, comments, column defaults and trigger
+arguments, and a Database Webhook's trigger carries its `Authorization` header.
+So the step publishes only:
+
+- the identifiers of objects that are only in production, only in the
+  repository, or defined differently (`FUNCTION public.foo(uuid)`,
+  `POLICY public.members members_select`, and so on), up to 200 of each;
+- the counts, and the first 16 hex digits of a sha256 of each normalised object
+  list, so two runs can be compared.
+
+If the production dump fails to load, the step reports only the dump's line
+number. psql's own message quotes the failing statement, so it stays in a file
+on the runner.
+
+The step never runs on `pull_request`. A pull request runs its own copy of
+`ci.yml`, so skipping that event keeps PR-head code away from
+`PROD_SCHEMA_DUMP`. The step runs on pushes to `dev`/`main` and on manual runs.
+A collaborator who can push a branch could still edit the workflow and run it
+by hand. That is the same trust model as every other secret in this workflow.
+For stricter isolation, move the step into its own job bound to a protected
+environment that holds the secret.
+
+Fork PRs get no secrets either way.
+
+### Reading the full diff (owner, locally)
+
+The CI summary says which objects differ; read their SQL on your own machine.
+Without Docker, compare against dev, which is built from the same migrations:
+
+```bash
+/opt/homebrew/opt/libpq/bin/pg_dump "<dev-session-pooler-URI>" -W \
+  --schema=public --schema=entitlements --schema-only --no-owner -f dev-schema.sql
+diff -u prod-schema.sql dev-schema.sql | less
+```
+
+With Docker, use the exact repository schema: run the job's steps locally (see
+"Running it locally"), load `prod-schema.sql` into a `prod_ref` database the way
+the step does, and `diff -u` the two `pg_dump --schema-only --no-owner` outputs.
+
+Delete `prod-schema.sql`, `prod-schema.b64` and `dev-schema.sql` afterwards.
 
 If the dump outgrows 48 KB, use GitHub's documented pattern for large secrets:
 commit a `gpg --symmetric` encrypted file and keep only the passphrase as a

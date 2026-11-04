@@ -466,24 +466,33 @@ jobs:
       # xz- or gzip-compressed or plain; see the runbook). CI never connects to
       # production. Both schemas are loaded into this one Postgres and dumped
       # with the same pg_dump, so version noise cannot show up as drift.
+      #
+      # The logs of this public repository are public, and drift is by
+      # definition production SQL nobody reviewed here (SQL-editor functions,
+      # policies, a webhook trigger's arguments). So nothing from the dump's
+      # contents reaches the log or the summary: only object identifiers
+      # (type, schema, name), counts and sha256 digests. The owner reads the
+      # full diff locally (runbook). Never on pull_request: a PR runs its own
+      # copy of this workflow, so PR-head code never receives the secret here.
       # Report-only: drift marks the step, not the job.
-      - if: steps.scope.outputs.run == 'true'
+      - if: steps.scope.outputs.run == 'true' && github.event_name != 'pull_request'
         name: Schema diff against production (when a dump is provided)
         continue-on-error: true
         env:
           PROD_SCHEMA_DUMP: ${{ secrets.PROD_SCHEMA_DUMP }}
         run: |
           if [ -z "$PROD_SCHEMA_DUMP" ]; then
-            echo "::notice::No PROD_SCHEMA_DUMP secret (or a fork PR without secrets): schema diff against production skipped."
+            echo "::notice::No PROD_SCHEMA_DUMP secret: schema diff against production skipped."
             echo "Schema diff skipped: no PROD_SCHEMA_DUMP secret." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          raw="$RUNNER_TEMP/prod-schema.bin"
-          prod="$RUNNER_TEMP/prod-schema.sql"
-          printf '%s' "$PROD_SCHEMA_DUMP" | base64 -d > "$raw"
-          if xz -t "$raw" 2>/dev/null; then xz -dc "$raw" > "$prod"
-          elif gzip -t "$raw" 2>/dev/null; then gzip -dc "$raw" > "$prod"
-          else cp "$raw" "$prod"; fi
+          export LC_ALL=C
+          work="$RUNNER_TEMP/schema-diff"
+          mkdir -p "$work"
+          printf '%s' "$PROD_SCHEMA_DUMP" | base64 -d > "$work/prod.bin"
+          if xz -t "$work/prod.bin" 2>/dev/null; then xz -dc "$work/prod.bin" > "$work/prod.sql"
+          elif gzip -t "$work/prod.bin" 2>/dev/null; then gzip -dc "$work/prod.bin" > "$work/prod.sql"
+          else cp "$work/prod.bin" "$work/prod.sql"; fi
 
           q() { docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" \
                   psql -h 127.0.0.1 -U postgres -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -498,33 +507,67 @@ jobs:
             -c "create or replace function auth.jwt() returns jsonb language sql stable as 'select null::jsonb'" \
             -c "create or replace function auth.uid() returns uuid language sql stable as 'select null::uuid'" \
             -c 'drop schema public cascade'
-          sed -e '/^\\restrict /d' -e '/^\\unrestrict /d' \
-              -e '/^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin /d' "$prod" \
-            | q -d prod_ref -f -
+          # psql quotes the failing statement on error, so its output stays
+          # off the log; only the dump's line number is reported.
+          if ! sed -e '/^\\restrict /d' -e '/^\\unrestrict /d' \
+                   -e '/^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin /d' "$work/prod.sql" \
+               | q -d prod_ref -f - > "$work/prod-load.log" 2>&1; then
+            at=$(grep -m1 -oE '^psql:[^:]*:[0-9]+: ERROR' "$work/prod-load.log" | sed -E 's/.*:([0-9]+): ERROR/\1/')
+            echo "::error::The production dump did not load into the scratch database (dump line ${at:-unknown}). The message is withheld from this public log; load the dump locally to read it (docs/RUNBOOK-ci-database.md)."
+            exit 1
+          fi
 
-          dump() {
+          # One line per schema object: "<type> <schema>.<name>", a tab, then
+          # its normalised SQL. Keyed on pg_dump's own "-- Name:" headers.
+          objects() {
             docker exec -e PGPASSWORD=postgres "$DB_CONTAINER" \
               pg_dump -h 127.0.0.1 -U postgres -d "$1" --schema-only --no-owner \
                 --schema=public --schema=entitlements \
-              | sed -e '/^--/d' -e '/^\\restrict /d' -e '/^\\unrestrict /d' -e '/^$/d'
+            | awk '
+                /^-- Name: / {
+                  line = substr($0, 10)
+                  i = index(line, "; Type: ");   name = substr(line, 1, i - 1);  rest = substr(line, i + 8)
+                  i = index(rest, "; Schema: "); type = substr(rest, 1, i - 1);  rest = substr(rest, i + 10)
+                  i = index(rest, "; Owner: ");  schema = (i ? substr(rest, 1, i - 1) : rest)
+                  key = type " " schema "." name
+                  next
+                }
+                /^--/ || /^$/ || /^\\(un)?restrict / { next }
+                key != "" { body[key] = body[key] $0 "\037" }
+                END { for (k in body) print k "\t" body[k] }
+              ' | sort
           }
-          dump prod_ref > "$RUNNER_TEMP/prod.norm.sql"
-          dump postgres > "$RUNNER_TEMP/ci.norm.sql"
-          if diff -u --label production --label repository \
-               "$RUNNER_TEMP/prod.norm.sql" "$RUNNER_TEMP/ci.norm.sql" > "$RUNNER_TEMP/schema.diff"; then
-            echo "Schema matches production (public + entitlements)." | tee -a "$GITHUB_STEP_SUMMARY"
+          objects prod_ref > "$work/prod.obj"
+          objects postgres > "$work/repo.obj"
+          cut -f1 "$work/prod.obj" > "$work/prod.keys"
+          cut -f1 "$work/repo.obj" > "$work/repo.keys"
+          comm -23 "$work/prod.keys" "$work/repo.keys" > "$work/only-prod"
+          comm -13 "$work/prod.keys" "$work/repo.keys" > "$work/only-repo"
+          comm -12 "$work/prod.keys" "$work/repo.keys" > "$work/both"
+          comm -3 "$work/prod.obj" "$work/repo.obj" | sed 's/^\t//' | cut -f1 | sort -u \
+            | comm -12 - "$work/both" > "$work/changed"
+          rm -f "$work/prod.bin" "$work/prod.sql"
+
+          n_prod=$(wc -l < "$work/only-prod"); n_repo=$(wc -l < "$work/only-repo"); n_changed=$(wc -l < "$work/changed")
+          digests="sha256 of the normalised object lists: production $(sha256sum < "$work/prod.obj" | cut -c1-16), repository $(sha256sum < "$work/repo.obj" | cut -c1-16)"
+          if [ "$n_prod" -eq 0 ] && [ "$n_repo" -eq 0 ] && [ "$n_changed" -eq 0 ]; then
+            echo "Schema matches production: $(wc -l < "$work/both") objects in public + entitlements. $digests." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          lines=$(wc -l < "$RUNNER_TEMP/schema.diff")
-          {
+          report() {
             echo "### Schema drift against production"
             echo ""
-            echo "\`-\` = only in production, \`+\` = only in baseline + migrations. $lines diff lines (first 400 shown)."
-            echo ""
-            echo '```diff'
-            head -n 400 "$RUNNER_TEMP/schema.diff"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          cat "$RUNNER_TEMP/schema.diff"
-          echo "::warning::The repository schema differs from the production dump ($lines diff lines). See the job summary."
+            echo "Object identifiers only; the SQL stays off this public log. Read the full diff locally (docs/RUNBOOK-ci-database.md). $digests."
+            for kind in only-prod:"Only in production" only-repo:"Only in the repository" changed:"Different definitions"; do
+              f="${kind%%:*}"; title="${kind#*:}"
+              [ -s "$work/$f" ] || continue
+              echo ""
+              echo "**$title** ($(wc -l < "$work/$f")):"
+              echo '```'
+              head -n 200 "$work/$f"
+              echo '```'
+            done
+          }
+          report | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::warning::The repository schema differs from the production dump: $n_prod object(s) only in production, $n_repo only in the repository, $n_changed with different definitions. Identifiers are in the job summary."
           exit 1

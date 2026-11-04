@@ -20,7 +20,7 @@ The owner keeps their own account for reviews and merges. An approval only count
 
 ## 2. Ruleset: code-owner review on guard files
 
-`.github/CODEOWNERS` names the owner on: `.github/**`, `scripts/check-*.mjs`, `test/route-guards.test.ts`, `supabase/migrations/**`, `supabase/tests/security_checks.sql`, `lib/supabase-keys.ts`, `lib/impersonation.ts`, `lib/access-gates.ts`, `proxy.ts`, `ops/backups/**` and `CLAUDE.md`.
+`.github/CODEOWNERS` names the owner on CI and workflows, the build and migration gates, the structural guard and gate tests, the schema and database tests, keys, impersonation, access gates, the request proxy, sign-in, onboarding and consent gates, community access, CSP, email sending and suppression, upload checks, inbound webhooks, `ops/backups/**` and `CLAUDE.md`. The file itself is the list. Any PR that adds a guard, gate test or security file adds its path there too (`docs/compliance/information-security-program.md`, §3).
 
 Settings → Rules → Rulesets → New branch ruleset:
 

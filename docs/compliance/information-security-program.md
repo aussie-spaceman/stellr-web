@@ -78,6 +78,7 @@ Systems that hold or process personal data. "In code" means the repo calls or co
 - **MFA — owner action.** School Data Terms §5 promises "multi-factor sign-in for administrators". This is not enforced in code. The owner must: enforce MFA for admin accounts in Clerk; turn on MFA for the Supabase, Vercel, Resend, Google, Stripe, DocuSign, Checkr, HubSpot and GitHub consoles; record the date done here. **(to confirm)**
 - **Leavers.** Remove the Clerk role, the `staff_roles` scope and every console seat on the day someone leaves (to confirm the procedure).
 - **Production changes need the owner.** Guard files (`.github/CODEOWNERS`) merge only with the owner's review once the ruleset is on; production SQL runs only through the owner-approved `Production migration` Action. Agents have no production write path (§13). **(owner setup pending: `docs/RUNBOOK-agent-controls.md`)**
+- **Extend CODEOWNERS with every new guard.** Any PR that adds a guard, a gate or structural test, or a security file (auth, consent, CSP, webhook signature checks, upload checks, email suppression, database tests) adds its path to `.github/CODEOWNERS` in the same PR. A guard missing from that file can be weakened without the owner's review. Reviewers check this before approving.
 
 ## 4. Secrets management
 

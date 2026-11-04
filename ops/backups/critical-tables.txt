@@ -1,0 +1,54 @@
+# Tables dumped every hour (RPO 1 hour). Everything else is in the nightly
+# full dump (RPO 24 hours). One schema-qualified table per line; '#' starts a
+# comment. pg_dump runs with --strict-names, so a renamed or dropped table
+# fails the hourly job loudly instead of silently dropping out of the backup.
+# test/ops-backups.test.ts checks every name here exists in the schema.
+#
+# Add a table here in the same PR that creates it when it holds consent,
+# agreements, registrations, members, money or credentials.
+
+# Consent, agreements and the e-sign audit trail
+public.agreements
+public.agreement_recipients
+public.esign_audit_events
+public.esign_access_log
+public.esign_templates
+public.esign_provider_state
+public.member_privacy_prefs
+public.member_directory_prefs
+public.privacy_requests
+public.deletion_requests
+
+# Registrations and participants
+public.registrations
+public.participants
+public.event_participations
+public.group_join_tokens
+public.group_invoices
+
+# Members and staff
+public.members
+public.member_memberships
+public.member_roles
+public.staff_roles
+
+# Money (ledger-like tables)
+public.event_refunds
+public.store_orders
+public.store_order_items
+public.store_returns
+public.account_credits
+public.credit_redemptions
+public.scholarship_applications
+public.stripe_webhook_events
+entitlements.account_credit_ledger
+entitlements.bookings
+entitlements.coupon_redemptions
+entitlements.entitlements
+entitlements.processed_events
+
+# Credentials and safeguarding
+public.credentials
+public.credential_events
+public.member_background_checks
+public.member_teacher_licenses

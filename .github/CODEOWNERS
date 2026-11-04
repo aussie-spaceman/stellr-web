@@ -1,0 +1,29 @@
+# Files that guard production. A change to any of them needs the owner's
+# review before it can merge into `dev` or `main` — once the branch ruleset
+# requires code-owner review (docs/RUNBOOK-agent-controls.md, step 2). Until
+# then this file only requests the review; it does not enforce it.
+#
+# Later rules win, so keep the list flat: one path, one owner.
+
+# CI, workflows (incl. the production-migration Action) and this file
+/.github/**                         @aussie-spaceman
+
+# Build and migration gates
+/scripts/check-*.mjs                @aussie-spaceman
+/test/route-guards.test.ts          @aussie-spaceman
+
+# Schema, and the check the production-migration Action trusts
+/supabase/migrations/**             @aussie-spaceman
+/supabase/tests/security_checks.sql @aussie-spaceman
+
+# Keys, impersonation, access gates, request proxy
+/lib/supabase-keys.ts               @aussie-spaceman
+/lib/impersonation.ts               @aussie-spaceman
+/lib/access-gates.ts                @aussie-spaceman
+/proxy.ts                           @aussie-spaceman
+
+# Backup scripts (run with production read access in the private repo)
+/ops/backups/**                     @aussie-spaceman
+
+# Binding instructions for AI agents
+/CLAUDE.md                          @aussie-spaceman

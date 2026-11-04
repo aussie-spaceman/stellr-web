@@ -4,6 +4,9 @@ import { appEnv, isProd } from '@/lib/env'
 import { supabaseServer } from '@/lib/supabase'
 import { canSend, recordSend, type EmailKind } from '@/lib/email-budget'
 import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
+import { maskEmail } from '@/lib/utils'
+import { EmailSendError, resendTransport } from '@/lib/email/transport'
+import { lookupSuppressions, normaliseEmail, suppressionBlocks } from '@/lib/email/suppressions'
 
 // deep review PUB-2 / HTML-injection cluster: every user-supplied value that is
 // interpolated into an HTML email body is escaped with `esc` (the shared
@@ -122,12 +125,24 @@ interface SendEmailOptions {
    * / safeguarding mail.
    */
   kind?: EmailKind
+  /**
+   * S1 suppression list: true sends even to an address on email_suppressions.
+   * Only for mail a child's safety or an account's security depends on
+   * (guardian consent, safeguarding, sign-in/security). Everything else is
+   * non-critical by default — see lib/email/suppressions.ts for the policy.
+   */
+  critical?: boolean
 }
 
-/** Resend's id for the message, when one was sent. */
-export interface SentEmail { id: string | null }
+/**
+ * The provider's id for the message, when one was sent. `suppressed` is set
+ * when the recipient is on the suppression list and nothing was sent.
+ */
+export interface SentEmail { id: string | null; suppressed?: true }
 
-export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers, kind = 'transactional' }: SendEmailOptions): Promise<SentEmail> {
+export { EmailSendError }
+
+export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers, kind = 'transactional', critical = false }: SendEmailOptions): Promise<SentEmail> {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to?.replace(/^.*@/, '…@'), subject)
     return { id: null }
@@ -152,48 +167,59 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
   // defensively: if the service-role env is absent the whole app is broken
   // anyway, and we would rather let a send through than crash the mailer here.
   const quotaDb = quotaClient()
+
+  // S1 suppression list: a hard bounce, a spam complaint, an unsubscribe or a
+  // manual entry stops non-critical mail to that address (policy in
+  // lib/email/suppressions.ts). Checked against the INTENDED recipients, before
+  // the budget, so a skipped send never spends a slot or trips the quota. An
+  // unreadable list does not block mail: the send goes ahead and the failure is
+  // logged, because silently dropping a consent email on a database hiccup is
+  // the worse outcome.
+  let ccOut = routed.cc
+  if (quotaDb) {
+    try {
+      const listed = await lookupSuppressions(quotaDb, [to, ...(cc ?? [])])
+      if (listed.size) {
+        const toReason = listed.get(normaliseEmail(to))
+        if (toReason) {
+          if (suppressionBlocks(toReason, { kind, critical })) {
+            console.warn(`[email] Skipped — ${maskEmail(normaliseEmail(to))} is on the suppression list (${toReason}):`, subject)
+            return { id: null, suppressed: true }
+          }
+          console.warn(`[email] Sending critical mail to suppressed ${maskEmail(normaliseEmail(to))} (${toReason}):`, subject)
+        }
+        ccOut = routed.cc.filter((addr) => {
+          const reason = listed.get(normaliseEmail(addr))
+          const drop = !!reason && suppressionBlocks(reason, { kind, critical })
+          if (drop) console.warn(`[email] Dropped cc ${maskEmail(addr)} — on the suppression list (${reason})`)
+          return !drop
+        })
+      }
+    } catch (err) {
+      console.error('[email] suppression lookup failed — sending anyway:', err instanceof Error ? err.message : err)
+    }
+  }
+
   if (kind === 'marketing' && quotaDb && !(await canSend('marketing', quotaDb))) {
     throw new EmailSendError('Daily email budget reserved for transactional mail is exhausted', 429)
   }
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: from ?? FROM,
-      to: [routed.to],
-      cc: routed.cc,
-      reply_to: replyTo ?? DEFAULT_REPLY_TO,
-      subject: routed.subjectPrefix + subject,
-      html,
-      text,
-      ...(headers && Object.keys(headers).length ? { headers } : {}),
-      ...(attachments && attachments.length
-        ? {
-            attachments: attachments.map((a) => ({
-              filename: a.filename,
-              content: a.content,
-              content_type: a.contentType,
-            })),
-          }
-        : {}),
-    }),
+  const sent = await resendTransport(RESEND_API_KEY).send({
+    from: from ?? FROM,
+    to: [routed.to],
+    cc: ccOut,
+    replyTo: replyTo ?? DEFAULT_REPLY_TO,
+    subject: routed.subjectPrefix + subject,
+    html,
+    text,
+    headers,
+    attachments,
   })
-
-  if (!res.ok) {
-    const err = await res.text()
-    console.error('[email] Resend error sending to', routed.to.replace(/^.*@/, '…@'), '—', err)
-    throw new EmailSendError(`Failed to send email: ${err}`, res.status)
-  }
-  const body = await res.json().catch(() => null) as { id?: string } | null
   // deep review INT-2 / PUB-4: count the send that actually went out against the
   // shared daily budget, keyed by UTC day. Best-effort: recordSend never throws,
   // since the mail has already been sent.
   if (quotaDb) await recordSend(quotaDb)
-  return { id: body?.id ?? null }
+  return { id: sent.id }
 }
 
 // deep review INT-2 / PUB-4: the shared budget lives in Supabase (service role).
@@ -207,23 +233,6 @@ function quotaClient(): ReturnType<typeof supabaseServer> | null {
   } catch (err) {
     console.error('[email] shared-budget client unavailable — skipping budget check:', err instanceof Error ? err.message : err)
     return null
-  }
-}
-
-/**
- * A send Resend refused. `status` 429 is the rate limit or the plan's daily
- * quota: a sender working through a queue should stop and try later, not
- * carry on and fail the rest.
- */
-export class EmailSendError extends Error {
-  readonly status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'EmailSendError'
-    this.status = status
-  }
-  get isQuota(): boolean {
-    return this.status === 429
   }
 }
 

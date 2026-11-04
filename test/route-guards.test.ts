@@ -94,3 +94,41 @@ describe('route guards (static inventory)', () => {
     expect(offenders).toEqual([])
   })
 })
+
+// S1 (Nov 2026): webhooks have no session either, so each one must prove the
+// caller another way. Every webhook route is listed here with how it does that
+// and a pattern its source must contain; a new webhook fails until it is added.
+const WEBHOOKS: Record<string, { how: string; pattern: RegExp }> = {
+  'app/api/webhooks/resend/route.ts': {
+    how: 'svix signature with RESEND_WEBHOOK_SECRET; refused when the secret is unset',
+    pattern: /new Webhook\(secret\)\.verify[\s\S]*RESEND_WEBHOOK_SECRET|RESEND_WEBHOOK_SECRET[\s\S]*new Webhook\(secret\)\.verify/,
+  },
+  'app/api/webhooks/clerk/route.ts': { how: 'svix signature', pattern: /\.verify\(/ },
+  'app/api/webhooks/docusign/route.ts': { how: 'DocuSign Connect HMAC', pattern: /verifyConnectHmac/ },
+  'app/api/webhooks/background/route.ts': { how: 'provider signature check', pattern: /verifyWebhook/ },
+  'app/api/webhooks/recording/route.ts': { how: 'JaaS signature or legacy shared secret', pattern: /JAAS_WEBHOOK_SECRET/ },
+  'app/api/webhooks/motion/route.ts': { how: 'HMAC, constant-time compare', pattern: /timingSafeEqual/ },
+  'app/api/webhooks/apollo/route.ts': { how: 'shared secret, constant-time compare', pattern: /timingSafeEqual/ },
+  'app/api/webhooks/sanity/route.ts': { how: 'shared secret; refused when unset', pattern: /SANITY_REVALIDATE_SECRET/ },
+  'app/api/webhooks/google-sheets/route.ts': {
+    how: 'acts only on a channel id it registered (sheet_watch_channels), unexpired',
+    pattern: /sheet_watch_channels/,
+  },
+  'app/api/stripe/webhook/route.ts': { how: 'Stripe signature', pattern: /constructEvent/ },
+  'app/api/printful/webhook/route.ts': { how: 'shared secret', pattern: /verifyPrintfulWebhook/ },
+}
+
+describe('webhook guards (static inventory)', () => {
+  it('every webhook route is in the inventory and still verifies its caller', () => {
+    const found = [
+      ...routeFiles('app/api/webhooks'),
+      ...routeFiles('app/api').filter((f) => /\/webhook\/route\.ts$/.test(f)),
+    ]
+    expect(found.length).toBeGreaterThan(5)
+    const unlisted = found.filter((f) => !(f in WEBHOOKS))
+    expect(unlisted).toEqual([])
+    for (const [file, { pattern }] of Object.entries(WEBHOOKS)) {
+      expect(pattern.test(readFileSync(file, 'utf8')), file).toBe(true)
+    }
+  })
+})

@@ -1,6 +1,7 @@
 import { ClerkProvider } from '@clerk/nextjs'
 import { auth } from '@clerk/nextjs/server'
 import { clerkAppearance } from '@/lib/clerk-appearance'
+import { requestNonce } from '@/lib/request-nonce'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppTopBar } from '@/components/layout/AppTopBar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
@@ -38,8 +39,9 @@ export default async function MemberLayout({ children }: { children: React.React
 
   // Clerk lives here (and in the admin, auth and register layouts), not at
   // the root: the public site ships no Clerk code to anonymous visitors.
+  // The nonce puts clerk-js under the CSP (lib/csp.ts).
   return (
-    <ClerkProvider appearance={clerkAppearance}>
+    <ClerkProvider appearance={clerkAppearance} nonce={await requestNonce()}>
     <div className="min-h-[100svh] bg-surface">
       {markStudent && <NoAdsStudentMarker />}
       {viewAs && <ImpersonationBanner {...viewAs} />}

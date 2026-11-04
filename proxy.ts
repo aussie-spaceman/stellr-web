@@ -8,6 +8,7 @@ import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { authPath } from '@/lib/auth-path'
 import { safeNext } from '@/lib/safe-next'
+import { NONCE_HEADER, applyCsp, cspFor } from '@/lib/csp'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -116,7 +117,8 @@ export default async function proxy(req: NextRequest, event: NextFetchEvent) {
       const bot = matchCrawler(req.headers.get('user-agent'))
       if (bot) event.waitUntil(recordCrawlerHit(bot, req.nextUrl.pathname))
     }
-    return withRegionCookie(req, NextResponse.next())
+    // Report-Only CSP (lib/csp.ts): marketing pages are prerendered, so the host policy.
+    return applyCsp(withRegionCookie(req, NextResponse.next()), cspFor(req.nextUrl.pathname).value, req.url)
   }
   // Clerk returns nothing when it has nothing to add; that means carry on.
   return withRegionCookie(req, (await clerkHandler(req, event)) || NextResponse.next())
@@ -223,7 +225,24 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   const headers = new Headers(req.headers)
   headers.delete(PRIVATE_ROUTE_HEADER)
   if (privateRoute) headers.set(PRIVATE_ROUTE_HEADER, '1')
-  return NextResponse.next({ request: { headers } })
+
+  // ── Content-Security-Policy, Report-Only (S1; lib/csp.ts) ──────────────────
+  // A route that renders per request gets a fresh nonce. Next reads it from the
+  // policy on the request headers and stamps it on its own scripts and every
+  // next/script. Anything the client sent under these names is dropped first,
+  // so it can't choose the nonce.
+  // The nonce also goes to the layouts as x-nonce, for the clerk-js tag Clerk
+  // renders in the HTML (lib/request-nonce.ts).
+  headers.delete('content-security-policy')
+  headers.delete('content-security-policy-report-only')
+  headers.delete(NONCE_HEADER)
+  const csp = cspFor(url.pathname)
+  if (csp.nonce) {
+    headers.set('content-security-policy-report-only', csp.value)
+    headers.set(NONCE_HEADER, csp.nonce)
+  }
+  return applyCsp(NextResponse.next({ request: { headers } }), csp.value, req.url)
+  // ── end CSP ────────────────────────────────────────────────────────────────
 })
 
 // /api/img (the Sanity watermarker) is left out of both entries: it reads no
@@ -231,9 +250,11 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 // proxy run on Vercel's metered CPU even when the CDN already has the image
 // (the proxy was 37% of the team's Active CPU on 21 Oct 2026). The check-in
 // desk's scanner reader (/vendor/zxing_reader.wasm) is a static file too.
+// /api/csp-report (browser CSP reports) is skipped for the same reason: it reads
+// no session, and a page can send several reports.
 export const config = {
   matcher: [
-    '/((?!_next|api/img(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
-    '/((?!api/img(?:/|$))(?:api|trpc).*)',
+    '/((?!_next|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
+    '/((?!api/img(?:/|$)|api/csp-report(?:/|$))(?:api|trpc).*)',
   ],
 }

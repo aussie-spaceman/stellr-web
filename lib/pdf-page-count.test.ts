@@ -16,6 +16,10 @@ import {
   scanPdfPages,
 } from './pdf-page-count'
 import { GB, LINEAR_TEST_TIMEOUT_MS, MB, REFUSAL_MS, bombPdf, linearBudgetMs } from './pdf-bombs.test.helper'
+import { UNDER_MUTATION, expectWithin } from '@/test/time-budget'
+
+// Under Stryker (nightly mutation testing) the linear-time suites take
+// minutes per mutant, so they are skipped there; see test/time-budget.ts.
 
 const enc = (s: string) => new Uint8Array(Buffer.from(s, 'latin1'))
 const join = (...parts: (string | Uint8Array)[]) =>
@@ -425,7 +429,7 @@ describe('scanPdfPages', () => {
         expect(file.byteLength).toBeLessThan(25 * 1024 * 1024)
         const started = performance.now()
         expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).not.toBe('ok')
-        expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+        expectWithin(started, linearBudgetMs(1000))
       }, LINEAR_TEST_TIMEOUT_MS)
     }
   })
@@ -437,7 +441,7 @@ describe('scanPdfPages', () => {
     const file = objectStreamPdf(PAGE, offsets)
     const started = performance.now()
     expect(scan(file)).toBeNull()
-    expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+    expectWithin(started, linearBudgetMs(1000))
   }, LINEAR_TEST_TIMEOUT_MS)
 
   it('can’t tell a file of more Flate streams than any 50-page PDF has', () => {
@@ -445,7 +449,7 @@ describe('scanPdfPages', () => {
     const many = join('%PDF-1.7\n', ...Array.from({ length: MAX_FLATE_STREAMS + 1 }, () => one))
     const started = performance.now()
     expect(scan(many)).toBeNull()
-    expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+    expectWithin(started, linearBudgetMs(1000))
   }, LINEAR_TEST_TIMEOUT_MS)
 
   it('can’t tell a file of more object streams than it inflates in full', () => {
@@ -459,7 +463,7 @@ describe('scanPdfPages', () => {
   // Every pass is linear: 25MB of the worst each branch can be fed stays well
   // under a second on a quiet machine. The budget is scaled for the runner
   // (linearBudgetMs): it catches a quadratic pass, which takes minutes.
-  describe('25MB of hostile input', () => {
+  describe.skipIf(UNDER_MUTATION)('25MB of hostile input', () => {
     const MB25 = 25 * 1024 * 1024
     const fill = (unit: string | Buffer) => {
       const b = Buffer.alloc(MB25, unit as string, 'latin1')
@@ -490,7 +494,7 @@ describe('scanPdfPages', () => {
         const b = make()
         const started = performance.now()
         const result = scan(b, 250)
-        expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+        expectWithin(started, linearBudgetMs(1000))
         expect(result === null || result.bound >= 0).toBe(true)
       }, LINEAR_TEST_TIMEOUT_MS)
     }
@@ -541,7 +545,7 @@ describe('checkPdfPageLimit', () => {
     // Its object stream is inflated in full (pdf-lib would decode it on load),
     // and its 300,000 `/Type /Page` counted: over, without a load.
     expect(await checkPdfPageLimit(crafted(300_000), 50)).toBe('over')
-    expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+    expectWithin(started, linearBudgetMs(1000))
   }, LINEAR_TEST_TIMEOUT_MS)
 
   // An incremental save (a signature, an annotation) appends a new copy of each
@@ -772,7 +776,7 @@ describe('numbers pdf-lib moves or loops by', () => {
       const file = backwardsLength()
       const started = performance.now()
       expect(scan(file)).toBeNull()
-      expect(performance.now() - started).toBeLessThan(linearBudgetMs(100))
+      expectWithin(started, linearBudgetMs(100))
       expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).toBe('unknown')
       expect(await uploadInWorker(file, { scanFirst: true, ms: 10_000 })).toBe('refused')
     }, 30_000)
@@ -940,7 +944,7 @@ describe('numbers pdf-lib moves or loops by', () => {
     expect(await uploadInWorker(file, { scanFirst: true, ms: 10_000 })).toBe('loaded:1')
   }, 30_000)
 
-  describe('25MB of hostile input, still linear', () => {
+  describe.skipIf(UNDER_MUTATION)('25MB of hostile input, still linear', () => {
     const MB25 = 25 * 1024 * 1024
     const fill = (unit: string) => {
       const b = Buffer.alloc(MB25, unit, 'latin1')
@@ -977,7 +981,7 @@ describe('numbers pdf-lib moves or loops by', () => {
         const b = make()
         const started = performance.now()
         const result = scan(b, 250)
-        expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+        expectWithin(started, linearBudgetMs(1000))
         expect(result === null || result.bound >= 0).toBe(true)
       }, LINEAR_TEST_TIMEOUT_MS)
     }
@@ -1055,7 +1059,7 @@ describe('streams pdf-lib inflates on load', () => {
       const file = bombPdf(size)
       const started = performance.now()
       expect(scan(file)).toBeNull()
-      expect(performance.now() - started).toBeLessThan(REFUSAL_MS)
+      expectWithin(started, REFUSAL_MS)
     })
 
     it(`refuses the ${name} bomb within a 64 MB heap, holding little memory`, async () => {
@@ -1208,7 +1212,7 @@ describe('streams pdf-lib inflates on load', () => {
     })
   })
 
-  it('reads dictionaries in linear time, whatever a file holds', () => {
+  it.skipIf(UNDER_MUTATION)('reads dictionaries in linear time, whatever a file holds', () => {
     // 1000 Flate streams, each after a dictionary as long as DICT_WINDOW
     // allows: every read runs the window, until the read budget is spent.
     const dict = `<< ${'/A 1 '.repeat(Math.floor((DICT_WINDOW - 64) / 5))}/Length {L} >>`
@@ -1217,7 +1221,7 @@ describe('streams pdf-lib inflates on load', () => {
     for (const check of [() => scan(file), () => checkLoadInflation(file)]) {
       const started = performance.now()
       check()
-      expect(performance.now() - started).toBeLessThan(linearBudgetMs(1000))
+      expectWithin(started, linearBudgetMs(1000))
     }
   }, LINEAR_TEST_TIMEOUT_MS)
 })

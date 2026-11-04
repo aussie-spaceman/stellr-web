@@ -1,0 +1,21 @@
+# Paths Semgrep never scans (.semgrep/*.yml rules, .github/workflows/security.yml).
+# A custom .semgrepignore replaces Semgrep's built-in defaults, so the usual
+# dependency and build directories are listed here too. Gitignored paths are
+# skipped as well.
+
+node_modules/
+.next/
+storybook-static/
+playwright-report/
+test-results/
+coverage/
+reports/
+.stryker-tmp/
+public/
+*.min.js
+
+# Worktrees of this repo (local runs only; CI checks out one tree).
+.claude/
+
+# The rule tests deliberately contain every pattern the rules flag.
+.semgrep/tests/

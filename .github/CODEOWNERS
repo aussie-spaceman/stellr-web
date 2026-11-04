@@ -48,6 +48,11 @@
 /supabase/tests/security_checks.sql @aussie-spaceman
 /supabase/tests/database/**         @aussie-spaceman
 
+# Tenancy model (S3): the table registry and the schema parser the lint trusts
+/lib/tenancy/registry.ts            @aussie-spaceman
+/lib/tenancy/constants.ts           @aussie-spaceman
+/scripts/lib/schema-tables.mjs      @aussie-spaceman
+
 # Keys, impersonation, access gates, request proxy
 /lib/supabase-keys.ts               @aussie-spaceman
 /lib/impersonation.ts               @aussie-spaceman

@@ -144,6 +144,13 @@ jobs:
       - name: Design-system lint
         run: npm run lint:tokens
 
+      # Migration naming, SECURITY DEFINER revokes, and (S3) the table
+      # registry: every table classified, tenant/event-scoped tables carry
+      # tenant_id + index + RLS (scripts/check-migration-tenancy.mjs). Also in
+      # prebuild; a step of its own so a failure is named in the summary.
+      - name: Migration lints
+        run: npm run lint:migrations
+
       - name: Unit tests
         run: npm run test
 

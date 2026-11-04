@@ -9,6 +9,7 @@ import { isAdminClaims } from '@/lib/admin-auth'
 import { getSignedInMember } from '@/lib/community'
 import { sendAccountInvite } from '@/lib/member-invite'
 import { isMinorOn } from '@/lib/age'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // POST /api/admin/members — admin manually creates a new member record
 export async function POST(req: Request) {
@@ -134,6 +135,8 @@ export async function POST(req: Request) {
     console.error('Member insert error:', memberError)
     return NextResponse.json({ error: 'Failed to create member' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('members', [member.id])
 
   // Link to school
   if (resolvedSchoolId) {

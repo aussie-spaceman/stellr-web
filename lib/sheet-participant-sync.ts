@@ -11,6 +11,7 @@ import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/in
 import { applyRosterChange } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 export interface SheetSyncRegistration {
   id: string
@@ -218,6 +219,9 @@ async function syncFromSheet(
         if (participantId) createdPeople.push({ id: participantId, role: eventRole })
       }
     }
+
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('participants', [participantId])
 
     // Paperwork, then billing. dispatchAgreement is a no-op for anyone who
     // already has an envelope for this participant or valid signed paperwork on

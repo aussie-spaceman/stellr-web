@@ -33,12 +33,15 @@
  *      TABLE … SET SCHEMA / INHERIT / ATTACH PARTITION, dropping a tenant_id
  *      index, or a trigger it disables and never re-enables. The lint fails
  *      closed: such a statement fails unless UNPARSED_ALLOWLIST names its
- *      file and kind, with the reason it is safe.
+ *      file and kind, with the reason it is safe;
+ *  10. (S4) an `own` or `derived` table lacks either tenant policy,
+ *      tenant_isolation or tenant_isolation_guard, at the end of the
+ *      migration history (isolationPolicyProblems).
  *
  * Dependency-free (Node runs the .ts registry directly).
  */
 import { pathToFileURL } from 'node:url'
-import { readSchemaInventory, TIMESTAMPED } from './lib/schema-tables.mjs'
+import { readSchemaInventory, schemaSources, qualify, TIMESTAMPED } from './lib/schema-tables.mjs'
 import { TABLE_REGISTRY, EVENT_KEY_COLUMNS, entryProblems } from '../lib/tenancy/registry.ts'
 import { S3_FIRST_MIGRATION } from '../lib/tenancy/constants.ts'
 
@@ -128,9 +131,49 @@ export function checkTenancy(tables, registry = TABLE_REGISTRY, issues = [], all
   return problems
 }
 
+/**
+ * S4: the two tenant policies every 'own' / 'derived' table must carry
+ * (20261104200000_tenant_isolation_policies.sql). A table added later writes
+ * both in its own migration.
+ */
+export const ISOLATION_POLICIES = ['tenant_isolation', 'tenant_isolation_guard']
+
+/** The first S4 migration: from here on every own/derived table needs the tenant policies. */
+export const S4_FIRST_MIGRATION = '20261104200000'
+
+const POLICY_STATEMENT =
+  /\b(create|drop)\s+policy\s+(?:if\s+exists\s+)?"?(tenant_isolation(?:_guard)?)"?\s+on\s+(?:only\s+)?(?:("?[a-z_][a-z0-9_$]*"?)\s*\.\s*)?("?[a-z_][a-z0-9_$]*"?)/gi
+
+/**
+ * Own/derived tables missing a tenant policy at the end of the migration
+ * history (a later DROP without a re-CREATE counts as missing). Skipped
+ * entirely while no migration at or after S4 exists (a pre-S4 checkout).
+ *
+ * @param {{name: string, sql: string}[]} sources  ordered SQL sources
+ */
+export function isolationPolicyProblems(sources, registry = TABLE_REGISTRY) {
+  if (!sources.some((s) => TIMESTAMPED.test(s.name) && s.name.slice(0, 14) >= S4_FIRST_MIGRATION)) return []
+  const present = new Map()
+  for (const { sql } of sources) {
+    for (const m of sql.replace(/--[^\n]*/g, '').matchAll(POLICY_STATEMENT)) {
+      present.set(`${qualify(m[3], m[4])}|${m[2].toLowerCase()}`, m[1].toLowerCase() === 'create')
+    }
+  }
+  const problems = []
+  for (const [table, e] of Object.entries(registry)) {
+    if (e.tenantColumn !== 'own' && e.tenantColumn !== 'derived') continue
+    for (const p of ISOLATION_POLICIES) {
+      if (!present.get(`${table}|${p}`)) {
+        problems.push(`${table}: ${e.tenantColumn} tenant table without the ${p} policy TO tenant_app (see docs/TENANCY-S4.md)`)
+      }
+    }
+  }
+  return problems
+}
+
 function main() {
   const { tables, issues } = readSchemaInventory('.', S3_FIRST_MIGRATION)
-  const problems = checkTenancy(tables, TABLE_REGISTRY, issues)
+  const problems = [...checkTenancy(tables, TABLE_REGISTRY, issues), ...isolationPolicyProblems(schemaSources('.'))]
   if (problems.length) {
     console.error('\n✗ migration tenancy\n')
     for (const p of problems) console.error(`  ${p}`)

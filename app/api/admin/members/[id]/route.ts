@@ -5,6 +5,7 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { startRetentionClock } from '@/lib/esign/retention'
 import { resolveEmailPair } from '@/lib/member-email'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 function humanizeFields(keys: string[]): string {
   return keys.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')
@@ -77,6 +78,8 @@ export async function PATCH(
     console.error('Admin member update error:', error)
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('members', [id])
 
   // Replace ethnicity + allergy selections — independent tables, run concurrently
   const replacements: Promise<void>[] = []

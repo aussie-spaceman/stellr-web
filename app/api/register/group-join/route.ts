@@ -20,6 +20,7 @@ import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { childAwaitingConsentBlock } from '@/lib/pending-consent'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // A participant, normalised to the enum/shape the participants + members tables
 // and DocuSign expect — built either from the signed-in member's profile, or
@@ -415,6 +416,8 @@ export async function POST(req: NextRequest) {
     console.error('Group join participant insert error:', partError)
     return NextResponse.json({ error: 'Failed to complete registration. Please try again.' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('participants', [partRow.id as string])
 
   // Link the joining member to the group's school so it surfaces in
   // /admin/schools and on their member page — not just as participant text.

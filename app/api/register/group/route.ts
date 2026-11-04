@@ -42,6 +42,7 @@ import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { createAndSendGroupInvoice } from '@/lib/group-invoice'
 import { checkInCodeLink } from '@/lib/check-in-codes'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -829,6 +830,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // S4 field encryption (inert unless FIELD_CRYPTO_MODE=shadow): only members
+    // this request created; existing rows were not written.
+    shadowSyncFields('members', Object.entries(memberIdMap).filter(([e]) => newlyCreatedEmails.has(e)).map(([, id]) => id))
+
     // Resolve the group's school to a schools row and link every member to it,
     // so the school surfaces in /admin/schools and on each member page — not
     // just as free text on the registration/participant rows.
@@ -1030,6 +1035,8 @@ export async function POST(req: NextRequest) {
         inserted: insertedParts?.length ?? 0, expected: participantRows.length,
       })
     }
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('participants', (insertedParts ?? []).map((p) => p.id as string))
     const participantsWithId = participantRows.map((row, i) => ({
       row,
       participantId: insertedParts?.[i]?.id as string | undefined,

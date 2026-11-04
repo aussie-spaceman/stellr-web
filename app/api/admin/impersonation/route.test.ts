@@ -24,8 +24,10 @@ const h = vi.hoisted(() => ({
   decoded: null as { memberId: string; adminMemberId: string; issuedAt: number } | null,
   encoded: [] as unknown[],
   actor: { actorType: 'admin', actorMemberId: 'admin1' } as Record<string, unknown>,
+  auditOn: false,
 }))
 const logActivityOrThrow = vi.fn()
+const platformAudit = vi.fn()
 const getUser = vi.fn()
 
 vi.mock('@clerk/nextjs/server', () => ({
@@ -55,6 +57,10 @@ vi.mock('@/lib/activity-log', () => ({
   actorFromAuth: async () => h.actor,
 }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => h.db.client }))
+vi.mock('@/lib/audit/platform', () => ({
+  auditEnabled: () => h.auditOn,
+  audit: (...a: unknown[]) => platformAudit(...a),
+}))
 
 const { POST, DELETE } = await import('./route')
 
@@ -77,6 +83,9 @@ beforeEach(() => {
   h.decoded = null
   h.encoded = []
   h.actor = { actorType: 'admin', actorMemberId: 'admin1' }
+  h.auditOn = false
+  platformAudit.mockReset()
+  platformAudit.mockResolvedValue({ ok: true, id: 1, seq: 1 })
 })
 
 function post(memberId = M1) {
@@ -348,5 +357,73 @@ describe('DELETE /api/admin/impersonation', () => {
     expect(res.status).toBe(200)
     expect(logActivityOrThrow).not.toHaveBeenCalled()
     expect(cookieSet(res)).toBe('')
+  })
+})
+
+// S4: the platform audit log is a shadow copy behind PLATFORM_AUDIT_ENABLED.
+// Off, nothing calls it. On, it records each edge after the member_activity_log
+// row, and its result never changes the response.
+describe('platform audit (PLATFORM_AUDIT_ENABLED)', () => {
+  const STELLR = '00000000-0000-4000-8000-000000000001'
+
+  it('is not called while the flag is off', async () => {
+    holdTicketFor(OTHER)
+    expect((await post()).status).toBe(200)
+    expect((await DELETE()).status).toBe(200)
+    expect(platformAudit).not.toHaveBeenCalled()
+  })
+
+  it('records the start on Stellr\'s chain, ids only, after the activity row', async () => {
+    h.auditOn = true
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(platformAudit).toHaveBeenCalledTimes(1)
+    expect(platformAudit.mock.calls[0][0]).toEqual({
+      tenantId: STELLR,
+      actor: 'admin-clerk',
+      action: 'support.impersonate.start',
+      target: { table: 'members', id: M1 },
+      metadata: { adminMemberId: 'admin1' },
+    })
+    expect(logActivityOrThrow.mock.invocationCallOrder[0]).toBeLessThan(platformAudit.mock.invocationCallOrder[0])
+  })
+
+  it('records the replaced session\'s end before the new start when switching', async () => {
+    h.auditOn = true
+    holdTicketFor(OTHER)
+    expect((await post()).status).toBe(200)
+    expect(platformAudit.mock.calls.map((c) => (c[0] as { action: string }).action)).toEqual([
+      'support.impersonate.stop',
+      'support.impersonate.start',
+    ])
+    expect(platformAudit.mock.calls[0][0]).toMatchObject({ target: { id: OTHER }, metadata: { reason: 'replaced' } })
+  })
+
+  it('records the end on DELETE', async () => {
+    h.auditOn = true
+    h.cookieValue = 'ticket-abc'
+    h.decoded = { memberId: M1, adminMemberId: 'admin1', issuedAt: Date.now() }
+    const res = await DELETE()
+    expect(res.status).toBe(200)
+    expect(platformAudit.mock.calls[0][0]).toMatchObject({
+      actor: 'admin-clerk',
+      action: 'support.impersonate.stop',
+      metadata: { adminMemberId: 'admin1', reason: 'exited' },
+    })
+  })
+
+  it('a failed platform audit write changes nothing for the caller', async () => {
+    h.auditOn = true
+    platformAudit.mockResolvedValue({ ok: false, error: 'db down' })
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(cookieSet(res)).toBe('ticket-abc')
+  })
+
+  it('is not called when the session did not start', async () => {
+    h.auditOn = true
+    logActivityOrThrow.mockRejectedValue(new Error('insert failed'))
+    expect((await post()).status).toBe(503)
+    expect(platformAudit).not.toHaveBeenCalled()
   })
 })

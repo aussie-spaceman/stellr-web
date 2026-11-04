@@ -6,6 +6,7 @@ import { resolveEmailPair } from '@/lib/member-email'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { stripeClient } from '@/lib/stripe'
 import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
@@ -119,6 +120,8 @@ export async function PATCH(
     console.error('[teams/participants/pid] Update error:', error)
     return NextResponse.json({ error: 'Failed to update participant' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('participants', [pid])
 
   return NextResponse.json({ participant })
 }

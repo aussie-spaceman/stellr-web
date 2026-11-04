@@ -6,6 +6,7 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { isValidEmail, normalizeEmail } from '@/lib/member-enums'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
 import { maskEmail } from '@/lib/utils'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // POST /api/admin/events/[slug]/participants/[pid]/guardian — fix a student's
 // parent/guardian email when their consent form could not be sent (a refused
@@ -74,6 +75,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     const memberUpdate = db.from('members').update({ ec_email: email }).eq('id', p.member_id as string)
     await (previous ? memberUpdate.eq('ec_email', previous) : memberUpdate.is('ec_email', null))
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('participants', [pid])
+  shadowSyncFields('members', [p.member_id as string | null])
 
   const actor = await actorFromAuth()
   if (p.member_id) {

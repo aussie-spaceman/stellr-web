@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import { childAwaitingConsentBlock } from '@/lib/pending-consent'
 import { assertNotImpersonating, impersonatedMemberId } from '@/lib/impersonation'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // Treat null/undefined/'' as equivalent so an untouched empty field (the form
 // submits null DB values as '') is not flagged as a change.
@@ -192,6 +193,8 @@ export async function PATCH(req: Request) {
       console.error('Error updating member:', error)
       return NextResponse.json({ error: 'Failed to update member' }, { status: 500 })
     }
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('members', [memberId])
   }
 
   // Replace ethnicity + allergy selections with the pre-validated ids. Independent

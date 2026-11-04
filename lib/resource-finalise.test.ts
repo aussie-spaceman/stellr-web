@@ -30,7 +30,13 @@ vi.mock('@/lib/resource-upload', () => ({ memberManagesContainer: vi.fn() }))
 vi.mock('@/lib/event-access', () => ({ requireEventAccess: vi.fn() }))
 vi.mock('@/lib/watermark/pdf', () => ({
   isPdf: (name: string, mime?: string | null) => mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf'),
-  stampPdfBytes,
+}))
+// The stamp runs in the sandbox (lib/pdf-sandbox.ts, tested on its own).
+vi.mock('@/lib/pdf-sandbox', () => ({
+  stampPdfSandboxed: async (bytes: Uint8Array) => {
+    const out = await stampPdfBytes(bytes)
+    return out && typeof out === 'object' && 'reason' in out ? out : { ok: true, value: out }
+  },
 }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
@@ -45,6 +51,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 import { finaliseStoredUpload, watermarkIfPdf } from './resource-finalise'
+import { PDF_UNPROCESSABLE } from './pdf-page-count'
 
 const PATH = 'resources/members/m1/1-notes.pdf'
 const STAMPED = new Uint8Array([...FORMAT_SAMPLES.pdf, 0x0a])
@@ -102,5 +109,33 @@ describe('watermarkIfPdf', () => {
     const pdf = Uint8Array.from(FORMAT_SAMPLES.pdf)
     expect(await watermarkIfPdf('community-resources', PATH, pdf, 'application/pdf')).toEqual(STAMPED)
     expect(stampPdfBytes).toHaveBeenCalledWith(pdf)
+  })
+
+  // The sandbox stopped pdf-lib: past the timeout, out of heap, or the worker
+  // died. The upload is refused and the object discarded — never thrown.
+  for (const reason of ['timeout', 'memory', 'crash'] as const) {
+    it(`refuses and discards a PDF the sandbox stopped (${reason})`, async () => {
+      stampPdfBytes.mockResolvedValue({ ok: false, reason, detail: 'stopped' })
+      const pdf = Uint8Array.from(FORMAT_SAMPLES.pdf)
+      expect(await watermarkIfPdf('community-resources', PATH, pdf, 'application/pdf')).toEqual({
+        error: PDF_UNPROCESSABLE,
+        status: 422,
+      })
+      expect(remove).toHaveBeenCalledWith([PATH])
+      expect(upload).not.toHaveBeenCalled()
+    })
+  }
+
+  it('keeps the original when pdf-lib only threw on it', async () => {
+    stampPdfBytes.mockResolvedValue({ ok: false, reason: 'invalid', detail: 'parse error' })
+    const pdf = Uint8Array.from(FORMAT_SAMPLES.pdf)
+    expect(await watermarkIfPdf('community-resources', PATH, pdf, 'application/pdf')).toBe(pdf)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('finaliseStoredUpload passes the refusal on and records nothing', async () => {
+    stampPdfBytes.mockResolvedValue({ ok: false, reason: 'timeout', detail: 'stopped' })
+    expect(await finalise()).toEqual({ error: PDF_UNPROCESSABLE, status: 422 })
+    expect(insert).not.toHaveBeenCalled()
   })
 })

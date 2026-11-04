@@ -7,7 +7,10 @@ import { WATERMARK_MARKER, WATERMARK_TEXT, watermarkGeometry } from './config'
 //   - stampPdfDocument(doc): mutates an already-open PDFDocument (used by the
 //     cert/badge generators, which build the doc and then save it).
 //   - stampPdfBytes(bytes): loads raw PDF bytes, stamps them, and returns new
-//     bytes — used by the static-file backfill and the resource-upload routes.
+//     bytes — run in-process by the static-file backfill, and inside the
+//     sandbox worker (lib/pdf-sandbox.ts) for uploads. An upload's bytes go
+//     through stampPdfSandboxed, never straight here: pdf-lib can be made to
+//     loop or exhaust memory by a crafted file.
 //
 // A translucent white pill sits behind the text so the mark stays legible over
 // any artwork/background, then dark ink text is drawn on top. Each stamped PDF

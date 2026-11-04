@@ -63,6 +63,11 @@ import { constants as zlibConstants, inflateSync } from 'node:zlib'
 //
 // What this cannot see is a page tree that lists one page many times. That
 // costs nothing to load, and countPageTree refuses it.
+//
+// This scan is a filter, not the bound. Every pdf-lib load of a member's file
+// (the count here, the watermark) runs in lib/pdf-sandbox.ts, a worker thread
+// with a heap limit and a timeout, so a file this scan misjudges costs that
+// thread a few seconds and is refused — it can't stall or kill the server.
 
 /** The most pages a PDF a member uploads may have (owner decision, 3 Nov 2026). */
 export const MAX_MEMBER_PDF_PAGES = 50
@@ -389,14 +394,38 @@ function loopCount(b: Uint8Array, at: number): { count: number; end: number } {
   return { count: negative ? 0 : whole + (fraction ? 1 : 0), end: j }
 }
 
-/** Whether `N G R` continues from `end`, the end of N: then the value is a reference. */
-function refFollows(b: Uint8Array, end: number): boolean {
-  let j = skipWs(b, end)
-  if (j < 0 || !isDigit(b[j])) return false
-  const stop = Math.min(b.length, j + VALUE_WINDOW)
-  while (j < stop && isDigit(b[j])) j++
-  j = skipWs(b, j)
-  return j >= 0 && b[j] === 0x52 /* R */
+/**
+ * Whether `N G R` continues from `end`, the end of N — read exactly as
+ * pdf-lib's parseNumberOrRef reads it: whitespace AND comments skipped before
+ * G and before R (skipWhitespaceAndComments), G any number that starts with a
+ * digit (`0.5` too). true: the value is a reference. false: it is the number N.
+ * null: it can't be told — a run of whitespace past the window, the file
+ * ending, or the read budget spent — and the caller must treat it as a
+ * reference it can't see. Comment and digit bytes are charged to
+ * `flags.readBudget`, as skipToValue charges them.
+ *
+ * Skipping only whitespace here (as before 3 Nov 2026) let `/W 5 %c\n0 R`
+ * pass as the number 5 while pdf-lib followed it to `[1 2000000000 1]`.
+ */
+function refFollows(b: Uint8Array, end: number, flags: Flags): boolean | null {
+  // Whitespace may run on, as pdf-lib lets it (a writer may pad a dictionary);
+  // every byte passed is charged to the budget.
+  let j = skipToValue(b, end, flags, b.length)
+  if (j < 0) return null
+  flags.readBudget -= j - end
+  if (flags.readBudget < 0) return null
+  if (!isDigit(b[j])) return false
+  // G as parseRawNumber reads it: digits, signs and at most one point, then digits.
+  const start = j
+  while (j < b.length && isNumeric(b[j])) {
+    if (b[j++] === DOT) break
+  }
+  while (j < b.length && isDigit(b[j])) j++
+  j = skipToValue(b, j, flags, b.length)
+  if (j < 0) return null
+  flags.readBudget -= j - start
+  if (flags.readBudget < 0) return null
+  return b[j] === 0x52 /* R */
 }
 
 /**
@@ -406,6 +435,8 @@ function refFollows(b: Uint8Array, end: number): boolean {
  * number pdf-lib could loop on.
  */
 function readSize(b: Uint8Array, nameStop: number, flags: Flags): void {
+  // A comment before the value is "can't see" (stricter than pdf-lib, which
+  // skips it; no writer puts one there).
   const v = skipWs(b, nameStop)
   if (v < 0 || b[v] === PERCENT) {
     flags.xrefUnresolved = true
@@ -413,7 +444,7 @@ function readSize(b: Uint8Array, nameStop: number, flags: Flags): void {
   }
   if (!isNumeric(b[v])) return
   const { count, end } = loopCount(b, v)
-  if (refFollows(b, end)) flags.xrefUnresolved = true
+  if (refFollows(b, end, flags) !== false) flags.xrefUnresolved = true
   else flags.xrefEntries += count
 }
 
@@ -458,7 +489,7 @@ function numberArray(b: Uint8Array, nameStop: number, kind: 'index' | 'widths', 
   if (b[v] !== LBRACKET) {
     if (!isNumeric(b[v])) return 0
     // A number is no array; `N G R` may be a reference to one.
-    return refFollows(b, loopCount(b, v).end) ? -1 : 0
+    return refFollows(b, loopCount(b, v).end, flags) !== false ? -1 : 0
   }
   let j = v + 1
   let sum = 0
@@ -744,12 +775,23 @@ export function scanPdfPages(bytes: Uint8Array, stopAbove = Infinity): PdfPageSc
   return result()
 }
 
-export type PdfPageCheck = 'ok' | 'over' | 'unknown'
+/**
+ * 'failed': the sandbox had to stop pdf-lib on this file (it ran past the
+ * timeout or the heap limit, or the worker died). Refused like 'unknown', with
+ * PDF_UNPROCESSABLE.
+ */
+export type PdfPageCheck = 'ok' | 'over' | 'unknown' | 'failed'
+
+/** Shown when the sandbox (lib/pdf-sandbox.ts) had to stop pdf-lib on a file. */
+export const PDF_UNPROCESSABLE =
+  'We couldn’t process that PDF. Save it again as a PDF (Print › Save as PDF works) and upload that copy.'
 
 /**
  * Whether a PDF fits within `maxPages`. The scan's bound decides most files.
  * A bound over the cap is settled by loading the file with pdf-lib and
- * counting its page tree — when the scan has bounded that load's objects.
+ * counting its page tree — when the scan has bounded that load's objects, and
+ * always in the sandbox (lib/pdf-sandbox.ts): pdf-lib never runs on a member's
+ * bytes on the main thread.
  */
 export async function checkPdfPageLimit(bytes: Uint8Array, maxPages: number): Promise<PdfPageCheck> {
   const ceiling = maxPages * PAGE_SCAN_HEADROOM
@@ -758,16 +800,9 @@ export async function checkPdfPageLimit(bytes: Uint8Array, maxPages: number): Pr
   if (scan.markers > ceiling) return 'over'
   if (scan.bound <= maxPages) return 'ok'
   if (scan.objects > LOAD_OBJECT_LIMIT) return scan.markers > maxPages ? 'over' : 'unknown'
-  try {
-    const [{ PDFDocument }, { countPageTree }] = await Promise.all([
-      import('pdf-lib'),
-      import('@/lib/watermark/pdf'),
-    ])
-    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false })
-    const pages = countPageTree(doc, maxPages)
-    if (pages === null) return 'unknown'
-    return pages > maxPages ? 'over' : 'ok'
-  } catch {
-    return 'unknown'
-  }
+  const { countPdfPagesSandboxed } = await import('@/lib/pdf-sandbox')
+  const counted = await countPdfPagesSandboxed(bytes, maxPages)
+  if (!counted.ok) return counted.reason === 'invalid' ? 'unknown' : 'failed'
+  if (counted.value === null) return 'unknown'
+  return counted.value > maxPages ? 'over' : 'ok'
 }

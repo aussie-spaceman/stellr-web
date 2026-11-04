@@ -37,7 +37,10 @@ vi.mock('@/lib/resource-upload', () => ({
 }))
 vi.mock('@/lib/watermark/pdf', () => ({
   isPdf: (name: string, mime?: string | null) => mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf'),
-  stampPdfBytes,
+}))
+// The stamp runs in the sandbox worker (lib/pdf-sandbox.ts, tested on its own).
+vi.mock('@/lib/pdf-sandbox', () => ({
+  stampPdfSandboxed: async (bytes: Uint8Array) => ({ ok: true, value: await stampPdfBytes(bytes) }),
 }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({

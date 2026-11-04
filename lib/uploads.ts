@@ -17,6 +17,7 @@ import {
   MAX_MEMBER_PDF_PAGES,
   PDF_PAGES_UNKNOWN,
   PDF_TOO_MANY_PAGES,
+  PDF_UNPROCESSABLE,
   checkPdfPageLimit,
 } from '@/lib/pdf-page-count'
 import {
@@ -712,7 +713,8 @@ export async function claimUpload(args: {
     const pages = await checkPdfPageLimit(bytes, spec.maxPdfPages)
     if (pages !== 'ok') {
       await discardUpload(spec.bucket, storagePath)
-      return pages === 'over' ? deny(PDF_TOO_MANY_PAGES, 413) : deny(PDF_PAGES_UNKNOWN, 415)
+      if (pages === 'over') return deny(PDF_TOO_MANY_PAGES, 413)
+      return pages === 'failed' ? deny(PDF_UNPROCESSABLE, 422) : deny(PDF_PAGES_UNKNOWN, 415)
     }
   }
 

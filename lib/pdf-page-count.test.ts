@@ -830,6 +830,19 @@ describe('numbers pdf-lib moves or loops by', () => {
       '/W [1 2 1] /Size %x\n1',
       '/W [1 2 1] /Size 1 /Index 9 0 R',
       '/W [1 2 1] /Size 1 /Index [0 9 0 R]',
+      // A comment inside the reference: pdf-lib skips it (parseNumberOrRef's
+      // skipWhitespaceAndComments), so these are references too (A1–A4).
+      '/W 9 %x\n0 R /Size 1',
+      '/W 9 0 %x\nR /Size 1',
+      '/W 9 %x\n%y\n0 %z\nR /Size 1',
+      '/W [1 2 1] /Size 9 %x\n0 R',
+      '/W [1 2 1] /Size 9 0 %x\nR',
+      '/W [1 2 1] /Size 1 /Index 9 %x\n0 R',
+      '/W [1 2 1] /Size 1 /Index 9 0 %x\nR',
+      // Whitespace pdf-lib skips however long it runs, and a G it reads as a number.
+      `/W 9${' '.repeat(40)}0 R /Size 1`,
+      `/W 9 0${' '.repeat(40)}R /Size 1`,
+      '/W 9 0.0 R /Size 1',
     ]
     for (const dict of refused) {
       it(`refuses ${JSON.stringify(dict)}`, () => {
@@ -849,6 +862,10 @@ describe('numbers pdf-lib moves or loops by', () => {
         `/W [\n${' '.repeat(80)}1 2 1 %x\n] /Size 1`,
         // A number is no array, so pdf-lib throws on it as a /W.
         '/W 5 /W 5 0 /W 5 0 Q /Size 1',
+        // A number, then a comment, then no reference: still the number.
+        '/W [1 2 1] /Size 64 %x\n/Root 1 0 R',
+        // A writer padding the dictionary.
+        `/W [1 2 1] /Size 64${' '.repeat(80)}`,
       ]) {
         expect(scan(xref(dict))?.bound, dict).toBe(1)
       }

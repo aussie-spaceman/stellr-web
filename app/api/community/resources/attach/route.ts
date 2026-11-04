@@ -103,6 +103,7 @@ export async function POST(req: Request) {
 
   // Copyright watermark on the bottom-right of every page of uploaded PDFs.
   const bytes = await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, fileType)
+  if ('error' in bytes) return NextResponse.json({ error: bytes.error }, { status: bytes.status })
 
   const { data, error } = await db
     .from('community_resources')

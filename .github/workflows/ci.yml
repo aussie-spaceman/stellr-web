@@ -296,6 +296,7 @@ jobs:
         run: |
           echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
           echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
       - if: steps.config.outputs.ready == 'true'
         uses: actions/cache@v6
@@ -304,12 +305,51 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
 
+      # The browsers' system libraries (114 MB of .debs) come from the runner's
+      # Ubuntu mirror, which usually gives 10-28 MB/s but sometimes about
+      # 200 kB/s for a whole run. apt only moves to its next mirror on a stall,
+      # so a slow connection never fails over. That took 10 minutes on 4 Nov and
+      # used up the job's 20 minutes on 22 Oct and 4 Nov, before any test ran.
+      # GitHub's cache restored at 80+ MB/s in those same runs, so keep the .debs
+      # there. apt checks each one against its signed index and downloads
+      # whatever is missing or out of date. The key changes weekly, seeded from
+      # the previous week, so Ubuntu updates do not pile up as repeat downloads.
+      # Saved straight after install, not at job end: a failing test must not
+      # stop the next run benefiting. Both helper steps may fail harmlessly: apt
+      # then just downloads.
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/cache/restore@v6
+        id: apt-debs
+        with:
+          path: ~/.cache/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-${{ steps.pw-version.outputs.week }}
+          restore-keys: apt-debs-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-
+
+      - if: steps.config.outputs.ready == 'true'
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.cache/apt-debs
+          find ~/.cache/apt-debs -name '*.deb' -exec sudo mv -t /var/cache/apt/archives/ {} +
+
       - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium webkit
 
       # Deps only when the browser was cached — the system libraries are not.
       - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium webkit
+
+      # autoclean drops superseded versions, so the cache does not grow.
+      - if: steps.config.outputs.ready == 'true' && steps.apt-debs.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          sudo apt-get autoclean -qq
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t ~/.cache/apt-debs/ {} +
+
+      - if: steps.config.outputs.ready == 'true' && steps.apt-debs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/apt-debs
+          key: ${{ steps.apt-debs.outputs.cache-primary-key }}
 
       # Built and served here rather than tested against a Vercel preview.
       # Preview builds queue behind one another on this plan, and a suite that

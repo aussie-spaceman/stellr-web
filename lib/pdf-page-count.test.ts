@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Worker } from 'node:worker_threads'
+import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { deflateSync } from 'node:zlib'
 import { PDFDocument } from 'pdf-lib'
@@ -675,5 +676,245 @@ describe('checkPdfPageLimit', () => {
     expect(
       await checkPdfPageLimit(objectStreamPdf(body, offsets, { dict: '<< /Type /ObjStm /N 1 /First {F} /Filter /LZWDecode >>' }), 50),
     ).toBe('unknown')
+  })
+})
+
+// ── Numbers pdf-lib moves or loops by ───────────────────────────────────────
+
+/**
+ * What an upload does with `file`, in a worker that is killed after `ms`:
+ * scan it (when `scanFirst`), and load it with pdf-lib if the scan lets it
+ * through. 'refused', 'loaded:<pages>', 'threw', or 'timeout' — so a
+ * regression that hangs pdf-lib fails this suite instead of hanging it.
+ */
+async function uploadInWorker(file: Uint8Array, { scanFirst, ms }: { scanFirst: boolean; ms: number }): Promise<string> {
+  const copy = new Uint8Array(file)
+  const worker = new Worker(
+    `const { parentPort, workerData } = require('node:worker_threads')
+     const { PDFDocument } = require(workerData.pdfLib)
+     import(workerData.source).then(async ({ scanPdfPages }) => {
+       const bytes = new Uint8Array(workerData.file)
+       if (workerData.scanFirst && scanPdfPages(bytes) === null) return parentPort.postMessage('refused')
+       const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false })
+       parentPort.postMessage('loaded:' + doc.getPageCount())
+     }).catch(() => parentPort.postMessage('threw'))`,
+    {
+      eval: true,
+      workerData: {
+        source: pathToFileURL(`${import.meta.dirname}/pdf-page-count.ts`).href,
+        pdfLib: createRequire(import.meta.url).resolve('pdf-lib'),
+        file: copy.buffer,
+        scanFirst,
+      },
+      transferList: [copy.buffer as ArrayBuffer],
+      resourceLimits: { maxOldGenerationSizeMb: 256 },
+      stdout: true,
+      stderr: true,
+    },
+  )
+  worker.stdout.resume()
+  worker.stderr.resume()
+  const outcome = await new Promise<string>((resolve) => {
+    const timer = setTimeout(() => resolve('timeout'), ms)
+    worker.once('message', (m: string) => {
+      clearTimeout(timer)
+      resolve(m)
+    })
+    worker.once('error', (e: Error) => {
+      clearTimeout(timer)
+      resolve(`error: ${e.message}`)
+    })
+  })
+  await worker.terminate()
+  return outcome
+}
+
+/**
+ * The review finding (MEDIUM): one page, and a stream whose /Length is
+ * negative, pointing back at an `endstream` inside an earlier comment. pdf-lib
+ * jumps back there, parses forward to the same stream, and jumps back again.
+ */
+function backwardsLength(): Uint8Array {
+  const pre =
+    '%PDF-1.7\n1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj\n2 0 obj <</Type/Pages/Kids[3 0 R]/Count 1>> endobj\n3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 9 9]>> endobj\n% '
+  const anchor = pre.length // the comment's `endstream` starts here
+  const mid = 'endstream\n4 0 obj <</Length '
+  let length = 0
+  // The data starts after `stream\n`, whose place depends on the length's digits.
+  for (let i = 0; i < 3; i++) length = anchor - (pre + mid + String(length) + '>> stream\n').length
+  return enc(`${pre}${mid}${length}>> stream\nxx\nendstream endobj\ntrailer <</Root 1 0 R>>\n%%EOF\n`)
+}
+
+/** One page, then one stream object whose dictionary is `dict`. */
+const withStream = (dict: string, data = 'hello') =>
+  enc(
+    `%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n` +
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>\nendobj\n` +
+      `4 0 obj\n${dict}\nstream\n${data}\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n`,
+  )
+
+describe('numbers pdf-lib moves or loops by', () => {
+  describe('a /Length that sends pdf-lib backwards', () => {
+    it('is a hang pdf-lib really has', async () => {
+      expect(scan(backwardsLength())).toBeNull()
+      expect(await uploadInWorker(backwardsLength(), { scanFirst: false, ms: 3000 })).toBe('timeout')
+    }, 30_000)
+
+    it('is refused, quickly, before pdf-lib loads it', async () => {
+      const file = backwardsLength()
+      const started = performance.now()
+      expect(scan(file)).toBeNull()
+      expect(performance.now() - started).toBeLessThan(100)
+      expect(await checkPdfPageLimit(file, MAX_MEMBER_PDF_PAGES)).toBe('unknown')
+      expect(await uploadInWorker(file, { scanFirst: true, ms: 10_000 })).toBe('refused')
+    }, 30_000)
+
+    const refused = [
+      '-5',
+      '+5',
+      '5.5',
+      '5.',
+      '.5',
+      '-0',
+      '%x\n5',
+      `${' '.repeat(40)}5`,
+      '1'.repeat(40),
+      '/Five',
+      '(5)',
+      '[5]',
+    ]
+    for (const value of refused) {
+      it(`refuses /Length ${JSON.stringify(value)}`, () => {
+        expect(scan(withStream(`<< /Length ${value} >>`))).toBeNull()
+      })
+    }
+
+    it('reads the name as pdf-lib decodes it', () => {
+      expect(scan(withStream('<< /Le#6egth -5 >>'))).toBeNull()
+      expect(scan(withStream('<< /#4Cength +5 >>'))).toBeNull()
+    })
+
+    it('lets through a plain length or a reference, which pdf-lib never follows', async () => {
+      for (const value of ['5', '0', '005', '9 0 R', '5\n', '99999999']) {
+        const file = withStream(`<< /Length ${value} >>`)
+        expect(scan(file)?.bound, value).toBe(1)
+        expect(await uploadInWorker(file, { scanFirst: true, ms: 10_000 }), value).toBe('loaded:1')
+      }
+    }, 60_000)
+  })
+
+  it('refuses a signed /First, and lets an outline’s /First reference through', () => {
+    for (const value of ['-3', '+3', '3.5', '.5']) expect(scan(withStream(`<< /First ${value} >>`)), value).toBeNull()
+    expect(scan(withStream('<< /Type /Outlines /First 12 0 R /Last 12 0 R >>'))?.bound).toBe(1)
+  })
+
+  describe('an xref stream pdf-lib loops on', () => {
+    const xref = (dict: string) => withStream(`<< /Type /XRef ${dict} >>`, '\x01\x00\x00\x00')
+
+    it('is a stall pdf-lib really has', async () => {
+      expect(await uploadInWorker(xref('/W [1 2000000000 1] /Size 1'), { scanFirst: false, ms: 2000 })).toBe('timeout')
+    }, 30_000)
+
+    const refused = [
+      '/W [1 2000000000 1] /Size 1',
+      '/W [1 2 1] /Size 100000000',
+      '/W [1 2 1] /Size 1 /Index [0 100000000]',
+      '/W [1 2 1] /Size 1 /Index [0 1 5 999999 9 999999]',
+      '/W [1 2 1] /Size 900000 /Index [0 900000]',
+      '/W [1 100 1] /Size 600000',
+      '/W 9 0 R /Size 1',
+      '/W [1 9 0 R 1] /Size 1',
+      '/W %x\n[1 2000000000 1] /Size 1',
+      '/W [1 %x\n2000000000 1] /Size 1',
+      '/W [1 2 1] /Size 9 0 R',
+      '/W [1 2 1] /Size %x\n1',
+      '/W [1 2 1] /Size 1 /Index 9 0 R',
+      '/W [1 2 1] /Size 1 /Index [0 9 0 R]',
+    ]
+    for (const dict of refused) {
+      it(`refuses ${JSON.stringify(dict)}`, () => {
+        expect(scan(xref(dict))).toBeNull()
+      })
+    }
+
+    it('treats a /Type that is a reference as a possible /XRef', () => {
+      expect(scan(withStream('<< /Type 9 0 R /W [1 2000000000 1] /Size 1 >>'))).toBeNull()
+    })
+
+    it('lets through what writers emit, and a CID font’s widths', async () => {
+      for (const dict of [
+        '/W [1 2 1] /Size 64',
+        '/W [1 3 1] /Size 5000 /Index [0 10 20 5]',
+        '/W [ 1 4 2 ] /Size 1',
+        `/W [\n${' '.repeat(80)}1 2 1 %x\n] /Size 1`,
+        // A number is no array, so pdf-lib throws on it as a /W.
+        '/W 5 /W 5 0 /W 5 0 Q /Size 1',
+      ]) {
+        expect(scan(xref(dict))?.bound, dict).toBe(1)
+      }
+      // A CIDFont's /W holds arrays, so pdf-lib would throw on it as an xref /W.
+      expect(scan(join(xref('/W [1 2 1] /Size 4'), '5 0 obj\n<< /W [1 [500 600] 3 [278]] >>\nendobj\n'))?.bound).toBe(1)
+      // Without an xref stream, nothing loops on a /Size or a /W.
+      expect(scan(withStream('<< /Size 100000000 /W 9 0 R >>'))?.bound).toBe(1)
+      for (const file of [await pdfOf(7, true), await pdfOf(7, false)]) expect(scan(file)?.bound).toBeGreaterThanOrEqual(7)
+    })
+  })
+
+  // pdf-lib parses the file front to back and never seeks: a /Prev chain that
+  // loops, or a startxref past the end, is never followed.
+  it('lets through a /Prev that points at itself, which pdf-lib ignores', async () => {
+    const body =
+      '%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n' +
+      '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>\nendobj\n'
+    const at = body.length
+    const file = enc(
+      `${body}xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 4 /Root 1 0 R /Prev ${at} >>\nstartxref\n${at}\n` +
+        `xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 4 /Root 1 0 R /Prev 99999999 >>\nstartxref\n99999999\n%%EOF\n`,
+    )
+    expect(scan(file)?.bound).toBe(1)
+    expect(await uploadInWorker(file, { scanFirst: true, ms: 10_000 })).toBe('loaded:1')
+  }, 30_000)
+
+  describe('25MB of hostile input, still linear', () => {
+    const MB25 = 25 * 1024 * 1024
+    const fill = (unit: string) => {
+      const b = Buffer.alloc(MB25, unit, 'latin1')
+      b.write('%PDF-1.7\n', 0, 'latin1')
+      return new Uint8Array(b.buffer, b.byteOffset, b.length)
+    }
+    const cases: [string, () => Uint8Array][] = [
+      ['nothing but /Length', () => fill('/Length ')],
+      ['a /Length before every long number', () => fill(`/Length ${'1'.repeat(60)} `)],
+      ['nothing but /First', () => fill('/First 1')],
+      ['nothing but /Size', () => fill('/Size 1 0 ')],
+      [
+        'a /W array that runs to the end',
+        () => {
+          const b = fill('1 2 ')
+          b.set(enc('%PDF-1.7\n/XRef /W ['), 0)
+          return b
+        },
+      ],
+      ['/Index arrays one after another', () => fill('/Index [0 1 2 3 4 5 6 7 8 9]')],
+      ['/W arrays of numbers', () => fill('/W [1 2 3 4 5 6.5 -7 +8 .9]')],
+      ['/W arrays inside the comments of /W arrays', () => fill('/XRef /W [%/W [% ')],
+      [
+        'one long line of /W comments before a long array',
+        () => {
+          const b = fill('1 ')
+          b.set(enc(`%PDF-1.7\n/XRef ${'/W %'.repeat(100_000)}\n[`), 0)
+          return b
+        },
+      ],
+    ]
+    for (const [name, make] of cases) {
+      it(name, () => {
+        const b = make()
+        const started = performance.now()
+        const result = scan(b, 250)
+        expect(performance.now() - started).toBeLessThan(1000)
+        expect(result === null || result.bound >= 0).toBe(true)
+      })
+    }
   })
 })

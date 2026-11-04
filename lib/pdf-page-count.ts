@@ -195,6 +195,18 @@ type Flags = {
   otherFilter: boolean
   /** A /Filter or /DecodeParms whose value isn't written out directly. */
   unresolvedFilter: boolean
+  /** A /Length that isn't a plain non-negative integer or a reference, or a signed /First. */
+  badNumber: boolean
+  /** The name /XRef seen, anywhere. */
+  xref: boolean
+  /** A /Size, /Index or /W whose value an xref stream would look up, or can't be read. */
+  xrefUnresolved: boolean
+  /** Every /Size, and every subsection length of every /Index, summed. */
+  xrefEntries: number
+  /** The largest sum of the first three widths of a /W written as numbers. */
+  xrefWidths: number
+  /** What /W and /Index reads may still cover (see numberArray). */
+  readBudget: number
 }
 
 const OTHER_FILTERS = ['LZWDecode', 'ASCII85Decode', 'ASCIIHexDecode', 'RunLengthDecode']
@@ -271,6 +283,202 @@ function parmsResolved(b: Uint8Array, nameStop: number): boolean {
   return c === 0x3c || c === LBRACKET || c === SLASH || c === 0x6e /* null */
 }
 
+// ── Numbers pdf-lib moves or loops by ───────────────────────────────────────
+//
+// pdf-lib trusts a handful of numbers in a file to say where to read next or
+// how many times to loop, and checks none of them:
+//
+//   - A stream's /Length. pdf-lib jumps to `start + Length` and, if
+//     `endstream` is there, takes the stream as ending there. A negative
+//     /Length jumps BACK — to an `endstream` in an earlier comment, say — and
+//     the top-level parse resumes from there, reaches the same stream, and
+//     jumps back again, forever, blocking the event loop. pdf-lib reads the
+//     /Length only when it's a number written right there (a reference is not
+//     followed: it finds the end by searching forward instead). So every
+//     /Length must be a plain non-negative integer or a reference.
+//   - An xref stream's /Size or /Index (how many entries) and /W (how many
+//     bytes each field takes). pdf-lib loops entries × widths times, reading
+//     past the end of the data without stopping, so `/W [1 2000000000 1]`
+//     runs for minutes. pdf-lib follows references for all three. When a file
+//     could hold an xref stream (it names /XRef, or a /Type is a reference),
+//     every /Size, /Index and /W must be written out as numbers whose product
+//     stays under XREF_WORK_LIMIT. (/W is also a CID font's widths array; one
+//     that holds anything but numbers is no xref /W, since pdf-lib throws on
+//     it, and one of numbers only counts.)
+//   - An object stream's /First, added to every entry's offset. A signed one
+//     is refused. Each entry is parsed once wherever it lands, so neither it
+//     nor /N (the loop reading the header stops at the end of the data) can
+//     loop; the cost of overlapping entries is LOAD_OBJECT_LIMIT's to bound.
+//
+// Nothing else pdf-lib reads moves it: it never seeks to an xref offset, a
+// startxref or a /Prev (it parses the file front to back), so a /Prev chain
+// that loops, or an offset past the end, is never followed.
+
+/** The most xref entries (every /Size and /Index length, summed) a file that may hold an xref stream can claim. */
+export const XREF_ENTRY_LIMIT = 1_000_000
+/** The most field bytes (entries × widths) pdf-lib may be made to read for xref streams. */
+export const XREF_WORK_LIMIT = 50_000_000
+
+/**
+ * The most bytes /W and /Index values may be read over, in total, for one
+ * file. Honest arrays are a few dozen bytes (a CID font's /W stops at its
+ * first nested array); a spent budget is "can't tell" in a file that may hold
+ * an xref stream.
+ */
+export const NUMBER_ARRAY_BUDGET = 8 * 1024 * 1024
+
+const PLUS = 0x2b
+const MINUS = 0x2d
+const DOT = 0x2e
+const isSign = (c: number) => c === PLUS || c === MINUS || c === DOT
+
+/**
+ * Whether the value after a /Length is one pdf-lib can't be moved backwards
+ * by: a plain non-negative integer (or a reference, `N G R`, which starts as
+ * one). A sign, a fraction, a comment, a value past the window, or anything
+ * that isn't a number is not.
+ */
+function plainLength(b: Uint8Array, nameStop: number): boolean {
+  const v = skipWs(b, nameStop)
+  if (v < 0 || !isDigit(b[v])) return false
+  const stop = Math.min(b.length, v + VALUE_WINDOW)
+  let j = v
+  while (j < stop && isDigit(b[j])) j++
+  // Digits running past the window: no writer emits a /Length that long.
+  if (j === stop && j < b.length) return false
+  return j >= b.length || !isSign(b[j])
+}
+
+/** Whether the value after a /First is a signed number (or a fraction). */
+function signedFirst(b: Uint8Array, nameStop: number): boolean {
+  const v = skipWs(b, nameStop)
+  if (v < 0) return false
+  if (isSign(b[v])) return true
+  if (!isDigit(b[v])) return false
+  const stop = Math.min(b.length, v + VALUE_WINDOW)
+  let j = v
+  while (j < stop && isDigit(b[j])) j++
+  return j < b.length && isSign(b[j])
+}
+
+/**
+ * The number pdf-lib would read at `at` — digits, signs and a point — as how
+ * many times it would loop on it: a negative one loops never, a fraction one
+ * more time. `end` is where it stops. Read in place, no allocation.
+ */
+function loopCount(b: Uint8Array, at: number): { count: number; end: number } {
+  let j = at
+  let negative = false
+  while (j < b.length && (b[j] === PLUS || b[j] === MINUS)) {
+    if (b[j] === MINUS) negative = true
+    j++
+  }
+  let whole = 0
+  while (j < b.length && isDigit(b[j])) {
+    whole = Math.min(whole * 10 + (b[j] - 0x30), Number.MAX_SAFE_INTEGER)
+    j++
+  }
+  let fraction = false
+  if (j < b.length && b[j] === DOT) {
+    j++
+    while (j < b.length && isDigit(b[j])) {
+      if (b[j] !== 0x30) fraction = true
+      j++
+    }
+  }
+  return { count: negative ? 0 : whole + (fraction ? 1 : 0), end: j }
+}
+
+/** Whether `N G R` continues from `end`, the end of N: then the value is a reference. */
+function refFollows(b: Uint8Array, end: number): boolean {
+  let j = skipWs(b, end)
+  if (j < 0 || !isDigit(b[j])) return false
+  const stop = Math.min(b.length, j + VALUE_WINDOW)
+  while (j < stop && isDigit(b[j])) j++
+  j = skipWs(b, j)
+  return j >= 0 && b[j] === 0x52 /* R */
+}
+
+/**
+ * The value after a /Size, as an xref stream would read it: a number, which
+ * adds to `xrefEntries`, or a reference or a value the scan can't see, which
+ * is unresolved. Anything else (a sampled function's `/Size [256]`) is no
+ * number pdf-lib could loop on.
+ */
+function readSize(b: Uint8Array, nameStop: number, flags: Flags): void {
+  const v = skipWs(b, nameStop)
+  if (v < 0 || b[v] === PERCENT) {
+    flags.xrefUnresolved = true
+    return
+  }
+  if (!isNumeric(b[v])) return
+  const { count, end } = loopCount(b, v)
+  if (refFollows(b, end)) flags.xrefUnresolved = true
+  else flags.xrefEntries += count
+}
+
+/**
+ * The first byte at or after `from` that isn't whitespace or a comment, as
+ * pdf-lib skips them before a value; -1 when a run of whitespace passes the
+ * window, the file ends, or the read budget is spent. Comment bytes are charged to
+ * `flags.readBudget`: a comment can hold another name, whose read would cover
+ * the same bytes again, and the budget keeps that linear.
+ */
+function skipToValue(b: Uint8Array, from: number, flags: Flags, window = VALUE_WINDOW): number {
+  let j = from
+  for (;;) {
+    const v = skipWs(b, j, window)
+    if (v < 0 || b[v] !== PERCENT) return v
+    // Read no further than the budget allows, so a spent budget costs nothing.
+    const stop = Math.min(b.length, v + Math.max(0, flags.readBudget) + 1)
+    j = v
+    while (j < stop && b[j] !== LF && b[j] !== CR) j++
+    flags.readBudget -= j - v
+    if (flags.readBudget < 0 || j >= b.length) return -1
+  }
+}
+
+/**
+ * An array after /Index or /W, read as an xref stream reads it: every element
+ * must be a number, or pdf-lib throws and loops on nothing. Returns the
+ * numbers' loop counts — the subsection lengths of an /Index (every second
+ * number), the first three widths of a /W — summed; 0 when there's nothing
+ * pdf-lib could loop on (not an array, a plain number, an array holding
+ * something other than numbers); -1 when it can't be told (a reference, a
+ * value that can't be seen, the read budget spent).
+ *
+ * `/W` is two bytes, so compressed data holds it often enough: only what
+ * pdf-lib would really read as a reference or an array counts, comments are
+ * skipped as pdf-lib skips them, and every byte read is charged to
+ * `flags.readBudget`, which no honest file comes near.
+ */
+function numberArray(b: Uint8Array, nameStop: number, kind: 'index' | 'widths', flags: Flags): number {
+  const v = skipToValue(b, nameStop, flags)
+  if (v < 0) return -1
+  if (b[v] !== LBRACKET) {
+    if (!isNumeric(b[v])) return 0
+    // A number is no array; `N G R` may be a reference to one.
+    return refFollows(b, loopCount(b, v).end) ? -1 : 0
+  }
+  let j = v + 1
+  let sum = 0
+  for (let k = 0; ; k++) {
+    const at = j
+    // Inside the array whitespace may run on (it's charged to the budget).
+    j = skipToValue(b, j, flags, b.length)
+    if (j < 0) return -1
+    const c = b[j]
+    if (c === RBRACKET) return sum
+    if (c === 0x52 /* R */) return -1
+    if (!isNumeric(c)) return 0
+    const { count, end } = loopCount(b, j)
+    if (kind === 'index' ? k % 2 === 1 : k < 3) sum = Math.min(sum + count, Number.MAX_SAFE_INTEGER)
+    j = end
+    flags.readBudget -= j - at
+    if (flags.readBudget < 0) return -1
+  }
+}
+
 /** Read the name whose `/` is at `i` into `flags`; returns where it ends. */
 function readName(b: Uint8Array, i: number, flags: Flags): number {
   const end = nameEnd(b, i)
@@ -292,6 +500,22 @@ function readName(b: Uint8Array, i: number, flags: Flags): number {
     if (!parmsResolved(b, end)) flags.unresolvedFilter = true
   } else if ((first === 0x4f || escaped) && nameIs(b, i + 1, end, 'ObjStm')) {
     flags.objStm = true
+  } else if ((first === 0x4c || escaped) && nameIs(b, i + 1, end, 'Length')) {
+    if (!plainLength(b, end)) flags.badNumber = true
+  } else if ((first === 0x46 || escaped) && nameIs(b, i + 1, end, 'First')) {
+    if (signedFirst(b, end)) flags.badNumber = true
+  } else if ((first === 0x58 || escaped) && nameIs(b, i + 1, end, 'XRef')) {
+    flags.xref = true
+  } else if ((first === 0x53 || escaped) && nameIs(b, i + 1, end, 'Size')) {
+    readSize(b, end, flags)
+  } else if ((first === 0x49 || escaped) && nameIs(b, i + 1, end, 'Index')) {
+    const lengths = numberArray(b, end, 'index', flags)
+    if (lengths < 0) flags.xrefUnresolved = true
+    else flags.xrefEntries += lengths
+  } else if ((first === 0x57 || escaped) && nameIs(b, i + 1, end, 'W')) {
+    const widths = numberArray(b, end, 'widths', flags)
+    if (widths < 0) flags.xrefUnresolved = true
+    else flags.xrefWidths = Math.max(flags.xrefWidths, widths)
   } else if (
     (first === 0x4c || first === 0x41 || first === 0x52 || escaped) &&
     OTHER_FILTERS.some((f) => nameIs(b, i + 1, end, f))
@@ -371,7 +595,19 @@ const UNKNOWN = null
  */
 export function scanPdfPages(bytes: Uint8Array, stopAbove = Infinity): PdfPageScan | null {
   const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const flags: Flags = { markers: 0, objStm: false, typeRef: false, otherFilter: false, unresolvedFilter: false }
+  const flags: Flags = {
+    markers: 0,
+    objStm: false,
+    typeRef: false,
+    otherFilter: false,
+    unresolvedFilter: false,
+    badNumber: false,
+    xref: false,
+    xrefUnresolved: false,
+    xrefEntries: 0,
+    xrefWidths: 0,
+    readBudget: NUMBER_ARRAY_BUDGET,
+  }
   let topMarkers = 0
   let streamEntries = 0
   let topObjects = 0
@@ -495,6 +731,14 @@ export function scanPdfPages(bytes: Uint8Array, stopAbove = Infinity): PdfPageSc
   // read, hidden where the scan didn't look. Refused whatever else the file
   // holds — no writer needs it.
   if (flags.unresolvedFilter) return UNKNOWN
+  // A /Length that could send pdf-lib backwards (into a loop that never
+  // ends), or a signed /First.
+  if (flags.badNumber) return UNKNOWN
+  // An xref stream pdf-lib could be made to loop on for minutes.
+  if (flags.xref || flags.typeRef) {
+    if (flags.xrefUnresolved || flags.xrefEntries > XREF_ENTRY_LIMIT) return UNKNOWN
+    if (flags.xrefEntries * (flags.xrefWidths + 1) > XREF_WORK_LIMIT) return UNKNOWN
+  }
   // An object stream under a filter this scan can't read.
   if (flags.otherFilter && (flags.objStm || flags.typeRef)) return UNKNOWN
   return result()

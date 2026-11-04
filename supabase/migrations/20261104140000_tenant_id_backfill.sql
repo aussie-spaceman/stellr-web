@@ -40,7 +40,6 @@ CREATE OR REPLACE FUNCTION public.tenancy_backfill_tenant_ids()
 RETURNS TABLE (tbl text, rows_updated bigint)
 LANGUAGE plpgsql SECURITY INVOKER
 SET search_path = public, pg_temp
-SET stellr.tenancy_backfill = 'on'
 AS $fn$
 DECLARE
   stellr constant uuid := '00000000-0000-4000-8000-000000000001';
@@ -50,7 +49,14 @@ DECLARE
   modes  text[];
   i      int;
   n      bigint;
+  -- The quiet flag the derivation trigger reads. Set in the body, not as a
+  -- function-level SET: Postgres lets only a superuser pin an unregistered
+  -- custom parameter in CREATE FUNCTION, and the hosted migration role is not
+  -- one (the CI database, which is, would have hidden it). Restored on return.
+  prev   text := current_setting('stellr.tenancy_backfill', true);
 BEGIN
+  PERFORM set_config('stellr.tenancy_backfill', 'on', true);
+
   FOR spec IN
     SELECT c.relname::text AS rel,
            split_part(encode(t.tgargs, 'escape'), '\000', 1) AS key_col,
@@ -102,6 +108,8 @@ BEGIN
     rows_updated := n;
     RETURN NEXT;
   END LOOP;
+
+  PERFORM set_config('stellr.tenancy_backfill', COALESCE(prev, ''), true);
 END $fn$;
 
 REVOKE EXECUTE ON FUNCTION public.tenancy_backfill_tenant_ids() FROM PUBLIC, anon, authenticated;

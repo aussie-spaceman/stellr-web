@@ -30,6 +30,7 @@ import * as fs from 'fs'
 import { supabaseServer } from '../lib/supabase'
 import { SECRET_KEY_VARS, supabaseSecretKey } from '../lib/supabase-keys'
 import {
+  ACTIVE_CHECK_MS,
   FieldCrypto,
   FieldCryptoError,
   loadMasterKeyring,
@@ -39,7 +40,7 @@ import {
   type DekStore,
 } from '../lib/field-crypto'
 import { supabaseDekStore } from '../lib/field-crypto-store'
-import { buildShadowPatch, rowTenantId, shadowSelect, type ShadowRow } from '../lib/field-crypto-patch'
+import { applyShadowPatch, buildShadowPatch, rowTenantId, shadowSelect, type ShadowRow } from '../lib/field-crypto-patch'
 import { SENSITIVE_TABLES, type SensitiveTableName } from '../lib/field-crypto-fields'
 import { PRODUCTION_SUPABASE_REF } from './production-guard.mjs'
 
@@ -104,11 +105,16 @@ async function rotateDek(store: DekStore, tenantId: string) {
   }
   await store.retireKey!(tenantId, active.key_id, new Date().toISOString())
   console.log(`Retired data key ${active.key_id}. A new key is created on the first encryption below.`)
+  console.log(
+    `Warm app instances can still write under the old key for up to ${ACTIVE_CHECK_MS / 1000} s. ` +
+      `Wait at least a minute, re-run this backfill (without --rotate-dek), then run ` +
+      `scan-plaintext-sensitive.ts --gate coverage: the rotation is done only when "retired key" is 0 everywhere.`,
+  )
 }
 
 async function backfillTable(fc: FieldCrypto, db: ReturnType<typeof supabaseServer>, name: SensitiveTableName) {
   const t = SENSITIVE_TABLES.find((x) => x.table === name)!
-  const counts = { scanned: 0, current: 0, changed: 0, columns: 0, noTenant: 0, errors: 0 }
+  const counts = { scanned: 0, current: 0, changed: 0, columns: 0, noTenant: 0, errors: 0, raced: 0 }
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await db
       .from(t.table)
@@ -134,8 +140,11 @@ async function backfillTable(fc: FieldCrypto, db: ReturnType<typeof supabaseServ
         counts.changed++
         counts.columns += n
         if (APPLY) {
-          const { error: upErr } = await db.from(t.table).update(patch).eq(t.idColumn, row[t.idColumn] as string)
-          if (upErr) counts.errors++
+          // Compare-and-set on the plaintext read above: a value changed or
+          // erased since then is not overwritten with a stale ciphertext.
+          const outcome = await applyShadowPatch(db, t, row, patch)
+          if (outcome === 'error') counts.errors++
+          else if (outcome === 'raced') counts.raced++
         }
       } catch (e) {
         counts.errors++
@@ -149,7 +158,7 @@ async function backfillTable(fc: FieldCrypto, db: ReturnType<typeof supabaseServ
   console.log(
     `  ${t.table.padEnd(24)} scanned ${counts.scanned}, current ${counts.current}, ` +
       `${APPLY ? 'updated' : 'to update'} ${counts.changed} (${counts.columns} column value(s)), ` +
-      `no tenant ${counts.noTenant}, errors ${counts.errors}`,
+      `no tenant ${counts.noTenant}, changed during the run ${counts.raced}, errors ${counts.errors}`,
   )
   return counts
 }
@@ -204,14 +213,18 @@ async function main() {
   const fc = new FieldCrypto(ring, store, { cacheTtlMs: 60 * 60 * 1000 })
 
   let errors = 0
+  let raced = 0
   for (const t of SENSITIVE_TABLES) {
     if (ONLY_TABLE && t.table !== ONLY_TABLE) continue
-    errors += (await backfillTable(fc, db, t.table)).errors
+    const c = await backfillTable(fc, db, t.table)
+    errors += c.errors
+    raced += c.raced
   }
   if (createdDryRun.size) console.log(`\n${createdDryRun.size} tenant(s) have no data key yet; --apply creates one each.`)
   if (!APPLY) console.log('\nDry run: nothing written. Re-run with --apply to write.')
-  if (errors) {
-    console.error(`\n${errors} row(s) failed. Re-run to retry; scripts/scan-plaintext-sensitive.ts --verify shows what is left.`)
+  if (raced) console.error(`\n${raced} row(s) changed while the backfill ran and were left alone. Re-run to cover them.`)
+  if (errors) console.error(`\n${errors} row(s) failed. Re-run to retry; scripts/scan-plaintext-sensitive.ts --verify shows what is left.`)
+  if (errors || raced) {
     process.exit(1)
   }
 }

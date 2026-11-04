@@ -840,6 +840,10 @@ async function childPendingSignup(
     }
     memberId = (inserted as { id: string }).id
   }
+  // The update above erases any stored emergency contact on purpose (COPPA
+  // data minimisation): the shadow ciphertext must go with it. Inert unless
+  // FIELD_CRYPTO_MODE is on; never throws.
+  shadowSyncFields('members', [memberId])
 
   try {
     await openPendingConsent(db, { memberId, band: 'child', guardianName: null, guardianEmail: parentEmail })

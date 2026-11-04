@@ -3,7 +3,8 @@ import type { DekRow, DekStore } from '@/lib/field-crypto'
 
 // public.tenant_data_keys as a DekStore (supabase/migrations/
 // 20261104400000_field_crypto_shadow.sql). The service role may read, insert
-// and update rows (retire, re-wrap) but not delete them: deleting a DEK
+// and update rows (retire, re-wrap) but not delete or truncate them (the
+// migration revokes Supabase's default GRANT ALL first): deleting a DEK
 // destroys every value written under it, so that is an owner action in the
 // SQL editor (docs/FIELD-CRYPTO.md).
 //

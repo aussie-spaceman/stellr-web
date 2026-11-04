@@ -132,6 +132,17 @@ The writers are the files that save each column.
 - `agreement_recipients.name` / `.email`. For a minor, the signer is the
   guardian. These are operational addresses for e-sign delivery, so they stay
   plaintext while e-sign sends from them.
+- `agreements.prefill` (jsonb) and `agreement_recipients.signer_values`
+  (jsonb). The native engine pre-fills `GuardianName`, `GuardianEmail`,
+  `GuardianPhone`, `EmergencyContactName` and `EmergencyContactPhone`
+  (`lib/esign/native/plan.ts`, stored by `lib/esign/providers/native.ts`; the
+  fields are in `lib/esign/native/templates/minor-v2-3.fields.json` and
+  `mentor-v2-3.fields.json`), and a signer's corrections land in
+  `signer_values`. The signed PDFs in the `signed-agreements` bucket hold the
+  same values. A signed agreement is a legal record, so these are not encrypted
+  here. The scanner reports both columns (by those key names) and
+  `--gate plaintext` fails while any hold a value; the owner decides whether to
+  encrypt, minimise or exempt them before the cut-over.
 - Google Sheets already written. Those copies live outside Postgres. Tenants
   are fenced from Sheets in S11.
 
@@ -142,6 +153,17 @@ These effects exist only when shadow mode is on. They are all off by default.
 - Each sync is one extra `UPDATE` on the row, and only when a sensitive value
   changed. A ciphertext that already opens to the current value under the
   active DEK is left alone.
+- That `UPDATE` is a compare-and-set: it carries an equality (or `IS NULL`)
+  filter on every sensitive plaintext column it read. If the plaintext changed
+  after the read (a member clearing a value, the retention job, the under-13
+  erase, another write), no row matches, nothing is written, and the row is
+  re-read and rebuilt, up to three attempts. A stale sync can therefore never
+  land the ciphertext of a value that was since changed or erased. The backfill
+  uses the same guarded write and reports such rows as "changed during the run".
+- Every write path that sets or clears a sensitive column calls
+  `shadowSyncFields`, including the under-13 onboarding path that erases a
+  linked member's emergency contact (`childPendingSignup`), so the ciphertext
+  is cleared with the plaintext.
 - On `members`, that `UPDATE` fires `trg_audit_members` (one more `audit_log`
   row, which still holds the plaintext until the S0 trigger scrub) and
   `trg_members_updated_at`.
@@ -158,11 +180,15 @@ These effects exist only when shadow mode is on. They are all off by default.
 `scripts/scan-plaintext-sensitive.ts` only reads, and prints counts only.
 
 - `--gate coverage`: every plaintext value has a current ciphertext and, for
-  indexed columns, a blind index. No orphan ciphertext is left. With
+  indexed columns, a blind index. No orphan ciphertext is left, and no
+  ciphertext or blind index is still under a retired DEK (the "retired key"
+  column, read from the key id prefix, so it needs no master key). With
   `--verify`, every ciphertext opens to the current plaintext. This must pass
   before `read` mode.
-- `--gate plaintext`: no sensitive plaintext in any table, `audit_log` or
-  `deletion_archive`, and no exporter reading a plaintext column. This is the
+- `--gate plaintext`: no sensitive plaintext in any table, `audit_log`,
+  `deletion_archive`, `agreements.prefill` or
+  `agreement_recipients.signer_values`, and no exporter reading a plaintext
+  column. This is the
   S4 cut-over gate from the plan. It fails today by design.
 
 ## Owner actions
@@ -204,12 +230,23 @@ These effects exist only when shadow mode is on. They are all off by default.
 1. `npx tsx scripts/backfill-field-crypto.ts --rotate-dek <tenant-uuid>` (dry
    run), then add `--apply`. This retires the active DEK, creates a new one and
    re-encrypts and re-indexes every row it finds.
-2. `scan --gate coverage --verify` must pass. Retired DEKs stay in the table:
-   backups and old ciphertexts may still need them.
+2. **Wait at least one minute.** A warm app instance re-checks which DEK is
+   active at most every 30 seconds (`ACTIVE_CHECK_MS` in `lib/field-crypto.ts`)
+   before it encrypts, so for up to 30 seconds after step 1 it can still write
+   under the retired key. To be certain, redeploy instead of waiting.
+3. Re-run `npx tsx scripts/backfill-field-crypto.ts --apply` (without
+   `--rotate-dek`). It rewrites anything written under the old key in the
+   meantime.
+4. `scan --gate coverage --verify` must pass, which includes "retired key" = 0
+   on every column. Until it does, some values are still under the retired
+   (possibly exposed) DEK. Retired DEKs stay in the table: backups and old
+   ciphertexts may still need them.
 
 **Crypto-shredding** a tenant's data (offboarding, after the retention period):
 delete the tenant's rows from `tenant_data_keys` in the SQL editor. The service
-role has no DELETE on that table. Every value under those keys becomes
+role has no DELETE or TRUNCATE on that table: the migration revokes Supabase's
+default `GRANT ALL ON TABLES TO service_role` (supabase/baseline.sql) before
+granting SELECT, INSERT and UPDATE, and `field_crypto.test.sql` asserts it. Every value under those keys becomes
 unrecoverable, including in backups that still hold the wrapped key once the
 master key no longer exists. This is irreversible: take a dump first if there is
 any doubt.

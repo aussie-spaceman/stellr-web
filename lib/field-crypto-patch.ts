@@ -103,6 +103,77 @@ export interface ShadowSyncResult {
   unchanged: number
   skipped: number
   failed: number
+  /** The plaintext kept changing under us; that writer's own sync covers it. */
+  raced: number
+}
+
+export type ShadowApplyOutcome = 'updated' | 'raced' | 'error'
+
+/** A PostgREST text[] literal for an equality filter, or null if `raw` is not a string array. */
+export function pgTextArrayLiteral(raw: unknown): string | null {
+  if (!Array.isArray(raw)) return null
+  const items: string[] = []
+  for (const v of raw) {
+    if (v === null) items.push('NULL')
+    else if (typeof v === 'string') items.push(`"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
+    else return null
+  }
+  return `{${items.join(',')}}`
+}
+
+/**
+ * Write `patch` to `row`, but only while every sensitive plaintext column still
+ * holds the value the patch was built from (compare-and-set). Without this, a
+ * sync that read an old value and stalled could land after a newer sync and
+ * write back the ciphertext of a value that has since been changed or erased
+ * (a member clearing their health notes, the medical retention job, the
+ * under-13 erase). 'raced' means no row matched: re-read and rebuild.
+ */
+export async function applyShadowPatch(
+  db: SupabaseClient,
+  t: SensitiveTable,
+  row: ShadowRow,
+  patch: Record<string, string | null>,
+): Promise<ShadowApplyOutcome> {
+  const rowId = row[t.idColumn]
+  if (typeof rowId !== 'string' || !rowId) return 'error'
+  let q = db.from(t.table).update(patch).eq(t.idColumn, rowId)
+  for (const f of t.fields) {
+    const raw = row[f.column]
+    if (raw === null) {
+      q = q.is(f.column, null)
+    } else if (f.kind === 'text_array') {
+      const literal = pgTextArrayLiteral(raw)
+      if (literal === null) return 'error'
+      q = q.filter(f.column, 'eq', literal)
+    } else if (typeof raw === 'string') {
+      q = q.eq(f.column, raw)
+    } else {
+      // Not selected, or an unexpected type: no safe guard, so no write.
+      return 'error'
+    }
+  }
+  const { data, error } = await q.select(t.idColumn)
+  if (error) return 'error'
+  return Array.isArray(data) && data.length > 0 ? 'updated' : 'raced'
+}
+
+/** Attempts per row before a row whose plaintext keeps changing is left to its writer's own sync. */
+const MAX_ATTEMPTS = 3
+
+type RowOutcome = 'updated' | 'unchanged' | 'skipped' | 'failed' | 'raced'
+
+async function syncOneRow(db: SupabaseClient, crypto: FieldCrypto, t: SensitiveTable, row: ShadowRow): Promise<RowOutcome> {
+  const tenantId = rowTenantId(t, row)
+  if (!tenantId) return 'skipped'
+  try {
+    const patch = await buildShadowPatch(crypto, t, row, tenantId)
+    if (Object.keys(patch).length === 0) return 'unchanged'
+    const outcome = await applyShadowPatch(db, t, row, patch)
+    return outcome === 'error' ? 'failed' : outcome
+  } catch {
+    return 'failed'
+  }
 }
 
 /** Encrypt the given rows' sensitive columns. Errors per row are counted, not thrown. */
@@ -113,7 +184,7 @@ export async function syncShadowRows(
   ids: readonly string[],
 ): Promise<ShadowSyncResult> {
   const t = sensitiveTable(tableName)
-  const result: ShadowSyncResult = { updated: 0, unchanged: 0, skipped: 0, failed: 0 }
+  const result: ShadowSyncResult = { updated: 0, unchanged: 0, skipped: 0, failed: 0, raced: 0 }
   const unique = [...new Set(ids.filter((id) => typeof id === 'string' && id.length > 0))]
   for (let i = 0; i < unique.length; i += 100) {
     const batch = unique.slice(i, i + 100)
@@ -122,26 +193,33 @@ export async function syncShadowRows(
       result.failed += batch.length
       continue
     }
-    for (const row of (data ?? []) as unknown as ShadowRow[]) {
-      const tenantId = rowTenantId(t, row)
-      if (!tenantId) {
-        result.skipped++
-        continue
-      }
-      try {
-        const patch = await buildShadowPatch(crypto, t, row, tenantId)
-        if (Object.keys(patch).length === 0) {
-          result.unchanged++
-          continue
+    for (const first of (data ?? []) as unknown as ShadowRow[]) {
+      let row: ShadowRow | null = first
+      for (let attempt = 1; row; attempt++) {
+        const outcome = await syncOneRow(db, crypto, t, row)
+        if (outcome !== 'raced') {
+          result[outcome]++
+          break
         }
-        const { error: upErr } = await db.from(t.table).update(patch).eq(t.idColumn, row[t.idColumn] as string)
-        if (upErr) result.failed++
-        else result.updated++
-      } catch {
-        result.failed++
+        if (attempt >= MAX_ATTEMPTS) {
+          result.raced++
+          break
+        }
+        // The plaintext changed between our read and our write: read it again
+        // and rebuild. A row that has gone away needs nothing.
+        const rowId = row[t.idColumn] as string
+        const { data: again, error: reErr }: { data: unknown; error: unknown } = await db
+          .from(t.table)
+          .select(shadowSelect(t))
+          .in(t.idColumn, [rowId])
+        if (reErr) {
+          result.failed++
+          break
+        }
+        row = ((again ?? []) as unknown as ShadowRow[])[0] ?? null
+        if (!row) result.unchanged++
       }
     }
   }
   return result
 }
-

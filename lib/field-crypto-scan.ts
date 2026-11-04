@@ -6,6 +6,7 @@ import {
   type SensitiveTable,
 } from '@/lib/field-crypto-fields'
 import { encodeFieldValue } from '@/lib/field-crypto-patch'
+import { fieldKeyId } from '@/lib/field-crypto'
 
 // The pure half of scripts/scan-plaintext-sensitive.ts: given rows, count where
 // sensitive plaintext still exists and whether its ciphertext is in place.
@@ -29,13 +30,39 @@ export interface ColumnCoverage {
   missingBidx: number
   /** With --verify: the ciphertext does not open to the current plaintext. */
   mismatched: number
+  /**
+   * Ciphertexts or blind indexes made under a DEK that is not the row
+   * tenant's active one: a DEK rotation is not finished (or a warm instance
+   * wrote under the old key before it saw the rotation). Read from the key id
+   * prefix, so no master key is needed.
+   */
+  staleKey: number
 }
 
-/** Coverage for one table's rows. `verify` (optional) says whether a row's ciphertext matches. */
+/** The DEK id a blind index (`bi1.<dek id>.<mac>`) was made under, or null if malformed. */
+export function blindIndexKeyId(value: string): string | null {
+  const parts = value.split('.')
+  return parts.length === 3 && parts[0] === 'bi1' && parts[1] ? parts[1] : null
+}
+
+function cipherKeyId(value: string): string | null {
+  try {
+    return fieldKeyId(value)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Coverage for one table's rows. `mismatches` (optional, from --verify) counts
+ * ciphertexts that do not open to the plaintext. `activeKeyOf` (optional)
+ * returns the row tenant's active DEK id; without it staleKey is not counted.
+ */
 export function tableCoverage(
   t: SensitiveTable,
   rows: Record<string, unknown>[],
   mismatches?: Map<string, number>,
+  activeKeyOf?: (row: Record<string, unknown>) => string | null | undefined,
 ): ColumnCoverage[] {
   return t.fields.map((f) => {
     const c: ColumnCoverage = {
@@ -47,6 +74,7 @@ export function tableCoverage(
       orphanEnc: 0,
       missingBidx: 0,
       mismatched: mismatches?.get(f.column) ?? 0,
+      staleKey: 0,
     }
     for (const row of rows) {
       const plain = encodeFieldValue(f, row[f.column]) !== null
@@ -56,6 +84,14 @@ export function tableCoverage(
       if (plain && !enc) c.missingEnc++
       if (!plain && enc) c.orphanEnc++
       if (f.blindIndex && plain && !row[bidxColumn(f.column)]) c.missingBidx++
+      if (activeKeyOf) {
+        const active = activeKeyOf(row)
+        const encVal = row[encColumn(f.column)]
+        const bidxVal = f.blindIndex ? row[bidxColumn(f.column)] : null
+        const staleEnc = typeof encVal === 'string' && encVal.length > 0 && (!active || cipherKeyId(encVal) !== active)
+        const staleBidx = typeof bidxVal === 'string' && bidxVal.length > 0 && (!active || blindIndexKeyId(bidxVal) !== active)
+        if (staleEnc || staleBidx) c.staleKey++
+      }
     }
     return c
   })
@@ -94,6 +130,27 @@ export function countSensitiveKeys(
   return into
 }
 
+/**
+ * The e-sign copies of guardian and emergency contact details:
+ * agreements.prefill (lib/esign/native/plan.ts builds it; the minor and mentor
+ * V2.3 templates carry these fields) and agreement_recipients.signer_values
+ * (a signer's corrections, lib/esign/native/template.ts). The keys are the
+ * template field names. A signed agreement is a legal record, so these are
+ * reported for the plaintext gate, not encrypted here (docs/FIELD-CRYPTO.md).
+ */
+export const AGREEMENT_SENSITIVE_KEYS = [
+  'EmergencyContactName',
+  'EmergencyContactPhone',
+  'GuardianEmail',
+  'GuardianName',
+  'GuardianPhone',
+] as const
+
+/** Does this agreement prefill / signer_values object hold guardian or emergency-contact plaintext? */
+export function agreementHoldsPlaintext(value: unknown): boolean {
+  return countSensitiveKeys(value, AGREEMENT_SENSITIVE_KEYS).plaintext.size > 0
+}
+
 /** Does this whole-row copy hold any sensitive plaintext? */
 export function holdsPlaintext(value: unknown): boolean {
   return countSensitiveKeys(value).plaintext.size > 0
@@ -129,6 +186,10 @@ export interface ScanReport {
   tables: ColumnCoverage[]
   auditLog: { rows: number; plaintextRows: number; ciphertextRows: number }
   deletionArchive: { rows: number; plaintextRows: number; ciphertextRows: number }
+  /** agreements.prefill holding guardian / emergency-contact values. */
+  agreements: { rows: number; plaintextRows: number }
+  /** agreement_recipients.signer_values holding them. */
+  agreementRecipients: { rows: number; plaintextRows: number }
   exporters: Array<{ path: string; columns: string[] }>
 }
 
@@ -143,12 +204,17 @@ export function gateFailures(r: ScanReport, gate: Gate): string[] {
       if (c.orphanEnc) out.push(`${c.table}.${c.column}: ${c.orphanEnc} ciphertext(s) whose plaintext was cleared`)
       if (c.missingBidx) out.push(`${c.table}.${c.column}: ${c.missingBidx} row(s) without a blind index`)
       if (c.mismatched) out.push(`${c.table}.${c.column}: ${c.mismatched} ciphertext(s) that do not match the plaintext`)
+      if (c.staleKey) out.push(`${c.table}.${c.column}: ${c.staleKey} value(s) still under a retired or unknown data key`)
     }
     return out
   }
   for (const c of r.tables) if (c.plaintext) out.push(`${c.table}.${c.column}: ${c.plaintext} plaintext value(s)`)
   if (r.auditLog.plaintextRows) out.push(`audit_log: ${r.auditLog.plaintextRows} row(s) with sensitive plaintext`)
   if (r.deletionArchive.plaintextRows) out.push(`deletion_archive: ${r.deletionArchive.plaintextRows} snapshot(s) with sensitive plaintext`)
+  if (r.agreements.plaintextRows) out.push(`agreements.prefill: ${r.agreements.plaintextRows} agreement(s) with guardian or emergency-contact values`)
+  if (r.agreementRecipients.plaintextRows) {
+    out.push(`agreement_recipients.signer_values: ${r.agreementRecipients.plaintextRows} signer(s) with guardian or emergency-contact values`)
+  }
   for (const e of r.exporters) out.push(`exporter ${e.path} reads ${e.columns.join(', ')}`)
   return out
 }

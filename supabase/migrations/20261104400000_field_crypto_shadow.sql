@@ -53,7 +53,11 @@ COMMENT ON TABLE public.tenant_data_keys IS
   'Per-tenant field-encryption data keys, wrapped by the environment master key (lib/field-crypto.ts, docs/FIELD-CRYPTO.md). Never delete a row outside the documented crypto-shred procedure.';
 
 ALTER TABLE public.tenant_data_keys ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.tenant_data_keys FROM PUBLIC, anon, authenticated;
+-- service_role is revoked too: Supabase's default ACL (supabase/baseline.sql,
+-- ALTER DEFAULT PRIVILEGES FOR ROLE postgres ... GRANT ALL ON TABLES TO
+-- service_role) hands it ALL, including DELETE and TRUNCATE, on every table
+-- postgres creates in public. Only the GRANT below may stand.
+REVOKE ALL ON public.tenant_data_keys FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE ON public.tenant_data_keys TO service_role;
 DO $$ BEGIN
   CREATE POLICY "service role full access tenant_data_keys"

@@ -100,7 +100,11 @@ describe('shadowSyncFields', () => {
       id: pid,
       health_conditions: 'Asthma',
       dietary_requirements: [],
+      emergency_contact_first_name: null,
+      emergency_contact_last_name: null,
       emergency_contact_email: 'guardian@example.test',
+      emergency_contact_phone: null,
+      emergency_contact_relationship: null,
       registrations: { tenant_id: '00000000-0000-4000-8000-000000000001' },
     }
     const keys: Record<string, unknown>[] = []
@@ -118,12 +122,22 @@ describe('shadowSyncFields', () => {
         }
         return {
           select: () => ({ in: async () => ({ data: [{ ...row }], error: null }) }),
-          update: (patch: Record<string, unknown>) => ({
-            eq: async () => {
-              Object.assign(row, patch)
-              return { error: null }
-            },
-          }),
+          // The shadow UPDATE is guarded on every plaintext column; it lands
+          // only when .select() runs and every filter still matches.
+          update: (patch: Record<string, unknown>) => {
+            const preds: Array<() => boolean> = []
+            const b = {
+              eq: (c: string, v: unknown) => (preds.push(() => row[c] === v), b),
+              is: (c: string, v: unknown) => (preds.push(() => row[c] === v), b),
+              filter: (c: string, _op: string, v: string) => (preds.push(() => v === '{}' && Array.isArray(row[c]) && (row[c] as unknown[]).length === 0), b),
+              select: async () => {
+                if (!preds.every((p) => p())) return { data: [], error: null }
+                Object.assign(row, patch)
+                return { data: [{ id: row.id }], error: null }
+              },
+            }
+            return b
+          },
         }
       },
     }

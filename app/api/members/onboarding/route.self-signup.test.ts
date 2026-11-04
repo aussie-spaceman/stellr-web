@@ -22,6 +22,7 @@ const { state } = vi.hoisted(() => ({
     opened: [] as Array<Record<string, unknown>>,
     sent: [] as string[],
     membershipDispatched: 0,
+    shadow: [] as Array<[string, unknown[]]>,
   },
 }))
 
@@ -109,6 +110,9 @@ vi.mock('@/lib/pending-consent', async (orig) => ({
   },
   sendConsentRequest: async (_db: unknown, memberId: string) => { state.sent.push(memberId); return { outcome: 'issued' } },
 }))
+vi.mock('@/lib/field-crypto-shadow', () => ({
+  shadowSyncFields: (table: string, ids: unknown[]) => { state.shadow.push([table, [...ids]]) },
+}))
 vi.mock('@/lib/email-campaigns', () => ({ fireCampaignEvent: async () => {} }))
 vi.mock('@/lib/membership-grants', () => ({ applyGrantTrigger: async () => {} }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: async () => {} }))
@@ -161,6 +165,7 @@ beforeEach(() => {
   state.openFails = false
   state.invited = false
   state.sequence = []
+  state.shadow = []
 })
 afterEach(() => { process.env.MINOR_SELF_SIGNUP_ENABLED = flagBefore })
 
@@ -248,6 +253,14 @@ describe('flag ON — under 13 (COPPA)', () => {
     expect(state.opened).toEqual([expect.objectContaining({ memberId: 'm-1', band: 'child', guardianEmail: 'parent@example.test' })])
     expect(state.sent).toEqual(['m-1'])
     expect(state.membershipDispatched).toBe(0)
+  })
+
+  it('re-syncs the shadow ciphertext after erasing a linked row\'s emergency contact', async () => {
+    // The erase nulls ec_* on purpose; without a shadow sync the *_enc copy
+    // would outlive it (review finding, S4 shadow phase).
+    expect((await post(child())).status).toBe(200)
+    expect(memberWrites()[0]).toMatchObject({ op: 'update', payload: expect.objectContaining({ ec_first_name: null, ec_phone: null }) })
+    expect(state.shadow).toContainEqual(['members', ['m-1']])
   })
 
   it('creates the row when the sign-up has none yet, with the login email only', async () => {

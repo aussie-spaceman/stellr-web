@@ -13,8 +13,12 @@
  *   - participants, members, member_pending_consent: per column, plaintext
  *     values, ciphertexts, values missing a ciphertext or blind index, and
  *     ciphertexts whose plaintext was cleared (retention must clear both);
+ *   - per column, values still under a retired data key (a DEK rotation is
+ *     finished only when this is 0; read from the key id, no master key);
  *   - audit_log (whole-row images from the members trigger) and
  *     deletion_archive (nested snapshots): rows holding sensitive keys;
+ *   - agreements.prefill and agreement_recipients.signer_values: the e-sign
+ *     copies of guardian and emergency contact details;
  *   - source files that read a sensitive column and write a CSV, a Sheet or a
  *     download: the exporters that must become encrypted-aware.
  *
@@ -34,6 +38,7 @@ import { supabaseDekStore } from '../lib/field-crypto-store'
 import { encodeFieldValue, rowTenantId, shadowSelect, type ShadowRow } from '../lib/field-crypto-patch'
 import { SENSITIVE_TABLES, encColumn } from '../lib/field-crypto-fields'
 import {
+  agreementHoldsPlaintext,
   countSensitiveKeys,
   exporterFiles,
   gateFailures,
@@ -122,6 +127,15 @@ async function main() {
     fc = new FieldCrypto(ring, { listKeys: (t) => real.listKeys(t), insertKey: async () => 'conflict' })
   }
 
+  // Each tenant's active DEK id, for the stale-key count. Ids and dates only:
+  // the wrapped keys are not read.
+  const keyRows = await pageAll<{ tenant_id: string; key_id: string; retired_at: string | null }>(
+    (from, to) => db.from('tenant_data_keys').select('tenant_id, key_id, retired_at').order('created_at', { ascending: true }).range(from, to),
+    'tenant_data_keys',
+  )
+  const activeDek = new Map<string, string>()
+  for (const k of keyRows) if (!k.retired_at) activeDek.set(k.tenant_id, k.key_id)
+
   const tables: ColumnCoverage[] = []
   for (const t of SENSITIVE_TABLES) {
     const rows = await pageAll<ShadowRow>(
@@ -146,7 +160,11 @@ async function main() {
         }
       }
     }
-    tables.push(...tableCoverage(t, rows as Record<string, unknown>[], fc ? mismatches : undefined))
+    const activeKeyOf = (row: Record<string, unknown>) => {
+      const tenantId = rowTenantId(t, row as ShadowRow)
+      return tenantId ? activeDek.get(tenantId) : undefined
+    }
+    tables.push(...tableCoverage(t, rows as Record<string, unknown>[], fc ? mismatches : undefined, activeKeyOf))
   }
 
   const audit = await pageAll<{ old_data: unknown; new_data: unknown }>(
@@ -163,6 +181,19 @@ async function main() {
     (from, to) => db.from('deletion_archive').select('snapshot').order('deleted_at', { ascending: true }).range(from, to),
     'deletion_archive',
   )
+  const agreementRows = await pageAll<{ prefill: unknown }>(
+    (from, to) => db.from('agreements').select('prefill').not('prefill', 'is', null).order('id', { ascending: true }).range(from, to),
+    'agreements',
+  )
+  const recipientRows = await pageAll<{ signer_values: unknown }>(
+    (from, to) =>
+      db.from('agreement_recipients').select('signer_values').not('signer_values', 'is', null).order('id', { ascending: true }).range(from, to),
+    'agreement_recipients',
+  )
+  const tallyAgreements = (values: unknown[]) => ({
+    rows: values.length,
+    plaintextRows: values.filter((v) => agreementHoldsPlaintext(v)).length,
+  })
   const tally = (values: unknown[]) => {
     let plaintextRows = 0
     let ciphertextRows = 0
@@ -178,19 +209,30 @@ async function main() {
     tables,
     auditLog: tally(audit.map((r) => [r.old_data, r.new_data])),
     deletionArchive: tally(archive.map((r) => r.snapshot)),
+    agreements: tallyAgreements(agreementRows.map((r) => r.prefill)),
+    agreementRecipients: tallyAgreements(recipientRows.map((r) => r.signer_values)),
     exporters,
   }
 
-  console.log('Tables (plaintext / encrypted / missing ciphertext / orphan ciphertext / missing index' + (fc ? ' / mismatched' : '') + '):')
+  console.log(
+    'Tables (plaintext / encrypted / missing ciphertext / orphan ciphertext / missing index / retired key' +
+      (fc ? ' / mismatched' : '') +
+      '):',
+  )
   for (const c of report.tables) {
     console.log(
       `  ${`${c.table}.${c.column}`.padEnd(52)} ${String(c.plaintext).padStart(6)} ${String(c.encrypted).padStart(6)} ` +
-        `${String(c.missingEnc).padStart(6)} ${String(c.orphanEnc).padStart(6)} ${String(c.missingBidx).padStart(6)}` +
+        `${String(c.missingEnc).padStart(6)} ${String(c.orphanEnc).padStart(6)} ${String(c.missingBidx).padStart(6)} ` +
+        `${String(c.staleKey).padStart(6)}` +
         (fc ? ` ${String(c.mismatched).padStart(6)}` : ''),
     )
   }
   console.log(`\naudit_log: ${report.auditLog.rows} row(s) for these tables; ${report.auditLog.plaintextRows} hold sensitive plaintext, ${report.auditLog.ciphertextRows} hold ciphertext`)
   console.log(`deletion_archive: ${report.deletionArchive.rows} snapshot(s); ${report.deletionArchive.plaintextRows} hold sensitive plaintext, ${report.deletionArchive.ciphertextRows} hold ciphertext`)
+  console.log(`agreements.prefill: ${report.agreements.rows} with a prefill; ${report.agreements.plaintextRows} hold guardian or emergency-contact values`)
+  console.log(
+    `agreement_recipients.signer_values: ${report.agreementRecipients.rows} with values; ${report.agreementRecipients.plaintextRows} hold guardian or emergency-contact values`,
+  )
   console.log(`\nExporters reading sensitive columns (${exporters.length}):`)
   for (const e of exporters) console.log(`  ${e.path}  [${e.columns.join(', ')}]`)
 

@@ -2,6 +2,7 @@
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  ACTIVE_CHECK_MS,
   FieldCrypto,
   FieldCryptoError,
   blindIndex,
@@ -391,6 +392,40 @@ describe('FieldCrypto service', () => {
     await fc.activeKey(TENANT_A)
     expect(spy.mock.calls.length).toBe(calls)
     now += 1001
+    await fc.activeKey(TENANT_A)
+    expect(spy.mock.calls.length).toBe(calls + 1)
+  })
+
+  // Review finding (S4 shadow phase): a warm instance kept encrypting under a
+  // DEK that another instance had retired, for the whole 5-minute cache.
+  it('DEK rotation: a warm instance stops encrypting under a retired DEK within activeCheckMs', async () => {
+    const store = memoryStore()
+    const r = ring()
+    let now = 1_000_000
+    const warm = new FieldCrypto(r, store, { now: () => now }) // default TTL and activeCheckMs
+    const k1 = fieldKeyId(await warm.encrypt(ctx, 'before'))
+    // An ops instance retires k1 and creates k2.
+    const ops = new FieldCrypto(r, store)
+    await store.retireKey!(TENANT_A, k1, new Date().toISOString())
+    const k2 = (await ops.activeKey(TENANT_A)).keyId
+    expect(k2).not.toBe(k1)
+    // Inside the window the warm cache may still answer k1 ...
+    now += ACTIVE_CHECK_MS - 1
+    expect(fieldKeyId(await warm.encrypt(ctx, 'during'))).toBe(k1)
+    // ... and never after it, although the 5-minute DEK cache has not expired.
+    now += 2
+    expect(fieldKeyId(await warm.encrypt(ctx, 'after'))).toBe(k2)
+    expect((await warm.blindIndex({ tenantId: TENANT_A, table: 'participants', column: 'emergency_contact_email' }, 'a@example.test', 'email'))!.split('.')[1]).toBe(k2)
+  })
+
+  it('activeCheckMs never exceeds the cache TTL', async () => {
+    const store = memoryStore()
+    const spy = vi.spyOn(store, 'listKeys')
+    let now = 1_000_000
+    const fc = new FieldCrypto(ring(), store, { cacheTtlMs: 10, activeCheckMs: 60_000, now: () => now })
+    await fc.activeKey(TENANT_A)
+    const calls = spy.mock.calls.length
+    now += 11
     await fc.activeKey(TENANT_A)
     expect(spy.mock.calls.length).toBe(calls + 1)
   })

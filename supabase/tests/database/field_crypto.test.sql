@@ -9,7 +9,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(92);
+SELECT plan(94);
 
 SELECT has_table('public', 'tenant_data_keys', 'tenant_data_keys exists');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.tenant_data_keys'::regclass), 'tenant_data_keys has RLS enabled');
@@ -25,6 +25,8 @@ SELECT ok(has_table_privilege('service_role', 'public.tenant_data_keys', 'SELECT
 SELECT ok(has_table_privilege('service_role', 'public.tenant_data_keys', 'INSERT'), 'service_role has INSERT on tenant_data_keys');
 SELECT ok(has_table_privilege('service_role', 'public.tenant_data_keys', 'UPDATE'), 'service_role has UPDATE on tenant_data_keys');
 SELECT ok(NOT has_table_privilege('service_role', 'public.tenant_data_keys', 'DELETE'), 'service_role cannot DELETE a data key (crypto-shred is an owner action)');
+SELECT ok(NOT has_table_privilege('service_role', 'public.tenant_data_keys', 'TRUNCATE'), 'service_role cannot TRUNCATE tenant_data_keys (default ACL revoked)');
+SELECT ok(NOT has_table_privilege('service_role', 'public.tenant_data_keys', 'REFERENCES') AND NOT has_table_privilege('service_role', 'public.tenant_data_keys', 'TRIGGER'), 'service_role holds only SELECT, INSERT, UPDATE on tenant_data_keys');
 SELECT has_column('public', 'participants', 'health_conditions_enc', 'participants.health_conditions_enc exists');
 SELECT col_is_null('public', 'participants', 'health_conditions_enc', 'participants.health_conditions_enc is nullable');
 SELECT col_type_is('public', 'participants', 'health_conditions_enc', 'text', 'participants.health_conditions_enc is text');

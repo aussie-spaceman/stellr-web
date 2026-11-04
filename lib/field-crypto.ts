@@ -366,6 +366,9 @@ export interface DekStore {
   updateWrapped?(tenantId: string, keyId: string, masterKeyId: string, wrapped: string): Promise<void>
 }
 
+/** Default for FieldCryptoOptions.activeCheckMs; the DEK rotation runbook waits longer than this. */
+export const ACTIVE_CHECK_MS = 30 * 1000
+
 interface TenantKeys {
   keys: Map<string, DataKey>
   active?: string
@@ -373,8 +376,15 @@ interface TenantKeys {
 }
 
 export interface FieldCryptoOptions {
-  /** How long unwrapped DEKs stay cached in memory (default 5 minutes). */
+  /** How long unwrapped DEKs stay cached in memory for decryption (default 5 minutes). */
   cacheTtlMs?: number
+  /**
+   * How long a cached answer to "which DEK is active" is trusted before
+   * encrypting again (default 30 seconds, never longer than cacheTtlMs). A DEK
+   * rotation retires the old key in the store; within this window every warm
+   * instance stops writing under it. docs/FIELD-CRYPTO.md, DEK rotation.
+   */
+  activeCheckMs?: number
   now?: () => number
 }
 
@@ -386,6 +396,7 @@ export interface FieldCryptoOptions {
 export class FieldCrypto {
   private readonly cache = new Map<string, TenantKeys>()
   private readonly ttl: number
+  private readonly activeCheckMs: number
   private readonly now: () => number
 
   constructor(
@@ -394,6 +405,7 @@ export class FieldCrypto {
     opts: FieldCryptoOptions = {},
   ) {
     this.ttl = opts.cacheTtlMs ?? 5 * 60 * 1000
+    this.activeCheckMs = Math.min(opts.activeCheckMs ?? ACTIVE_CHECK_MS, this.ttl)
     this.now = opts.now ?? Date.now
   }
 
@@ -422,6 +434,9 @@ export class FieldCrypto {
   /** The tenant's active DEK, creating (and wrapping) one on first use. */
   async activeKey(tenantId: string): Promise<DataKey> {
     let entry = await this.load(tenantId)
+    // Never encrypt under a cached answer older than activeCheckMs: the key
+    // may have been retired since (a DEK rotation after a suspected exposure).
+    if (this.now() - entry.loadedAt >= this.activeCheckMs) entry = await this.load(tenantId, true)
     if (entry.active) return entry.keys.get(entry.active)!
     const dek = generateDek()
     const keyId = newDekId(new Date(this.now()))

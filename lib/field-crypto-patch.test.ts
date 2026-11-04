@@ -2,7 +2,16 @@
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { FieldCrypto, blindIndexEquals, fieldKeyId, type DekRow, type DekStore } from '@/lib/field-crypto'
-import { buildShadowPatch, encodeFieldValue, rowTenantId, shadowSelect, syncShadowRows } from '@/lib/field-crypto-patch'
+import {
+  applyShadowPatch,
+  buildShadowPatch,
+  encodeFieldValue,
+  pgTextArrayLiteral,
+  rowTenantId,
+  shadowSelect,
+  syncShadowRows,
+  type ShadowRow,
+} from '@/lib/field-crypto-patch'
 import { sensitiveTable } from '@/lib/field-crypto-fields'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
@@ -151,30 +160,57 @@ describe('buildShadowPatch', () => {
   })
 })
 
-/** Just enough of the Supabase query builder for syncShadowRows. */
-function fakeDb(rows: Record<string, unknown>[], opts: { failSelect?: boolean; failUpdate?: boolean } = {}) {
+/**
+ * Just enough of the Supabase query builder for syncShadowRows: reads return
+ * copies (as a real database does), and an UPDATE applies only to rows that
+ * match every filter, returning them when `.select()` is chained.
+ */
+function fakeDb(
+  rows: Record<string, unknown>[],
+  opts: { failSelect?: boolean; failUpdate?: boolean; afterRead?: (n: number) => void } = {},
+) {
   const updates: { patch: Record<string, unknown>; id: string }[] = []
+  let reads = 0
   const db = {
     from() {
       return {
         select() {
           return {
-            in: async (_col: string, ids: string[]) =>
-              opts.failSelect
-                ? { data: null, error: { code: 'XX000' } }
-                : { data: rows.filter((r) => ids.includes(r.id as string)), error: null },
+            in: async (_col: string, ids: string[]) => {
+              if (opts.failSelect) return { data: null, error: { code: 'XX000' } }
+              const data = rows.filter((r) => ids.includes(r.id as string)).map((r) => structuredClone(r))
+              opts.afterRead?.(++reads)
+              return { data, error: null }
+            },
           }
         },
         update(patch: Record<string, unknown>) {
-          return {
-            eq: async (_col: string, id: string) => {
-              if (opts.failUpdate) return { error: { code: 'XX000' } }
-              updates.push({ patch, id })
-              const row = rows.find((r) => r.id === id)
-              if (row) Object.assign(row, patch)
-              return { error: null }
+          const preds: Array<(r: Record<string, unknown>) => boolean> = []
+          let id = ''
+          const builder = {
+            eq(col: string, v: unknown) {
+              if (col === 'id') id = v as string
+              preds.push((r) => r[col] === v)
+              return builder
+            },
+            is(col: string, v: null) {
+              preds.push((r) => (r[col] ?? null) === v)
+              return builder
+            },
+            filter(col: string, op: string, v: string) {
+              if (op !== 'eq') throw new Error(`unsupported ${op}`)
+              preds.push((r) => pgTextArrayLiteral(r[col]) === v)
+              return builder
+            },
+            async select() {
+              if (opts.failUpdate) return { data: null, error: { code: 'XX000' } }
+              const hit = rows.filter((r) => preds.every((p) => p(r)))
+              for (const r of hit) Object.assign(r, patch)
+              if (hit.length) updates.push({ patch, id })
+              return { data: hit.map((r) => ({ id: r.id })), error: null }
             },
           }
+          return builder
         },
       }
     },
@@ -182,14 +218,16 @@ function fakeDb(rows: Record<string, unknown>[], opts: { failSelect?: boolean; f
   return { db: db as never, updates }
 }
 
+const ZERO = { updated: 0, unchanged: 0, skipped: 0, failed: 0, raced: 0 }
+
 describe('syncShadowRows', () => {
   it('writes, then finds the row current on the next run', async () => {
     const rows = [participantRow()]
     const { db, updates } = fakeDb(rows)
     const fc = crypto()
-    expect(await syncShadowRows(db, fc, 'participants', [PID, PID, ''])).toEqual({ updated: 1, unchanged: 0, skipped: 0, failed: 0 })
+    expect(await syncShadowRows(db, fc, 'participants', [PID, PID, ''])).toEqual({ ...ZERO, updated: 1 })
     expect(updates).toHaveLength(1)
-    expect(await syncShadowRows(db, fc, 'participants', [PID])).toEqual({ updated: 0, unchanged: 1, skipped: 0, failed: 0 })
+    expect(await syncShadowRows(db, fc, 'participants', [PID])).toEqual({ ...ZERO, unchanged: 1 })
   })
 
   it('skips rows with no tenant and counts failures without throwing', async () => {
@@ -200,5 +238,98 @@ describe('syncShadowRows', () => {
     expect(await syncShadowRows(badSelect.db, fc, 'participants', [PID])).toMatchObject({ failed: 1 })
     const badUpdate = fakeDb([participantRow()], { failUpdate: true })
     expect(await syncShadowRows(badUpdate.db, fc, 'participants', [PID])).toMatchObject({ failed: 1 })
+  })
+
+  // Review finding (S4 shadow phase): an older sync that stalled between its
+  // read and its UPDATE used to land last and write back the ciphertext of a
+  // value that had since been erased.
+  it('a stale sync cannot resurrect a value erased after it read the row', async () => {
+    const rows: Record<string, unknown>[] = [participantRow()]
+    const { db } = fakeDb(rows)
+    const fc = crypto()
+    // Sync A reads 'Asthma' (before its first ciphertext) and builds its patch, then stalls.
+    const snapshotA = structuredClone(rows[0]) as ShadowRow
+    const patchA = await buildShadowPatch(fc, participants, snapshotA, TENANT)
+    expect(patchA.health_conditions_enc).toBeTruthy()
+    // The member (or the retention job) clears the value; sync B runs.
+    rows[0].health_conditions = null
+    expect(await syncShadowRows(db, fc, 'participants', [PID])).toMatchObject({ updated: 1 })
+    // A's UPDATE lands last: the compare-and-set refuses it.
+    expect(await applyShadowPatch(db, participants, snapshotA, patchA)).toBe('raced')
+    expect(rows[0].health_conditions).toBeNull()
+    expect(rows[0].health_conditions_enc ?? null).toBeNull()
+    // The rest of the row is still covered by B's write.
+    expect(rows[0].emergency_contact_phone_enc).toBeTruthy()
+  })
+
+  it('a stale sync cannot overwrite a newer value with an older ciphertext', async () => {
+    const rows: Record<string, unknown>[] = [participantRow()]
+    const { db } = fakeDb(rows)
+    const fc = crypto()
+    await syncShadowRows(db, fc, 'participants', [PID])
+    const snapshotA = structuredClone(rows[0]) as ShadowRow
+    snapshotA.emergency_contact_phone_enc = null // A saw no ciphertext yet
+    const patchA = await buildShadowPatch(fc, participants, snapshotA, TENANT)
+    rows[0].emergency_contact_phone = '(555) 010-1234'
+    await syncShadowRows(db, fc, 'participants', [PID])
+    expect(await applyShadowPatch(db, participants, snapshotA, patchA)).toBe('raced')
+    const ctx = { tenantId: TENANT, table: 'participants', column: 'emergency_contact_phone', rowId: PID }
+    expect(await fc.decrypt(ctx, rows[0].emergency_contact_phone_enc as string)).toBe('(555) 010-1234')
+  })
+
+  it('re-reads and rebuilds when the plaintext changes between read and write', async () => {
+    const rows: Record<string, unknown>[] = [participantRow()]
+    const { db } = fakeDb(rows, {
+      afterRead: (n) => {
+        if (n === 1) {
+          rows[0].emergency_contact_phone = '(555) 010-9999'
+          rows[0].dietary_requirements = ['Vegan, "strict"']
+        }
+      },
+    })
+    const fc = crypto()
+    expect(await syncShadowRows(db, fc, 'participants', [PID])).toEqual({ ...ZERO, updated: 1 })
+    const ctx = (column: string) => ({ tenantId: TENANT, table: 'participants', column, rowId: PID })
+    expect(await fc.decrypt(ctx('emergency_contact_phone'), rows[0].emergency_contact_phone_enc as string)).toBe('(555) 010-9999')
+    expect(await fc.decrypt(ctx('dietary_requirements'), rows[0].dietary_requirements_enc as string)).toBe(
+      JSON.stringify(['Vegan, "strict"']),
+    )
+  })
+
+  it('gives up after a few attempts on a row that keeps changing, writing nothing stale', async () => {
+    const rows: Record<string, unknown>[] = [participantRow()]
+    const { db, updates } = fakeDb(rows, { afterRead: (n) => (rows[0].health_conditions = `changed ${n}`) })
+    expect(await syncShadowRows(db, crypto(), 'participants', [PID])).toEqual({ ...ZERO, raced: 1 })
+    expect(updates).toHaveLength(0)
+  })
+
+  it('writes nothing when a row disappears between attempts', async () => {
+    const rows: Record<string, unknown>[] = [participantRow()]
+    const { db, updates } = fakeDb(rows, {
+      afterRead: (n) => {
+        if (n === 1) rows[0].health_conditions = 'changed'
+        if (n === 2) rows.splice(0, 1)
+      },
+    })
+    expect(await syncShadowRows(db, crypto(), 'participants', [PID])).toEqual({ ...ZERO, unchanged: 1 })
+    expect(updates).toHaveLength(0)
+  })
+})
+
+describe('applyShadowPatch', () => {
+  it('refuses to write without a guard for every plaintext column', async () => {
+    const { db, updates } = fakeDb([participantRow()])
+    const row = participantRow() as ShadowRow
+    delete row.health_conditions
+    expect(await applyShadowPatch(db, participants, row, { health_conditions_enc: null })).toBe('error')
+    expect(await applyShadowPatch(db, participants, participantRow({ dietary_requirements: [1] }), {})).toBe('error')
+    expect(updates).toHaveLength(0)
+  })
+
+  it('builds PostgREST array literals that escape quotes and backslashes', () => {
+    expect(pgTextArrayLiteral([])).toBe('{}')
+    expect(pgTextArrayLiteral(['a', 'b c'])).toBe('{"a","b c"}')
+    expect(pgTextArrayLiteral(['say "hi"', 'back\\slash', null])).toBe('{"say \\"hi\\"","back\\\\slash",NULL}')
+    expect(pgTextArrayLiteral('x')).toBeNull()
   })
 })

@@ -21,8 +21,11 @@ import { supabaseServer } from '@/lib/supabase'
 // (no values, no key material). Reads stay on the plaintext.
 //
 // Re-reading rather than taking the values from the caller keeps each call
-// site to one line and makes the result right whichever columns changed. A
-// write that races ours is followed by its own sync, so the last sync wins.
+// site to one line and makes the result right whichever columns changed. The
+// shadow UPDATE is a compare-and-set on the plaintext it was built from
+// (applyShadowPatch): if the plaintext changed after our read, nothing is
+// written and the row is re-read, so a stale sync can never land the
+// ciphertext of a value that was since changed or erased.
 // scripts/backfill-field-crypto.ts runs the same patch builder over every row,
 // and scripts/scan-plaintext-sensitive.ts reports any drift.
 
@@ -89,7 +92,9 @@ async function runShadow(table: SensitiveTableName, ids: string[]): Promise<void
     const crypto = await appFieldCrypto()
     if (!crypto) return logSkip(table, 'config')
     const r = await syncShadowRows(supabaseServer(), crypto, table, ids)
-    if (r.failed || r.skipped) logSkip(table, `${r.failed} failed, ${r.skipped} without a tenant`)
+    if (r.failed || r.skipped || r.raced) {
+      logSkip(table, `${r.failed} failed, ${r.skipped} without a tenant, ${r.raced} still changing`)
+    }
   } catch (e) {
     logSkip(table, e instanceof FieldCryptoError ? e.code : 'error')
   }

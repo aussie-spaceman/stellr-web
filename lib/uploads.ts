@@ -15,6 +15,7 @@ import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-li
 import { isLiteralStoragePath } from '@/lib/storage-path'
 import {
   MAX_MEMBER_PDF_PAGES,
+  PDF_BUSY,
   PDF_PAGES_UNKNOWN,
   PDF_TOO_MANY_PAGES,
   PDF_UNPROCESSABLE,
@@ -714,6 +715,8 @@ export async function claimUpload(args: {
     if (pages !== 'ok') {
       await discardUpload(spec.bucket, storagePath)
       if (pages === 'over') return deny(PDF_TOO_MANY_PAGES, 413)
+      // Every sandbox slot stayed taken: not the file's fault — try again.
+      if (pages === 'busy') return deny(PDF_BUSY, 503)
       return pages === 'failed' ? deny(PDF_UNPROCESSABLE, 422) : deny(PDF_PAGES_UNKNOWN, 415)
     }
   }

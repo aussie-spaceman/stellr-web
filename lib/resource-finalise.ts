@@ -1,7 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { isPdf } from '@/lib/watermark/pdf'
 import { stampPdfSandboxed } from '@/lib/pdf-sandbox'
-import { PDF_UNPROCESSABLE } from '@/lib/pdf-page-count'
+import { PDF_BUSY, PDF_UNPROCESSABLE } from '@/lib/pdf-page-count'
 import { sniffFileFormat } from '@/lib/file-sniff'
 import {
   claimUpload,
@@ -90,7 +90,8 @@ export async function finaliseStoredUpload(args: {
  *
  * pdf-lib runs in the sandbox (lib/pdf-sandbox.ts), never on this thread. A
  * file the sandbox had to stop — past the timeout or the heap limit, or a
- * worker that died — is refused: the object is discarded and a denial
+ * worker that died, or one its own scan refused — is refused, as is one no
+ * worker came free for in time (PDF_BUSY, 503): the object is discarded and a denial
  * returned, for the caller to send back as it sends a claimUpload denial.
  */
 export async function watermarkIfPdf(
@@ -114,6 +115,9 @@ export async function watermarkIfPdf(
     }
     // The sandbox has logged it (console and app_errors).
     await discardUpload(bucket, storagePath)
+    // No worker came free in time: the file wasn't judged, so ask again later.
+    // Stored unstamped, it would be served without its mark.
+    if (stamped.reason === 'busy') return { error: PDF_BUSY, status: 503 }
     return { error: PDF_UNPROCESSABLE, status: 422 }
   }
   if (await replaceUpload(bucket, storagePath, stamped.value, 'application/pdf')) return stamped.value

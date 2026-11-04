@@ -1,25 +1,40 @@
 import { Worker } from 'node:worker_threads'
 import type { PdfJob, PdfJobReply } from './pdf-sandbox-worker'
 
-// pdf-lib, run on bytes a member uploaded, in a worker thread with a heap limit
-// and a wall-clock timeout.
+// pdf-lib, run on bytes a member uploaded, in a worker thread with a heap limit,
+// a memory watchdog and a wall-clock timeout.
 //
 // Why: pdf-lib trusts the file. Three rounds of a static pre-scan
-// (lib/pdf-page-count.ts) were each answered by a new crafted PDF that made
+// (lib/pdf-scan.ts) were each answered by a new crafted PDF that made
 // PDFDocument.load loop for seconds per object, or allocate until the process
 // died — and on the main thread either one stalls every request the instance
-// is serving, or kills it. The scan still refuses what it can see. This is the
-// bound that doesn't depend on seeing everything: whatever a file makes pdf-lib
-// do, it does it on another thread, in at most PDF_WORKER_HEAP_MB of heap, for
-// at most PDF_WORKER_TIMEOUT_MS. Then the thread is terminated and the upload
-// refused.
+// is serving, or kills it. The scan still refuses what it can see, and the
+// worker runs its bound on what a load inflates (checkLoadInflation) before it
+// loads anything. This is the bound that
+// doesn't depend on seeing everything: whatever a file makes pdf-lib do, it
+// does it on another thread, in at most PDF_WORKER_HEAP_MB of heap and about
+// PDF_WORKER_EXTERNAL_MB of buffers, for at most PDF_WORKER_TIMEOUT_MS. Then
+// the thread is terminated and the upload refused.
+//
+// Two memory limits, because a heap limit isn't a memory limit: resourceLimits
+// caps the V8 heap, but the bytes of an ArrayBuffer live outside it. A 4 MB
+// PDF whose object stream inflates to 4 GB grew a worker by GBs of
+// ArrayBuffers under a 256 MB heap limit; only the timeout ended it. So the
+// parent asks the worker for its heap statistics every PDF_WORKER_POLL_MS
+// (worker.getHeapStatistics(), which V8 answers even while the worker is
+// stuck in a loop) and terminates it once `external_memory` — ArrayBuffers and
+// Buffers — passes PDF_WORKER_EXTERNAL_MB. pdf-lib grows a decode buffer by
+// doubling, so a worker can briefly hold about twice the cap before a poll
+// sees it.
 //
 // Cost: a worker that times out burns up to one CPU core for the timeout (8 s)
 // on its own thread, then is terminated; the main event loop keeps serving.
 // Starting a worker costs ~50 ms. At most PDF_WORKER_CONCURRENCY run at once
 // per instance, so a burst of crafted uploads can't stack heaps past the
 // function's memory; the rest wait their turn (the timeout starts when a job's
-// worker does).
+// worker does) — for at most PDF_QUEUE_MAX_WAIT_MS, then they are refused as
+// 'busy' (a 503 asking the member to try again), never left waiting until the
+// route's maxDuration ends the request.
 //
 // The worker entry is `new Worker(new URL('./pdf-sandbox-worker.ts',
 // import.meta.url))`, written out in full: Turbopack recognises that exact
@@ -34,41 +49,80 @@ export const PDF_WORKER_TIMEOUT_MS = 8_000
 export const PDF_WORKER_HEAP_MB = 256
 /** The worker's young-generation heap. */
 export const PDF_WORKER_YOUNG_MB = 64
+/**
+ * The most ArrayBuffer and Buffer memory a worker may hold before the
+ * watchdog terminates it. Stamping a 25 MB PDF holds well under 200 MB: the
+ * bytes, the scan's inflate (at most 32 MB, lib/pdf-scan.ts
+ * LOAD_INFLATE_BUDGET) and the saved copy.
+ */
+export const PDF_WORKER_EXTERNAL_MB = 384
+/** How often the watchdog reads a worker's memory. */
+export const PDF_WORKER_POLL_MS = 100
 /** Workers running at once, per instance. */
 export const PDF_WORKER_CONCURRENCY = 2
+/** How long a job may wait for a free worker before it is refused as 'busy'. */
+export const PDF_QUEUE_MAX_WAIT_MS = 10_000
 
 /**
  * Why a job didn't produce a result:
  *   - invalid: pdf-lib threw — a damaged or unsupported file, nothing worse.
+ *   - refused: the worker's own check (lib/pdf-scan.ts checkLoadInflation)
+ *              found the load would inflate too much; pdf-lib never opened it.
  *   - timeout: still running at the timeout; terminated.
- *   - memory:  hit the heap limit; the thread died.
+ *   - memory:  hit the heap limit (the thread died), or the watchdog saw its
+ *              buffers pass PDF_WORKER_EXTERNAL_MB (terminated).
  *   - crash:   the thread died any other way (or couldn't start).
- * The last three are what the sandbox exists for: the caller refuses the file.
+ *   - busy:    no worker came free within PDF_QUEUE_MAX_WAIT_MS; the file was
+ *              never looked at.
+ * refused, timeout, memory and crash are what the sandbox exists for: the
+ * caller refuses the file. busy says nothing about the file: the caller asks
+ * for it again later.
  */
-export type PdfSandboxFailure = 'invalid' | 'timeout' | 'memory' | 'crash'
+export type PdfSandboxFailure = 'invalid' | 'refused' | 'timeout' | 'memory' | 'crash' | 'busy'
 
 export type PdfSandboxResult<T> = { ok: true; value: T } | { ok: false; reason: PdfSandboxFailure; detail: string }
 
 type RunOptions = {
   timeoutMs?: number
   heapMb?: number
+  /** The watchdog's limit, in MB, in place of PDF_WORKER_EXTERNAL_MB. */
+  externalMb?: number
+  /** How long to wait for a free worker, in place of PDF_QUEUE_MAX_WAIT_MS. */
+  queueWaitMs?: number
   /** Lets the worker run its test-only jobs. Never set outside tests. */
   allowTestOps?: boolean
+  /** Test only (needs allowTestOps): load without the worker's scan, to prove the other bounds. */
+  skipScan?: boolean
 }
+
+const MB = 1024 * 1024
 
 // ── Concurrency ─────────────────────────────────────────────────────────────
 
 let running = 0
 const waiting: Array<() => void> = []
 
-async function acquire(): Promise<void> {
+/** A worker slot: true once one is held, false if none came free within `maxWaitMs`. */
+async function acquire(maxWaitMs: number): Promise<boolean> {
   if (running < PDF_WORKER_CONCURRENCY) {
     running++
-    return
+    return true
   }
-  await new Promise<void>((resolve) => waiting.push(resolve))
+  return new Promise<boolean>((resolve) => {
+    const take = () => {
+      clearTimeout(timer)
+      resolve(true)
+    }
+    const timer = setTimeout(() => {
+      const at = waiting.indexOf(take)
+      if (at >= 0) waiting.splice(at, 1)
+      resolve(false)
+    }, maxWaitMs)
+    waiting.push(take)
+  })
 }
 
+/** Hand the slot to the next job waiting, or free it. */
 function release(): void {
   const next = waiting.shift()
   if (next) next()
@@ -100,24 +154,42 @@ function startWorker(opts: RunOptions): Worker {
 }
 
 async function runJob(job: PdfJob, opts: RunOptions = {}): Promise<PdfSandboxResult<PdfJobReply & { ok: true }>> {
-  await acquire()
+  const queueWaitMs = opts.queueWaitMs ?? PDF_QUEUE_MAX_WAIT_MS
+  if (!(await acquire(queueWaitMs))) {
+    return { ok: false, reason: 'busy', detail: `no free PDF worker in ${queueWaitMs} ms` }
+  }
   try {
     return await new Promise((resolve) => {
       let settled = false
       let worker: Worker | undefined
+      const timeoutMs = opts.timeoutMs ?? PDF_WORKER_TIMEOUT_MS
+      const externalCap = (opts.externalMb ?? PDF_WORKER_EXTERNAL_MB) * MB
       const finish = (result: PdfSandboxResult<PdfJobReply & { ok: true }>) => {
         if (settled) return
         settled = true
         clearTimeout(timer)
+        clearInterval(watchdog)
         // Terminate in every case: a worker that replied is done; one that
         // didn't is stopped mid-loop (V8 interrupts running JS).
         void worker?.terminate().catch(() => {})
         resolve(result)
       }
-      const timer = setTimeout(
-        () => finish({ ok: false, reason: 'timeout', detail: `no result in ${opts.timeoutMs ?? PDF_WORKER_TIMEOUT_MS} ms` }),
-        opts.timeoutMs ?? PDF_WORKER_TIMEOUT_MS,
-      )
+      const timer = setTimeout(() => finish({ ok: false, reason: 'timeout', detail: `no result in ${timeoutMs} ms` }), timeoutMs)
+      // The memory watchdog: buffers live outside the heap limit.
+      const watchdog = setInterval(() => {
+        worker?.getHeapStatistics().then(
+          (stats) => {
+            if (stats.external_memory <= externalCap) return
+            finish({
+              ok: false,
+              reason: 'memory',
+              detail: `${Math.round(stats.external_memory / MB)} MB of buffers, past the ${externalCap / MB} MB watchdog`,
+            })
+          },
+          // The worker has exited; its own events settle the job.
+          () => {},
+        )
+      }, PDF_WORKER_POLL_MS)
       try {
         worker = startWorker(opts)
       } catch (err) {
@@ -126,7 +198,7 @@ async function runJob(job: PdfJob, opts: RunOptions = {}): Promise<PdfSandboxRes
       }
       worker.once('message', (reply: PdfJobReply) => {
         if (reply.ok) finish({ ok: true, value: reply })
-        else finish({ ok: false, reason: 'invalid', detail: reply.error })
+        else finish({ ok: false, reason: reply.refused ? 'refused' : 'invalid', detail: reply.error })
       })
       worker.once('error', (err: Error & { code?: string }) => {
         const memory = err.code === 'ERR_WORKER_OUT_OF_MEMORY'
@@ -134,7 +206,7 @@ async function runJob(job: PdfJob, opts: RunOptions = {}): Promise<PdfSandboxRes
       })
       worker.once('exit', (code) => finish({ ok: false, reason: 'crash', detail: `worker exited (${code}) without a result` }))
       // The bytes are copied, not transferred: the caller still owns its buffer.
-      worker.postMessage(job)
+      worker.postMessage(opts.allowTestOps && opts.skipScan ? { ...job, skipScan: true } : job)
     })
   } finally {
     release()
@@ -194,9 +266,16 @@ export async function stampPdfSandboxed(bytes: Uint8Array, opts?: RunOptions): P
     : { ok: false, reason: 'crash', detail: 'wrong reply' }
 }
 
-/** Test hook: a worker that allocates until its heap limit kills it. */
+/** Test hook: a worker that allocates heap until its heap limit kills it. */
 export async function exhaustMemorySandboxed(opts: RunOptions): Promise<PdfSandboxResult<never>> {
   const result = await runJob({ op: 'exhaust-memory' }, { ...opts, allowTestOps: true })
   if (!result.ok) await report('memory test', result)
+  return result.ok ? { ok: false, reason: 'crash', detail: 'unexpected reply' } : result
+}
+
+/** Test hook: a worker that allocates ArrayBuffers (outside its heap limit) until the watchdog stops it. */
+export async function exhaustBuffersSandboxed(opts: RunOptions): Promise<PdfSandboxResult<never>> {
+  const result = await runJob({ op: 'exhaust-buffers' }, { ...opts, allowTestOps: true })
+  if (!result.ok) await report('buffer test', result)
   return result.ok ? { ok: false, reason: 'crash', detail: 'unexpected reply' } : result
 }

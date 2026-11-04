@@ -3,12 +3,16 @@ import { describe, it, expect, vi } from 'vitest'
 import { PDFDocument, PDFName, PDFRef, StandardFonts } from 'pdf-lib'
 import sharp from 'sharp'
 import {
+  PDF_QUEUE_MAX_WAIT_MS,
+  PDF_WORKER_EXTERNAL_MB,
   PDF_WORKER_TIMEOUT_MS,
   countPdfPagesSandboxed,
+  exhaustBuffersSandboxed,
   exhaustMemorySandboxed,
   stampPdfSandboxed,
 } from './pdf-sandbox'
 import { MAX_MEMBER_PDF_PAGES, checkPdfPageLimit, scanPdfPages } from './pdf-page-count'
+import { GB, MB, bombPdf } from './pdf-bombs.test.helper'
 import { WATERMARK_MARKER } from './watermark/config'
 
 // The sandbox (lib/pdf-sandbox.ts) is the bound on what a member's PDF can make
@@ -103,7 +107,8 @@ describe('crafted PDFs', () => {
       const elapsed = performance.now() - started
       expect(stamped.ok).toBe(false)
       // Refused, whichever way pdf-lib went: looped (timeout), ran out of heap
-      // (memory), or threw.
+      // (memory), or threw. (The worker's own check bounds only what a load
+      // inflates, so these numbers reach pdf-lib.)
       if (!stamped.ok) expect(['timeout', 'memory', 'crash', 'invalid']).toContain(stamped.reason)
       expect(elapsed).toBeLessThan(SHORT + 2_000)
     }, 20_000)
@@ -138,6 +143,72 @@ describe('a worker that dies', () => {
     const result = await exhaustMemorySandboxed({ timeoutMs: 15_000, heapMb: 32 })
     expect(result).toMatchObject({ ok: false, reason: 'memory' })
   }, 30_000)
+})
+
+// A heap limit isn't a memory limit: ArrayBuffers live outside it. The
+// verified HIGH was a 4 MB PDF whose object stream pdf-lib inflated to GBs of
+// buffers under a 256 MB heap limit, stopped only by the timeout.
+describe('memory outside the heap', () => {
+  it('the watchdog terminates a worker whose buffers pass its limit', async () => {
+    const started = performance.now()
+    const result = await exhaustBuffersSandboxed({ timeoutMs: 15_000, heapMb: 32, externalMb: 64 })
+    expect(result).toMatchObject({ ok: false, reason: 'memory' })
+    if (!result.ok) expect(result.detail).toMatch(/watchdog/)
+    // Long before the timeout: ~64 MB at 1 MB every 2 ms, then one poll.
+    expect(performance.now() - started).toBeLessThan(5_000)
+  }, 30_000)
+
+  it('the bomb is real: pdf-lib, unscanned, grows past the watchdog, which stops it', async () => {
+    const started = performance.now()
+    const result = await stampPdfSandboxed(bombPdf(512 * MB), {
+      timeoutMs: 15_000,
+      externalMb: 128,
+      allowTestOps: true,
+      skipScan: true,
+    })
+    expect(result).toMatchObject({ ok: false, reason: 'memory' })
+    if (!result.ok) expect(result.detail).toMatch(/watchdog/)
+    expect(performance.now() - started).toBeLessThan(10_000)
+  }, 30_000)
+
+  it('the worker’s own scan refuses the 4 GB bomb before pdf-lib opens it', async () => {
+    const started = performance.now()
+    for (const run of [stampPdfSandboxed, (b: Uint8Array) => countPdfPagesSandboxed(b, 50)]) {
+      expect(await run(bombPdf(4 * GB))).toMatchObject({ ok: false, reason: 'refused' })
+    }
+    expect(performance.now() - started).toBeLessThan(5_000)
+    // And the upload check never gets that far.
+    expect(await checkPdfPageLimit(bombPdf(4 * GB), MAX_MEMBER_PDF_PAGES)).toBe('unknown')
+  }, 30_000)
+
+  it('has a 384 MB watchdog', () => {
+    expect(PDF_WORKER_EXTERNAL_MB).toBe(384)
+  })
+})
+
+describe('waiting for a worker', () => {
+  it('refuses a job as busy when no worker comes free in time', async () => {
+    // Both workers spin on the negative-/Length hang until their timeout.
+    const hangs = [stampPdfSandboxed(backwardsLength(), { timeoutMs: 3_000 }), stampPdfSandboxed(backwardsLength(), { timeoutMs: 3_000 })]
+    const started = performance.now()
+    const queued = await stampPdfSandboxed(await textPdf(1, false), { queueWaitMs: 300 })
+    expect(queued).toMatchObject({ ok: false, reason: 'busy' })
+    expect(performance.now() - started).toBeLessThan(1_500)
+    expect((await Promise.all(hangs)).map((r) => r.ok)).toEqual([false, false])
+    // The slots are free again.
+    expect((await stampPdfSandboxed(await textPdf(1, false))).ok).toBe(true)
+  }, 30_000)
+
+  it('runs a queued job once a worker comes free in time', async () => {
+    const hangs = [stampPdfSandboxed(backwardsLength(), { timeoutMs: 800 }), stampPdfSandboxed(backwardsLength(), { timeoutMs: 800 })]
+    const queued = await stampPdfSandboxed(await textPdf(1, false), { queueWaitMs: 5_000 })
+    expect(queued.ok).toBe(true)
+    await Promise.all(hangs)
+  }, 30_000)
+
+  it('waits at most 10 s by default', () => {
+    expect(PDF_QUEUE_MAX_WAIT_MS).toBe(10_000)
+  })
 })
 
 describe('ordinary PDFs through the sandbox', () => {

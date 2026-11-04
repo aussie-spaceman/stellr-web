@@ -81,7 +81,8 @@
 
 # Uploads: PDF page cap and watermarking (pdf-lib parse limits)
 /lib/pdf-page-count.ts              @aussie-spaceman
-/lib/pdf-sandbox.ts                 @aussie-spaceman
+/lib/pdf-scan.ts                    @aussie-spaceman
+/lib/pdf-sandbox.ts                @aussie-spaceman
 /lib/pdf-sandbox-worker.ts          @aussie-spaceman
 /lib/resource-finalise.ts           @aussie-spaceman
 /lib/watermark/**                   @aussie-spaceman

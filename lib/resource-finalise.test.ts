@@ -51,7 +51,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 import { finaliseStoredUpload, watermarkIfPdf } from './resource-finalise'
-import { PDF_UNPROCESSABLE } from './pdf-page-count'
+import { PDF_BUSY, PDF_UNPROCESSABLE } from './pdf-page-count'
 
 const PATH = 'resources/members/m1/1-notes.pdf'
 const STAMPED = new Uint8Array([...FORMAT_SAMPLES.pdf, 0x0a])
@@ -113,7 +113,7 @@ describe('watermarkIfPdf', () => {
 
   // The sandbox stopped pdf-lib: past the timeout, out of heap, or the worker
   // died. The upload is refused and the object discarded — never thrown.
-  for (const reason of ['timeout', 'memory', 'crash'] as const) {
+  for (const reason of ['timeout', 'memory', 'crash', 'refused'] as const) {
     it(`refuses and discards a PDF the sandbox stopped (${reason})`, async () => {
       stampPdfBytes.mockResolvedValue({ ok: false, reason, detail: 'stopped' })
       const pdf = Uint8Array.from(FORMAT_SAMPLES.pdf)
@@ -125,6 +125,19 @@ describe('watermarkIfPdf', () => {
       expect(upload).not.toHaveBeenCalled()
     })
   }
+
+  // No worker came free in time: the file wasn't judged. Discarded (stored, it
+  // would be served unstamped) with a 503 asking for it again.
+  it('refuses and discards a PDF no worker came free for, as busy', async () => {
+    stampPdfBytes.mockResolvedValue({ ok: false, reason: 'busy', detail: 'no free PDF worker in 10000 ms' })
+    const pdf = Uint8Array.from(FORMAT_SAMPLES.pdf)
+    expect(await watermarkIfPdf('community-resources', PATH, pdf, 'application/pdf')).toEqual({
+      error: PDF_BUSY,
+      status: 503,
+    })
+    expect(remove).toHaveBeenCalledWith([PATH])
+    expect(upload).not.toHaveBeenCalled()
+  })
 
   it('keeps the original when pdf-lib only threw on it', async () => {
     stampPdfBytes.mockResolvedValue({ ok: false, reason: 'invalid', detail: 'parse error' })

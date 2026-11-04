@@ -5,13 +5,17 @@ import { pathToFileURL } from 'node:url'
 import { deflateSync } from 'node:zlib'
 import { PDFDocument } from 'pdf-lib'
 import {
+  DICT_WINDOW,
+  LOAD_INFLATE_BUDGET,
   LOAD_OBJECT_LIMIT,
   MAX_FLATE_STREAMS,
   MAX_MEMBER_PDF_PAGES,
   MAX_OBJECT_STREAMS,
+  checkLoadInflation,
   checkPdfPageLimit,
   scanPdfPages,
 } from './pdf-page-count'
+import { GB, MB, bombPdf } from './pdf-bombs.test.helper'
 
 const enc = (s: string) => new Uint8Array(Buffer.from(s, 'latin1'))
 const join = (...parts: (string | Uint8Array)[]) =>
@@ -183,6 +187,7 @@ describe('scanPdfPages', () => {
       bound: 0,
       objects: 1,
       markers: 0,
+      inflated: 0,
     })
   })
 
@@ -427,7 +432,8 @@ describe('scanPdfPages', () => {
 
   // More than the inflate budget holds is "can't tell", never a partial count.
   it('stops inflating at its budget', () => {
-    const offsets = Array.from({ length: 1_500_000 }, (_, i) => i * 7)
+    // A header of ~40 MB: past LOAD_INFLATE_BUDGET.
+    const offsets = Array.from({ length: 2_500_000 }, (_, i) => i * 7)
     const file = objectStreamPdf(PAGE, offsets)
     const started = performance.now()
     expect(scan(file)).toBeNull()
@@ -491,7 +497,7 @@ describe('scanPdfPages', () => {
 
   // The fixture is built here and handed over, so the 64MB limit measures
   // only the scan (building 300,000 objects in the worker ran it out of
-  // memory on its own). The worker loads lib/pdf-page-count.ts from source
+  // memory on its own). The worker loads lib/pdf-scan.ts from source
   // with Node's own type stripping, so that module must import nothing but
   // Node built-ins up top.
   it('refuses the 300,000-page file within a 64MB heap', async () => {
@@ -504,7 +510,7 @@ describe('scanPdfPages', () => {
        })`,
       {
         eval: true,
-        workerData: { source: pathToFileURL(`${import.meta.dirname}/pdf-page-count.ts`).href, file: file.buffer },
+        workerData: { source: pathToFileURL(`${import.meta.dirname}/pdf-scan.ts`).href, file: file.buffer },
         transferList: [file.buffer as ArrayBuffer],
         resourceLimits: { maxOldGenerationSizeMb: 64 },
         stderr: true,
@@ -531,8 +537,9 @@ describe('checkPdfPageLimit', () => {
 
   it('refuses the 300,000-page file without loading it', async () => {
     const started = performance.now()
-    // More to inflate than the budget allows: refused as uncountable.
-    expect(await checkPdfPageLimit(crafted(300_000), 50)).toBe('unknown')
+    // Its object stream is inflated in full (pdf-lib would decode it on load),
+    // and its 300,000 `/Type /Page` counted: over, without a load.
+    expect(await checkPdfPageLimit(crafted(300_000), 50)).toBe('over')
     expect(performance.now() - started).toBeLessThan(1000)
   })
 
@@ -701,7 +708,7 @@ async function uploadInWorker(file: Uint8Array, { scanFirst, ms }: { scanFirst: 
     {
       eval: true,
       workerData: {
-        source: pathToFileURL(`${import.meta.dirname}/pdf-page-count.ts`).href,
+        source: pathToFileURL(`${import.meta.dirname}/pdf-scan.ts`).href,
         pdfLib: createRequire(import.meta.url).resolve('pdf-lib'),
         file: copy.buffer,
         scanFirst,
@@ -932,6 +939,219 @@ describe('numbers pdf-lib moves or loops by', () => {
         expect(performance.now() - started).toBeLessThan(1000)
         expect(result === null || result.bound >= 0).toBe(true)
       })
+    }
+  })
+})
+
+// ── Streams pdf-lib inflates on load ────────────────────────────────────────
+
+/** Random hex digits: deflates about 2× — an honest ratio, unlike a bomb's. */
+function hexNoise(bytes: number): string {
+  let s = ''
+  let x = 0x2545f491
+  while (s.length < bytes) {
+    x ^= x << 13
+    x ^= x >>> 17
+    x ^= x << 5
+    s += (x >>> 0).toString(16).padStart(8, '0')
+  }
+  return s.slice(0, bytes)
+}
+
+/** One page, then streams of the given dictionaries ({L}: the data's length) and data. */
+function withStreams(streams: { dict: string; data: Uint8Array }[]): Uint8Array {
+  return join(
+    `%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n` +
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>\nendobj\n`,
+    ...streams.flatMap(({ dict, data }, i) => [
+      `${i + 4} 0 obj\n${dict.replace('{L}', String(data.length))}\nstream\n`,
+      data,
+      '\nendstream\nendobj\n',
+    ]),
+    'trailer\n<< /Root 1 0 R >>\n%%EOF\n',
+  )
+}
+
+/** Scan `file` in a worker with a 64 MB heap; the result and the buffers it left. */
+async function scanInSmallWorker(file: Uint8Array): Promise<{ refused: boolean; arrayBuffersMb: number } | string> {
+  const copy = new Uint8Array(file)
+  const worker = new Worker(
+    `const { parentPort, workerData } = require('node:worker_threads')
+     import(workerData.source).then(({ scanPdfPages }) => {
+       const before = process.memoryUsage().arrayBuffers
+       const result = scanPdfPages(new Uint8Array(workerData.file))
+       // No GC in between: whatever the scan allocated is still counted.
+       const arrayBuffersMb = (process.memoryUsage().arrayBuffers - before) / 1048576
+       parentPort.postMessage({ refused: result === null, arrayBuffersMb })
+     })`,
+    {
+      eval: true,
+      workerData: { source: pathToFileURL(`${import.meta.dirname}/pdf-scan.ts`).href, file: copy.buffer },
+      transferList: [copy.buffer as ArrayBuffer],
+      resourceLimits: { maxOldGenerationSizeMb: 64 },
+      stderr: true,
+    },
+  )
+  worker.stderr.resume()
+  const outcome = await new Promise<{ refused: boolean; arrayBuffersMb: number } | string>((resolve) => {
+    worker.once('message', resolve)
+    worker.once('error', (e: Error & { code?: string }) => resolve(`${e.code}: ${e.message}`))
+  })
+  await worker.terminate()
+  return outcome
+}
+
+describe('streams pdf-lib inflates on load', () => {
+  // The verified HIGH: a short, valid object-stream header — which the scan
+  // used to read from an 8 KB sniff and stop — then GBs of spaces, which
+  // pdf-lib inflates in full on load. 4.2 MB on disk for the 4 GB one.
+  for (const [name, size] of [
+    ['64 MB', 64 * MB],
+    ['512 MB', 512 * MB],
+    ['4 GB', 4 * GB],
+  ] as const) {
+    it(`refuses an object stream that inflates to ${name}, in milliseconds`, () => {
+      const file = bombPdf(size)
+      const started = performance.now()
+      expect(scan(file)).toBeNull()
+      expect(performance.now() - started).toBeLessThan(1000)
+    })
+
+    it(`refuses the ${name} bomb within a 64 MB heap, holding little memory`, async () => {
+      const outcome = await scanInSmallWorker(bombPdf(size))
+      expect(outcome).toMatchObject({ refused: true })
+      // At most the budget's worth of output, plus zlib's chunks: never the bomb.
+      expect((outcome as { arrayBuffersMb: number }).arrayBuffersMb).toBeLessThan((2 * LOAD_INFLATE_BUDGET) / MB + 16)
+    }, 30_000)
+  }
+
+  it('refuses the same bomb as an xref stream', () => {
+    expect(scan(bombPdf(512 * MB, '<< /Type /XRef /Size 6 /W [1 2 1] /Filter /FlateDecode /Length {L} >>'))).toBeNull()
+  })
+
+  it('refuses it behind a /Type that is a reference pdf-lib would look up', () => {
+    expect(scan(bombPdf(512 * MB, '<< /Type 9 0 R /N 1 /First 4 /Filter /FlateDecode /Length {L} >>'))).toBeNull()
+  })
+
+  // A dictionary that can't be read backwards (a string, a comment) may be
+  // anything: its stream is inflated as if pdf-lib decoded it.
+  it('refuses it behind a dictionary that hides its type in a string or a comment', () => {
+    for (const dict of [
+      '<< /Type /ObjStm /Note (stream) /N 1 /First 4 /Filter /FlateDecode /Length {L} >>',
+      '<< /Type /ObjStm /Note (>> stream) /N 1 /First 4 /Filter /FlateDecode /Length {L} >>',
+      '<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length {L} >> %c\n',
+      '<< /Type %c\n/ObjStm /N 1 /First 4 /Filter /FlateDecode /Length {L} >>',
+      '<< /Subtype /Image /Note (x) /Filter /FlateDecode /Length {L} >>',
+    ]) {
+      expect(scan(bombPdf(512 * MB, dict)), dict).toBeNull()
+    }
+  })
+
+  it('refuses it behind an escaped /ObjStm and a nested dictionary', () => {
+    for (const dict of [
+      '<< /Type /Obj#53tm /N 1 /First 4 /Filter /FlateDecode /Length {L} >>',
+      '<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /DecodeParms <</Predictor 1>> /Length {L}>>',
+      '<</Extends<</A 1>>/Type/ObjStm/N 1/First 4/Filter/FlateDecode/Length {L}>>',
+    ]) {
+      expect(scan(bombPdf(512 * MB, dict)), dict).toBeNull()
+    }
+  })
+
+  // Images, page contents and fonts stay compressed through a load, so a
+  // large one is fine: it isn't inflated here, as pdf-lib doesn't.
+  it('leaves a stream pdf-lib doesn’t decode on load compressed, however far it inflates', () => {
+    const big = deflateSync(Buffer.alloc(64 * MB, 0xff))
+    for (const dict of [
+      '<< /Type /XObject /Subtype /Image /Width 8192 /Height 8192 /BitsPerComponent 8 /ColorSpace /DeviceGray /Filter /FlateDecode /Length {L} >>',
+      // `>>>>`, `<<<<` and an indexed palette in a hex string: all read.
+      '<</Subtype/Image/ColorSpace[/Indexed/DeviceRGB 1<ff0000 00ff00>]/DecodeParms<</Predictor 15/Colors 1>>/Filter/FlateDecode/Length {L}>>',
+      '<</Subtype/Form/Resources<</ExtGState<</GS0 5 0 R>>>>/Filter/FlateDecode/Length {L}>>',
+      '<<<</A 1>> 2 0 R<</B<ab>>>/Subtype/Image/Filter/FlateDecode/Length {L}>>',
+    ]) {
+      const result = scan(withStreams([{ dict, data: big }]))
+      expect(result, dict).not.toBeNull()
+      expect(result!.inflated, dict).toBe(0)
+    }
+  })
+
+  it('holds each stream pdf-lib decodes on load to MAX_INFLATE_RATIO', () => {
+    // 4 MB of spaces deflates ~1000×: refused. 4 MB of hex noise ~2×: read.
+    const objStm = '<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length {L} >>'
+    const blank = deflateSync(Buffer.from(`5 0 << /A 1 >>${' '.repeat(4 * MB)}`, 'latin1'))
+    expect(scan(withStreams([{ dict: objStm, data: blank }]))).toBeNull()
+    const noise = deflateSync(Buffer.from(`5 0 << /A 1 >>${hexNoise(4 * MB)}`, 'latin1'))
+    expect(scan(withStreams([{ dict: objStm, data: noise }]))?.inflated).toBeGreaterThan(4 * MB)
+  })
+
+  it('holds what all of them inflate, together, to the budget', () => {
+    const objStm = '<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length {L} >>'
+    const one = { dict: objStm, data: deflateSync(Buffer.from(`5 0 << /A 1 >>${hexNoise(2 * MB)}`, 'latin1')) }
+    const file = withStreams([one, one, one])
+    expect(scan(file)?.inflated).toBeGreaterThan(6 * MB)
+    // Each is under the budget; together they're past it.
+    expect(scanPdfPages(file, Infinity, { inflateBudget: 5 * MB })).toBeNull()
+  })
+
+  it('refuses a filter it can’t bound cheaply on an object or xref stream, not on an image', () => {
+    const data = new Uint8Array(Buffer.from('ab', 'latin1'))
+    expect(scan(withStreams([{ dict: '<< /Type /XRef /Size 1 /W [1 1 1] /Filter /RunLengthDecode /Length {L} >>', data }]))).toBeNull()
+    expect(
+      scan(withStreams([{ dict: '<< /Type /XRef /Size 1 /W [1 1 1] /Filter [/FlateDecode /LZWDecode] /Length {L} >>', data }])),
+    ).toBeNull()
+    expect(scan(withStreams([{ dict: '<< /Subtype /Image /Filter /RunLengthDecode /Length {L} >>', data }]))).not.toBeNull()
+  })
+
+  it('still reads every ordinary object-stream file', async () => {
+    for (const pages of [1, 50]) {
+      const file = await pdfOf(pages, true)
+      const result = scan(file)
+      expect(result).not.toBeNull()
+      expect(result!.inflated).toBeGreaterThan(0)
+    }
+  })
+
+  // The sandbox worker's check before every load: the same bound on what a
+  // load inflates, and nothing the page count refuses for other reasons.
+  describe('checkLoadInflation', () => {
+    it('refuses the bombs, the way the scan does', () => {
+      for (const size of [64 * MB, 512 * MB, 4 * GB]) expect(checkLoadInflation(bombPdf(size))).toBeNull()
+      expect(checkLoadInflation(bombPdf(512 * MB, '<< /Type /XRef /Size 6 /W [1 2 1] /Filter /FlateDecode /Length {L} >>'))).toBeNull()
+      expect(checkLoadInflation(bombPdf(512 * MB, '<< /Type /ObjStm /Note (stream) /Filter /FlateDecode /Length {L} >>'))).toBeNull()
+      const data = new Uint8Array(Buffer.from('ab', 'latin1'))
+      expect(checkLoadInflation(withStreams([{ dict: '<< /Type /XRef /Filter /RunLengthDecode /Length {L} >>', data }]))).toBeNull()
+    })
+
+    it('holds the streams to the budget together, and each to the ratio', () => {
+      const objStm = '<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length {L} >>'
+      const one = { dict: objStm, data: deflateSync(Buffer.from(`5 0 << /A 1 >>${hexNoise(2 * MB)}`, 'latin1')) }
+      expect(checkLoadInflation(withStreams([one, one, one]))).toBeGreaterThan(6 * MB)
+      expect(checkLoadInflation(withStreams([one, one, one]), { inflateBudget: 5 * MB })).toBeNull()
+      const blank = deflateSync(Buffer.from(`5 0 << /A 1 >>${' '.repeat(4 * MB)}`, 'latin1'))
+      expect(checkLoadInflation(withStreams([{ dict: objStm, data: blank }]))).toBeNull()
+    })
+
+    it('passes ordinary files, and what the page count refuses only for its numbers', async () => {
+      for (const streams of [true, false]) expect(checkLoadInflation(await pdfOf(50, streams))).not.toBeNull()
+      // A negative /Length: the page count refuses it (pdf-lib loops), but it
+      // inflates nothing — the sandbox's timeout is that one's bound.
+      expect(scan(backwardsLength())).toBeNull()
+      expect(checkLoadInflation(backwardsLength())).toBe(0)
+      // An image that inflates far stays compressed through a load.
+      const big = deflateSync(Buffer.alloc(64 * MB, 0xff))
+      expect(checkLoadInflation(withStreams([{ dict: '<< /Subtype /Image /Filter /FlateDecode /Length {L} >>', data: big }]))).toBe(0)
+    })
+  })
+
+  it('reads dictionaries in linear time, whatever a file holds', () => {
+    // 1000 Flate streams, each after a dictionary as long as DICT_WINDOW
+    // allows: every read runs the window, until the read budget is spent.
+    const dict = `<< ${'/A 1 '.repeat(Math.floor((DICT_WINDOW - 64) / 5))}/Length {L} >>`
+    const data = new Uint8Array(deflateSync(Buffer.from('0 0')))
+    const file = withStreams(Array.from({ length: 1000 }, () => ({ dict, data })))
+    for (const check of [() => scan(file), () => checkLoadInflation(file)]) {
+      const started = performance.now()
+      check()
+      expect(performance.now() - started).toBeLessThan(1000)
     }
   })
 })

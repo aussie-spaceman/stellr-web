@@ -34,12 +34,18 @@ describe('checkPdfPageLimit and the sandbox', () => {
 
   it('is "failed" when the sandbox had to stop pdf-lib, "unknown" when pdf-lib threw', async () => {
     const file = await needsLoad()
-    for (const reason of ['timeout', 'memory', 'crash']) {
+    for (const reason of ['timeout', 'memory', 'crash', 'refused']) {
       countPdfPagesSandboxed.mockResolvedValue({ ok: false, reason, detail: 'stopped' })
       expect(await checkPdfPageLimit(file, 50), reason).toBe('failed')
     }
     countPdfPagesSandboxed.mockResolvedValue({ ok: false, reason: 'invalid', detail: 'parse error' })
     expect(await checkPdfPageLimit(file, 50)).toBe('unknown')
+  })
+
+  it('is "busy" when no worker came free in time: the file wasn’t judged', async () => {
+    const file = await needsLoad()
+    countPdfPagesSandboxed.mockResolvedValue({ ok: false, reason: 'busy', detail: 'no free PDF worker in 10000 ms' })
+    expect(await checkPdfPageLimit(file, 50)).toBe('busy')
   })
 
   it('never reaches the sandbox for a file the scan settles', async () => {

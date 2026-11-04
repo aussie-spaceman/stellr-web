@@ -35,13 +35,22 @@ runs:
 
     # The system libraries are not part of that cache. WebKit's come to 114 MB
     # from the Ubuntu mirror, which usually takes 10 s, but twice on 4 Nov 2026
-    # ran at ~200 kB/s and took 9-10 minutes. Keeping the packages means a normal
-    # run downloads almost nothing. apt checks every package against the signed
-    # index, so a restored file cannot install anything apt would not accept.
-    - uses: actions/cache@v6
+    # ran at ~200 kB/s and took 9-10 minutes. apt only moves to its next mirror on
+    # a stall, so a slow connection never fails over. Keeping the packages means a
+    # normal run downloads almost nothing. apt checks every package against the
+    # signed index, so a restored file cannot install anything apt would not
+    # accept. The key changes weekly, seeded from the previous week, so Ubuntu
+    # updates do not pile up as repeat downloads.
+    - id: apt-week
+      shell: bash
+      run: echo "value=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+    - id: apt
+      uses: actions/cache/restore@v6
       with:
         path: ~/apt-archives
-        key: playwright-apt-${{ steps.key.outputs.value }}
+        key: playwright-apt-${{ steps.key.outputs.value }}-${{ steps.apt-week.outputs.value }}
+        restore-keys: playwright-apt-${{ steps.key.outputs.value }}-
 
     # A package a security update has replaced is still downloaded, so the mirror
     # can stall this. A stalled try is stopped and retried: apt keeps what it has
@@ -65,6 +74,16 @@ runs:
           sudo dpkg --configure -a || true
         done
         [ "$installed" = true ] || npx playwright install-deps $BROWSERS
+        # Drop superseded versions, so the cache does not grow.
+        sudo apt-get autoclean -qq || true
         # apt ran as root. actions/cache saves these as the runner user.
         sudo rm -f "$archives/lock"
         sudo chown -R "$USER" "$archives"
+
+    # Saved here, not at the end of the job, so a failing test does not stop the
+    # next run benefiting.
+    - if: steps.apt.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/apt-archives
+        key: ${{ steps.apt.outputs.cache-primary-key }}

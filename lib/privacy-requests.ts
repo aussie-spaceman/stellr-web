@@ -90,9 +90,12 @@ export async function submitRequest(db: SupabaseClient, input: RequestInput, now
   if (error) throw new Error(`Recording the request failed: ${error.message}`)
 
   const { token } = mintToken(data.id as string, 'request', data.token_version as number, LINK_TTL_SECONDS, now.getTime())
+  // Critical mail (lib/email/suppressions.ts): the request only counts once this
+  // link is followed, so the suppression list never holds it back.
   await sendEmail({
     to: input.requesterEmail,
     ...confirmationEmail({ requesterName: input.requesterName, kind: input.kind, subjectName: input.subjectName, url: confirmUrl(token) }),
+    critical: true,
   })
 }
 

@@ -110,7 +110,10 @@ export async function sendAccountInvite(
     url: `${AUTH_APP_URL}/account/onboarding`,
   })
   try {
-    await sendEmail({ to: member.email, ...mail })
+    // Critical mail (lib/email/suppressions.ts): the sign-in invite is how the
+    // member reaches their account, so the suppression list never holds it back.
+    const sent = await sendEmail({ to: member.email, ...mail, critical: true })
+    if (sent?.suppressed) return { sent: false, reason: 'send_failed' }
   } catch (e) {
     console.error('[member-invite] send failed:', e)
     return { sent: false, reason: 'send_failed' }
@@ -194,7 +197,9 @@ export async function sendGroupAccountInvite(
     url: `${AUTH_APP_URL}/account/onboarding?next=${encodeURIComponent('/account?tab=profile')}`,
   })
   try {
-    await sendEmail({ to: member.email, ...mail })
+    // Critical mail, as in sendAccountInvite.
+    const sent = await sendEmail({ to: member.email, ...mail, critical: true })
+    if (sent?.suppressed) return { sent: false, reason: 'send_failed' }
   } catch (e) {
     console.error('[member-invite] group send failed:', e)
     return { sent: false, reason: 'send_failed' }

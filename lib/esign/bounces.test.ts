@@ -65,9 +65,9 @@ describe('POST /api/webhooks/resend', () => {
   it('acts on a correctly signed bounce', async () => {
     vi.stubEnv('RESEND_WEBHOOK_SECRET', secret)
     setup()
-    const res = await POST(signed(JSON.stringify({ type: 'email.bounced', data: { email_id: 're_bundle' } })))
+    const res = await POST(signed(JSON.stringify({ type: 'email.bounced', data: { email_id: 're_bundle', to: ['pat@example.test'], bounce: { type: 'Permanent' } } })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ received: true, bounced: 2 })
+    expect(await res.json()).toEqual({ received: true, suppressed: 1, bounced: 2 })
   })
 
   it('refuses a wrong signature or a replayed old message', async () => {

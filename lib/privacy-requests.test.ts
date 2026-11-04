@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
-const { sent, notify } = vi.hoisted(() => ({ sent: [] as { to: string; text: string }[], notify: vi.fn(async () => {}) }))
-vi.mock('@/lib/email', () => ({ sendEmail: async (m: { to: string; text: string }) => { sent.push(m); return { id: 're_1' } } }))
+const { sent, notify } = vi.hoisted(() => ({ sent: [] as { to: string; text: string; critical?: boolean }[], notify: vi.fn(async () => {}) }))
+vi.mock('@/lib/email', () => ({ sendEmail: async (m: { to: string; text: string; critical?: boolean }) => { sent.push(m); return { id: 're_1' } } }))
 vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: notify }))
 
 import { confirmRequest, findMatches, purgeRequests, requestSchema, resolveRequest, submitRequest } from './privacy-requests'
@@ -33,6 +33,9 @@ describe('a request, from form to answer', () => {
     const row = db.table('privacy_requests')[0]
     expect(row).toMatchObject({ status: 'unverified', kind: 'deletion', requester_email: 'pat@example.test' })
     expect(sent.map((m) => m.to)).toEqual(['pat@example.test'])
+    // A parent's privacy request is confirmed by this link alone: it goes even
+    // to an address on the suppression list.
+    expect(sent[0].critical).toBe(true)
     expect(notify).not.toHaveBeenCalled()
 
     const token = linkIn(sent[0].text)

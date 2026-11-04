@@ -28,6 +28,10 @@ const hubspot = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/env-guards', () => ({ isRealProductionApp: () => hubspot.isProd }))
 vi.mock('@/lib/hubspot-event-options', () => ({ syncEventOptions: hubspot.sync }))
+// S3 events mirror: the route calls syncEventMirrorSafe last; it must never be
+// able to fail the webhook.
+const mirror = vi.hoisted(() => ({ sync: vi.fn(async (_db: unknown, _by: unknown) => ({ status: 'synced' as string })) }))
+vi.mock('@/lib/events/sync', () => ({ syncEventMirrorSafe: mirror.sync }))
 
 const SECRET = 'top-secret-value'
 const { POST } = await import('./route')
@@ -98,5 +102,47 @@ describe('POST /api/admin/sanity/event-sync — HubSpot option sync', () => {
     const res = await publish()
     expect(res.status).toBe(200)
     expect((await res.json()).hubspotOptions).toBe('error')
+  })
+})
+
+describe('POST /api/admin/sanity/event-sync — events mirror (S3)', () => {
+  function publish() {
+    return POST(new Request('https://app.test/api/admin/sanity/event-sync', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-webhook-secret': SECRET },
+      body: body(),
+    }))
+  }
+
+  afterEach(() => { mirror.sync.mockClear() })
+
+  it('mirrors the published event by its Sanity _id and reports the outcome', async () => {
+    const res = await publish()
+    expect(res.status).toBe(200)
+    expect(mirror.sync).toHaveBeenCalledWith(expect.anything(), { sanityId: 'doc1', slug: 'co-sdc' })
+    expect((await res.json()).mirror).toBe('synced')
+  })
+
+  it('still answers 200 with the rest of the sync when the mirror reports an error', async () => {
+    mirror.sync.mockResolvedValueOnce({ status: 'error' })
+    const res = await publish()
+    const json = await res.json()
+    expect(res.status).toBe(200)
+    expect(json).toMatchObject({ ok: true, slug: 'co-sdc', mirror: 'error', containerId: 'c1' })
+  })
+
+  it('does not fail the webhook even if the mirror throws', async () => {
+    mirror.sync.mockRejectedValueOnce(new Error('mirror down'))
+    const res = await publish()
+    expect(res.status).toBe(200)
+    expect((await res.json()).mirror).toBe('error')
+  })
+
+  it('is not called for a refused request', async () => {
+    const res = await POST(new Request('https://app.test/api/admin/sanity/event-sync', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: body(),
+    }))
+    expect(res.status).toBe(403)
+    expect(mirror.sync).not.toHaveBeenCalled()
   })
 })

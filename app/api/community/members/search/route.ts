@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getHostCaps } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
 import { isStudentForAds } from '@/lib/no-ads'
@@ -20,7 +20,7 @@ import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 //   • the search is rate-limited per caller so a host can't iterate the
 //     alphabet to enumerate the membership.
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const caps = await getHostCaps(member.id)
   if (!member.isAdmin && !caps.canMentor) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

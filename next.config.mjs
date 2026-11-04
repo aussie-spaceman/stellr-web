@@ -14,6 +14,9 @@ export const VIDEO_PERMISSIONS_POLICY = `camera=(self ${VIDEO_ORIGINS}), microph
 export const CHECK_IN_DESK_ROUTE = '/admin/competitions/:slug/check-in'
 export const CHECK_IN_DESK_PERMISSIONS_POLICY = 'camera=(self), microphone=(), geolocation=(), payment=(self)'
 
+// Strict-Transport-Security for every response. Exported for security-headers tests.
+export const STRICT_TRANSPORT_SECURITY = 'max-age=31536000; includeSubDomains'
+
 // The stellr-web-dev Vercel project (same ID as scripts/vercel-ignore-build.sh).
 export const DEV_PROJECT_ID = 'prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO'
 
@@ -103,8 +106,8 @@ function isLegacyServiceRoleKey(value) {
 }
 
 /**
- * The public Supabase key variable that holds an elevated key (a secret key,
- * `sb_secret_…`, or the legacy service_role JWT), or null. Next copies
+ * NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY when it holds an elevated key (a secret
+ * key, `sb_secret_…`, or the legacy service_role JWT), or null. Next copies
  * NEXT_PUBLIC_ values into the browser bundle at build time, so such a key
  * pasted into the public slot would be published with the site. Names the
  * variable, never the value. Exported for next-config-supabase-keys.test.ts;
@@ -114,11 +117,11 @@ function isLegacyServiceRoleKey(value) {
  * @param {Record<string, string | undefined>} [env]
  */
 export function secretInPublicSupabaseKey(env = process.env) {
-  for (const name of ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']) {
-    const value = (env[name] ?? '').trim()
-    if (value.startsWith('sb_secret_') || isLegacyServiceRoleKey(value)) return name
-  }
-  return null
+  // The only public key variable the app reads (the legacy
+  // NEXT_PUBLIC_SUPABASE_ANON_KEY fallback was removed 3 Nov 2026).
+  const name = 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
+  const value = (env[name] ?? '').trim()
+  return value.startsWith('sb_secret_') || isLegacyServiceRoleKey(value) ? name : null
 }
 
 const leakedSupabaseKey = secretInPublicSupabaseKey()
@@ -211,6 +214,12 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(self)' },
+          // HTTPS only, for a year, on this host and every host beneath it
+          // (S1). No `preload` yet: joining the browsers' preload list is hard
+          // to undo and is the owner's call. Browsers ignore this header on
+          // plain-http localhost. The Report-Only Content-Security-Policy is
+          // set per request by proxy.ts (lib/csp.ts), not here.
+          { key: 'Strict-Transport-Security', value: STRICT_TRANSPORT_SECURITY },
         ],
       },
       // Video rooms embed Jitsi (8x8.vc in production, meet.jit.si as the dev

@@ -19,6 +19,8 @@ import { MemberAgreementPanel, type MemberAgreement } from '@/components/admin/M
 import { MemberAccessPanel } from '@/components/admin/MemberAccessPanel'
 import { MemberSpacesPanel } from '@/components/admin/MemberSpacesPanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
+import { MemberMergeDialog } from '@/components/admin/MemberMergeDialog'
+import { PERSONAL_EMAIL_LABEL, SCHOOL_EMAIL_LABEL, showsSchoolEmail } from '@/lib/member-email'
 
 interface Member {
   id: string
@@ -27,11 +29,12 @@ interface Member {
   last_name: string
   nickname: string | null
   email: string
+  school_email?: string | null
   phone: string | null
   date_of_birth: string | null
   gender: string | null
   account_invite_sent_at: string | null
-  age_bracket: string
+  age_bracket: string | null
   event_role: string
   grade: string | null
   grade_auto_promote: boolean
@@ -152,8 +155,10 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     first_name: member.first_name,
     last_name: member.last_name,
     email: member.email,
+    school_email: member.school_email ?? '',
     phone: member.phone ?? '',
-    age_bracket: member.age_bracket,
+    // Null for a self sign-up that has not onboarded: its age is not known yet.
+    age_bracket: member.age_bracket ?? '',
     event_role: member.event_role,
     grade: member.grade ?? '',
     grade_auto_promote: member.grade_auto_promote,
@@ -348,6 +353,10 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               Confirm deactivate
             </button>
           )}
+          <MemberMergeDialog
+            member={{ id: member.id, first_name: member.first_name, last_name: member.last_name }}
+            className="border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas"
+          />
           <DeleteEntityButton
             entity="member"
             id={member.id}
@@ -372,9 +381,20 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               <Field label="Last name">
                 <Input type="text" autoComplete="off" value={form.last_name} onChange={(e) => set('last_name', e.target.value)} />
               </Field>
-              <Field label="Email">
-                <Input type="email" autoComplete="off" value={form.email} onChange={(e) => set('email', e.target.value)} />
-              </Field>
+              {showsSchoolEmail(member.date_of_birth) ? (
+                <>
+                  <Field label={PERSONAL_EMAIL_LABEL} hint="The primary address. If left blank, the school email is used.">
+                    <Input type="email" autoComplete="off" value={form.email} onChange={(e) => set('email', e.target.value)} />
+                  </Field>
+                  <Field label={SCHOOL_EMAIL_LABEL} hint="Optional. Nothing is sent here while a personal email is on file.">
+                    <Input type="email" autoComplete="off" value={form.school_email} onChange={(e) => set('school_email', e.target.value)} />
+                  </Field>
+                </>
+              ) : (
+                <Field label="Email">
+                  <Input type="email" autoComplete="off" value={form.email} onChange={(e) => set('email', e.target.value)} />
+                </Field>
+              )}
               <Field label="Phone">
                 <Input type="tel" autoComplete="off" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
               </Field>
@@ -393,6 +413,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Age bracket">
                 <Select value={form.age_bracket} onChange={(e) => handleBracketChange(e.target.value)}>
+                  {!form.age_bracket && <option value="">Not known yet</option>}
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
                 </Select>
               </Field>

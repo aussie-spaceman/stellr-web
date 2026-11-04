@@ -12,14 +12,21 @@
     "lint": "eslint .",
     "lint:ci": "eslint app components packages lib proxy.ts --max-warnings 42",
     "lint:tokens": "node scripts/ds-lint.mjs",
-    "lint:migrations": "node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs",
+    "lint:migrations": "node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs && npm run lint:tenancy --silent",
+    "lint:tenancy": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-migration-tenancy.mjs",
     "lint:pii": "node scripts/lint-pii.mjs",
+    "lint:lockfile": "lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity --validate-integrity-strict --validate-package-names --allowed-package-name-aliases @typescript/old:typescript ui5:@sanity/ui",
+    "lint:semgrep": "semgrep scan --config .semgrep --metrics=off --severity ERROR --error . && sh scripts/semgrep-rule-tests.sh",
+    "migration:report": "node scripts/migration-report.mjs",
+    "test:mutation": "stryker run",
+    "idor:snapshot": "IDOR_UPDATE_SNAPSHOT=1 vitest run test/idor/idor-routes.test.ts",
+    "idor:canary": "node scripts/idor-canary.mjs",
     "migration:new": "supabase migration new",
     "db:status": "node scripts/db-status.mjs",
     "tracker": "node scripts/tracker.mjs",
     "worktrees": "node scripts/worktree-sweep.mjs",
     "check:deploy-ready": "node scripts/check-deploy-ready.mjs",
-    "prebuild": "node scripts/copy-scanner-wasm.mjs && node design/build-tokens.mjs && node scripts/ds-lint.mjs && node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs && tsx scripts/check-watermarks.ts",
+    "prebuild": "node scripts/copy-scanner-wasm.mjs && node design/build-tokens.mjs && node scripts/ds-lint.mjs && node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-migration-tenancy.mjs && tsx scripts/check-watermarks.ts",
     "build": "next build",
     "start": "next start",
     "watermark:pdfs": "tsx scripts/watermark-pdfs.ts",
@@ -108,6 +115,8 @@
     "@playwright/test": "^1.64.1",
     "@storybook/addon-a11y": "^10.6.3",
     "@storybook/nextjs-vite": "^10.6.3",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@tailwindcss/node": "^4.3.3",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
@@ -128,6 +137,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "ffmpeg-static": "^5.2.0",
     "jsdom": "^30.1.3",
+    "lockfile-lint": "5.1.0",
     "postcss": "^8.5.31",
     "storybook": "^10.6.3",
     "style-dictionary": "^5.7.0",
@@ -165,6 +175,9 @@
     },
     "eslint-plugin-jsx-a11y": {
       "eslint": "$eslint"
+    },
+    "typed-rest-client": {
+      "qs": "^6.17.0"
     }
   }
 }

@@ -14,7 +14,7 @@
  *   npm run fix:event-slug -- --from <old> --to <new>
  *
  * Prerequisites (.env.local): NEXT_PUBLIC_SANITY_PROJECT_ID,
- * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY)
+ * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY
  *
  * Run:
  *   npm run audit:event-slugs

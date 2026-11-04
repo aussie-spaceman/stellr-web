@@ -12,8 +12,10 @@ import {
 
 // S0 key migration: Supabase retires the JWT anon/service_role keys at the end
 // of 2026. These pin that the app reads the new publishable/secret variables
-// first, falls back to the legacy ones while they exist, never needs a key to be
-// a JWT, and never sends a new-format key as a Bearer token.
+// only (the legacy-name fallback was removed 3 Nov 2026, runbook step 11, so a
+// legacy-only env is unconfigured), never needs a key to be a JWT, still
+// catches a mis-slotted legacy JWT value, and never sends a new-format key as a
+// Bearer token.
 
 // Obviously fake values, short enough that no secret scanner mistakes them.
 const PUBLISHABLE = 'sb_publishable_TESTONLY'
@@ -77,26 +79,33 @@ describe('supabaseKeyRole', () => {
 })
 
 describe('supabasePublicKey', () => {
-  it('prefers the publishable key over the legacy anon key', () => {
+  it('reads the publishable key', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', PUBLISHABLE)
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
     expect(supabasePublicKey()).toBe(PUBLISHABLE)
   })
 
-  it('falls back to the legacy anon key while the new variable is unset', () => {
+  it('no longer reads the legacy anon variable, in any format', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    expect(supabasePublicKey()).toBe(LEGACY_ANON)
+    expect(supabasePublicKey()).toBeUndefined()
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', PUBLISHABLE)
+    expect(supabasePublicKey()).toBeUndefined()
   })
 
-  it('treats an empty or blank new variable as unset (GitHub Actions sends "" for a missing secret)', () => {
+  it('ignores the legacy anon variable when the publishable key is set', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', PUBLISHABLE)
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_SERVICE)
+    expect(supabasePublicKey()).toBe(PUBLISHABLE)
+  })
+
+  it('treats an empty or blank variable as unset (GitHub Actions sends "" for a missing secret)', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', '  ')
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
-    expect(supabasePublicKey()).toBe(LEGACY_ANON)
+    expect(supabasePublicKey()).toBeUndefined()
   })
 
-  it('accepts a new-format key under the legacy name too (no JWT needed)', () => {
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', PUBLISHABLE)
-    expect(supabasePublicKey()).toBe(PUBLISHABLE)
+  it('still accepts a legacy anon JWT value under the new name (format-agnostic)', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', LEGACY_ANON)
+    expect(supabasePublicKey()).toBe(LEGACY_ANON)
   })
 
   it('trims a pasted trailing newline', () => {
@@ -104,7 +113,7 @@ describe('supabasePublicKey', () => {
     expect(supabasePublicKey()).toBe(PUBLISHABLE)
   })
 
-  it('is undefined when neither variable is set', () => {
+  it('is undefined when the variable is unset', () => {
     expect(supabasePublicKey()).toBeUndefined()
   })
 
@@ -119,14 +128,12 @@ describe('supabasePublicKey', () => {
     }
   })
 
-  it('refuses a secret key under the legacy public name too', () => {
+  it('ignores a secret key under the legacy public name (that variable is not read)', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', SECRET)
-    expect(() => supabasePublicKey()).toThrow(/NEXT_PUBLIC_SUPABASE_ANON_KEY/)
+    expect(supabasePublicKey()).toBeUndefined()
   })
 
-  it('refuses a legacy service_role key in either public variable, without echoing it', () => {
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_SERVICE)
-    expect(() => supabasePublicKey()).toThrow(/NEXT_PUBLIC_SUPABASE_ANON_KEY holds a Supabase legacy service_role key/)
+  it('refuses a legacy service_role JWT in the public slot, without echoing it', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', LEGACY_SERVICE)
     expect(() => supabasePublicKey()).toThrow(/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY holds a Supabase legacy service_role key/)
     try {
@@ -138,25 +145,27 @@ describe('supabasePublicKey', () => {
 })
 
 describe('supabaseSecretKey', () => {
-  it('prefers the secret key over the legacy service_role key', () => {
+  it('reads the secret key, ignoring the legacy service_role variable', () => {
     vi.stubEnv('SUPABASE_SECRET_KEY', SECRET)
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_ANON)
     expect(supabaseSecretKey()).toBe(SECRET)
   })
 
-  it('falls back to the legacy service_role key while the new variable is unset or empty', () => {
+  it('no longer reads the legacy service_role variable, unset or empty new name alike', () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
-    expect(supabaseSecretKey()).toBe(LEGACY_SERVICE)
+    expect(supabaseSecretKey()).toBeUndefined()
     vi.stubEnv('SUPABASE_SECRET_KEY', '')
+    expect(supabaseSecretKey()).toBeUndefined()
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SECRET)
+    expect(supabaseSecretKey()).toBeUndefined()
+  })
+
+  it('still accepts a legacy service_role JWT value under the new name (format-agnostic)', () => {
+    vi.stubEnv('SUPABASE_SECRET_KEY', LEGACY_SERVICE)
     expect(supabaseSecretKey()).toBe(LEGACY_SERVICE)
   })
 
-  it('accepts a secret key under the legacy name', () => {
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SECRET)
-    expect(supabaseSecretKey()).toBe(SECRET)
-  })
-
-  it('is undefined when neither variable is set', () => {
+  it('is undefined when the variable is unset', () => {
     expect(supabaseSecretKey()).toBeUndefined()
   })
 
@@ -166,15 +175,13 @@ describe('supabaseSecretKey', () => {
     expect(() => supabaseSecretKey()).toThrow(/SUPABASE_SECRET_KEY holds a Supabase publishable key/)
   })
 
-  it('refuses a legacy anon key in either secret variable (the same silent-anon failure)', () => {
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_ANON)
-    expect(() => supabaseSecretKey()).toThrow(/SUPABASE_SERVICE_ROLE_KEY holds a Supabase legacy anon key/)
+  it('refuses a legacy anon JWT in the secret slot (the same silent-anon failure)', () => {
     vi.stubEnv('SUPABASE_SECRET_KEY', LEGACY_ANON)
     expect(() => supabaseSecretKey()).toThrow(/SUPABASE_SECRET_KEY holds a Supabase legacy anon key/)
   })
 
   it('still accepts a legacy key whose role cannot be read (no new failure for an odd JWT)', () => {
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'eyJhbGci.eyJyb2xl.c2VydmljZQ')
+    vi.stubEnv('SUPABASE_SECRET_KEY', 'eyJhbGci.eyJyb2xl.c2VydmljZQ')
     expect(supabaseSecretKey()).toBe('eyJhbGci.eyJyb2xl.c2VydmljZQ')
   })
 })
@@ -263,18 +270,27 @@ describe('supabaseFetch (the fetch every supabase-js client here is given)', () 
 describe('supabaseKeySlots', () => {
   it('reports kind, role and source variable for each slot, never a value', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', PUBLISHABLE)
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
+    vi.stubEnv('SUPABASE_SECRET_KEY', SECRET)
     const slots = supabaseKeySlots()
     expect(slots).toEqual({
       public: { variable: 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', kind: 'publishable', role: 'anon' },
-      secret: { variable: 'SUPABASE_SERVICE_ROLE_KEY', kind: 'legacy-jwt', role: 'service_role' },
+      secret: { variable: 'SUPABASE_SECRET_KEY', kind: 'secret', role: 'service_role' },
     })
     const json = JSON.stringify(slots)
     expect(json).not.toContain(PUBLISHABLE)
-    expect(json).not.toContain(LEGACY_SERVICE)
+    expect(json).not.toContain(SECRET)
   })
 
   it('says unconfigured when a slot is empty', () => {
+    expect(supabaseKeySlots()).toEqual({
+      public: { variable: null, kind: 'unconfigured', role: null },
+      secret: { variable: null, kind: 'unconfigured', role: null },
+    })
+  })
+
+  it('says unconfigured for a legacy-only env (the legacy names are no longer read)', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_ANON)
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_SERVICE)
     expect(supabaseKeySlots()).toEqual({
       public: { variable: null, kind: 'unconfigured', role: null },
       secret: { variable: null, kind: 'unconfigured', role: null },
@@ -290,12 +306,12 @@ describe('supabaseKeySlots', () => {
     })
   })
 
-  it('tells swapped legacy keys apart by role (both are legacy-jwt)', () => {
-    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', LEGACY_SERVICE)
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', LEGACY_ANON)
+  it('tells swapped legacy JWT values apart by role (both are legacy-jwt)', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', LEGACY_SERVICE)
+    vi.stubEnv('SUPABASE_SECRET_KEY', LEGACY_ANON)
     expect(supabaseKeySlots()).toEqual({
-      public: { variable: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', kind: 'legacy-jwt', role: 'service_role' },
-      secret: { variable: 'SUPABASE_SERVICE_ROLE_KEY', kind: 'legacy-jwt', role: 'anon' },
+      public: { variable: 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', kind: 'legacy-jwt', role: 'service_role' },
+      secret: { variable: 'SUPABASE_SECRET_KEY', kind: 'legacy-jwt', role: 'anon' },
     })
   })
 })

@@ -8,6 +8,7 @@ import { syncMemberClassificationRole } from '@/lib/member-roles'
 import { startRetentionClock } from '@/lib/esign/retention'
 import { mayLinkLogin } from '@/lib/guardian-consent'
 import { logActivity } from '@/lib/activity-log'
+import { isUnder13On, isValidDob } from '@/lib/age'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
 // This keeps the members table in sync with Clerk identity records. A new
@@ -157,15 +158,25 @@ export async function POST(req: Request) {
         ((existing as { event_role: string | null }).event_role) ?? 'subscriber',
       )
     } else {
-      // Create a minimal member record; they complete their profile on /account
+      // A self sign-up. COPPA data minimisation (decision 24): nobody's age is
+      // known yet, and the person signing up may be a child, so the row holds
+      // only what links the login to it — the verified email and the Clerk id.
+      // No name, no photo, and no age bracket (null is "not known yet": an
+      // 'adult' default here told every age gate the opposite). Onboarding
+      // records the date of birth first and then fills the rest by age band:
+      // an under-13 gives only a first name and a parent's email; anyone older
+      // gets their name and photo from their login (app/api/members/onboarding).
+      // Until then memberIsMinor and isStudentForAds treat the row as a minor
+      // (no usable date of birth), and every member surface sends it to
+      // onboarding. The names are '' rather than null: the columns are NOT
+      // NULL, and '' is what a login with no name already stored here.
       const { data: created } = await db.from('members').insert({
         clerk_user_id: data.id,
-        first_name: data.first_name ?? '',
-        last_name: data.last_name ?? '',
+        first_name: '',
+        last_name: '',
         email: primaryEmail,
-        profile_photo_url: data.image_url,
-        // Defaults — member sets these during onboarding
-        age_bracket: 'adult',
+        profile_photo_url: null,
+        age_bracket: null,
         event_role: 'subscriber',
         is_active: true,
       }).select('id').maybeSingle()
@@ -188,15 +199,29 @@ export async function POST(req: Request) {
       (e) => e.id === data.primary_email_address_id
     )?.email_address) || undefined
 
-    await db
+    // The name and photo follow the login only for a member whose date of
+    // birth on file says 13 or over. A row with no usable date (a sign-up that
+    // has not onboarded yet) or a child's keeps what onboarding stored: Clerk
+    // sends user.updated right after sign-up and on every profile edit, and
+    // copying the name and photo here would undo the minimisation above.
+    const { data: row } = await db
       .from('members')
-      .update({
-        first_name: data.first_name ?? undefined,
-        last_name: data.last_name ?? undefined,
-        email: primaryEmail ?? undefined,
-        profile_photo_url: data.image_url,
-      })
+      .select('date_of_birth')
       .eq('clerk_user_id', data.id)
+      .maybeSingle()
+    const dob = (row as { date_of_birth: string | null } | null)?.date_of_birth ?? null
+    const profileFollowsLogin = isValidDob(dob) && !isUnder13On(dob)
+
+    const patch: Record<string, string | null> = {}
+    if (primaryEmail) patch.email = primaryEmail
+    if (profileFollowsLogin) {
+      if (data.first_name != null) patch.first_name = data.first_name
+      if (data.last_name != null) patch.last_name = data.last_name
+      patch.profile_photo_url = data.image_url
+    }
+    if (Object.keys(patch).length) {
+      await db.from('members').update(patch).eq('clerk_user_id', data.id)
+    }
   }
 
   if (type === 'user.deleted') {

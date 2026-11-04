@@ -1,0 +1,151 @@
+# Stellr backups — runs in the owner's PRIVATE backups repository, not here.
+#
+# Install (docs/RUNBOOK-backups.md): copy this file to
+# .github/workflows/backups.yml in the private repo, and copy the rest of
+# ops/backups/ to ops/backups/ there. It is kept in the public repo only so
+# changes to it are reviewed with the app; it never runs from stellr-web
+# (GitHub only runs workflows under .github/workflows/).
+#
+#   hourly   :07 every hour   critical tables (ops/backups/critical-tables.txt)   RPO 1 h
+#   nightly  09:23 UTC        roles + full schema and data + storage metadata      RPO 24 h
+#   storage  09:53 UTC        every file in every Supabase Storage bucket          RPO 24 h
+#
+# Each job encrypts with age to the owner-held public key, uploads to R2 (bucket
+# lock rules make objects undeletable until they age out), then pings its own
+# Better Stack heartbeat. A failure pings the heartbeat's /fail URL; a job that
+# never runs (GitHub skips a scheduled run, the repo is disabled, a secret
+# expires before the job starts) misses its ping and the heartbeat alerts.
+#
+# Secrets (repository secrets in the private repo):
+#   PROD_DATABASE_URL            backup_reader role, session pooler URI (read-only)
+#   AGE_RECIPIENT                owner's age public key(s), space separated
+#   R2_ACCOUNT_ID  R2_ACCESS_KEY_ID  R2_SECRET_ACCESS_KEY  R2_BUCKET
+#                                R2 token: Object Read & Write on the one bucket
+#   SUPABASE_S3_ENDPOINT  SUPABASE_S3_REGION
+#   SUPABASE_S3_ACCESS_KEY_ID  SUPABASE_S3_SECRET_ACCESS_KEY   (storage job)
+#   HEARTBEAT_URL_HOURLY  HEARTBEAT_URL_NIGHTLY  HEARTBEAT_URL_STORAGE
+#
+# Actions are pinned to full commit SHAs; the only one used is actions/checkout.
+# Tools come from ops/backups/install-tools.sh.
+name: Backups
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+    - cron: '23 9 * * *'
+    - cron: '53 9 * * *'
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Which backup to take now
+        type: choice
+        options: [hourly, nightly, storage]
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # Production project ref (public: it is in scripts/db-status.mjs). backup.sh
+  # refuses a PROD_DATABASE_URL that does not name it.
+  EXPECTED_PROJECT_REF: hwtzpfrnksksxlwwabqz
+
+
+# Three separate jobs rather than a matrix: a job-level `if` cannot read the
+# matrix, and a matrix would start a runner for every kind on every trigger,
+# tripling Actions minutes (a private repo on GitHub Free has 2,000 a month;
+# see the runbook's budget). The steps are identical apart from the kind and
+# the heartbeat; keep the three in step when editing.
+jobs:
+  hourly:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '7 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.kind == 'hourly')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency: { group: backup-hourly, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Install PostgreSQL 17 client and age
+        run: bash ops/backups/install-tools.sh
+      - name: Take the hourly backup
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          AGE_RECIPIENT: ${{ secrets.AGE_RECIPIENT }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: bash ops/backups/backup.sh hourly
+      - name: Heartbeat (success)
+        if: success()
+        env: { HEARTBEAT: '${{ secrets.HEARTBEAT_URL_HOURLY }}' }
+        run: curl -fsS -m 30 --retry 3 "$HEARTBEAT" > /dev/null
+      - name: Heartbeat (failure)
+        if: failure() || cancelled()
+        env: { HEARTBEAT: '${{ secrets.HEARTBEAT_URL_HOURLY }}' }
+        run: curl -fsS -m 30 --retry 3 "$HEARTBEAT/fail" > /dev/null
+
+  nightly:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '23 9 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.kind == 'nightly')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency: { group: backup-nightly, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Install PostgreSQL 17 client and age
+        run: bash ops/backups/install-tools.sh
+      - name: Take the nightly backup
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          AGE_RECIPIENT: ${{ secrets.AGE_RECIPIENT }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: bash ops/backups/backup.sh nightly
+      - name: Heartbeat (success)
+        if: success()
+        env: { HEARTBEAT: '${{ secrets.HEARTBEAT_URL_NIGHTLY }}' }
+        run: curl -fsS -m 30 --retry 3 "$HEARTBEAT" > /dev/null
+      - name: Heartbeat (failure)
+        if: failure() || cancelled()
+        env: { HEARTBEAT: '${{ secrets.HEARTBEAT_URL_NIGHTLY }}' }
+        run: curl -fsS -m 30 --retry 3 "$HEARTBEAT/fail" > /dev/null
+
+  storage:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '53 9 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.kind == 'storage')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency: { group: backup-storage, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Install age
+        run: bash ops/backups/install-tools.sh --age-only
+      - name: Take the storage backup
+        env:
+          AGE_RECIPIENT: ${{ secrets.AGE_RECIPIENT }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SUPABASE_S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+          SUPABASE_S3_REGION: ${{ secrets.SUPABASE_S3_REGION }}
+          SUPABASE_S3_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+          SUPABASE_S3_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
+        run: bash ops/backups/backup.sh storage
+      - name: Heartbeat (success)
+        if: success()
+        env: { HEARTBEAT: '${{ secrets.HEARTBEAT_URL_STORAGE }}' }
+        run: curl -fsS -m 30 --retry 3 "$HEARTBEAT" > /dev/null
+      - name: Heartbeat (failure)
+        if: failure() || cancelled()
+        env: { HEARTBEAT: '${{ secrets.HEARTBEAT_URL_STORAGE }}' }
+        run: curl -fsS -m 30 --retry 3 "$HEARTBEAT/fail" > /dev/null

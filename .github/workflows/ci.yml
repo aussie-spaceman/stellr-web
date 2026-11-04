@@ -93,14 +93,14 @@ jobs:
       # Placeholders. `next build` instantiates clients at module scope (see
       # lib/supabase.ts), so the build needs syntactically valid values — it
       # never connects to anything with them. Real values live in Vercel.
-      # Supabase keys under the legacy names only, as both Vercel projects are
-      # set today: this build proves the fallback in lib/supabase-keys.ts (the
-      # e2e job runs the new names). Switch to the new names once the legacy
-      # keys are retired (docs/RUNBOOK-supabase-api-keys.md, step 11).
+      # Supabase keys under the only names the app reads (the legacy
+      # anon/service_role fallback was removed 3 Nov 2026,
+      # docs/RUNBOOK-supabase-api-keys.md step 11). The values are deliberately
+      # neither key format, so the bundle check below can grep for them.
       NEXT_PUBLIC_APP_ENV: dev
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
-      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
+      SUPABASE_SECRET_KEY: placeholder-secret-key
       NEXT_PUBLIC_SANITY_PROJECT_ID: placeholder
       # Public media host (non-secret; same value in every environment).
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
@@ -144,6 +144,13 @@ jobs:
       - name: Design-system lint
         run: npm run lint:tokens
 
+      # Migration naming, SECURITY DEFINER revokes, and (S3) the table
+      # registry: every table classified, tenant/event-scoped tables carry
+      # tenant_id + index + RLS (scripts/check-migration-tenancy.mjs). Also in
+      # prebuild; a step of its own so a failure is named in the summary.
+      - name: Migration lints
+        run: npm run lint:migrations
+
       - name: Unit tests
         run: npm run test
 
@@ -156,14 +163,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # S0: with only the legacy names set, the browser bundle must still carry
-      # the anon key (through lib/supabase-keys.ts; chat and signed uploads read
-      # it), and must never carry the server-only key.
+      # S0: the browser bundle must carry the publishable key (through
+      # lib/supabase-keys.ts; chat and signed uploads read it), and must never
+      # carry the server-only secret key.
       - name: Supabase keys in the browser bundle
         run: |
-          grep -rqF placeholder-anon-key .next/static \
+          grep -rqF placeholder-publishable-key .next/static \
             || { echo "::error::The public Supabase key did not reach the browser bundle."; exit 1; }
-          if grep -rqF placeholder-service-role-key .next/static; then
+          if grep -rqF placeholder-secret-key .next/static; then
             echo "::error::The server-only Supabase key reached the browser bundle."; exit 1
           fi
 
@@ -210,11 +217,11 @@ jobs:
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
 
       # Secrets. Configure at Settings → Secrets and variables → Actions.
-      # Supabase: the new publishable/secret key secrets win; the legacy
-      # anon/service_role secrets fill in until they are deleted
-      # (docs/RUNBOOK-supabase-api-keys.md). lib/supabase-keys.ts reads either format.
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY || secrets.DEV_SUPABASE_ANON_KEY }}
-      SUPABASE_SECRET_KEY: ${{ secrets.DEV_SUPABASE_SECRET_KEY || secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}
+      # Supabase: the publishable and secret keys only; the legacy
+      # anon/service_role secrets are no longer read
+      # (docs/RUNBOOK-supabase-api-keys.md, step 11).
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.DEV_SUPABASE_SECRET_KEY }}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
       CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
       E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
@@ -350,3 +357,224 @@ jobs:
           path: lhci-report/
           retention-days: 14
           if-no-files-found: ignore
+
+  # S1: an ephemeral Postgres on the runner, built from the schema of record
+  # (supabase/baseline.sql) plus every timestamped migration, then checked with
+  # pgTAP (supabase/tests/database). It never touches the dev or production
+  # projects, and holds no database secret. Runbook: docs/RUNBOOK-ci-database.md.
+  #
+  # Report-only until it has run green: a failure shows red on the PR but does
+  # not fail the workflow. Once it passes, set the repository variable
+  # DB_CI_ENFORCE=true, then add `db` to the required checks on dev and main.
+  db:
+    name: db
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: ${{ vars.DB_CI_ENFORCE != 'true' }}
+    env:
+      # Pinning the CLI also pins the Postgres, Auth and Storage images it pulls.
+      SUPABASE_CLI_VERSION: 2.105.0
+      # The local database container is named after config.toml's project_id.
+      DB_CONTAINER: supabase_db_stellr-web
+
+    steps:
+      # Only supabase/ is checked out. Full history without blobs (see
+      # `changes`) so the scope step can diff trees.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: supabase
+
+      # A PR that touches neither supabase/ nor this workflow cannot change the
+      # database, so the job finishes green in seconds (a required check is then
+      # still satisfied). Pushes to dev/main and manual runs always build it.
+      # Anything unresolved counts as in scope.
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          run=true
+          if [ "$EVENT" = pull_request ]; then
+            files=$(git diff --name-only --no-renames HEAD^1 HEAD || true)
+            if [ -n "$files" ] && ! echo "$files" | grep -qE '^supabase/|^\.github/workflows/ci\.yml$'; then
+              run=false
+              echo "No change under supabase/ or to ci.yml: database checks skipped." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - if: steps.scope.outputs.run == 'true'
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # Postgres only, not the full local stack. The CLI must NOT replay
+      # supabase/migrations itself: 001–148 are historical and cannot rebuild
+      # the schema (docs/SCHEMA-BASELINE.md), and the seed needs the tables.
+      # These variables override config.toml's [db.migrations] / [db.seed] /
+      # [realtime] for this step only.
+      - if: steps.scope.outputs.run == 'true'
+        name: Start the local database
+        env:
+          SUPABASE_DB_MIGRATIONS_ENABLED: 'false'
+          SUPABASE_DB_SEED_ENABLED: 'false'
+          SUPABASE_REALTIME_ENABLED: 'false'
+        run: supabase db start
+
+      # The documented rebuild (docs/SCHEMA-BASELINE.md), with ON_ERROR_STOP so
+      # a partial load fails here. Three kinds of line are dropped first:
+      # \restrict / \unrestrict (pg_dump 18 meta-commands), and the
+      # `FOR ROLE supabase_admin` default privileges, which the postgres role
+      # cannot set (on the hosted rebuild they are the one expected error, and
+      # they stop the load before the postgres-role defaults that follow them).
+      # psql runs inside the database container, so the client always matches
+      # the server.
+      - if: steps.scope.outputs.run == 'true'
+        name: Load the baseline schema
+        run: |
+          sed -e '/^\\restrict /d' -e '/^\\unrestrict /d' \
+              -e '/^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin /d' \
+              supabase/baseline.sql > "$RUNNER_TEMP/baseline.sql"
+          docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" \
+            psql -h 127.0.0.1 -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 \
+              -c 'drop schema if exists entitlements cascade' \
+              -c 'drop schema public cascade' \
+              -f - < "$RUNNER_TEMP/baseline.sql"
+
+      # Every migration since the baseline (the timestamped ones), oldest
+      # first, each in its own transaction — as they were applied to production.
+      - if: steps.scope.outputs.run == 'true'
+        name: Apply migrations since the baseline
+        run: |
+          count=0
+          for f in $(ls supabase/migrations | grep -E '^[0-9]{14}_.+\.sql$' | sort); do
+            echo "::group::$f"
+            if ! docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" \
+                 psql -h 127.0.0.1 -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 \
+                   --single-transaction -f - < "supabase/migrations/$f"; then
+              echo "::endgroup::"
+              echo "::error file=supabase/migrations/$f::This migration failed on a database built from the baseline."
+              exit 1
+            fi
+            echo "::endgroup::"
+            count=$((count + 1))
+          done
+          echo "Applied $count migrations on top of the baseline." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # pgTAP. Pass the directory: the other files in supabase/tests/ are
+      # manual SQL-editor checks, not pgTAP.
+      - if: steps.scope.outputs.run == 'true'
+        name: pgTAP tests
+        run: supabase test db supabase/tests/database
+
+      # Schema drift against production, from a schema-only dump the owner
+      # takes and stores as the PROD_SCHEMA_DUMP secret (base64 of the dump,
+      # xz- or gzip-compressed or plain; see the runbook). CI never connects to
+      # production. Both schemas are loaded into this one Postgres and dumped
+      # with the same pg_dump, so version noise cannot show up as drift.
+      #
+      # The logs of this public repository are public, and drift is by
+      # definition production SQL nobody reviewed here (SQL-editor functions,
+      # policies, a webhook trigger's arguments). So nothing from the dump's
+      # contents reaches the log or the summary: only object identifiers
+      # (type, schema, name), counts and sha256 digests. The owner reads the
+      # full diff locally (runbook). Never on pull_request: a PR runs its own
+      # copy of this workflow, so PR-head code never receives the secret here.
+      # Report-only: drift marks the step, not the job.
+      - if: steps.scope.outputs.run == 'true' && github.event_name != 'pull_request'
+        name: Schema diff against production (when a dump is provided)
+        continue-on-error: true
+        env:
+          PROD_SCHEMA_DUMP: ${{ secrets.PROD_SCHEMA_DUMP }}
+        run: |
+          if [ -z "$PROD_SCHEMA_DUMP" ]; then
+            echo "::notice::No PROD_SCHEMA_DUMP secret: schema diff against production skipped."
+            echo "Schema diff skipped: no PROD_SCHEMA_DUMP secret." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          export LC_ALL=C
+          work="$RUNNER_TEMP/schema-diff"
+          mkdir -p "$work"
+          printf '%s' "$PROD_SCHEMA_DUMP" | base64 -d > "$work/prod.bin"
+          if xz -t "$work/prod.bin" 2>/dev/null; then xz -dc "$work/prod.bin" > "$work/prod.sql"
+          elif gzip -t "$work/prod.bin" 2>/dev/null; then gzip -dc "$work/prod.bin" > "$work/prod.sql"
+          else cp "$work/prod.bin" "$work/prod.sql"; fi
+
+          q() { docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" \
+                  psql -h 127.0.0.1 -U postgres -X -q -v ON_ERROR_STOP=1 "$@"; }
+          # A scratch database with just enough of Supabase for the dump to
+          # load: the extensions it calls and stubs of auth.jwt()/auth.uid().
+          q -d postgres -c 'drop database if exists prod_ref' -c 'create database prod_ref'
+          q -d prod_ref \
+            -c 'create schema if not exists extensions' \
+            -c 'create extension if not exists "uuid-ossp" with schema extensions' \
+            -c 'create extension if not exists pgcrypto with schema extensions' \
+            -c 'create schema if not exists auth' \
+            -c "create or replace function auth.jwt() returns jsonb language sql stable as 'select null::jsonb'" \
+            -c "create or replace function auth.uid() returns uuid language sql stable as 'select null::uuid'" \
+            -c 'drop schema public cascade'
+          # psql quotes the failing statement on error, so its output stays
+          # off the log; only the dump's line number is reported.
+          if ! sed -e '/^\\restrict /d' -e '/^\\unrestrict /d' \
+                   -e '/^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin /d' "$work/prod.sql" \
+               | q -d prod_ref -f - > "$work/prod-load.log" 2>&1; then
+            at=$(grep -m1 -oE '^psql:[^:]*:[0-9]+: ERROR' "$work/prod-load.log" | sed -E 's/.*:([0-9]+): ERROR/\1/')
+            echo "::error::The production dump did not load into the scratch database (dump line ${at:-unknown}). The message is withheld from this public log; load the dump locally to read it (docs/RUNBOOK-ci-database.md)."
+            exit 1
+          fi
+
+          # One line per schema object: "<type> <schema>.<name>", a tab, then
+          # its normalised SQL. Keyed on pg_dump's own "-- Name:" headers.
+          objects() {
+            docker exec -e PGPASSWORD=postgres "$DB_CONTAINER" \
+              pg_dump -h 127.0.0.1 -U postgres -d "$1" --schema-only --no-owner \
+                --schema=public --schema=entitlements \
+            | awk '
+                /^-- Name: / {
+                  line = substr($0, 10)
+                  i = index(line, "; Type: ");   name = substr(line, 1, i - 1);  rest = substr(line, i + 8)
+                  i = index(rest, "; Schema: "); type = substr(rest, 1, i - 1);  rest = substr(rest, i + 10)
+                  i = index(rest, "; Owner: ");  schema = (i ? substr(rest, 1, i - 1) : rest)
+                  key = type " " schema "." name
+                  next
+                }
+                /^--/ || /^$/ || /^\\(un)?restrict / { next }
+                key != "" { body[key] = body[key] $0 "\037" }
+                END { for (k in body) print k "\t" body[k] }
+              ' | sort
+          }
+          objects prod_ref > "$work/prod.obj"
+          objects postgres > "$work/repo.obj"
+          cut -f1 "$work/prod.obj" > "$work/prod.keys"
+          cut -f1 "$work/repo.obj" > "$work/repo.keys"
+          comm -23 "$work/prod.keys" "$work/repo.keys" > "$work/only-prod"
+          comm -13 "$work/prod.keys" "$work/repo.keys" > "$work/only-repo"
+          comm -12 "$work/prod.keys" "$work/repo.keys" > "$work/both"
+          comm -3 "$work/prod.obj" "$work/repo.obj" | sed 's/^\t//' | cut -f1 | sort -u \
+            | comm -12 - "$work/both" > "$work/changed"
+          rm -f "$work/prod.bin" "$work/prod.sql"
+
+          n_prod=$(wc -l < "$work/only-prod"); n_repo=$(wc -l < "$work/only-repo"); n_changed=$(wc -l < "$work/changed")
+          digests="sha256 of the normalised object lists: production $(sha256sum < "$work/prod.obj" | cut -c1-16), repository $(sha256sum < "$work/repo.obj" | cut -c1-16)"
+          if [ "$n_prod" -eq 0 ] && [ "$n_repo" -eq 0 ] && [ "$n_changed" -eq 0 ]; then
+            echo "Schema matches production: $(wc -l < "$work/both") objects in public + entitlements. $digests." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          report() {
+            echo "### Schema drift against production"
+            echo ""
+            echo "Object identifiers only; the SQL stays off this public log. Read the full diff locally (docs/RUNBOOK-ci-database.md). $digests."
+            for kind in only-prod:"Only in production" only-repo:"Only in the repository" changed:"Different definitions"; do
+              f="${kind%%:*}"; title="${kind#*:}"
+              [ -s "$work/$f" ] || continue
+              echo ""
+              echo "**$title** ($(wc -l < "$work/$f")):"
+              echo '```'
+              head -n 200 "$work/$f"
+              echo '```'
+            done
+          }
+          report | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::warning::The repository schema differs from the production dump: $n_prod object(s) only in production, $n_repo only in the repository, $n_changed with different definitions. Identifiers are in the job summary."
+          exit 1

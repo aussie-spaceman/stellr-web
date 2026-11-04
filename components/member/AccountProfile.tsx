@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Choice, Field, Fieldset, Input, Select, Textarea } from '@stellr/web-ui'
 import { EMERGENCY_RELATIONSHIPS } from '@/lib/registration-constants'
+import { SCHOOL_EMAIL_LABEL, SCHOOL_EMAIL_NOTE, showsSchoolEmail } from '@/lib/member-email'
 
 interface Member {
   id: string
@@ -11,13 +12,15 @@ interface Member {
   last_name: string
   nickname: string | null
   email: string
+  school_email?: string | null
   phone: string | null
   discord_handle: string | null
   date_of_birth: string
   gender: string
   grade: string | null
   tshirt_size: string | null
-  age_bracket: string
+  /** Null for a sign-up whose age is not known yet. */
+  age_bracket: string | null
   event_role: string
   profile_photo_url: string | null
   ec_first_name: string | null
@@ -73,6 +76,8 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
   const [ecFirst, setEcFirst] = useState(member.ec_first_name ?? '')
   const [ecLast, setEcLast] = useState(member.ec_last_name ?? '')
   const [ecEmail, setEcEmail] = useState(member.ec_email ?? '')
+  const [schoolEmail, setSchoolEmail] = useState(member.school_email ?? '')
+  const asksSchoolEmail = showsSchoolEmail(member.date_of_birth)
   const [ecPhone, setEcPhone] = useState(member.ec_phone ?? '')
   const [ecRelationship, setEcRelationship] = useState(member.ec_relationship ?? '')
   const [healthConditions, setHealthConditions] = useState(member.health_conditions ?? '')
@@ -104,6 +109,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
           ec_phone: ecPhone || null,
           ec_relationship: ecRelationship || null,
           health_conditions: healthConditions || null,
+          ...(asksSchoolEmail ? { school_email: schoolEmail || null } : {}),
         }),
       })
       ok = res.ok
@@ -157,7 +163,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         <div>
           <dt className="text-brand-muted-soft">Age bracket</dt>
           <dd className="font-medium text-brand-blue-dark capitalize">
-            {member.age_bracket.replace('_', ' ')}
+            {member.age_bracket ? member.age_bracket.replace('_', ' ') : 'Not given yet'}
           </dd>
         </div>
         {member.grade && (
@@ -206,6 +212,15 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
             />
           </Field>
         </div>
+
+        {asksSchoolEmail && (
+          <Field
+            label={SCHOOL_EMAIL_LABEL}
+            hint={`Optional. Your sign-in email above stays your main address. ${SCHOOL_EMAIL_NOTE}`}
+          >
+            <Input type="email" autoComplete="off" value={schoolEmail} onChange={(e) => setSchoolEmail(e.target.value)} />
+          </Field>
+        )}
 
         {/* Ethnicity */}
         {ethnicityOptions.length > 0 && (

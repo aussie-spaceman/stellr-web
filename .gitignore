@@ -50,3 +50,7 @@ supabase/.temp/
 # The desk scanner's WebAssembly reader, copied from node_modules/zxing-wasm by
 # scripts/copy-scanner-wasm.mjs before dev and build.
 /public/vendor/zxing_reader.wasm
+
+# Stryker mutation testing (stryker.config.mjs): sandbox and reports.
+/.stryker-tmp/
+/reports/

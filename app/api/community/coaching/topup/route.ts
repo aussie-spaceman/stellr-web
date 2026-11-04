@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { supabaseServer } from '@/lib/supabase'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
@@ -20,8 +21,11 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'purchase')
+  if (restricted) return restricted
 
   const body = await req.json().catch(() => ({}))
   const quantity = Number(body?.quantity) === 3 ? 3 : 1

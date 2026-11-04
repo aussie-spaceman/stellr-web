@@ -16,6 +16,7 @@ vi.mock('@/lib/uploads', async (importOriginal) => ({
 
 import { POST } from './route'
 import { FILE_NAME_TOO_LONG, MAX_FILE_NAME_LENGTH } from '@/lib/uploads'
+import { expectWithin } from '@/test/time-budget'
 
 const sign = (fileName: unknown) =>
   POST(
@@ -60,7 +61,7 @@ describe('POST /api/uploads/sign — file name length', () => {
       const started = performance.now()
       const res = await sign(`a${run.repeat(1024 * 1024)}x`)
       expect(res.status).toBe(400)
-      expect(performance.now() - started).toBeLessThan(500)
+      expectWithin(started, 500)
     }
     expect(signUpload).not.toHaveBeenCalled()
   })

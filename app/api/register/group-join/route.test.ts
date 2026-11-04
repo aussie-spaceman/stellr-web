@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   getUserList: vi.fn(async () => ({ data: [] as Array<{ id: string }> })),
   createUser: vi.fn(async () => ({ id: 'user_new' })),
   createSignInToken: vi.fn(async () => ({ token: 'tkt' })),
+  // Decision 24: the signed-in caller is a child whose parent has not consented.
+  childAwaiting: false,
 }))
 
 const tokenRow = {
@@ -40,13 +42,17 @@ vi.mock('@clerk/nextjs/server', () => ({
   }),
 }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
+vi.mock('@/lib/pending-consent', async (orig) => {
+  const real = await orig<typeof import('@/lib/pending-consent')>()
+  return { ...real, childAwaitingConsentBlock: async () => (h.childAwaiting ? real.consentPendingResponse() : null) }
+})
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: (table: string) => {
       const chain: Record<string, unknown> = {
-        select: () => chain, eq: () => chain, not: () => chain, is: () => chain,
+        select: () => chain, eq: () => chain, not: () => chain, is: () => chain, limit: () => chain,
         maybeSingle: async () => {
           if (table === 'group_join_tokens') return { data: tokenRow, error: null }
           if (table === 'members') return { data: h.signedInMember, error: null }
@@ -107,6 +113,21 @@ beforeEach(() => {
   h.dedupeError = null
   h.countError = null
   h.insertError = null
+  h.childAwaiting = false
+})
+
+// Decision 24, COPPA (review finding, 3 Nov 2026): a signed-in child whose
+// parent has not consented joins nothing until the parent signs.
+describe('POST /api/register/group-join — a child awaiting a parent’s consent', () => {
+  it('is refused before anyone is admitted', async () => {
+    h.auth.mockResolvedValue({ userId: 'clerk-kid' })
+    h.childAwaiting = true
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('guardian_consent_pending')
+    expect(h.partInsert).not.toHaveBeenCalled()
+    expect(h.upsertMember).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/register/group-join', () => {

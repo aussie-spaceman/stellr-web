@@ -1,0 +1,121 @@
+name: Mutation testing
+
+# Stryker on the trust-boundary modules listed in stryker.config.mjs
+# (multi-tenant plan, S2). Nightly and on demand, NEVER on pull requests: a
+# full run takes tens of minutes and its score moves slowly, so it is a trend
+# to watch, not a merge gate. Report-only: the score lands in the job summary
+# and the HTML report in an artifact.
+#
+# Two guards keep a meaningless score off the summary:
+#   - Runner support: @stryker-mutator/vitest-runner 10.0.0 never activates a
+#     mutant under Vitest 5 (fixed in 10.1.0, which the 14-day rule allows from
+#     6 Nov 2026). On such a pair the run is SKIPPED with a warning and a
+#     summary line, rather than failing red every night
+#     (scripts/stryker-runner-support.mjs). Bumping both @stryker-mutator
+#     packages to 10.1.x turns the run on with no edit here.
+#   - Zero kills: on a supported pair, a run that kills no mutant at all still
+#     fails the job, because that means mutants are not being activated.
+
+on:
+  schedule:
+    # 03:17 UTC daily (evening in the US, afternoon in Australia): off the hour,
+    # when GitHub's scheduled-run queue is shortest.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      mutate:
+        description: 'Optional: one file or glob to mutate instead of the configured set (e.g. lib/impersonation.ts)'
+        required: false
+        default: ''
+
+concurrency:
+  group: mutation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  stryker:
+    runs-on: ubuntu-latest
+    # A full local run (6 workers) took 61 minutes; the 4-vCPU public
+    # runner is slower. Six hours is the GitHub-hosted maximum.
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - name: Runner support
+        id: support
+        run: |
+          node scripts/stryker-runner-support.mjs
+          if grep -q '^supported=false$' "$GITHUB_OUTPUT"; then
+            msg="Mutation testing skipped: @stryker-mutator/vitest-runner $(node -p "require('./node_modules/@stryker-mutator/vitest-runner/package.json').version") does not activate mutants under Vitest $(node -p "require('./node_modules/vitest/package.json').version"). Bump both @stryker-mutator packages to 10.1.x (docs/RUNBOOK-security-scans.md)."
+            echo "::warning::$msg"
+            { echo "### Mutation score"; echo ""; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Stryker
+        if: steps.support.outputs.supported == 'true'
+        env:
+          MUTATE: ${{ inputs.mutate }}
+        run: |
+          if [ -n "$MUTATE" ]; then
+            npx stryker run --mutate "$MUTATE"
+          else
+            npx stryker run
+          fi
+
+      - name: Score
+        if: always() && steps.support.outputs.supported == 'true'
+        run: |
+          if [ ! -f reports/mutation/mutation.json ]; then
+            echo "::error::Stryker wrote no report."
+            exit 1
+          fi
+          node --input-type=module <<'JS'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          const report = JSON.parse(readFileSync('reports/mutation/mutation.json', 'utf8'))
+          const rows = []
+          let killed = 0
+          let total = 0
+          for (const [file, { mutants }] of Object.entries(report.files)) {
+            const count = (s) => mutants.filter((m) => m.status === s).length
+            const k = count('Killed') + count('Timeout')
+            const valid = mutants.filter((m) => !['CompileError', 'RuntimeError', 'Ignored'].includes(m.status)).length
+            killed += k
+            total += valid
+            rows.push(`| \`${file}\` | ${valid ? ((100 * k) / valid).toFixed(1) : '-'}% | ${k} | ${count('Survived')} | ${count('NoCoverage')} |`)
+          }
+          const score = total ? ((100 * killed) / total).toFixed(1) : '0.0'
+          const summary = [
+            '### Mutation score',
+            '',
+            `Overall: **${score}%** (${killed} of ${total} mutants killed). HTML report: the mutation-report artifact.`,
+            '',
+            '| File | Score | Killed | Survived | No coverage |',
+            '|---|---|---|---|---|',
+            ...rows,
+            '',
+          ].join('\n')
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary)
+          console.log(summary)
+          if (total > 0 && killed === 0) {
+            console.log('::error::No mutant was killed: the test runner is not activating mutants, so this score means nothing. Check the @stryker-mutator/vitest-runner version supports the installed Vitest.')
+            process.exit(1)
+          }
+          JS
+
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 30
+          if-no-files-found: ignore

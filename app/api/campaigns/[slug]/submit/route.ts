@@ -54,7 +54,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     }
 
     // Watermark PDFs in place; store other formats as-is.
-    await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, fileType)
+    const stamped = await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, fileType)
+    if ('error' in stamped) return NextResponse.json({ error: stamped.error }, { status: stamped.status })
 
     const { error: updateError } = await db
       .from('registrations')

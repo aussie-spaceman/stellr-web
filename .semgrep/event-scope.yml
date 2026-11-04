@@ -1,0 +1,59 @@
+# Semgrep CE rule: event-scoped tables read without an event filter
+# (multi-tenant plan, S2 — WARNING only for now).
+#
+# Every table below carries an event_slug (or event_id) column, so a query on it
+# usually means "rows for one event". A query with no event filter at all reads
+# every event's rows — today that is every Stellr event; once tenants share the
+# database (S3/S4) it is every tenant's. This rule lists those queries so the
+# S5 tenancy conversion has a worklist; it does not fail the build (severity
+# WARNING; only ERROR rules can gate, see .github/workflows/security.yml).
+#
+# A query counts as scoped when anywhere in its chain it filters on the event:
+#   .eq/.neq/.in('event_slug' | 'event_id', …), .match({ event_slug | event_id })
+# Writes that carry the event in the row (.insert / .upsert) are not reported.
+# A lookup by primary key alone IS reported: that is the IDOR shape the S2
+# cross-tenant suite targets.
+#
+# The table list comes from supabase/baseline.sql plus the timestamped
+# migrations (columns named event_slug / event_id). It must cover every table
+# lib/tenancy/registry.ts (S3) classifies as event_scoped with an event_slug
+# key; test/semgrep-event-scope.test.ts fails when the two drift.
+# docusign_envelopes is the compatibility view over agreements (renamed
+# 20261002213222) and stays listed while any caller still uses the old name.
+#
+# Rule tests: semgrep --test --config .semgrep/event-scope.yml .semgrep/tests/event-scope.ts
+rules:
+  - id: stellr-unscoped-event-table
+    severity: WARNING
+    languages: [typescript, javascript]
+    message: >-
+      Query on the event-scoped table '$TABLE' with no event filter
+      (.eq('event_slug', …) / .eq('event_id', …)). It reads or changes rows
+      across every event (and, after S3, every tenant). Add the event filter, or
+      note why the query is deliberately cross-event.
+    metadata:
+      category: security
+      cwe: 'CWE-639: Authorization Bypass Through User-Controlled Key'
+      plan: multi-tenant S2 static analysis
+      confidence: LOW
+    paths:
+      exclude:
+        - '*.test.ts'
+        - '*.test.tsx'
+        - /scripts/
+        - /e2e/
+        - /test/
+    patterns:
+      - pattern: $DB.from("$TABLE")
+      - metavariable-regex:
+          metavariable: $TABLE
+          regex: ^(registrations|event_participations|event_companies|event_manager_assignments|event_refunds|event_settings|event_store_offerings|group_join_tokens|member_groups|merch_batches|refund_policies|store_event_discounts|store_orders|volunteer_event_interest|agreements|docusign_envelopes|credentials|event_award_assignments|event_badge_templates|event_certificate_templates|event_email_sends|event_emails|group_invoices|scholarship_applications|survey_access_log|survey_distributions|survey_responses|team_profiles)$
+      - pattern-not-inside: $Q.eq("event_slug", ...)
+      - pattern-not-inside: $Q.eq("event_id", ...)
+      - pattern-not-inside: $Q.neq("event_slug", ...)
+      - pattern-not-inside: $Q.in("event_slug", ...)
+      - pattern-not-inside: $Q.in("event_id", ...)
+      - pattern-not-inside: '$Q.match({..., event_slug: $V, ...})'
+      - pattern-not-inside: '$Q.match({..., event_id: $V, ...})'
+      - pattern-not-inside: $Q.insert(...)
+      - pattern-not-inside: $Q.upsert(...)

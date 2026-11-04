@@ -1,6 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
+import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 import { Choice, Field, Fieldset, Input, Select } from '@stellr/web-ui'
 import { ageOn, isValidDob } from '@/lib/age'
 import { T_SHIRT_SIZES } from '@/lib/registration-constants'
@@ -81,6 +82,7 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
     last_name: '',
     nickname: '',
     email: '',
+    school_email: '',
     phone: '',
     date_of_birth: '',
     gender: '',
@@ -142,7 +144,8 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
     const missing: Partial<Record<RequiredField, string>> = {}
     if (!form.first_name.trim()) missing.first_name = 'Enter a first name.'
     if (!form.last_name.trim()) missing.last_name = 'Enter a last name.'
-    if (!form.email.trim()) missing.email = 'Enter an email address.'
+    const emailError = emailPairError(form.date_of_birth, form.email, form.school_email)
+    if (emailError) missing.email = emailError === 'Required' ? 'Enter an email address.' : emailError
     setFieldErrors(missing)
     const first = Object.keys(missing)[0]
     if (first) {
@@ -251,15 +254,17 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
                   onChange={(e) => set('nickname', e.target.value)}
                 />
               </Field>
-              <Field label="Email" required error={fieldErrors.email}>
-                <Input
-                  id={fid('email')}
-                  type="email"
-                  autoComplete="off"
-                  value={form.email}
-                  onChange={(e) => set('email', e.target.value)}
-                />
-              </Field>
+              <MemberEmailFields
+                dateOfBirth={form.date_of_birth}
+                email={form.email}
+                schoolEmail={form.school_email}
+                onEmailChange={(v) => set('email', v)}
+                onSchoolEmailChange={(v) => set('school_email', v)}
+                error={fieldErrors.email}
+                audience="other"
+                autoComplete="off"
+                emailId={fid('email')}
+              />
               <Field label="Phone">
                 <Input
                   type="tel"

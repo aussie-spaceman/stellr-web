@@ -7,6 +7,7 @@ import { ensureDistribution } from '@/lib/survey/distributions'
 import { loadSurveyEvent } from '@/lib/survey/events'
 import { isRealProductionApp } from '@/lib/env-guards'
 import { syncEventOptions } from '@/lib/hubspot-event-options'
+import { syncEventMirrorSafe } from '@/lib/events/sync'
 
 // POST /api/admin/sanity/event-sync — Sanity → Supabase access-structure sync
 // (HANDOFF-CODE-REVIEW §7). Sanity is the source of truth for event CONTENT;
@@ -125,11 +126,26 @@ export async function POST(req: Request) {
     }
   }
 
+  // S3 events mirror (lib/events/sync.ts): copy the event into public.events
+  // so the database knows which tenant owns it. Additive and last: everything
+  // above has already happened, syncEventMirrorSafe never throws, waits at
+  // most MIRROR_TIMEOUT_MS and records a failure in app_errors, and the
+  // try/catch is belt and braces — a mirror problem can never fail this
+  // webhook. Re-read from Sanity by _id, like the survey above.
+  let mirror: string
+  try {
+    mirror = (await syncEventMirrorSafe(db, { sanityId: body._id, slug })).status
+  } catch (err) {
+    console.error('[event-sync] events mirror failed:', err)
+    mirror = 'error'
+  }
+
   return NextResponse.json({
     ok: true,
     slug,
     survey,
     hubspotOptions,
+    mirror,
     containerId: sync.containerId,
     eventSpaceId: sync.spaceId,
     created: sync.created,

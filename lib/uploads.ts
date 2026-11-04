@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { RESOURCES_BUCKET, getCurrentMember, type CommunityMember } from '@/lib/community'
+import {
+  RESOURCES_BUCKET, communityWriteBlock, getCurrentMember, type CommunityMember, type CommunityWrite,
+} from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { getSpaceForMember } from '@/lib/spaces'
 import { getMemberCampaignRegistration } from '@/lib/campaign-registrations'
@@ -11,6 +13,14 @@ import { BADGE_FORMATS } from '@/lib/badge-layout'
 import { isArtworkTheme } from '@/lib/artwork-theme'
 import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
 import { isLiteralStoragePath } from '@/lib/storage-path'
+import {
+  MAX_MEMBER_PDF_PAGES,
+  PDF_BUSY,
+  PDF_PAGES_UNKNOWN,
+  PDF_TOO_MANY_PAGES,
+  PDF_UNPROCESSABLE,
+  checkPdfPageLimit,
+} from '@/lib/pdf-page-count'
 import {
   extensionsFor,
   fileExtension,
@@ -105,6 +115,13 @@ type PurposeSpec = {
    */
   sharedFileNames?: boolean
   /**
+   * The most pages a PDF may have (lib/pdf-page-count.ts), counted by
+   * claimUpload before anything opens the file. Set on every purpose any
+   * member reaches (sign-up is open) that takes a PDF; staff-only purposes
+   * (admin, event manager) have none.
+   */
+  maxPdfPages?: number
+  /**
    * Authorise the caller and decide where the object lands. Returning a path is
    * what grants the upload, so any check needed to *build* the path (resolving a
    * registration, a space, a member) doubles as the gate.
@@ -157,16 +174,39 @@ async function requireAdmin(): Promise<null | UploadDenied> {
   return role === 'admin' ? null : deny('Forbidden')
 }
 
+/** Refused because the caller has not finished /account/onboarding. */
+export const FINISH_ONBOARDING_FIRST = 'Please finish setting up your account first.'
+
 /**
  * A member acting as themselves. Impersonation is a lens, not a login — an admin
  * viewing as someone must never upload as them.
+ *
+ * Review (3 Nov 2026): getCurrentMember alone resolves an account that has not
+ * been through onboarding (a sign-up row with no date of birth yet) and a
+ * minor still waiting on guardian consent. So:
+ *   onboarded — the member must have finished onboarding (an admin's own row is
+ *               exempt: their uploads are not age-gated).
+ *   community — the upload is a community write of this kind, so the age and
+ *               consent restrictions apply (communityWriteBlock, lib/community),
+ *               with the same answer the write route itself would give.
  */
-async function requireMember(): Promise<CommunityMember | UploadDenied> {
+async function requireMember(
+  opts: { onboarded?: boolean; community?: CommunityWrite } = {},
+): Promise<CommunityMember | UploadDenied> {
   if (await assertNotImpersonating()) {
     return deny('Read-only while viewing as a member. Exit view-as to make changes.')
   }
   const member = await getCurrentMember()
-  return member ?? deny('Unauthorised', 401)
+  if (!member) return deny('Unauthorised', 401)
+  if (opts.onboarded && member.needsOnboarding && !member.isAdmin) return deny(FINISH_ONBOARDING_FIRST)
+  if (opts.community) {
+    const blocked = await communityWriteBlock(member, opts.community)
+    if (blocked) {
+      const body = (await blocked.json().catch(() => ({}))) as { error?: string }
+      return deny(body.error ?? 'Forbidden', blocked.status)
+    }
+  }
+  return member
 }
 
 // One badge background per Avery format, or one certificate background per award.
@@ -337,6 +377,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     // HEIC too), text such as a CSV, and calendar files. No archives or media.
     // The attach route also sends each file under a name and type that match
     // its bytes, not the ones the browser posted.
+    // No page cap: only staff (admins, and event managers the admin portal
+    // assigns) reach this, and nothing opens these PDFs with pdf-lib.
     formats: [...DOCUMENTS, ...IMAGES, 'heif', 'text', 'calendar'],
     formatError: 'That file doesn’t look like a PDF, Office, OpenDocument, Keynote, image, CSV or calendar file.',
     async grant({ ctx, safeName }) {
@@ -376,10 +418,26 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   // The form offers PDF, Word, PowerPoint, Keynote and OpenDocument; judges
   // open these, so the bytes must be one of them — not a zip, not an installer,
   // not a macro document — and the name must say which.
+  //
+  // Who may upload, by purpose (review, 3 Nov 2026):
+  //   campaign-proposal      — any signed-in member with a registration for the
+  //                            campaign. Not tied to onboarding: /campaigns/[slug]/submit
+  //                            does not send anyone to onboarding, and a student
+  //                            registered by their teacher or an event form can
+  //                            hold a registration before finishing their own
+  //                            profile. The registration is the gate.
+  //   community-media,
+  //   space-attachment       — onboarded, and the community 'upload' restriction.
+  //   container-contribution — onboarded, and the community 'contribute' restriction.
+  //   compliance-document    — onboarded. Its only form (ComplianceSection) is on
+  //                            /account, which sends anyone not onboarded to
+  //                            onboarding, and the license row it needs is saved
+  //                            from the same section. Not a community write.
   'campaign-proposal': {
     bucket: PROPOSALS_BUCKET,
     maxBytes: 25 * MB,
     formats: DOCUMENTS,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     formatError: 'That file doesn’t look like a PDF, Word, PowerPoint, Keynote or OpenDocument file.',
     async grant({ ctx, safeName }) {
       const member = await requireMember()
@@ -398,7 +456,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     formats: IMAGES,
     formatError: 'That file doesn’t look like a PNG, JPEG, GIF or WebP image.',
     async grant({ safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true, community: 'upload' })
       if ('error' in member) return member
       return { path: `${COMMUNITY_MEDIA_STAGING}/${member.id}/${Date.now()}-${safeName}` }
     },
@@ -410,9 +468,10 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
     formats: SHARED_FILES,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     sharedFileNames: true,
     async grant({ ctx, safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true, community: 'upload' })
       if ('error' in member) return member
       if (!ctx.spaceSlug) return deny('spaceSlug required', 400)
       const space = await getSpaceForMember(member, ctx.spaceSlug)
@@ -428,9 +487,10 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 25 * MB,
     formats: SHARED_FILES,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     sharedFileNames: true,
     async grant({ ctx, safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true, community: 'contribute' })
       if ('error' in member) return member
       if (!ctx.containerId) return deny('containerId required', 400)
       if (!(await memberManagesContainer(member, ctx.containerId))) {
@@ -445,9 +505,10 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     maxBytes: 10 * MB,
     allowedTypes: LICENSE_TYPES,
     formats: LICENSE_FORMATS,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
     formatError: LICENSE_ERROR,
     async grant({ ctx, safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true })
       if ('error' in member) return member
       const db = supabaseServer()
       const { data: license } = await db
@@ -645,6 +706,19 @@ export async function claimUpload(args: {
   if (isActiveContentType(stored.type)) {
     await discardUpload(spec.bucket, storagePath)
     return deny('That file type is not accepted here.', 415)
+  }
+  // A member's PDF is page-counted before anything (the watermark's pdf-lib)
+  // opens it: a crafted file can pack hundreds of thousands of pages into a
+  // few MB. One that can't be counted cheaply is refused, not trusted.
+  if (format === 'pdf' && spec.maxPdfPages !== undefined) {
+    const pages = await checkPdfPageLimit(bytes, spec.maxPdfPages)
+    if (pages !== 'ok') {
+      await discardUpload(spec.bucket, storagePath)
+      if (pages === 'over') return deny(PDF_TOO_MANY_PAGES, 413)
+      // Every sandbox slot stayed taken: not the file's fault — try again.
+      if (pages === 'busy') return deny(PDF_BUSY, 503)
+      return pages === 'failed' ? deny(PDF_UNPROCESSABLE, 422) : deny(PDF_PAGES_UNKNOWN, 415)
+    }
   }
 
   return { bytes, bucket: spec.bucket, format }

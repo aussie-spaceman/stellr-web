@@ -318,11 +318,12 @@ async function issueOrReuse(
         // until now they only ever heard from DocuSign — so a filtered or ignored
         // DocuSign email was a silent dead end for everyone. Tell them directly,
         // in our own voice, what is coming and from whom.
+        // Critical mail (lib/email/suppressions.ts): guardian consent.
         await safeEmail(ctx.guardianEmail, docusignSentToGuardianEmail({
           guardianName,
           minorName:  `${ctx.firstName} ${ctx.lastName}`,
           eventTitle: ctx.eventTitle,
-        }))
+        }), { critical: true })
       }
       return { outcome: 'issued', provider: envelope.provider, signNowUrl: recorded.signNowUrl }
     }
@@ -749,9 +750,13 @@ export async function dispatchTyped(
   }
 }
 
-async function safeEmail(to: string, content: { subject: string; html: string; text: string }): Promise<void> {
+async function safeEmail(
+  to: string,
+  content: { subject: string; html: string; text: string },
+  { critical = false }: { critical?: boolean } = {},
+): Promise<void> {
   try {
-    await sendEmail({ to, ...content })
+    await sendEmail({ to, ...content, critical })
   } catch (err) {
     console.error('[docusign] heads-up email failed (non-fatal):', err)
   }

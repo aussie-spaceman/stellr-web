@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { sendEmail, groupMemberJoinedEmail } from '@/lib/email'
+import { resolveEmailPair } from '@/lib/member-email'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
@@ -18,6 +19,8 @@ import { AUTH_APP_URL } from '@/lib/env'
 import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { childAwaitingConsentBlock } from '@/lib/pending-consent'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 // A participant, normalised to the enum/shape the participants + members tables
 // and DocuSign expect — built either from the signed-in member's profile, or
@@ -27,6 +30,7 @@ interface JoinPerson {
   last_name: string
   nickname: string | null
   email: string
+  school_email?: string | null
   phone: string | null
   date_of_birth: string | null
   gender: string | null
@@ -138,10 +142,15 @@ export async function POST(req: NextRequest) {
   let signInToken: string | null = null
 
   if (userId) {
+    // Decision 24, COPPA: a child whose parent has not consented joins
+    // nothing until the parent signs (lib/pending-consent).
+    const childBlock = await childAwaitingConsentBlock(db, userId)
+    if (childBlock) return childBlock
+
     // ── Signed-in member: their stored profile is authoritative ────────────────
     const { data: member } = await db
       .from('members')
-      .select('id, first_name, last_name, nickname, email, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
+      .select('id, first_name, last_name, nickname, email, school_email, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
       .eq('clerk_user_id', userId)
       .eq('is_active', true)
       .maybeSingle()
@@ -176,6 +185,7 @@ export async function POST(req: NextRequest) {
       last_name: member.last_name,
       nickname: (member as { nickname?: string | null }).nickname ?? null,
       email: member.email,
+      school_email: member.school_email ?? null,
       phone: member.phone ?? null,
       date_of_birth: profileAge.dateOfBirth,
       gender: member.gender ?? null,
@@ -201,7 +211,9 @@ export async function POST(req: NextRequest) {
     const str = (v: unknown) => (v == null ? '' : String(v)).trim()
     const firstName = str(d.first_name)
     const lastName = str(d.last_name)
-    const email = str(d.email).toLowerCase()
+    // Personal takes primacy: with only a school address, it is the primary.
+    const emails = resolveEmailPair({ email: d.email, school_email: d.school_email })
+    const email = emails.email
     const dob = str(d.date_of_birth)
 
     if (!firstName || !lastName || !email || !dob) {
@@ -221,6 +233,7 @@ export async function POST(req: NextRequest) {
       last_name: lastName,
       nickname: str(d.nickname) || null,
       email,
+      school_email: emails.school_email,
       phone: str(d.phone) || null,
       date_of_birth: ageCheck.dateOfBirth,
       gender: normalizeGender(d.gender),
@@ -242,9 +255,17 @@ export async function POST(req: NextRequest) {
     // Captured now so we can decide whether a silent sign-in token is safe — an
     // anonymous join must never get a session for an existing member (deep review
     // C-1). A lookup error leaves this false, so no token is minted.
+    // Both addresses count (4 Nov 2026): upsertMember also links by the school
+    // address, so a submitted school_email naming an existing member must not
+    // read as "new" and mint a session for that member.
     const { data: priorJoiner } = await db
       .from('members').select('id').eq('email', person.email).maybeSingle()
-    const memberIsNew = !priorJoiner
+    const { data: priorBySchool } = await db
+      .from('members').select('id').eq('school_email', person.email).limit(1).maybeSingle()
+    const { data: priorSchoolAddr } = person.school_email && person.school_email !== person.email
+      ? await db.from('members').select('id').eq('email', person.school_email).maybeSingle()
+      : { data: null }
+    const memberIsNew = !priorJoiner && !priorBySchool && !priorSchoolAddr
 
     // Cross-reference against the existing membership database by email: someone
     // already on file (added by an organiser, a past event, or another group's
@@ -254,6 +275,7 @@ export async function POST(req: NextRequest) {
     // they live on the participant row below. A brand-new email is still created.
     const resolvedMemberId = await upsertMember(db, {
       email: person.email,
+      school_email: person.school_email,
       first_name: person.first_name,
       last_name: person.last_name,
       nickname: person.nickname,
@@ -362,6 +384,7 @@ export async function POST(req: NextRequest) {
     last_name: person.last_name,
     nickname: null,
     email: person.email,
+    school_email: person.school_email ?? null,
     phone: person.phone ?? '',
     date_of_birth: person.date_of_birth,
     grade: person.grade ?? null,
@@ -393,6 +416,8 @@ export async function POST(req: NextRequest) {
     console.error('Group join participant insert error:', partError)
     return NextResponse.json({ error: 'Failed to complete registration. Please try again.' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('participants', [partRow.id as string])
 
   // Link the joining member to the group's school so it surfaces in
   // /admin/schools and on their member page — not just as participant text.

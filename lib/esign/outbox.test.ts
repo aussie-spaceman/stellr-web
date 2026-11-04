@@ -2,8 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
-const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn() }))
+const { sendEmail, notifyCommunityAdmins } = vi.hoisted(() => ({ sendEmail: vi.fn(), notifyCommunityAdmins: vi.fn(async () => {}) }))
 vi.mock('@/lib/email', async (orig) => ({ ...(await orig<typeof import('@/lib/email')>()), sendEmail }))
+vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins }))
 
 import { EmailSendError } from '@/lib/email'
 import { batchInvites, sendInvites } from './outbox'
@@ -30,6 +31,7 @@ beforeEach(() => {
   vi.stubEnv('ESIGN_TOKEN_SECRET', 'k'.repeat(48))
   sendEmail.mockReset()
   sendEmail.mockResolvedValue({ id: 're_1' })
+  notifyCommunityAdmins.mockClear()
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -52,6 +54,28 @@ describe('sendInvites', () => {
     const msg = sendEmail.mock.calls[0][0]
     expect(msg.text).toMatch(/\/sign#[0-9a-f-]{36}\.s1\.\d+\./)
     expect(msg.attachments).toBeUndefined()
+  })
+
+  // Review finding: signing invitations went out as ordinary mail, so the
+  // suppression list could drop a guardian's consent form.
+  it('sends every signing invitation as critical mail, past the suppression list', async () => {
+    const db = setup(5)
+    await sendInvites(db.client, db.table('agreement_recipients') as never)
+    expect(sendEmail.mock.calls.length).toBeGreaterThan(0)
+    for (const [msg] of sendEmail.mock.calls) expect(msg.critical).toBe(true)
+  })
+
+  // Review finding: a suppressed send came back { id: null, suppressed: true }
+  // and the outbox recorded it as sent, so the roster said Sent for good.
+  it('treats a suppressed send as not sent: Email Bounced on the roster, staff told', async () => {
+    const db = setup(5)
+    sendEmail.mockResolvedValueOnce({ id: null, suppressed: true })
+    const rows = db.table('agreement_recipients')
+    const result = await sendInvites(db.client, [rows[0]] as never)
+    expect(result).toEqual({ sent: 0, deferred: 0, failed: 1 })
+    expect(rows[0]).toMatchObject({ status: 'autoresponded', invite_email_id: null })
+    expect(rows[0].invite_error).toMatch(/suppression list/i)
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
   })
 
   it('stops the batch on Resend’s rate limit or quota, and records the failure', async () => {

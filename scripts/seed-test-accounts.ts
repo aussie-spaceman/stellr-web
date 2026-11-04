@@ -17,8 +17,7 @@
  *
  * ── Auth / env (put in .env.local, pointed at your STAGING project) ────────────
  *   NEXT_PUBLIC_SUPABASE_URL      staging Supabase URL
- *   SUPABASE_SECRET_KEY           staging secret key (bypasses RLS; legacy
- *                                 SUPABASE_SERVICE_ROLE_KEY also accepted)
+ *   SUPABASE_SECRET_KEY           staging secret key (bypasses RLS)
  *   CLERK_SECRET_KEY              sk_test_… for the staging Clerk instance
  *
  * ── Seed config (all optional; sensible defaults) ──────────────────────────────

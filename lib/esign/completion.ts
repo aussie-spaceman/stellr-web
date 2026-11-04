@@ -74,6 +74,19 @@ export async function onEnvelopeCompleted(
       .is('retain_until', null)
   }
 
+  // A self-registered minor's account leaves its pending state once a
+  // guardian's Student / Minor agreement is complete (decision 24,
+  // lib/pending-consent). Idempotent; non-fatal, because the pending state is
+  // re-settled wherever it is read and before the daily purge.
+  if (envelope.member_id && (envelope.envelope_type ?? '') === 'minor') {
+    try {
+      const { settlePendingConsent } = await import('@/lib/pending-consent')
+      await settlePendingConsent(db, envelope.member_id)
+    } catch (err) {
+      console.error('[esign-completion] pending consent settle failed:', err)
+    }
+  }
+
   // A student's permission form is the gate for their team profile. Idempotent
   // (one profile per participant), so a replay is harmless; non-fatal, because
   // the daily team-profiles sweep sends anything this misses.

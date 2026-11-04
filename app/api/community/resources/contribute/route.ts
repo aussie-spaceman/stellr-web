@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import { searchAttachableResources } from '@/lib/mentoring'
 import {
   attachBinary,
@@ -24,7 +25,7 @@ export const maxDuration = 60
 
 // GET ?containerId&q — search the library to attach by reference.
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const { searchParams } = new URL(req.url)
   const containerId = searchParams.get('containerId') ?? ''
@@ -41,8 +42,11 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'contribute')
+  if (restricted) return restricted
 
   // ── File upload (already in storage) ──────────────────────────────────────
   // The bytes went browser → storage via /api/uploads/sign; only the path

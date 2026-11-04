@@ -9,6 +9,7 @@ import {
   sendEmail,
   groupConfirmationEmail,
 } from '@/lib/email'
+import { resolveEmailPair } from '@/lib/member-email'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { collectsNothing } from '@/lib/event-pricing'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
@@ -41,6 +42,7 @@ import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { createAndSendGroupInvoice } from '@/lib/group-invoice'
 import { checkInCodeLink } from '@/lib/check-in-codes'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -70,7 +72,7 @@ function resolveRoleForAge(rawRole: unknown, isMinor: boolean): string {
 }
 
 interface ParticipantPayload {
-  first_name: string; last_name: string; nickname?: string; email: string; phone: string
+  first_name: string; last_name: string; nickname?: string; email: string; school_email?: string | null; phone: string
   date_of_birth: string; grade?: string; gender: string; t_shirt_size: string
   age_bracket: string; event_role: string
   ethnicity?: string[]; dietary_requirements?: string[]; health_conditions?: string
@@ -158,8 +160,14 @@ export async function POST(req: NextRequest) {
     // participant's address up front so casing never spawns a duplicate member
     // (and so the duplicate-check queries below compare like-for-like).
     if (teacher?.email) teacher.email = normalizeEmail(teacher.email)
-    for (const p of (additional_adults ?? [])) if (p?.email) p.email = normalizeEmail(p.email)
-    for (const p of (students ?? [])) if (p?.email) p.email = normalizeEmail(p.email)
+    // Personal takes primacy (lib/member-email): a participant given only a
+    // school address has it as their primary; school_email keeps the school one.
+    for (const p of [...(additional_adults ?? []), ...(students ?? [])] as ParticipantPayload[]) {
+      if (!p) continue
+      const pair = resolveEmailPair({ email: p.email, school_email: p.school_email })
+      p.email = pair.email
+      p.school_email = pair.school_email
+    }
 
     if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -686,6 +694,7 @@ export async function POST(req: NextRequest) {
       })
       memberUpsertByEmail.set(p.email, {
         email: p.email,
+        school_email: p.school_email || null,
         first_name: p.first_name,
         last_name: p.last_name,
         nickname: p.nickname || null,
@@ -736,6 +745,34 @@ export async function POST(req: NextRequest) {
       for (const stored of storedMembers ?? []) {
         preexistingMemberEmails.add(stored.email as string)
         existingIdByEmail.set(stored.email as string, stored.id as string)
+      }
+      // The same person under their other address (4 Nov 2026): a member whose
+      // school_email is this address, or whose email is this person's school
+      // address, is linked (never rewritten) instead of duplicated.
+      const unmatched = upsertEmails.filter((e) => !preexistingMemberEmails.has(e))
+      if (!storedError && unmatched.length > 0) {
+        const schoolOf = new Map<string, string>()
+        for (const e of unmatched) {
+          const school = memberUpsertByEmail.get(e)?.school_email as string | null | undefined
+          if (school && school !== e) schoolOf.set(school, e)
+        }
+        const [{ data: bySchoolCol }, { data: bySchoolAddr }] = await Promise.all([
+          db.from('members').select('id, school_email').in('school_email', unmatched),
+          schoolOf.size > 0
+            ? db.from('members').select('id, email').in('email', [...schoolOf.keys()])
+            : Promise.resolve({ data: [] as { id: string; email: string }[] }),
+        ])
+        for (const row of (bySchoolCol ?? []) as { id: string; school_email: string }[]) {
+          if (preexistingMemberEmails.has(row.school_email)) continue
+          preexistingMemberEmails.add(row.school_email)
+          existingIdByEmail.set(row.school_email, row.id)
+        }
+        for (const row of (bySchoolAddr ?? []) as { id: string; email: string }[]) {
+          const e = schoolOf.get(row.email)
+          if (!e || preexistingMemberEmails.has(e)) continue
+          preexistingMemberEmails.add(e)
+          existingIdByEmail.set(e, row.id)
+        }
       }
     }
     // The registrant is only "new" if their email was in the upsert batch (not
@@ -792,6 +829,10 @@ export async function POST(req: NextRequest) {
         if (soloRow?.id) { memberIdMap[teacher.email] = soloRow.id; newlyCreatedEmails.add(teacher.email) }
       }
     }
+
+    // S4 field encryption (inert unless FIELD_CRYPTO_MODE=shadow): only members
+    // this request created; existing rows were not written.
+    shadowSyncFields('members', Object.entries(memberIdMap).filter(([e]) => newlyCreatedEmails.has(e)).map(([, id]) => id))
 
     // Resolve the group's school to a schools row and link every member to it,
     // so the school surfaces in /admin/schools and on each member page — not
@@ -911,7 +952,7 @@ export async function POST(req: NextRequest) {
       member_id: resolveMemberId(p),
       first_name: p.first_name, last_name: p.last_name,
       nickname: p.nickname || null,
-      email: p.email, phone: p.phone,
+      email: p.email, school_email: p.school_email || null, phone: p.phone,
       date_of_birth: p.date_of_birth,
       grade: p.grade ?? null,
       gender: p.gender,
@@ -994,6 +1035,8 @@ export async function POST(req: NextRequest) {
         inserted: insertedParts?.length ?? 0, expected: participantRows.length,
       })
     }
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('participants', (insertedParts ?? []).map((p) => p.id as string))
     const participantsWithId = participantRows.map((row, i) => ({
       row,
       participantId: insertedParts?.[i]?.id as string | undefined,
@@ -1064,6 +1107,7 @@ export async function POST(req: NextRequest) {
           ec_first_name: p.emergency_contact_first_name ?? '', ec_last_name: p.emergency_contact_last_name ?? '',
           ec_email: p.emergency_contact_email ?? '', ec_phone: p.emergency_contact_phone ?? '',
           ec_relationship: p.emergency_contact_relationship ?? '',
+          school_email: p.school_email ?? '',
         })
         const enteredParticipants: SheetSeedRow[] = details_method === 'add_now'
           ? [

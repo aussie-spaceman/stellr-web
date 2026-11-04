@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember } from '@/lib/community'
+import { communityWriteBlock } from '@/lib/community'
+import { getOnboardedMember } from '@/lib/onboarded-member'
 import {
   isCohortMentor,
   linkCohortTraining,
@@ -12,7 +13,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 
 // GET — resource-library search for the "Attach a resource" picker (mentor/admin).
 export async function GET(req: Request) {
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const { searchParams } = new URL(req.url)
   const cohortId = searchParams.get('cohortId') ?? ''
@@ -32,8 +33,11 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const member = await getCurrentMember()
+  const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'host')
+  if (restricted) return restricted
 
   const b = await req.json().catch(() => ({}))
   if (!b.cohortId) return NextResponse.json({ error: 'cohortId required' }, { status: 400 })

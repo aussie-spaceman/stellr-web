@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useId, type RefObject } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
@@ -26,7 +27,7 @@ type DetailsMethod = 'add_now' | 'spreadsheet' | 'email_link'
 type PaymentMethod = 'invoice' | 'card' | 'individual'
 
 interface AdultData {
-  first_name: string; last_name: string; nickname: string; email: string; phone: string
+  first_name: string; last_name: string; nickname: string; email: string; school_email: string; phone: string
   date_of_birth: string; gender: string; t_shirt_size: string
   ethnicity: string[]; dietary_requirements: string[]; health_conditions: string
   existing_membership_id: string
@@ -37,7 +38,7 @@ interface AdultData {
 }
 
 interface StudentData {
-  first_name: string; last_name: string; nickname: string; email: string; phone: string
+  first_name: string; last_name: string; nickname: string; email: string; school_email: string; phone: string
   date_of_birth: string; grade: string; gender: string; t_shirt_size: string
   ethnicity: string[]; dietary_requirements: string[]; health_conditions: string
   emergency_contact_first_name: string; emergency_contact_last_name: string
@@ -48,11 +49,11 @@ interface StudentData {
 }
 
 function emptyAdult(): AdultData {
-  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', existing_membership_id: '', linked: false }
+  return { first_name: '', last_name: '', nickname: '', email: '', school_email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', existing_membership_id: '', linked: false }
 }
 
 function emptyStudent(): StudentData {
-  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '', linked: false }
+  return { first_name: '', last_name: '', nickname: '', email: '', school_email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '', linked: false }
 }
 
 // ── Schemas (no school fields — school is handled via SchoolSearchInput state) ─
@@ -189,21 +190,23 @@ function NumberStepper({ label, value, min, max, onChange, note }: {
 type SlotStatus = 'complete' | 'incomplete' | 'empty'
 type SlotErrors<T> = Partial<Record<keyof T, string>>
 
-const ADULT_REQUIRED = ['first_name', 'last_name', 'email', 'phone', 'date_of_birth', 'gender', 't_shirt_size'] as const
-const STUDENT_REQUIRED = ['first_name', 'last_name', 'email', 'phone', 'date_of_birth', 'grade', 'gender', 't_shirt_size'] as const
+const ADULT_REQUIRED = ['first_name', 'last_name', 'phone', 'date_of_birth', 'gender', 't_shirt_size'] as const
+const STUDENT_REQUIRED = ['first_name', 'last_name', 'phone', 'date_of_birth', 'grade', 'gender', 't_shirt_size'] as const
 const STUDENT_EC_REQUIRED = [
   'emergency_contact_first_name', 'emergency_contact_last_name', 'emergency_contact_email',
   'emergency_contact_phone', 'emergency_contact_relationship',
 ] as const
 
-const isEmptySlot = (p: { first_name: string; last_name: string; email: string }) => !(p.first_name || p.last_name || p.email)
+const isEmptySlot = (p: { first_name: string; last_name: string; email: string; school_email?: string }) => !(p.first_name || p.last_name || p.email || p.school_email)
 
 /** Missing required fields of a started, unlinked adult slot ({} when none). */
 function adultSlotErrors(a: AdultData): SlotErrors<AdultData> {
   if (a.linked || isEmptySlot(a)) return {}
   const e: SlotErrors<AdultData> = {}
   for (const f of ADULT_REQUIRED) if (!a[f]) e[f] = 'Required'
-  if (a.email && !isValidEmail(a.email)) e.email = 'Enter a valid email'
+  // Under 18, a personal or a school address will do (lib/member-email).
+  const emailErr = emailPairError(a.date_of_birth, a.email, a.school_email)
+  if (emailErr) e.email = emailErr
   if (a.ethnicity.length === 0) e.ethnicity = 'Select at least one'
   if (a.dietary_requirements.length === 0) e.dietary_requirements = 'Select at least one'
   return e
@@ -214,7 +217,8 @@ function studentSlotErrors(s: StudentData): SlotErrors<StudentData> {
   if (s.linked || isEmptySlot(s)) return {}
   const e: SlotErrors<StudentData> = {}
   for (const f of STUDENT_REQUIRED) if (!s[f]) e[f] = 'Required'
-  if (s.email && !isValidEmail(s.email)) e.email = 'Enter a valid email'
+  const emailErr = emailPairError(s.date_of_birth, s.email, s.school_email)
+  if (emailErr) e.email = emailErr
   if (s.ethnicity.length === 0) e.ethnicity = 'Select at least one'
   if (s.dietary_requirements.length === 0) e.dietary_requirements = 'Select at least one'
   for (const f of STUDENT_EC_REQUIRED) if (!s[f]) e[f] = 'Required'
@@ -300,9 +304,16 @@ function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, o
                 <Input value={data.nickname} onChange={e => onChange('nickname', e.target.value)} autoComplete={NOT_MINE} placeholder="Optional" />
               </Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Email" required error={errors.email}>
-                  <Input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} autoComplete={NOT_MINE} />
-                </Field>
+                <MemberEmailFields
+                  dateOfBirth={data.date_of_birth}
+                  email={data.email}
+                  schoolEmail={data.school_email}
+                  onEmailChange={v => onChange('email', v)}
+                  onSchoolEmailChange={v => onChange('school_email', v)}
+                  error={errors.email}
+                  audience="other"
+                  autoComplete={NOT_MINE}
+                />
                 <Field label="Phone" required error={errors.phone}>
                   <Input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} autoComplete={NOT_MINE} />
                 </Field>
@@ -380,9 +391,16 @@ function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUn
                 <Input value={data.nickname} onChange={e => onChange('nickname', e.target.value)} autoComplete={NOT_MINE} placeholder="Optional" />
               </Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Email" required error={errors.email}>
-                  <Input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} autoComplete={NOT_MINE} />
-                </Field>
+                <MemberEmailFields
+                  dateOfBirth={data.date_of_birth}
+                  email={data.email}
+                  schoolEmail={data.school_email}
+                  onEmailChange={v => onChange('email', v)}
+                  onSchoolEmailChange={v => onChange('school_email', v)}
+                  error={errors.email}
+                  audience="other"
+                  autoComplete={NOT_MINE}
+                />
                 <Field label="Phone" required error={errors.phone}>
                   <Input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} autoComplete={NOT_MINE} />
                 </Field>

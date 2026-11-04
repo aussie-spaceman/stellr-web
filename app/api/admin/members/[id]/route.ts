@@ -4,6 +4,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { startRetentionClock } from '@/lib/esign/retention'
+import { resolveEmailPair } from '@/lib/member-email'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 function humanizeFields(keys: string[]): string {
   return keys.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')
@@ -33,7 +35,7 @@ export async function PATCH(
   const db = supabaseServer()
 
   const allowed = [
-    'first_name', 'last_name', 'nickname', 'phone', 'email', 'discord_handle',
+    'first_name', 'last_name', 'nickname', 'phone', 'email', 'school_email', 'discord_handle',
     'date_of_birth', 'gender', 'age_bracket', 'event_role',
     'grade', 'grade_auto_promote', 'tshirt_size',
     'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone', 'ec_relationship',
@@ -45,6 +47,16 @@ export async function PATCH(
   // could never be saved — store empties as NULL instead.
   for (const key of allowed) {
     if (key in body) updates[key] = body[key] === '' ? null : body[key]
+  }
+  // Personal takes primacy (lib/member-email): with no personal address the
+  // school one becomes the primary, and email (NOT NULL) is never blanked.
+  if ('email' in body || 'school_email' in body) {
+    const pair = resolveEmailPair({ email: body.email, school_email: body.school_email })
+    if ('email' in body) {
+      if (!pair.email) return NextResponse.json({ error: 'An email address is required.' }, { status: 400 })
+      updates.email = pair.email
+    }
+    if ('school_email' in body) updates.school_email = pair.school_email
   }
 
   // Snapshot the editable fields + current ethnicity/allergy selections before
@@ -66,6 +78,8 @@ export async function PATCH(
     console.error('Admin member update error:', error)
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   }
+  // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+  shadowSyncFields('members', [id])
 
   // Replace ethnicity + allergy selections — independent tables, run concurrently
   const replacements: Promise<void>[] = []

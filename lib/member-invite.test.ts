@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
   updates: [] as Array<Record<string, unknown>>,
   getUserList: vi.fn(async () => ({ data: [] as Array<{ id: string }> })),
   createUser: vi.fn(async () => ({ id: 'user_1' })),
-  sendEmail: vi.fn(async () => {}),
+  sendEmail: vi.fn(async (_msg: Record<string, unknown>) => {}),
   logActivity: vi.fn(async (_entry: Record<string, unknown>) => {}),
 }))
 
@@ -100,6 +100,21 @@ describe('sendGroupAccountInvite', () => {
     expect(linked()).toBe(true)
     expect(h.sendEmail).toHaveBeenCalledTimes(1)
     expect(h.updates.some((u) => u.table === 'members' && 'account_invite_sent_at' in u)).toBe(true)
+  })
+
+  // Review finding: the sign-in email was ordinary mail, so the suppression
+  // list could stop it while the member was recorded as invited.
+  it('sends the sign-in email as critical mail, past the suppression list', async () => {
+    h.member = { ...base, date_of_birth: yearsAgo(14) }
+    await sendGroupAccountInvite(makeDb(), 'm1', opts)
+    expect(h.sendEmail.mock.calls[0][0]).toMatchObject({ to: 'sam@example.com', critical: true })
+  })
+
+  it('does not record an invite the suppression list stopped', async () => {
+    h.member = { ...base, date_of_birth: yearsAgo(14) }
+    h.sendEmail.mockResolvedValueOnce({ id: null, suppressed: true } as never)
+    expect(await sendGroupAccountInvite(makeDb(), 'm1', opts)).toEqual({ sent: false, reason: 'send_failed' })
+    expect(h.updates.some((u) => u.table === 'members' && 'account_invite_sent_at' in u)).toBe(false)
   })
 
   it('treats 13 today as 13', async () => {
@@ -193,6 +208,7 @@ describe('sendAccountInvite (admin, hand-created member)', () => {
     expect(h.createUser).toHaveBeenCalledTimes(1)
     expect(linked()).toBe(true)
     expect(h.sendEmail).toHaveBeenCalledTimes(1)
+    expect(h.sendEmail.mock.calls[0][0]).toMatchObject({ critical: true })
   })
 
   it('gives a child under 13 no login and no email until a parent has signed', async () => {

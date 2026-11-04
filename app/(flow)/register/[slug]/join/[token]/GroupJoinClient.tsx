@@ -9,6 +9,7 @@ import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
 import { gradeOptions } from '@/lib/grade-band'
 import { ageFromDob } from '@/lib/utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
+import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 
 interface Props {
   token: string
@@ -45,6 +46,7 @@ interface DetailsForm {
   last_name: string
   nickname: string
   email: string
+  school_email: string
   phone: string
   date_of_birth: string
   gender: string
@@ -72,6 +74,7 @@ function detailsFromPrefill(p: RegistrationPrefill | null | undefined): DetailsF
     last_name: p.last_name ?? '',
     nickname: p.nickname ?? '',
     email: p.email,
+    school_email: p.school_email ?? '',
     phone: p.phone ?? '',
     date_of_birth: p.date_of_birth ?? '',
     gender: p.gender ?? '',
@@ -89,7 +92,7 @@ function detailsFromPrefill(p: RegistrationPrefill | null | undefined): DetailsF
 }
 
 const EMPTY_DETAILS: DetailsForm = {
-  type: 'Student', first_name: '', last_name: '', nickname: '', email: '', phone: '',
+  type: 'Student', first_name: '', last_name: '', nickname: '', email: '', school_email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
   ethnicity: [], dietary_requirements: [], health_conditions: '',
   emergency_contact_first_name: '', emergency_contact_last_name: '',
@@ -213,6 +216,11 @@ export default function GroupJoinClient({
     e.preventDefault()
     if (existingAccount) {
       setError('You already have a Stellr account — please sign in to join this group.')
+      return
+    }
+    const emailError = emailPairError(form.date_of_birth, form.email, form.school_email)
+    if (emailError) {
+      setError(emailError === 'Required' ? 'Enter your email address.' : emailError)
       return
     }
     if (requiresEmergencyContact && (
@@ -382,22 +390,8 @@ export default function GroupJoinClient({
           <Input value={form.nickname} onChange={e => set('nickname', e.target.value)} autoComplete="nickname" />
         </Field>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Email" required>
-            <Input
-              type="email"
-              value={form.email}
-              autoComplete="email"
-              inputMode="email"
-              onChange={e => { set('email', e.target.value); if (existingAccount) setExistingAccount(false) }}
-              onBlur={e => checkExistingAccount(e.target.value)}
-            />
-          </Field>
-          <Field label="Phone">
-            <Input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={e => set('phone', e.target.value)} />
-          </Field>
-        </div>
-
+        {/* Date of birth before email: it decides whether the personal +
+            school email pair is asked for. */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date of birth" required>
             <Input type="date" autoComplete="bday" value={form.date_of_birth} onChange={e => setDateOfBirth(e.target.value)} />
@@ -407,6 +401,20 @@ export default function GroupJoinClient({
               <option value="">Select…</option>
               {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
             </Select>
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <MemberEmailFields
+            dateOfBirth={form.date_of_birth}
+            email={form.email}
+            schoolEmail={form.school_email}
+            onEmailChange={v => { set('email', v); if (existingAccount) setExistingAccount(false) }}
+            onSchoolEmailChange={v => set('school_email', v)}
+            onEmailBlur={v => checkExistingAccount(v)}
+          />
+          <Field label="Phone">
+            <Input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={e => set('phone', e.target.value)} />
           </Field>
         </div>
 

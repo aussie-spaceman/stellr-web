@@ -21,7 +21,7 @@
  * Read-only by default. Pass --apply to write.
  *
  * Prerequisites (.env.local): NEXT_PUBLIC_SANITY_PROJECT_ID,
- * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY).
+ * NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY.
  * SANITY_API_TOKEN too if the dataset is private.
  *
  * Run:

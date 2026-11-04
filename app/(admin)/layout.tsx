@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { ClerkProvider } from '@clerk/nextjs'
 import { AdminUserButton } from '@/components/admin/AdminUserButton'
 import { clerkAppearance } from '@/lib/clerk-appearance'
+import { requestNonce } from '@/lib/request-nonce'
 import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
@@ -16,8 +17,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!hasAdminPortalAccess(sessionClaims)) redirect('/account')
   const isAdmin = isAdminClaims(sessionClaims)
 
+  // The nonce puts clerk-js under the CSP (lib/csp.ts).
   return (
-    <ClerkProvider appearance={clerkAppearance}>
+    <ClerkProvider appearance={clerkAppearance} nonce={await requestNonce()}>
     <div className="min-h-[100svh] bg-brand-canvas">
       <div className="flex">
         <AdminSidebar isAdmin={isAdmin} />

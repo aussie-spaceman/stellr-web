@@ -122,16 +122,36 @@ WHERE m.health_conditions IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM participants p JOIN registrations r ON r.id = p.registration_id
                   WHERE p.member_id = m.id AND r.event_slug IN (${activeList}))${keepMembers};
 
--- 3. Audit copies (the members trigger copies whole rows, including step 2's)
+-- 2b. S4 shadow ciphertext follows the plaintext (docs/FIELD-CRYPTO.md): a
+--     health_conditions_enc whose plaintext is now NULL is cleared too, or the
+--     value would still be recoverable with the data key. Skipped where the
+--     S4 migration (20261104400000) is not applied yet.
+DO $retention$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+             AND table_name = 'participants' AND column_name = 'health_conditions_enc') THEN
+    UPDATE participants SET health_conditions_enc = NULL
+    WHERE health_conditions IS NULL AND health_conditions_enc IS NOT NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+             AND table_name = 'members' AND column_name = 'health_conditions_enc') THEN
+    UPDATE members SET health_conditions_enc = NULL
+    WHERE health_conditions IS NULL AND health_conditions_enc IS NOT NULL;
+  END IF;
+END
+$retention$;
+
+-- 3. Audit copies (the members trigger copies whole rows, including step 2's,
+--    and the S4 ciphertext column with them)
 UPDATE audit_log
-SET old_data = CASE WHEN old_data ? 'health_conditions' THEN old_data - 'health_conditions' ELSE old_data END,
-    new_data = CASE WHEN new_data ? 'health_conditions' THEN new_data - 'health_conditions' ELSE new_data END
+SET old_data = CASE WHEN old_data ?| array['health_conditions', 'health_conditions_enc'] THEN old_data - 'health_conditions' - 'health_conditions_enc' ELSE old_data END,
+    new_data = CASE WHEN new_data ?| array['health_conditions', 'health_conditions_enc'] THEN new_data - 'health_conditions' - 'health_conditions_enc' ELSE new_data END
 WHERE table_name = 'members'
-  AND (old_data ? 'health_conditions' OR new_data ? 'health_conditions');
+  AND (old_data ?| array['health_conditions', 'health_conditions_enc'] OR new_data ?| array['health_conditions', 'health_conditions_enc']);
 
 -- 4. Deletion snapshots
-UPDATE deletion_archive SET snapshot = snapshot - 'health_conditions'
-WHERE snapshot ? 'health_conditions';
+UPDATE deletion_archive SET snapshot = snapshot - 'health_conditions' - 'health_conditions_enc'
+WHERE snapshot ?| array['health_conditions', 'health_conditions_enc'];
 
 COMMIT;`)
 }

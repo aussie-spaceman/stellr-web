@@ -30,7 +30,13 @@ interface Props {
   /** Volunteer program signup (?role=volunteer): role is locked to 'volunteer',
    *  the member must be 18+, and the student-specific steps are skipped. */
   volunteerFlow?: boolean
+  /** MINOR_SELF_SIGNUP_ENABLED (decision 24): ask the date of birth first, on
+   *  its own, and route minors to the guardian-consent flow. */
+  minorSelfSignup?: boolean
 }
+
+type AgeBand = 'adult' | 'teen' | 'child'
+type PendingKind = 'guardian' | 'parent'
 
 const ROLES = [
   { value: 'participant', label: 'Student (High School)', bracket: 'high_school' },
@@ -71,8 +77,10 @@ const VOLUNTEER_BRACKETS = [
 
 const GENDERS = ['male', 'female', 'other']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
+// A self-registering minor's contact is the guardian who signs their consent form.
+const GUARDIAN_RELATIONSHIPS = ['Parent', 'Legal Guardian']
 
-type StepKey = 'role' | 'details' | 'emergency'
+type StepKey = 'age' | 'parent' | 'role' | 'details' | 'emergency'
 
 /** A message per field that stops the step, keyed in the order the fields appear. */
 type FieldErrors = Partial<Record<string, string>>
@@ -85,8 +93,17 @@ function ageBracketFor(tierBracket: SelectedTier['bracket'] | null): string {
   return ''
 }
 
-export function OnboardingForm({ existingMember, next, selectedTier, volunteerFlow }: Props) {
+export function OnboardingForm({ existingMember, next, selectedTier, volunteerFlow, minorSelfSignup }: Props) {
   const router = useRouter()
+  // The neutral age screen comes first when minors may register themselves.
+  // Volunteers keep their own flow: they must be 18+, and say so on the details step.
+  const useAgeStep = !!minorSelfSignup && !volunteerFlow
+  const [band, setBand] = useState<AgeBand | null>(null)
+  const [pending, setPending] = useState<{ kind: PendingKind; email: string } | null>(null)
+  const [child, setChild] = useState({ first_name: '', parent_email: '' })
+  // A guardian's agreement already on file means no consent form to send.
+  const [consented, setConsented] = useState(false)
+  const guardianStep = useAgeStep && band === 'teen' && !consented
 
   const tierBracket = selectedTier?.bracket ?? null
   // School & college tiers don't need the "what describes you?" question — the
@@ -132,13 +149,18 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
   // those who attend events (students and mentors).
   const steps = useMemo<StepKey[]>(() => {
     const s: StepKey[] = []
+    if (useAgeStep) s.push('age')
+    if (useAgeStep && band === 'child') {
+      s.push('parent')
+      return s
+    }
     if (showRoleStep) s.push('role')
     s.push('details')
     if (req.emergencyContact !== 'hidden') s.push('emergency')
     return s
-  }, [showRoleStep, req.emergencyContact])
+  }, [useAgeStep, band, showRoleStep, req.emergencyContact])
 
-  const [stepKey, setStepKey] = useState<StepKey>(skipRoleStep ? 'details' : 'role')
+  const [stepKey, setStepKey] = useState<StepKey>(useAgeStep ? 'age' : skipRoleStep ? 'details' : 'role')
   const stepIndex = Math.max(0, steps.indexOf(stepKey))
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -240,6 +262,60 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
   const isLastStep = stepIndex === steps.length - 1
 
+  /** The age screen: the server says which form follows. Nothing on the page names an age. */
+  async function submitAge() {
+    if (!check(form.date_of_birth ? {} : { date_of_birth: 'Enter your date of birth.' })) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/members/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'age', date_of_birth: form.date_of_birth }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !['adult', 'teen', 'child'].includes(data.band)) {
+        setFieldErrors({ date_of_birth: data.error ?? 'Something went wrong. Please try again.' })
+        return
+      }
+      const b = data.band as AgeBand
+      setBand(b)
+      setConsented(data.consented === true)
+      setStepKey(b === 'child' ? 'parent' : showRoleStep ? 'role' : 'details')
+    } catch {
+      setFieldErrors({ date_of_birth: 'Something went wrong. Please try again.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /** Under 13: a first name and a parent's email, nothing else, until the parent consents. */
+  async function submitChild() {
+    const e: FieldErrors = {}
+    if (!child.first_name.trim()) e.first_name = 'Enter your first name.'
+    if (!child.parent_email.trim()) e.parent_email = 'Enter your parent or guardian’s email address.'
+    if (!check(e)) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/members/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date_of_birth: form.date_of_birth, ...child }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'Something went wrong')
+        return
+      }
+      setPending({ kind: 'parent', email: child.parent_email.trim() })
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleSubmit() {
     setLoading(true)
     setError('')
@@ -269,6 +345,10 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
         setError(data.error ?? 'Something went wrong')
         return
       }
+      if (data.pendingConsent === 'guardian') {
+        setPending({ kind: 'guardian', email: form.ec_email.trim() })
+        return
+      }
       // An adult joining can sign the Membership Agreement straight away.
       // Not when onboarding is a stop on the way somewhere (checkout): the
       // account page offers "Sign now" for them instead.
@@ -284,28 +364,107 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
     }
   }
 
+  if (pending) {
+    return <PendingConsentPanel kind={pending.kind} guardianEmail={pending.email} next={next} />
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-5 sm:p-8">
+    <div className="bg-white rounded-xl border border-line p-5 sm:p-8">
       {/* Step indicator — reflects the actual number of steps for this member */}
       <div className="flex gap-2 mb-8">
         {steps.map((s, i) => (
           <div
             key={s}
-            className={`h-1.5 flex-1 rounded-full ${i <= stepIndex ? 'bg-brand-blue' : 'bg-brand-border'}`}
+            className={`h-1.5 flex-1 rounded-full ${i <= stepIndex ? 'bg-primary' : 'bg-line'}`}
           />
         ))}
       </div>
 
       {selectedTier && (
-        <p className="-mt-4 mb-6 text-xs text-brand-muted-soft">
-          Signing up for <span className="font-semibold text-brand-blue-dark">{selectedTier.name}</span>
+        <p className="-mt-4 mb-6 text-xs text-content-muted">
+          Signing up for <span className="font-semibold text-ink">{selectedTier.name}</span>
         </p>
+      )}
+
+      {stepKey === 'age' && (
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-ink">First, your date of birth</h2>
+          <p className="text-xs text-content-muted">We ask everyone this before anything else.</p>
+          <Field label="Date of birth" error={fieldErrors.date_of_birth}>
+            <Input
+              id={fid('date_of_birth')}
+              type="date"
+              autoComplete="bday"
+              required
+              value={form.date_of_birth}
+              onChange={(e) => set('date_of_birth', e.target.value)}
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={submitAge}
+            disabled={loading}
+            className="w-full mt-4 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
+          >
+            {loading ? 'Checking…' : 'Continue'}
+          </button>
+        </div>
+      )}
+
+      {stepKey === 'parent' && (
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-ink">Your parent or guardian</h2>
+          <p className="text-xs text-content-muted">
+            We&rsquo;ll email your parent or guardian a consent form. Once they&rsquo;ve signed it, you can finish
+            setting up your account. Until then we keep only your first name, your date of birth and their email.
+          </p>
+          <Field label="Your first name" error={fieldErrors.first_name}>
+            <Input
+              id={fid('first_name')}
+              type="text"
+              autoComplete="given-name"
+              required
+              value={child.first_name}
+              onChange={(e) => {
+                setChild((c) => ({ ...c, first_name: e.target.value }))
+                setFieldErrors((x) => (x.first_name ? { ...x, first_name: undefined } : x))
+              }}
+            />
+          </Field>
+          <Field label="Parent or guardian’s email" error={fieldErrors.parent_email}>
+            <Input
+              id={fid('parent_email')}
+              type="email"
+              autoComplete="off"
+              required
+              value={child.parent_email}
+              onChange={(e) => {
+                setChild((c) => ({ ...c, parent_email: e.target.value }))
+                setFieldErrors((x) => (x.parent_email ? { ...x, parent_email: undefined } : x))
+              }}
+            />
+          </Field>
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={goBack} className="flex-1 border border-line rounded-lg py-2.5 text-sm font-medium text-content-body hover:bg-surface">
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={submitChild}
+              disabled={loading}
+              className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
+            >
+              {loading ? 'Sending…' : 'Send the consent form'}
+            </button>
+          </div>
+        </div>
       )}
 
       {stepKey === 'role' && volunteerFlow && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-brand-blue-dark">Which best describes you?</h2>
-          <p className="text-xs text-brand-muted-soft">
+          <h2 className="text-base font-semibold text-ink">Which best describes you?</h2>
+          <p className="text-xs text-content-muted">
             You&rsquo;re joining as a Stellr volunteer — this just helps us set up the right membership.
           </p>
           <div className="grid grid-cols-1 gap-3">
@@ -317,8 +476,8 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
                 onClick={() => set('age_bracket', b.value)}
                 className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   form.age_bracket === b.value
-                    ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
-                    : 'border-brand-border hover:border-brand-border text-brand-muted'
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-line hover:border-line text-content-body'
                 }`}
               >
                 {b.label}
@@ -328,7 +487,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
           <button
             onClick={goNext}
             disabled={!form.age_bracket}
-            className="w-full mt-4 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
+            className="w-full mt-4 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
           >
             Continue
           </button>
@@ -337,7 +496,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
       {stepKey === 'role' && !volunteerFlow && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-brand-blue-dark">What best describes you?</h2>
+          <h2 className="text-base font-semibold text-ink">What best describes you?</h2>
           <div className="grid grid-cols-1 gap-3">
             {ROLES.filter((r) => (adultOnlyRoles ? ADULT_ROLE_VALUES.includes(r.value) : true)).map((r) => (
               <button
@@ -347,8 +506,8 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
                 onClick={() => handleRoleSelect(r)}
                 className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   form.event_role === r.value
-                    ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
-                    : 'border-brand-border hover:border-brand-border text-brand-muted'
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-line hover:border-line text-content-body'
                 }`}
               >
                 {r.label}
@@ -358,7 +517,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
           <button
             onClick={goNext}
             disabled={!form.event_role}
-            className="w-full mt-4 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
+            className="w-full mt-4 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
           >
             Continue
           </button>
@@ -367,25 +526,28 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
       {stepKey === 'details' && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-brand-blue-dark">Personal details</h2>
+          <h2 className="text-base font-semibold text-ink">Personal details</h2>
 
           {/* The member's own details: autocomplete tokens let the browser
               fill them (WCAG 1.3.5). Required fields carry `required` for
               screen readers; the optional ones say so in their label. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
-              label="Date of birth"
-              error={fieldErrors.date_of_birth ?? (volunteerUnderage ? volunteerUnderageMessage : undefined)}
-            >
-              <Input
-                id={fid('date_of_birth')}
-                type="date"
-                autoComplete="bday"
-                required
-                value={form.date_of_birth}
-                onChange={(e) => set('date_of_birth', e.target.value)}
-              />
-            </Field>
+            {/* Already asked on its own on the age screen, when there is one. */}
+            {!useAgeStep && (
+              <Field
+                label="Date of birth"
+                error={fieldErrors.date_of_birth ?? (volunteerUnderage ? volunteerUnderageMessage : undefined)}
+              >
+                <Input
+                  id={fid('date_of_birth')}
+                  type="date"
+                  autoComplete="bday"
+                  required
+                  value={form.date_of_birth}
+                  onChange={(e) => set('date_of_birth', e.target.value)}
+                />
+              </Field>
+            )}
             <Field label="Gender" error={fieldErrors.gender}>
               <Select
                 id={fid('gender')}
@@ -486,7 +648,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
           <div className="flex gap-3 pt-2">
             {steps[stepIndex - 1] && (
-              <button type="button" onClick={goBack} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
+              <button type="button" onClick={goBack} className="flex-1 border border-line rounded-lg py-2.5 text-sm font-medium text-content-body hover:bg-surface">
                 Back
               </button>
             )}
@@ -497,7 +659,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
                 type="button"
                 onClick={submitFromDetails}
                 disabled={loading}
-                className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
+                className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
               >
                 {loading ? 'Saving…' : 'Complete profile'}
               </button>
@@ -505,7 +667,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
               <button
                 type="button"
                 onClick={continueFromDetails}
-                className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
+                className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
               >
                 Continue
               </button>
@@ -517,14 +679,16 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
       {stepKey === 'emergency' && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-brand-blue-dark">
-            Emergency contact
+          <h2 className="text-base font-semibold text-ink">
+            {guardianStep ? 'Your parent or guardian' : 'Emergency contact'}
             {req.emergencyContact === 'optional' && (
-              <span className="font-normal text-brand-muted-soft"> (optional)</span>
+              <span className="font-normal text-content-muted"> (optional)</span>
             )}
           </h2>
-          <p className="text-xs text-brand-muted-soft">
-            {req.emergencyContact === 'optional'
+          <p className="text-xs text-content-muted">
+            {guardianStep
+              ? 'We’ll email them a consent form. Until they sign it you can browse Stellr and manage your profile and registrations; posting and chat open up once they have. They’re also your emergency contact at events.'
+              : req.emergencyContact === 'optional'
               ? 'We only need this if you attend an event — you can skip it now and add it later from your account.'
               : 'Required for event participation.'}
           </p>
@@ -581,12 +745,14 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
               onChange={(e) => set('ec_relationship', e.target.value)}
             >
               <option value="">Select…</option>
-              {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
+              {(useAgeStep && band === 'teen' ? GUARDIAN_RELATIONSHIPS : EMERGENCY_RELATIONSHIPS).map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
             </Select>
           </Field>
 
           {req.emergencyContact === 'optional' && ecState.any && !ecState.all && (
-            <p className="text-sm text-brand-grey-dark">
+            <p className="text-sm text-content-secondary">
               Please complete every field, or clear them all — a partial contact can&rsquo;t be used.
             </p>
           )}
@@ -594,7 +760,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
           {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={goBack} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
+            <button type="button" onClick={goBack} className="flex-1 border border-line rounded-lg py-2.5 text-sm font-medium text-content-body hover:bg-surface">
               Back
             </button>
             {/* Never disabled for missing answers: see the details step. */}
@@ -602,13 +768,135 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
               type="button"
               onClick={submitFromEmergency}
               disabled={loading}
-              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
+              className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-50"
             >
               {loading ? 'Saving…' : 'Complete profile'}
             </button>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * What a self-registered minor sees while their parent or guardian's consent
+ * is outstanding (decision 24): who the form went to, a resend, and a way to
+ * correct the address (POST /api/consent/request). A 13–17-year-old can carry
+ * on into Stellr with read-only access; an under-13's account waits here.
+ */
+export function PendingConsentPanel({
+  kind,
+  guardianEmail,
+  next,
+}: {
+  kind: PendingKind
+  guardianEmail: string
+  next?: string
+}) {
+  const router = useRouter()
+  const uid = useId()
+  const [email, setEmail] = useState(guardianEmail)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  async function send(newEmail?: string) {
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch('/api/consent/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEmail ? { guardian_email: newEmail } : {}),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'Something went wrong. Please try again.')
+        return
+      }
+      if (data.state === 'consented') {
+        router.refresh()
+        return
+      }
+      if (newEmail) {
+        setEmail(newEmail)
+        setEditing(false)
+      }
+      setMessage('Sent. Ask them to check their inbox, and the spam folder too.')
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-line p-5 sm:p-8 space-y-4">
+      <h2 className="text-base font-semibold text-ink">Waiting for your parent or guardian</h2>
+      <p className="text-sm text-content-body">
+        We&rsquo;ve emailed a consent form to <span className="font-semibold text-ink">{email}</span>.{' '}
+        {kind === 'parent'
+          ? 'Once they’ve signed it, come back here to finish setting up your account.'
+          : 'Until they sign it you can browse Stellr and manage your profile and registrations. Posting and chat open up once they have.'}
+      </p>
+      <p className="text-xs text-content-muted">
+        If the form isn&rsquo;t signed within 30 days, we delete this account and the details on it.
+      </p>
+
+      {editing ? (
+        <div className="space-y-3">
+          <Field label="Parent or guardian’s email">
+            <Input id={`${uid}-guardian-email`} type="email" autoComplete="off" value={draft} onChange={(e) => setDraft(e.target.value)} />
+          </Field>
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setEditing(false)} className="flex-1 border border-line rounded-lg py-2.5 text-sm font-medium text-content-body hover:bg-surface">
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy || !draft.trim()}
+              onClick={() => send(draft.trim())}
+              className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink disabled:opacity-40"
+            >
+              {busy ? 'Sending…' : 'Send to this address'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => send()}
+            className="flex-1 border border-line rounded-lg py-2.5 text-sm font-medium text-content-body hover:bg-surface disabled:opacity-40"
+          >
+            {busy ? 'Sending…' : 'Send it again'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setDraft(''); setEditing(true) }}
+            className="flex-1 border border-line rounded-lg py-2.5 text-sm font-medium text-content-body hover:bg-surface"
+          >
+            Change the email
+          </button>
+          {kind === 'guardian' && (
+            <button
+              type="button"
+              onClick={() => router.push(next ?? '/home')}
+              className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-ink"
+            >
+              Continue to Stellr
+            </button>
+          )}
+        </div>
+      )}
+
+      {message && <p role="status" className="text-sm text-content-body">{message}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { resolveAndLinkSchool } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
+import { sessionChildAwaitingConsentBlock } from '@/lib/pending-consent'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
@@ -29,6 +30,8 @@ import { pendingAddonLines } from '@/lib/registration-checkout'
 import { confirmRegistration } from '@/lib/registration-confirm'
 import { attachOfferToRegistration, findOfferByToken } from '@/lib/scholarships'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { primaryEmail, schoolEmailToStore } from '@/lib/member-email'
+import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
@@ -81,8 +84,18 @@ export async function POST(req: NextRequest) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
+    // Decision 24, COPPA: a signed-in child whose parent has not consented
+    // registers for nothing until the parent signs (lib/pending-consent).
+    // Asked before getCurrentMember, which resolves no member for them and
+    // would otherwise let the submitted email stand in for the session's.
+    const childBlock = await sessionChildAwaitingConsentBlock(supabaseServer())
+    if (childBlock) return childBlock
+
     const sessionMember = await getCurrentMember().catch(() => null)
-    const email: string = normalizeEmail(sessionMember?.email ?? body.email)
+    // Personal takes primacy (lib/member-email): with only a school address
+    // submitted, it is the primary. A session email always wins.
+    const email: string = normalizeEmail(sessionMember?.email ?? primaryEmail(body.email, body.school_email))
+    const schoolEmail = schoolEmailToStore(body.school_email)
 
     if (!event_slug || !email || !first_name || !last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -326,8 +339,20 @@ export async function POST(req: NextRequest) {
     // before the upsert and used to decide whether a silent sign-in token is
     // safe — never hand an anonymous caller a session for an existing member
     // (deep review C-1). A lookup error leaves this false, so no token is minted.
-    const { data: priorMember } = await db
+    const { data: priorByEmail } = await db
       .from('members').select('id').eq('email', email).maybeSingle()
+    // The same person under their other address (4 Nov 2026): link to that
+    // member rather than create a duplicate. Counts as "not new", so no
+    // session is minted and an anonymous caller rewrites nothing (C-1, C-3).
+    let priorMember = priorByEmail as { id: string } | null
+    if (!priorMember) {
+      const { data } = await db.from('members').select('id').eq('school_email', email).limit(1).maybeSingle()
+      priorMember = (data as { id: string } | null) ?? null
+    }
+    if (!priorMember && schoolEmail && schoolEmail !== email) {
+      const { data } = await db.from('members').select('id').eq('email', schoolEmail).maybeSingle()
+      priorMember = (data as { id: string } | null) ?? null
+    }
     const memberIsNew = !priorMember
 
     // Only write the canonical members row when this request created it, or when
@@ -337,13 +362,16 @@ export async function POST(req: NextRequest) {
     // emergency/guardian contact, role and active flag stay as they were; the
     // submitted details live on the participant/registration row only, for staff
     // to review (deep review C-3, finding REG-2). A brand-new email is created.
-    const mayWriteMemberRow = memberIsNew || !!sessionMember
+    // The upsert keys on email, so a member found only by the other address is
+    // linked, never rewritten, even for a signed-in caller.
+    const mayWriteMemberRow = memberIsNew || (!!sessionMember && !!priorByEmail)
     let memberId: string | null = priorMember?.id ?? null
     if (mayWriteMemberRow) {
       const { data: memberRow, error: memberUpsertError } = await db
         .from('members')
         .upsert({
           email,
+          ...(schoolEmail ? { school_email: schoolEmail } : {}),
           first_name,
           last_name,
           nickname: nickname || null,
@@ -373,6 +401,7 @@ export async function POST(req: NextRequest) {
         console.error('Member upsert error (non-fatal — participant still created):', memberUpsertError)
       }
       memberId = memberRow?.id ?? memberId
+      if (memberRow?.id) shadowSyncFields('members', [memberRow.id])
     }
 
     // Resolve the school to a schools row and link the member to it, so the
@@ -407,7 +436,7 @@ export async function POST(req: NextRequest) {
       registration_id: regId,
       member_id: memberId,
       first_name, last_name, nickname: nickname || null,
-      email, phone, date_of_birth: dob, grade, gender,
+      email, school_email: schoolEmail, phone, date_of_birth: dob, grade, gender,
       ethnicity: ethnicity ?? [],
       t_shirt_size, school_name, age_bracket,
       event_role: resolvedRole,
@@ -423,6 +452,8 @@ export async function POST(req: NextRequest) {
       await db.from('registrations').delete().eq('id', regId)
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
+    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
+    shadowSyncFields('participants', [partRow.id])
 
     // A scholarship offer now has its registration: link it, and record the
     // discounted amount due (the checkout below applies the coupon itself).

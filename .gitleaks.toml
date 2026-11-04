@@ -1,0 +1,37 @@
+# gitleaks configuration (multi-tenant plan, S2 supply chain).
+#
+# CI scans only the commits a pull request or push adds
+# (.github/workflows/security.yml, `gitleaks`), with gitleaks' built-in rules.
+# The allow-lists below cover values that look like secrets but are invented
+# test fixtures or placeholders. Never add a real key's file here: rotate the
+# key instead (a secret in a public repo's history is public).
+
+title = "Stellr gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known test fixtures: invented webhook signing secrets and fake tokens used to test redaction and signature checks"
+paths = [
+  '''^app/api/webhooks/clerk/route\.test\.ts$''',
+  '''^app/api/stripe/webhook/signature\.test\.ts$''',
+  '''^lib/app-errors\.test\.ts$''',
+  '''^scripts/fixtures/''',
+  '''^\.semgrep/tests/''',
+]
+
+[[allowlists]]
+description = "Placeholder values in CI and examples (deliberately not in any real key format)"
+regexTarget = "match"
+regexes = [
+  '''(?i)placeholder''',
+  '''whsec_(?:test|whatever|A{32})\b''',
+]
+
+[[allowlists]]
+description = "IDOR honeytokens (lib/testing/honeytokens.ts): invented Canary-tenant values that are meant to look real"
+regexTarget = "match"
+regexes = [
+  '''STL-\d{4}-CANARY\d{2}\b''',
+]

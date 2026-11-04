@@ -6,16 +6,22 @@ import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
-import { signInPath } from '@/lib/sign-in-path'
+import { authPath } from '@/lib/auth-path'
+import { safeNext } from '@/lib/safe-next'
+import { NONCE_HEADER, applyCsp, cspFor } from '@/lib/csp'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
 // Competitions admin (formerly /admin/events — the old path 307s in next.config).
 const isAdminEventsRoute = createRouteMatcher(['/admin/competitions(.*)', '/admin/events(.*)'])
 // Member-only app surfaces that require a signed-in user (Home dashboard + the
-// community portal). Unauthenticated hits are bounced to sign-in (sign-up is
-// invite-only).
+// community portal). Unauthenticated hits are bounced to sign-in, whose card
+// links on to sign-up: anyone can create an account (decision 24).
 const isCommunityRoute = createRouteMatcher(['/community(.*)', '/home(.*)'])
+// Community pages meant for people who are new to Stellr (the /academy
+// "Book a mentoring session" CTA deep-links here). Guests go straight to
+// sign-up, whose card links back to sign-in.
+const isNewMemberRoute = createRouteMatcher(['/community/mentoring/discover'])
 const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
 
 // Pages that live on www only — redirect away from app subdomain
@@ -111,7 +117,8 @@ export default async function proxy(req: NextRequest, event: NextFetchEvent) {
       const bot = matchCrawler(req.headers.get('user-agent'))
       if (bot) event.waitUntil(recordCrawlerHit(bot, req.nextUrl.pathname))
     }
-    return withRegionCookie(req, NextResponse.next())
+    // Report-Only CSP (lib/csp.ts): marketing pages are prerendered, so the host policy.
+    return applyCsp(withRegionCookie(req, NextResponse.next()), cspFor(req.nextUrl.pathname).value, req.url)
   }
   // Clerk returns nothing when it has nothing to add; that means carry on.
   return withRegionCookie(req, (await clerkHandler(req, event)) || NextResponse.next())
@@ -169,16 +176,23 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   }
 
   if (isAuthRoute(req) && userId) {
-    return NextResponse.redirect(new URL('/home', req.url))
+    // Already signed in. With a ?next, go through onboarding, which sends an
+    // onboarded member straight on to it and makes anyone else finish their
+    // profile (and its age checks) first. That is the case of a form that read
+    // a community API's 401 as "guest": the API refuses an account that has
+    // not onboarded (lib/onboarded-member). Without ?next, /home as before.
+    const next = safeNext(url.searchParams.get('next'))
+    return NextResponse.redirect(new URL(next ? `/account/onboarding?next=${encodeURIComponent(next)}` : '/home', req.url))
   }
 
   if (isCommunityRoute(req) && !userId) {
-    // Sign-up is invite-only (Clerk Restricted mode, 3 Nov 2026), so guests go
-    // to sign-in, not sign-up. Preserve the intended destination so they resume
-    // here after signing in (e.g. an /academy "Book a mentoring session" CTA
-    // deep-links straight into /community/mentoring/discover). The sign-in
-    // page validates ?next with safeNext (same-origin relative paths only).
-    return NextResponse.redirect(new URL(signInPath(url.pathname + url.search), req.url))
+    // Anyone can create an account (decision 24, 3 Nov 2026). Guests get a page
+    // that offers both: Clerk's sign-in card with its "Sign up" link, or the
+    // sign-up card (linking back to sign-in) for pages meant for new members.
+    // Preserve the intended destination so they resume here afterwards. The
+    // auth pages validate ?next with safeNext (same-origin relative paths only).
+    const mode = isNewMemberRoute(req) ? 'sign-up' : 'sign-in'
+    return NextResponse.redirect(new URL(authPath(url.pathname + url.search, mode), req.url))
   }
 
   if (isProtectedRoute(req)) {
@@ -211,7 +225,24 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   const headers = new Headers(req.headers)
   headers.delete(PRIVATE_ROUTE_HEADER)
   if (privateRoute) headers.set(PRIVATE_ROUTE_HEADER, '1')
-  return NextResponse.next({ request: { headers } })
+
+  // ── Content-Security-Policy, Report-Only (S1; lib/csp.ts) ──────────────────
+  // A route that renders per request gets a fresh nonce. Next reads it from the
+  // policy on the request headers and stamps it on its own scripts and every
+  // next/script. Anything the client sent under these names is dropped first,
+  // so it can't choose the nonce.
+  // The nonce also goes to the layouts as x-nonce, for the clerk-js tag Clerk
+  // renders in the HTML (lib/request-nonce.ts).
+  headers.delete('content-security-policy')
+  headers.delete('content-security-policy-report-only')
+  headers.delete(NONCE_HEADER)
+  const csp = cspFor(url.pathname)
+  if (csp.nonce) {
+    headers.set('content-security-policy-report-only', csp.value)
+    headers.set(NONCE_HEADER, csp.nonce)
+  }
+  return applyCsp(NextResponse.next({ request: { headers } }), csp.value, req.url)
+  // ── end CSP ────────────────────────────────────────────────────────────────
 })
 
 // /api/img (the Sanity watermarker) is left out of both entries: it reads no
@@ -219,9 +250,11 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 // proxy run on Vercel's metered CPU even when the CDN already has the image
 // (the proxy was 37% of the team's Active CPU on 21 Oct 2026). The check-in
 // desk's scanner reader (/vendor/zxing_reader.wasm) is a static file too.
+// /api/csp-report (browser CSP reports) is skipped for the same reason: it reads
+// no session, and a page can send several reports.
 export const config = {
   matcher: [
-    '/((?!_next|api/img(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
-    '/((?!api/img(?:/|$))(?:api|trpc).*)',
+    '/((?!_next|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
+    '/((?!api/img(?:/|$)|api/csp-report(?:/|$))(?:api|trpc).*)',
   ],
 }

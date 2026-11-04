@@ -20,6 +20,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/community', () => ({
   getCurrentMember: async () => ({ id: 'm1', activeTierIds: [] }),
+  communityWriteBlock: async () => null,
 }))
 vi.mock('@/lib/mentoring', () => ({
   getCohortFull: async () => ({ id: 'c1', name: 'Rocketry', isOpen: true, oneOffPriceCents: 12000, oneOffStripePriceId: null }),

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { applyGrantTrigger } from '@/lib/membership-grants'
-import { normalizeEmail } from '@/lib/member-enums'
+import { normalizeAgeBracket, normalizeEmail } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
 import { grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
@@ -11,9 +11,13 @@ import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboardi
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
-import { isKnownMinorOn, isMinorOn } from '@/lib/age'
+import { isKnownMinorOn, isMinorOn, isUnder13On, isValidDob } from '@/lib/age'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
-import { mayLinkLogin, memberAgeFacts } from '@/lib/guardian-consent'
+import { mayLinkLogin, memberAgeFacts, youngestDob } from '@/lib/guardian-consent'
+import {
+  GUARDIAN_RELATIONSHIPS, adultRouteForMinor, ageBand, guardianConsentOnFile, isPlausibleEmail, minorSelfSignupEnabled,
+  openPendingConsent, openScreenedRequest, sendConsentRequest,
+} from '@/lib/pending-consent'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -34,11 +38,56 @@ export async function POST(req: Request) {
     ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship,
   } = body
 
+  // Decision 24 (3 Nov 2026): minors may register themselves, behind
+  // MINOR_SELF_SIGNUP_ENABLED until the owner approves the revised Terms §4.1
+  // and Privacy §2. Off, every line below behaves as on 2 Oct 2026.
+  const selfSignup = minorSelfSignupEnabled()
+
+  // The neutral age screen: the date of birth alone, asked first. It answers
+  // which form comes next and, for a minor, records the date where none is on
+  // file, so going back and typing an older one changes nothing.
+  if (body?.stage === 'age') {
+    if (!selfSignup) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return ageStage(userId, date_of_birth)
+  }
+
+  // S0 (2 Nov 2026): a real past date, as on every registration route. Every
+  // age rule below reads it, and an unreadable one would be stored as given.
+  // With self-sign-up on, the date is checked first: an under-13 sends only a
+  // first name and a parent's email, so the adult field checks come after.
+  if (selfSignup) {
+    const early = checkRegistrationAge(date_of_birth)
+    if (!early.ok) return NextResponse.json({ code: early.reason, error: early.error }, { status: 400 })
+    const db = supabaseServer()
+    const prior = await findPriorRow(db, userId)
+    if (prior.row?.is_active === false) return accountClosed()
+    // A date of birth on file is never swapped for a younger one here, in
+    // either direction: an adult already on file who posts an under-13 date
+    // gets the same answer as a minor posting an adult one, never the pending
+    // path (which would wipe their profile and queue the account for purge).
+    if (youngerThanOnFile(prior.row?.date_of_birth, early.dateOfBirth)) return dobOnFile()
+    // COPPA: under 13 (the younger of this date and any on file), and no
+    // parent's agreement on file — the pending path, not the full profile.
+    const coppa = await mayLinkLogin(db, prior.row, early.dateOfBirth)
+    if (!coppa.allowed) {
+      // A record found only by email came from an adult's registration; it is
+      // linked once that registration's guardian form is signed, as before.
+      if (prior.row && !prior.linked) return guardianConsentRequired()
+      // So did a linked child an adult route brought here (an admin invite, an
+      // event or group registration, an event form): they keep the
+      // pre-decision-24 answer, and nothing the teacher entered is touched.
+      if (prior.row) {
+        const route = await adultRouteForMinor(db, prior.row.id)
+        if (route === 'unknown') return tryAgain()
+        if (route === 'yes') return guardianConsentRequired()
+      }
+      return childPendingSignup(db, userId, prior, early.dateOfBirth, body)
+    }
+  }
+
   if (!date_of_birth || !gender || !event_role) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
-  // S0 (2 Nov 2026): a real past date, as on every registration route. Every
-  // age rule below reads it, and an unreadable one would be stored as given.
   const dobCheck = checkRegistrationAge(date_of_birth)
   if (!dobCheck.ok) {
     return NextResponse.json({ code: dobCheck.reason, error: dobCheck.error }, { status: 400 })
@@ -90,7 +139,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Stellr volunteers must be 18 or older' }, { status: 400 })
   }
   // A minor is a high-school participant whatever they selected.
-  const resolvedBracket = required.isMinor ? 'high_school' : age_bracket
+  // An adult picks their bracket on the role step. A sign-up row no longer
+  // carries an 'adult' default from the Clerk webhook (its age is not known
+  // then), so a blank or unknown answer from an adult is 'adult', never ''.
+  const resolvedBracket = required.isMinor ? 'high_school' : normalizeAgeBracket(age_bracket)
   const resolvedRole = required.isMinor ? 'participant' : event_role
 
   // deep review MEM-3: onboarding is a POST anyone signed in can re-run, and it
@@ -126,12 +178,7 @@ export async function POST(req: Request) {
     // onboarding — that was the only member-level ban lever, and this route
     // undid it. Fail closed; a genuine returning member is restored by staff.
     // (A separate fix bans the Clerk user too; this refuses onboarding here.)
-    if (priorRow.is_active === false) {
-      return NextResponse.json(
-        { error: 'This account has been closed. Please contact Stellr to restore access.' },
-        { status: 403 },
-      )
-    }
+    if (priorRow.is_active === false) return accountClosed()
     // A minor already on file may not re-submit an adult date of birth to strip
     // their own minor status — doing so would move them into an adult bracket and
     // skip the guardian-consent path and the high-school gates. The DOB on file
@@ -150,13 +197,50 @@ export async function POST(req: Request) {
     }
   }
 
+  // Decision 24: a 13–17-year-old registering THEMSELVES finishes in the
+  // pending guardian-consent state. One an adult route brought here (an admin
+  // invite, an event or group registration, an event form) is not a
+  // self-registration: they keep the pre-decision path below (the membership
+  // agreement, no pending row, no purge). A failed read decides nothing.
+  let selfRegisteredMinor = false
+  if (selfSignup && required.isMinor && !isVolunteerSignup) {
+    const route = priorRow ? await adultRouteForMinor(db, priorRow.id) : 'no'
+    if (route === 'unknown') return tryAgain()
+    selfRegisteredMinor = route === 'no'
+  }
+  // Their emergency contact is the parent or guardian the consent form goes
+  // to, so it has to be one, and not the member's own address.
+  if (selfRegisteredMinor) {
+    if (!(GUARDIAN_RELATIONSHIPS as readonly string[]).includes(String(ec_relationship ?? ''))) {
+      return NextResponse.json(
+        { code: 'guardian_required', error: 'Please give a parent or legal guardian as your contact.' },
+        { status: 400 },
+      )
+    }
+    if (!isPlausibleEmail(ec_email)) {
+      return NextResponse.json({ error: "Please check your parent or guardian's email address." }, { status: 400 })
+    }
+    if (guardEmail && normalizeEmail(ec_email) === guardEmail) return guardianEmailIsOwn()
+  }
+  // No consent step when a guardian's agreement is already on file, for the
+  // member or any of their participant rows (the scope mayLinkLogin reads).
+  const teenNeedsConsent = selfRegisteredMinor && !(priorRow && await guardianConsentOnFile(db, priorRow.id))
+  const openTeenRequest = (id: string) => openPendingConsent(db, {
+    memberId: id,
+    band: 'teen',
+    guardianName: [ec_first_name, ec_last_name].filter(Boolean).join(' ').trim() || null,
+    guardianEmail: String(ec_email),
+  })
+
   // Self-registration is not open to Minors yet (Terms §4.1, Privacy §2, 2 Oct
   // 2026). Until the pending-consent flow exists — parent email, DocuSign
   // without an event, 30-day purge — a Minor (under 18, or in high school) may
   // only finish onboarding when an adult route already brought them here: an
   // admin invite, an event registration (which sends the guardian's consent
   // form), or a consent envelope on file.
-  if (required.isMinor || resolvedBracket === 'high_school') {
+  // With self-sign-up on (decision 24), this gate gives way to the pending
+  // guardian-consent state below.
+  if (!selfSignup && (required.isMinor || resolvedBracket === 'high_school')) {
     const cleared = await minorHasConsentRoute(db, userId)
     if (!cleared) {
       return NextResponse.json(
@@ -177,16 +261,7 @@ export async function POST(req: Request) {
   // where a self-serve sign-up the Clerk webhook held back is linked to its
   // member row by email (below), so the webhook's rule has to hold here too.
   const coppa = await mayLinkLogin(db, priorRow, dobCheck.dateOfBirth)
-  if (!coppa.allowed) {
-    return NextResponse.json(
-      {
-        code: 'guardian_consent_required',
-        error:
-          "A parent or guardian needs to sign your Stellr consent form before you can finish setting up your account. Once they have, come back here and try again. If they can't find the form, please contact Stellr.",
-      },
-      { status: 403 },
-    )
-  }
+  if (!coppa.allowed) return guardianConsentRequired()
 
   // Resolve school FK
   let resolvedSchoolId: string | null = school_id && school_id !== 'new' ? school_id : null
@@ -226,9 +301,24 @@ export async function POST(req: Request) {
   // (webhook may not have fired yet in local dev)
   const { data: existingMember } = await db
     .from('members')
-    .select('id, email, first_name, last_name')
+    .select('id, email, first_name, last_name, profile_photo_url')
     .eq('clerk_user_id', userId)
     .maybeSingle()
+
+  // The Clerk webhook keeps no name or photo for a self sign-up (its age is not
+  // known then, COPPA data minimisation). They come from the login here, now
+  // the date of birth is: a name for everyone on this path, and the photo for
+  // 13 and over. Only where the row has none, so a name a registration or an
+  // admin entered is never overwritten. (An under-13 with no parent's
+  // agreement never gets here: childPendingSignup keeps only a first name.)
+  const loginFirst = guardClerkUser?.firstName?.trim() || ''
+  const loginLast = guardClerkUser?.lastName?.trim() || ''
+  const loginPhoto = isUnder13On(dobCheck.dateOfBirth) ? null : guardClerkUser?.imageUrl ?? null
+  const fillFromLogin = (row: { first_name?: string | null; last_name?: string | null; profile_photo_url?: string | null }) => ({
+    ...(!row.first_name?.trim() && loginFirst ? { first_name: loginFirst } : {}),
+    ...(!row.last_name?.trim() && loginLast ? { last_name: loginLast } : {}),
+    ...(!row.profile_photo_url && loginPhoto ? { profile_photo_url: loginPhoto } : {}),
+  })
 
   const profileUpdates = {
     clerk_user_id: userId,
@@ -244,6 +334,8 @@ export async function POST(req: Request) {
     ec_email: ec_email || null,
     ec_phone: ec_phone || null,
     ec_relationship: ec_relationship || null,
+    // Never marketing email to anyone under 18 (decision 24; plan S1).
+    ...(required.isMinor ? { marketing_consent: false } : {}),
     is_active: true,
     // Clear the soft-delete stamp too. This object is also applied to a row found
     // by EMAIL below, which may be a previously soft-deleted member (Clerk
@@ -253,12 +345,26 @@ export async function POST(req: Request) {
     deleted_at: null,
   }
 
+  // A self-registered teen's pending row goes in BEFORE their profile is
+  // completed, so there is never a finished minor account with no pending
+  // state (and so full community access) if the write in between fails.
+  let teenRequestOpen = false
+  if (teenNeedsConsent && existingMember) {
+    try {
+      await openTeenRequest(existingMember.id)
+      teenRequestOpen = true
+    } catch (e) {
+      console.error('[onboarding] opening the consent request failed:', e)
+      return tryAgain()
+    }
+  }
+
   let memberError
   let memberId: string | null = null
   if (existingMember) {
     const { error } = await db
       .from('members')
-      .update(profileUpdates)
+      .update({ ...profileUpdates, ...fillFromLogin(existingMember) })
       .eq('id', existingMember.id)
     memberError = error
     memberId = existingMember.id
@@ -271,7 +377,7 @@ export async function POST(req: Request) {
     const primaryEmail = normalizeEmail(primary?.emailAddress)
 
     const { data: byEmail } = primaryEmail
-      ? await db.from('members').select('id, clerk_user_id').eq('email', primaryEmail).maybeSingle()
+      ? await db.from('members').select('id, clerk_user_id, first_name, last_name, profile_photo_url').eq('email', primaryEmail).maybeSingle()
       : { data: null }
 
     if (byEmail) {
@@ -293,7 +399,7 @@ export async function POST(req: Request) {
       // Only while still unlinked, so a link made in the meantime is never overwritten.
       const { data: linked, error } = await db
         .from('members')
-        .update(profileUpdates)
+        .update({ ...profileUpdates, ...fillFromLogin(byEmail) })
         .eq('id', byEmail.id)
         .is('clerk_user_id', null)
         .select('id')
@@ -310,6 +416,7 @@ export async function POST(req: Request) {
         ...profileUpdates,
         first_name: clerkUser?.firstName ?? '',
         last_name: clerkUser?.lastName ?? '',
+        profile_photo_url: loginPhoto,
         email: primaryEmail,
       }).select('id').single()
       memberError = error
@@ -320,6 +427,20 @@ export async function POST(req: Request) {
   if (memberError) {
     console.error('Member upsert error:', memberError)
     return NextResponse.json({ error: 'Failed to save member' }, { status: 500 })
+  }
+
+  // A row that was not there before the write (inserted, or linked by email):
+  // open the request now, before anything else happens. If it cannot be
+  // opened, the profile goes back to unfinished (no gender, so every member
+  // surface sends them back to onboarding) and nothing else runs.
+  if (teenNeedsConsent && memberId && !teenRequestOpen) {
+    try {
+      await openTeenRequest(memberId)
+    } catch (e) {
+      console.error('[onboarding] opening the consent request failed:', e)
+      await db.from('members').update({ gender: null }).eq('id', memberId)
+      return tryAgain()
+    }
   }
 
   if (memberId) {
@@ -445,6 +566,30 @@ export async function POST(req: Request) {
   // member's account is created whatever happens. An adult can sign straight
   // away; for an under-18 the parent or guardian is emailed first.
   let signNowUrl: string | null = null
+
+  // Decision 24: a self-registered 13–17-year-old with no guardian's agreement
+  // on file finishes in the pending state (opened above, before the profile
+  // write). The consent request IS the membership agreement (the Student /
+  // Minor form, guardian first), so it replaces the dispatch below rather than
+  // adding a second form.
+  if (memberId && teenNeedsConsent) {
+    await logActivity({
+      memberId,
+      category: 'account',
+      action: 'guardian_consent_requested',
+      summary: 'Asked a parent or guardian to consent to this account',
+      actorType: 'member',
+      actorMemberId: memberId,
+    }, db)
+    try {
+      await sendConsentRequest(db, memberId)
+    } catch (e) {
+      // Non-fatal: the member can resend from their account.
+      console.error('[onboarding] consent request failed (non-fatal):', e)
+    }
+    return NextResponse.json({ success: true, signNowUrl: null, pendingConsent: 'guardian' })
+  }
+
   if (memberId && !isVolunteerSignup) {
     try {
       const result = await dispatchMembershipAgreement(db, memberId)
@@ -486,4 +631,231 @@ async function minorHasConsentRoute(db: ReturnType<typeof supabaseServer>, userI
     db.from('agreements').select('id', { count: 'exact', head: true }).eq('member_id', member.id).eq('envelope_type', 'minor'),
   ])
   return (participations ?? 0) > 0 || (envelopes ?? 0) > 0
+}
+
+type Db = ReturnType<typeof supabaseServer>
+
+function accountClosed() {
+  return NextResponse.json(
+    { error: 'This account has been closed. Please contact Stellr to restore access.' },
+    { status: 403 },
+  )
+}
+
+function guardianConsentRequired() {
+  return NextResponse.json(
+    {
+      code: 'guardian_consent_required',
+      error:
+        "A parent or guardian needs to sign your Stellr consent form before you can finish setting up your account. Once they have, come back here and try again. If they can't find the form, please contact Stellr.",
+    },
+    { status: 403 },
+  )
+}
+
+function dobOnFile() {
+  return NextResponse.json(
+    { error: 'Your date of birth is already on file and cannot be changed here. Please contact Stellr.' },
+    { status: 403 },
+  )
+}
+
+const BAND_RANK = { child: 0, teen: 1, adult: 2 } as const
+
+/**
+ * Whether `submitted` puts the member in a younger age band than the usable
+ * date of birth on their own row. Nothing on file (or an unreadable date)
+ * decides nothing: there is no older answer to protect.
+ */
+function youngerThanOnFile(onFile: string | null | undefined, submitted: string): boolean {
+  if (!isValidDob(onFile)) return false
+  return BAND_RANK[ageBand(submitted)] < BAND_RANK[ageBand(onFile)]
+}
+
+function tryAgain() {
+  return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
+}
+
+function guardianEmailIsOwn() {
+  return NextResponse.json(
+    { code: 'guardian_email_is_own', error: "Please use your parent or guardian's own email address, not yours." },
+    { status: 400 },
+  )
+}
+
+interface PriorLookup {
+  row: { id: string; is_active: boolean | null; date_of_birth: string | null } | null
+  /** Found by this login's Clerk id (true) rather than only by its email. */
+  linked: boolean
+  primaryEmail: string | null
+}
+
+/** The caller's member row, by Clerk id, else by their Clerk primary email (as MEM-3 reads it). */
+async function findPriorRow(db: Db, userId: string): Promise<PriorLookup> {
+  const clerkUser = await currentUser()
+  const primaryEmail = normalizeEmail(
+    clerkUser?.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress,
+  ) || null
+  const { data: byClerk } = await db
+    .from('members')
+    .select('id, is_active, date_of_birth')
+    .eq('clerk_user_id', userId)
+    .maybeSingle()
+  if (byClerk) return { row: byClerk as PriorLookup['row'], linked: true, primaryEmail }
+  if (primaryEmail) {
+    const { data: byEmail } = await db
+      .from('members')
+      .select('id, is_active, date_of_birth')
+      .eq('email', primaryEmail)
+      .maybeSingle()
+    if (byEmail) return { row: byEmail as PriorLookup['row'], linked: false, primaryEmail }
+  }
+  return { row: null, linked: false, primaryEmail }
+}
+
+/**
+ * The age screen (self-sign-up on). Says which form follows — 'adult', 'teen'
+ * or 'child' — without the page ever naming an age. A minor's date is written
+ * to their own row when none is on file, so the band cannot be shopped for.
+ */
+async function ageStage(userId: string, dateOfBirth: unknown) {
+  const dobCheck = checkRegistrationAge(dateOfBirth)
+  if (!dobCheck.ok) return NextResponse.json({ code: dobCheck.reason, error: dobCheck.error }, { status: 400 })
+  const db = supabaseServer()
+  const prior = await findPriorRow(db, userId)
+  if (prior.row?.is_active === false) return accountClosed()
+  const onFile = prior.row ? (await memberAgeFacts(db, prior.row)).youngestDateOfBirth : null
+  if (isKnownMinorOn(onFile) && !isMinorOn(dobCheck.dateOfBirth)) return dobOnFile()
+  // Nor an older date on file for a younger one: an adult's account must not be
+  // opened as a pending child (inactive, then purged after 30 days).
+  if (youngerThanOnFile(prior.row?.date_of_birth, dobCheck.dateOfBirth)) return dobOnFile()
+  const band = ageBand(youngestDob([dobCheck.dateOfBirth, onFile]))
+  // Nothing is recorded for an adult, or before this login has its own row.
+  if (band === 'adult' || !prior.row || !prior.linked) return NextResponse.json({ band, consented: false })
+  const memberId = prior.row.id
+  const recordDob = () => prior.row?.date_of_birth ? Promise.resolve() : db
+    .from('members')
+    .update({ date_of_birth: dobCheck.dateOfBirth, marketing_consent: false })
+    .eq('id', memberId)
+    .is('date_of_birth', null)
+    .then(() => undefined)
+
+  // `consented` in the answer means "no consent step follows". That is so when
+  // a guardian's agreement is already on file (consent given, or an event's
+  // form, for the member or any participant row of theirs), and for a minor an
+  // adult route brought here (invite, event or group registration, event
+  // form): not a self-registration, so no pending state and no purge.
+  const route = await adultRouteForMinor(db, memberId)
+  if (route === 'unknown') return tryAgain()
+  const consented = await guardianConsentOnFile(db, memberId)
+  if (route === 'yes' || consented) {
+    await recordDob()
+    // An under-13 whose parent has not signed the event's form waits for it,
+    // as before decision 24. Otherwise the full minor profile follows, which
+    // onboarding accepts (mayLinkLogin), so an under-13 gets the 'teen' form.
+    if (band === 'child' && !consented) return guardianConsentRequired()
+    return NextResponse.json({ band: 'teen', consented: true })
+  }
+
+  // A self-registration. The pending row goes in before the date of birth is
+  // recorded, so a sign-up abandoned right here is still purged after 30 days
+  // (COPPA: what is held to ask for consent goes if consent never comes).
+  try {
+    await openScreenedRequest(db, { memberId, band })
+  } catch (e) {
+    console.error('[onboarding] opening the consent request at the age screen failed:', e)
+    return tryAgain()
+  }
+  await recordDob()
+  return NextResponse.json({ band, consented: false })
+}
+
+/**
+ * Under 13 with no parent's agreement on file (self-sign-up on). COPPA: only a
+ * first name, the date of birth and a parent's email are kept until the
+ * parent consents; every other profile field is cleared. The parent is sent
+ * the Student / Minor agreement, signs first with the guardian attestation and
+ * the birth-year check, and the account stays inactive (onboarding is not
+ * complete) until then. Unanswered for 30 days, it is purged.
+ */
+async function childPendingSignup(
+  db: Db,
+  userId: string,
+  prior: PriorLookup,
+  dateOfBirth: string,
+  body: Record<string, unknown>,
+) {
+  const firstName = typeof body.first_name === 'string' ? body.first_name.trim().slice(0, 80) : ''
+  if (!firstName) return NextResponse.json({ error: 'Please add your first name.' }, { status: 400 })
+  const parentEmail = isPlausibleEmail(body.parent_email) ? normalizeEmail(body.parent_email) : ''
+  if (!parentEmail) {
+    return NextResponse.json({ error: "Please add your parent or guardian's email address." }, { status: 400 })
+  }
+  if (prior.primaryEmail && parentEmail === prior.primaryEmail) return guardianEmailIsOwn()
+
+  const childFields = {
+    first_name: firstName,
+    last_name: '',
+    date_of_birth: dateOfBirth,
+    age_bracket: 'high_school',
+    event_role: 'participant',
+    gender: null,
+    phone: null,
+    grade: null,
+    tshirt_size: null,
+    profile_photo_url: null,
+    ec_first_name: null,
+    ec_last_name: null,
+    ec_email: null,
+    ec_phone: null,
+    ec_relationship: null,
+    marketing_consent: false,
+    is_active: true,
+    deleted_at: null,
+  }
+
+  let memberId: string
+  if (prior.row && prior.linked) {
+    const { error } = await db.from('members').update(childFields).eq('id', prior.row.id)
+    if (error) {
+      console.error('[onboarding] child pending update failed:', error)
+      return NextResponse.json({ error: 'Failed to save member' }, { status: 500 })
+    }
+    memberId = prior.row.id
+  } else {
+    if (!prior.primaryEmail) {
+      return NextResponse.json({ error: 'Please verify your email address, then try again.' }, { status: 403 })
+    }
+    const { data: inserted, error } = await db
+      .from('members')
+      .insert({ ...childFields, clerk_user_id: userId, email: prior.primaryEmail })
+      .select('id')
+      .single()
+    if (error || !inserted) {
+      console.error('[onboarding] child pending insert failed:', error)
+      return NextResponse.json({ error: 'Failed to save member' }, { status: 500 })
+    }
+    memberId = (inserted as { id: string }).id
+  }
+
+  try {
+    await openPendingConsent(db, { memberId, band: 'child', guardianName: null, guardianEmail: parentEmail })
+  } catch (e) {
+    console.error('[onboarding] opening the consent request failed:', e)
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
+  }
+  await logActivity({
+    memberId,
+    category: 'account',
+    action: 'guardian_consent_requested',
+    summary: 'Asked a parent to consent to this account (under 13)',
+    actorType: 'member',
+    actorMemberId: memberId,
+  }, db)
+  try {
+    await sendConsentRequest(db, memberId)
+  } catch (e) {
+    console.error('[onboarding] consent request failed (non-fatal):', e)
+  }
+  return NextResponse.json({ success: true, signNowUrl: null, pendingConsent: 'parent' })
 }

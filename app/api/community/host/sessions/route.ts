@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getHostCaps, hostRespond, setHostNotes, addActions, scheduleMentoring } from '@/lib/sessions'
 import { assertNotImpersonating } from '@/lib/impersonation'
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'host')
+  if (restricted) return restricted
   const caps = await getHostCaps(member.id)
   if (!caps.canCoach && !caps.canMentor) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

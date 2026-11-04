@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { supabaseServer } from '@/lib/supabase'
 import { CREDIT_PACK_PRICE_CENTS } from '@/lib/mentoring-format'
@@ -24,6 +25,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'purchase')
+  if (restricted) return restricted
 
   const body = await req.json().catch(() => ({}))
   const quantity = Math.max(1, Math.min(20, Math.floor(Number(body?.quantity) || 1)))

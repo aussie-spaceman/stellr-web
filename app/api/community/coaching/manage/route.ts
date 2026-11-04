@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import {
   isCohortMentor,
@@ -35,6 +36,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'host')
+  if (restricted) return restricted
 
   const b = await req.json().catch(() => ({}))
   // Accept either workshopId or cohortId (the shared modals post cohortId).

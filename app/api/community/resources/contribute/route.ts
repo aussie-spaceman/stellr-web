@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { searchAttachableResources } from '@/lib/mentoring'
 import {
@@ -43,6 +44,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'contribute')
+  if (restricted) return restricted
 
   // ── File upload (already in storage) ──────────────────────────────────────
   // The bytes went browser → storage via /api/uploads/sign; only the path

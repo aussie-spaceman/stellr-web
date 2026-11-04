@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { RESOURCES_BUCKET, getCurrentMember, type CommunityMember } from '@/lib/community'
+import {
+  RESOURCES_BUCKET, communityWriteBlock, getCurrentMember, type CommunityMember, type CommunityWrite,
+} from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { getSpaceForMember } from '@/lib/spaces'
 import { getMemberCampaignRegistration } from '@/lib/campaign-registrations'
@@ -157,16 +159,39 @@ async function requireAdmin(): Promise<null | UploadDenied> {
   return role === 'admin' ? null : deny('Forbidden')
 }
 
+/** Refused because the caller has not finished /account/onboarding. */
+export const FINISH_ONBOARDING_FIRST = 'Please finish setting up your account first.'
+
 /**
  * A member acting as themselves. Impersonation is a lens, not a login — an admin
  * viewing as someone must never upload as them.
+ *
+ * Review (3 Nov 2026): getCurrentMember alone resolves an account that has not
+ * been through onboarding (a sign-up row with no date of birth yet) and a
+ * minor still waiting on guardian consent. So:
+ *   onboarded — the member must have finished onboarding (an admin's own row is
+ *               exempt: their uploads are not age-gated).
+ *   community — the upload is a community write of this kind, so the age and
+ *               consent restrictions apply (communityWriteBlock, lib/community),
+ *               with the same answer the write route itself would give.
  */
-async function requireMember(): Promise<CommunityMember | UploadDenied> {
+async function requireMember(
+  opts: { onboarded?: boolean; community?: CommunityWrite } = {},
+): Promise<CommunityMember | UploadDenied> {
   if (await assertNotImpersonating()) {
     return deny('Read-only while viewing as a member. Exit view-as to make changes.')
   }
   const member = await getCurrentMember()
-  return member ?? deny('Unauthorised', 401)
+  if (!member) return deny('Unauthorised', 401)
+  if (opts.onboarded && member.needsOnboarding && !member.isAdmin) return deny(FINISH_ONBOARDING_FIRST)
+  if (opts.community) {
+    const blocked = await communityWriteBlock(member, opts.community)
+    if (blocked) {
+      const body = (await blocked.json().catch(() => ({}))) as { error?: string }
+      return deny(body.error ?? 'Forbidden', blocked.status)
+    }
+  }
+  return member
 }
 
 // One badge background per Avery format, or one certificate background per award.
@@ -376,6 +401,21 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
   // The form offers PDF, Word, PowerPoint, Keynote and OpenDocument; judges
   // open these, so the bytes must be one of them — not a zip, not an installer,
   // not a macro document — and the name must say which.
+  //
+  // Who may upload, by purpose (review, 3 Nov 2026):
+  //   campaign-proposal      — any signed-in member with a registration for the
+  //                            campaign. Not tied to onboarding: /campaigns/[slug]/submit
+  //                            does not send anyone to onboarding, and a student
+  //                            registered by their teacher or an event form can
+  //                            hold a registration before finishing their own
+  //                            profile. The registration is the gate.
+  //   community-media,
+  //   space-attachment       — onboarded, and the community 'upload' restriction.
+  //   container-contribution — onboarded, and the community 'contribute' restriction.
+  //   compliance-document    — onboarded. Its only form (ComplianceSection) is on
+  //                            /account, which sends anyone not onboarded to
+  //                            onboarding, and the license row it needs is saved
+  //                            from the same section. Not a community write.
   'campaign-proposal': {
     bucket: PROPOSALS_BUCKET,
     maxBytes: 25 * MB,
@@ -398,7 +438,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     formats: IMAGES,
     formatError: 'That file doesn’t look like a PNG, JPEG, GIF or WebP image.',
     async grant({ safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true, community: 'upload' })
       if ('error' in member) return member
       return { path: `${COMMUNITY_MEDIA_STAGING}/${member.id}/${Date.now()}-${safeName}` }
     },
@@ -412,7 +452,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     formats: SHARED_FILES,
     sharedFileNames: true,
     async grant({ ctx, safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true, community: 'upload' })
       if ('error' in member) return member
       if (!ctx.spaceSlug) return deny('spaceSlug required', 400)
       const space = await getSpaceForMember(member, ctx.spaceSlug)
@@ -430,7 +470,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     formats: SHARED_FILES,
     sharedFileNames: true,
     async grant({ ctx, safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true, community: 'contribute' })
       if ('error' in member) return member
       if (!ctx.containerId) return deny('containerId required', 400)
       if (!(await memberManagesContainer(member, ctx.containerId))) {
@@ -447,7 +487,7 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     formats: LICENSE_FORMATS,
     formatError: LICENSE_ERROR,
     async grant({ ctx, safeName }) {
-      const member = await requireMember()
+      const member = await requireMember({ onboarded: true })
       if ('error' in member) return member
       const db = supabaseServer()
       const { data: license } = await db

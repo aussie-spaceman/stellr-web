@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { supabaseServer } from '@/lib/supabase'
@@ -26,6 +27,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'upload')
+  if (restricted) return restricted
 
   // The bytes went browser → storage via /api/uploads/sign; only the path lands
   // here, and claimUpload re-checks the object that actually arrived.

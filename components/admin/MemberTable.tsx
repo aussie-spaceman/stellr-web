@@ -76,6 +76,15 @@ const CONTROL = 'border border-line-strong rounded-lg px-3 py-2 text-input mouse
 const FILTER_CONTROL = 'w-full min-w-24 rounded-lg border border-line-strong bg-white px-2 py-1.5 text-input mouse:text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
 
 // Newest first is the useful default for dates; A–Z for everything else.
+/**
+ * A self sign-up has no name on file until onboarding (the Clerk webhook keeps
+ * only the login email then), so the link falls back to the email rather than
+ * having no name at all.
+ */
+function displayName(m: { first_name: string | null; last_name: string | null; email: string }): string {
+  return [m.first_name, m.last_name].map((x) => x?.trim()).filter(Boolean).join(' ') || m.email
+}
+
 const FIRST_DIR: Record<MemberSort, 'asc' | 'desc'> = { name: 'asc', email: 'asc', role: 'asc', joined: 'desc' }
 
 /**
@@ -313,10 +322,10 @@ export function MemberTable({ members, tiers, schools = [], total, page, pageSiz
                       {/* aria-hidden: the avatar is labelled with the name, which
                           the link would otherwise announce twice. */}
                       <span aria-hidden className="flex shrink-0">
-                        <Avatar id={m.id} name={`${m.first_name} ${m.last_name}`} size="sm" ring={false} />
+                        <Avatar id={m.id} name={displayName(m)} size="sm" ring={false} />
                       </span>
                       <span>
-                        {m.first_name} {m.last_name}
+                        {displayName(m)}
                         {/* The space keeps the code a separate word in the link's name. */}
                         {m.member_code && (
                           <>

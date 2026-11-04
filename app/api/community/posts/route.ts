@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { tiptapToPlainText } from '@/lib/community'
+import { communityWriteBlock, tiptapToPlainText } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { getChannelPosts } from '@/lib/space-posts'
@@ -61,6 +61,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'post')
+  if (restricted) return restricted
 
   const parsed = createPostSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
@@ -160,6 +163,10 @@ export async function PATCH(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'moderate')
+  if (restricted) return restricted
 
   const body = await req.json().catch(() => ({}))
   const postId = typeof body.postId === 'string' ? body.postId : null

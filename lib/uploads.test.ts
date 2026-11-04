@@ -9,9 +9,12 @@ const download = vi.fn()
 const remove = vi.fn()
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }))
+// The community age and consent restriction (lib/community): null lets the write through.
+const communityWriteBlockMock = vi.fn(async (_m: unknown, _action: string): Promise<Response | null> => null)
 vi.mock('@/lib/community', () => ({
   RESOURCES_BUCKET: 'community-resources',
   getCurrentMember: getCurrentMemberMock,
+  communityWriteBlock: communityWriteBlockMock,
 }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: assertNotImpersonatingMock }))
 const getSpaceForMemberMock = vi.fn()
@@ -44,6 +47,7 @@ const {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  communityWriteBlockMock.mockImplementation(async () => null)
   licenseRow.current = null
   assertNotImpersonatingMock.mockResolvedValue(null)
   createSignedUploadUrl.mockResolvedValue({ data: { path: 'p', token: 't' }, error: null })
@@ -872,5 +876,82 @@ describe('member upload folders', () => {
     const [spacePath, catalogPath] = createSignedUploadUrl.mock.calls.map((c) => c[0] as string)
     expect(spacePath.startsWith(`community-resources/${SPACE}/members/`)).toBe(false)
     expect(catalogPath.startsWith('resources/members/')).toBe(false)
+  })
+})
+
+// Review (3 Nov 2026): /api/uploads/sign signed member uploads for any account
+// getCurrentMember resolved, including one that had not finished onboarding
+// and a minor still waiting on guardian consent.
+describe('signUpload — who may upload as a member', () => {
+  const MEMBER = '3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9d8e6f'
+  const sign = (purpose: UploadPurpose, ctx: Record<string, string> = {}, fileName = 'a.png', contentType = 'image/png') =>
+    signUpload({ purpose, ctx, fileName, fileSize: 10, contentType })
+  const notOnboarded = () => getCurrentMemberMock.mockResolvedValue({ id: MEMBER, isAdmin: false, needsOnboarding: true })
+  const onboarded = () => getCurrentMemberMock.mockResolvedValue({ id: MEMBER, isAdmin: false, needsOnboarding: false })
+  const consentPending = () => communityWriteBlockMock.mockImplementation(async () =>
+    Response.json({ code: 'guardian_consent_pending', error: 'This opens up once your parent or guardian has signed your consent form.' }, { status: 403 }))
+
+  beforeEach(() => {
+    asVisitor()
+    getSpaceForMemberMock.mockResolvedValue({ id: 'space-1', access: { canAccess: true }, allowMemberUploads: true })
+    memberManagesContainerMock.mockResolvedValue(true)
+    getRegistrationMock.mockResolvedValue({ id: 'reg-1' })
+  })
+
+  it.each([
+    ['community-media', {}, 'a.png', 'image/png'],
+    ['space-attachment', { spaceSlug: 'rocketry' }, 'a.pdf', 'application/pdf'],
+    ['container-contribution', { containerId: 'c-1' }, 'a.pdf', 'application/pdf'],
+    ['compliance-document', {}, 'a.png', 'image/png'],
+  ] as const)('%s: refuses an account that has not finished onboarding', async (purpose, ctx, name, type) => {
+    notOnboarded()
+    licenseRow.current = { id: 'lic-1' }
+    expect(await sign(purpose, ctx, name, type)).toEqual({ error: 'Please finish setting up your account first.', status: 403 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['community-media', {}, 'a.png', 'image/png', 'upload'],
+    ['space-attachment', { spaceSlug: 'rocketry' }, 'a.pdf', 'application/pdf', 'upload'],
+    ['container-contribution', { containerId: 'c-1' }, 'a.pdf', 'application/pdf', 'contribute'],
+  ] as const)('%s: applies the community restriction (%s), with its answer', async (purpose, ctx, name, type, action) => {
+    onboarded()
+    consentPending()
+    expect(await sign(purpose, ctx, name, type)).toEqual({
+      error: 'This opens up once your parent or guardian has signed your consent form.', status: 403,
+    })
+    expect(communityWriteBlockMock).toHaveBeenCalledWith(expect.objectContaining({ id: MEMBER }), action)
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+    expect(getSpaceForMemberMock).not.toHaveBeenCalled()
+    expect(memberManagesContainerMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['community-media', {}, 'a.png', 'image/png'],
+    ['space-attachment', { spaceSlug: 'rocketry' }, 'a.pdf', 'application/pdf'],
+    ['container-contribution', { containerId: 'c-1' }, 'a.pdf', 'application/pdf'],
+  ] as const)('%s: signs for an onboarded member the restriction lets through', async (purpose, ctx, name, type) => {
+    onboarded()
+    expect(await sign(purpose, ctx, name, type)).toMatchObject({ token: 't' })
+  })
+
+  it('a teacher license: onboarded is enough (not a community write)', async () => {
+    onboarded()
+    consentPending()
+    licenseRow.current = { id: 'lic-1' }
+    expect(await sign('compliance-document')).toMatchObject({ token: 't' })
+    expect(communityWriteBlockMock).not.toHaveBeenCalled()
+  })
+
+  it('a campaign proposal: a registration is the gate, so it works before onboarding', async () => {
+    notOnboarded()
+    consentPending()
+    expect(await sign('campaign-proposal', { slug: 'mars-base' }, 'proposal.pdf', 'application/pdf')).toMatchObject({ token: 't' })
+    expect(communityWriteBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("an admin's own uploads are not held for onboarding", async () => {
+    getCurrentMemberMock.mockResolvedValue({ id: MEMBER, isAdmin: true, needsOnboarding: true })
+    expect(await sign('community-media')).toMatchObject({ token: 't' })
   })
 })

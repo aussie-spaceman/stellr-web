@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { createCoachingRequest } from '@/lib/coaching-requests'
 import { assertNotImpersonating } from '@/lib/impersonation'
@@ -14,6 +15,9 @@ export async function POST(req: Request) {
 
   const member = await getOnboardedMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  // Decision 24: age and guardian-consent restrictions (lib/community).
+  const restricted = await communityWriteBlock(member, 'request')
+  if (restricted) return restricted
 
   const body = await req.json().catch(() => ({}))
   const topic = typeof body?.topic === 'string' ? body.topic : ''

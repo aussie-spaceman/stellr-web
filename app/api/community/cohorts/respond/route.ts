@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { respondToInvite } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
@@ -19,6 +20,14 @@ export async function POST(req: Request) {
   const { cohortId, action } = await req.json().catch(() => ({}))
   if (!cohortId || (action !== 'accept' && action !== 'decline')) {
     return NextResponse.json({ error: 'cohortId and a valid action are required' }, { status: 400 })
+  }
+
+  // Decision 24: accepting is a join, so a member whose age or guardian-consent
+  // state refuses joins is stopped here, before anything is read or written.
+  // Declining stays open to everyone.
+  if (action === 'accept') {
+    const restricted = await communityWriteBlock(member, 'join')
+    if (restricted) return restricted
   }
 
   // Minor participation-agreement gate — block a minor joining a live cohort/workshop

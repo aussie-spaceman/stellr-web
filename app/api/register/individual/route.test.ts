@@ -22,6 +22,8 @@ const h = vi.hoisted(() => ({
   createSignInToken: vi.fn(async () => ({ token: 'tkt' })),
   // AUTH-N2: controllable rate-limit guard (null = proceed by default).
   rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
+  // Decision 24: the signed-in caller is a child whose parent has not consented.
+  childAwaiting: false,
 }))
 
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
@@ -55,12 +57,18 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 vi.mock('@clerk/nextjs/server', () => ({
+  // Signed out: the decision-24 pending-child check has no one to look up.
+  auth: async () => ({ userId: null }),
   clerkClient: async () => ({
     users: { getUserList: h.getUserList, createUser: h.createUser },
     signInTokens: { createSignInToken: h.createSignInToken },
   }),
 }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
+vi.mock('@/lib/pending-consent', async (orig) => {
+  const real = await orig<typeof import('@/lib/pending-consent')>()
+  return { ...real, sessionChildAwaitingConsentBlock: async () => (h.childAwaiting ? real.consentPendingResponse() : null) }
+})
 vi.mock('@/lib/scholarships', () => ({ findOfferByToken: async () => null, attachOfferToRegistration: async () => {} }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => null }))
 vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: h.dispatch }))
@@ -114,6 +122,7 @@ beforeEach(() => {
   h.getCurrentMember.mockResolvedValue(null)
   h.rlGuard.mockReturnValue(null)
   h.getUserList.mockResolvedValue({ data: [] })
+  h.childAwaiting = false
 })
 
 describe('POST /api/register/individual', () => {
@@ -149,6 +158,19 @@ describe('POST /api/register/individual', () => {
     const res = await post()
     expect(res.status).toBe(429)
     expect(h.regInsert).not.toHaveBeenCalled()
+  })
+})
+
+// Decision 24, COPPA (review finding, 3 Nov 2026): a signed-in child whose
+// parent has not consented registered for events like anyone else.
+describe('POST /api/register/individual — a child awaiting a parent’s consent', () => {
+  it('is refused before anything is written', async () => {
+    h.childAwaiting = true
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('guardian_consent_pending')
+    expect(h.regInsert).not.toHaveBeenCalled()
+    expect(h.memberUpsert).not.toHaveBeenCalled()
   })
 })
 

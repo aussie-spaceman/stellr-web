@@ -313,13 +313,17 @@ A bare re-export is not enough, and the lint must fail one. The reused page igno
 
 The lint runs over the tree's import closure, reusing B8's closure tooling, not only over files under `app/%5Ft`. The code it must see sits in `app/(flow)` and `lib/`. A page may not use `headers()`, `Host` or a cookie to decide the tenant. The review asked for a plain ban over the closure, but that cannot pass: `check-in/[slug]/page.tsx` needs its `cookies()` call. So each `headers()` or `cookies()` call in the closure is listed by name with its reason, as that one and `requestNonce` would be.
 
+B7's `test/tenant-tree-no-analytics.test.ts` also walks that closure, and `register/[slug]/{individual,group,confirmation}/page.tsx` import `TrackEvent` and `lib/analytics` today. B5b moves those into the Stellr pages, through a slot or prop the Stellr page supplies, so the shared bodies are free of them. It does not exempt them from the test: `FORBIDDEN_FILES` has no allow-list, and an edit there would loosen it for everything.
+
 **B5c.** `app/layout.tsx` wraps the `/_t` tree too. A nested layout cannot remove head JSON-LD, and the un-nonced `ConsentMode` inline script would break under B6's enforcing CSP. The gate is B10a's body hash, flag off and on, over all 158 pages.
+
+B7 does not stop that head script. Until B5c lands it still runs on a tenant host: it creates `window.dataLayer`, replays a stored choice and shows the banner at first paint, with no network request. B7's test walks only `app/%5Ft`, so it does not see this. B5c adds an assertion that the tenant layout's parent chain holds neither `ConsentMode` nor `SiteTracking`. No real zone gets the routing flag before B5c.
 
 **B8.** `lib/community/event-hooks.ts` also wraps `syncObjectSpaceRoster` and `reconcileEventSpaceRoster` (`lib/space-inheritance`), `autoGrantBaseMembership` (`lib/auto-membership-grant`, now Lane B) and `linkMembersToSchoolByName`. `syncMemberOptionSelections` is imported by the same route and has no decision yet: B8 either wraps it or says why not.
 
 **B9.** Four tables, not two. Closing the two community `TODO(S5)` snapshot entries points at the coaching request and training item-flag routes.
 
-**B10.** (b) seeds a second non-owner tenant (for example `canary-b.localhost`) and alternates between the two non-owner tenants. Alternating with `stellr.localhost` passes vacuously: Stellr is never rewritten into `/_t`, and with B6 every tenant page renders per request. If ISR stays an owner option, also run once in ISR mode. (c) also tries a denied path with a dotted suffix on a tenant host, and names host B's slug and token on host A's pages, in both directions.
+**B10.** (b) seeds a second non-owner tenant (for example `canary-b.localhost`) and alternates between the two non-owner tenants. Alternating with `stellr.localhost` passes vacuously: Stellr is never rewritten into `/_t`, and with B6 every tenant page renders per request. If ISR stays an owner option, also run once in ISR mode. (c) also tries a denied path with a dotted suffix on a tenant host, and names host B's slug and token on host A's pages, in both directions. (d) counts third-party requests, and also asserts no hydration error, no `window.dataLayer` and no cookie banner, so it covers the head script as well as the five trackers.
 
 **C5.** Split so the audit chain does not wait on the rate limiter for no functional reason. C6 depends on C5a only.
 
@@ -369,7 +373,7 @@ S5 finishes when all of these hold. Each names its proof.
   - the disposition register (51 / 9 / 55 / 16);
   - the refusal copy for under-minimum registrants;
   - the `proxy.ts` admin prefilter (B20).
-- **Real tenant hosts.** The G5 subzone, Vercel Pro (G1), Clerk session sharing and FAPI origins, and the cookie-domain review on `.stellreducation.org`.
+- **Real tenant hosts.** The G5 subzone, Vercel Pro (G1), Clerk session sharing and FAPI origins, and the cookie-domain review on `.stellreducation.org`. That review also decides the no-ads marker: since B7 a student who signs in only on a tenant host is not marked for Stellr's www in that browser, so Privacy Policy section 9.4 is not closed for them.
   - **Order on each Vercel project.** Set the flag and suffix, redeploy, confirm through the health check that `suffixError` is null, then attach the wildcard domain. Then check straight away that an unknown host in the zone answers 404, and detach if it does not. The review put that 404 check before the attach, but Vercel does not route the host to the deployment until the domain is attached.
   - **Why the order matters.** With the flag off, the resolver says Stellr, and `proxy.ts` compares the host only to `APP_HOST`. A tenant hostname would get the full Stellr surface: `/admin`, community and trackers. The same happens if the suffix does not cover the zone.
   - **Rollback.** Detach the zone first, then flip the flag.

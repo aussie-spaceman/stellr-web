@@ -38,12 +38,14 @@ export const TENANT_APP_READ_ONLY_TABLES: readonly string[] = [
 ]
 
 /**
- * Platform-level tables that carry a tenant_id but are classified platform in
- * lib/tenancy/registry.ts, so tenant_app gets no policy and no grant on them.
- * The matrix (supabase/tests/database/tenant_isolation.test.sql) asserts
- * tenant_app holds no privilege at all on each. Key: table. Value: why.
+ * Platform-level tables that carry a tenant_id but are classified platform or
+ * system in lib/tenancy/registry.ts, so tenant_app gets no policy and no grant
+ * on them. The matrix (supabase/tests/database/tenant_isolation.test.sql)
+ * asserts tenant_app holds no privilege at all on each. Key: table. Value: why.
  */
 export const TENANT_APP_NO_ACCESS_TABLES: Readonly<Record<string, string>> = {
+  'public.cron_runs':
+    'the cron ledger (S5 B3): written by service_role through lib/cron-runs.ts; tenant_id only labels a per-tenant child row, and is NULL on every top-level run',
   'public.platform_audit_events':
     'hash-chained audit (S4 audit lane): written by service_role through lib/audit/platform.ts; a tenant must not read or rewrite the chain, and tenant_id is nullable (NULL = the platform chain)',
   'public.tenant_data_keys':

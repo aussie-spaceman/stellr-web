@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { trackingAllowedHere } from '@/lib/analytics'
 import { NO_ADS_COOKIE } from '@/lib/no-ads'
 
 /**
@@ -9,9 +10,13 @@ import { NO_ADS_COOKIE } from '@/lib/no-ads'
  * cookie is shared across www and app, lasts a year, and outlives sign-out on
  * purpose: a shared family device that a child uses keeps no ads. HubSpot's
  * own do-not-track is set as well, since its script may already be loaded.
+ *
+ * Does nothing on a tenant host: no tracker runs there, and a tenant page must
+ * not write a cookie that every Stellr host then reads.
  */
 export function NoAdsStudentMarker() {
   useEffect(() => {
+    if (!trackingAllowedHere()) return
     const host = window.location.hostname
     const domain = host.endsWith('stellreducation.org') ? '; domain=.stellreducation.org' : ''
     const secure = window.location.protocol === 'https:' ? '; secure' : ''

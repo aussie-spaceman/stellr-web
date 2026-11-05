@@ -551,18 +551,22 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
             // Minor-agreement backstop (3 Nov 2026): paid, but the enforced gate
             // kept them off the live cohort. The payment and ledger seat stand
             // (never dropped, never auto-refunded); staff decide between getting
-            // the agreement signed and rostering by hand, or refunding.
+            // the agreement signed and rostering by hand, or refunding. A cohort
+            // archived since Checkout is held the same way.
+            const archived = roster.reason === 'cohort-archived'
             await logActivity({
               memberId,
               category: 'billing',
               action: 'paid_booking_held',
-              summary: `Paid for a mentoring cohort${fmtMoney(session.amount_total, session.currency)} but not added: no participation agreement on file. Needs staff action.`,
+              summary: `Paid for a mentoring cohort${fmtMoney(session.amount_total, session.currency)} but not added: ${archived ? 'the cohort has been archived' : 'no participation agreement on file'}. Needs staff action.`,
               metadata: { kind: 'entitlement_booking', offeringId, cohortId: target.cohortId, bookingId, reason: roster.reason, paymentIntent: intent, sessionId: session.id, amount, currency: session.currency },
               actorType: 'stripe',
             }).catch(() => {})
             await notifyCommunityAdmins({
               type: 'action',
-              body: `Member ${memberId} paid for mentoring cohort ${target.cohortId}${fmtMoney(session.amount_total, session.currency)} but was not added to it: they count as a minor and have no participation agreement on file. The payment was kept (intent ${intent ?? session.id}). Get the agreement signed and add them to the cohort, or refund them.`,
+              body: archived
+                ? `Member ${memberId} paid for mentoring cohort ${target.cohortId}${fmtMoney(session.amount_total, session.currency)} but was not added to it: the cohort has been archived. The payment was kept (intent ${intent ?? session.id}). Add them to the cohort or another one, or refund them.`
+                : `Member ${memberId} paid for mentoring cohort ${target.cohortId}${fmtMoney(session.amount_total, session.currency)} but was not added to it: they count as a minor and have no participation agreement on file. The payment was kept (intent ${intent ?? session.id}). Get the agreement signed and add them to the cohort, or refund them.`,
             }).catch(() => {})
           }
         }

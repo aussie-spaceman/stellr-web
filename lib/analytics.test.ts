@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { trackLeadSubmitted, participationTypeFor, type LeadFormSource } from '@/lib/analytics'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { pushDataLayer, trackLeadSubmitted, trackingAllowedHere, participationTypeFor, type LeadFormSource } from '@/lib/analytics'
+import { importClosure, readRepoFile } from '@/test/import-closure'
 
 /**
  * These tests guard two things that are cheap to break and expensive to notice:
@@ -82,6 +83,58 @@ describe('trackLeadSubmitted', () => {
     delete window.dataLayer
     expect(() => trackLeadSubmitted('newsletter')).not.toThrow()
     expect(pushed()).toHaveLength(1)
+  })
+})
+
+describe('pushDataLayer by host', () => {
+  const visit = (hostname: string) => vi.stubGlobal('location', new URL(`https://${hostname}/`))
+
+  beforeEach(() => {
+    window.dataLayer = []
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    window.dataLayer = []
+  })
+
+  for (const hostname of ['www.stellreducation.org', 'app.stellreducation.org', 'localhost', 'stellr-web-dev-x.vercel.app']) {
+    it(`pushes on ${hostname}`, () => {
+      visit(hostname)
+      expect(trackingAllowedHere()).toBe(true)
+      pushDataLayer({ event: 'page' })
+      expect(pushed()).toEqual([{ event: 'page' }])
+    })
+  }
+
+  for (const hostname of ['x.events.stellreducation.org', 'canary-academy.localhost', 'stellr.localhost', 'events.school.example']) {
+    // The ConsentMode head script still creates a dataLayer until B5c moves it out
+    // of the tenant root. This covers pushDataLayer only.
+    it(`pushDataLayer pushes nothing on ${hostname} and creates no dataLayer itself`, () => {
+      visit(hostname)
+      // @ts-expect-error deliberately simulating the pre-GTM window
+      delete window.dataLayer
+      expect(trackingAllowedHere()).toBe(false)
+      pushDataLayer({ event: 'page' })
+      trackLeadSubmitted('newsletter')
+      expect(window.dataLayer).toBeUndefined()
+    })
+  }
+
+  it('gives the same answers with no tenant zone configured', () => {
+    vi.stubEnv('TENANT_HOST_SUFFIX', '')
+    vi.stubEnv('TENANT_ROUTING_ENABLED', '')
+    visit('www.stellreducation.org')
+    expect(trackingAllowedHere()).toBe(true)
+    visit('x.events.stellreducation.org')
+    expect(trackingAllowedHere()).toBe(false)
+  })
+
+  it('reaches only the pure host rules, never the host-map loader', () => {
+    const closure = importClosure('lib/analytics.ts', readRepoFile)
+    expect(closure.has('lib/tenancy/host-pure.ts')).toBe(true)
+    expect(closure.has('lib/tenancy/host.ts')).toBe(false)
   })
 })
 

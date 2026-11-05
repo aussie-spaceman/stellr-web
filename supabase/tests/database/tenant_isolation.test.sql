@@ -19,7 +19,7 @@ DO $grant$ BEGIN
   EXECUTE format('GRANT %I TO %I', 'tenant_app', current_user);
 END $grant$;
 
-SELECT plan(977);
+SELECT plan(978);
 
 -- 1. The tenant role cannot escape RLS, and every tenant table carries both tenant policies.
 SELECT ok(EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tenant_app'), 'role tenant_app exists');
@@ -354,6 +354,9 @@ SELECT is(
   ) fk),
   'agreements.participant_id->participants agreements.reused_from->agreements community_resources.space_id->community_spaces credentials.module_id->training_modules credentials.participant_id->participants event_award_assignments.company_id->event_companies event_award_assignments.participant_id->participants event_badge_templates.company_id->event_companies event_email_sends.event_email_id->event_emails event_refunds.registration_id->registrations group_invoices.registration_id->registrations group_join_tokens.registration_id->registrations mentoring_cohorts.parent_container_id->mentoring_cohorts mentoring_cohorts.registration_id->registrations scholarship_applications.registration_id->registrations store_orders.registration_id->registrations store_orders.source_order_id->store_orders survey_responses.distribution_id->survey_distributions survey_responses.invitation_id->survey_invitations survey_responses.participant_id->participants team_profiles.participant_id->participants team_profiles.prefilled_from->team_profiles training_assignments.module_id->training_modules',
   'every foreign key between tenant tables is listed in lib/tenancy/tenant-role.ts TENANT_PARENT_REFS (and so guarded)');
+SELECT ok(NOT has_table_privilege('tenant_app', 'public.cron_runs', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cron_runs'::regclass),
+  'public.cron_runs: platform-level (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES), RLS on and tenant_app has no privilege on it at all');
 SELECT ok(NOT has_table_privilege('tenant_app', 'public.platform_audit_events', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
   AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.platform_audit_events'::regclass),
   'public.platform_audit_events: platform-level (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES), RLS on and tenant_app has no privilege on it at all');

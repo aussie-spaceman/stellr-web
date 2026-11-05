@@ -167,6 +167,9 @@ describe('normaliseZoneSuffix', () => {
     ['.org'],
     ['.stellreducation.org'], // would swallow www and app
     ['.vercel.app'],
+    ['x.vercel.app'], // every host under it is a known Stellr host
+    ['.X.vercel.app.'],
+    ['.a.b.vercel.app'],
     ['.events.stellreducation.org:443'],
     ['.ev ents.stellreducation.org'],
   ])('refuses %j', (raw) => {
@@ -264,10 +267,13 @@ describe('isStellrTrackingHost', () => {
     expect(isStellrTrackingHost('canary.events.stellreducation.org')).toBe(false)
   })
 
-  it('normalises the zone it is given', () => {
-    expect(isStellrTrackingHost('tenant.x.vercel.app', 'x.vercel.app')).toBe(false)
-    expect(isStellrTrackingHost('tenant.x.vercel.app', '.X.vercel.app.')).toBe(false)
+  it('cannot disagree with the browser, which passes no zone, over a Vercel host', () => {
     expect(isStellrTrackingHost('tenant.x.vercel.app')).toBe(true)
+    expect(isStellrTrackingHost('tenant.x.vercel.app', 'x.vercel.app')).toBe(true)
+    const config = tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: 'x.vercel.app' })
+    expect(config.suffix).toBeNull()
+    expect(config.suffixError).toMatch(/not a safe tenant zone suffix/)
+    expect(classifyHost('tenant.x.vercel.app', config.suffix).kind).toBe('outside-zone')
   })
 
   it('is false for any host it does not know, including look-alikes', () => {

@@ -260,6 +260,18 @@ describe('open IDOR findings: fixtures held back until the route is fixed', () =
       expect(r.outcome, fixedHint).toBe('honey_write')
       expect(r.writes.map((w) => w.table), fixedHint).toEqual(expect.arrayContaining(held.writes))
     })
+
+    if (!held.refusedWhen) continue
+    it(`${held.method} ${file}: the route's own rule refuses when the row does not pass it`, async () => {
+      const target = targets.find((t) => t.file === file) as IdorTarget
+      const restoreEnv = applyEnv(held.fixture.env)
+      const mod = (await import(`../../${file}`).finally(restoreEnv)) as Record<string, unknown>
+      const fixture = { ...held.fixture, honey: { ...held.fixture.honey, ...held.refusedWhen } }
+      const r = await runIdorCase(mod, { ...targetInput(target), fixture }, held.method, 'participant', `refused: ${file}`)
+      expect(r.outcome, describeResult(r)).toBe('refused')
+      expect(r.touched, describeResult(r)).toBe(true)
+      expect(r.writes, describeResult(r)).toEqual([])
+    })
   }
 })
 

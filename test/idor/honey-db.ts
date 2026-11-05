@@ -146,7 +146,7 @@ function displayValue(col: string): unknown {
   if (/^(is|has|can|allow|show|requires?|enabled|active|published|visible)(_|$)/.test(c)) return true
   if (/(amount|price|total|count|cents|qty|quantity|seats|capacity|fee|minor|position|index|size|version|grade|age)/.test(c)) return 100
   if (/(^|_)(name|title|label)$/.test(c)) return HONEYTOKENS.personName
-  if (c === 'status' || c.endsWith('_status')) return 'active'
+  if (c === 'status' || c.endsWith('_status') || c === 'lifecycle') return 'active'
   if (c === 'role') return 'member'
   if (/(raw|metadata|data|payload|answers|settings|config|details|meta|json|branding)$/.test(c)) return { note: HONEYTOKENS.text }
   return HONEYTOKENS.text

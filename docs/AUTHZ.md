@@ -1,0 +1,203 @@
+# Authorisation: `lib/authz.ts`
+
+One API for "who may do this", in place of the legacy guard idioms. This file covers the API, how today's roles map onto the S3 tables, what keeps those tables true, what must hold before `AUTHZ_SOURCE` changes, and how a route moves to a new class.
+
+Plan of record: `docs/TENANCY-S5.md`. Built by C1, C5a, C6 and C9. Code wins over this file; if they disagree, fix this file.
+
+## Where it stands
+
+**No route decides through `lib/authz` yet.** The only runtime importers are `lib/authz/role-sync.ts` and `lib/authz/role-sync-report.ts`, used by `app/api/admin/event-managers/route.ts`, `app/api/admin/staff-roles/route.ts` and `lib/deletion/execute.ts` to keep the tables in step. The conversion slices (C13 to C23) move routes on. Until then:
+
+- every guard in production is a legacy idiom reading the Clerk claim, `staff_roles` or `event_manager_assignments`;
+- `AUTHZ_SOURCE` changes nothing, and **a shadow window run now would show 0 mismatches because nothing is being compared**. It proves nothing.
+
+`npx tsx scripts/authz-idioms.mjs` measures what is left (`test/baselines/authz-legacy-idioms.json`). Authorisation has converged when that baseline reaches 0, at C25. The flip may be the first S6 step.
+
+## The API
+
+Import from `@/lib/authz`. `proxy.ts` must import from `@/lib/authz/decide`: `lib/authz.ts` is `server-only`, and the proxy may not add a database read.
+
+| Call | Answers | Replaces |
+|---|---|---|
+| `getAuthzSource()` | the configured source, read per call | |
+| `getPrincipal()` | who is asking. Under postgres, a failed lookup gives the signed-out principal | |
+| `assertPlatformAdmin()` | `platform_admin` routes. Postgres: `platform_admins` only | |
+| `assertTenantRole(tenantId, roles)` | holds one of `roles` in that tenant. A platform admin is not implied | |
+| `requireStellrAdmin()`, `isStellrAdmin()` | a Stellr admin | `isAdminClaims`, `currentUserIsAdmin`, the admin-only wrappers |
+| `requireTenantStaff(tenantId, roles)` | staff of a tenant. A platform admin passes Stellr, and another tenant only in S6 support mode | |
+| `hasPortalAccess()` | may enter the admin shell: an admin or an event manager. Never `staff` | `hasAdminPortalAccess` |
+| `requireEventAccess(slug?)` | the legacy return shape plus `tenantId`. `isAdmin` and `assignedSlugs: null` mean every event of that tenant, not every event | `lib/event-access.ts` |
+| `accessCoversEvent(access, slug)` | does a section-level answer cover a row of this event? A read error is false | |
+| `hasScope(scope)` | a staff scope, from `staff_roles`. Stellr only | `currentUserHasScope` |
+| `isStaffTarget(target)` | is the target of view-as or deletion staff? A lookup error under postgres counts as staff, so the action is refused | `isStaffRole`, the set in `lib/deletion/external.ts` |
+| `portalRoleFromClaims(claims)` | pure and database-free, for `proxy.ts` | the inline read in `proxy.ts` |
+| `assertWritable()` | S6 support-mode placeholder. Always passes in S5 | |
+| `page.requireAdmin()`, `page.requireTenantAdmin()`, `page.requireEventSection()`, `page.requireStellrAdmin()` | signed out goes to `/sign-in`; signed in without access gets `notFound()` | `requireAdminPage` |
+| `api.requireStellrAdmin()`, `api.requireTenantStaff()`, `api.requireEventAccess()` | `{ ok, value }` or `{ ok: false, deny }` | |
+
+Pass `{ route: '<route pattern>' }` as the options, so a shadow mismatch names the route. A concrete path never goes there.
+
+Most conversions use the predicate form, so each route keeps its own deny response byte for byte. Deny shapes differ today (403 with different bodies, `redirect('/account')`, `notFound()`).
+
+The decisions are pure functions in `lib/authz/decide.ts`. `lib/authz/equivalence.test.ts` runs each one against its legacy idiom over the whole truth table, in both sources. `lib/authz/two-tenant.test.ts` covers the second tenant.
+
+## `AUTHZ_SOURCE`
+
+| Value | Decides from | On a database error |
+|---|---|---|
+| `clerk`, unset, or anything unrecognised | the Clerk session claim, exactly as the legacy helpers do. Claim-only decisions add no database read | as legacy: an assignment read error throws, a scope read error is "no scope" |
+| `shadow` | the Clerk claim. Also computes the postgres answer and logs any difference | the Clerk answer stands. The failure is logged. Nobody is denied by shadowing |
+| `postgres` | `platform_admins` and `tenant_memberships`. Clerk supplies identity only | **denies** (403). `isStaffTarget` answers staff |
+
+A set but unrecognised value uses `clerk` and writes one `authz_source_unrecognised` row to `app_errors`, because after a flip a typo would quietly restore Clerk's authority.
+
+A mismatch goes to `app_errors` as `authz_mismatch <decision> member=<members.id> clerk=<answer> postgres=<answer>`, or `lookup_failed` or `error` in place of the two answers. The message holds fixed labels and a validated uuid only. The member is part of the digest, so each drifted member gets a row of their own. Writes share the `app_errors` rate limit.
+
+**Shadow reads are not sampled.** Each shadowed decision runs the postgres read path as well (the principal is cached per request). The plan of record's risk note says "sampled and limited to admin"; `lib/authz.ts` has no sampling. So measure Active CPU when shadow goes on, and decide on sampling before any call site that serves ordinary members moves to `lib/authz`.
+
+## Role mapping
+
+`lib/tenancy/role-mapping.ts`. For Stellr the postgres rules are this table read backwards, so a complete, synced mapping gives the same answers as `clerk`.
+
+| Today's authority | Row in the S3 tables | Written by |
+|---|---|---|
+| Clerk `publicMetadata.role = 'admin'` | `tenant_memberships` `tenant_admin` for Stellr | `scripts/set-admin.ts`, `scripts/map-tenancy-roles.ts --apply` |
+| same | `platform_admins` | **Owner only:** `scripts/map-tenancy-roles.ts --apply --platform-admins` or the same flag on `scripts/set-admin.ts` |
+| `event_manager_assignments.clerk_user_id` | `tenant_memberships` `event_manager`, one per person, not per event | `app/api/admin/event-managers/route.ts`, event deletion, `--apply` |
+| `staff_roles.member_id` | `tenant_memberships` `staff`, keyed by member | `app/api/admin/staff-roles/route.ts`, `--apply` |
+
+What the mapping does not carry, on purpose:
+
+- **Per-event confinement.** The `event_manager` row says the person is one. `event_manager_assignments` still says which events, and it stays the authority. A row whose `tenant_id` is still NULL counts as Stellr's.
+- **`staff_roles.scopes`.** Scopes stay in `staff_roles`, Stellr only, in both sources. Tenants get no scopes in release 1, and on another tenant's host no scope holds.
+- **The portal.** `staff` never opens `/admin`, in either source. Today a `staff_roles` holder without the Clerk claim cannot enter, and Stellr stays that way.
+
+Who gets staff email is a separate question: `lib/authz/audiences.ts`, ready for B17. Stellr keeps its current sources whatever `AUTHZ_SOURCE` says.
+
+## Keeping the tables true (C9)
+
+`lib/authz/role-sync.ts` dual-writes alongside the event-manager and staff-role routes, event deletion and `scripts/set-admin.ts`. Under `clerk` nothing reads these rows, so no decision changes.
+
+- The sync functions never throw. In a route, a failed write leaves the status and body alone. It goes to `console.error`, `app_errors` (which the daily digest emails) and `membership_sync: 'failed'` on the activity row, with fixed labels and a Postgres code only.
+- `scripts/set-admin.ts` prints a warning and exits 2 when the row was not written. The Clerk change stands, so that a revoke never waits on a second system. Under `postgres` that person keeps access until the row is removed. Revisit this at C25, when Clerk stops being the authority.
+- `.upsert()` cannot be used on `tenant_memberships`: both unique indexes are partial, and PostgREST's `on_conflict` cannot name a predicate, so Postgres answers 42P10. Each write reads, inserts, and takes a 23505 as success.
+
+**The drift check:** `npx tsx scripts/map-tenancy-roles.ts --check`. It is read-only and exits 1 on drift. It fails on:
+
+- a missing or stale Stellr membership;
+- a `platform_admins` row with no Clerk admin role;
+- a Clerk `event_manager` role with no assignment;
+- an assignment with no Clerk portal role;
+- another tenant's `event_manager` row and assignments that disagree.
+
+A Clerk admin outside `platform_admins` is listed but does not fail: that list is the owner's decision. `--check` never repairs. `--apply` adds what is missing for Stellr; a stale row is for a person to read and remove. The output holds account ids, so it stays off the repo.
+
+**Run it after any role change made another way, above all in the Clerk dashboard, and immediately before each `AUTHZ_SOURCE` change.** After C9, the owner gate is to stop assigning `admin` or `event_manager` in the dashboard, or to run `--check` after any change.
+
+## What must hold before a flip
+
+These come from C1's notes (the comments in `lib/authz.ts`, `lib/authz/decide.ts`, `lib/authz/principal.ts` and `lib/authz/tenant.ts`, and the C1 analysis), plus what C5a and C9 added. Each is open today.
+
+**Before `shadow` on production:**
+
+1. **Routes call `lib/authz`.** Otherwise the window is empty. Proof: `test/baselines/authz-legacy-idioms.json` has fallen for the areas you need covered, and on `dev` a deliberate drift (a Clerk `event_manager` role with no assignment, on a test account) writes an `authz_mismatch` row. Remove the drift afterwards. A window that cannot fail is not evidence.
+2. **The drift check passes on dev, then production.** The drift is real. `lib/authz/equivalence.test.ts` pins it: under `postgres` a Clerk `event_manager` with no assignment loses the portal, and a stray assignment gains it. Admin and scope answers never move on unsynced data.
+3. **The roles are mapped.** `scripts/map-tenancy-roles.ts --apply` on each environment. The owner decides `--platform-admins`.
+4. **Active CPU has room.** Shadow is not sampled (above).
+
+**Before `postgres` on production:**
+
+5. **At least 7 clean days of `shadow` on production**, with real admin and event-manager traffic in the window: 0 `authz_mismatch` rows, including `lookup_failed`. Each `lookup_failed` would have been a denial under `postgres`, so a recurring one is a blocker, not noise.
+6. **The ratchet is at 0.** A flip changes only callers of `lib/authz`. A legacy guard keeps trusting Clerk, so a partial flip leaves two authorities side by side.
+7. **No page is left on `page.requireAdmin`.** It admits admins and event managers and does not confine an event manager. `proxy.ts` does that, from the Clerk claim. Under `postgres`, a claim of `admin` with only an `event_manager` row passes it and reaches every page using it. Each page moves to `requireStellrAdmin`, `requireTenantAdmin` or `requireEventSection`. The ratchet counts each use (`pageRequireAdmin`), so it cannot reach 0 while one is left.
+8. **The `proxy.ts` prefilter is settled (B20, owner's choice).** The admin check in `proxy.ts` reads only the Clerk claim, and must stay database-free because it runs on every request. Under `postgres`, someone with a table role and no claim is bounced to `/account`, and event-manager confinement still follows the claim. Either sync the claim from Postgres, or relax the proxy to signed-in-only and rely on the page guards.
+9. **The drift check passes immediately before the flip**, and stale rows have been read and removed. `--check` does not repair them, and under `postgres` a stale row grants access.
+10. **The `platform_admins` list is decided, route by route.** Under `postgres` only that table passes `assertPlatformAdmin`. A route in the `platform_admin` class locks out every Clerk admin the owner leaves off the list, which is a visible change for Stellr.
+
+**Before a second tenant has real events (these are separate from the flip, and each is a hard stop):**
+
+11. **`AUTHZ_SOURCE=postgres` first.** The `clerk` source knows only Stellr and refuses any other tenant. It reads no `events` row, so it cannot see which tenant owns an event.
+12. **`currentTenantId()` stops being a stub with its callers ready.** `lib/authz/tenant.ts` returns Stellr today. Before it returns anything else, every caller that trusts `isAdmin` or `assignedSlugs` on a row loaded by global id must be on `loadScoped` or `accessCoversEvent`.
+13. **A mirror miss must deny.** `loadEventTenantId` answers Stellr when `events` has no row or a NULL `tenant_id`. That is safe only while every event is Stellr's. Role sync has the same blind spot: an assignment on an unmirrored event looks like a Stellr one.
+14. **A `tenant_staff` route names the event.** `requireEventAccess()` without a slug passes an event manager with any or no assignment, so it counts as a `tenant` check only with a slug. Otherwise the route also calls `requireTenantStaff`.
+15. **MFA for staff and tenant admins (S6).** `/admin` stays a 404 on tenant hosts until membership checks and MFA exist, because a Clerk role is valid on every host.
+
+## The runbook
+
+Each step is the owner's. Dev first, then production, one environment at a time, and choose a time away from a live event: under `postgres` a database outage denies staff, and shadow adds reads.
+
+**Shadow**
+
+1. `npx tsx scripts/map-tenancy-roles.ts --check`. Exit 0, or fix what it lists.
+2. Set `AUTHZ_SOURCE=shadow` on the Vercel project and redeploy the newest READY deployment. A running deployment does not pick up a new value.
+3. Sign in as an admin and as an event manager, and open an event in the admin screens.
+4. Read the mismatch rows. Keep the output off the repo.
+
+```sql
+SELECT route, message, count, occurred_at, last_seen
+FROM public.app_errors
+WHERE message LIKE 'authz\_%'
+ORDER BY last_seen DESC;
+```
+
+**Check**
+
+Watch for at least 7 days on production with real traffic. For each row, decide whether the table or Clerk is wrong, fix it, and run `--check`. A fix restarts the 7 days.
+
+**Flip**
+
+1. Confirm preconditions 5 to 10, and that the owner has read the report.
+2. Run `--check` again.
+3. Set `AUTHZ_SOURCE=postgres` and redeploy the newest READY deployment. Dev first, with a pass through the admin and event-manager screens.
+4. Confirm an admin reaches `/admin`, an event manager reaches only their events, and a member does not reach `/admin`.
+
+**Roll back**
+
+Set `AUTHZ_SOURCE=clerk` (or remove it) and redeploy. This works because `scripts/set-admin.ts` and the Clerk dashboard still hold the Clerk roles. C25 deletes the legacy helpers; do not treat that as reversible with this switch alone.
+
+## The authz codemod
+
+**Not built yet (C10).** `ts-morph` is awaiting the owner's approval; the fallback is the TypeScript compiler API, which `lib/security/route-ast.ts` and `scripts/codemods/events-facade.ts` already use. The events-facade codemod is the working model: dry run by default, and a second run reports nothing to change.
+
+The planned transforms:
+
+| | Change |
+|---|---|
+| T1 | `isAdminClaims` and the inline role read become an authz predicate. The if-branch and response stay |
+| T2 | `currentUserIsAdmin()` becomes the authz call |
+| T3 | Same-file `requireAdmin` or `isAdmin` wrappers are inlined and deleted |
+| T4 | `requireAdminPage()` becomes `page.requireAdmin()`. Not progress on its own: the ratchet keeps counting it |
+| T5 | `requireEventAccess` is re-pointed at `lib/authz`. The shape is unchanged |
+| T6 | Domain wrappers (`requireScholarshipAdmin`, `requireSurveyAdmin`, `canManageStoreCatalog`, `adminName`) are re-implemented over authz in their own files. Their callers then drop out of the ratchet |
+| T7 | Test mocks move to `@/lib/authz` |
+
+Anything it cannot match is reported, never rewritten. It runs on one feature area per PR, and a person adds `loadScoped` or `tenantDb`, the events facade, audit and the two-tenant tests in the same PR.
+
+## Moving a route to another class
+
+`lib/security/route-manifest.ts` holds the class. `lib/security/route-guards.ts` says what each class must reach.
+
+| Class | Must reach | Satisfied by |
+|---|---|---|
+| `platform_admin` | `platform` | `assertPlatformAdmin` |
+| `tenant_staff` | `tenant` | `assertTenantRole`, `requireTenantStaff`, `requireEventAccess` with a slug, `page.requireTenantAdmin` |
+| `stellr_only` | `admin` | the legacy admin checks, and `requireStellrAdmin`, `isStellrAdmin`, `hasPortalAccess`, `hasScope`, `page.requireAdmin`, `page.requireEventSection` |
+
+A platform check also counts as an admin check, and an admin or tenant check counts as a session check. Never the other way round: holding a role in some tenant does not make anyone a Stellr admin. A legacy admin check never meets `tenant` or `platform`, so a moved route fails the static check until it really calls the new guard.
+
+A `lib/authz` call counts only when it is awaited and its answer is used, and a tenant check on a tenant taken from the request does not count. `isStaffTarget` and `accessCoversEvent` are not guards: they do not decide whether the caller gets in.
+
+The static check cannot see whether the tenant asked about is the tenant of the row the handler then touches. That is what the IDOR tenant personas test (C6), so the static check alone is never enough to move a route.
+
+In the PR that moves a route:
+
+1. Change its class in `route-manifest.ts`, and update its entry in `lib/security/stellr-only-dispositions.ts`. `MAX_TENANT_DESTINED_STELLR_ONLY` only falls.
+2. Keep each file's deny response as it is.
+3. Do not call `.from()` directly on a table with a tenant column from a `tenant_staff` file. A route-manifest test fails on it. Use `loadScoped` or `tenantDb`.
+4. Regenerate with `npm run idor:snapshot`, and read the diff. The staff personas run strict over these classes, with no accepted reason possible: a leak, honey write or 4xx oracle fails.
+5. Add `audit()` and regenerate `unaudited-mutations.json` (`npx tsx scripts/s5-inventory.mjs --write`).
+6. Shrink the legacy baseline (`npx tsx scripts/authz-idioms.mjs --write`).
+
+If a count must rise, that takes `--allow-grow` and the `authz-ratchet-grow` PR label. The label needs only triage access, and `.github/CODEOWNERS` requests review without requiring it until the owner's ruleset does. Both are recorded as owner decisions in `docs/TENANCY-S5.md`.
+
+While the source is `clerk`, moving a route does not change who gets in from Stellr: the Clerk `admin` claim passes `assertPlatformAdmin`, and the `admin` and `event_manager` claims map to `tenant_admin` and `event_manager` for Stellr only. The visible change comes at the flip.

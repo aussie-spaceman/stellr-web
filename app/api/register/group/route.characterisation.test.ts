@@ -11,9 +11,7 @@ import {
 // `code`, body, and the order of writes and side effects. In particular every
 // person is age-checked BEFORE the first write, and the writes run
 // registration → members → participants. If one of these fails, the refactor
-// changed behaviour; fix the refactor, not this file. A test named KNOWN DEFECT,
-// or carrying a KNOWN DEFECT comment, is the exception: it records what happens,
-// and is not a contract to preserve.
+// changed behaviour; fix the refactor, not this file.
 //
 // What is real: the route, lib/registration-eligibility, lib/registration (the
 // window), lib/clerk-provisioning (the COPPA login guard; only Clerk is faked),
@@ -332,19 +330,38 @@ describe('characterisation: POST /api/register/group — a member already on fil
     expect(h.getUserList).not.toHaveBeenCalled()
   })
 
-  // Only the first of the three reads checks its error. A failed second read is
-  // "not found", so someone on file only by school address reads as new: a
-  // duplicate member is created and a caller gets a ticket for it. The upsert is
-  // insert-only here, so the existing row is not rewritten.
-  it('KNOWN DEFECT, fails open: a failed school-address lookup reads as new, and mints a login', async () => {
+  // Neither school-address read may count a failure as "not found": someone on
+  // file only by school address would read as new, with a duplicate member and a
+  // login. The registration is taken back and nothing else is written.
+  it.each([
+    ['school_email column', 'school_email', TEACHER, {}],
+    ['submitted school address', 'email', OLD_ADDRESS, { school_email: OLD_ADDRESS }],
+  ])('a failed %s read is a retryable 503 with nothing kept', async (_l, column, value, teacher) => {
     rec.respond((c) =>
-      c.table === 'members' && c.op === 'select' && inFilter(c, 'school_email', TEACHER)
+      c.table === 'members' && c.op === 'select' && inFilter(c, column, value)
         ? { data: null, error: { message: 'boom' } }
         : undefined,
     )
-    const { body: res } = await settle(await post(body()))
-    expect(res).toMatchObject({ signInToken: 'tkt' })
-    expect(rec.writes()).toEqual(addNowWrites(ALL, 3, true))
+    expect(await settle(await post(body({}, teacher)))).toEqual({
+      status: 503,
+      body: { error: 'Registration is temporarily unavailable. Please try again shortly.' },
+    })
+    expect(rec.writes()).toEqual(['insert registrations', 'delete registrations'])
+    expect(h.getUserList).not.toHaveBeenCalled()
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.createSignInToken).not.toHaveBeenCalled()
+  })
+
+  it('a delete that fails on the way out is logged with the registration id, and is still the 503', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rec.respond((c) => {
+      if (c.table === 'members' && c.op === 'select' && inFilter(c, 'school_email', TEACHER)) return { data: null, error: { message: 'boom' } }
+      if (c.table === 'registrations' && c.op === 'delete') return { data: null, error: { message: 'also boom' } }
+      return undefined
+    })
+    expect((await post(body())).status).toBe(503)
+    expect(errors).toHaveBeenCalledWith('[register/group] could not take back registration', 'reg-1', { message: 'also boom' })
+    errors.mockRestore()
   })
 })
 
@@ -526,55 +543,133 @@ describe('characterisation: POST /api/register/group — add_now people’s date
     expect(rec.log).toEqual([])
   })
 
-  // KNOWN DEFECT, not a contract: the next two refusals answer an anonymous POST
-  // with the name on file, and an unknown ID gets a different answer (the test
-  // after them), so Member IDs, which come from a sequence, can be walked to find
-  // people with no usable date of birth. The lookup is also not tenant-scoped.
-  // Raised for A7 and for its own fix after Nevada; the bodies are pinned only so
-  // a refactor does not change them by accident.
-  it('a Member ID with no date of birth on file is refused with its own copy, before any write', async () => {
-    h.onFile = {
-      memberId: 'm-linked', first_name: 'Lin', last_name: 'Ked', email: 'linked@example.com',
-      date_of_birth: null, ethnicity: [], dietary_requirements: [],
-    }
-    const res = await settle(await post(body({
-      students: [student('1'), { linked: true, existing_membership_id: 'STL-1' }],
-    })))
-    expect(res).toEqual({
+  // The answer for a Member ID slot depends only on what was submitted: one refusal
+  // for an unknown ID, a wrong last name and a record with no usable date of birth,
+  // naming nobody from the record.
+  describe('a Member ID that cannot be used', () => {
+    const LINKED = { memberId: 'm-linked', first_name: 'Lin', last_name: 'Ked', member_last_name: 'Ked', email: 'linked@example.com', ethnicity: [], dietary_requirements: [] }
+    const slot = (extra: Person = {}): Person => ({
+      linked: true, existing_membership_id: 'STL-1', first_name: 'Sub', last_name: 'Mitted', ...extra,
+    })
+    const REFUSAL = {
       status: 400,
       body: {
         code: 'dob_missing',
-        error: "We don't have a date of birth on file for Lin Ked's Stellr Member ID. Ask them to add it to their profile, or enter their details by hand.",
+        error: "We couldn't use the Stellr Member ID for Sub Mitted. Check the ID and last name, or enter their details by hand. If both are right, ask them to check their date of birth with Stellr.",
       },
-    })
-    expect(rec.log).toEqual([])
-  })
-
-  it('a Member ID with an unreadable date of birth on file is refused with its own copy', async () => {
-    h.onFile = {
-      memberId: 'm-linked', first_name: 'Lin', last_name: 'Ked', email: 'linked@example.com',
-      date_of_birth: '2999-01-01', ethnicity: [], dietary_requirements: [],
     }
-    const res = await settle(await post(body({
-      students: [student('1'), { linked: true, existing_membership_id: 'STL-1' }],
-    })))
-    expect(res).toEqual({
-      status: 400,
-      body: {
-        code: 'dob_invalid',
-        error: "The date of birth on file for Lin Ked's Stellr Member ID doesn't look right. Ask them to contact Stellr to correct it, or enter their details by hand.",
-      },
+
+    it.each([
+      ['an unknown ID', null, slot()],
+      ['a wrong last name', { ...LINKED, date_of_birth: '2008-01-01' }, slot()],
+      ['no date of birth on file', { ...LINKED, date_of_birth: null }, slot({ last_name: 'Ked' })],
+      ['an unreadable date of birth on file', { ...LINKED, date_of_birth: '2999-01-01' }, slot({ last_name: 'Ked' })],
+    ])('%s gets the one refusal, before any write', async (_l, onFile, sent) => {
+      h.onFile = onFile
+      const res = await settle(await post(body({ students: [student('1'), sent] })))
+      const name = `${sent.first_name} ${sent.last_name}`
+      expect(res).toEqual({ ...REFUSAL, body: { ...REFUSAL.body, error: REFUSAL.body.error.replace('Sub Mitted', name) } })
+      expect(JSON.stringify(res)).not.toContain('Lin')
+      expect(rec.log).toEqual([])
     })
-    expect(rec.log).toEqual([])
+
+    it('no last name at all is refused the same way, so a bare ID finds nothing', async () => {
+      h.onFile = { ...LINKED, date_of_birth: '2008-01-01' }
+      const res = await settle(await post(body({
+        students: [student('1'), { linked: true, existing_membership_id: 'STL-1' }],
+      })))
+      expect(res).toMatchObject({ status: 400, body: { code: 'dob_missing' } })
+      expect(JSON.stringify(res)).toContain('one person')
+      expect(JSON.stringify(res)).not.toContain('Lin')
+      expect(rec.log).toEqual([])
+    })
+
+    it.each([
+      ['an unknown ID', null],
+      ['a wrong last name', { ...LINKED, date_of_birth: '2008-01-01' }],
+      ['no date of birth on file', { ...LINKED, member_last_name: 'Mitted', date_of_birth: null }],
+      ['an unreadable date of birth on file', { ...LINKED, member_last_name: 'Mitted', date_of_birth: '2999-01-01' }],
+    ])('with details typed in, %s goes ahead on what was typed, unlinked', async (_l, onFile) => {
+      h.onFile = onFile
+      const typed = slot({ email: 'typed@example.com', date_of_birth: '2010-02-02', emergency_contact_email: 'parent@example.com' })
+      expect((await post(body({ students: [student('1'), typed] }))).status).toBe(201)
+      const [rows] = rec.payloads('insert', 'participants') as Person[][]
+      expect(rows[2]).toMatchObject({ email: 'typed@example.com', first_name: 'Sub', last_name: 'Mitted', date_of_birth: '2010-02-02', member_id: M('typed@example.com') })
+    })
+
+    it('a date of birth typed badly is that person’s usual refusal, whatever the ID names', async () => {
+      h.onFile = { ...LINKED, date_of_birth: '2008-01-01' }
+      const res = await settle(await post(body({ students: [student('1'), slot({ date_of_birth: 'abc' })] })))
+      expect(res).toEqual({ status: 400, body: { code: 'dob_invalid', error: dobInvalidFor('Sub Mitted') } })
+    })
+
+    it('a name that matches only the latest participant row gets the one refusal', async () => {
+      h.onFile = { ...LINKED, last_name: 'Latest', member_last_name: 'Ked', date_of_birth: '2008-01-01' }
+      const sent = slot({ last_name: 'Latest' })
+      const res = await settle(await post(body({ students: [student('1'), sent] })))
+      expect(res).toEqual({ ...REFUSAL, body: { ...REFUSAL.body, error: REFUSAL.body.error.replace('Sub Mitted', 'Sub Latest') } })
+      expect(rec.log).toEqual([])
+    })
+
+    it.each([
+      ['an unknown ID', null, {}],
+      ['a wrong last name', { ...LINKED, date_of_birth: '2008-01-01' }, {}],
+      ['no ID at all', null, { existing_membership_id: undefined }],
+    ])('typed details are checked like anyone else’s: an invalid email with %s', async (_l, onFile, extra) => {
+      h.onFile = onFile
+      const typed = slot({ email: 'not-an-email', date_of_birth: '2010-02-02', ...extra })
+      const res = await settle(await post(body({ students: [student('1'), typed] })))
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(res.body)).toContain('The email for Sub Mitted')
+      expect(rec.log).toEqual([])
+    })
+
+    it('typed details are checked like anyone else’s: an invalid guardian email', async () => {
+      h.onFile = null
+      const typed = slot({ email: 'typed@example.com', date_of_birth: '2010-02-02', emergency_contact_email: 'none' })
+      const res = await settle(await post(body({ students: [student('1'), typed] })))
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(res.body)).toContain('parent or guardian email for Sub Mitted')
+      expect(rec.log).toEqual([])
+    })
   })
 
-  it('KNOWN DEFECT: an unknown Member ID answers differently, so the ID’s existence shows', async () => {
-    h.onFile = null
-    const res = await settle(await post(body({
-      students: [student('1'), { linked: true, existing_membership_id: 'STL-404' }],
-    })))
-    expect(res).toEqual({ status: 400, body: { code: 'dob_missing', error: dobMissingFor('one person') } })
-    expect(rec.log).toEqual([])
+  describe('a member id in the request body', () => {
+    it('never links a typed slot', async () => {
+      const typed = student('2', { _linked_member_id: 'm-other' })
+      expect((await post(body({ students: [student('1'), typed] }))).status).toBe(201)
+      const [rows] = rec.payloads('insert', 'participants') as Person[][]
+      expect(rows[2]).toMatchObject({ email: 's2@example.com', member_id: M('s2@example.com') })
+    })
+
+    it('never links the registrant', async () => {
+      expect((await post(body({}, { _linked_member_id: 'm-other' }))).status).toBe(201)
+      const [rows] = rec.payloads('insert', 'participants') as Person[][]
+      expect(rows[0]).toMatchObject({ email: TEACHER, member_id: M(TEACHER) })
+    })
+  })
+
+  // What the form sends after an accepted lookup: the ID and the confirmed name.
+  describe('a Member ID confirmed by last name', () => {
+    const ONFILE = {
+      memberId: 'm-linked', first_name: 'Lin', last_name: 'Latest', member_last_name: 'Ked', email: 'linked@example.com',
+      date_of_birth: '2010-03-03', ethnicity: [], dietary_requirements: [],
+    }
+    const slot = (last_name: string): Person => ({ linked: true, existing_membership_id: 'STL-1', first_name: 'Lin', last_name })
+
+    it.each([
+      ['the member row’s name, which the lookup confirms', 'Ked'],
+      ['in any case, with stray spaces', '  kED '],
+    ])('links to the record and writes from it: %s', async (_l, name) => {
+      h.onFile = ONFILE
+      expect((await post(body({ students: [student('1'), slot(name)] }))).status).toBe(201)
+      const [rows] = rec.payloads('insert', 'participants') as Person[][]
+      expect(rows[2]).toMatchObject({
+        email: 'linked@example.com', first_name: 'Lin', last_name: 'Latest', date_of_birth: '2010-03-03', member_id: 'm-linked',
+      })
+      const [members] = rec.payloads('upsert', 'members') as Person[][]
+      expect(members.map((m) => m.email)).not.toContain('linked@example.com')
+    })
   })
 
   it.each(AGE_CASES)('a student aged $age is accepted; a minor is forced to participant / high school', async (c) => {

@@ -10,8 +10,6 @@ import {
 // unchanged: status, `code`, body, and the order of writes and side effects.
 // If one of these fails, the refactor changed behaviour; fix the refactor, not
 // this file. A deliberate behaviour change updates this file in its own commit.
-// A test named KNOWN DEFECT is the exception: it records what happens, and is
-// not a contract to preserve.
 //
 // What is real: the route, lib/registration-eligibility, lib/registration (the
 // window), lib/clerk-provisioning (the COPPA login guard; only Clerk is faked)
@@ -36,6 +34,7 @@ const h = vi.hoisted(() => ({
   createSignInToken: vi.fn(async () => ({ token: 'tkt' })),
   priceRetrieve: vi.fn(async (_id: string): Promise<{ unit_amount: number }> => ({ unit_amount: 2500 })),
   stripeOn: false,
+  checkoutEvent: undefined as unknown,
 }))
 
 vi.mock('@/lib/supabase', async () => {
@@ -120,7 +119,8 @@ vi.mock('@/lib/registration-pay-link', async () => {
 vi.mock('@/lib/registration-checkout', async () => {
   const { rec } = await import('@/test/registration/fixtures')
   return {
-    createRegistrationCheckout: async () => {
+    createRegistrationCheckout: async (_db: unknown, _stripe: unknown, _id: unknown, opts: { event?: unknown }) => {
+      h.checkoutEvent = opts.event
       rec.event('hook createRegistrationCheckout')
       return { url: 'https://checkout.test' }
     },
@@ -250,19 +250,39 @@ describe('characterisation: POST /api/register/individual — a member already o
     expect(h.createSignInToken).not.toHaveBeenCalled()
   })
 
-  // The route comment says "a lookup error leaves this false, so no token is
-  // minted". It does not: the error field is discarded, so a failed read is
-  // "not found", the existing member's row is upserted over, and a caller whose
-  // email has no Clerk login gets a ticket and a clerk_user_id write onto it.
-  it('KNOWN DEFECT, fails open: a failed prior-member lookup reads as new, with a rewrite and a login', async () => {
+  // A failed read cannot tell new from existing, so it is not "not found": no
+  // upsert, no ticket, no clerk_user_id write, and the registration is taken back.
+  it.each([
+    ['by email', 'email', 'kid@example.com', {}],
+    ['by school email', 'school_email', 'kid@example.com', {}],
+    ['by the submitted school address', 'email', 'old@school.example.com', { school_email: 'old@school.example.com' }],
+  ])('a failed prior-member lookup %s is a retryable 503 with nothing kept', async (_l, column, value, extra) => {
     rec.respond((c) =>
-      c.table === 'members' && c.op === 'select' ? { data: null, error: { message: 'boom' } } : undefined,
+      c.table === 'members' && c.op === 'select' && eqFilter(c, column, value)
+        ? { data: null, error: { message: 'boom' } }
+        : undefined,
     )
-    expect(await settle(await post())).toEqual({
-      status: 201,
-      body: { registrationId: 'reg-1', checkoutUrl: null, signInToken: 'tkt' },
+    expect(await settle(await post(extra))).toEqual({
+      status: 503,
+      body: { error: 'Registration is temporarily unavailable. Please try again shortly.' },
     })
-    expect(rec.writes()).toEqual(happyWrites(true))
+    expect(rec.writes()).toEqual(['insert registrations', 'delete registrations'])
+    expect(h.getUserList).not.toHaveBeenCalled()
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.createSignInToken).not.toHaveBeenCalled()
+    expect(h.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('a delete that fails on the way out is logged with the registration id, and is still the 503', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rec.respond((c) => {
+      if (c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', 'kid@example.com')) return { data: null, error: { message: 'boom' } }
+      if (c.table === 'registrations' && c.op === 'delete') return { data: null, error: { message: 'also boom' } }
+      return undefined
+    })
+    expect((await post()).status).toBe(503)
+    expect(errors).toHaveBeenCalledWith('[register/individual] could not take back registration', 'reg-1', { message: 'also boom' })
+    errors.mockRestore()
   })
 })
 
@@ -327,6 +347,16 @@ describe('characterisation: POST /api/register/individual — a priced event', (
     ])
     const [reg] = rec.payloads('insert', 'registrations') as Record<string, unknown>[]
     expect(reg).toMatchObject({ status: 'pending', amount_due_cents: 2500 })
+    expect(h.checkoutEvent).toEqual(PRICED)
+  })
+
+  it('a second event read that comes back empty still checks out with the event the gate read', async () => {
+    h.getEventBySlug.mockReset()
+    h.getEventBySlug.mockResolvedValue(null)
+    h.getEventBySlug.mockResolvedValueOnce(PRICED)
+    expect((await post()).status).toBe(201)
+    expect(h.getEventBySlug).toHaveBeenCalledTimes(2)
+    expect(h.checkoutEvent).toEqual(PRICED)
   })
 
   it('a price Stripe cannot resolve is a 503 before anything is written', async () => {

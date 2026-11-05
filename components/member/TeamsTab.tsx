@@ -46,6 +46,10 @@ interface Participant {
   member_id: string | null
   individual_payment_status: string | null
   event_companies?: { number: number; name: string | null } | null
+  // Set on a row filled from the member's own record: the server sends no email,
+  // date of birth or other details for it, only is_minor for the consent summary.
+  details_hidden?: boolean
+  is_minor?: boolean
 }
 
 interface DocuSignEnvelope {
@@ -261,7 +265,7 @@ function JoinedTeamsView({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const participantIsMinor = (dob: string) => isMinorOn(dob)
+const participantIsMinor = (p: Participant) => (p.details_hidden ? !!p.is_minor : isMinorOn(p.date_of_birth))
 
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
@@ -583,7 +587,7 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
 
                 {/* Consent summary */}
                 {(() => {
-                  const minors = fullTeam.registration.participants.filter(p => participantIsMinor(p.date_of_birth))
+                  const minors = fullTeam.registration.participants.filter(p => participantIsMinor(p))
                   if (minors.length === 0) return null
                   const envelopes = fullTeam.registration.docusignEnvelopes ?? {}
                   const signed   = minors.filter(p => envelopes[p.id]?.status === 'completed').length
@@ -607,7 +611,7 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                 {(() => {
                   const envelopes = fullTeam.registration.docusignEnvelopes ?? {}
                   const adults = fullTeam.registration.participants.filter(
-                    p => !participantIsMinor(p.date_of_birth) && envelopes[p.id],
+                    p => !participantIsMinor(p) && envelopes[p.id],
                   )
                   if (adults.length === 0) return null
                   const signed  = adults.filter(p => envelopes[p.id]?.status === 'completed').length
@@ -649,7 +653,7 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                       <tbody className="divide-y divide-brand-hairline">
                         {fullTeam.registration.participants.map(p => {
                           const envelope = fullTeam.registration.docusignEnvelopes?.[p.id]
-                          const isMinor = participantIsMinor(p.date_of_birth)
+                          const isMinor = participantIsMinor(p)
                           const canResend = envelope &&
                             envelope.status !== 'completed' &&
                             envelope.status !== 'voided' &&
@@ -658,7 +662,11 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                           return (
                             <tr key={p.id} className="hover:bg-brand-canvas">
                               <td className="py-2.5 pr-4">{p.first_name} {p.last_name}</td>
-                              <td className="py-2.5 pr-4 text-brand-muted-soft">{p.email}</td>
+                              <td className="py-2.5 pr-4 text-brand-muted-soft">
+                                {p.details_hidden
+                                  ? <span title="This person keeps their details in their own Stellr profile.">Kept private</span>
+                                  : p.email}
+                              </td>
                               <td className="py-2.5 pr-4">{displayEventRole(p.event_role) ?? p.event_role}</td>
                               <td className="py-2.5 pr-4 text-brand-muted-soft">{p.grade ?? '—'}</td>
                               <td className="py-2.5 pr-4">
@@ -696,10 +704,12 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                                     <p className="text-xs text-brand-muted-soft leading-tight">
                                       {CONSENT_TYPE_LABEL[envelope.envelope_type] ?? 'Agreement'}
                                     </p>
-                                    <p className="text-xs text-brand-muted-soft leading-tight">
-                                      {envelope.signer_name}
-                                      {envelope.signer_email && <> &middot; {envelope.signer_email}</>}
-                                    </p>
+                                    {!p.details_hidden && (
+                                      <p className="text-xs text-brand-muted-soft leading-tight">
+                                        {envelope.signer_name}
+                                        {envelope.signer_email && <> &middot; {envelope.signer_email}</>}
+                                      </p>
+                                    )}
                                     <p className="text-xs text-brand-muted-soft">
                                       Sent {formatDateShort(envelope.sent_at)}
                                       {envelope.completed_at && <> &middot; Signed {formatDateShort(envelope.completed_at)}</>}
@@ -730,12 +740,14 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                               <td className="py-2.5 text-right space-x-2">
                                 {!readOnly && (
                                   <>
-                                    <button
-                                      onClick={() => setEditing(p)}
-                                      className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
-                                    >
-                                      Edit
-                                    </button>
+                                    {!p.details_hidden && (
+                                      <button
+                                        onClick={() => setEditing(p)}
+                                        className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
+                                      >
+                                        Edit
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handleRemoveParticipant(team.id, p.id)}
                                       disabled={removing === p.id}

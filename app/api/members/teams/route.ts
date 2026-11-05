@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveRequestMember } from '@/lib/impersonation'
 import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
+import { isDetailsHiddenFrom } from '@/lib/team-linked-details'
 
 // GET /api/members/teams
 // Managers: all group registrations they own — as the registrant (teacher or
@@ -36,7 +37,7 @@ export async function GET() {
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
       member_pays_individually, invoice_requested, invoice_paid_at,
       details_method, adult_count, student_count,
-      participants(id, event_role, first_name, last_name, email, join_completed_at, individual_payment_status, event_companies(number, name))
+      participants(id, member_id, details_from_member, event_role, first_name, last_name, email, join_completed_at, individual_payment_status, event_companies(number, name))
     `)
     .or(ownerOr)
     .eq('type', 'group')
@@ -74,6 +75,11 @@ export async function GET() {
 
     const teams = (registrations ?? []).map((r) => ({
       ...r,
+      // The two link columns stay on the server, and a linked row loses its email.
+      participants: ((r as { participants?: Record<string, unknown>[] }).participants ?? []).map((p) => {
+        const { member_id: _memberId, details_from_member: _fromMember, email, ...rest } = p
+        return isDetailsHiddenFrom(p, member.id) ? { ...rest, details_hidden: true } : { ...rest, email }
+      }),
       joinUrl: joinUrlMap[(r as { id: string }).id] ?? null,
       // How the viewer relates to this group, so the portal can label it
       // (Student Manager / Teacher POC / Teacher).

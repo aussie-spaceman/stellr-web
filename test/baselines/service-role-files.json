@@ -1163,15 +1163,15 @@
     },
     "app/api/register/group-join/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: group_join_tokens, members, participants"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/register/group/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: group_join_tokens, members, participants, registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/register/individual/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: members, participants, registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/register/pay-seat/route.ts": {
       "class": "convert",

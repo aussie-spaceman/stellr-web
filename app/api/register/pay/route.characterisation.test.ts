@@ -6,15 +6,9 @@ import { rec, OPEN_EVENT, CLOSED_EVENT, jsonRequest, settle } from '@/test/regis
 // resolver (A7) reads through it, so its answers are pinned here too. pay-seat,
 // the fifth register route, is not covered here.
 //
-// Note the difference from the three gates: pay does NOT fail closed on the
-// event lookup. An outage or an unknown slug reads as "no event" and skips the
-// window check. The real checkout then has no price to charge, which gives three
-// different outcomes, pinned below against the real createRegistrationCheckout:
-// a group is refused (503), an individual with nothing else owing is refused
-// (400), and an individual with paid add-ons gets a checkout for the add-ons
-// alone. That last one is a KNOWN DEFECT: the Stripe webhook confirms the seat
-// with no amount check, so the seat is confirmed without the event fee. A7 must
-// not treat it as behaviour to preserve.
+// Like the three gates, pay fails closed on the event lookup: with no event, the
+// window and the fee cannot be known. An outage is a retryable 503 and an unknown
+// slug the 503 no_price, and no checkout is made.
 
 const h = vi.hoisted(() => ({
   getEventBySlug: vi.fn(async (_slug: string): Promise<unknown> => null),
@@ -106,10 +100,7 @@ describe('characterisation: POST /api/register/pay', () => {
     expect(await settle(await post())).toEqual({ status: 200, body: { url: 'https://checkout.test/cs_1' } })
   })
 
-  describe.each([
-    ['a Sanity outage', () => h.getEventBySlug.mockRejectedValue(new Error('sanity timeout'))],
-    ['an unknown event slug', () => h.getEventBySlug.mockResolvedValue(null)],
-  ])('%s, with the real checkout', (_l, noEvent) => {
+  describe('with the real checkout', () => {
     const FEE_REG = {
       event_title: 'Colorado', invoice_requested: false, member_pays_individually: false,
       adult_count: 1, student_count: 2, teacher_first_name: 'T', teacher_last_name: 'Eacher',
@@ -133,8 +124,9 @@ describe('characterisation: POST /api/register/pay', () => {
       })
     }
 
+    const SHIRT = { name: 'Shirt', qty: 1, unit_amount_cents: 1500 }
+
     beforeEach(() => {
-      noEvent()
       createSession = vi.fn(async () => ({ id: 'cs_1', url: 'https://checkout.test/cs_real' }))
       retrievePrice = vi.fn(async () => ({ unit_amount: 2500 }))
       h.stripe = {
@@ -144,39 +136,54 @@ describe('characterisation: POST /api/register/pay', () => {
       h.createCheckout.mockImplementation(realCheckout as (...args: unknown[]) => Promise<unknown>)
     })
 
-    it('the window is skipped, and the route passes the checkout no event', async () => {
-      withRegistration('group', [])
-      await post()
-      expect(h.createCheckout).toHaveBeenCalledWith(
-        expect.anything(), expect.anything(), 'reg-1', expect.objectContaining({ event: null }),
-      )
-      expect(h.getEventBySlug).toHaveBeenCalledTimes(1)
-      expect(retrievePrice).not.toHaveBeenCalled()
+    describe.each([
+      ['individual', []],
+      ['individual', [SHIRT]],
+      ['group', []],
+    ])('a %s registration with add-ons %j', (type, addons) => {
+      it('a Sanity outage is a retryable 503, and no checkout is made', async () => {
+        h.getEventBySlug.mockRejectedValue(new Error('sanity timeout'))
+        withRegistration(type, addons)
+        expect(await settle(await post())).toEqual({
+          status: 503, body: { error: 'Payment could not be started. Please try again shortly.' },
+        })
+        expect(h.createCheckout).not.toHaveBeenCalled()
+        expect(createSession).not.toHaveBeenCalled()
+      })
+
+      it('an unknown event slug is the 503 no_price, and no checkout is made', async () => {
+        h.getEventBySlug.mockResolvedValue(null)
+        withRegistration(type, addons)
+        expect(await settle(await post())).toEqual({
+          status: 503,
+          body: { error: 'This event’s registration fee is misconfigured — please contact Stellr.', code: 'no_price' },
+        })
+        expect(h.createCheckout).not.toHaveBeenCalled()
+        expect(createSession).not.toHaveBeenCalled()
+      })
     })
 
-    it('a group is refused: 503 no_price', async () => {
-      withRegistration('group', [])
-      expect(await settle(await post())).toEqual({
-        status: 503,
-        body: { error: 'This event’s registration fee is misconfigured — please contact Stellr.', code: 'no_price' },
-      })
+    it('a scholarship offer does not get an unresolved event past the refusal', async () => {
+      h.getEventBySlug.mockResolvedValue(null)
+      h.findOffer.mockResolvedValue({ id: 'sch-1' })
+      withRegistration('individual', [SHIRT])
+      expect((await settle(await post())).status).toBe(503)
       expect(createSession).not.toHaveBeenCalled()
     })
 
-    it('an individual with nothing else owing is refused: 400 nothing_to_pay', async () => {
-      withRegistration('individual', [])
-      expect(await settle(await post())).toEqual({
-        status: 400,
-        body: {
-          error: 'There’s nothing left to pay on this registration. Reply to your registration email if you think that’s wrong.',
-          code: 'nothing_to_pay',
-        },
-      })
-      expect(createSession).not.toHaveBeenCalled()
+    it('an individual on a priced event pays the fee and the add-ons', async () => {
+      h.getEventBySlug.mockResolvedValue({ ...OPEN_EVENT, stripePriceId: 'price_1' })
+      withRegistration('individual', [SHIRT])
+      expect(await settle(await post())).toEqual({ status: 200, body: { url: 'https://checkout.test/cs_real' } })
+      const [params] = createSession.mock.calls[0] as [{ line_items: unknown[] }]
+      expect(params.line_items).toEqual([
+        { price: 'price_1', quantity: 1 },
+        { quantity: 1, price_data: { currency: 'usd', unit_amount: 1500, product_data: { name: 'Shirt' } } },
+      ])
     })
 
-    it('KNOWN DEFECT, under-charges: an individual with paid add-ons checks out without the event fee', async () => {
-      withRegistration('individual', [{ name: 'Shirt', qty: 1, unit_amount_cents: 1500 }])
+    it('a free event, resolved with no price, still checks out its paid add-ons', async () => {
+      withRegistration('individual', [SHIRT])
       expect(await settle(await post())).toEqual({ status: 200, body: { url: 'https://checkout.test/cs_real' } })
       const [params] = createSession.mock.calls[0] as [{ line_items: unknown[] }]
       expect(params.line_items).toEqual([

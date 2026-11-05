@@ -112,9 +112,10 @@ const UNAVAILABLE_MESSAGE =
  * The youngest anyone can be today to register for a tenant event, whatever
  * their age on the day. The COPPA line: tenant events have no parental-consent
  * flow for under-13s. Not applied to the platform owner, which admits them with
- * a parent. The A3 trigger needs the same rule.
+ * a parent. The A3 trigger holds the same rule, and
+ * test/registration/participants-eligibility-sql.test.ts keeps the two equal.
  */
-const TENANT_MIN_AGE_TODAY = 13
+export const TENANT_MIN_AGE_TODAY = 13
 
 function unavailable(detail: EligibilityUnavailableDetail): EligibilityUnavailable {
   return { ok: false, reason: 'eligibility_unavailable', detail, error: UNAVAILABLE_MESSAGE }
@@ -227,7 +228,7 @@ export function stellrUndatedContext(
   return { kind: 'platform_owner', isPlatformOwner: true, tenantId: tenant.id, eventDate: null }
 }
 
-/** The events-mirror columns the context needs (lib/events/repo.ts MirroredEvent). */
+/** The events-mirror columns the context needs (lib/events/mirror.ts MirroredEvent). */
 export interface MirrorEventForEligibility {
   tenant_id: string
   activity_type: string | null

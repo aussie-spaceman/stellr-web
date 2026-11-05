@@ -1,13 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { denormalizeGender, denormalizeGrade, denormalizeTshirt } from '@/lib/member-enums'
+import { youngestDob } from '@/lib/guardian-consent'
+import { normalizeMembershipId } from '@/lib/membership-id'
 
 export interface OnFileParticipant {
   memberId: string
   first_name: string
   last_name: string
+  /** The member row's own surname, the one /api/members/lookup confirms against. */
+  member_last_name: string | null
   nickname: string | null
   email: string
   phone: string | null
+  /** The youngest usable date on the member row or any of their participant rows. */
   date_of_birth: string | null
   grade: string | null
   gender: string | null
@@ -30,12 +35,14 @@ export interface OnFileParticipant {
 // their participant row from this record instead of re-collecting, and never
 // overwrite the member. Mirrors the source priority in lib/registration-prefill
 // (richest = latest participant row; fall back to the members row, denormalising
-// its enum columns back to display strings).
+// its enum columns back to display strings). Age is the exception: it decides the
+// consent route, so it reads as onboarding does (lib/guardian-consent), the youngest
+// usable date on file, and null when those rows can't be read.
 export async function getMemberOnFileByMembershipId(
   db: SupabaseClient,
   membershipId: string,
 ): Promise<OnFileParticipant | null> {
-  const id = membershipId.trim()
+  const id = normalizeMembershipId(membershipId)
   if (!id) return null
 
   // The id may be the member's canonical id (members.membership_id, migration 036)
@@ -57,7 +64,7 @@ export async function getMemberOnFileByMembershipId(
   }
   if (!memberId) return null
 
-  const [{ data: mem }, { data: last }] = await Promise.all([
+  const [{ data: mem }, { data: last }, { data: dobRows, error: dobError }] = await Promise.all([
     db
       .from('members')
       .select(
@@ -81,6 +88,7 @@ export async function getMemberOnFileByMembershipId(
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    db.from('participants').select('date_of_birth').eq('member_id', memberId),
   ])
   if (!mem) return null
 
@@ -103,9 +111,12 @@ export async function getMemberOnFileByMembershipId(
     email: str(p.email) ?? str(m.email) ?? '',
     first_name: str(p.first_name) ?? str(m.first_name) ?? '',
     last_name: str(p.last_name) ?? str(m.last_name) ?? '',
+    member_last_name: str(m.last_name),
     nickname: str(p.nickname) ?? str(m.nickname),
     phone: str(p.phone) ?? str(m.phone),
-    date_of_birth: str(p.date_of_birth) ?? str(m.date_of_birth),
+    date_of_birth: dobError
+      ? null
+      : youngestDob([str(m.date_of_birth), ...((dobRows ?? []) as Array<{ date_of_birth: string | null }>).map((r) => r.date_of_birth)]),
     grade: str(p.grade) ?? denormalizeGrade(m.grade) ?? null,
     gender: str(p.gender) ?? denormalizeGender(m.gender) ?? null,
     t_shirt_size: str(p.t_shirt_size) ?? denormalizeTshirt(m.tshirt_size) ?? null,

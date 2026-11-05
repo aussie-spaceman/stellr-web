@@ -80,26 +80,34 @@ describe('POST /api/members/teams/[id]/participants — S0 date-of-birth check',
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('a Member-ID-linked person with no date of birth on file is refused with a way forward', async () => {
-    h.onFile = { memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', email: 'lee@x.com', date_of_birth: null, event_role: 'participant' }
-    const res = await post({ linked: true, membership_id: 'STL-1', event_role: 'Student' })
+  it.each([
+    ['no date of birth on file', null],
+    ['a date of birth on file that is wrong', '2999-01-01'],
+  ])('a Member ID with %s gets the one refusal, naming what was sent', async (_l, dob) => {
+    h.onFile = { memberId: 'm-linked', first_name: 'Rec', last_name: 'Ng', member_last_name: 'Ng', email: 'lee@x.com', date_of_birth: dob, event_role: 'participant' }
+    const res = await post({ linked: true, membership_id: '0000018', first_name: 'Lee', last_name: 'Ng', event_role: 'Student' })
     expect(res.status).toBe(400)
-    const json = await res.json()
-    expect(json.code).toBe('dob_missing')
-    expect(json.error).toMatch(/don't have a date of birth on file for this Stellr Member ID/)
-    expect(h.partInsert).not.toHaveBeenCalled()
-  })
-
-  it('a Member-ID-linked person whose date of birth on file is wrong is asked to correct it', async () => {
-    h.onFile = { memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', email: 'lee@x.com', date_of_birth: '2999-01-01', event_role: 'participant' }
-    const res = await post({ linked: true, membership_id: 'STL-1', event_role: 'Student' })
-    expect(res.status).toBe(400)
-    const json = await res.json()
-    expect(json.code).toBe('dob_invalid')
-    expect(json.error).toMatch(/date of birth on file for this Stellr Member ID doesn't look right/)
-    expect(json.error).toMatch(/contact Stellr to correct it/)
+    expect(await res.json()).toEqual({
+      code: 'member_id_unusable',
+      error: "We couldn't use the Stellr Member ID for Lee Ng. Check the ID and last name, or enter their details by hand. If both are right, ask them to check their date of birth with Stellr.",
+    })
     expect(h.partInsert).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('a Member ID with its last name links the member and answers with the submitted name', async () => {
+    h.onFile = {
+      memberId: 'm-linked', first_name: 'Rec', last_name: 'Ng', member_last_name: 'Ng', email: 'lee@x.com',
+      date_of_birth: '2012-03-04', health_conditions: 'Asthma', event_role: 'participant',
+    }
+    const res = await post({ linked: true, membership_id: '0000018', first_name: 'Lee', last_name: 'Ng', event_role: 'Student' })
+    expect(res.status).toBe(201)
+    const json = await res.json()
+    expect(json.participant).toEqual({ id: 'p-1', first_name: 'Lee', last_name: 'Ng' })
+    expect(h.partInsert).toHaveBeenCalledWith(expect.objectContaining({
+      member_id: 'm-linked', email: 'lee@x.com', date_of_birth: '2012-03-04', health_conditions: 'Asthma',
+    }))
+    expect(h.upsertMember).not.toHaveBeenCalled()
   })
 
   it('a real past date is saved as YYYY-MM-DD, as before', async () => {

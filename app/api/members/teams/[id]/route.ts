@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { supabaseServer } from '@/lib/supabase'
 import { ownsTeam, teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { resolveRequestMember } from '@/lib/impersonation'
+import { isDetailsHiddenFrom, organiserViewOfParticipant } from '@/lib/team-linked-details'
 
 // GET /api/members/teams/[id] — full team detail with participants
 // An admin holding a view-as ticket reads it as the viewed member.
@@ -150,15 +151,20 @@ export async function GET(
     id: string; status: string; envelope_type: string; signer_name: string; signer_email: string
     sent_at: string; completed_at: string | null; reminder_sent_at: string | null
   }> = {}
+  const roster = registration.participants as Record<string, unknown>[]
+  const hiddenIds = new Set(roster.filter((p) => isDetailsHiddenFrom(p, member.id)).map((p) => p.id))
   for (const e of envelopes ?? []) {
+    const hidden = hiddenIds.has(e.participant_id)
     docusignEnvelopes[e.participant_id] = {
       id: e.id, status: e.status, envelope_type: e.envelope_type ?? 'minor',
-      signer_name: e.signer_name, signer_email: e.signer_email,
+      signer_name: hidden ? '' : e.signer_name, signer_email: hidden ? '' : e.signer_email,
       sent_at: e.sent_at, completed_at: e.completed_at, reminder_sent_at: e.reminder_sent_at,
     }
   }
 
   const viewerRole = teamViewerRole(member, registration as unknown as TeamViewerRegistration)
 
-  return NextResponse.json({ registration: { ...registration, joinUrl, docusignEnvelopes, viewerRole }, watchActive })
+  const participants = roster.map((p) => organiserViewOfParticipant(p, member.id))
+
+  return NextResponse.json({ registration: { ...registration, participants, joinUrl, docusignEnvelopes, viewerRole }, watchActive })
 }

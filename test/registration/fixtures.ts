@@ -20,6 +20,8 @@ export interface DbCall {
   table: string
   op: DbOp
   payload: unknown
+  /** The second argument of .upsert(). */
+  options?: unknown
   /** Every filter in call order, e.g. ['eq', 'email', 'a@b.co']. */
   filters: unknown[][]
   /** The terminal used: .single(), .maybeSingle(), or a bare await. */
@@ -84,7 +86,7 @@ export function createRecorder() {
         return chain
       },
       insert: (p: unknown) => { call.op = 'insert'; call.payload = p; return chain },
-      upsert: (p: unknown) => { call.op = 'upsert'; call.payload = p; return chain },
+      upsert: (p: unknown, o?: unknown) => { call.op = 'upsert'; call.payload = p; call.options = o; return chain },
       update: (p: unknown) => { call.op = 'update'; call.payload = p; return chain },
       delete: () => { call.op = 'delete'; return chain },
       eq: filter('eq'), neq: filter('neq'), in: filter('in'), is: filter('is'), not: filter('not'),

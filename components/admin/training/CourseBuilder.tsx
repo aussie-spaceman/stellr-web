@@ -618,7 +618,7 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
           key={editing?.lesson?.id ?? editing?.sectionId ?? 'none'}
           moduleId={m.id}
           target={editing}
-          lessonCount={editing ? lessonsIn(editing.sectionId).length : 0}
+          nextOrder={editing ? Math.max(-1, ...lessonsIn(editing.sectionId).map((l) => l.display_order)) + 1 : 0}
           onSaved={(notice) => { setResourceNotice(notice ?? null); setEditing(null); onDone() }}
           onCancel={() => setEditing(null)}
           onChanged={onDone}
@@ -747,6 +747,11 @@ function SectionCard({
     if (res.ok) { setEditingTitle(false); onDone() }
   }
   const remove = async () => {
+    // A section's lessons outlive it, and members go on seeing them: say so first.
+    const kept = lessons.length === 0
+      ? ''
+      : ` ${lessons.length === 1 ? 'Its lesson stays' : `Its ${lessons.length} lessons stay`} in the course under “Not in a section”, and members will still see ${lessons.length === 1 ? 'it' : 'them'}. To remove a lesson, delete it separately.`
+    if (!confirm(`Delete “${s.title}”?${kept}`)) return
     const res = await fetch(`/api/admin/community/training/sections?id=${s.id}`, { method: 'DELETE' })
     if (res.ok) onDone()
   }
@@ -810,11 +815,12 @@ function SectionCard({
 }
 
 function LessonEditor({
-  moduleId, target, lessonCount, onSaved, onCancel, onChanged,
+  moduleId, target, nextOrder, onSaved, onCancel, onChanged,
 }: {
   moduleId: string
   target: { lesson?: AdminLesson; sectionId: string | null } | null
-  lessonCount: number
+  /** One past the last lesson in the section, so a new lesson never ties with one. */
+  nextOrder: number
   /** A notice is a problem the admin still needs to see once the editor has closed. */
   onSaved: (notice?: string) => void
   onCancel: () => void
@@ -832,6 +838,7 @@ function LessonEditor({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingResources, setPendingResources] = useState<PendingResource[]>([])
+  const [attachedCount, setAttachedCount] = useState(0)
 
   if (!target) {
     return (
@@ -852,11 +859,14 @@ function LessonEditor({
     (active.input === 'select' && interactiveKey !== (existing.interactive_key ?? '')) ||
     (active.input === 'file' && !!file)
   const showDropzone = active.input !== 'none' && (contentChanged || !existing)
+  // A Resource lesson can be made of attached resources alone: an existing
+  // catalogue file attached below is content, so it needs no second upload.
+  const hasResources = existing ? attachedCount > 0 : pendingResources.length > 0
 
   const save = async () => {
     if (!title.trim()) { setError('Add a lesson title.'); return }
     if (contentChanged && active.input === 'url' && !url.trim()) { setError('Add a URL for this lesson.'); return }
-    if (contentChanged && active.input === 'file' && !file) { setError('Choose a file to upload.'); return }
+    if (contentChanged && active.input === 'file' && !file && !hasResources) { setError('Choose a file to upload, or attach a resource below.'); return }
     if (contentChanged && active.input === 'select' && !interactiveKey) { setError('Choose a tutorial for this lesson.'); return }
     setBusy(true); setError(null)
     try {
@@ -923,7 +933,7 @@ function LessonEditor({
           title: title.trim(),
           contentKind,
           status,
-          displayOrder: String(lessonCount),
+          displayOrder: String(nextOrder),
           estimatedMinutes: minutes || undefined,
           body: body.trim() || undefined,
           externalUrl: active.input === 'url' ? url : undefined,
@@ -999,7 +1009,11 @@ function LessonEditor({
             <active.Icon className="h-4 w-4 text-brand-muted" />
             <p className="text-sm font-semibold text-brand-blue-dark">{active.title}</p>
           </div>
-          <p className="mt-0.5 text-xs text-brand-muted-soft">{active.desc}</p>
+          <p className="mt-0.5 text-xs text-brand-muted-soft">
+            {active.input === 'file' && hasResources && !file
+              ? 'The attached resource below is enough for this lesson. Upload a file only if you also want it shown in the player.'
+              : active.desc}
+          </p>
           {active.input === 'url' && (
             <div className="mt-2">
               <Input type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label={`${active.title} URL`} />
@@ -1038,7 +1052,7 @@ function LessonEditor({
 
       {/* Attached resources (files / links beneath the primary content). */}
       {existing
-        ? <LessonResources itemId={existing.id} />
+        ? <LessonResources itemId={existing.id} onCountChange={setAttachedCount} />
         : <LessonResources pending={pendingResources} onPendingChange={setPendingResources} />}
 
       <Field label="Lesson notes" labelSize="small" hint="Optional — shown beneath the content.">

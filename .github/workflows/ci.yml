@@ -432,28 +432,6 @@ jobs:
         with:
           browsers: chromium webkit
 
-      # Turbopack's compile cache only. Not .next/cache as a whole: fetch-cache
-      # holds responses from the dev database and third parties, and a test must
-      # never read yesterday's data. One copy per week per lockfile, because the
-      # repo's caches sit near GitHub's 10 GB limit, and never across a lockfile
-      # change. verify-build stays cold, so a bad cache cannot hide a build
-      # failure from the check that predicts Vercel.
-      - if: steps.config.outputs.ready == 'true'
-        id: turbopack-key
-        env:
-          PREFIX: turbopack-e2e-${{ hashFiles('package-lock.json') }}-
-        run: |
-          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
-          echo "value=$PREFIX$(date +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      - if: steps.config.outputs.ready == 'true'
-        id: turbopack-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: .next/cache/turbopack
-          key: ${{ steps.turbopack-key.outputs.value }}
-          restore-keys: ${{ steps.turbopack-key.outputs.prefix }}
-
       # Built and served here rather than tested against a Vercel preview.
       # Preview builds queue behind one another on this plan, and a suite that
       # waits on someone else's queue is a suite that gets skipped.
@@ -471,16 +449,6 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
-
-      # Saved from dev, main and manual runs, never a PR, whose copy no other
-      # branch could read. Pull requests into dev read dev's.
-      - if: >-
-          success() && steps.config.outputs.ready == 'true' && github.event_name != 'pull_request'
-          && steps.turbopack-cache.outputs.cache-matched-key != steps.turbopack-key.outputs.value
-        uses: actions/cache/save@v6
-        with:
-          path: .next/cache/turbopack
-          key: ${{ steps.turbopack-key.outputs.value }}
 
   # Storybook (mobile review G5): every story renders at phone width with no
   # page error and no serious/critical axe issue (e2e/storybook). Static files

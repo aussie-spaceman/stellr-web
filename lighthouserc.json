@@ -4,9 +4,7 @@
       "url": [
         "http://localhost:3000/",
         "http://localhost:3000/competitions",
-        "http://localhost:3000/events/nevada-space-design-challenge",
-        "http://localhost:3000/lp/homeschool-students",
-        "http://localhost:3000/register/nevada-space-design-challenge/individual"
+        "http://localhost:3000/lp/homeschool-students"
       ],
       "numberOfRuns": 1,
       "settings": {

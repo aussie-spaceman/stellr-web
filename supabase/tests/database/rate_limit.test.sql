@@ -4,18 +4,15 @@
 -- directory. Covers: shape and privileges, the limit and its reset, a take across
 -- several windows, input checks, gc, and the JSON form PostgREST sends.
 --
--- The concurrency checks open real separate sessions through dblink, because one
--- transaction cannot race itself. Those sessions commit, so their rows outlive
--- the ROLLBACK. Their keys are random and the CI database is thrown away. They
--- log in the way CI's own psql steps do, with the local database's default
--- password (see ci.yml), so this file only runs against that throwaway database.
+-- Real concurrency is in scripts/ci-rate-limit-race.sh, the step after this one in
+-- the same job, because one transaction cannot race itself.
 --
 -- Elsewhere the clock is frozen inside this transaction, since now() is its start
 -- time, so "the window has passed" is arranged by moving window_start back.
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(38);
+SELECT plan(35);
 
 -- Fixture keys: 32 bytes each, as the table's CHECK requires.
 CREATE TEMP TABLE rl_keys ON COMMIT DROP AS
@@ -144,60 +141,6 @@ SELECT is(
      'p_keys', json_build_array('\x' || encode(seven, 'hex'))))) AS x(p_keys bytea[])),
   (SELECT ARRAY[seven] FROM rl_keys),
   'a JSON array of \x hex strings decodes to the bytes');
-
--- ── 7. Real concurrency ─────────────────────────────────────────────────────
-CREATE EXTENSION IF NOT EXISTS dblink WITH SCHEMA extensions;
-
-CREATE TEMP TABLE rl_race (allowed boolean) ON COMMIT DROP;
-CREATE TEMP TABLE rl_race_key ON COMMIT DROP AS
-SELECT sha256(convert_to(gen_random_uuid()::text, 'UTF8')) AS one, sha256(convert_to(gen_random_uuid()::text, 'UTF8')) AS two;
-
-DO $$
-DECLARE
-  v_conn text := format('host=127.0.0.1 port=5432 dbname=%s user=postgres password=postgres', current_database());
-  v_one text;
-  v_two text;
-  i int;
-BEGIN
-  SELECT encode(one, 'hex'), encode(two, 'hex') INTO v_one, v_two FROM rl_race_key;
-
-  FOR i IN 1..16 LOOP
-    PERFORM dblink_connect('rl_' || i, v_conn);
-  END LOOP;
-
-  -- Sessions 1 to 8 race on one key, with a limit of 5.
-  FOR i IN 1..8 LOOP
-    PERFORM dblink_send_query('rl_' || i, format(
-      $q$SELECT allowed FROM public.rate_limit_take(ARRAY[decode(%L, 'hex')], ARRAY[5], ARRAY[60])$q$, v_one));
-  END LOOP;
-  -- Sessions 9 to 16 list the same two keys in opposite orders, the deadlock shape.
-  FOR i IN 9..16 LOOP
-    PERFORM dblink_send_query('rl_' || i, format(
-      $q$SELECT allowed FROM public.rate_limit_take(ARRAY[decode(%L, 'hex'), decode(%L, 'hex')], ARRAY[100, 100], ARRAY[120, 120])$q$,
-      CASE WHEN i % 2 = 0 THEN v_one ELSE v_two END,
-      CASE WHEN i % 2 = 0 THEN v_two ELSE v_one END));
-  END LOOP;
-
-  -- A failed query, a deadlock included, raises here.
-  FOR i IN 1..8 LOOP
-    INSERT INTO rl_race SELECT allowed FROM dblink_get_result('rl_' || i) AS t(allowed boolean);
-  END LOOP;
-  FOR i IN 9..16 LOOP
-    PERFORM allowed FROM dblink_get_result('rl_' || i) AS t(allowed boolean);
-  END LOOP;
-
-  FOR i IN 1..16 LOOP
-    PERFORM dblink_disconnect('rl_' || i);
-  END LOOP;
-END $$;
-
-SELECT is((SELECT count(*)::int FROM rl_race WHERE allowed), 5, 'eight concurrent takes against a limit of 5 allow exactly 5');
-SELECT is(
-  (SELECT hits FROM public.rate_limit_hits, rl_race_key WHERE key_hash = one AND window_seconds = 60),
-  8, 'and lose no count');
-SELECT is(
-  (SELECT sum(hits)::int FROM public.rate_limit_hits, rl_race_key WHERE key_hash IN (one, two) AND window_seconds = 120),
-  16, 'opposite-order takes on two keys all finish, with no deadlock');
 
 SELECT * FROM finish();
 ROLLBACK;

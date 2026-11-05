@@ -32,5 +32,10 @@ echo "Applied $count migrations on top of the baseline."
 psql_local -f - < supabase/seed.sql
 psql_local -f - < supabase/seed-e2e-stack.sql
 
+# Exposed here, as on the hosted projects (migration 090), and not in config.toml:
+# PostgREST reports unhealthy if a schema it is told to serve doesn't exist yet,
+# and `supabase start` stops the whole stack before this script can create it.
+psql_local -c "alter role authenticator set pgrst.db_schemas = 'public, graphql_public, entitlements'"
+
 # PostgREST started before these schemas existed.
-psql_local -c "notify pgrst, 'reload schema'" -c "notify pgrst, 'reload config'"
+psql_local -c "notify pgrst, 'reload config'" -c "notify pgrst, 'reload schema'"

@@ -63,6 +63,29 @@ export function idorTargetFor(file: string, cls: RouteClass, src: string): IdorT
   return { file, cls, urlPattern: urlPatternOf(file), segments, query, body, fill, methods: [...new Set(methods)].sort() }
 }
 
+/**
+ * Every route handler classed tenant_staff or platform_admin, id-bearing or not: a list or
+ * export names no id, and has to stay inside one tenant all the same. Pages are not here;
+ * B10(c) covers what a page renders.
+ */
+export function staffTargets(
+  read: (file: string) => string = (f) => readFileSync(f, 'utf8'),
+  manifest: Record<string, RouteClass> = ROUTE_MANIFEST,
+): IdorTarget[] {
+  const out: IdorTarget[] = []
+  for (const [file, cls] of Object.entries(manifest)) {
+    if (!ROUTE_FILE.test(file) || (cls !== 'tenant_staff' && cls !== 'platform_admin')) continue
+    const src = read(file)
+    const methods = analyzeRoute(file, src)
+      .handlers.map((h) => h.name)
+      .filter((m) => (HTTP_METHODS as readonly string[]).includes(m) && m !== 'HEAD' && m !== 'OPTIONS')
+    if (methods.length === 0) throw new Error(`${file} is classed ${cls} but exports no handler the personas can run`)
+    const { query, body, fill } = requestIdInputs(file, src)
+    out.push({ file, cls, urlPattern: urlPatternOf(file), segments: segmentsOf(file), query, body, fill, methods: [...new Set(methods)].sort() })
+  }
+  return out.sort((a, b) => a.file.localeCompare(b.file))
+}
+
 /** Every id-bearing route handler file in the manifest, sorted by file. */
 export function idorTargets(read: (file: string) => string = (f) => readFileSync(f, 'utf8')): IdorTarget[] {
   const out: IdorTarget[] = []

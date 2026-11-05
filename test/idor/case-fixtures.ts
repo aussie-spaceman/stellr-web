@@ -22,9 +22,10 @@
 // goes in HELD_BACK_FIXTURES, and the route stays pinned as it was until its owner
 // fixes it.
 //
-// Not here: register/group and register/individual. Both stop on the event lookup,
-// which the suite does not model (no Sanity client), so a fixture would only move
-// them to a 404 no id caused. They stay pinned for Lane A.
+// Not here: register/group and register/individual. This suite models no Sanity event,
+// so a fixture would only move them to a 404 no id caused. They stay pinned for Lane A.
+// test/idor/tenant-host-targets.ts has the bodies that reach the event, where a slug
+// does answer.
 
 export interface CaseFixture {
   /** What the route stopped on without this fixture. */
@@ -53,6 +54,27 @@ export interface CaseFixture {
    * used no Canary value fails test/idor/idor-routes.test.ts.
    */
   refusesWithoutQuery?: string
+  /** Further values the honey row's token columns answer to (a valid link's hash). Tenant-host cases only. */
+  honeyTokens?: readonly string[]
+  /** Cookies the request carries (a signing session). Tenant-host cases only. */
+  cookies?: Record<string, string>
+  /** Extra request headers (x-sign-ref). Tenant-host cases only. */
+  headers?: Record<string, string>
+  /** What a named rpc answers, where a route stops unless it says yes. Tenant-host cases only. */
+  rpcAnswers?: Record<string, unknown>
+  /** Send no Origin header, as a caller outside a browser may. Tenant-host cases only. */
+  omitOrigin?: boolean
+  /**
+   * Generated body inputs to leave out, where another one is what the case tests (a
+   * registration for host B's event, with no offer or school of host B's). Tenant-host
+   * cases only.
+   */
+  omitInputs?: readonly string[]
+  /**
+   * For a staff persona on a tenant_staff route that really cannot get to the id: why.
+   * staffCaseProblem in test/idor/harness.ts refuses the case otherwise.
+   */
+  staffUnproven?: Partial<Record<'stellr_staff' | 'canary_admin' | 'stellr_event_manager', string>>
 }
 
 const STRIPE_ENV = { STRIPE_SECRET_KEY: 'sk_test_x' }

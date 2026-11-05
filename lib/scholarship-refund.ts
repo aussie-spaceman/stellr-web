@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { logActivity } from '@/lib/activity-log'
 import { stripeRefundState, remainingCents } from '@/lib/refunds/stripe-state'

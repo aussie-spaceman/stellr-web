@@ -10,8 +10,12 @@ import {
   PUBLIC_DATA_GATES,
   baseKinds,
   calledFrom,
+  callsClerkSession,
   callsDelegate,
+  decisionKinds,
+  enforcedFacts,
   satisfies,
+  withImplied,
   type GuardKind,
 } from '@/lib/security/route-guards'
 import {
@@ -19,10 +23,13 @@ import {
   analyzeDefaultExport,
   analyzeNamedExport,
   analyzeRoute,
+  directRpcCalls,
+  directTableReads,
   exportedNames,
   resolveModule,
   type HandlerFacts,
 } from '@/lib/security/route-ast'
+import { TABLE_REGISTRY } from '@/lib/tenancy/registry'
 
 // S2 (multi-tenant plan): the route manifest and the AST guard check.
 //   1. Every route handler, metadata route and page under app/ is classified,
@@ -43,8 +50,8 @@ const EXPECTED_EXCEPTIONS = 18
 const EXPECTED_DATA_GATES = 1
 
 // Floors, so a broken walker or an emptied manifest cannot pass. The real
-// numbers on 4 Nov 2026: 309 route files, 5 metadata routes, 158 pages,
-// 420 route handlers.
+// numbers on 4 Nov 2026: 311 route files, 5 metadata routes, 158 pages,
+// 425 route handlers.
 const MIN_ROUTE_FILES = 300
 const MIN_METADATA_FILES = 5
 const MIN_PAGES = 150
@@ -111,6 +118,23 @@ function missingKinds(h: Checked, page: boolean): GuardKind[] {
   return missing
 }
 
+/**
+ * Functions a tenant_staff file may call directly. Empty: an rpc runs SQL this rule cannot
+ * see, so adding one here is a review of what it reads and how it is scoped.
+ */
+const TENANT_STAFF_REVIEWED_RPCS: readonly string[] = []
+
+/** Direct reads the tenant_staff rule refuses. An unknown table or schema fails closed. */
+function unscopedTableReads(file: string, code: string): string[] {
+  const tables = directTableReads(file, code).flatMap((key) => {
+    if (key === null) return ['a table named at run time']
+    const entry = TABLE_REGISTRY[key]
+    return !entry || entry.tenantColumn !== 'none' ? [key] : []
+  })
+  const rpcs = directRpcCalls(file, code).flatMap((fn) => (fn !== null && TENANT_STAFF_REVIEWED_RPCS.includes(fn) ? [] : [`rpc ${fn ?? 'named at run time'}`]))
+  return [...tables, ...rpcs]
+}
+
 const readsData = (f: HandlerFacts) => Object.entries(DATA_READERS).some(([n, from]) => calledFrom(f, n, from))
 
 describe('route manifest: 100% classification', () => {
@@ -157,10 +181,41 @@ describe('route manifest: 100% classification', () => {
       // Crawlers and unfurlers fetch metadata routes with no session.
       if (isMetadataFile(f)) expect(cls, f).toBe('public')
     }
-    // Nothing is tenant-scoped until S5, so these classes are still empty.
-    const used = new Set(Object.values(ROUTE_MANIFEST))
-    expect(used.has('platform_admin')).toBe(false)
-    expect(used.has('tenant_staff')).toBe(false)
+  })
+
+  // S5 C6: a file classed tenant_staff reaches a tenant-holding table only through
+  // loadScoped, scopedQuery or tenantDb, so a bare `.from('registrations')` cannot be
+  // the way in. Direct calls in the file; what a lib helper does is the IDOR personas' job.
+  it('a tenant_staff file queries no own, derived or via_parent table directly', () => {
+    const files = Object.entries(ROUTE_MANIFEST).filter(([, cls]) => cls === 'tenant_staff').map(([f]) => f)
+    const failures = files.flatMap((f) => unscopedTableReads(f, src(f)).map((t) => `${f}: ${t}`))
+    expect(failures, 'use loadScoped, scopedQuery or tenantDb').toEqual([])
+  })
+
+  it('the tenant_staff table rule sees a direct read, and only a tenant-holding one', () => {
+    const f = 'app/api/admin/x/route.ts'
+    expect(unscopedTableReads(f, "db.from('registrations').select('*')")).toEqual(['public.registrations'])
+    expect(unscopedTableReads(f, "const T = 'participants'; db.from(T).select('*')")).toEqual(['public.participants'])
+    expect(unscopedTableReads(f, 'db.from(tableName).select()')).toEqual(['a table named at run time'])
+    expect(unscopedTableReads(f, "db.schema('nope').from('registrations').select('*')")).toEqual(['nope.registrations'])
+    // No tenant column, a bucket, a global, and the scoped ways in.
+    expect(unscopedTableReads(f, "db.from('schools').select('*'); db.storage.from('registrations'); Array.from(x)")).toEqual([])
+    expect(unscopedTableReads(f, "await loadScoped(s, 'registrations', id, o); scopedQuery(s, 'participants', o)")).toEqual([])
+  })
+
+  it('the tenant_staff table rule resolves only a name that can hold one value', () => {
+    const f = 'app/api/admin/x/route.ts'
+    const runTime = ['a table named at run time']
+    expect(unscopedTableReads(f, "let T = 'schools'; T = 'registrations'; db.from(T).select('*')")).toEqual(runTime)
+    expect(unscopedTableReads(f, "const T = 'schools'; function g(T) { return db.from(T).select('*') }")).toEqual(runTime)
+    expect(unscopedTableReads(f, "const T = 'schools'; function g() { const T = 'registrations'; return db.from(T) }")).toEqual(runTime)
+    expect(unscopedTableReads(f, "const T = 'schools'; const { T: U, ...rest } = o; const [V] = p; db.from(T)")).toEqual([])
+  })
+
+  it('the tenant_staff table rule refuses an rpc that nobody has reviewed', () => {
+    const f = 'app/api/admin/x/route.ts'
+    expect(unscopedTableReads(f, "await db.rpc('withdraw_registration', { p_id: id })")).toEqual(['rpc withdraw_registration'])
+    expect(unscopedTableReads(f, 'await db.rpc(name, args)')).toEqual(['rpc named at run time'])
   })
 
   it('every class in use has members (counts)', () => {
@@ -250,9 +305,14 @@ describe('route manifest: shared guard helpers really guard', () => {
     const cached = memo.get(name)
     if (cached) return cached
     const d = DELEGATE_GUARDS[name]
-    const facts = analyzeNamedExport(d.file, src(d.file), name)
-    if (!facts) throw new Error(`${name} is not exported from ${d.file}`)
+    const exported = d.export ?? d.call ?? name
+    const raw = analyzeNamedExport(d.file, src(d.file), exported)
+    if (!raw) throw new Error(`${exported} is not exported from ${d.file}`)
+    // A helper that discards a lib/authz answer is no more a guard than a handler that does.
+    const facts = enforcedFacts(raw)
     const out = baseKinds(facts)
+    // lib/authz's composites decide through its pure functions, not each other.
+    if (d.file === 'lib/authz.ts') for (const k of decisionKinds(facts)) out.add(k)
     for (const other of Object.keys(DELEGATE_GUARDS)) {
       if (other === name || stack.includes(other)) continue
       // Another delegate counts when imported from its file, or called inside
@@ -262,7 +322,7 @@ describe('route manifest: shared guard helpers really guard', () => {
         for (const k of kindsOf(other, [...stack, name])) out.add(k)
       }
     }
-    if (out.has('admin')) out.add('session')
+    withImplied(out)
     memo.set(name, out)
     return out
   }
@@ -277,6 +337,269 @@ describe('route manifest: shared guard helpers really guard', () => {
       for (const k of kinds) expect(got.has(k), `${name} does not reach a ${k} check`).toBe(true)
     })
   }
+
+  // The primitives are BASE guards, so nothing above proves them. An admin kind
+  // implies a session only because each of these really reads the Clerk session.
+  const AUTHZ_FILE = 'lib/authz.ts'
+  it.each([
+    ['assertTenantRole', 'tenant'],
+    ['assertPlatformAdmin', 'platform'],
+    ['requireStellrAdmin', 'admin'],
+    ['requireTenantStaff', 'tenant'],
+    ['hasPortalAccess', 'admin'],
+    ['hasScope', 'admin'],
+    ['requireEventAccess', 'tenant'],
+  ] as const)('lib/authz %s reaches its %s decision and the Clerk session', (name, kind) => {
+    const facts = analyzeNamedExport(AUTHZ_FILE, src(AUTHZ_FILE), name)!
+    expect(decisionKinds(facts).has(kind)).toBe(true)
+    expect(callsClerkSession(facts)).toBe(true)
+  })
+
+  it('getPrincipal reads the Clerk session', () => {
+    expect(callsClerkSession(analyzeNamedExport(AUTHZ_FILE, src(AUTHZ_FILE), 'getPrincipal')!)).toBe(true)
+  })
+
+  it('a helper that stops deciding is no longer proved', () => {
+    const code = `import { decideTenantStaff } from '@/lib/authz/decide'
+      export async function requireTenantStaff() { return { ok: true } }
+      export async function other() { return decideTenantStaff() }`
+    expect(decisionKinds(analyzeNamedExport(AUTHZ_FILE, code, 'requireTenantStaff')!).size).toBe(0)
+    expect(decisionKinds(analyzeNamedExport(AUTHZ_FILE, code, 'other')!).has('tenant')).toBe(true)
+  })
+})
+
+describe('guard list: lib/authz', () => {
+  const handler = (code: string) => analyzeRoute('app/api/fixture/route.ts', code).handlers[0]
+  const meets = (cls: RouteClass, code: string) => {
+    const got = satisfies(handler(code))
+    return CLASS_REQUIREMENTS[cls].kinds.every((k) => got.has(k))
+  }
+  // Branches on the answer: a lib/authz check returns its decision, it does not throw.
+  const calling = (spec: string, name: string, call = `${name}('t', ['tenant_admin'])`) =>
+    `import { ${name} } from '${spec}'\nexport async function GET() { const d = await ${call}; if (!d) return new Response(null, { status: 403 }); return new Response() }`
+  const AUTHZ = '@/lib/authz'
+  const inGet = (imports: string, body: string) =>
+    `import { ${imports} } from '@/lib/authz'\nexport async function GET(req, { params }) { ${body}; return new Response() }`
+
+  it('a tenant_staff or platform_admin handler with only a legacy admin check fails', () => {
+    const legacy = [
+      calling('@/lib/admin-auth', 'isAdminClaims'),
+      calling('@/lib/admin-auth', 'currentUserIsAdmin'),
+      calling('@/lib/admin-auth', 'requireAdminPage'),
+      calling('@/lib/event-access', 'requireEventAccess'),
+      `import { auth } from '@clerk/nextjs/server'
+       export async function GET() {
+         const { sessionClaims } = await auth()
+         if (sessionClaims?.metadata?.role !== 'admin') return new Response(null, { status: 403 })
+         return new Response() }`,
+    ]
+    for (const code of legacy) {
+      expect(meets('stellr_only', code), code).toBe(true)
+      expect(meets('tenant_staff', code), code).toBe(false)
+      expect(meets('platform_admin', code), code).toBe(false)
+    }
+  })
+
+  it('each class accepts its own lib/authz check, and not the other', () => {
+    for (const name of ['assertTenantRole', 'requireTenantStaff', 'requireTenantAdmin']) {
+      expect(meets('tenant_staff', calling(AUTHZ, name)), name).toBe(true)
+      expect(meets('platform_admin', calling(AUTHZ, name)), name).toBe(false)
+    }
+    expect(meets('tenant_staff', calling(AUTHZ, 'requireEventAccess', "requireEventAccess('slug')"))).toBe(true)
+    expect(meets('platform_admin', calling(AUTHZ, 'assertPlatformAdmin'))).toBe(true)
+    expect(meets('tenant_staff', calling(AUTHZ, 'assertPlatformAdmin'))).toBe(false)
+  })
+
+  it('a Stellr-wide check does not pass as a tenant check', () => {
+    for (const name of ['requireStellrAdmin', 'isStellrAdmin', 'hasPortalAccess', 'hasScope', 'requireAdmin']) {
+      expect(meets('stellr_only', calling(AUTHZ, name)), name).toBe(true)
+      expect(meets('tenant_staff', calling(AUTHZ, name)), name).toBe(false)
+      expect(meets('platform_admin', calling(AUTHZ, name)), name).toBe(false)
+    }
+  })
+
+  it('a converted stellr_only handler passes on a Stellr check, and every authz guard implies a session', () => {
+    for (const name of ['assertPlatformAdmin', 'requireStellrAdmin', 'isStellrAdmin', 'hasPortalAccess', 'hasScope']) {
+      expect(meets('stellr_only', calling(AUTHZ, name)), name).toBe(true)
+    }
+    expect(meets('stellr_only', calling(AUTHZ, 'requireAdmin'))).toBe(true)
+    expect(meets('stellr_only', calling(AUTHZ, 'requireEventAccess', "requireEventAccess('slug')"))).toBe(true)
+    expect(meets('stellr_only', calling(AUTHZ, 'requireEventSection'))).toBe(true)
+    for (const name of ['assertTenantRole', 'assertPlatformAdmin', 'requireStellrAdmin', 'requireTenantStaff']) {
+      expect(satisfies(handler(calling(AUTHZ, name))).has('session'), name).toBe(true)
+    }
+  })
+
+  it('a tenant check does not meet stellr_only: holding a role in some tenant is not being a Stellr admin', () => {
+    for (const name of ['assertTenantRole', 'requireTenantStaff', 'requireTenantAdmin']) {
+      expect(meets('stellr_only', calling(AUTHZ, name)), name).toBe(false)
+      expect([...satisfies(handler(calling(AUTHZ, name)))].sort(), name).toEqual(['session', 'tenant'])
+    }
+    expect(withImplied(new Set<GuardKind>(['tenant'])).has('admin')).toBe(false)
+    expect(withImplied(new Set<GuardKind>(['platform'])).has('admin')).toBe(true)
+  })
+
+  describe('a lib/authz answer has to be used', () => {
+    it('a discarded or un-awaited answer is no guard', () => {
+      const none = [
+        inGet('assertTenantRole', "await assertTenantRole('t', ['staff'])"),
+        inGet('assertTenantRole', "assertTenantRole('t', ['staff'])"),
+        inGet('requireTenantStaff', "void requireTenantStaff('t', ['staff'])"),
+        inGet('assertPlatformAdmin', 'await assertPlatformAdmin()'),
+        inGet('requireStellrAdmin', 'const d = await requireStellrAdmin()'),
+        inGet('requireStellrAdmin', '(await requireStellrAdmin()).ok'),
+        inGet('isStellrAdmin', 'if (!isStellrAdmin()) return new Response(null, { status: 403 })'),
+        inGet('isStellrAdmin', 'const ok = isStellrAdmin(); if (!ok) return new Response(null, { status: 403 })'),
+        inGet('hasScope', "await hasScope('x')"),
+        inGet('hasPortalAccess', 'req && (await hasPortalAccess())'),
+        inGet('getPrincipal', 'await getPrincipal()'),
+        inGet('authz', "await authz.api.requireTenantStaff('t', ['staff'])"),
+        inGet('page', 'page.requireAdmin()'),
+        inGet('authz', 'authz.page.requireStellrAdmin()'),
+        `import { isStellrAdmin } from '@/lib/authz'
+         async function gate() { return isStellrAdmin() }
+         export async function GET() { await gate(); return new Response() }`,
+      ]
+      for (const code of none) expect([...satisfies(handler(code))], code).toEqual([])
+    })
+
+    it('every way of acting on the answer counts', () => {
+      const admin = [
+        inGet('requireStellrAdmin', 'const d = await requireStellrAdmin(); if (!d.ok) return new Response(null, { status: d.status })'),
+        inGet('requireStellrAdmin', 'const { ok } = await requireStellrAdmin(); if (!ok) return new Response(null, { status: 403 })'),
+        inGet('requireStellrAdmin', 'if (!(await requireStellrAdmin()).ok) return new Response(null, { status: 403 })'),
+        inGet('isStellrAdmin', 'if (!(await isStellrAdmin())) return new Response(null, { status: 403 })'),
+        inGet('isStellrAdmin', '(await isStellrAdmin()) || notFound()'),
+        inGet('isStellrAdmin', 'const out = (await isStellrAdmin()) ? a() : b(); use(out)'),
+        inGet('isStellrAdmin', 'const p = isStellrAdmin(); if (!(await p)) return new Response(null, { status: 403 })'),
+        inGet('isStellrAdmin', 'let ok = false; ok = await isStellrAdmin(); if (!ok) return new Response(null, { status: 403 })'),
+        inGet('isStellrAdmin', 'const [ok, rows] = await Promise.all([isStellrAdmin(), load()]); if (!ok) return rows'),
+        inGet('isStellrAdmin', 'const ok = await isStellrAdmin().catch(() => false); if (!ok) return new Response(null, { status: 403 })'),
+        inGet('isStellrAdmin', 'return (await isStellrAdmin()) ? 1 : 2'),
+        inGet('isStellrAdmin', 'return isStellrAdmin()'),
+        inGet('authz', 'const r = await authz.api.requireStellrAdmin(); if (!r.ok) return r.deny'),
+        inGet('page', 'await page.requireAdmin()'),
+        inGet('authz', 'await authz.page.requireStellrAdmin()'),
+        inGet('page as p', 'await p.requireStellrAdmin()'),
+        `import { isStellrAdmin } from '@/lib/authz'
+         async function gate() { return isStellrAdmin() }
+         export async function GET() { if (!(await gate())) return new Response(null, { status: 403 }); return new Response() }`,
+      ]
+      for (const code of admin) expect(satisfies(handler(code)).has('admin'), code).toBe(true)
+    })
+
+    it('leaves a legacy check as it was: that blind spot goes when the check does', () => {
+      expect([...satisfies(handler(`import { currentUserIsAdmin } from '@/lib/admin-auth'
+        export async function GET() { await currentUserIsAdmin(); return 1 }`))].sort()).toEqual(['admin', 'session'])
+    })
+  })
+
+  describe('which tenant a tenant check asks about', () => {
+    const asked = (imports: string, setup: string, tenant: string) =>
+      inGet(imports, `${setup}; const d = await assertTenantRole(${tenant}, ['tenant_admin']); if (!d.ok) return new Response(null, { status: 403 })`)
+
+    it('a tenant the request names proves nothing', () => {
+      const fromRequest = [
+        ['const b = await req.json()', 'b.tenantId'],
+        ['const body = await req.json()', 'body.tenantId'],
+        ['const { tenantId } = await req.json()', 'tenantId'],
+        ['const { tenantId } = await params', 'tenantId'],
+        ["const t = req.nextUrl.searchParams.get('tenant')", 't'],
+        ['const parsed = schema.parse(await req.json())', 'parsed.tenantId'],
+        ['const parsed = readJson(req)', 'parsed.tenantId'],
+        ["const t = (await headers()).get('x-tenant')", 't'],
+        ['', 'params.tenantId'],
+      ]
+      for (const [setup, tenant] of fromRequest) {
+        const got = satisfies(handler(asked('assertTenantRole', setup, tenant)))
+        expect(got.has('tenant'), `${setup} ${tenant}`).toBe(false)
+        expect(got.has('session'), `${setup} ${tenant}`).toBe(false)
+      }
+      const staff = inGet('requireTenantStaff', "const b = await req.json(); if (!(await requireTenantStaff(b.tenantId, ['staff'])).ok) return 1")
+      expect(satisfies(handler(staff)).has('tenant')).toBe(false)
+      const adapter = inGet('authz', "const b = await req.json(); const r = await authz.api.requireTenantStaff(b.tenantId, ['staff']); if (!r.ok) return r.deny")
+      expect(satisfies(handler(adapter)).has('tenant')).toBe(false)
+    })
+
+    it('a tenant from the server counts, even when the request picked the row', () => {
+      const fromServer = [
+        ['', 'currentTenantId()'],
+        ['', 'STELLR_TENANT_ID'],
+        ['const ctx = await scope()', 'ctx.tenantId'],
+        ['const tenant = await requestTenant(req)', 'tenant.id'],
+        ["const b = await req.json(); const { data: row } = await db.from('t').select('tenant_id').eq('id', b.id).single()", 'row.tenant_id'],
+        ['const b = await req.json(); const row = await loadEvent(b.id)', 'row.tenant_id'],
+      ]
+      for (const [setup, tenant] of fromServer) {
+        expect(satisfies(handler(asked('assertTenantRole', setup, tenant))).has('tenant'), `${setup} ${tenant}`).toBe(true)
+      }
+    })
+  })
+
+  describe('section-level event access', () => {
+    const eventCall = (arg: string) => inGet('requireEventAccess', `const a = await requireEventAccess(${arg}); if (!a.ok) return new Response(null, { status: a.status })`)
+
+    it('without an event it is an admin check, not a tenant check', () => {
+      for (const code of [eventCall(''), eventCall('undefined'), eventCall('undefined, { route: "x" }'), inGet('page', 'await page.requireEventSection()')]) {
+        expect(meets('stellr_only', code), code).toBe(true)
+        expect(meets('tenant_staff', code), code).toBe(false)
+      }
+      const onIdRoute = analyzeRoute('app/api/admin/x/[id]/route.ts', eventCall('')).handlers[0]
+      expect(satisfies(onIdRoute).has('tenant')).toBe(false)
+      expect(satisfies(handler(inGet('authz', 'const r = await authz.api.requireEventAccess(); if (!r.ok) return r.deny'))).has('tenant')).toBe(false)
+    })
+
+    it('naming the event is a tenant check, and the request may name it', () => {
+      for (const arg of ["'slug'", '(await params).slug', 'slug']) {
+        expect(meets('tenant_staff', eventCall(arg)), arg).toBe(true)
+      }
+      expect(satisfies(handler(inGet('authz', 'const r = await authz.api.requireEventAccess(slug); if (!r.ok) return r.deny'))).has('tenant')).toBe(true)
+    })
+  })
+
+  it('accepts the authz object and the page and api adapters', () => {
+    const viaObject = (call: string) =>
+      `import { authz } from '@/lib/authz'\nexport async function GET() { const d = await authz.${call}; if (!d) return new Response(null, { status: 403 }); return new Response() }`
+    expect(meets('tenant_staff', viaObject("assertTenantRole('t', ['staff'])"))).toBe(true)
+    expect(meets('platform_admin', viaObject('assertPlatformAdmin()'))).toBe(true)
+    expect(meets('tenant_staff', viaObject("api.requireTenantStaff('t', ['staff'])"))).toBe(true)
+    expect(meets('tenant_staff', viaObject('page.requireTenantAdmin()'))).toBe(true)
+    expect(meets('stellr_only', viaObject('page.requireAdmin()'))).toBe(true)
+    expect(meets('tenant_staff', viaObject('page.requireAdmin()'))).toBe(false)
+    expect(meets('stellr_only', `import { page } from '@/lib/authz'
+      export async function GET() { await page.requireStellrAdmin(); return 1 }`)).toBe(true)
+  })
+
+  it('does not trust a look-alike', () => {
+    for (const name of ['assertTenantRole', 'assertPlatformAdmin', 'requireTenantStaff', 'requireAdmin']) {
+      expect([...satisfies(handler(calling('@/lib/not-authz', name)))], name).toEqual([])
+      expect([...satisfies(handler(`function ${name}() { return true }
+        export async function GET() { ${name}(); return 1 }`))], name).toEqual([])
+    }
+    expect([...satisfies(handler(`export async function GET() {
+      const g = { assertTenantRole: async () => true }; await g.assertTenantRole(); return 1 }`))]).toEqual([])
+  })
+
+  it('a pure decision, or a helper about someone else, is not a guard', () => {
+    expect([...satisfies(handler(calling('@/lib/authz/decide', 'decideTenantRole')))]).toEqual([])
+    expect([...satisfies(handler(calling('@/lib/authz/decide', 'decideStellrAdmin')))]).toEqual([])
+    expect([...satisfies(handler(calling(AUTHZ, 'isStaffTarget')))]).toEqual([])
+    expect([...satisfies(handler(calling(AUTHZ, 'accessCoversEvent')))]).toEqual([])
+    expect([...satisfies(handler(calling(AUTHZ, 'assertWritable')))]).toEqual([])
+    expect([...satisfies(handler(calling(AUTHZ, 'getPrincipal')))]).toEqual(['session'])
+  })
+
+  it('reads a method of an exported object, and only that', () => {
+    const code = `import { auth } from '@clerk/nextjs/server'
+      export const page = { async a() { return auth() }, b: async () => 1 }
+      const hidden = { async a() { return auth() } }`
+    expect(analyzeNamedExport('lib/x.ts', code, 'page.a')!.calls.has('auth')).toBe(true)
+    expect(analyzeNamedExport('lib/x.ts', code, 'page.b')!.calls.has('auth')).toBe(false)
+    expect(analyzeNamedExport('lib/x.ts', code, 'page.missing')).toBeNull()
+    expect(analyzeNamedExport('lib/x.ts', code, 'hidden.a')).toBeNull()
+    // The object itself runs nothing, so it is never a guard.
+    expect(analyzeNamedExport('lib/x.ts', code, 'page')!.calls.has('auth')).toBe(false)
+  })
 })
 
 describe('route manifest: grandfathered exceptions', () => {

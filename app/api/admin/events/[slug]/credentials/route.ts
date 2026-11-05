@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { issueCredential, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { themeFromType } from '@/lib/campaigns'

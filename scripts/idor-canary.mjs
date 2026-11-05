@@ -33,18 +33,43 @@ const ROOT = process.cwd()
 const FIXTURES = 'test/idor/fixtures/handlers.ts'
 const FIXTURE_SUITE = 'test/idor/fixtures.test.ts'
 const ROUTE_SUITE = 'test/idor/idor-routes.test.ts'
+const HOST_SUITE = 'test/idor/tenant-host-routes.test.ts'
+
+/** Every label a tenant-host mutation must be caught under: both people, both directions. */
+const hostLabels = (name) =>
+  ['anonymous', 'participant'].flatMap((persona) =>
+    ['stellr_to_canary', 'canary_to_stellr'].map((direction) => `${name}:${persona}:${direction}`),
+  )
 
 /**
  * Each mutation deletes the lines of `file` that match `line`.
  *   fixture: the copy replaces test/idor/fixtures/handlers.ts (IDOR_FIXTURE_DIR)
  *   route:   the copy replaces one real route in the generated suite (IDOR_ROUTE_OVERRIDE)
+ * `label` is the case that must record a failing outcome; `labels`, when given, every one.
+ * `suite` runs a route mutation in the tenant-host suite instead of the generated one.
  */
 export const MUTATIONS = [
+  { name: 'staff fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, label: 'staffFiltered', line: /CANARY:staff-tenant-filter/ },
+  { name: 'staff fixture: event filter removed', kind: 'fixture', file: FIXTURES, label: 'staffFiltered', line: /CANARY:staff-event-filter/ },
+  { name: 'staff fixture: 403 against 404 for a record out of scope', kind: 'fixture', file: FIXTURES, label: 'staffUniform', line: /CANARY:staff-uniform/ },
+  { name: 'staff fixture: tenant filter removed from a list with no id', kind: 'fixture', file: FIXTURES, label: 'staffList', line: /CANARY:staff-list-tenant-filter/ },
+  { name: 'staff fixture: event filter removed from a list with no id', kind: 'fixture', file: FIXTURES, label: 'staffList', line: /CANARY:staff-list-event-filter/ },
+  { name: 'staff fixture: platform guard removed', kind: 'fixture', file: FIXTURES, label: 'platformGuarded', line: /CANARY:platform-guard/ },
+  { name: 'tenant host: host filter removed from a token lookup', kind: 'fixture', file: FIXTURES, labels: hostLabels('hostTokenScoped'), line: /CANARY:host-tenant-filter/ },
+  { name: 'tenant host: 403 against 404 for another host\'s record', kind: 'fixture', file: FIXTURES, labels: hostLabels('hostUniform'), line: /CANARY:host-uniform/ },
   { name: 'fixture: owner filter removed from the query', kind: 'fixture', file: FIXTURES, label: 'ownerFiltered', line: /CANARY:owner-filter/ },
   { name: 'fixture: owner check removed after the read', kind: 'fixture', file: FIXTURES, label: 'ownerChecked', line: /CANARY:owner-check/ },
   { name: 'fixture: admin guard removed', kind: 'fixture', file: FIXTURES, label: 'adminGuarded', line: /CANARY:admin-guard/ },
   { name: 'fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, label: 'tenantFiltered', line: /CANARY:tenant-filter/ },
   { name: 'fixture: owner filter removed from an update', kind: 'fixture', file: FIXTURES, label: 'scopedWrite', line: /CANARY:write-filter/ },
+  {
+    name: 'real tenant-host route: owner check removed from POST /api/credentials/[number]/visibility',
+    kind: 'route',
+    suite: HOST_SUITE,
+    file: 'app/api/credentials/[number]/visibility/route.ts',
+    label: 'app/api/credentials/[number]/visibility/route.ts',
+    line: /cred\.owner_member_id !== member\.id/,
+  },
   {
     name: 'real route: member filter removed from DELETE /api/members/event-participations/[id]',
     kind: 'route',
@@ -54,15 +79,32 @@ export const MUTATIONS = [
   },
 ]
 
+/**
+ * Handlers the audit gate calls audited, and that write no event: the wrapper drops what
+ * it is given, which the gate cannot see. The copy replaces a real route in the generated
+ * suite, whose audit check must fail on it. This proves the check is wired into the
+ * participant loop, whichever real routes have adopted audit.
+ */
+export const AUDIT_CANARIES = [
+  {
+    name: 'real route loop: a handler the gate calls audited writes no event',
+    file: 'app/api/members/event-participations/[id]/route.ts',
+    source: `import { withAudit } from '@/lib/audit/route'
+const dropsWhatItIsGiven = (_handler) => async () => new Response('{}')
+export const DELETE = dropsWhatItIsGiven(withAudit({ action: 'webhook.event.process', actor: { system: true }, tenant: { stellr: true } }, async () => new Response('{}')))
+`,
+  },
+]
+
 /** Outcomes that prove the suite saw the missing guard. */
-export const CAUGHT_OUTCOMES = ['leak', 'honey_write', 'oracle']
+export const CAUGHT_OUTCOMES = ['leak', 'honey_write', 'oracle', 'oracle_4xx']
 
 /**
  * Was the mutation caught for the right reason? The run failed AND the
  * mutated case (by label) recorded a failing outcome in the results file.
  * `results` is the file's text: one JSON object per line.
  */
-export function caughtFor(exitCode, results, label) {
+export function caughtFor(exitCode, results, label, outcomes = CAUGHT_OUTCOMES) {
   if (exitCode === 0) return false
   return results
     .split('\n')
@@ -74,7 +116,7 @@ export function caughtFor(exitCode, results, label) {
         return null
       }
     })
-    .some((r) => r && r.label === label && CAUGHT_OUTCOMES.includes(r.outcome))
+    .some((r) => r && r.label === label && outcomes.includes(r.outcome))
 }
 
 function vitest(file, env) {
@@ -96,7 +138,7 @@ export function mutate(src, line) {
 
 function main() {
   console.log('IDOR canary: intact run')
-  for (const suite of [FIXTURE_SUITE, ROUTE_SUITE]) {
+  for (const suite of [FIXTURE_SUITE, ROUTE_SUITE, HOST_SUITE]) {
     const r = vitest(suite, {})
     if (r.code !== 0) {
       console.error(r.out.slice(-4000))
@@ -124,8 +166,9 @@ function main() {
       const r =
         m.kind === 'fixture'
           ? vitest(FIXTURE_SUITE, { IDOR_FIXTURE_DIR: dir, IDOR_RESULTS_FILE: resultsFile })
-          : vitest(ROUTE_SUITE, { IDOR_ROUTE_OVERRIDE: `${m.file}=${copy}`, IDOR_RESULTS_FILE: resultsFile })
-      const caught = caughtFor(r.code, readFileSync(resultsFile, 'utf8'), m.label)
+          : vitest(m.suite ?? ROUTE_SUITE, { IDOR_ROUTE_OVERRIDE: `${m.file}=${copy}`, IDOR_RESULTS_FILE: resultsFile })
+      const recorded = readFileSync(resultsFile, 'utf8')
+      const caught = (m.labels ?? [m.label]).every((label) => caughtFor(r.code, recorded, label))
       if (caught) console.log(`  ✓ caught: ${m.name}`)
       else {
         survived.push(m.name)
@@ -137,11 +180,30 @@ function main() {
     }
   }
 
+  for (const c of AUDIT_CANARIES) {
+    const dir = mkdtempSync(path.join(base, 'm-'))
+    try {
+      const copy = path.join(dir, path.basename(c.file))
+      writeFileSync(copy, c.source)
+      const resultsFile = path.join(dir, 'results.jsonl')
+      writeFileSync(resultsFile, '')
+      const r = vitest(ROUTE_SUITE, { IDOR_ROUTE_OVERRIDE: `${c.file}=${copy}`, IDOR_RESULTS_FILE: resultsFile })
+      if (caughtFor(r.code, readFileSync(resultsFile, 'utf8'), c.file, ['audit_problem'])) console.log(`  ✓ caught: ${c.name}`)
+      else {
+        survived.push(c.name)
+        console.log(`  ✗ SURVIVED: ${c.name} (exit ${r.code})`)
+        console.log(r.out.slice(-3000))
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
   if (survived.length) {
     console.error(`\n${survived.length} mutation(s) survived: the IDOR suite cannot see these missing guards.`)
     process.exit(1)
   }
-  console.log(`\nAll ${MUTATIONS.length} mutations caught: the IDOR suites can fail.`)
+  console.log(`\nAll ${MUTATIONS.length + AUDIT_CANARIES.length} mutations caught: the IDOR suites can fail.`)
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main()

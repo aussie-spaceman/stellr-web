@@ -11,7 +11,9 @@
 //     file (a handler that calls `loadForAdmin()` which calls `requireAdmin()`
 //     counts as calling requireAdmin), and WHERE each callee comes from;
 //   - which calls its FIRST statement makes (crons must start with guardCron);
-//   - whether it compares a role read from the Clerk session claims to 'admin'.
+//   - whether it compares a role read from the Clerk session claims to 'admin';
+//   - for a lib/authz call, whether its answer is awaited and used, and where its
+//     first argument comes from (CallUse).
 //
 // Calls are recorded by their final name (`auth()` → auth,
 // `stripe.webhooks.constructEvent()` → constructEvent), with an ORIGIN:
@@ -58,6 +60,38 @@ export interface HandlerFacts {
   comparesRoleToAdmin: boolean
   /** Every reached `x.prop === 'literal'` comparison, as `prop=literal`. */
   compares: Set<string>
+  /** How each reached lib/authz call is used, by the name it is recorded under. */
+  uses: Map<string, CallUse[]>
+  /** The handler reaches a `.from(…)` chain that ends in a write: DB_WRITE_CALLS or a storage write. */
+  dbWrite: boolean
+  /** The function each reached `.rpc(…)` calls, or null when the name is not a literal. */
+  rpcs: Set<string | null>
+  /** The handler reaches a `fetch` whose method is not a literal GET. */
+  outboundWrite: boolean
+}
+
+/** Supabase query-builder calls that write. */
+export const DB_WRITE_CALLS = ['insert', 'update', 'upsert', 'delete'] as const
+const STORAGE_WRITE_CALLS = ['upload', 'remove', 'move'] as const
+const FROM_WRITE_CALLS: ReadonlySet<string> = new Set([...DB_WRITE_CALLS, ...STORAGE_WRITE_CALLS])
+
+/**
+ * The module whose calls carry a CallUse. Its checks return their answer rather than
+ * throw, so calling one proves nothing by itself. A legacy guard has no use recorded:
+ * those call sites are being replaced, and their guard-check results must not change.
+ */
+export const CHECKED_USE_ORIGIN = 'lib/authz'
+
+/** How the code around one lib/authz call treats it. */
+export interface CallUse {
+  /** The promise is awaited, or returned for the caller to await. */
+  awaited: boolean
+  /** The answer reaches a condition, a later read, a return or another call. */
+  consumed: boolean
+  /** What the method is called on, by its imported name: `page` in page.x() and authz.page.x(). */
+  receiver: string | null
+  /** The first argument: absent, literally undefined, read from the request, or anything else. */
+  firstArg: 'none' | 'undefined' | 'request' | 'value'
 }
 
 export interface ModuleFacts {
@@ -296,6 +330,223 @@ const EQUALITY = new Set([
   ts.SyntaxKind.ExclamationEqualsToken,
 ])
 
+// ── How a lib/authz call's answer is used (see CallUse) ───────────────────────
+
+type Use = Pick<CallUse, 'awaited' | 'consumed'>
+
+const MAX_USE_DEPTH = 8
+const ASSIGNMENTS = new Set([
+  ts.SyntaxKind.EqualsToken,
+  ts.SyntaxKind.BarBarEqualsToken,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+  ts.SyntaxKind.QuestionQuestionEqualsToken,
+])
+const SHORT_CIRCUITS = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+])
+
+const enforcing = (u: Use) => u.awaited && u.consumed
+
+/** The strongest of several uses, or nothing read at all. */
+function strongest(uses: Use[], awaited: boolean): Use {
+  return uses.find(enforcing) ?? uses.find((u) => u.awaited) ?? uses.find((u) => u.consumed) ?? { awaited, consumed: false }
+}
+
+function enclosingFunctionOrFile(n: ts.Node): ts.Node {
+  let p = n.parent
+  while (p && !isFunctionWithBody(p) && !ts.isSourceFile(p)) p = p.parent
+  return p ?? n
+}
+
+/** References that read `name` under `scope`: not its declaration, not an assignment to it. */
+function readsOf(name: string, scope: ts.Node): ts.Identifier[] {
+  const out: ts.Identifier[] = []
+  const visit = (n: ts.Node) => {
+    if (ts.isIdentifier(n) && n.text === name && !isDeclarationOrKey(n)) {
+      const p = n.parent
+      if (!(ts.isBinaryExpression(p) && p.left === n && ASSIGNMENTS.has(p.operatorToken.kind))) out.push(n)
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(scope)
+  return out
+}
+
+function boundNames(name: ts.BindingName, into: string[] = []): string[] {
+  if (ts.isIdentifier(name)) into.push(name.text)
+  else for (const el of name.elements) if (ts.isBindingElement(el)) boundNames(el.name, into)
+  return into
+}
+
+/** A value bound to these names: how the code goes on to read them. */
+function useOfNames(names: string[], at: ts.Node, awaited: boolean, depth: number): Use {
+  const scope = enclosingFunctionOrFile(at)
+  const uses = names.flatMap((n) => readsOf(n, scope)).map((r) => useOf(r, awaited, depth + 1))
+  return strongest(uses, awaited)
+}
+
+/**
+ * A value returned from a function. From a same-file helper, it is whatever the
+ * helper's callers do with it. From an export or an anonymous callback, the caller
+ * is out of sight, so it counts.
+ */
+function useOfReturned(from: ts.Node, depth: number): Use {
+  const counted = { awaited: true, consumed: true }
+  const fn = enclosingFunctionOrFile(from)
+  let name: string | null = null
+  let stmt: ts.Node = fn
+  if (ts.isFunctionDeclaration(fn) && fn.name) {
+    name = fn.name.text
+  } else {
+    let holder: ts.Node = fn.parent
+    while (holder && (ts.isParenthesizedExpression(holder) || ts.isAsExpression(holder))) holder = holder.parent
+    if (holder && ts.isVariableDeclaration(holder) && ts.isIdentifier(holder.name)) {
+      name = holder.name.text
+      stmt = holder.parent.parent
+    }
+  }
+  if (!name || hasExportModifier(stmt)) return counted
+  const refs = readsOf(name, fn.getSourceFile())
+  if (refs.length === 0) return counted
+  return strongest(
+    refs.map((r) => {
+      const p = r.parent
+      return ts.isCallExpression(p) && p.expression === r ? useOf(p, false, depth + 1) : counted
+    }),
+    true,
+  )
+}
+
+/** How the code around this expression treats its value, walking outward. */
+function useOf(node: ts.Expression, awaited: boolean, depth = 0): Use {
+  if (depth > MAX_USE_DEPTH) return { awaited, consumed: false }
+  const p = node.parent
+  const up = (next: ts.Expression, isAwaited = awaited) => useOf(next, isAwaited, depth + 1)
+
+  if (ts.isAwaitExpression(p)) return up(p, true)
+  if (
+    ts.isParenthesizedExpression(p) ||
+    ts.isAsExpression(p) ||
+    ts.isNonNullExpression(p) ||
+    ts.isSatisfiesExpression(p) ||
+    ts.isTypeAssertionExpression(p) ||
+    ts.isPrefixUnaryExpression(p)
+  ) {
+    return up(p)
+  }
+  if (ts.isVoidExpression(p) || ts.isExpressionStatement(p)) return { awaited, consumed: false }
+  if (ts.isReturnStatement(p)) return useOfReturned(p, depth)
+  if (ts.isArrowFunction(p) && p.body === node) return useOfReturned(node, depth)
+
+  // `.ok` keeps the answer alive; `.then(fn)` hands it on; `.catch()` keeps it pending.
+  if ((ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) && p.expression === node) {
+    const outer = p.parent
+    if (ts.isPropertyAccessExpression(p) && ts.isCallExpression(outer) && outer.expression === p) {
+      if (p.name.text === 'then') return { awaited: up(outer).awaited, consumed: true }
+    }
+    return ts.isCallExpression(outer) && outer.expression === p ? up(outer) : up(p)
+  }
+
+  if (ts.isConditionalExpression(p)) return p.condition === node ? { awaited, consumed: true } : up(p)
+  if (ts.isBinaryExpression(p)) {
+    const op = p.operatorToken.kind
+    if (op === ts.SyntaxKind.CommaToken) return p.left === node ? { awaited, consumed: false } : up(p)
+    if (SHORT_CIRCUITS.has(op)) return p.left === node ? { awaited, consumed: true } : up(p)
+    if (ASSIGNMENTS.has(op) && p.right === node) {
+      const target = strip(p.left)
+      return ts.isIdentifier(target) ? useOfNames([target.text], p, awaited, depth) : { awaited, consumed: true }
+    }
+    return up(p)
+  }
+  if (ts.isVariableDeclaration(p) && p.initializer === node) return useOfNames(boundNames(p.name), p, awaited, depth)
+
+  if (ts.isArrayLiteralExpression(p)) {
+    const call = p.parent
+    if (
+      ts.isCallExpression(call) &&
+      ts.isPropertyAccessExpression(call.expression) &&
+      ts.isIdentifier(call.expression.expression) &&
+      call.expression.expression.text === 'Promise'
+    ) {
+      return up(call)
+    }
+    return up(p)
+  }
+  // A condition, a throw, an argument, a property or a JSX value: the answer is used.
+  return { awaited, consumed: true }
+}
+
+/**
+ * Names that hold what the caller sent. The same list as UNTRUSTED_NAMES in
+ * scripts/s5-inventory.mjs, plus the header and cookie readers.
+ */
+const REQUEST_NAMES = new Set([
+  'body', 'json', 'params', 'searchParams', 'nextUrl', 'query', 'form', 'formData', 'payload', 'input', 'req', 'request',
+  'headers', 'cookies',
+])
+/** A call that answers from the server, even when the request picks which row. */
+const SERVER_LOOKUP = /^(load|fetch|get|find|resolve|current|request)[A-Z]/
+
+function rootOf(expr: ts.Expression): ts.Expression {
+  let e = strip(expr)
+  while (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e) || ts.isCallExpression(e)) e = strip(e.expression)
+  return e
+}
+
+function isServerLookup(call: ts.CallExpression): boolean {
+  const callee = strip(call.expression)
+  const name = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : ''
+  if (SERVER_LOOKUP.test(name)) return true
+  // db.from('t').select().eq('id', body.id): a row, whatever picked it.
+  for (let e: ts.Expression = call; ts.isCallExpression(e); ) {
+    const c = strip(e.expression)
+    if (!ts.isPropertyAccessExpression(c)) return false
+    if (c.name.text === 'from') return true
+    e = strip(c.expression)
+  }
+  return false
+}
+
+/** The expression's value comes from the request, directly or through local bindings. */
+function readsRequest(expr: ts.Node, depth = 0): boolean {
+  if (depth > 4) return false
+  let found = false
+  const visit = (n: ts.Node): void => {
+    if (found) return
+    if (ts.isCallExpression(n)) {
+      const root = rootOf(n)
+      if (!(ts.isIdentifier(root) && REQUEST_NAMES.has(root.text)) && isServerLookup(n)) return
+    }
+    if (ts.isPropertyAccessExpression(n)) {
+      if (REQUEST_NAMES.has(n.name.text)) found = true
+      else visit(n.expression)
+      return
+    }
+    if (ts.isIdentifier(n) && !isDeclarationOrKey(n)) {
+      if (REQUEST_NAMES.has(n.text)) {
+        found = true
+        return
+      }
+      const init = resolveBinding(n)
+      if (init && readsRequest(init, depth + 1)) found = true
+      return
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(expr)
+  return found
+}
+
+function firstArgOf(call: ts.CallExpression): CallUse['firstArg'] {
+  const arg = call.arguments[0]
+  if (!arg) return 'none'
+  const e = strip(arg)
+  if (ts.isIdentifier(e) && e.text === 'undefined') return 'undefined'
+  return readsRequest(e) ? 'request' : 'value'
+}
+
 function hasExportModifier(node: ts.Node): boolean {
   const mods = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined
   return !!mods?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
@@ -347,7 +598,57 @@ interface Scope {
   trusted?: Set<string>
 }
 
-function walkReachable(start: ts.Node, scope: Scope) {
+/**
+ * The handler inside `withAudit(spec, handler)`, imported from lib/audit/route: it calls
+ * the handler first and audits after, so the handler's first statement is the route's.
+ * No other wrapper is read through, because nothing says when it calls what it is given.
+ */
+function wrappedHandlerOf(node: ts.Node, scope: Scope): ts.Node | null {
+  if (!ts.isCallExpression(node)) return null
+  const callee = strip(node.expression)
+  const imp = ts.isIdentifier(callee) ? scope.imports.get(callee.text) : null
+  if (imp?.imported !== 'withAudit' || imp.module !== 'lib/audit/route') return null
+  const handler = node.arguments[1] && strip(node.arguments[1])
+  if (!handler) return null
+  return ts.isIdentifier(handler) ? (scope.locals.get(handler.text) ?? null) : handler
+}
+
+/**
+ * The receiver of a call is a `.from(…)` query builder: `db.from('t').eq(…)`, or a
+ * name bound to one (`const q = db.from('t')`). `Array.from` and the like are not.
+ */
+function isFromChain(expr: ts.Expression, depth = 0): boolean {
+  let e = strip(expr)
+  for (;;) {
+    if (ts.isCallExpression(e)) {
+      const callee = strip(e.expression)
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'from') {
+        const r = strip(callee.expression)
+        return !(ts.isIdentifier(r) && /^(Array|Buffer|Object|Set|Map|Uint8Array)$/.test(r.text))
+      }
+      e = callee
+    } else if (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) {
+      e = strip(e.expression)
+    } else if (ts.isIdentifier(e) && depth < 4) {
+      const init = resolveBinding(e)
+      return !!init && isFromChain(init, depth + 1)
+    } else {
+      return false
+    }
+  }
+}
+
+/** `fetch(url, { method })` with any method that is not a literal GET. */
+function isOutboundWrite(call: ts.CallExpression): boolean {
+  const options = call.arguments[1] && strip(call.arguments[1])
+  if (!options || !ts.isObjectLiteralExpression(options)) return false
+  const method = options.properties.find((p) => p.name && ts.isIdentifier(p.name) && p.name.text === 'method')
+  if (!method) return false
+  if (!ts.isPropertyAssignment(method) || !ts.isStringLiteralLike(method.initializer)) return true
+  return !/^(get|head)$/i.test(method.initializer.text)
+}
+
+function walkReachable(start: ts.Node, scope: Scope, enclosing?: ts.Node) {
   const { locals, imports, fileName } = scope
   const self = fileModule(fileName)
   const trusted = scope.trusted ?? new Set<string>()
@@ -355,8 +656,27 @@ function walkReachable(start: ts.Node, scope: Scope) {
   const calls = new Set<string>()
   const origins = new Map<string, Set<string>>()
   const compares = new Set<string>()
+  const uses = new Map<string, CallUse[]>()
+  const rpcs = new Set<string | null>()
+  let dbWrite = false
+  let outboundWrite = false
   let role = false
   const seen = new Set<ts.Node>()
+
+  const noteWrite = (call: ts.CallExpression) => {
+    const callee = strip(call.expression)
+    if (ts.isIdentifier(callee)) {
+      if (callee.text === 'fetch' && !imports.has('fetch') && isOutboundWrite(call)) outboundWrite = true
+      return
+    }
+    if (!ts.isPropertyAccessExpression(callee)) return
+    const name = callee.name.text
+    if (FROM_WRITE_CALLS.has(name) && isFromChain(callee.expression)) dbWrite = true
+    if (name === 'rpc') {
+      const first = call.arguments[0]
+      rpcs.add(first && ts.isStringLiteralLike(first) ? first.text : null)
+    }
+  }
 
   const isLocal = (name: string) => nested.has(name) || locals.has(name)
 
@@ -366,6 +686,10 @@ function walkReachable(start: ts.Node, scope: Scope) {
     if (depth > 6) return UNKNOWN_ORIGIN
     const e = strip(expr)
     if (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) return originOf(e.expression, depth + 1)
+    if (ts.isCallExpression(e) && e.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const spec = e.arguments[0]
+      return spec && ts.isStringLiteralLike(spec) ? resolveModule(fileName, spec.text) : UNKNOWN_ORIGIN
+    }
     if (ts.isNewExpression(e) || ts.isCallExpression(e)) return originOf(e.expression, depth + 1)
     if (ts.isIdentifier(e)) {
       const imp = imports.get(e.text)
@@ -378,33 +702,46 @@ function walkReachable(start: ts.Node, scope: Scope) {
     return UNKNOWN_ORIGIN
   }
 
-  const add = (into: Set<string>, name: string, origin: string) => {
+  const receiverOf = (e: ts.Expression): string | null => {
+    if (!ts.isPropertyAccessExpression(e) && !ts.isElementAccessExpression(e)) return null
+    const r = strip(e.expression)
+    if (ts.isIdentifier(r)) return imports.get(r.text)?.imported ?? r.text
+    return ts.isPropertyAccessExpression(r) ? r.name.text : null
+  }
+
+  const add = (into: Set<string>, name: string, origin: string, site?: { call: ts.CallExpression; callee: ts.Expression }) => {
     into.add(name)
     calls.add(name)
     let set = origins.get(name)
     if (!set) origins.set(name, (set = new Set()))
     set.add(origin)
+    if (site && origin === CHECKED_USE_ORIGIN) {
+      let list = uses.get(name)
+      if (!list) uses.set(name, (list = []))
+      list.push({ ...useOf(site.call, false), receiver: receiverOf(site.callee), firstArg: firstArgOf(site.call) })
+    }
   }
 
   // A bare identifier names either a same-file function (followed, and NOT
   // recorded: a local `function getCurrentMember() {}` must not pass for the
   // shared guard), an import (recorded under its imported name, with its
   // module), or a global. A method call is recorded with its receiver's origin.
-  const record = (expr: ts.Expression, into: Set<string>, prefix = '') => {
+  const record = (expr: ts.Expression, into: Set<string>, prefix = '', call?: ts.CallExpression) => {
     const e = ts.isParenthesizedExpression(expr) || ts.isNonNullExpression(expr) ? strip(expr) : expr
+    const site = call && { call, callee: e }
     if (ts.isIdentifier(e)) {
       const imp = imports.get(e.text)
-      if (imp) return add(into, prefix + imp.imported, imp.module)
-      if (trusted.has(e.text) && !nested.has(e.text)) return add(into, prefix + e.text, self)
+      if (imp) return add(into, prefix + imp.imported, imp.module, site)
+      if (trusted.has(e.text) && !nested.has(e.text)) return add(into, prefix + e.text, self, site)
       if (isLocal(e.text)) return
       const dyn = dynamicImportBinding(e, fileName)
-      if (dyn) return add(into, prefix + dyn.imported, dyn.module)
+      if (dyn) return add(into, prefix + dyn.imported, dyn.module, site)
       if (resolveBinding(e)) return
-      return add(into, prefix + e.text, GLOBAL_ORIGIN)
+      return add(into, prefix + e.text, GLOBAL_ORIGIN, site)
     }
-    if (ts.isPropertyAccessExpression(e)) return add(into, prefix + e.name.text, originOf(e.expression))
+    if (ts.isPropertyAccessExpression(e)) return add(into, prefix + e.name.text, originOf(e.expression), site)
     if (ts.isElementAccessExpression(e) && ts.isStringLiteralLike(e.argumentExpression)) {
-      return add(into, prefix + e.argumentExpression.text, originOf(e.expression))
+      return add(into, prefix + e.argumentExpression.text, originOf(e.expression), site)
     }
   }
 
@@ -428,7 +765,8 @@ function walkReachable(start: ts.Node, scope: Scope) {
   const visit = (n: ts.Node, isRoot = false): void => {
     if (!isRoot && isFunctionWithBody(n) && !runsInPlace(n)) return
     if (ts.isCallExpression(n)) {
-      record(n.expression, calls)
+      record(n.expression, calls, '', n)
+      noteWrite(n)
     } else if (ts.isNewExpression(n)) {
       record(n.expression, calls, 'new ')
     } else if (ts.isBinaryExpression(n) && EQUALITY.has(n.operatorToken.kind)) {
@@ -451,12 +789,13 @@ function walkReachable(start: ts.Node, scope: Scope) {
   }
 
   seen.add(start)
+  if (enclosing) nestedFunctions(enclosing, nested)
   nestedFunctions(start, nested)
   visit(start, true)
 
   // The first statement's own calls (not through helpers or nested functions).
   const firstStatementCalls = new Set<string>()
-  const first = firstStatementOf(start)
+  const first = firstStatementOf(wrappedHandlerOf(start, scope) ?? start)
   if (first) {
     const direct = (n: ts.Node) => {
       if (isFunctionWithBody(n)) return
@@ -466,17 +805,78 @@ function walkReachable(start: ts.Node, scope: Scope) {
     direct(first)
   }
 
-  return { calls, origins, compares, role, firstStatementCalls }
+  return { calls, origins, compares, role, firstStatementCalls, uses, dbWrite, rpcs, outboundWrite }
 }
 
-function facts(name: string, node: ts.Node, scope: Scope): HandlerFacts {
-  const { calls, origins, compares, role, firstStatementCalls } = walkReachable(node, scope)
-  return { name, calls, origins, firstStatementCalls, comparesRoleToAdmin: role, compares }
+function facts(name: string, node: ts.Node, scope: Scope, enclosing?: ts.Node): HandlerFacts {
+  const { calls, origins, compares, role, firstStatementCalls, uses, dbWrite, rpcs, outboundWrite } = walkReachable(node, scope, enclosing)
+  return { name, calls, origins, firstStatementCalls, comparesRoleToAdmin: role, compares, uses, dbWrite, rpcs, outboundWrite }
 }
+
+// A sweep asks about the same source many times, so keep the last parse of each file.
+const parsed = new Map<string, { src: string; sf: ts.SourceFile }>()
 
 function parse(fileName: string, src: string): ts.SourceFile {
+  const hit = parsed.get(fileName)
+  if (hit?.src === src) return hit.sf
   const kind = fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  return ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true, kind)
+  const sf = ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true, kind)
+  parsed.set(fileName, { src, sf })
+  return sf
+}
+
+/** The parsed file analyzeNodeFacts walks: its nodes are what the caller passes back. */
+export function parseSource(fileName: string, src: string): ts.SourceFile {
+  return parse(fileName, src)
+}
+
+/**
+ * Facts for one node of a parsed file: what running just that statement reaches. A
+ * function the enclosing handler declares is followed when the node refers to it.
+ */
+export function analyzeNodeFacts(fileName: string, sf: ts.SourceFile, node: ts.Node, enclosing: ts.Node): HandlerFacts {
+  return facts('node', node, scopeOf(sf, fileName), enclosing)
+}
+
+/** The initializer a name is bound to where it is read (a variable, not a parameter), or null. */
+export function bindingOf(id: ts.Identifier): ts.Expression | null {
+  return resolveBinding(id)
+}
+
+/** Every export of a module that is really another name: its module, or null for one of the file's own functions. */
+export function reExportsOf(fileName: string, src: string): { named: Map<string, { module: string | null; name: string }>; stars: string[] } {
+  const sf = parse(fileName, src)
+  const imports = importsOf(sf, fileName)
+  const named = new Map<string, { module: string | null; name: string }>()
+  const stars: string[] = []
+  for (const stmt of sf.statements) {
+    if (!ts.isExportDeclaration(stmt)) continue
+    const from = stmt.moduleSpecifier && ts.isStringLiteralLike(stmt.moduleSpecifier) ? resolveModule(fileName, stmt.moduleSpecifier.text) : null
+    if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+      for (const el of stmt.exportClause.elements) {
+        const local = (el.propertyName ?? el.name).text
+        const imp = from ? null : imports.get(local)
+        named.set(el.name.text, imp ? { module: imp.module, name: imp.imported } : { module: from, name: local })
+      }
+    } else if (from && !stmt.exportClause) {
+      stars.push(from)
+    }
+  }
+  return { named, stars }
+}
+
+/** The exported objects of a module that have a member of this name (`export const repo = { save() {} }`). */
+export function exportedObjectsWith(fileName: string, src: string, member: string): string[] {
+  const out: string[] = []
+  for (const stmt of parse(fileName, src).statements) {
+    if (!ts.isVariableStatement(stmt) || !hasExportModifier(stmt)) continue
+    for (const d of stmt.declarationList.declarations) {
+      const init = d.initializer && strip(d.initializer)
+      if (!ts.isIdentifier(d.name) || !init || !ts.isObjectLiteralExpression(init)) continue
+      if (init.properties.some((p) => p.name && ts.isIdentifier(p.name) && p.name.text === member)) out.push(d.name.text)
+    }
+  }
+  return out
 }
 
 function scopeOf(sf: ts.SourceFile, fileName: string, trusted?: Set<string>): Scope {
@@ -509,6 +909,64 @@ export function analyzeRoute(fileName: string, src: string): ModuleFacts {
     }
   }
   return { handlers }
+}
+
+/** A table this file queries directly: `schema.table`, or null when the name is not a literal. */
+export function directTableReads(fileName: string, src: string): (string | null)[] {
+  const sf = parse(fileName, src)
+  // A name resolves only when it is one `const` of a string and nothing else in the file
+  // binds it. A `let`, a parameter or a shadowing name could hold anything, so it counts
+  // as named at run time, which the rule refuses.
+  const bindings = new Map<string, number>()
+  const constants = new Map<string, string>()
+  const collect = (n: ts.Node) => {
+    if ((ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n)) && ts.isIdentifier(n.name)) {
+      bindings.set(n.name.text, (bindings.get(n.name.text) ?? 0) + 1)
+    }
+    if ((ts.isFunctionDeclaration(n) || ts.isClassDeclaration(n)) && n.name) bindings.set(n.name.text, (bindings.get(n.name.text) ?? 0) + 1)
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isStringLiteralLike(n.initializer)) {
+      if (ts.isVariableDeclarationList(n.parent) && n.parent.flags & ts.NodeFlags.Const) constants.set(n.name.text, n.initializer.text)
+    }
+    ts.forEachChild(n, collect)
+  }
+  collect(sf)
+  for (const name of [...constants.keys()]) if (bindings.get(name) !== 1) constants.delete(name)
+  const out: (string | null)[] = []
+  const literal = (e: ts.Expression | undefined) =>
+    !e ? null : ts.isStringLiteralLike(e) ? e.text : ts.isIdentifier(e) ? (constants.get(e.text) ?? null) : null
+  const visit = (n: ts.Node) => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'from') {
+      const receiver = n.expression.expression
+      // storage.from(bucket) is not a table; `Array.from` and the like are not a query.
+      const isStorage = ts.isPropertyAccessExpression(receiver) && receiver.name.text === 'storage'
+      const isGlobal = ts.isIdentifier(receiver) && /^(Array|Buffer|Object|Set|Map|Uint8Array)$/.test(receiver.text)
+      if (!isStorage && !isGlobal) {
+        const table = literal(n.arguments[0])
+        let schema = 'public'
+        if (ts.isCallExpression(receiver) && ts.isPropertyAccessExpression(receiver.expression) && receiver.expression.name.text === 'schema') {
+          schema = literal(receiver.arguments[0]) ?? 'unknown'
+        }
+        out.push(table === null ? null : `${schema}.${table}`)
+      }
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(sf)
+  return out
+}
+
+/** The function each `.rpc(...)` in this file calls, or null when the name is not a literal. */
+export function directRpcCalls(fileName: string, src: string): (string | null)[] {
+  const out: (string | null)[] = []
+  const visit = (n: ts.Node) => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'rpc') {
+      const first = n.arguments[0]
+      out.push(first && ts.isStringLiteralLike(first) ? first.text : null)
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(parse(fileName, src))
+  return out
 }
 
 /** Every exported name of a module, so a re-exported handler is never missed. */
@@ -555,10 +1013,29 @@ export function analyzeDefaultExport(fileName: string, src: string): HandlerFact
  * Facts for one named export of a library module (a shared guard helper such
  * as getOnboardedMember), so the test can prove the helper really reaches the
  * session, admin or rate-limit check it is trusted for. Null when not found.
+ * A dotted name reads a method of an exported object (`page.requireAdmin`).
  */
 export function analyzeNamedExport(fileName: string, src: string, name: string): HandlerFacts | null {
   const sf = parse(fileName, src)
   const scope = scopeOf(sf, fileName, new Set(exportedNames(fileName, src)))
+  const [objectName, methodName] = name.split('.')
+  if (methodName) {
+    for (const stmt of sf.statements) {
+      if (!ts.isVariableStatement(stmt) || !hasExportModifier(stmt)) continue
+      for (const d of stmt.declarationList.declarations) {
+        if (!ts.isIdentifier(d.name) || d.name.text !== objectName || !d.initializer) continue
+        const obj = strip(d.initializer)
+        if (!ts.isObjectLiteralExpression(obj)) return null
+        for (const p of obj.properties) {
+          if (!p.name || !ts.isIdentifier(p.name) || p.name.text !== methodName) continue
+          if (ts.isMethodDeclaration(p)) return facts(name, p, scope)
+          if (ts.isPropertyAssignment(p)) return facts(name, strip(p.initializer), scope)
+        }
+        return null
+      }
+    }
+    return null
+  }
   for (const stmt of sf.statements) {
     if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === name && hasExportModifier(stmt)) {
       return facts(name, stmt, scope)
@@ -566,6 +1043,13 @@ export function analyzeNamedExport(fileName: string, src: string, name: string):
     if (ts.isVariableStatement(stmt) && hasExportModifier(stmt)) {
       for (const d of stmt.declarationList.declarations) {
         if (ts.isIdentifier(d.name) && d.name.text === name && d.initializer) return facts(name, d.initializer, scope)
+      }
+    }
+    // `function save() {}` then `export { save }` or `export { save as store }`.
+    if (ts.isExportDeclaration(stmt) && !stmt.moduleSpecifier && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+      for (const el of stmt.exportClause.elements) {
+        const target = el.name.text === name ? scope.locals.get((el.propertyName ?? el.name).text) : undefined
+        if (target) return facts(name, target, scope)
       }
     }
   }

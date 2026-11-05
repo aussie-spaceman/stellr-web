@@ -57,7 +57,7 @@ async function loadDeps() {
     ...(await import('../lib/email')),
     ...(await import('../lib/email-layout')),
     ...(await import('../lib/waitlist-optout')),
-    ...(await import('../lib/sanity')),
+    ...(await import('../lib/events/repo')),
   }
 }
 

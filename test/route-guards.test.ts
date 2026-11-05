@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { BASE_GUARDS, DELEGATE_GUARDS } from '@/lib/security/route-guards'
 
 // readdirSync(dir, { recursive: true }) returns paths relative to `dir`; we
 // re-prefix so the matcher and the allow-list key read as repo-root paths.
@@ -26,7 +27,7 @@ function routeFiles(dir: string): string[] {
 // requireAdmin/isAdmin functions, the store/survey/scholarship gates, and the
 // inline role check. A file matching ANY of these is considered guarded.
 const ADMIN_GUARD =
-  /isAdminClaims|currentUserIsAdmin|currentUserHasScope|requireEventAccess|requireScholarshipAdmin|requireSurveyAdmin|canManageStoreCatalog|requireAdmin|isAdmin|adminName|role\s*(!==|===)\s*['"]admin['"]/
+  /isAdminClaims|currentUserIsAdmin|currentUserHasScope|requireEventAccess|requireScholarshipAdmin|requireSurveyAdmin|canManageStoreCatalog|requireAdmin|isAdmin|adminName|role\s*(!==|===)\s*['"]admin['"]|assertTenantRole|assertPlatformAdmin|requireStellrAdmin|isStellrAdmin|requireTenantStaff|requireTenantAdmin|requireEventSection|hasPortalAccess|hasScope/
 
 // Admin routes that are deliberately NOT gated by an admin session. Each entry
 // needs a WHY: a stale entry here is the one way this test can hide a regression.
@@ -38,6 +39,18 @@ const ALLOW_UNGUARDED: Record<string, string> = {
 }
 
 describe('route guards (static inventory)', () => {
+  it('the regex net knows every lib/authz guard the AST check accepts', () => {
+    const authz = [
+      ...Object.keys(BASE_GUARDS.tenant),
+      ...Object.keys(BASE_GUARDS.platform),
+      ...Object.entries(DELEGATE_GUARDS)
+        .filter(([, d]) => d.file === 'lib/authz.ts' && d.kinds.some((k) => k !== 'session'))
+        .map(([key, d]) => d.call ?? key),
+    ]
+    expect(authz.length).toBeGreaterThan(5)
+    expect(authz.filter((name) => !ADMIN_GUARD.test(name))).toEqual([])
+  })
+
   it('every /api/admin handler file checks the caller (admin session or a documented alternative)', () => {
     const files = routeFiles('app/api/admin')
     // Sanity: the sweep must actually find the routes, or the test is vacuously green.

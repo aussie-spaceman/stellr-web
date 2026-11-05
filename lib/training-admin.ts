@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getAllEvents, getAllCampaigns, getEventsBySlugs } from '@/lib/sanity'
+import { getAllEvents, getEventsBySlugs, getAllCampaigns } from '@/lib/events/repo'
 import type { ObjectType } from '@/lib/training-portal'
 import { audienceIncludes, eventVolunteers, normalizeAudience, type Audience, type RosterKind } from '@/lib/training-audience'
 export type { ObjectType }

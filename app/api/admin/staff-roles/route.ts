@@ -4,8 +4,12 @@ import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { STAFF_SCOPES } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { syncStaffGranted, syncStaffRevoked } from '@/lib/authz/role-sync'
+import { reportRoleSyncFailure, roleSyncMetadata } from '@/lib/authz/role-sync-report'
 
 // Admin CRUD for the staff-roles function-scope seam (migration 044).
+
+const ROUTE = '/api/admin/staff-roles'
 
 async function requireAdmin() {
   const { sessionClaims } = await auth()
@@ -42,6 +46,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Could not save staff role' }, { status: 500 })
   }
 
+  // S5 C9 dual-write. A failure here is reported, and never fails the grant.
+  const sync = await syncStaffGranted(db, member.id)
+  await reportRoleSyncFailure('staff_grant', sync, { method: 'POST', routePath: ROUTE })
+
   // deep review AUTH-6: staff function scopes grant admin-area access, so who
   // set them (and to what) must be recoverable. Best-effort, like the rest of
   // the audit trail — a logging failure never fails the grant.
@@ -51,7 +59,7 @@ export async function POST(req: Request) {
     category: 'account',
     action: 'staff_scopes_set',
     summary: `Staff function scopes set: ${clean.join(', ')}`,
-    metadata: { scopes: clean },
+    metadata: { scopes: clean, ...roleSyncMetadata(sync) },
   })
 
   return NextResponse.json({ ok: true, member })
@@ -70,6 +78,10 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'Could not remove staff role' }, { status: 500 })
   }
 
+  // S5 C9 dual-write. A failure here is reported, and never fails the revoke.
+  const sync = await syncStaffRevoked(db, memberId)
+  await reportRoleSyncFailure('staff_revoke', sync, { method: 'DELETE', routePath: ROUTE })
+
   // deep review AUTH-6: a revoke is as audit-worthy as a grant.
   await logActivity({
     ...(await actorFromAuth()),
@@ -77,6 +89,7 @@ export async function DELETE(req: Request) {
     category: 'account',
     action: 'staff_scopes_removed',
     summary: 'Staff function scopes removed',
+    ...(sync.ok ? {} : { metadata: roleSyncMetadata(sync) }),
   })
 
   return NextResponse.json({ ok: true })

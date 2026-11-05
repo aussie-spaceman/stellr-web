@@ -7,11 +7,12 @@
  * derivation trigger now, for RLS in S4. NOTHING on a live flow reads it, and
  * nothing on the registration path may await it: callers that sync in-line
  * are the event webhook (after its own work, through syncEventMirrorSafe, which
- * never throws), lib/events/repo.ts's background sync on a miss, and
+ * never throws), lib/events/mirror.ts's background sync on a miss, and
  * scripts/backfill-events-mirror.ts.
  *
- * Every event is Stellr's until S8 gives events an owner of their own, so the
- * tenant defaults to STELLR_TENANT_ID.
+ * Every event document is Stellr's until S8 gives events an owner of their own, so
+ * a NEW row's tenant defaults to STELLR_TENANT_ID. An existing row keeps its tenant
+ * (upsertEventRows), and the sync on a miss must name one (lib/events/mirror.ts).
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
@@ -128,10 +129,30 @@ export function toEventRow(
   }
 }
 
-/** Upsert mirror rows, matched on the Sanity _id (a renamed slug updates in place). */
+/**
+ * Upsert mirror rows, matched on the Sanity _id (a renamed slug updates in place).
+ *
+ * A sync never changes who owns an event. A row that already exists under another
+ * tenant keeps that tenant and its currency, so republishing a document cannot move
+ * an event to the default owner. If the owners cannot be read, nothing is written.
+ */
 export async function upsertEventRows(db: SupabaseClient, rows: EventRow[]): Promise<{ error: string | null }> {
   if (rows.length === 0) return { error: null }
-  const { error } = await db.from('events').upsert(rows, { onConflict: 'sanity_id' })
+  const { data, error: readError } = await db
+    .from('events')
+    .select('sanity_id, tenant_id, currency')
+    .in('sanity_id', rows.map((r) => r.sanity_id))
+  if (readError) return { error: readError.message }
+  const owners = new Map(
+    ((data ?? []) as Pick<EventRow, 'sanity_id' | 'tenant_id' | 'currency'>[]).map((o) => [o.sanity_id, o]),
+  )
+  const kept = rows.map((row) => {
+    const owner = owners.get(row.sanity_id)
+    if (!owner || owner.tenant_id === row.tenant_id) return row
+    // An Australian venue is priced in AUD whoever owns it (toEventRow).
+    return { ...row, tenant_id: owner.tenant_id, currency: row.country === 'AU' ? row.currency : owner.currency }
+  })
+  const { error } = await db.from('events').upsert(kept, { onConflict: 'sanity_id' })
   return { error: error ? error.message : null }
 }
 

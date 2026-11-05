@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { getAllEvents, getAllCampaigns, type StellarEvent } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
+import { type StellarEvent } from '@/lib/sanity'
 import { requireEventAccess } from '@/lib/event-access'
 
 export const metadata = { title: 'Admin — Events' }

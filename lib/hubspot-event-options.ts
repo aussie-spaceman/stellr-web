@@ -40,7 +40,7 @@ import {
   schoolYearFor,
   type EventLike,
 } from '@/lib/hubspot-fields'
-import { getEventsForHubspotSync } from '@/lib/sanity'
+import { getEventsForHubspotSync } from '@/lib/events/repo'
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 

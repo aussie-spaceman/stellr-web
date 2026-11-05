@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
-import { getEventBySlug, type StellarEvent } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
+import { type StellarEvent } from '@/lib/sanity'
 import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'

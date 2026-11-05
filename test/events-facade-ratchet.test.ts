@@ -11,9 +11,12 @@ import {
   nextRawEventQueries,
   rawEventQueriesDiff,
   readBaseline,
+  sanityEventQueryExports,
   sanityGetterImports,
   summarize,
 } from '../scripts/s5-inventory.mjs'
+import { laneOf } from '../scripts/codemods/events-facade'
+import { auditHandlers } from '../lib/security/audit-coverage'
 
 // S5 data access (C2): events move from Sanity to Postgres behind
 // lib/events/repo.ts (S8 needs 0 getter imports left). A new direct import of a
@@ -76,10 +79,43 @@ describe('events-facade ratchet', () => {
     expect(rawEventQueriesDiff(baseline, measured).added).toEqual([file])
   })
 
-  it('the getter list is every event getter lib/sanity.ts exports', () => {
+  it('the getter list is everything in lib/sanity.ts that queries event documents, whatever its name', () => {
     const src = readFileSync('lib/sanity.ts', 'utf8')
-    const exported = [...src.matchAll(/export (?:async )?function (get\w*Events?\w*)/g)].map((m) => m[1]).sort()
-    expect(exported).toEqual([...SANITY_EVENT_GETTERS].sort())
+    expect(sanityEventQueryExports(src)).toEqual([...SANITY_EVENT_GETTERS].sort())
+  })
+
+  it('a new event query in lib/sanity.ts under any name fails that check', () => {
+    const src = 'export async function listThings() { return client.fetch(`*[_type == "event"]{ _id }`) }\nexport async function news() { return client.fetch(`*[_type == "newsPost"]`) }\n'
+    expect(sanityEventQueryExports(src)).toEqual(['listThings'])
+  })
+
+  it('the facade fronts every getter', () => {
+    const src = readFileSync('lib/events/repo.ts', 'utf8')
+    for (const g of SANITY_EVENT_GETTERS as string[]) expect(src, g).toMatch(new RegExp(`export async function ${g}\\(`))
+  })
+
+  it('the facade imports lib/sanity and nothing else, so a plain read loads no database client', () => {
+    const src = readFileSync('lib/events/repo.ts', 'utf8')
+    const specs = [...src.matchAll(/(?:from\s+|import\(\s*)['"]([^'"]+)['"]/g)].map((m) => m[1])
+    expect(specs).toEqual(['@/lib/sanity'])
+  })
+
+  it('every file left in the baseline has a lane to move it, so the count can reach 0', () => {
+    expect(Object.keys(baseline?.files ?? {}).filter((f) => laneOf(f) === null)).toEqual([])
+  })
+
+  it.each(SANITY_EVENT_GETTERS as string[])('a GET that reads through the facade %s is not a GET that writes', (g) => {
+    const file = 'app/api/zz-synthetic/route.ts'
+    const src = `import { ${g} } from '@/lib/events/repo'\nexport async function GET() { return Response.json(await ${g}('x')) }\n`
+    const project = new Map([...collectSources(process.cwd()), [file, src]])
+    expect(auditHandlers(file, src, project)).toEqual([])
+  })
+
+  it('the gate does follow a GET into the mirrored read, so that check above has teeth', () => {
+    const file = 'app/api/zz-synthetic/route.ts'
+    const src = "import { getEventBySlugMirrored } from '@/lib/events/mirror'\nexport async function GET() { return Response.json(await getEventBySlugMirrored('x', opts)) }\n"
+    const project = new Map([...collectSources(process.cwd()), [file, src]])
+    expect(auditHandlers(file, src, project).map((h) => h.kind)).toEqual(['get_mutation'])
   })
 })
 

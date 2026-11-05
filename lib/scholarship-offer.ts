@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { stripeClient } from '@/lib/stripe'
 import { sendEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity-log'

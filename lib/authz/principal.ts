@@ -125,10 +125,8 @@ export async function loadAssignments(db: SupabaseClient, clerkUserId: string, w
  * row or a null tenant_id. That holds only while every event is Stellr's: the
  * mirror fills by sync and can miss, so once a second tenant exists a miss must
  * deny (a precondition of that tenant, see lib/authz/decide.ts). A read error
- * THROWS. lib/events/repo.ts
- * getEventTenantId is not used here because it answers Stellr on an error too:
- * a Stellr admin would then pass on another tenant's event while the read is
- * down.
+ * THROWS: answering Stellr there would pass a Stellr admin on another tenant's
+ * event while the read is down.
  */
 export async function loadEventTenantId(db: SupabaseClient, slug: string): Promise<string> {
   const { data, error } = await db.from('events').select('tenant_id').eq('slug', slug).maybeSingle()

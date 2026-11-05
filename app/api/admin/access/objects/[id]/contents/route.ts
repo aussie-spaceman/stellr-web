@@ -10,7 +10,7 @@ import {
   type AccessObjectType,
 } from '@/lib/access-objects'
 import { getSignedInMember } from '@/lib/community'
-import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 import { isAdminClaims } from '@/lib/admin-auth'
 
 // /api/admin/access/objects/[id]/contents — the Contents tab of the unified

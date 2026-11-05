@@ -782,8 +782,8 @@
       "reason": "auto: no tenant or event-scoped table, classed by its platform tables; tables: schools"
     },
     "app/api/admin/staff-roles/route.ts": {
-      "class": "stellr_only",
-      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: members, staff_roles"
+      "class": "convert",
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members, staff_roles"
     },
     "app/api/admin/store/discounts/route.ts": {
       "class": "stellr_only",
@@ -1409,10 +1409,6 @@
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: cohort_members, community_resources, community_space_sources, community_spaces"
     },
-    "lib/events/repo.ts": {
-      "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: events"
-    },
     "lib/field-crypto-shadow.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
@@ -1635,7 +1631,7 @@
     },
     "scripts/map-tenancy-roles.ts": {
       "class": "script",
-      "reason": "auto: operator script, run by hand; tables: event_manager_assignments, members, platform_admins, staff_roles, tenant_memberships"
+      "reason": "auto: operator script, run by hand; tables: platform_admins, tenant_memberships"
     },
     "scripts/pd-certificate-sample.ts": {
       "class": "script",
@@ -1656,6 +1652,10 @@
     "scripts/seed-welcome-drips.ts": {
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: email_campaigns, email_templates, membership_tiers"
+    },
+    "scripts/set-admin.ts": {
+      "class": "script",
+      "reason": "Operator script, run by hand with the secret key. S5 C9 dual-write: it writes the Stellr tenant_admin membership next to its Clerk change, and platform_admins behind the owner's flag. Both are platform tables tenantDb cannot write."
     },
     "scripts/survey-definition.ts": {
       "class": "script",

@@ -391,7 +391,9 @@ export const page = {
    * event manager: proxy.ts does, and only from the Clerk claim, so under
    * postgres a claim of 'admin' with only an event_manager row passes here and
    * reaches every page using it. Before any flip, guard each page with
-   * requireTenantAdmin or requireEventSection instead.
+   * requireStellrAdmin (a stellr_only page), requireTenantAdmin (a tenant_staff page)
+   * or requireEventSection instead. test/baselines/authz-legacy-idioms.json counts
+   * every use, so the ratchet cannot reach 0 while one is left.
    */
   async requireAdmin(opts: AuthzOptions = {}): Promise<void> {
     const session = await clerkSession()

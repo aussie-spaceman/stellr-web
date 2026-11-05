@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getEventsBySlugs, getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { getEventsBySlugs, getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 import { eventLastDay, registrationStatus, todayInAppZone } from '@/lib/utils'
 import { campaignHasEnded, campaignStatusKey } from '@/lib/campaigns'
 import {

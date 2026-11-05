@@ -58,12 +58,25 @@ export interface HoneyDbState {
   touched: boolean
   /** The differential run: no table holds the honey row. */
   honeyAbsent: boolean
+  /** Non-identity columns a case fixture sets on the honey row (test/idor/case-fixtures.ts). */
+  honeyColumns: Row
   /** Ids handed to inserted rows, per run so two runs are comparable. */
   insertSeq: number
 }
 
-export function newHoneyDbState(callerRows: Record<string, Row[]> = {}, opts: { honeyAbsent?: boolean } = {}): HoneyDbState {
-  return { writes: [], honeyReads: [], callerRows, touched: false, honeyAbsent: opts.honeyAbsent === true, insertSeq: 0 }
+export function newHoneyDbState(
+  callerRows: Record<string, Row[]> = {},
+  opts: { honeyAbsent?: boolean; honeyColumns?: Row } = {},
+): HoneyDbState {
+  return {
+    writes: [],
+    honeyReads: [],
+    callerRows,
+    touched: false,
+    honeyAbsent: opts.honeyAbsent === true,
+    honeyColumns: opts.honeyColumns ?? {},
+    insertSeq: 0,
+  }
 }
 
 // ── column classification ────────────────────────────────────────────────────
@@ -73,7 +86,7 @@ const WILDCARD = Symbol('wildcard')
 const CANARY_ID = Symbol('canary-id')
 
 const OWNER =
-  /(^|_)(member|members|user|clerk|owner|author|creator|created_by|submitted_by|uploaded_by|requested_by|recipient|signer|holder|participant|guardian|parent|student|mentor|coach|coachee|teacher|host|requester|reporter|invitee|inviter|buyer|customer|contact|person|account)(_|$)/
+  /(^|_)(member|members|user|clerk|owner|author|creator|created_by|submitted_by|uploaded_by|requested_by|flagged_by|recipient|signer|holder|participant|guardian|parent|student|mentor|coach|coachee|teacher|host|requester|reporter|invitee|inviter|buyer|customer|contact|person|account)(_|$)/
 
 /**
  * The value an IDENTITY column holds on the honey row, or WILDCARD for a
@@ -135,9 +148,13 @@ const DEFAULT_COLUMNS = [
  * relations in the select (`participants(*)`, `event:events(title)`) are filled
  * with nested honey rows: an array for a plural name, an object otherwise.
  */
-function honeyRow(cols?: string, echo: Echo = {}): Row {
+function honeyRow(cols?: string, echo: Echo = {}, columns: Row = {}): Row {
   const target: Row = {}
   for (const c of DEFAULT_COLUMNS) target[c] = honeyColumnValue(c, echo)
+  for (const [c, v] of Object.entries(columns)) {
+    // Only a column that filters treat as a wildcard: never who the row belongs to.
+    if (identityValue(c) === WILDCARD) target[c] = v
+  }
   for (const part of splitTop((cols ?? '').replace(/\s+/g, ''))) {
     const m = part.match(/^(?:(\w+):)?(\w+)(?:![\w]+)?\((.*)\)$/)
     if (!m) continue
@@ -396,7 +413,7 @@ class Query {
 
   private rows(): { row: Row; kind: Kind }[] {
     const caller = (this.db.callerRows[this.table] ?? []).map((r) => ({ row: { ...r }, kind: 'caller' as Kind }))
-    const all = this.db.honeyAbsent ? caller : [...caller, { row: honeyRow(this.cols, this.echo), kind: 'honey' as Kind }]
+    const all = this.db.honeyAbsent ? caller : [...caller, { row: honeyRow(this.cols, this.echo, this.db.honeyColumns), kind: 'honey' as Kind }]
     return all.filter(({ row, kind }) => this.preds.every((p) => p(row, kind)))
   }
 

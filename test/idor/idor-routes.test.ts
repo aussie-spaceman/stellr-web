@@ -32,18 +32,26 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { idorTargets, type IdorTarget } from '@/lib/security/idor-targets'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
+import { applyEnv, CASE_FIXTURES, fixtureFor, HELD_BACK_FIXTURES } from './case-fixtures'
 import { FAILING_OUTCOMES, installNetworkGuard, runIdorCase, targetInput, type CaseResult, type Outcome } from './harness'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.idor.invalid'
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_idorharness'
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_idorharness'
+// lib/hubspot.ts reads this when it first loads, which several routes share, so
+// it cannot be a per-route fixture. Inert without a HUBSPOT_FORM_* id.
+process.env.HUBSPOT_PORTAL_ID = 'idor-harness-portal'
+// lib/sanity.ts builds no client without a project id, so outcomes cannot depend
+// on the machine's environment. What that leaves unmodelled: a route that looks
+// an event up finds none, whatever the slug.
+delete process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 
 const SNAPSHOT_FILE = 'test/idor/idor-snapshot.json'
 const UPDATE = process.env.IDOR_UPDATE_SNAPSHOT === '1'
 const TODO = 'TODO: review'
 
 // Floor, so an emptied manifest or a broken analyser cannot pass with a small
-// count. 4 Nov 2026: 226 id-bearing route files (130 stellr_only, 64
+// count. 4 Nov 2026: 227 id-bearing route files (131 stellr_only, 64
 // participant, 30 public, 2 webhook).
 const MIN_TARGETS = 215
 
@@ -52,7 +60,15 @@ const MIN_TARGETS = 215
 // non-id body fields with plausible values to get past validation; what is
 // left is pinned in the snapshot as `unexercised` and capped here, so the
 // number can only go down. Lower it when a route starts being exercised.
-const MAX_UNEXERCISED = 16
+// test/idor/case-fixtures.ts gets the rest through. Of the 5 left, 4 are held back
+// there, because getting through shows a write carrying a Canary value, and
+// register/individual is Lane A's (it needs an event the suite does not model).
+const MAX_UNEXERCISED = 5
+
+// Cases that ended in a 5xx: the harness could not model the path, so they
+// prove nothing either. Same rule. Of the 3 left, 2 are held back in the same
+// place and register/group is Lane A's, for the same reason.
+const MAX_ERROR = 3
 
 type MethodEntry = Outcome | { outcome: Outcome; accepted: string }
 interface SnapshotTarget {
@@ -112,7 +128,9 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
   for (const t of targets) {
     it(`${t.cls} ${t.urlPattern} [${t.methods.join(',')}]`, async () => {
       ran++
-      const mod = (await (OVERRIDE?.file === t.file ? import(OVERRIDE.path) : import(`../../${t.file}`))) as Record<string, unknown>
+      // A route that reads its secret when it loads gets the fixture's env then too.
+      const restoreEnv = applyEnv(CASE_FIXTURES[t.file]?.env)
+      const mod = (await (OVERRIDE?.file === t.file ? import(OVERRIDE.path) : import(`../../${t.file}`)).finally(restoreEnv)) as Record<string, unknown>
       const results: Record<string, CaseResult> = {}
       for (const m of t.methods) results[m] = await runIdorCase(mod, targetInput(t), m, 'participant', t.file)
       observed.set(t.file, results)
@@ -120,10 +138,17 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
       if (process.env.IDOR_DEBUG && t.file.includes(process.env.IDOR_DEBUG)) {
         console.log(`${t.file}\n${Object.values(results).map(describeResult).join('\n')}`)
       }
+      checkFixtureReachedTheId(t, results)
       if (UPDATE) return
       checkTarget(t, results)
     })
   }
+
+  it('models no Sanity event: getEventBySlug answers null for any slug', async () => {
+    const { client, getEventBySlug } = await import('@/lib/sanity')
+    expect(client).toBeNull()
+    expect(await getEventBySlug('any-slug')).toBeNull()
+  })
 
   it('ran one case per id-bearing route (count gate) and the snapshot lists exactly those routes', () => {
     expect(ran).toBe(targets.length)
@@ -149,7 +174,53 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
     )
     expect(unexercised.length, unexercised.join('\n')).toBeLessThanOrEqual(MAX_UNEXERCISED)
   })
+
+  it(`no more than ${MAX_ERROR} cases end in a 5xx (the harness could not model the path)`, () => {
+    if (UPDATE) return
+    const errors = [...observed.entries()].flatMap(([file, rs]) =>
+      Object.values(rs)
+        .filter((r) => r.outcome === 'error')
+        .map((r) => `${r.method} ${file}`),
+    )
+    expect(errors.length, errors.join('\n')).toBeLessThanOrEqual(MAX_ERROR)
+  })
 })
+
+// Not accepted outcomes: the snapshot keeps these routes as `unexercised` or
+// `error`. This proves each finding is still open, so the fix cannot land without
+// its case moving to CASE_FIXTURES.
+describe('open IDOR findings: fixtures held back until the route is fixed', () => {
+  for (const [file, held] of Object.entries(HELD_BACK_FIXTURES)) {
+    it(`${held.method} ${file}`, async () => {
+      const target = targets.find((t) => t.file === file)
+      expect(target, `${file} is no longer an id-bearing route`).toBeDefined()
+      expect(CASE_FIXTURES[file], `${file} cannot be both exercised and held back`).toBeUndefined()
+      const restoreEnv = applyEnv(held.fixture.env)
+      const mod = (await import(`../../${file}`).finally(restoreEnv)) as Record<string, unknown>
+      const input = { ...targetInput(target as IdorTarget), fixture: held.fixture }
+      const r = await runIdorCase(mod, input, held.method, 'participant', `held back: ${file}`)
+      const fixedHint =
+        `${file}\n${describeResult(r)}\nthe finding is fixed, or the fixture no longer gets through: check the result above. ` +
+        'If it is fixed, move this fixture to CASE_FIXTURES, then `npm run idor:snapshot`. If not, update the fixture here.'
+      expect(r.outcome, fixedHint).toBe('honey_write')
+      expect(r.writes.map((w) => w.table), fixedHint).toEqual(expect.arrayContaining(held.writes))
+    })
+  }
+})
+
+/**
+ * A fixture exists to get the id to the code that decides. A refusal with no
+ * Canary value used stopped on something else (an event the suite does not model,
+ * say), and pinning it as `refused` would claim a check nobody saw. The few routes
+ * that do decide without a query name that decision in `refusesWithoutQuery`.
+ */
+function checkFixtureReachedTheId(t: IdorTarget, results: Record<string, CaseResult>) {
+  for (const [method, r] of Object.entries(results)) {
+    const fixture = fixtureFor(CASE_FIXTURES[t.file], method)
+    if (!fixture || r.outcome !== 'refused' || r.touched) continue
+    expect(fixture.refusesWithoutQuery, `${t.file}\n${describeResult(r)}\nthe fixture got a refusal without using the id: this case proves nothing`).toBeDefined()
+  }
+}
 
 function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
   const snap = snapshot.targets[t.file]

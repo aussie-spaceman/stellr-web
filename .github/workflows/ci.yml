@@ -285,8 +285,8 @@ jobs:
   # while the work moves into jobs that can run apart. A required check that is
   # SKIPPED counts as passed, so this must always run. It passes only for a
   # docs-only change, a tree that already passed, or both jobs succeeding. A job
-  # the one-pending rule cancelled (see e2e-tests) therefore shows red here:
-  # re-run the failed jobs.
+  # that timed out or was pushed off a full queue (see e2e-tests) therefore shows
+  # red here: re-run the failed jobs.
   e2e:
     name: e2e
     needs: [changes, verify, e2e-tests, storybook]
@@ -348,16 +348,21 @@ jobs:
     #
     # cancel-in-progress: false, so another ref's run never kills this suite
     # halfway through, with rows left mutated. The workflow-level group can
-    # still cancel it, but only for a newer push to the same PR. GitHub keeps
-    # only ONE pending job per group: if a third run queues while one runs and
-    # one waits, the waiting one is cancelled. Its e2e check then fails;
-    # re-run the failed jobs.
+    # still cancel it, but only for a newer push to the same PR.
+    #
+    # queue: max, because by default GitHub keeps only ONE pending job per group,
+    # and a third arrival cancels the waiting one with zero steps run. That hit 7
+    # of 59 jobs asking for this lock on 4-5 Nov 2026, each left red until a re-run
+    # or a new push (14 minutes to 4.5 hours). With max, up to 100 wait in roughly
+    # FIFO order. Past 100 GitHub cancels the job, and the e2e gate still reads that as
+    # red: a job that never ran can't pass. A wait doesn't use up timeout-minutes.
     #
     # Everything in this job holds up every other branch, so only what needs the
     # shared rows belongs here. Storybook and Lighthouse have their own jobs.
     concurrency:
       group: e2e-dev-supabase
       cancel-in-progress: false
+      queue: max
 
     outputs:
       ran: ${{ steps.config.outputs.ready }}

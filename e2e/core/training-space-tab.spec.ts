@@ -32,6 +32,11 @@ function devDb() {
 }
 
 test.describe('training on an event Space', () => {
+  // Every test rosters the same member on the same event container, and that row
+  // has one primary key. Run side by side, a second insert fails and one test's
+  // clean-up pulls the row out from under another.
+  test.describe.configure({ mode: 'serial' })
+
   const suffix = randomUUID().slice(0, 8)
   const spaceSlug = `e2e-space-training-${suffix}`
   const courseTitle = `E2E mentoring ${suffix}`

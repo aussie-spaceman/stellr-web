@@ -130,7 +130,7 @@ nothing about this job: read its steps and its summary.
 
 | Step | What happens |
 |---|---|
-| Start | `supabase start` with migrations and seed off. Postgres, Kong, PostgREST and Storage; everything else is excluded. |
+| Start | `supabase start` with migrations and seed off. Postgres, Kong, PostgREST, Storage and Auth; everything else is excluded. The app doesn't use Auth, but `supabase status` doesn't report the API keys without it. |
 | Point | Reads the URL and keys from `supabase status`, and stops if the URL is not on loopback. |
 | Database | `scripts/e2e-stack-db.sh`: baseline, migrations, `supabase/seed.sql`, `supabase/seed-e2e-stack.sql`. Then exposes `entitlements` on the `authenticator` role. It can't go in `config.toml`: PostgREST would report unhealthy until the schema exists, and `supabase start` would stop the stack. |
 | Wait | Reads `public.members` and `entitlements.tiers` through the gateway until PostgREST has the schema. |

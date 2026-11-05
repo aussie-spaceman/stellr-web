@@ -630,14 +630,15 @@ jobs:
       # One `supabase start`: it does nothing if the database is already up, so
       # services cannot be added after `supabase db start`. The CLI must not replay
       # the migrations or seed (see the `db` job). Left out: what the suite never
-      # reaches. Realtime has no spec; the app signs in with Clerk, not Auth.
+      # reaches. Realtime has no spec. Auth stays although the app signs in with
+      # Clerk: without it, `supabase status` doesn't report the API keys.
       - name: Start the local stack
         env:
           SUPABASE_DB_MIGRATIONS_ENABLED: 'false'
           SUPABASE_DB_SEED_ENABLED: 'false'
         run: >-
           supabase start
-          -x realtime,gotrue,studio,imgproxy,mailpit,logflare,vector,postgres-meta,supavisor,edge-runtime
+          -x realtime,studio,imgproxy,mailpit,logflare,vector,postgres-meta,supavisor,edge-runtime
 
       # NEXT_PUBLIC_* are inlined at build, so these must be set before `npm run
       # build`. A URL that is not on this machine stops the job here.

@@ -275,6 +275,7 @@ On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #54
 | A0 + | Merged. Added for the wave 1 `KNOWN DEFECT` tests | A defect fix: register routes fail closed on a failed read. Stellr sees a change only when a read has already failed |
 | A3 | Merged | Platform-owner early return. One added lookup per participant write, and a failed read fails the write |
 | A4, A5, A6 | Merged | Pure refactors, pinned by branch tests that passed on the unsplit routes first |
+| A5 + | Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link asks an email on file to sign in, and the register forms give one answer for an address on file to anyone not signed in as it |
 | A6 + | Merged. Owner decision, 5 Nov | **Not a no-op:** organisers see a Member ID linked row by name and status only, for rows linked from now on (`lib/team-linked-details.ts`) |
 | B0 + | Merged. Added for the wave 1 follow-ups | Defect fixes on community reports and reactions, cohort sign-up and library files |
 | B3 | Merged | No route imports the runner. `lastCronResult` works with or without the migration |
@@ -341,7 +342,7 @@ On top of [Owner gates](#owner-gates).
 | From | Decision |
 |---|---|
 | A3 | When a tenant tightens an event and an existing participant no longer qualifies: keep refusing the change, or apply it to new writes and report them to staff. Settle before the first tenant event |
-| A0, A4, A5 | Several decisions on how the register routes treat an existing member's record and what they answer. The slice reports hold the detail. It stays out of this file because the repo is public and the behaviour is live |
+| A0, A4, A5 | Several decisions on how the register routes treat an existing member's record and what they answer. Two were settled on 5 Nov (A5 + above). The rest stay in the slice reports, because the repo is public and the behaviour is live |
 | B0 | C4-F5, the store catalogue: give it a tenant, or accept the outcome with a written reason. And the access rule for a library file that has lost its last attachment. The slice report holds the detail |
 | B3 | `alumni-upgrades`, `campaigns`, `campaign-drip` and `campaign-events` pick people from shared `members` with no tenant limit, and no slice claims this. Once tenant registrants exist as members they could receive Stellr marketing or Alumni grants. Name a slice, or record that it is acceptable |
 | B3 | Retention for inactive tenants: `survey-retention` is assumed to keep running for them |

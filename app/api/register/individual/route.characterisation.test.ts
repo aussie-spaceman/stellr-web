@@ -370,7 +370,8 @@ describe('characterisation: POST /api/register/individual — a priced event', (
 })
 
 describe('characterisation: POST /api/register/individual — a duplicate', () => {
-  it('someone already registered is a 409 with nothing written', async () => {
+  it('someone signed in as the address, already registered, is a 409 with nothing written', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com' })
     h.resolveDuplicate.mockReturnValue({
       kind: 'already_registered',
       registration: { registrationId: 'reg-old', type: 'individual' },

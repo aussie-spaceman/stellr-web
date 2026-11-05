@@ -39,7 +39,19 @@ export async function POST(req: NextRequest) {
   // known until the token is resolved below), so this is the per-link analogue
   // of the event-slug sub-key used by the individual/group routes and also caps
   // the token-lookup read path. Limit stays tight because the quota is shared.
-  const rateLimited = rateLimitGuard(req, 'register-group-join', { limit: 3, windowMs: HOUR_MS }, token)
+  // A signed-in confirm has its own count: a member on file is asked to sign in
+  // first, and that refusal must not use up the classroom's shared allowance. A
+  // wider cap per link stops new accounts multiplying that count.
+  if (userId) {
+    const linkCapped = rateLimitGuard(req, 'register-group-join-session', { limit: 30, windowMs: HOUR_MS }, token)
+    if (linkCapped) return linkCapped
+  }
+  const rateLimited = rateLimitGuard(
+    req,
+    'register-group-join',
+    { limit: 3, windowMs: HOUR_MS },
+    userId ? `${token}:${userId}` : token,
+  )
   if (rateLimited) return rateLimited
 
   const db = supabaseServer()

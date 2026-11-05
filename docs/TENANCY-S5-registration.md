@@ -113,7 +113,7 @@ WHERE e.starts_at IS NOT NULL
 ## Rollout order
 
 1. **`dev` migration.** Applied 5 Nov 2026, and the ledger re-read. Still owed: confirm a Stellr registration on `dev` still writes.
-2. **Parity query on `dev`, then production.** Not yet meaningful on `dev`: on 5 Nov 2026 its `events` mirror had 0 rows, so the query's 0 proves nothing, and every `dev` registration passes through the no-row path above. Run `scripts/backfill-events-mirror.ts` on `dev` first, then this query. Production is still owed.
+2. **Parity query on `dev`, then production.** `dev`, 5 Nov 2026: 0 mismatches across 9 dated events, after `scripts/backfill-events-mirror.ts` filled the mirror (11 rows, all Stellr's). Production's backfill and query are still owed.
 3. **Production migration.** Through `prod-migrate`, with the owner's approval, one file, then re-read `db:status --prod`. It is a no-op for Stellr apart from the one lookup above. It must land before any code that relies on it.
 4. **A7** wires `assertEligible` into the register routes, supplies `tenant_id` on every write, Stellr's too, and refuses priced tenant events. **A8** does the same for team-leader add and edit and the roster sheet import.
 5. **The S3 enforce flip**, after A7, A8, B16 and C20 and 7 clean days, and before the first non-owner event on production. A3 relies on it.

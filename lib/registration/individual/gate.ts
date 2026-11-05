@@ -141,6 +141,15 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   })
   if (duplicateAnswer) return refuse(duplicateAnswer)
 
+  // A new registration, with an offer already on another one. An offer covers one
+  // registration, and a live token alone must not make a second one free.
+  if (scholarship?.registration_id) {
+    return refuse(NextResponse.json(
+      { error: 'This scholarship has already been used for a registration. Reply to your scholarship email and we’ll sort it out.' },
+      { status: 409 },
+    ))
+  }
+
   // Campaigns are entered as a GROUP, never by an individual student — the
   // campaign page only ever links to the group form. This route is still
   // reachable by URL, though, and an individual campaign registration would be

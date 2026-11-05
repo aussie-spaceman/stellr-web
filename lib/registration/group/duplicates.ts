@@ -10,7 +10,7 @@ import {
   ensurePayToken,
   payPageUrl,
 } from '@/lib/registration-checkout'
-import { sendPayLinkEmail } from '@/lib/registration-pay-link'
+import { registrationOnFileAnswer, resendPayLinkAfterResponse } from '../duplicate-answer'
 import { enteredPeople, SITE_URL, type GroupBody, type TeacherPayload } from './parse'
 import type { LinkedSlotNames } from './roster'
 
@@ -36,15 +36,22 @@ export async function answerDuplicates(
   const existing = await findExistingRegistrations(db, [teacher.email, ...entered.map((p) => p.email)], event_slug)
 
   // Organiser: an unpaid card registration of their own is resumed, not
-  // refused — them (session matches) straight to a fresh checkout, anyone
-  // else gets the pay link by email.
-  const dup = resolveDuplicate(existing.get(teacher.email), {
-    sessionMatches: !!sessionEmail && normalizeEmail(sessionEmail) === teacher.email,
-  })
+  // refused — them (session matches) straight to a fresh checkout and an answer
+  // specific to their registration. Anyone else gets one answer whatever its
+  // state (lib/registration/duplicate-answer), with any pay link sent by email.
+  const sessionMatches = !!sessionEmail && normalizeEmail(sessionEmail) === teacher.email
+  const dup = resolveDuplicate(existing.get(teacher.email), { sessionMatches })
   if (dup.kind !== 'none') {
     const existingRegId = dup.registration.registrationId
+    if (!sessionMatches) {
+      // An unfinished INDIVIDUAL registration isn't resumed from the group form.
+      if (dup.kind === 'email_link' && dup.registration.type === 'group') {
+        resendPayLinkAfterResponse(db, existingRegId, 'register/group pay-link resend')
+      }
+      return registrationOnFileAnswer('Teams')
+    }
     // An unfinished INDIVIDUAL registration isn't resumed from the group form.
-    if ((dup.kind === 'resume' || dup.kind === 'email_link') && dup.registration.type !== 'group') {
+    if (dup.kind === 'resume' && dup.registration.type !== 'group') {
       return NextResponse.json(
         { code: 'already_registered', error: `${teacher.email} already has an individual registration for this event. Complete its payment from the link in your email, or under Account → Billing.` },
         { status: 409 },
@@ -65,23 +72,6 @@ export async function answerDuplicates(
           if (!(e instanceof RegistrationCheckoutError)) console.error('[register/group] resume checkout failed:', e)
         }
       }
-    }
-    if (dup.kind === 'email_link') {
-      const sent = await sendPayLinkEmail(db, existingRegId).catch((e) => {
-        console.error('[register/group] pay-link resend failed (non-fatal):', e)
-        return { sent: false, reason: undefined, recipients: [] as string[] }
-      })
-      const where = sent.recipients.length > 0 ? sent.recipients.map(maskEmail) : [maskEmail(teacher.email)]
-      // Inside the resend cooldown nothing went out just now — say so, rather
-      // than promising an email that isn't coming.
-      const verb = sent.reason === 'cooldown' ? 'We recently emailed' : 'We’ve emailed'
-      return NextResponse.json(
-        {
-          code: 'unfinished_registration',
-          error: `This email already has an unfinished group registration for this event. ${verb} a link to complete payment to ${where.join(' and ')} — check spam if it hasn’t arrived in a few minutes.`,
-        },
-        { status: 409 },
-      )
     }
     if (dup.kind === 'invoice_pending') {
       return NextResponse.json(

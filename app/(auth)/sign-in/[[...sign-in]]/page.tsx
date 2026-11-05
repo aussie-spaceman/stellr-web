@@ -27,6 +27,9 @@ export default async function SignInPage({
     <div className="flex min-h-[100svh] items-center justify-center bg-surface px-4 py-12">
       <SignIn
         forceRedirectUrl={next ?? undefined}
+        // A new login made from this card (a social button with no account yet)
+        // goes where the sign-up page sends one, or it loses the way back.
+        signUpForceRedirectUrl={next ? `/account/onboarding?next=${encodeURIComponent(next)}` : undefined}
         signUpUrl={authPath(next, 'sign-up')}
         appearance={
           SIGNUPS_OPEN

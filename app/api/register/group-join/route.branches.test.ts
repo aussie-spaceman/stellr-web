@@ -399,16 +399,126 @@ describe('branches: POST /api/register/group-join — a brand-new participant', 
     expect(eqFilter(loginLink, 'id', 'm-1')).toBe(true)
   })
 
-  it('someone already on file is provisioned as not new', async () => {
+  describe.each([
+    ['their email', 'email', 'kid@example.com', {}],
+    ['their school email', 'school_email', 'kid@example.com', {}],
+    ['the school address submitted beside a new email', 'email', 'old@school.example.com', { school_email: 'old@school.example.com' }],
+    ['a school address another member holds', 'school_email', 'old@school.example.com', { school_email: 'old@school.example.com' }],
+  ])('someone already on file, found by %s', (_l, column, value, extra) => {
+    beforeEach(() => {
+      more = (c) =>
+        c.table === 'members' && c.op === 'select' && eqFilter(c, column, value)
+          ? { data: { id: 'm-prior' }, error: null }
+          : undefined
+    })
+
+    it('is asked to sign in, and nothing happens in that member’s name', async () => {
+      expect(await settle(await post({ ...DETAILS, ...extra }))).toEqual({
+        status: 409,
+        body: {
+          code: 'sign_in_required',
+          school_address_only: column === 'school_email',
+          error: 'This email is already on file with Stellr. Sign in with the address you first used with us and you’ll come back here to join. If you can’t, or a parent or guardian is helping you, ask your group organiser to add you.',
+        },
+      })
+      expect(h.upsertMember).not.toHaveBeenCalled()
+      expect(h.provision).not.toHaveBeenCalled()
+      expect(h.linkSchool).not.toHaveBeenCalled()
+      expect(h.participation).not.toHaveBeenCalled()
+      expect(h.syncRoster).not.toHaveBeenCalled()
+      expect(h.reconcile).not.toHaveBeenCalled()
+      expect(h.dispatch).not.toHaveBeenCalled()
+      expect(h.sendEmail).not.toHaveBeenCalled()
+      expect(h.payments).not.toHaveBeenCalled()
+      expect(rec.calls.filter((c) => c.op !== 'select')).toEqual([])
+      expect(callsTo('participants')).toEqual([])
+    })
+  })
+
+  it('the failed fourth read is the retryable 503, with nothing written', async () => {
     more = (c) =>
-      c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', 'kid@example.com')
-        ? { data: { id: 'm-prior' }, error: null }
+      c.table === 'members' && c.op === 'select' && eqFilter(c, 'school_email', 'old@school.example.com')
+        ? { data: null, error: { message: 'down' } }
         : undefined
-    h.provision.mockResolvedValue({ clerkUserId: 'user_old', signInToken: null })
-    const res = await settle(await post(DETAILS))
-    expect(res.body).toMatchObject({ signInToken: null })
-    expect(h.provision.mock.calls[0][3]).toMatchObject({ memberIsNew: false })
-    expect(rec.payloads('update', 'members')).toEqual([])
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await settle(await post({ ...DETAILS, school_email: 'old@school.example.com' }))).toEqual({
+      status: 503, body: { error: UNAVAILABLE },
+    })
+    expect(h.upsertMember).not.toHaveBeenCalled()
+    errors.mockRestore()
+  })
+
+  it('the login is linked only to a row that has none', async () => {
+    await post(DETAILS)
+    const loginLink = callsTo('members').find((c) => c.op === 'update')!
+    expect(loginLink.filters).toContainEqual(['is', 'clerk_user_id', null])
+  })
+
+  it('a signed-in confirm has its own rate limit count, so the classroom’s does not use it up', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    profile = PROFILE
+    await post()
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], c[2].limit, c[3]])).toEqual([
+      ['register-group-join-session', 30, 'tok'],
+      ['register-group-join', 3, 'tok:user_1'],
+    ])
+  })
+
+  it('new accounts cannot multiply that count: the wider cap per link answers first', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    profile = PROFILE
+    h.rateLimit.mockReturnValueOnce(new Response(null, { status: 429 }))
+    expect((await post()).status).toBe(429)
+    expect(h.rateLimit).toHaveBeenCalledTimes(1)
+    expect(callsTo('group_join_tokens')).toEqual([])
+  })
+
+  it('signed out, the count is per link, with no second guard', async () => {
+    await post(DETAILS)
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], c[3]])).toEqual([['register-group-join', 'tok']])
+  })
+
+  it('a member already on the roster under their school address is told so, with no second row', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    profile = PROFILE
+    more = (c) =>
+      c.table === 'participants' && c.op === 'select' && eqFilter(c, 'email', PROFILE.school_email)
+        ? { data: { id: 'p-school-address' }, error: null }
+        : undefined
+    expect(await settle(await post())).toEqual({ status: 409, body: { error: ALREADY_JOINED } })
+    expect(rec.payloads('insert', 'participants')).toEqual([])
+    expect(h.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('a roster row holding this member’s id under someone else’s address does not stop them joining', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    profile = PROFILE
+    more = (c) =>
+      c.table === 'participants' && c.op === 'select' && eqFilter(c, 'member_id', PROFILE.id)
+        ? { data: { id: 'p-other-person' }, error: null }
+        : undefined
+    expect((await post()).status).toBe(201)
+  })
+
+  it('a failed read of the roster by school address is the retryable 503', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    profile = PROFILE
+    more = (c) =>
+      c.table === 'participants' && c.op === 'select' && eqFilter(c, 'email', PROFILE.school_email)
+        ? { data: null, error: { message: 'down' } }
+        : undefined
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await settle(await post())).toEqual({ status: 503, body: { error: UNAVAILABLE } })
+    expect(rec.payloads('insert', 'participants')).toEqual([])
+    errors.mockRestore()
+  })
+
+  it('signed in, the same person joins through their own profile, with the consent check', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    profile = PROFILE
+    expect((await post()).status).toBe(201)
+    expect(h.consentBlock).toHaveBeenCalledTimes(1)
+    expect(h.upsertMember).not.toHaveBeenCalled()
   })
 
   it('a Clerk failure still joins, with no token and no link', async () => {

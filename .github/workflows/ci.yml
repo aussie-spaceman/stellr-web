@@ -776,7 +776,7 @@ jobs:
     name: e2e-local
     runs-on: ubuntu-latest
     needs: [verify, changes]
-    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
     continue-on-error: true
     # 5 more than `e2e`, for the stack, so a slow runner reads as a result here.
     timeout-minutes: 25
@@ -791,11 +791,14 @@ jobs:
       NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /account
       NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: /account/onboarding
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
+      # verify's build has already type-checked this code. See next.config.mjs.
+      SKIP_BUILD_TYPECHECK: '1'
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
       CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
       E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
       E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_EVENT_MANAGER_PASSWORD: ${{ secrets.E2E_EVENT_MANAGER_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v7
@@ -876,28 +879,21 @@ jobs:
           echo "::add-mask::$secret"
           echo "ESIGN_TOKEN_SECRET=$secret" >> "$GITHUB_ENV"
 
-      - id: pw-version
-        run: |
-          echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v6
-        id: pw-cache
+      - uses: ./.github/actions/playwright-browsers
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
-
-      - if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium webkit
-
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium webkit
+          browsers: chromium webkit
 
       - run: npm run build
 
       - run: npx playwright test
         env:
           CI: 'true'
+
+      # Nothing from this job is uploaded, so this is tidiness rather than the
+      # exposure fix it is in e2e-tests: no reason to leave 7-day sessions behind.
+      - if: always()
+        name: End this run's sessions
+        run: npx tsx scripts/revoke-e2e-sessions.ts
 
       - if: always()
         name: Summarise the run

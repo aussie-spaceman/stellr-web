@@ -116,6 +116,15 @@ async function linkClerkUsers() {
     if (error) throw new Error(`Linking ${role}: ${error.message}`)
     if (count !== 1) throw new Error(`Linking ${role}: expected one member row, updated ${count}.`)
     console.log(`Clerk: ${role} linked.`)
+
+    // Keyed on the Clerk id, which is why supabase/seed.sql leaves it commented out.
+    if (role === 'event_manager') {
+      const { error: assignError } = await db
+        .from('event_manager_assignments')
+        .insert({ clerk_user_id: user.id, event_slug: 'seed-regional-challenge' })
+      if (assignError) throw new Error(`Assigning ${role}: ${assignError.message}`)
+      console.log(`Clerk: ${role} assigned to its one event.`)
+    }
   }
 }
 

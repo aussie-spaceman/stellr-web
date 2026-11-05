@@ -63,6 +63,26 @@ test.describe('course builder', () => {
     await lesson('Three', sectionB, 0)
     await page.goto(`/admin/academy/training?tab=builder&course=${moduleId}`)
     await expect(page.getByRole('button', { name: /^One/ })).toBeVisible()
+    // Server-rendered rows are visible before React attaches their drag handlers,
+    // and a drag started in that gap does nothing.
+    await expect
+      .poll(() => page.locator('[data-lesson-row]').first().evaluate((el) => Object.keys(el).some((k) => k.startsWith('__reactProps'))))
+      .toBe(true)
+    // The admin header grows a few pixels once it has finished loading, moving the
+    // whole page. A pointer aimed before that lands somewhere else, so wait until
+    // the rows have stopped moving.
+    let last = -1
+    await expect
+      .poll(
+        async () => {
+          const y = (await page.locator('[data-lesson-row]').first().boundingBox())!.y
+          const still = y === last
+          last = y
+          return still
+        },
+        { intervals: [750], timeout: 30_000 },
+      )
+      .toBe(true)
   })
 
   test.afterEach(async () => {
@@ -93,6 +113,23 @@ test.describe('course builder', () => {
     await expect.poll(placement).toEqual({ a: ['Two'], b: ['One', 'Three'] })
     await page.reload()
     await expect(row(page, 'One')).toBeVisible()
+  })
+
+  test('the drop line moves nothing, so a drop at a row\'s top edge stays there', async ({ page }) => {
+    const target = row(page, 'Three')
+    await row(page, 'One').hover() // Scrolls the list into view, so measure after it.
+    const before = (await target.boundingBox())!
+    await page.mouse.down()
+    await page.mouse.move(before.x + 40, before.y + 2, { steps: 5 })
+    await page.mouse.move(before.x + 42, before.y + 2, { steps: 3 })
+    expect((await target.boundingBox())!.y).toBe(before.y)
+    await page.mouse.up()
+    await expect.poll(placement).toEqual({ a: ['Two'], b: ['One', 'Three'] })
+  })
+
+  test('a drop on a section header lands at the top of that section', async ({ page }) => {
+    await row(page, 'One').dragTo(page.getByRole('button', { name: 'Beta', exact: true }))
+    await expect.poll(placement).toEqual({ a: ['Two'], b: ['One', 'Three'] })
   })
 
   test('moves a lesson across sections with the arrow buttons alone', async ({ page }) => {

@@ -4,7 +4,7 @@ Stage 5 of the multi-tenancy plan converts the app to tenancy and moves authoris
 
 It merges the six S5 area analyses with the review that followed them, at `dev` `c1e41eb8` (4 Nov 2026). Where this file disagrees with the plan or the scoping output, this file wins. Where it disagrees with a committed baseline (`test/baselines/**`), the baseline wins. Where it departs from the review, it says so and why.
 
-Sibling records: `docs/TENANCY-S3.md`, `docs/TENANCY-S4.md`, `docs/S4-SPIKE.md`. Later Lane D PRs add the routing, authz, data, registration and cron records (D2 to D6).
+Sibling records: `docs/TENANCY-S3.md`, `docs/TENANCY-S4.md`, `docs/S4-SPIKE.md`, `docs/TENANCY-S5-routing.md` (D2), `docs/AUTHZ.md` (D3), `docs/TENANCY-S5-registration.md` (D5), `docs/TENANCY-S5-flow-checklist.md` (D7). Later Lane D PRs add the data and cron records (D4, D6). What wave 2 built, and what it corrected here, is under [Wave 2 status](#wave-2-status).
 
 ## What may merge when
 
@@ -112,7 +112,7 @@ Migrations S5 expects, with no version assigned until created:
 
 | PR | Name | What it does |
 |---|---|---|
-| A3 | `participants_eligibility` | One function and two triggers. The trigger is named `zzz_participants_assert_eligible`, so it sorts after any `zz_tenancy_derive_tenant_id` trigger. Plus the events-row re-check (see A3 below). |
+| A3 | `participants_eligibility` | Three triggers and the check they share: `zzz_participants_assert_eligible`, which sorts after any `zz_tenancy_derive_tenant_id` trigger, `zzz_registrations_assert_eligible`, and the events-row re-check `zz_events_assert_participants_eligible` (see A3 below). |
 | B3 | `cron_runs_tenant` | `cron_runs` gains nullable `tenant_id` and `parent_id`, plus a partial index. |
 | B4 | `rate_limit` | UNLOGGED table and 2 functions, EXECUTE for `service_role` only. |
 | B9 | `community_stellr_only_check` | CHECK (`tenant_id IS NULL OR` Stellr), NOT VALID then VALIDATE, on 4 tables: `community_spaces`, `community_resources`, `mentoring_cohorts`, `training_modules`. |
@@ -264,7 +264,98 @@ B5d is added by this file: the review listed the gap but no fix. It has hunks in
 | D6 | Crons, limiter and SMMA record; WAF runbook; SMMA memo | B3, B4, B8 | later |
 | D7 + | 30-day Stellr flow checklist | | later |
 
-**D7** lists each flow, its evidence source and a sign-off row: individual registration; group by invoice and by card; group-join; signing; survey; the check-in desk and QR; credentials; refunds; scholarship; the admin event screens; and each of the 22 crons. The sign-off itself is the owner's, at M1.
+**D7** lists each flow, its evidence source and a sign-off row: individual registration; group by invoice and by card; group-join; signing; survey; the check-in desk and QR; credentials; refunds; scholarship; the admin event screens; and each of the 22 crons. The sign-off itself is the owner's, at M1. The list is `docs/TENANCY-S5-flow-checklist.md`.
+
+## Wave 2 status
+
+On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #540, Lane B #534, Lane C #535. Nothing here is on production. Every PR not listed is still to build.
+
+| PR | State | Flag, or why it is a no-op for Stellr |
+|---|---|---|
+| A0 + | Merged. Added for the wave 1 `KNOWN DEFECT` tests | A defect fix: register routes fail closed on a failed read. Stellr sees a change only when a read has already failed |
+| A3 | Merged | Platform-owner early return. One added lookup per participant write, and a failed read fails the write |
+| A4, A5, A6 | Merged | Pure refactors, pinned by branch tests that passed on the unsplit routes first |
+| A6 + | Merged. Owner decision, 5 Nov | **Not a no-op:** organisers see a Member ID linked row by name and status only, for rows linked from now on (`lib/team-linked-details.ts`) |
+| B0 + | Merged. Added for the wave 1 follow-ups | Defect fixes on community reports and reactions, cohort sign-up and library files |
+| B3 | Merged | No route imports the runner. `lastCronResult` works with or without the migration |
+| B4 | Merged | `RATE_LIMIT_STORE=memory`. `proxy.ts` keeps only the sync module |
+| B5 | Merged | `TENANT_ROUTING_ENABLED`. **One exception:** the host-keyed matcher entry, below |
+| B7 | Merged | Only stops trackers on hosts that are not Stellr's |
+| C5a, C6 | Merged | Tests, static checks and CI only |
+| C7 | Merged | `PLATFORM_AUDIT_ENABLED`. No route imports it yet |
+| C8 | Merged | The facade returns `lib/sanity`'s result by reference |
+| C9 | Merged | Under `AUTHZ_SOURCE=clerk` nothing reads the rows it writes. A failed write changes no response |
+| D2, D3, D5, D7 | This docs PR | Docs |
+
+**Migrations, stamped.** All five are on the `dev` database, with the ledger re-read after applying. None is on production: each needs the owner's approval, and must land before the code that needs it (see [Migrations](#migrations)).
+
+| PR | File |
+|---|---|
+| B3 | `20261105005751_cron_runs_tenant.sql` |
+| A3 | `20261105041211_participants_eligibility.sql` |
+| B4 | `20261105042629_rate_limit.sql` |
+| C7 | `20261105052154_platform_audit_webhook_actor.sql` |
+| A6 + | `20261105131500_participants_details_from_member.sql`. `GET /api/members/teams` names this column, so it must reach production before Lane A's code |
+
+**Proven on `dev`.** pgTAP passed on all five in CI's `db` job, and B4's race test passed. B5's host-keyed matcher entry passed its live check on the `dev` alias (`docs/TENANCY-S5-routing.md`).
+
+**Not yet proven.**
+
+- The real-registration witness for A4 to A6 (see [Owner gates](#owner-gates)) is still owed.
+- The team page's linked-row view has unit tests only. It has not been opened in a browser.
+
+### What wave 2 corrected
+
+Where these touch a number earlier in this file, the generated baseline wins, as the header says.
+
+| This file said | Now | Source |
+|---|---|---|
+| Authz legacy idioms: not fixed by hand | **222 files, 328 sites** at C5a | `test/baselines/authz-legacy-idioms.json` |
+| Mutating handlers 266, unaudited 264 | **269 and 268**, plus 22 crons. **15 GET handlers write**, which C2 could not see: all 15 unaudited | `test/baselines/unaudited-mutations.json` |
+| Service-role files 417 | **422**, with 417 still carrying a provisional reason | `test/baselines/service-role-files.json`, `service-role-seed.json` |
+| Sanity event-getter importers 73 | **44**, after C8's codemod on Lane C files | `test/baselines/sanity-event-getters.json` |
+| Route manifest 473 | **475**: B5 adds 2 `public` pages for the tenant tree | `lib/security/route-manifest.ts` |
+| IDOR targets 227, 131 `stellr_only` | **228, 132** | `docs/SECURITY-route-manifest.md` |
+| Disposition register 51 / 9 / 55 / 16 | **52 / 9 / 55 / 16**, 132 routes, still proposed for the owner | `lib/security/stellr-only-dispositions.ts` |
+| `MAX_UNEXERCISED` 16 | **5**, with `MAX_ERROR` **3**. B0 tried 3 and 2, and its review put them back | `test/idor/idor-routes.test.ts` |
+| Shadow reads are sampled and limited to admin (Risks) | **`lib/authz.ts` has no sampling.** Measure Active CPU at the flip, and decide on sampling before a call site that serves ordinary members moves on | `docs/AUTHZ.md` |
+| A3: one function, two triggers | Three triggers. The events re-check also covers `time_zone` and `slug`, and refuses a tenant event's handover to Stellr with tenant registrations on it | `docs/TENANCY-S5-registration.md` |
+
+New numbers with no earlier row:
+
+- **C6's tenant-host cap:** 26 routes, 120 cases, 94 failing, 18 unproven. These are caps that only fall, to 0 failing by the S5 gate (`test/baselines/tenant-host-idor.json`). The accepted register is empty.
+- **Cron classes:** 22 classified in `lib/cron-scope.ts`. `test/cron-scope.test.ts` keeps it the same set as `app/api/cron` and `vercel.json`.
+
+Decisions a slice made, for the record:
+
+- **B5, `/` on a tenant host** serves the tree's neutral page, not a 404. It stays off the allow-list.
+- **B5, the matcher.** The host-keyed entry goes further than the B5 amendment, which asked only for the `/_t` entry. It is the one change here a flag cannot gate.
+- **A6, linked rows.** Only rows linked by Member ID from now on are limited. Rows already on a roster stay visible, because nothing recorded how they were filled in. The join-link and sheet paths never set `details_from_member`, because the person or the organiser typed those details.
+- **B3, cron fairness.** The code default is `stellr_first` until the owner decides. `rotate` stays available.
+- **C6.** The old "`tenant_staff` and `platform_admin` are empty" assertions are gone. A static rule stops a `tenant_staff` file calling `.from()` directly on a table with a tenant column.
+
+### Owner decisions wave 2 raised
+
+On top of [Owner gates](#owner-gates).
+
+| From | Decision |
+|---|---|
+| A3 | When a tenant tightens an event and an existing participant no longer qualifies: keep refusing the change, or apply it to new writes and report them to staff. Settle before the first tenant event |
+| A0, A4, A5 | Several decisions on how the register routes treat an existing member's record and what they answer. The slice reports hold the detail. It stays out of this file because the repo is public and the behaviour is live |
+| B0 | C4-F5, the store catalogue: give it a tenant, or accept the outcome with a written reason. And the access rule for a library file that has lost its last attachment. The slice report holds the detail |
+| B3 | `alumni-upgrades`, `campaigns`, `campaign-drip` and `campaign-events` pick people from shared `members` with no tenant limit, and no slice claims this. Once tenant registrants exist as members they could receive Stellr marketing or Alumni grants. Name a slice, or record that it is acceptable |
+| B3 | Retention for inactive tenants: `survey-retention` is assumed to keep running for them |
+| B4 | Whether the nightly backup holds the hashed limiter counters: exclude `rate_limit_hits` from `ops/backups/backup.sh`, or keep them and say so in `docs/RUNBOOK-backups.md` |
+| B5 | Before any promotion carrying B5: accept the host-keyed matcher entry. Its live check passed on the `dev` alias on 5 Nov |
+| B5 | Add to `Real tenant hosts`: `TENANT_ROUTING_ENABLED` stays off for any deployment with a zone attached until B5c and B10(d) pass, and A7, C6 and B10(c) pass |
+| C5a | Turn on the required code-owner ruleset. `.github/CODEOWNERS` only requests review until then. And confirm a PR label is enough to raise a ratchet |
+| C6 | Whether per-route lists of differing refusals stay in the public repo, or become totals and a hash of the list. A CI artifact is not an option, because artifacts on a public repo are public. And which capability-token outcomes to accept before the S5 gate |
+| C9 | Run `--check` on `dev`, then production, before shadow, and decide what to do with any stale rows. Confirm a Clerk revoke through `set-admin` should go ahead when the Postgres write is refused |
+
+### Docs still owed
+
+- **D4:** `docs/SECURITY-route-manifest.md` still says `platform_admin` and `tenant_staff` need "an admin check" and that a test asserts they are empty. C5a and C6 changed both. D4's data and audit runbook is also still to write, and `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `PLATFORM_AUDIT_ENABLED` point to it from `docs/ENV-MATRIX.md`.
+- **D6:** the crons, limiter and SMMA record, and the WAF runbook.
 
 ## PR amendments
 
@@ -339,9 +430,9 @@ S5 finishes when all of these hold. Each names its proof.
 
 | Gate | Proof |
 |---|---|
-| Cross-tenant ratchet at 0 | C6: 0 leak, honey_write or 4xx-oracle outcomes for the tenant personas on every `tenant_staff` and `platform_admin` route. `MAX_TENANT_DESTINED_STELLR_ONLY` falls from 51 to 0 through C16 to C19. `MAX_UNEXERCISED` falls from 16 towards 0. `idor:canary` proves the personas can fail. |
+| Cross-tenant ratchet at 0 | C6: 0 leak, honey_write or 4xx-oracle outcomes for the tenant personas on every `tenant_staff` and `platform_admin` route. `MAX_TENANT_DESTINED_STELLR_ONLY` falls from 52 to 0 through C16 to C19. `MAX_UNEXERCISED` falls from 5 towards 0. `idor:canary` proves the personas can fail. |
 | Tenant-host routes isolate records | C6 for the APIs, B10(c) for the pages: 0 leak, honey_write or 4xx-oracle outcomes on every id-bearing route in `allowedTenantFiles()`, in both directions, Stellr included. An accepted outcome is listed by route with its reason (for example a capability token) and the owner's approval. |
-| 100% of mutations audited | C7's enforcing gate over 266 handlers and 22 crons. Every mutating route group now has a claimant: A7, A8, A10 to A14, B12, B16, B18 and C13 to C23. The rest are owner-approved, reasoned exemptions, proposed for `contact`, `subscribe`, `lp-lead`, `white-paper`, `join-network`, `host-event`, `asset-request` and `csp-report`. |
+| 100% of mutations audited | C7's enforcing gate over every mutating handler, GET writers included, and the 22 crons (counts in `test/baselines/unaudited-mutations.json`). Every mutating route group now has a claimant: A7, A8, A10 to A14, B12, B16, B18 and C13 to C23. The rest are owner-approved, reasoned exemptions, proposed for `contact`, `subscribe`, `lp-lead`, `white-paper`, `join-network`, `host-event`, `asset-request` and `csp-report`. |
 | Host-header spoof | B10(c): forged `X-Forwarded-Host` and `x-stellr-tenant-id` change nothing; `/_t/<slug>` and `/%5Ft/<slug>` 404 on every host, for `stellr` and for another tenant's slug on a foreign tenant host and on the Stellr host, with dotted variants (`x.html`, `x.png`, `x.pngfoo`); an unknown zone host 404s. |
 | Warm-cache body hash | B10a: flag off and on, identical normalised hash across all 158 pages. B10(b): two non-owner tenants keep their own hashes. |
 | 0 trackers, 0 community routes on tenant hosts | B10(d) and B9, with the localhost control proving the test can fail. All 80 community and home entries 404. |

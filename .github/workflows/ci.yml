@@ -542,6 +542,15 @@ jobs:
 
       - run: npm ci
 
+      # The public Sanity project, read without a token. Without it lib/sanity.ts
+      # has no client: every event page 404s and the rest render without their
+      # CMS content, which is not the site people see. Only this job gets it (the
+      # e2e env is shared), so it goes in here rather than in the anchor.
+      - name: Read the CMS
+        run: |
+          echo "NEXT_PUBLIC_SANITY_PROJECT_ID=if8ubvbg" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SANITY_DATASET=production" >> "$GITHUB_ENV"
+
       - env: *e2e-secrets
         run: npm run build
 
@@ -552,9 +561,18 @@ jobs:
           for i in $(seq 1 60); do curl -sf http://localhost:3000/ >/dev/null && exit 0; sleep 1; done
           echo "::error::The app did not start."; tail -n 40 "$RUNNER_TEMP/app.log"; exit 1
 
+      # lhci aborts everything on one 404, so the event is chosen at run time and
+      # every URL is checked first (scripts/lighthouse-urls.ts).
       - name: Lighthouse (mobile, report-only)
         continue-on-error: true
-        run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.json
+        run: |
+          npx tsx scripts/lighthouse-urls.ts "$RUNNER_TEMP/lighthouserc.json"
+          npx --yes @lhci/cli@0.15.1 autorun --config="$RUNNER_TEMP/lighthouserc.json"
+
+      # The job is green either way, so this is where a missing report shows.
+      - name: Lighthouse scores
+        if: always()
+        run: npx tsx scripts/lighthouse-summary.ts
 
       - if: always()
         uses: actions/upload-artifact@v7

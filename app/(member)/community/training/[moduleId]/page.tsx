@@ -158,7 +158,7 @@ export default async function CourseDetailPage({
                 <p className="text-sm text-brand-muted-soft">Unlocks {formatDateShort(lesson.availableAt)}</p>
               )}
             </div>
-          ) : (
+          ) : lesson.media === null && resources.length > 0 ? null : (
             <LessonMedia media={lesson.media} title={lesson.title} displayName={displayName} itemId={lesson.id} />
           )}
 

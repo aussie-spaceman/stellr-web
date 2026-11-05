@@ -5,22 +5,14 @@ import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveTierMap } from '@/lib/tiers-server'
 import { describeAssignedTiers } from '@/lib/tiers'
-import { resolveRequirement, type BracketRequirements } from '@/lib/space-training'
+import { coursesForSpace, type BracketRequirements } from '@/lib/space-training'
+import { listModules } from '@/lib/training'
+import { getAssignedCourses } from '@/lib/training-portal'
 import { formatDateShort } from '@/lib/utils'
 import { SpaceShell } from '@/components/community/spaces/SpaceShell'
 import { LockedSpaceGate } from '@/components/community/spaces/LockedSpaceGate'
 
 export const dynamic = 'force-dynamic'
-
-interface CourseCard {
-  id: string
-  title: string
-  description: string | null
-  mandatory: boolean
-  dueAt: string | null
-  total: number
-  done: number
-}
 
 export default async function SpaceTrainingPage({
   params,
@@ -45,68 +37,44 @@ export default async function SpaceTrainingPage({
       : `Included with ${describeAssignedTiers(space.assignedTierIds, tierMap.nameById)}`
 
   const db = supabaseServer()
-  const { data: links } = await db
-    .from('community_space_training')
-    .select('training_module_id, is_mandatory, bracket_requirements, display_order')
-    .eq('space_id', space.id)
-    .order('display_order', { ascending: true })
+  const [{ data: links }, { data: sources }, { data: container }] = await Promise.all([
+    db
+      .from('community_space_training')
+      .select('training_module_id, is_mandatory, bracket_requirements, display_order')
+      .eq('space_id', space.id)
+      .order('display_order', { ascending: true }),
+    db.from('community_space_sources').select('object_type, object_ref').eq('space_id', space.id),
+    db
+      .from('mentoring_cohorts')
+      .select('id')
+      .eq('container_type', 'space')
+      .eq('campaign_ref', space.slug)
+      .maybeSingle(),
+  ])
 
-  const moduleIds = (links ?? []).map((l) => (l as { training_module_id: string }).training_module_id)
-  // Mandatory + deadline are resolved against THIS member's age bracket, falling
-  // back to the legacy is_mandatory flag when their bracket has no override.
-  const reqById = new Map<string, { mandatory: boolean; dueAt: string | null }>()
-  for (const l of (links ?? []) as { training_module_id: string; is_mandatory: boolean; bracket_requirements: BracketRequirements | null }[]) {
-    reqById.set(l.training_module_id, resolveRequirement(l.bracket_requirements, member.age_bracket, l.is_mandatory))
-  }
+  // What this Space belongs to: an event Space takes its training from the event.
+  const refs = (sources ?? [])
+    .filter((s) => s.object_type !== 'training')
+    .map((s) => s.object_ref as string)
+  if (container) refs.push(container.id as string)
 
-  let cards: CourseCard[] = []
-  if (moduleIds.length > 0) {
-    const [{ data: modules }, { data: items }] = await Promise.all([
-      db.from('training_modules').select('id, title, description').in('id', moduleIds),
-      db.from('training_items').select('id, module_id').in('module_id', moduleIds),
-    ])
-    const itemsByModule = new Map<string, string[]>()
-    for (const it of (items ?? []) as { id: string; module_id: string }[]) {
-      const arr = itemsByModule.get(it.module_id) ?? []
-      arr.push(it.id)
-      itemsByModule.set(it.module_id, arr)
-    }
-    const allItemIds = (items ?? []).map((i) => (i as { id: string }).id)
-    const completed = new Set<string>()
-    if (allItemIds.length > 0) {
-      const { data: progress } = await db
-        .from('training_progress')
-        .select('item_id')
-        .eq('member_id', member.id)
-        .eq('status', 'completed')
-        .in('item_id', allItemIds)
-      for (const p of (progress ?? []) as { item_id: string }[]) completed.add(p.item_id)
-    }
-
-    cards = (modules ?? []).map((m) => {
-      const mod = m as { id: string; title: string; description: string | null }
-      const ids = itemsByModule.get(mod.id) ?? []
-      const req = reqById.get(mod.id)
-      return {
-        id: mod.id,
-        title: mod.title,
-        description: mod.description,
-        mandatory: req?.mandatory ?? false,
-        dueAt: req?.dueAt ?? null,
-        total: ids.length,
-        done: ids.filter((id) => completed.has(id)).length,
-      }
-    })
-    // Preserve the configured display order.
-    cards.sort((a, b) => moduleIds.indexOf(a.id) - moduleIds.indexOf(b.id))
-  }
+  const directLinks = (links ?? []) as {
+    training_module_id: string
+    is_mandatory: boolean
+    bracket_requirements: BracketRequirements | null
+  }[]
+  const [assigned, summaries] = await Promise.all([
+    refs.length > 0 ? getAssignedCourses(member) : [],
+    directLinks.length > 0 ? listModules(member) : [],
+  ])
+  const cards = coursesForSpace({ links: directLinks, summaries, assigned, refs, bracket: member.age_bracket })
 
   return (
     <SpaceShell space={space} activeKey="training">
       <div className="mx-auto max-w-[760px]">
         <h1 className="mb-4 font-heading text-[21px] text-brand-blue-dark">Training</h1>
         {cards.length === 0 ? (
-          <p className="py-10 text-center text-sm text-brand-muted-soft">No training assigned to this space.</p>
+          <p className="py-10 text-center text-sm text-brand-muted-soft">No training assigned to you in this space.</p>
         ) : (
           <div className="space-y-3">
             {cards.map((c) => {
@@ -140,7 +108,7 @@ export default async function SpaceTrainingPage({
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-xs font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">{tierNote}</p>
+                      <p className="mt-1 text-xs font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">{c.assignedVia ? `Assigned for ${c.assignedVia}` : tierNote}</p>
                       {c.description && <p className="mt-1 text-sm text-brand-muted">{c.description}</p>}
                     </div>
                     <span className="shrink-0 text-xs font-subheading font-semibold" style={{ color: statusColor }}>

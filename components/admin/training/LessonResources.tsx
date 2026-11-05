@@ -62,11 +62,14 @@ export function LessonResources({
   itemId,
   pending = [],
   onPendingChange,
+  onCountChange,
 }: {
   /** Absent for a lesson not created yet: picks go to `pending` instead. */
   itemId?: string
   pending?: PendingResource[]
   onPendingChange?: (next: PendingResource[]) => void
+  /** How many resources a saved lesson has attached, as they load and change. */
+  onCountChange?: (count: number) => void
 }) {
   const [resources, setResources] = useState<Resource[]>([])
   const [adding, setAdding] = useState(false)
@@ -86,6 +89,7 @@ export function LessonResources({
     if (res.ok) setResources((await res.json()).resources)
   }, [itemId])
   useEffect(() => { load() }, [load])
+  useEffect(() => { if (itemId) onCountChange?.(resources.length) }, [itemId, resources.length, onCountChange])
 
   // Search the Global Resources Catalogue (debounced) when in "existing" mode.
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useId, useState, useEffect, useRef } from 'react'
+import { useId, useState, useEffect, useRef } from 'react'
 import { Field, Input, Select, Textarea } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
@@ -383,6 +383,9 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
   const savedLessons = useRef(new Map<string, { sectionId: string | null; displayOrder: number }>())
   const [lessonDragId, setLessonDragId] = useState<string | null>(null)
   const [lessonDrop, setLessonDrop] = useState<{ key: string; index: number } | null>(null)
+  // What the drop reads. A dragover's render can still be pending when drop fires,
+  // and the state would then land the lesson where the pointer was a moment ago.
+  const lessonDropRef = useRef<{ key: string; index: number } | null>(null)
   const [refocusLesson, setRefocusLesson] = useState<{ id: string; dir: -1 | 1 } | null>(null)
   const [lessonError, setLessonError] = useState<string | null>(null)
   const [resourceNotice, setResourceNotice] = useState<string | null>(null)
@@ -424,18 +427,28 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
   // never delivers dragend to a drag source that has left the page.
   const dragLessonOver = (toKey: string, toIndex: number) => {
     if (!lessonDragId) return
-    setLessonDrop((prev) => (prev?.key === toKey && prev.index === toIndex ? prev : { key: toKey, index: toIndex }))
+    const prev = lessonDropRef.current
+    if (prev?.key === toKey && prev.index === toIndex) return
+    lessonDropRef.current = { key: toKey, index: toIndex }
+    setLessonDrop(lessonDropRef.current)
   }
-  // Over a section but not over a lesson row: the end of that section.
-  const dragLessonIntoSection = (toKey: string) => {
+  // Anywhere on a section's card. Read from the rows on screen rather than the
+  // element under the pointer, so the header and the gaps between rows land
+  // somewhere sensible: before the first row whose middle is below the pointer.
+  // A collapsed section shows no rows, so the lesson joins the end of it.
+  const dragLessonOverCard = (toKey: string, card: HTMLElement, clientY: number) => {
     if (!lessonDragId) return
-    dragLessonOver(toKey, (layout[toKey] ?? []).filter((id) => id !== lessonDragId).length)
+    const rows = [...card.querySelectorAll<HTMLElement>('[data-lesson-row]')]
+    const others = rows.filter((r) => r.dataset.lessonRow !== lessonDragId)
+    const end = (layout[toKey] ?? []).filter((id) => id !== lessonDragId).length
+    dragLessonOver(toKey, rows.length === 0 ? end : others.filter((r) => { const box = r.getBoundingClientRect(); return box.top + box.height / 2 < clientY }).length)
   }
   const dropLesson = () => {
     const id = lessonDragId
-    const at = lessonDrop
+    const at = lessonDropRef.current
     setLessonDragId(null)
     setLessonDrop(null)
+    lessonDropRef.current = null
     if (!id || !at) return
     const next = moveLesson(layout, id, at.key, at.index)
     if (next === layout) return
@@ -446,6 +459,7 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
   const cancelLessonDrag = () => {
     setLessonDragId(null)
     setLessonDrop(null)
+    lessonDropRef.current = null
   }
 
   // The non-drag way to move a lesson (WCAG 2.5.7).
@@ -476,8 +490,7 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
     lessonDrop,
     onStepLesson: stepLessonBy,
     onLessonDragStart: setLessonDragId,
-    onLessonDragOver: dragLessonOver,
-    onLessonDragIntoSection: dragLessonIntoSection,
+    onLessonDragOverCard: dragLessonOverCard,
     onLessonDragEnd: cancelLessonDrag,
   }
 
@@ -567,7 +580,7 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
               and so could not be opened or moved. */}
           {unsectioned.length > 0 && (
             <div
-              onDragOver={(e) => { e.preventDefault(); dragLessonIntoSection(UNSECTIONED) }}
+              onDragOver={(e) => { e.preventDefault(); dragLessonOverCard(UNSECTIONED, e.currentTarget, e.clientY) }}
               onDrop={(e) => { e.preventDefault(); if (lessonDragId) dropLesson() }}
               className={`rounded-xl border border-dashed bg-white ${lessonDrop?.key === UNSECTIONED ? 'border-primary' : 'border-brand-border'}`}
             >
@@ -605,7 +618,7 @@ function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModul
           key={editing?.lesson?.id ?? editing?.sectionId ?? 'none'}
           moduleId={m.id}
           target={editing}
-          lessonCount={editing ? lessonsIn(editing.sectionId).length : 0}
+          nextOrder={editing ? Math.max(-1, ...lessonsIn(editing.sectionId).map((l) => l.display_order)) + 1 : 0}
           onSaved={(notice) => { setResourceNotice(notice ?? null); setEditing(null); onDone() }}
           onCancel={() => setEditing(null)}
           onChanged={onDone}
@@ -627,21 +640,23 @@ interface LessonDragProps {
   lessonDrop: { key: string; index: number } | null
   onStepLesson: (id: string, dir: -1 | 1) => void
   onLessonDragStart: (id: string) => void
-  onLessonDragOver: (toKey: string, toIndex: number) => void
-  onLessonDragIntoSection: (toKey: string) => void
+  onLessonDragOverCard: (toKey: string, card: HTMLElement, clientY: number) => void
   onLessonDragEnd: () => void
 }
 
 function LessonList({
   listKey, lessons, selectedLessonId, onSelectLesson, recordingPhases, layout, layoutKeys, lessonDragId, lessonDrop,
-  onStepLesson, onLessonDragStart, onLessonDragOver, onLessonDragEnd,
-}: LessonDragProps & {
+  onStepLesson, onLessonDragStart, onLessonDragEnd,
+}: Omit<LessonDragProps, 'onLessonDragOverCard'> & {
   listKey: string; lessons: AdminLesson[]; selectedLessonId: string | null; onSelectLesson: (l: AdminLesson) => void
 }) {
   // Indexes are read with the dragged lesson lifted out of the list, as moveLesson does.
   const others = lessons.filter((x) => x.id !== lessonDragId)
   const lineAt = lessonDrop?.key === listKey ? lessonDrop.index : null
-  const dropLine = <div className="h-0.5 rounded-full bg-primary" aria-hidden="true" />
+  // Absolute, so showing it moves nothing. A line that took up space pushed the
+  // rows down, left the pointer in the gap above them, and sent the drop to the
+  // end of the section.
+  const dropLine = (edge: string) => <div className={`pointer-events-none absolute inset-x-1 ${edge} h-0.5 rounded-full bg-primary`} aria-hidden="true" />
   return (
     <div className="space-y-1 p-2">
       {lessons.map((l) => {
@@ -650,9 +665,9 @@ function LessonList({
         const chip = RECORDING_CHIP[recordingPhases[l.id]]
         const position = others.findIndex((x) => x.id === l.id)
         return (
-          <Fragment key={l.id}>
-          {lineAt !== null && position === lineAt && dropLine}
           <div
+            key={l.id}
+            data-lesson-row={l.id}
             draggable
             onDragStart={(e) => {
               // Firefox will not start a drag without data. Stop here so the
@@ -663,17 +678,11 @@ function LessonList({
               onLessonDragStart(l.id)
             }}
             onDragEnd={(e) => { e.stopPropagation(); onLessonDragEnd() }}
-            onDragOver={(e) => {
-              if (!lessonDragId) return
-              e.preventDefault()
-              e.stopPropagation()
-              if (lessonDragId === l.id) return
-              const box = e.currentTarget.getBoundingClientRect()
-              onLessonDragOver(listKey, position + (e.clientY > box.top + box.height / 2 ? 1 : 0))
-            }}
-            className={`group flex items-center gap-1 rounded-lg transition ${active ? 'bg-brand-soft' : 'hover:bg-brand-canvas'} ${lessonDragId === l.id ? 'opacity-50' : ''}`}
+            className={`group relative flex items-center gap-1 rounded-lg transition ${active ? 'bg-brand-soft' : 'hover:bg-brand-canvas'} ${lessonDragId === l.id ? 'opacity-50' : ''}`}
             style={active ? { background: '#EAF0FE' } : undefined}
           >
+            {lineAt !== null && position === lineAt && dropLine('-top-[3px]')}
+            {lineAt !== null && lineAt >= others.length && position === others.length - 1 && dropLine('-bottom-[3px]')}
             <span className="shrink-0 cursor-grab pl-1 text-brand-muted-soft" aria-hidden="true"><GripVertical className="h-4 w-4" /></span>
             <button onClick={() => onSelectLesson(l)} className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-1 pr-2 text-left text-sm">
               <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" aria-hidden="true" />
@@ -696,10 +705,8 @@ function LessonList({
               </button>
             ))}
           </div>
-          </Fragment>
         )
       })}
-      {lineAt !== null && lineAt >= others.length && lessons.length > 0 && dropLine}
       {lessons.length === 0 && (
         <p className="px-3 py-1.5 text-xs text-brand-muted-soft">{lessonDragId ? 'Drop here to move the lesson into this section.' : 'No lessons yet.'}</p>
       )}
@@ -710,7 +717,7 @@ function LessonList({
 function SectionCard({
   section: s, lessons, selectedLessonId, reorderable, isFirst, isLast, onMove, dragging,
   onDragStart, onDragEnter, onDrop, onDragEnd, onSelectLesson, onAddLesson, onDone,
-  recordingPhases, layout, layoutKeys, lessonDragId, lessonDrop, onStepLesson, onLessonDragStart, onLessonDragOver, onLessonDragIntoSection, onLessonDragEnd,
+  recordingPhases, layout, layoutKeys, lessonDragId, lessonDrop, onStepLesson, onLessonDragStart, onLessonDragOverCard, onLessonDragEnd,
 }: LessonDragProps & {
   section: AdminSection; lessons: AdminLesson[]; selectedLessonId: string | null
   reorderable: boolean; isFirst: boolean; isLast: boolean; onMove: (dir: -1 | 1) => void; dragging: boolean
@@ -740,6 +747,11 @@ function SectionCard({
     if (res.ok) { setEditingTitle(false); onDone() }
   }
   const remove = async () => {
+    // A section's lessons outlive it, and members go on seeing them: say so first.
+    const kept = lessons.length === 0
+      ? ''
+      : ` ${lessons.length === 1 ? 'Its lesson stays' : `Its ${lessons.length} lessons stay`} in the course under “Not in a section”, and members will still see ${lessons.length === 1 ? 'it' : 'them'}. To remove a lesson, delete it separately.`
+    if (!confirm(`Delete “${s.title}”?${kept}`)) return
     const res = await fetch(`/api/admin/community/training/sections?id=${s.id}`, { method: 'DELETE' })
     if (res.ok) onDone()
   }
@@ -747,7 +759,7 @@ function SectionCard({
   return (
     <div
       onDragEnter={onDragEnter}
-      onDragOver={(e) => { e.preventDefault(); onLessonDragIntoSection(s.id) }}
+      onDragOver={(e) => { e.preventDefault(); onLessonDragOverCard(s.id, e.currentTarget, e.clientY) }}
       onDrop={(e) => { e.preventDefault(); onDrop() }}
       className={`rounded-xl border bg-white transition ${dragging ? 'border-brand-blue opacity-60' : lessonDrop?.key === s.id ? 'border-primary' : 'border-brand-border'}`}
     >
@@ -791,8 +803,6 @@ function SectionCard({
             lessonDrop={lessonDrop}
             onStepLesson={onStepLesson}
             onLessonDragStart={onLessonDragStart}
-            onLessonDragOver={onLessonDragOver}
-            onLessonDragIntoSection={onLessonDragIntoSection}
             onLessonDragEnd={onLessonDragEnd}
           />
           <button onClick={onAddLesson} className="mb-2 ml-2 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-blue-dark">
@@ -805,11 +815,12 @@ function SectionCard({
 }
 
 function LessonEditor({
-  moduleId, target, lessonCount, onSaved, onCancel, onChanged,
+  moduleId, target, nextOrder, onSaved, onCancel, onChanged,
 }: {
   moduleId: string
   target: { lesson?: AdminLesson; sectionId: string | null } | null
-  lessonCount: number
+  /** One past the last lesson in the section, so a new lesson never ties with one. */
+  nextOrder: number
   /** A notice is a problem the admin still needs to see once the editor has closed. */
   onSaved: (notice?: string) => void
   onCancel: () => void
@@ -827,6 +838,7 @@ function LessonEditor({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingResources, setPendingResources] = useState<PendingResource[]>([])
+  const [attachedCount, setAttachedCount] = useState(0)
 
   if (!target) {
     return (
@@ -847,11 +859,14 @@ function LessonEditor({
     (active.input === 'select' && interactiveKey !== (existing.interactive_key ?? '')) ||
     (active.input === 'file' && !!file)
   const showDropzone = active.input !== 'none' && (contentChanged || !existing)
+  // A Resource lesson can be made of attached resources alone: an existing
+  // catalogue file attached below is content, so it needs no second upload.
+  const hasResources = existing ? attachedCount > 0 : pendingResources.length > 0
 
   const save = async () => {
     if (!title.trim()) { setError('Add a lesson title.'); return }
     if (contentChanged && active.input === 'url' && !url.trim()) { setError('Add a URL for this lesson.'); return }
-    if (contentChanged && active.input === 'file' && !file) { setError('Choose a file to upload.'); return }
+    if (contentChanged && active.input === 'file' && !file && !hasResources) { setError('Choose a file to upload, or attach a resource below.'); return }
     if (contentChanged && active.input === 'select' && !interactiveKey) { setError('Choose a tutorial for this lesson.'); return }
     setBusy(true); setError(null)
     try {
@@ -918,7 +933,7 @@ function LessonEditor({
           title: title.trim(),
           contentKind,
           status,
-          displayOrder: String(lessonCount),
+          displayOrder: String(nextOrder),
           estimatedMinutes: minutes || undefined,
           body: body.trim() || undefined,
           externalUrl: active.input === 'url' ? url : undefined,
@@ -994,7 +1009,11 @@ function LessonEditor({
             <active.Icon className="h-4 w-4 text-brand-muted" />
             <p className="text-sm font-semibold text-brand-blue-dark">{active.title}</p>
           </div>
-          <p className="mt-0.5 text-xs text-brand-muted-soft">{active.desc}</p>
+          <p className="mt-0.5 text-xs text-brand-muted-soft">
+            {active.input === 'file' && hasResources && !file
+              ? 'The attached resource below is enough for this lesson. Upload a file only if you also want it shown in the player.'
+              : active.desc}
+          </p>
           {active.input === 'url' && (
             <div className="mt-2">
               <Input type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label={`${active.title} URL`} />
@@ -1033,7 +1052,7 @@ function LessonEditor({
 
       {/* Attached resources (files / links beneath the primary content). */}
       {existing
-        ? <LessonResources itemId={existing.id} />
+        ? <LessonResources itemId={existing.id} onCountChange={setAttachedCount} />
         : <LessonResources pending={pendingResources} onPendingChange={setPendingResources} />}
 
       <Field label="Lesson notes" labelSize="small" hint="Optional — shown beneath the content.">

@@ -37,6 +37,30 @@
 /test/route-maxduration.test.ts     @aussie-spaceman
 /test/supabase-key-wiring.test.ts   @aussie-spaceman
 
+# S5 data-access ratchets: the shrink-only baselines and what measures them
+/test/service-role-ratchet.test.ts  @aussie-spaceman
+/test/events-facade-ratchet.test.ts @aussie-spaceman
+/test/audit-coverage.test.ts        @aussie-spaceman
+/test/optional-event-tenant-id.test.ts @aussie-spaceman
+/test/baselines/**                  @aussie-spaceman
+/scripts/s5-inventory.mjs           @aussie-spaceman
+/lib/security/audit-coverage.ts     @aussie-spaceman
+/lib/security/route-ast.ts          @aussie-spaceman
+/vitest.config.mts                  @aussie-spaceman
+
+# S5 wave 1: authorisation, tenant routing, scoped loads, the age gate, and
+# their gate tests (inert until later slices import them)
+/lib/authz.ts                       @aussie-spaceman
+/lib/authz/**                       @aussie-spaceman
+/lib/tenancy/host.ts                @aussie-spaceman
+/lib/tenancy/host-pure.ts           @aussie-spaceman
+/lib/tenancy/tenant-surface.ts      @aussie-spaceman
+/lib/tenancy/load-scoped.ts         @aussie-spaceman
+/lib/tenancy/scope-context.ts       @aussie-spaceman
+/lib/registration/eligibility.ts    @aussie-spaceman
+/test/tenant-surface-routes.test.ts @aussie-spaceman
+/test/idor/**                       @aussie-spaceman
+
 # Build config: security headers, CSP and redirects
 /next.config.mjs                    @aussie-spaceman
 

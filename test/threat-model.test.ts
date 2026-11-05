@@ -66,7 +66,13 @@ describe('docs/THREAT-MODEL.md citations', () => {
 
   it('finds a meaningful number of citations (the extractor works)', () => {
     expect(cited.length).toBeGreaterThan(60)
-    expect(planned.length).toBeGreaterThan(0)
+    // §10 is empty whenever every planned path has landed, so prove the section
+    // is found and the extractor reads it, rather than needing a live entry.
+    expect(DOC).toMatch(/^## 10\. Planned paths/m)
+    expect(plannedPaths('## 10. Planned paths (x)\n\n- `lib/a.ts` (S5)\n- `lib/b.ts` (S6)\n\n## 11. Next\n\n- `lib/c.ts` (S7)\n')).toEqual([
+      'lib/a.ts',
+      'lib/b.ts',
+    ])
   })
 
   it('cites only paths that exist, or that §10 lists as planned', () => {

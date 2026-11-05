@@ -31,13 +31,13 @@ Outside the PR, 352 active fixture sessions on the dev instance were revoked by 
 ## Verified
 
 - Run 41968184945 on `2443fb9b`: 189 passed, 43 skipped. 5 sessions recorded: 4 revoked, 1 already ended, 0 missing. Upload skipped.
+- Run 42030301231 on `0106e78f`, the first in the `e2e-tests` job after #525: revoke step success. 5 sessions recorded: 4 revoked, 0 already ended, 1 no longer at Clerk. Upload skipped.
 - At 05:00 UTC on 5 Nov, Clerk showed 0 active fixture sessions. This was not re-checked after later runs.
 
 ## Not verified
 
-- The revoke step has not run in the `e2e-tests` job since #525 (row `.3`).
 - The upload path has not run on a real failure (row `.4`).
-- Why one recorded session returned 404 on the first CI run (row `.5`).
+- Why one recorded session returned 404 on two CI runs (row `.5`).
 
 ## Trade-offs to remember
 

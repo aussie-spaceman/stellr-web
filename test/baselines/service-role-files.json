@@ -203,7 +203,7 @@
     },
     "app/(member)/community/[spaceSlug]/training/page.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: community_space_training, training_items, training_modules, training_progress"
+      "reason": "auto: touches tenant or event-scoped tables; tables: community_space_sources, community_space_training, mentoring_cohorts"
     },
     "app/(member)/community/coaching/[workshopId]/invite/page.tsx": {
       "class": "stellr_only",
@@ -391,7 +391,7 @@
     },
     "app/api/admin/community/training/items/route.ts": {
       "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: training_items, training_sections"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: training_item_resources, training_items, training_sections"
     },
     "app/api/admin/community/training/modules/route.ts": {
       "class": "convert",
@@ -1644,6 +1644,10 @@
     "scripts/scan-plaintext-sensitive.ts": {
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements, audit_log, deletion_archive, tenant_data_keys"
+    },
+    "scripts/seed-e2e-stack.ts": {
+      "class": "script",
+      "reason": "CI seed for the disposable e2e-local stack: writes fixture esign_templates and links members to Clerk users. Refuses any URL not on loopback, and any Clerk key not sk_test_, so it holds only the CLI's local default key."
     },
     "scripts/seed-test-accounts.ts": {
       "class": "script",

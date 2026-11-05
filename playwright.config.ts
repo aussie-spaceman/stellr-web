@@ -59,7 +59,11 @@ export default defineConfig({
   // hidden until the statistics turn.
   retries: process.env.CI ? 1 : 0,
 
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
+  // The JSON report is how e2e-local counts skips: a skipped spec is a green
+  // run that proved nothing (docs/RUNBOOK-ci-database.md).
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/e2e-results.json' }]]
+    : [['list']],
 
   use: {
     baseURL,

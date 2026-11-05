@@ -9,14 +9,12 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
-
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 
 async function main() {
   // Issuing sends no email: the test mints each signer's link itself.
   delete process.env.RESEND_API_KEY
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  if (!url.includes(DEV_PROJECT_REF)) throw new Error(`esign e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
+  const url = assertE2eSupabase()
   const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const [command, arg] = process.argv.slice(2)
 

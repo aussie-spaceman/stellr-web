@@ -16,4 +16,18 @@ describe('ci.yml e2e fail-closed (TEST-5)', () => {
     expect(ci).toMatch(/if \[ "\$ALLOW_UNCONFIGURED" != "true" \]; then/)
     expect(ci).toMatch(/exit 1/)
   })
+
+  // GitHub's default keeps one pending job per group and cancels the rest: 7 of
+  // 59 jobs asking for this lock on 4-5 Nov 2026 were lost that way.
+  it('queues e2e jobs behind the lock rather than dropping them', () => {
+    expect(ci).toMatch(
+      /group: e2e-dev-supabase\n\s+cancel-in-progress: false\n\s+queue: max\n/,
+    )
+  })
+
+  // Anything that stops a queued suite from running reads as cancelled, not
+  // failed. The gate has to treat every result but success as red.
+  it('the gate passes only when the suite succeeded', () => {
+    expect(ci).toMatch(/if \[ "\$TESTS" != success \] \|\| \[ "\$STORYBOOK" != success \]; then/)
+  })
 })

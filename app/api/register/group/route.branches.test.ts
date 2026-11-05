@@ -357,8 +357,79 @@ describe('branches: POST /api/register/group — who is already on this event', 
     expect(h.resolveDuplicate).toHaveBeenLastCalledWith(found, { sessionMatches: true })
   })
 
-  it.each(['resume', 'email_link'])('an unfinished individual registration (%s) is refused, not resumed', async (kind) => {
-    match(kind, 'individual')
+  describe('nobody signed in as the organiser', () => {
+    const ON_FILE = refused(
+      409,
+      'This email can’t start a new registration for this event. If a payment is unfinished, check the email on file, including spam, for the link to finish it. Otherwise, sign in to see your registration under Account → Teams, or ask your group organiser.',
+      { code: 'registration_on_file' },
+    )
+
+    beforeEach(() => {
+      h.getCurrentMember.mockResolvedValue(null)
+    })
+
+    it.each([
+      ['already_registered', 'group'],
+      ['email_link', 'group'],
+      ['email_link', 'individual'],
+      ['in_group', 'group'],
+      ['invoice_pending', 'group'],
+    ])('%s on a %s registration gets the one answer, and nothing new is written', async (kind, type) => {
+      match(kind, type)
+      expect(await settle(await post(body()))).toEqual(ON_FILE)
+      expect(h.checkout).not.toHaveBeenCalled()
+      nothingNew()
+    })
+
+    it('an unfinished registration of their own has its link sent, with no address in the answer', async () => {
+      match('email_link')
+      h.sendPayLink.mockResolvedValue({ sent: true, recipients: ['a@example.com', 'b@example.com'] })
+      const { body: answer } = await settle(await post(body()))
+      expect(JSON.stringify(answer)).not.toContain('@')
+      expect(h.afterTasks.map((t) => t.label)).toEqual(['register/group pay-link resend'])
+      await h.afterTasks[0].task()
+      expect(h.sendPayLink.mock.calls[0][1]).toBe('reg-old')
+    })
+
+    it('the answer goes before the email does', async () => {
+      match('email_link')
+      expect(await settle(await post(body()))).toEqual(ON_FILE)
+      expect(h.afterTasks).toHaveLength(1)
+      expect(h.sendPayLink).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['already_registered', 'group'],
+      ['invoice_pending', 'group'],
+      ['in_group', 'group'],
+      ['email_link', 'individual'],
+    ])('%s on a %s registration sends no email', async (kind, type) => {
+      match(kind, type)
+      await post(body())
+      expect(h.afterTasks).toHaveLength(0)
+      expect(h.sendPayLink).not.toHaveBeenCalled()
+    })
+
+    it('the answer is the same in every state, with no checkout link and no registration id', async () => {
+      const answers = new Set<string>()
+      for (const kind of ['already_registered', 'email_link', 'in_group', 'invoice_pending']) {
+        match(kind)
+        answers.add(JSON.stringify(await settle(await post(body()))))
+      }
+      expect(answers.size).toBe(1)
+      const [only] = answers
+      expect(only).not.toContain('reg-old')
+      expect(only).not.toContain('checkout')
+    })
+  })
+
+  describe('signed in as the organiser', () => {
+    beforeEach(() => {
+      h.getCurrentMember.mockResolvedValue({ email: TEACHER })
+    })
+
+  it('an unfinished individual registration is refused, not resumed', async () => {
+    match('resume', 'individual')
     withStripe()
     expect(await settle(await post(body()))).toEqual(refused(
       409,
@@ -419,38 +490,6 @@ describe('branches: POST /api/register/group — who is already on this event', 
     expect(errors).not.toHaveBeenCalled()
   })
 
-  it('email_link resends and names where it went, masked', async () => {
-    match('email_link')
-    h.sendPayLink.mockResolvedValue({ sent: true, recipients: ['a@example.com', 'b@example.com'] })
-    expect(await settle(await post(body()))).toEqual(refused(
-      409,
-      `This email already has an unfinished group registration for this event. We’ve emailed a link to complete payment to ${maskEmail('a@example.com')} and ${maskEmail('b@example.com')} — check spam if it hasn’t arrived in a few minutes.`,
-      { code: 'unfinished_registration' },
-    ))
-    expect(h.sendPayLink.mock.calls[0][1]).toBe('reg-old')
-    nothingNew()
-  })
-
-  it('email_link inside the cooldown says recently, and names the registrant when no one was sent to', async () => {
-    match('email_link')
-    h.sendPayLink.mockResolvedValue({ sent: false, reason: 'cooldown', recipients: [] })
-    expect(await settle(await post(body()))).toEqual(refused(
-      409,
-      `This email already has an unfinished group registration for this event. We recently emailed a link to complete payment to ${maskEmail(TEACHER)} — check spam if it hasn’t arrived in a few minutes.`,
-      { code: 'unfinished_registration' },
-    ))
-  })
-
-  it('a pay-link send that throws is logged and is still the same answer', async () => {
-    match('email_link')
-    const boom = new Error('boom')
-    h.sendPayLink.mockRejectedValue(boom)
-    const res = await settle(await post(body()))
-    expect(res.status).toBe(409)
-    expect(res.body).toMatchObject({ code: 'unfinished_registration' })
-    expect(errors).toHaveBeenCalledWith('[register/group] pay-link resend failed (non-fatal):', boom)
-  })
-
   it('invoice_pending, in_group and already_registered have their own answers', async () => {
     match('invoice_pending')
     expect(await settle(await post(body()))).toEqual(refused(
@@ -467,6 +506,7 @@ describe('branches: POST /api/register/group — who is already on this event', 
     match('already_registered')
     expect(await settle(await post(body()))).toEqual(ALREADY)
     nothingNew()
+  })
   })
 
   it('anyone entered who is already on this event is a conflict, each named once', async () => {

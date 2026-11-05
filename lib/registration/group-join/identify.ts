@@ -12,7 +12,13 @@ import { personFromDetails, personFromProfile, type JoinMemberProfile, type Join
 // new. Identity is resolved here, before persist admits anyone to the group. The
 // order is pinned by app/api/register/group-join/route.branches.test.ts.
 
-/** The person, their member row, and the sign-in token when one was minted. */
+/** The join form answers this code by asking the person to sign in. */
+export const SIGN_IN_REQUIRED = 'sign_in_required'
+
+/**
+ * The person, their member row, and the sign-in token when one was minted. The
+ * member is the one signed in, or one with no row when the reads were made.
+ */
 export interface GroupJoiner {
   person: JoinPerson
   memberId: string
@@ -80,34 +86,49 @@ export async function identifyNewParticipant(
   if (!parsed.ok) return parsed
   const { person } = parsed
 
-  // Did this email already have a member row before we upsert it below?
-  // Captured now so we can decide whether a silent sign-in token is safe — an
-  // anonymous join must never get a session for an existing member (deep review
-  // C-1). A failed read cannot tell new from existing, so it is a retryable
+  // Is this email already on file? This caller has not proven it is theirs, so
+  // nothing may follow in that member's name: no login, no school, no event
+  // activity, no Space, no agreement. They sign in, and join by
+  // identifySignedInMember, which holds their consent and stored date-of-birth
+  // checks. A failed read cannot tell new from existing, so it is a retryable
   // refusal, before anything is written.
   // Both addresses count (4 Nov 2026): upsertMember also links by the school
   // address, so a submitted school_email naming an existing member must not
-  // read as "new" and mint a session for that member.
+  // read as "new". The fourth read is an address another member holds as their
+  // school address, which upsertMember would copy onto a second row.
   const { data: priorJoiner, error: priorJoinerError } = await db
     .from('members').select('id').eq('email', person.email).maybeSingle()
   const { data: priorBySchool, error: priorBySchoolError } = await db
     .from('members').select('id').eq('school_email', person.email).limit(1).maybeSingle()
-  const { data: priorSchoolAddr, error: priorSchoolAddrError } = person.school_email && person.school_email !== person.email
-    ? await db.from('members').select('id').eq('email', person.school_email).maybeSingle()
+  const separateSchoolAddress = person.school_email && person.school_email !== person.email ? person.school_email : null
+  const { data: priorSchoolAddr, error: priorSchoolAddrError } = separateSchoolAddress
+    ? await db.from('members').select('id').eq('email', separateSchoolAddress).maybeSingle()
     : { data: null, error: null }
-  const priorLookupError = priorJoinerError ?? priorBySchoolError ?? priorSchoolAddrError
+  const { data: priorSchoolHolder, error: priorSchoolHolderError } = separateSchoolAddress
+    ? await db.from('members').select('id').eq('school_email', separateSchoolAddress).limit(1).maybeSingle()
+    : { data: null, error: null }
+  const priorLookupError = priorJoinerError ?? priorBySchoolError ?? priorSchoolAddrError ?? priorSchoolHolderError
   if (priorLookupError) {
     console.error('[register/group-join] prior-member lookup failed:', priorLookupError)
     return refuse(temporarilyUnavailable())
   }
-  const memberIsNew = !priorJoiner && !priorBySchool && !priorSchoolAddr
+  if (priorJoiner || priorBySchool || priorSchoolAddr || priorSchoolHolder) {
+    return refuse(NextResponse.json(
+      {
+        code: SIGN_IN_REQUIRED,
+        // A login made with a school address does not reach the member it belongs
+        // to, so the form must not suggest making one with that address.
+        school_address_only: !priorJoiner && !priorSchoolAddr,
+        error: 'This email is already on file with Stellr. Sign in with the address you first used with us and you’ll come back here to join. If you can’t, or a parent or guardian is helping you, ask your group organiser to add you.',
+      },
+      { status: 409 },
+    ))
+  }
 
-  // Cross-reference against the existing membership database by email: someone
-  // already on file (added by an organiser, a past event, or another group's
-  // sheet) keeps their record as-is and we just link the participant to it.
-  // This is an UNAUTHENTICATED join link, so submitted details must never
-  // rewrite an existing member's profile (deep review C-3, finding REG-2) —
-  // they live on the participant row below. A brand-new email is still created.
+  // This is an UNAUTHENTICATED join link, so submitted details must never rewrite
+  // an existing member's profile (deep review C-3, finding REG-2). 'skip' stays as
+  // the backstop for a row created since the reads above: the guarded login link
+  // below will not overwrite one that already has a login.
   const memberId = await upsertMember(db, {
     email: person.email,
     school_email: person.school_email,
@@ -142,7 +163,7 @@ export async function identifyNewParticipant(
   let signInToken: string | null = null
   try {
     const provisioned = await ensureClerkUserAndSignInToken(person.email, person.first_name, person.last_name, {
-      memberIsNew,
+      memberIsNew: true,
       age: { dateOfBirth: person.date_of_birth },
     })
     signInToken = provisioned.signInToken
@@ -150,7 +171,7 @@ export async function identifyNewParticipant(
     // member row new this request); otherwise linking would bind a
     // caller-created login to an existing member (deep review C-1).
     if (signInToken) {
-      await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId)
+      await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId).is('clerk_user_id', null)
     }
   } catch (clerkErr) {
     console.error('Clerk provisioning for group-join (non-fatal):', clerkErr)

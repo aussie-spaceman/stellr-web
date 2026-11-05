@@ -39,6 +39,26 @@ export async function persistGroupJoin(
     return refuse(NextResponse.json({ error: 'You are already registered in this group.' }, { status: 409 }))
   }
 
+  // The same person can be on the roster under their other address: an organiser
+  // may have added them by their school address, and they sign in with their
+  // primary. Matched on the address, not member_id, which a roster row can hold for
+  // someone else when a submitted school address belongs to another member.
+  if (person.school_email && person.school_email !== person.email) {
+    const { data: otherAddress, error: otherAddressError } = await db
+      .from('participants')
+      .select('id')
+      .eq('registration_id', registrationId)
+      .eq('email', person.school_email)
+      .maybeSingle()
+    if (otherAddressError) {
+      console.error('[register/group-join] school address dedupe lookup failed:', otherAddressError)
+      return refuse(temporarilyUnavailable())
+    }
+    if (otherAddress) {
+      return refuse(NextResponse.json({ error: 'You are already registered in this group.' }, { status: 409 }))
+    }
+  }
+
   // Cap at the declared group size. Once every place the organiser nominated is
   // filled, the link stops accepting NEW people (the dedupe above still lets an
   // already-registered member re-open the link harmlessly). Registrations created

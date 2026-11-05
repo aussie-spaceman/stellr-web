@@ -106,7 +106,7 @@ const BODY = {
 const post = (overrides: Record<string, unknown> = {}) =>
   POST(jsonRequest('/api/register/individual', { ...BODY, ...overrides }))
 
-const FULL_OFFER = { id: 'offer-1', event_slug: 'colorado', percent_off: 100, registration_id: null }
+const FULL_OFFER = { id: 'offer-1', event_slug: 'colorado', email: 'kid@example.com', percent_off: 100, registration_id: null }
 const HALF_OFFER = { ...FULL_OFFER, percent_off: 50 }
 const PRICED = { ...OPEN_EVENT, stripePriceId: 'price_1' }
 const UNAVAILABLE = 'Registration is temporarily unavailable. Please try again shortly.'
@@ -160,7 +160,7 @@ beforeEach(() => {
   hook(h.priceRetrieve, 'gate price', { unit_amount: 2500 })
   hook(h.linkSchool, 'hook linkSchool', { state: 'CO' })
   hook(h.syncOptions, 'hook syncOptions')
-  hook(h.attachOffer, 'hook attachOffer')
+  hook(h.attachOffer, 'hook attachOffer', true)
   hook(h.participation, 'hook participation')
   hook(h.grant, 'hook grant')
   hook(h.dispatch, 'hook dispatch')
@@ -374,6 +374,11 @@ describe('POST /api/register/individual — scholarship offers', () => {
 })
 
 describe('POST /api/register/individual — someone already on this event', () => {
+  // The specific answers are for the person signed in as this address.
+  beforeEach(() => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com' })
+  })
+
   it('resuming with Stripe on is a 200 with a fresh checkout, and nothing else written', async () => {
     h.stripeOn = true
     h.getEventBySlug.mockResolvedValue(PRICED)
@@ -427,41 +432,80 @@ describe('POST /api/register/individual — someone already on this event', () =
     errors.mockRestore()
   })
 
-  it('someone else naming the address gets the pay link by email, masked in the answer', async () => {
-    duplicate('email_link')
-    h.payLink.mockResolvedValue({ sent: true, recipients: ['kid@example.com', 'parent@example.com'] })
-    expect(await settle(await post())).toEqual({
+  describe('nobody signed in as the address', () => {
+    beforeEach(() => {
+      h.getCurrentMember.mockResolvedValue(null)
+    })
+
+    const ON_FILE = {
       status: 409,
       body: {
-        code: 'unfinished_registration',
-        error: 'This email already has an unfinished registration for this event. We’ve emailed a link to complete payment to k***@example.com and p***@example.com — check spam if it hasn’t arrived in a few minutes.',
+        code: 'registration_on_file',
+        error: 'This email can’t start a new registration for this event. If a payment is unfinished, check the email on file, including spam, for the link to finish it. Otherwise, sign in to see your registration under Account → Events, or ask your group organiser.',
       },
-    })
-    expect(h.payLink).toHaveBeenCalledWith(expect.anything(), 'reg-old')
-  })
+    }
 
-  it('inside the resend cooldown it says so, and names the submitted address when it has no recipients', async () => {
-    duplicate('email_link')
-    h.payLink.mockResolvedValue({ sent: false, reason: 'cooldown', recipients: [] })
-    expect(await settle(await post())).toEqual({
-      status: 409,
-      body: {
-        code: 'unfinished_registration',
-        error: 'This email already has an unfinished registration for this event. We recently emailed a link to complete payment to k***@example.com — check spam if it hasn’t arrived in a few minutes.',
-      },
+    it.each([
+      ['already_registered', 'individual'],
+      ['email_link', 'individual'],
+      ['email_link', 'group'],
+      ['in_group', 'group'],
+      ['invoice_pending', 'group'],
+    ])('%s on a %s registration gets the one answer, and nothing is written', async (kind, type) => {
+      duplicate(kind, type)
+      expect(await settle(await post())).toEqual(ON_FILE)
+      expect(writes().filter((l) => l !== 'hook payLink')).toEqual([])
+      expect(h.checkout).not.toHaveBeenCalled()
     })
-  })
 
-  it('a pay link that fails to send is logged, and the answer stands', async () => {
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
-    duplicate('email_link')
-    const boom = new Error('resend down')
-    h.payLink.mockRejectedValue(boom)
-    const res = await settle(await post())
-    expect(res.status).toBe(409)
-    expect(res.body).toMatchObject({ code: 'unfinished_registration' })
-    expect(errors).toHaveBeenCalledWith('[register/individual] pay-link resend failed (non-fatal):', boom)
-    errors.mockRestore()
+    it('an unfinished registration of their own has its link sent, with no address in the answer', async () => {
+      duplicate('email_link')
+      h.payLink.mockResolvedValue({ sent: true, recipients: ['kid@example.com', 'parent@example.com'] })
+      const { body } = await settle(await post())
+      expect(h.payLink).toHaveBeenCalledWith(expect.anything(), 'reg-old')
+      expect(JSON.stringify(body)).not.toContain('@')
+    })
+
+    it('the answer does not wait for the email', async () => {
+      duplicate('email_link')
+      h.payLink.mockReturnValue(new Promise(() => {}))
+      expect(await settle(await post())).toEqual(ON_FILE)
+    })
+
+    it('a pay link that fails to send is logged, and the answer stands', async () => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+      duplicate('email_link')
+      const boom = new Error('resend down')
+      h.payLink.mockRejectedValue(boom)
+      expect(await settle(await post())).toEqual(ON_FILE)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(errors).toHaveBeenCalledWith('[register/individual pay-link resend] post-response task failed:', boom)
+      errors.mockRestore()
+    })
+
+    it.each(['already_registered', 'in_group'])('%s sends no email', async (kind) => {
+      duplicate(kind, 'group')
+      await post()
+      expect(h.payLink).not.toHaveBeenCalled()
+    })
+
+    it('an unfinished group registration sends no email from this form', async () => {
+      duplicate('email_link', 'group')
+      await post()
+      expect(h.payLink).not.toHaveBeenCalled()
+    })
+
+    it('the answer is the same in every state, with no checkout link and no registration id', async () => {
+      const answers = new Set<string>()
+      for (const kind of ['already_registered', 'email_link', 'in_group', 'invoice_pending']) {
+        duplicate(kind)
+        answers.add(JSON.stringify(await settle(await post())))
+      }
+      expect(answers.size).toBe(1)
+      const [only] = answers
+      expect(only).not.toContain('reg-old')
+      expect(only).not.toContain('checkout')
+    })
   })
 
   it('someone in a group is told to ask the organiser', async () => {
@@ -475,9 +519,9 @@ describe('POST /api/register/individual — someone already on this event', () =
     })
   })
 
-  it.each(['resume', 'email_link'])('an unfinished group registration (%s) is not resumed from this form', async (kind) => {
+  it('an unfinished group registration is not resumed from this form', async () => {
     h.stripeOn = true
-    duplicate(kind, 'group')
+    duplicate('resume', 'group')
     expect(await settle(await post())).toEqual({
       status: 409,
       body: {
@@ -525,6 +569,64 @@ describe('POST /api/register/individual — someone already on this event', () =
       expect(h.pendingAddons).toHaveBeenCalledWith(expect.anything(), 'reg-old')
       expect(h.confirm).toHaveBeenCalledWith('reg-old', false)
       expect(writes()).toEqual(['hook attachOffer', 'hook pendingAddons', 'hook confirm'])
+    })
+
+    it('an offer that did not attach confirms nothing', async () => {
+      duplicate('resume')
+      existingRow('pending')
+      h.attachOffer.mockResolvedValue(false)
+      expect(await settle(await post({ scholarship_token: 'tok' }))).toEqual(ALREADY)
+      expect(h.confirm).not.toHaveBeenCalled()
+    })
+
+    describe('nobody signed in as the address', () => {
+      beforeEach(() => {
+        h.getCurrentMember.mockResolvedValue(null)
+      })
+
+      it('the person the offer was made to still has it applied', async () => {
+        duplicate('email_link')
+        existingRow('pending')
+        expect(await settle(await post({ scholarship_token: 'tok' }))).toEqual({
+          status: 200,
+          body: { registrationId: 'reg-old', checkoutUrl: null, signInToken: null },
+        })
+        expect(h.confirm).toHaveBeenCalledWith('reg-old', false)
+      })
+
+      it('the offer’s address matches whatever its case or spacing', async () => {
+        h.findOffer.mockResolvedValue({ ...FULL_OFFER, email: ' Kid@Example.com ' })
+        duplicate('email_link')
+        existingRow('pending')
+        expect((await post({ scholarship_token: 'tok' })).status).toBe(200)
+      })
+
+      it('an offer made to another address touches nothing, sends no full-price link, and says why', async () => {
+        h.findOffer.mockResolvedValue({ ...FULL_OFFER, email: 'other@example.com' })
+        duplicate('email_link')
+        existingRow('pending')
+        expect(await settle(await post({ scholarship_token: 'tok' }))).toEqual({
+          status: 409,
+          body: {
+            code: 'scholarship_other_email',
+            error: 'This scholarship was offered to a different email address. Sign in with this email to use it, or reply to your scholarship email and we’ll sort it out.',
+          },
+        })
+        expect(h.attachOffer).not.toHaveBeenCalled()
+        expect(h.confirm).not.toHaveBeenCalled()
+        expect(h.payLink).not.toHaveBeenCalled()
+      })
+    })
+
+    it('an offer already on a registration cannot make a new one free', async () => {
+      h.getCurrentMember.mockResolvedValue(null)
+      h.findOffer.mockResolvedValue({ ...FULL_OFFER, registration_id: 'reg-earlier' })
+      expect(await settle(await post({ scholarship_token: 'tok' }))).toEqual({
+        status: 409,
+        body: { error: 'This scholarship has already been used for a registration. Reply to your scholarship email and we’ll sort it out.' },
+      })
+      expect(writes()).toEqual([])
+      expect(h.confirm).not.toHaveBeenCalled()
     })
 
     it('with add-ons still owed it attaches but does not confirm', async () => {

@@ -8,6 +8,7 @@ import { Choice, Field, Fieldset, Input, Select, Textarea } from '@stellr/web-ui
 import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
 import { gradeOptions } from '@/lib/grade-band'
 import { ageFromDob } from '@/lib/utils'
+import { authPath } from '@/lib/auth-path'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 
@@ -112,11 +113,17 @@ export default function GroupJoinClient({
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [form, setForm] = useState<DetailsForm>(() => detailsFromPrefill(prefill))
-  // Invited person who already has an account → prompt them to sign in and
-  // connect it, instead of provisioning a second passwordless account.
+  // Invited person who already has a login → prompt them to sign in and connect
+  // it, instead of provisioning a second passwordless account. The server's
+  // refusal is kept apart: it also covers someone on file with no login, which the
+  // lookup on blur reads as "no account", so that lookup must not clear it.
   const [existingAccount, setExistingAccount] = useState(false)
+  const [refusedOnFile, setRefusedOnFile] = useState(false)
+  const [schoolAddressOnly, setSchoolAddressOnly] = useState(false)
+  const showSignInPrompt = existingAccount || refusedOnFile
 
-  const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(`/register/${eventSlug}/join/${token}`)}`
+  // authPath carries the way back through sign-in, sign-up and onboarding.
+  const signInUrl = authPath(`/register/${eventSlug}/join/${token}`)
 
   async function checkExistingAccount(email: string) {
     const clean = email.trim().toLowerCase()
@@ -142,6 +149,12 @@ export default function GroupJoinClient({
     if (!form.date_of_birth) return isStudent
     const age = ageFromDob(form.date_of_birth)
     return Number.isFinite(age) && age < 18
+  })()
+  // A child with no login cannot make one until a parent has consented, so they
+  // are never pointed at sign-up: the organiser's add sends the consent form.
+  const needsAnAdult = (() => {
+    const age = ageFromDob(form.date_of_birth)
+    return !Number.isFinite(age) || age < 13
   })()
   // Every student signs the minor participation agreement (regardless of age),
   // with their emergency contact as the guardian — so it's required for all
@@ -214,8 +227,8 @@ export default function GroupJoinClient({
   // ticket so they land on their account without touching the sign-in widget.
   async function handleJoinNew(e: React.FormEvent) {
     e.preventDefault()
-    if (existingAccount) {
-      setError('You already have a Stellr account — please sign in to join this group.')
+    if (showSignInPrompt) {
+      setError('This email is already on file with Stellr — please sign in to join this group.')
       return
     }
     const emailError = emailPairError(form.date_of_birth, form.email, form.school_email)
@@ -242,6 +255,13 @@ export default function GroupJoinClient({
         body: JSON.stringify({ token, details: form }),
       })
       const data = await res.json()
+      // On file, whether or not they have a login yet: show the sign-in prompt.
+      if (res.status === 409 && data.code === 'sign_in_required') {
+        setRefusedOnFile(true)
+        setSchoolAddressOnly(data.school_address_only === true)
+        setSubmitting(false)
+        return
+      }
       if (!res.ok) throw new Error(data.error ?? 'Something went wrong')
 
       if (data.signInToken && !isSignedIn && signInLoaded && signIn) {
@@ -341,11 +361,9 @@ export default function GroupJoinClient({
   // ── New participant: collect details, provision + auto-login on submit ─────
   return (
     <form onSubmit={handleJoinNew} className="space-y-6">
-      {/* Sign-in first. Anyone already in the membership database should join with
-          their existing record rather than re-typing details — the server matches
-          on email either way, but signing in also means no re-keying and no
-          second passwordless account. Deliberately above the form, not buried
-          beside the submit button. */}
+      {/* Sign-in first. Anyone already in the membership database joins with their
+          existing record: the server refuses an address on file from this form.
+          Deliberately above the form, not buried beside the submit button. */}
       <div className="bg-white rounded-xl border-2 border-brand-blue/40 p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
           <div>
@@ -409,8 +427,8 @@ export default function GroupJoinClient({
             dateOfBirth={form.date_of_birth}
             email={form.email}
             schoolEmail={form.school_email}
-            onEmailChange={v => { set('email', v); if (existingAccount) setExistingAccount(false) }}
-            onSchoolEmailChange={v => set('school_email', v)}
+            onEmailChange={v => { set('email', v); setExistingAccount(false); setRefusedOnFile(false) }}
+            onSchoolEmailChange={v => { set('school_email', v); setRefusedOnFile(false) }}
             onEmailBlur={v => checkExistingAccount(v)}
           />
           <Field label="Phone">
@@ -490,13 +508,27 @@ export default function GroupJoinClient({
           </div>
         )}
 
-        {existingAccount && (
+        {showSignInPrompt && (
           <div role="status" className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
-            <p className="font-medium">You already have a Stellr account</p>
-            <p className="mt-1">
-              Sign in to join this group with your existing account —{' '}
-              <Link href={signInUrl} className="underline hover:no-underline font-medium">sign in →</Link>
-            </p>
+            <p className="font-medium">This email is already on file with Stellr</p>
+            {needsAnAdult ? (
+              <p className="mt-1">
+                A parent or guardian needs to help with this one. Please ask your group organiser to add you, and they&apos;ll send the form your parent or guardian needs to sign.
+              </p>
+            ) : (
+              <>
+                <p className="mt-1">
+                  {refusedOnFile && schoolAddressOnly
+                    ? 'Sign in with your main email address, not your school one, and you’ll come back here to join — '
+                    : 'Sign in with the address you first used with us, or create your login with it, and you’ll come back here to join — '}
+                  <Link href={signInUrl} className="underline hover:no-underline font-medium">sign in →</Link>
+                </p>
+                <p className="mt-1">
+                  If that doesn&apos;t work, or a parent or guardian is helping you, ask your group organiser to add you. They can also tell you if you&apos;re already in this group.
+                </p>
+              </>
+            )}
+            <p className="mt-1">Registering someone who shares this email? Use a different address for them.</p>
           </div>
         )}
 
@@ -506,8 +538,8 @@ export default function GroupJoinClient({
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Link href={`/events/${eventSlug}`} className="btn-outline flex-1 text-center py-3">Cancel</Link>
-          {existingAccount ? (
-            <Link href={signInUrl} className="btn-primary flex-1 py-3 text-center">Sign in to join →</Link>
+          {showSignInPrompt ? (
+            needsAnAdult ? null : <Link href={signInUrl} className="btn-primary flex-1 py-3 text-center">Sign in to join →</Link>
           ) : (
             <button type="submit" disabled={submitting} className="btn-primary flex-1 py-3 disabled:opacity-60">
               {submitting ? 'Joining…' : 'Join Group →'}

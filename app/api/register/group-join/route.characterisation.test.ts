@@ -204,34 +204,31 @@ describe('characterisation: POST /api/register/group-join — a member already o
     ['their email', 'email', 'kid@example.com', {}],
     ['their school email', 'school_email', 'kid@example.com', {}],
     ['the school address submitted beside a new email', 'email', OLD_ADDRESS, { school_email: OLD_ADDRESS }],
-  ])('found by %s: linked, no login, and no clerk_user_id written', async (_l, column, value, extra) => {
+  ])('found by %s: asked to sign in, with nothing written', async (_l, column, value, extra) => {
     rec.respond((c) =>
       c.table === 'members' && c.op === 'select' && eqFilter(c, column, value)
         ? { data: { id: 'm-prior' }, error: null }
         : baseResponder(c),
     )
-    h.upsertMember.mockResolvedValue('m-prior')
-    expect(await settle(await post(newcomer(extra)))).toEqual({
-      status: 201,
-      body: { success: true, eventSlug: 'colorado', eventTitle: 'Colorado', signInToken: null },
-    })
-    expect(rec.writes()).toEqual(joinWrites({ newcomer: true, withLogin: false }))
-    expect(rec.payloads('update', 'members')).toEqual([])
-    expect(h.upsertMember).toHaveBeenCalledWith(expect.anything(), expect.anything(), { onExisting: 'skip' })
+    const res = await settle(await post(newcomer(extra)))
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ code: 'sign_in_required' })
+    expect(rec.writes()).toEqual([])
+    expect(h.upsertMember).not.toHaveBeenCalled()
     expect(h.getUserList).not.toHaveBeenCalled()
     expect(h.createUser).not.toHaveBeenCalled()
     expect(h.createSignInToken).not.toHaveBeenCalled()
-    const [row] = rec.payloads('insert', 'participants') as Row[]
-    expect(row.member_id).toBe('m-prior')
+    expect(rec.payloads('insert', 'participants')).toEqual([])
   })
 
-  it('a submitted school address adds a third lookup, before the member is written', async () => {
+  it('a submitted school address adds two lookups, before the member is written', async () => {
     await post(newcomer({ school_email: OLD_ADDRESS }))
-    expect(rec.log.slice(0, 5)).toEqual([
+    expect(rec.log.slice(0, 6)).toEqual([
       'select group_join_tokens',
       'select members', // by email
       'select members', // by school_email
       'select members', // the submitted school address, as someone's email
+      'select members', // the submitted school address, as someone's school address
       'hook upsertMember',
     ])
   })

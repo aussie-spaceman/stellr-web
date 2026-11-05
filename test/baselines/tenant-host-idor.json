@@ -6,15 +6,15 @@
     "failing": 94,
     "unproven": 18,
     "byOutcome": {
-      "honey_write": 30,
+      "honey_write": 26,
       "leak": 14,
       "ok": 4,
       "ok_untouched": 12,
       "oracle": 4,
-      "oracle_4xx": 46,
+      "oracle_4xx": 50,
       "refused": 4,
       "refused_untouched": 6
     }
   },
-  "caseHash": "5f807d7534d0fbf797115c7afea764fbb4a53ed34973accf8d0242be229c39d1"
+  "caseHash": "95216acaf595581ae61adbba0bf7018e7c088606ae587df2997b55a42165248a"
 }

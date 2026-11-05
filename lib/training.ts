@@ -476,8 +476,12 @@ export async function getLesson(
     } else {
       // Unlocked lesson with no usable resource — missing file, or an empty /
       // placeholder link ("TBC"). Surface an actionable unavailable state instead
-      // of a broken "Open lesson" button or blank player.
-      media = { type: 'unavailable' }
+      // of a broken "Open lesson" button or blank player. A Resource lesson made
+      // of attached resources has nothing to play: the page lists them instead.
+      const { count } = kind === 'document'
+        ? await db.from('training_item_resources').select('id', { count: 'exact', head: true }).eq('item_id', itemId)
+        : { count: 0 }
+      media = count ? null : { type: 'unavailable' }
     }
   }
 

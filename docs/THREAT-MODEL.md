@@ -343,7 +343,7 @@ Ranked by current residual. "Accepted" means the owner has knowingly taken the r
 
 These files are named by the plan and cited above as future controls. They are listed here so `test/threat-model.test.ts` can tell a planned path from a broken citation. When one lands, remove it from this list and move its mention into an **Existing** column.
 
-- `lib/authz.ts` (S5)
+None at present.
 
 ---
 
@@ -354,6 +354,7 @@ These files are named by the plan and cited above as future controls. They are l
 | 4 Nov 2026 | First version, S2 docs lane | agent, for owner review |
 | 4 Nov 2026 | Review fixes: TB5 "new table without RLS" had no real existing control (default privileges grant anon ALL), now H; Checkr and Printful are not Svix, Printful's URL secret rated M; `agent_readonly` moved from Existing to Planned in §7.2 I. Probes for each claim added to `test/threat-model.test.ts` | agent, for owner review |
 | 4 Nov 2026 | S2+S3 integration: `lib/tenancy/registry.ts`, `lib/events/repo.ts` and `scripts/check-migration-tenancy.mjs` landed, moved out of §10; TB5 E now cites the tenancy lint's RLS check as Existing, residual H to M (`REVOKE` still unenforced) | agent, for owner review |
+| 4 Nov 2026 | S5 slice C1: `lib/authz.ts` landed, moved out of §10. It stays in the **Planned** cells for now: no route calls it yet, so it is not an existing control until the S5 conversion slices land | agent, for owner review |
 | 4 Nov 2026 | S4 isolation lane: spike chose Option B (`docs/S4-SPIKE.md`); `lib/tenancy/db.ts` landed (not wired), moved out of §10; TB4 S, TB4 D, TB5 I and §8 cite the tenant policies, the matrix and the Storage rule; FORCE RLS recorded as owner-gated. Residuals unchanged until S5 routes use `tenantDb()` | agent, for owner review |
 | 4 Nov 2026 | S4 review fixes: the tenant role can no longer write `events`, `tenant_domains` or `tenant_memberships` (slug, host and owner-role claims); a tenant row cannot point at another tenant's parent row or an unknown event; `tenantDb` runs only minted statements, refuses quoted, comment-split and `U&` spellings plus `pg_settings` and SQL-text functions, and re-reads the pin after every statement; the caller allow-list test scans the whole repo; the Storage rule is enforced in server code (`assertTenantObjectPath`), not a policy `TO tenant_app` that Storage API traffic would never meet | agent, for owner review |
 | 4 Nov 2026 | S4 integration: isolation, audit, field-crypto and IDOR lanes merged; `lib/tenancy/db.ts` and `lib/field-crypto.ts` both landed, so both left §10; `tenant_data_keys` reclassified platform-level (`tenant_app` gets no grant on key material, asserted with `platform_audit_events` in the matrix) | agent, for owner review |

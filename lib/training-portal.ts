@@ -59,6 +59,8 @@ export interface AssignedCourse {
   canAccess: boolean
   objectType: ObjectType
   objectRef: string
+  /** The event's slug when the Object is an event, whichever ref the row used. */
+  eventSlug: string | null
   objectLabel: string
   role: string | null
   requirement: Requirement
@@ -155,6 +157,7 @@ export async function getAssignedCourses(member: CommunityMember): Promise<Assig
     completedCount: base.completedCount,
     canAccess: base.canAccess,
     role: member.event_role,
+    eventSlug: eventSlug.get(ctx.objectRef) ?? null,
     ...ctx,
   })
 

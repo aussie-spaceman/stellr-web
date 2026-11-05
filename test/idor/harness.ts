@@ -5,16 +5,19 @@
 // Boundaries replaced (see test/idor/mocks.ts, which registers them):
 //   @clerk/nextjs/server   auth(), currentUser(), clerkClient() → the persona
 //   @supabase/supabase-js  createClient() → test/idor/honey-db.ts
-//   stripe                 every call rejects
+//   stripe                 every call rejects, unless the case's fixture answers it
 //   next/headers, next/cache, next/server's after()  → inert
-//   global fetch           → 503, recorded; raw sockets refuse to connect
-// No network, no real database, no secrets.
+//   global fetch           → 503, recorded, unless the case's fixture answers it;
+//                            raw sockets refuse to connect
+// No network, no real database, no secrets. Per-route fixtures, which only get a
+// request further and never decide its outcome: test/idor/case-fixtures.ts.
 //
 // Outcomes:
 //   leak         a honeytoken the caller did not send is in the response → FAIL
 //   honey_write  an update/delete matched a Canary row, or an insert/upsert,
-//                rpc() or storage write carried a Canary value          → FAIL
-//   oracle       a 2xx whose status or body changes when tenant B's row is
+//                rpc() or storage write carried a Canary value, or a fetch
+//                a fixture answered carried one the caller did not send → FAIL
+//   oracle      a 2xx whose status or body changes when tenant B's row is
 //                removed (an existence oracle, or a response of fields the
 //                scanner cannot recognise)                               → FAIL
 //   refused      4xx, a redirect, notFound() / redirect()
@@ -36,6 +39,7 @@ import { vi } from 'vitest'
 import { HONEYTOKENS, honeytokenFor, isCanaryId, scanForHoneytokens, type HoneytokenHit } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { IdorTarget } from '@/lib/security/idor-targets'
+import { applyEnv, CASE_FIXTURES, fixtureFor, type CaseFixture } from './case-fixtures'
 import { honeyClient, newHoneyDbState, type HoneyDbState, type HoneyWrite } from './honey-db'
 
 export type Outcome = 'leak' | 'honey_write' | 'oracle' | 'refused' | 'unexercised' | 'ok' | 'error'
@@ -78,6 +82,10 @@ interface HarnessState {
   fetches: string[]
   /** Callbacks handed to next/server after(): run before the case is classified. */
   afters: unknown[]
+  /** The running case's fixture, if any (test/idor/case-fixtures.ts). */
+  fixture?: CaseFixture
+  /** The Canary values the running case's caller sent. */
+  sent: string[]
 }
 
 export const harness: HarnessState = {
@@ -85,13 +93,20 @@ export const harness: HarnessState = {
   db: newHoneyDbState(),
   fetches: [],
   afters: [],
+  sent: [],
 }
 
-export function resetHarness(persona: Persona = 'participant', opts: { honeyAbsent?: boolean } = {}) {
+export function resetHarness(persona: Persona = 'participant', opts: { honeyAbsent?: boolean; fixture?: CaseFixture } = {}) {
   harness.persona = persona
-  harness.db = newHoneyDbState(persona === 'participant' ? { members: [tenantAMemberRow()] } : {}, opts)
+  harness.fixture = opts.fixture
+  const callerRows =
+    persona === 'participant'
+      ? { ...opts.fixture?.callerRows, members: [{ ...tenantAMemberRow(), ...opts.fixture?.member }] }
+      : {}
+  harness.db = newHoneyDbState(callerRows, { honeyAbsent: opts.honeyAbsent, honeyColumns: opts.fixture?.honey })
   harness.fetches = []
   harness.afters = []
+  harness.sent = []
 }
 
 // ── module boundary mocks (registered by test/idor/mocks.ts) ─────────────────
@@ -187,10 +202,46 @@ function rejecting(path: string): unknown {
   })
 }
 
+/**
+ * The Stripe calls a case's fixture may have answered. A Canary value in
+ * the arguments means the id was used; one in any `metadata` (top level, or
+ * nested as in `payment_intent_data.metadata`) is what the webhook acts on later,
+ * so it counts as a write, as an rpc() argument does.
+ */
+const STRIPE_ANSWERS: Record<string, () => unknown> = {
+  'stripe.checkout.sessions.create': () => ({ id: 'cs_idorharness', url: 'https://checkout.stripe.idor.invalid/cs_idorharness' }),
+  'stripe.customers.create': () => ({ id: 'cus_idorharness' }),
+  'stripe.customers.retrieve': () => ({ id: 'cus_idorharness' }),
+}
+
+/** Every `metadata` value in a Stripe call's arguments, at any depth. */
+function stripeMetadata(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.flatMap(stripeMetadata)
+  if (!value || typeof value !== 'object') return []
+  return Object.entries(value).flatMap(([k, v]) => (k === 'metadata' ? [v] : stripeMetadata(v)))
+}
+
+function answeringStripe(path: string): unknown {
+  const fallback = rejecting(path) as () => unknown
+  const fn = (...args: unknown[]) => {
+    const answer = STRIPE_ANSWERS[path]
+    if (!answer || !harness.fixture?.stripe) return fallback()
+    if (scanForHoneytokens(args).length) harness.db.touched = true
+    const metadata = scanForHoneytokens(stripeMetadata(args))
+    if (metadata.length) {
+      harness.db.writes.push({ table: path, op: 'create', detail: `metadata carries the Canary value ${metadata[0].value}` })
+    }
+    return Promise.resolve(answer())
+  }
+  return new Proxy(fn, {
+    get: (_t, p) => (p === 'then' ? undefined : typeof p === 'string' ? answeringStripe(`${path}.${p}`) : undefined),
+  })
+}
+
 export function stripeMock() {
   class Stripe {
     constructor() {
-      return rejecting('stripe') as Stripe
+      return answeringStripe('stripe') as Stripe
     }
   }
   return { default: Stripe, Stripe }
@@ -258,16 +309,36 @@ async function settle() {
   }
 }
 
+/**
+ * The body of a request a fixture answered. The integration accepted it, so a
+ * Canary value in it left the system, as one in Stripe metadata does. A value the
+ * caller sent is only the caller's own input passed along; any other came from a
+ * tenant-B row, and counts as a write.
+ */
+async function recordOutboundBody(url: string, input: RequestInfo | URL, init?: RequestInit) {
+  const text = init?.body != null ? await new Response(init.body).text() : input instanceof Request ? await input.clone().text() : ''
+  if (scanForHoneytokens(text).length) harness.db.touched = true
+  const hits = scanForHoneytokens(text, { sent: harness.sent })
+  if (hits.length) {
+    harness.db.writes.push({ table: `fetch:${new URL(url).host}`, op: 'fetch', detail: `request body carries the Canary value ${hits[0].value}` })
+  }
+}
+
 let guarded = false
 /** Global fetch → 503 and recorded; raw sockets refuse to connect. */
 export function installNetworkGuard() {
   if (guarded) return
   guarded = true
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     harness.fetches.push(url)
     // A Canary value in an outbound URL means the id was used (scanned raw and URL-encoded).
     if (scanForHoneytokens(url).length) harness.db.touched = true
+    const answered = harness.fixture?.fetch?.(url)
+    if (answered) {
+      await recordOutboundBody(url, input, init)
+      return answered
+    }
     return new Response(JSON.stringify({ error: 'network disabled in the IDOR harness' }), {
       status: 503,
       headers: { 'content-type': 'application/json' },
@@ -294,6 +365,8 @@ export interface CaseInput {
   /** Other body fields the handler reads: filled with plausible values so validation passes. */
   fill?: string[]
   urlPattern: string
+  /** What this route's case needs to get past validation and configuration. */
+  fixture?: CaseFixture
 }
 
 /**
@@ -306,9 +379,9 @@ export const INPUT_FORMATS: Record<string, string> = {
   ref: `tr:${HONEYTOKENS.id}`,
 }
 
-function inputValue(name: string): string | string[] {
+function inputValue(name: string, fixture?: CaseFixture): string | string[] {
   const key = name.replace(/^\.\.\./, '').split('.').pop() ?? name
-  return INPUT_FORMATS[key] ?? honeytokenFor(name)
+  return fixture?.inputs?.[key] ?? INPUT_FORMATS[key] ?? honeytokenFor(name)
 }
 
 /** A plausible value for a non-id body field, so request validation lets the id through. */
@@ -344,6 +417,8 @@ export interface CaseResult {
   outcome: Outcome
   leaks: HoneytokenHit[]
   writes: HoneyWrite[]
+  /** A Canary value reached the database or an integration. */
+  touched: boolean
   error?: string
   /** For an `oracle` outcome: the two responses that differed. */
   oracle?: string
@@ -359,11 +434,12 @@ export async function buildRequest(input: CaseInput, method: string) {
   // The real NextRequest: 'next/server' itself is mocked (after()), and its
   // factory imports this file, so a static import here would deadlock.
   const { NextRequest } = await vi.importActual<typeof import('next/server')>('next/server')
+  const fixture = fixtureFor(input.fixture, method)
   const sent = new Set<string>()
   const params: Record<string, string | string[]> = {}
   let path = input.urlPattern
   for (const seg of input.segments) {
-    const value = inputValue(seg)
+    const value = inputValue(seg, fixture)
     const name = seg.replace(/^\.\.\./, '')
     params[name] = value
     for (const v of [value].flat()) sent.add(v)
@@ -372,7 +448,7 @@ export async function buildRequest(input: CaseInput, method: string) {
   }
   const url = new URL(`http://stellr.localhost${path}`)
   for (const q of input.query) {
-    const v = inputValue(q)
+    const v = inputValue(q, fixture)
     for (const x of [v].flat()) {
       url.searchParams.append(q, x)
       sent.add(x)
@@ -380,8 +456,9 @@ export async function buildRequest(input: CaseInput, method: string) {
   }
   const body: Record<string, unknown> = {}
   for (const f of input.fill ?? []) setBodyField(body, f, fillerFor(f))
+  Object.assign(body, fixture?.body)
   for (const b of input.body) {
-    const v = inputValue(b)
+    const v = inputValue(b, fixture)
     setBodyField(body, b, v)
     for (const x of [v].flat()) sent.add(x)
   }
@@ -426,6 +503,7 @@ interface RawRun {
 /** One call of the handler, then after() tasks and stray promises are settled. */
 async function invoke(handler: Handler, input: CaseInput, method: string): Promise<RawRun & { sent: string[] }> {
   const { req, params, sent } = await buildRequest(input, method)
+  harness.sent = sent
   let status = 0
   let text = ''
   let body = ''
@@ -497,7 +575,24 @@ export async function runIdorCase(
   const handler = mod[method] as Handler | undefined
   if (typeof handler !== 'function') throw new Error(`no ${method} export`)
 
-  resetHarness(persona)
+  const fixture = fixtureFor(input.fixture, method)
+  const restoreEnv = applyEnv(fixture?.env)
+  try {
+    return await classify(handler, input, method, persona, label, fixture)
+  } finally {
+    restoreEnv()
+  }
+}
+
+async function classify(
+  handler: Handler,
+  input: CaseInput,
+  method: string,
+  persona: Persona,
+  label: string,
+  fixture: CaseFixture | undefined,
+): Promise<CaseResult> {
+  resetHarness(persona, { fixture })
   const run = await invoke(handler, input, method)
   const { status, error } = run
   const leaks = scanForHoneytokens(run.text, { sent: run.sent })
@@ -516,7 +611,7 @@ export async function runIdorCase(
   // data in a shape the scanner cannot recognise).
   let oracle: string | undefined
   if (outcome === 'ok') {
-    resetHarness(persona, { honeyAbsent: true })
+    resetHarness(persona, { honeyAbsent: true, fixture })
     const without = await invoke(handler, input, method)
     if (without.status !== status || normalise(without.body) !== normalise(run.body)) {
       outcome = 'oracle'
@@ -526,9 +621,9 @@ export async function runIdorCase(
   resetHarness(persona)
 
   if (process.env.IDOR_RESULTS_FILE) {
-    appendFileSync(process.env.IDOR_RESULTS_FILE, JSON.stringify({ label, method, status, outcome }) + '\n')
+    appendFileSync(process.env.IDOR_RESULTS_FILE, JSON.stringify({ label, method, status, outcome, touched }) + '\n')
   }
-  return { method, status, outcome, leaks, writes, error, oracle }
+  return { method, status, outcome, leaks, writes, touched, error, oracle }
 }
 
 function safeJson(v: unknown): string {
@@ -540,7 +635,7 @@ function safeJson(v: unknown): string {
 }
 
 export function targetInput(t: IdorTarget): CaseInput {
-  return { segments: t.segments, query: t.query, body: t.body, fill: t.fill, urlPattern: t.urlPattern }
+  return { segments: t.segments, query: t.query, body: t.body, fill: t.fill, urlPattern: t.urlPattern, fixture: CASE_FIXTURES[t.file] }
 }
 
 export { HONEYTOKENS }

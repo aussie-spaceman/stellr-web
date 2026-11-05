@@ -36,7 +36,7 @@ vi.mock('@/lib/entitlements', () => ({
   hasReservedCohortBooking: async () => h.reserved,
 }))
 
-import { enrollWithCredit, enrollFree } from './mentoring'
+import { enrollWithCredit, enrollFree, getCohortFull } from './mentoring'
 import type { CommunityMember } from './community'
 
 const member = { id: 'm1', activeTierIds: ['tier-1'], isAdmin: false } as unknown as CommunityMember
@@ -56,6 +56,39 @@ beforeEach(() => {
   h.reserved = false
   h.credits = 12
   h.bookCohortFromAllocation.mockClear()
+})
+
+// A member may sign up only to a cohort that is open and active, the two conditions
+// Discover lists by, on every path.
+describe('a cohort that takes no registrations', () => {
+  it('reads lifecycle: without it no cohort would take a registration', async () => {
+    let columns = ''
+    const q = {
+      select: (cols: string) => ((columns = cols), q),
+      eq: () => q,
+      maybeSingle: async () => ({ data: null, error: null }),
+    }
+    db = { client: { from: () => q } } as unknown as FakeDb
+    expect(await getCohortFull('c1')).toBeNull()
+    expect(columns.split(',').map((c) => c.trim())).toContain('lifecycle')
+  })
+
+  it('an open, active cohort takes them', async () => {
+    db = fakeSupabase({ mentoring_cohorts: [cohort()], cohort_members: [], membership_tiers: [] })
+    expect((await getCohortFull('c1'))?.takesRegistrations).toBe(true)
+  })
+
+  it.each([
+    ['archived', { lifecycle: 'archived', is_open: true }],
+    ['closed', { lifecycle: 'active', is_open: false }],
+  ])('%s: no credit drawn, nobody rostered', async (_name, patch) => {
+    db = fakeSupabase({ mentoring_cohorts: [{ ...cohort(['tier-1']), ...patch }], cohort_members: [], membership_tiers: [] })
+    expect(await enrollFree(member, 'c1')).toEqual({ ok: false, reason: 'not-open' })
+    db = fakeSupabase({ mentoring_cohorts: [{ ...cohort(), ...patch }], cohort_members: [], membership_tiers: [] })
+    expect(await enrollWithCredit(member, 'c1')).toEqual({ ok: false, reason: 'not-open' })
+    expect(h.bookCohortFromAllocation).not.toHaveBeenCalled()
+    expect(rostered()).toHaveLength(0)
+  })
 })
 
 describe('enrollWithCredit: a held paid seat', () => {

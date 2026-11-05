@@ -37,13 +37,12 @@ export function ReactionBar({ targetType, targetId, initial }: Props) {
       return [...prev, { emoji, count: 1, reactedByMe: true }]
     })
 
-    try {
-      await fetch('/api/community/reactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetType, targetId, emoji }),
-      })
-    } catch {
+    const res = await fetch('/api/community/reactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetType, targetId, emoji }),
+    }).catch(() => null)
+    if (!res?.ok) {
       // On failure, revert by re-toggling locally.
       setReactions((prev) => {
         const found = prev.find((r) => r.emoji === emoji)

@@ -12,6 +12,7 @@ const { state } = vi.hoisted(() => ({
     unlocked: true,
     upserts: [] as { table: string; row: Record<string, unknown> }[],
     gateCalls: [] as { member: { id: string }; opts: Record<string, unknown> }[],
+    lifecycle: 'active',
   },
 }))
 
@@ -30,7 +31,7 @@ vi.mock('@/lib/supabase', () => ({
       const q = {
         select: () => q,
         eq: () => q,
-        maybeSingle: async () => ({ data: table === 'mentoring_cohorts' ? { name: 'Rocketry' } : null, error: null }),
+        maybeSingle: async () => ({ data: table === 'mentoring_cohorts' ? { name: 'Rocketry', lifecycle: state.lifecycle } : null, error: null }),
         upsert: async (row: Record<string, unknown>) => {
           state.upserts.push({ table, row })
           return { error: null }
@@ -48,6 +49,7 @@ beforeEach(() => {
   state.unlocked = true
   state.upserts = []
   state.gateCalls = []
+  state.lifecycle = 'active'
 })
 
 const rostered = () => state.upserts.filter((u) => u.table === 'cohort_members')
@@ -76,5 +78,13 @@ describe('rosterAfterPaidBooking: minor-agreement backstop', () => {
     expect(await rosterAfterPaidBooking('c1', 'm1')).toEqual({ rostered: true })
     expect(state.gateCalls).toHaveLength(1)
     expect(rostered()).toHaveLength(1)
+  })
+})
+
+describe('rosterAfterPaidBooking: a cohort archived since Checkout', () => {
+  it('holds the member for staff, enforced or not', async () => {
+    state.lifecycle = 'archived'
+    expect(await rosterAfterPaidBooking('c1', 'm1')).toEqual({ rostered: false, reason: 'cohort-archived' })
+    expect(rostered()).toHaveLength(0)
   })
 })

@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   if (!cohortId) return NextResponse.json({ error: 'Missing cohort' }, { status: 400 })
 
   const cohort = await getCohortFull(cohortId)
-  if (!cohort || !cohort.isOpen) return NextResponse.json({ error: 'This cohort is not open for registration' }, { status: 404 })
+  if (!cohort || !cohort.takesRegistrations) return NextResponse.json({ error: 'This cohort is not open for registration' }, { status: 404 })
 
   if (method === 'free') {
     const r = await enrollFree(member, cohortId)

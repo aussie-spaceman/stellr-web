@@ -63,6 +63,29 @@ describe('GET /api/admin/health/integrations — supabaseKeys', () => {
     for (const value of [LEGACY_ANON, LEGACY_SERVICE]) expect(text).not.toContain(value)
   })
 
+  it('reports the tenant routing flag and suffix error, never the zone', async () => {
+    authMock.mockResolvedValue({ userId: 'u-admin', sessionClaims: { metadata: { role: 'admin' } } })
+
+    vi.stubEnv('TENANT_ROUTING_ENABLED', undefined)
+    vi.stubEnv('TENANT_HOST_SUFFIX', undefined)
+    expect((await (await GET()).json()).tenantRouting).toEqual({ enabled: false, suffixError: null })
+
+    vi.stubEnv('TENANT_ROUTING_ENABLED', 'true')
+    const unset = (await (await GET()).json()).tenantRouting
+    expect(unset.enabled).toBe(true)
+    expect(unset.suffixError).toMatch(/TENANT_HOST_SUFFIX is not set/)
+
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.stellreducation.org')
+    const refused = await (await GET()).text()
+    expect(JSON.parse(refused).tenantRouting.suffixError).toMatch(/not a safe tenant zone suffix/)
+    expect(refused).not.toContain('.stellreducation.org')
+
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
+    const good = await (await GET()).text()
+    expect(JSON.parse(good).tenantRouting).toEqual({ enabled: true, suffixError: null })
+    expect(good).not.toContain('.events.stellreducation.org')
+  })
+
   it('stays admin-only (403 for a member)', async () => {
     authMock.mockResolvedValue({ userId: 'u-member', sessionClaims: { metadata: { role: 'member' } } })
     expect((await GET()).status).toBe(403)

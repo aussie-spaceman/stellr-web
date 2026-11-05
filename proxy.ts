@@ -9,6 +9,14 @@ import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { authPath } from '@/lib/auth-path'
 import { safeNext } from '@/lib/safe-next'
 import { NONCE_HEADER, applyCsp, cspFor } from '@/lib/csp'
+import {
+  TENANT_ID_HEADER,
+  TENANT_ROUTING_FLAG,
+  TENANT_SLUG_HEADER,
+  resolveTenantHost,
+  type TenantHostResolution,
+} from '@/lib/tenancy/host'
+import { TENANT_HOST_ROBOTS_TXT, isInternalTenantTreePath, tenantHostRoute } from '@/lib/tenancy/tenant-surface'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -108,7 +116,62 @@ function withRegionCookie(req: NextRequest, res: Response): Response {
   return res
 }
 
+/**
+ * NextResponse init that drops client-sent tenant headers, or undefined when the
+ * request has none. The usual request has none, and then the response is exactly
+ * what it was before tenant routing existed: no request-header override at all.
+ */
+function withoutClientTenantHeaders(req: NextRequest): { request: { headers: Headers } } | undefined {
+  if (!req.headers.has(TENANT_ID_HEADER) && !req.headers.has(TENANT_SLUG_HEADER)) return undefined
+  const headers = new Headers(req.headers)
+  headers.delete(TENANT_ID_HEADER)
+  headers.delete(TENANT_SLUG_HEADER)
+  return { request: { headers } }
+}
+
+function plainResponse(body: string, status: number, extra: Record<string, string> = {}): NextResponse {
+  return new NextResponse(body, {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex', ...extra },
+  })
+}
+
+const tenantHostNotFound = () => plainResponse('Not found', 404)
+
+/** Answers a request on a host that is not Stellr's. Never falls through to the Stellr path. */
+async function respondOnNonStellrHost(
+  req: NextRequest,
+  event: NextFetchEvent,
+  resolution: Exclude<TenantHostResolution, { kind: 'stellr' }>,
+): Promise<Response> {
+  if (resolution.kind === 'unavailable') return plainResponse('Service unavailable', 503, { 'Retry-After': '30' })
+  if (resolution.kind !== 'tenant') return tenantHostNotFound()
+  switch (tenantHostRoute(req.nextUrl.pathname)) {
+    case 'denied':
+      return tenantHostNotFound()
+    case 'robots':
+      return new NextResponse(TENANT_HOST_ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+    case 'static':
+      return NextResponse.next(withoutClientTenantHeaders(req))
+    default:
+      return (await tenantClerkHandler(req, event)) || tenantHostNotFound()
+  }
+}
+
 export default async function proxy(req: NextRequest, event: NextFetchEvent) {
+  // Always on, on every host: the tenant tree is reached only through the rewrite below.
+  if (isInternalTenantTreePath(req.nextUrl.pathname)) return plainResponse('Not found', 404)
+
+  // Tenant routing (S5, B5). This comes before the marketing fast path and the
+  // crawler count, because `/` and /events would otherwise serve Stellr's marketing
+  // on a tenant host. With the flag off it is this one string comparison. With it
+  // on, a host outside the tenant zone is string work too: only a host inside the
+  // zone can reach the cached host map, so a Stellr host never adds a database call.
+  if (process.env[TENANT_ROUTING_FLAG] === 'true') {
+    const resolution = await resolveTenantHost(req.headers.get('host'))
+    if (resolution.kind !== 'stellr') return respondOnNonStellrHost(req, event, resolution)
+  }
+
   const host = req.headers.get('host') ?? ''
   const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
   if (!isAppSubdomain && isMarketingRoute(req)) {
@@ -118,11 +181,64 @@ export default async function proxy(req: NextRequest, event: NextFetchEvent) {
       if (bot) event.waitUntil(recordCrawlerHit(bot, req.nextUrl.pathname))
     }
     // Report-Only CSP (lib/csp.ts): marketing pages are prerendered, so the host policy.
-    return applyCsp(withRegionCookie(req, NextResponse.next()), cspFor(req.nextUrl.pathname).value, req.url)
+    return applyCsp(withRegionCookie(req, NextResponse.next(withoutClientTenantHeaders(req))), cspFor(req.nextUrl.pathname).value, req.url)
   }
   // Clerk returns nothing when it has nothing to add; that means carry on.
-  return withRegionCookie(req, (await clerkHandler(req, event)) || NextResponse.next())
+  return withRegionCookie(req, (await clerkHandler(req, event)) || NextResponse.next(withoutClientTenantHeaders(req)))
 }
+
+/** The per-instance limit on public credential pages, on every host that serves them. */
+function credentialRateLimited(req: NextRequest): NextResponse | null {
+  if (!isCredentialRoute(req)) return null
+  const rl = checkRateLimit(`credentials:${clientIp(req)}`, { limit: 60, windowMs: 60_000 })
+  if (rl.ok) return null
+  return new NextResponse('Too many requests', {
+    status: 429,
+    headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+  })
+}
+
+// A tenant host's allowed pages and APIs. Clerk runs so that a session and its
+// handshake work there, but none of the Stellr handler's host logic does: no
+// app-host redirects, no www 308s, no crawler count, and no /admin role check,
+// because /admin never gets this far (the allow-list denies it, since a Clerk role
+// is valid on every host until lib/authz checks tenant membership).
+const tenantClerkHandler = clerkMiddleware(async (auth, req) => {
+  // The cached map again: a clerkMiddleware handler takes no extra argument.
+  const resolution = await resolveTenantHost(req.headers.get('host'))
+  if (resolution.kind !== 'tenant') return tenantHostNotFound()
+
+  const limited = credentialRateLimited(req)
+  if (limited) return limited
+  if (isProtectedRoute(req)) await auth.protect()
+
+  const pathname = req.nextUrl.pathname
+  const headers = new Headers(req.headers)
+  headers.delete(TENANT_ID_HEADER)
+  headers.delete(TENANT_SLUG_HEADER)
+  headers.delete(PRIVATE_ROUTE_HEADER)
+  if (isPrivatePath(pathname)) headers.set(PRIVATE_ROUTE_HEADER, '1')
+  headers.delete('content-security-policy')
+  headers.delete('content-security-policy-report-only')
+  headers.delete(NONCE_HEADER)
+  const csp = cspFor(pathname)
+  if (csp.nonce) {
+    headers.set('content-security-policy-report-only', csp.value)
+    headers.set(NONCE_HEADER, csp.nonce)
+  }
+
+  // An API cannot live in the tenant tree, so it gets the trusted headers
+  // (lib/tenancy/request-tenant.ts). A page gets the tenant from its URL instead,
+  // which keeps the tenant in the cache key, so it never sees these headers.
+  if (tenantHostRoute(pathname) === 'api') {
+    headers.set(TENANT_ID_HEADER, resolution.tenantId)
+    headers.set(TENANT_SLUG_HEADER, resolution.tenantSlug)
+    return applyCsp(NextResponse.next({ request: { headers } }), csp.value, req.url)
+  }
+  const target = req.nextUrl.clone()
+  target.pathname = `/_t/${resolution.tenantSlug}${pathname === '/' ? '' : pathname}`
+  return applyCsp(NextResponse.rewrite(target, { request: { headers } }), csp.value, req.url)
+})
 
 const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   const host = req.headers.get('host') ?? ''
@@ -153,7 +269,7 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
     // changing the URL. Event *detail* and registration still belong to www and
     // fall through to the public-only redirect below.
     if (url.pathname === '/events') {
-      return NextResponse.rewrite(new URL('/community/events', req.url))
+      return NextResponse.rewrite(new URL('/community/events', req.url), withoutClientTenantHeaders(req))
     }
     // Admin view-as is a host-only cookie on app, so on www the credential page
     // resolves the admin, not the member, and says "This credential is
@@ -165,15 +281,8 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
     }
   }
 
-  if (isCredentialRoute(req)) {
-    const rl = checkRateLimit(`credentials:${clientIp(req)}`, { limit: 60, windowMs: 60_000 })
-    if (!rl.ok) {
-      return new NextResponse('Too many requests', {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfterSeconds) },
-      })
-    }
-  }
+  const limited = credentialRateLimited(req)
+  if (limited) return limited
 
   if (isAuthRoute(req) && userId) {
     // Already signed in. With a ?next, go through onboarding, which sends an
@@ -225,6 +334,9 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   const headers = new Headers(req.headers)
   headers.delete(PRIVATE_ROUTE_HEADER)
   if (privateRoute) headers.set(PRIVATE_ROUTE_HEADER, '1')
+  // Only the tenant handler above sets these, on a host mapped to a tenant.
+  headers.delete(TENANT_ID_HEADER)
+  headers.delete(TENANT_SLUG_HEADER)
 
   // ── Content-Security-Policy, Report-Only (S1; lib/csp.ts) ──────────────────
   // A route that renders per request gets a fresh nonce. Next reads it from the
@@ -252,9 +364,32 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 // desk's scanner reader (/vendor/zxing_reader.wasm) is a static file too.
 // /api/csp-report (browser CSP reports) is skipped for the same reason: it reads
 // no session, and a page can send several reports.
+//
+// The first entry leaves out URLs with a static file extension. The last two entries
+// are for tenant routing (S5, B5), and neither adds a proxy run for normal Stellr
+// traffic:
+//   - A first segment starting with `%`, or `_t` or an encoded `_t`. The tenant tree
+//     must 404 by every spelling, with or without an extension, on every host. The
+//     proxy compares the decoded segment; anything else starting `%` just carries on.
+//   - Any host that is not one of Stellr's own (lib/tenancy/host-pure.ts, and
+//     test/proxy-tenant-routing.test.ts keeps the two in step). On those hosts every
+//     path must reach the tenant-host allow-list. The Stellr hosts are named literally
+//     because Next reads this config statically, and naming them means this entry does
+//     not depend on the zone setting. Attaching a new Stellr domain means adding it
+//     here and in host-pure.ts, or each of its static files runs the proxy and Clerk.
 export const config = {
   matcher: [
     '/((?!_next|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
     '/((?!api/img(?:/|$)|api/csp-report(?:/|$))(?:api|trpc).*)',
+    '/((?:%|_(?:[tT](?:/|$)|%)).*)',
+    {
+      source: '/((?!_next(?:/|$)|api/img(?:/|$)|api/csp-report(?:/|$)).*)',
+      missing: [
+        {
+          type: 'host',
+          value: '(?:(?:www\\.|app\\.)?stellreducation\\.org|localhost|127\\.0\\.0\\.1|.+\\.vercel\\.app)',
+        },
+      ],
+    },
   ],
 }

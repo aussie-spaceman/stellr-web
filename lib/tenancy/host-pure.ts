@@ -82,6 +82,10 @@ export function isDevZoneSuffix(suffix: string): boolean {
  * `.events.stellreducation.org`). `.org` or `.stellreducation.org` would put
  * www and app inside the zone and 404 them, so they are refused and treated as
  * unset.
+ *
+ * A zone under `.vercel.app` is refused too. Every host there is a known Stellr
+ * host, and browser code can't read the zone, so the server would route such a
+ * host as a tenant while the browser loaded trackers on it.
  */
 export function normaliseZoneSuffix(raw: string | null | undefined): string | null {
   if (typeof raw !== 'string') return null
@@ -90,6 +94,7 @@ export function normaliseZoneSuffix(raw: string | null | undefined): string | nu
   const host = normaliseHost(trimmed)
   if (!host || host !== trimmed.replace(/\.$/, '') || host.startsWith('[')) return null
   if (!isDevZoneSuffix(`.${host}`) && host.split('.').length < 3) return null
+  if (`.${host}`.endsWith(KNOWN_STELLR_HOST_SUFFIX)) return null
   return `.${host}`
 }
 

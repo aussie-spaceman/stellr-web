@@ -123,6 +123,7 @@ SELECT set_eq(
     'public.platform_audit_events',
     'public.platform_pricing',
     'public.privacy_requests',
+    'public.rate_limit_hits',
     'public.recording_offloads',
     'public.refund_policies',
     'public.registrations',

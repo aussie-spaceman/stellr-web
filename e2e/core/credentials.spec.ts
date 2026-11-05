@@ -1,4 +1,4 @@
-import type { APIRequestContext } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 import { attachConsoleGuard } from '../fixtures/console-guard'
@@ -35,8 +35,12 @@ const familyToken = (id: string) =>
 // 5s expect timeout. Longer wait, same assertion.
 const AFTER_TOGGLE = { timeout: 20_000 }
 
-async function makeGracePrivate(request: APIRequestContext) {
-  const res = await request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
+// Signed-in API calls go through a page that has loaded, never the `request`
+// fixture: its saved Clerk session cookie is short-lived and nothing renews it,
+// so the call answers 401 once the suite has been running for a minute or so.
+async function makeGracePrivate(page: Page) {
+  await page.goto('/account')
+  const res = await page.request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
     data: { visibility: 'private' },
   })
   expect(res.status(), `resetting Grace's credential to private: ${await res.text()}`).toBe(200)
@@ -59,8 +63,8 @@ test.describe('as Grace (adult)', () => {
   // Scoped to this test alone: the suite is fullyParallel, and a reset hook on
   // the wallet test could flip the credential back mid-way through this one.
   test.describe('publishing', () => {
-    test.beforeEach(async ({ request }) => makeGracePrivate(request))
-    test.afterEach(async ({ request }) => makeGracePrivate(request))
+    test.beforeEach(async ({ page }) => makeGracePrivate(page))
+    test.afterEach(async ({ page }) => makeGracePrivate(page))
 
     test('she can make it public, gets LinkedIn links, and can make it private again', async ({ page }) => {
       await page.goto(GRACE)
@@ -112,15 +116,17 @@ test.describe('as Ada (minor, consent outstanding)', () => {
     expect(consoleErrors, 'credential page logged console errors').toEqual([])
   })
 
-  test('the server refuses to publish it even if asked directly', async ({ request }) => {
-    const res = await request.post('/api/credentials/STL-2026-E2EADA01/visibility', {
+  test('the server refuses to publish it even if asked directly', async ({ page }) => {
+    await page.goto('/account')
+    const res = await page.request.post('/api/credentials/STL-2026-E2EADA01/visibility', {
       data: { visibility: 'public' },
     })
     expect(res.status()).toBe(403)
   })
 
-  test("she cannot change someone else's credential", async ({ request }) => {
-    const res = await request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
+  test("she cannot change someone else's credential", async ({ page }) => {
+    await page.goto('/account')
+    const res = await page.request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
       data: { visibility: 'public' },
     })
     expect(res.status()).toBe(404)

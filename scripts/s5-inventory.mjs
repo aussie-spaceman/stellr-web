@@ -22,24 +22,26 @@
 //
 // The baselines in test/baselines/ are written by this script, never by hand.
 // The ratchet tests (test/service-role-ratchet.test.ts,
-// test/events-facade-ratchet.test.ts) fail when a count GROWS, and also when
-// it shrinks without the baseline being shrunk with it, so the ratchet only
-// tightens. Audit coverage (test/audit-coverage.test.ts) and the
-// optional-event writers (test/optional-event-tenant-id.test.ts) are
-// report-only for now.
+// test/events-facade-ratchet.test.ts, test/audit-coverage.test.ts) fail when a
+// count GROWS, and also when it shrinks without the baseline being shrunk with
+// it, so the ratchet only tightens. scripts/audit-cap.mjs compares the audit
+// baseline with the merge base, which a test in the same tree cannot. The
+// optional-event writers (test/optional-event-tenant-id.test.ts) are report-only
+// for now.
 //
 // Usage (tsx, because it imports the TypeScript registry and route AST):
 //   npx tsx scripts/s5-inventory.mjs            summary and ratchet diffs
 //   npx tsx scripts/s5-inventory.mjs --json     the full measurement as JSON
 //   npx tsx scripts/s5-inventory.mjs --check    exit 1 when a ratchet grew or is stale
 //   npx tsx scripts/s5-inventory.mjs --write    shrink the baselines to what is measured
-//                                               (and regenerate the audit report)
 //   npx tsx scripts/s5-inventory.mjs --write --allow-grow
 //       also ADD new entries. A new service-role file gets class from the
 //       heuristic and a reason starting "TODO:", which the ratchet test
 //       rejects: replace it with a real reason before committing.
 //   npx tsx scripts/s5-inventory.mjs --seed     write all baselines from scratch
 //                                               (refuses when one already exists)
+//   npx tsx scripts/s5-inventory.mjs --why <route file>
+//       the helpers a GET goes through to reach a database write
 //   --root <dir>  measure another checkout (default: the current directory)
 //
 // Read-only unless --write or --seed. Never prints file contents.
@@ -49,7 +51,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { TABLE_REGISTRY } from '../lib/tenancy/registry'
 import { resolveModule } from '../lib/security/route-ast'
-import { auditHandlers } from '../lib/security/audit-coverage'
+import { auditHandlers, whyGetWrites } from '../lib/security/audit-coverage'
 
 // ── What is scanned ──────────────────────────────────────────────────────────
 
@@ -90,12 +92,12 @@ export function collectSources(root) {
   return new Map([...out.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 }
 
-function parse(file, src) {
+export function parse(file, src) {
   const kind = /\.tsx$|\.jsx$/.test(file) ? ts.ScriptKind.TSX : /\.(m|c)?js$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS
   return ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, kind)
 }
 
-function walkNodes(node, visit) {
+export function walkNodes(node, visit) {
   visit(node)
   ts.forEachChild(node, (c) => walkNodes(c, visit))
 }
@@ -272,6 +274,7 @@ export function classifyServiceRole(file, tables, reachesUnnamedTables = false) 
 
 /** The Sanity event getters in lib/sanity.ts that lib/events/repo.ts fronts. */
 export const SANITY_EVENT_GETTERS = [
+  'getAllCampaigns',
   'getAllEvents',
   'getEventBySlug',
   'getEventsByIds',
@@ -350,6 +353,23 @@ export function hasRawEventGroq(file, src) {
   return found
 }
 
+/**
+ * Which top-level statements of lib/sanity.ts query event documents, by name. A
+ * getter belongs in SANITY_EVENT_GETTERS because of the query it runs, whatever it
+ * is called: a campaign is an event document too. An unnamed statement is returned
+ * as its first line, so it fails the comparison rather than slipping past it.
+ */
+export function sanityEventQueryExports(src) {
+  const out = []
+  const sf = parse('lib/sanity.ts', src)
+  for (const stmt of sf.statements) {
+    if (ts.isImportDeclaration(stmt) || !hasRawEventGroq('lib/x.ts', stmt.getFullText(sf))) continue
+    const named = ts.isFunctionDeclaration(stmt) ? stmt.name?.text : ts.isVariableStatement(stmt) ? stmt.declarationList.declarations[0].name.getText(sf) : null
+    out.push(named ?? stmt.getText(sf).split('\n')[0])
+  }
+  return out.sort()
+}
+
 // ── 4. Optional-event writers ────────────────────────────────────────────────
 
 /**
@@ -388,7 +408,7 @@ function readsRequest(expr) {
 }
 
 /** The initializer that binds this name in an enclosing scope, or null. */
-function initializerOf(id) {
+export function initializerOf(id) {
   const binds = (name) => (ts.isIdentifier(name) ? name.text === id.text : name.elements.some((el) => ts.isBindingElement(el) && binds(el.name)))
   for (let n = id.parent; n; n = n.parent) {
     const statements = ts.isBlock(n) || ts.isSourceFile(n) ? n.statements : null
@@ -501,7 +521,7 @@ export function measure(sources) {
     const g = sanityGetterImports(file, src)
     if (g.length) getters[file] = g
     if (hasRawEventGroq(file, src)) rawEventQueries.push(file)
-    mutations.push(...auditHandlers(file, src))
+    mutations.push(...auditHandlers(file, src, sources))
     optionalWriters.push(...optionalEventWrites(file, src))
   }
   mutations.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
@@ -564,23 +584,41 @@ export function gettersBaseline(files, rawEventQueries = []) {
   }
 }
 
-export function auditBaseline(m) {
+/**
+ * Which rules measured a baseline. Raise it when lib/security/audit-coverage.ts starts
+ * seeing more, in the PR that does, so the log says why the list grew. Raising it excuses
+ * nothing: scripts/audit-cap.mjs still wants the audit-cap-grow label for any new entry.
+ */
+export const AUDIT_MEASURED_BY = 2
+
+export function auditBaseline(m, { keep = null } = {}) {
   const s = summarize(m)
-  const unaudited = (kind) => m.mutations.filter((h) => h.kind === kind && !h.audited).map((h) => h.key)
+  const unaudited = (kind) =>
+    m.mutations.filter((h) => h.kind === kind && !h.audited && h.coverage !== 'exempt' && (!keep || keep.has(h.key))).map((h) => h.key)
+  const mutations = unaudited('mutation')
+  const crons = unaudited('cron')
+  const getMutations = unaudited('get_mutation')
   return {
-    $comment: `${GENERATED} report-only until S5-DA-5 makes it enforcing. Handlers where an audit() write (lib/audit/platform) is not certain to run, including a conditional one. See test/audit-coverage.test.ts.`,
+    $comment: `${GENERATED} every mutating handler must audit or be listed here, and the list must equal the measurement. Handlers where an audit write is not certain to run on every path that can write, including a conditional one. See test/audit-coverage.test.ts. Comparing two of these: scripts/audit-cap.mjs.`,
+    measuredBy: AUDIT_MEASURED_BY,
     totals: {
       mutatingHandlers: s.mutatingHandlers,
-      unauditedMutations: s.mutatingHandlers - s.mutatingHandlersAudited,
+      unauditedMutations: mutations.length,
       cronHandlers: s.cronHandlers,
-      unauditedCrons: s.cronHandlers - s.cronHandlersAudited,
+      unauditedCrons: crons.length,
       getMutations: s.getMutationHandlers,
-      unauditedGetMutations: s.getMutationHandlers - s.getMutationHandlersAudited,
+      unauditedGetMutations: getMutations.length,
     },
-    mutations: unaudited('mutation'),
-    crons: unaudited('cron'),
-    getMutations: unaudited('get_mutation'),
+    mutations,
+    crons,
+    getMutations,
   }
+}
+
+/** The next audit baseline: drop what is now audited or gone and (only with allowGrow) add new handlers. */
+export function nextAuditBaseline(baseline, m, { allowGrow = false } = {}) {
+  if (allowGrow) return auditBaseline(m)
+  return auditBaseline(m, { keep: new Set([...(baseline?.mutations ?? []), ...(baseline?.crons ?? []), ...(baseline?.getMutations ?? [])]) })
 }
 
 /**
@@ -697,7 +735,16 @@ function main(argv) {
   const flag = (f) => argv.includes(f)
   const ri = argv.indexOf('--root')
   const root = path.resolve(ri >= 0 ? argv[ri + 1] : process.cwd())
-  const m = measure(collectSources(root))
+  const sources = collectSources(root)
+  const m = measure(sources)
+
+  const wi = argv.indexOf('--why')
+  if (wi >= 0) {
+    const file = argv[wi + 1]
+    const chain = sources.has(file) ? whyGetWrites(file, sources.get(file), sources) : null
+    console.log(chain === null ? `${file}: its GET reaches no write` : `${file}: ${chain.join(' > ') || 'the handler itself'}`)
+    return 0
+  }
 
   if (flag('--json')) {
     process.stdout.write(`${JSON.stringify({ summary: summarize(m), ...m }, null, 2)}\n`)
@@ -731,7 +778,7 @@ function main(argv) {
     writeBaseline(root, 'serviceRole', serviceRoleBaseline(files))
     writeBaseline(root, 'serviceRoleSeed', serviceRoleSeedBaseline(nextServiceRoleSeed(seedList, files)))
     writeBaseline(root, 'getters', gettersBaseline(nextGetterFiles(gb, m.getters, { allowGrow }), nextRawEventQueries(gb, m.rawEventQueries, { allowGrow })))
-    writeBaseline(root, 'audit', auditBaseline(m))
+    writeBaseline(root, 'audit', nextAuditBaseline(ab, m, { allowGrow }))
   }
 
   const reread = (which, before) => (flag('--write') ? readBaseline(root, which) : before)
@@ -752,9 +799,10 @@ function main(argv) {
   show('Sanity getters: stale baseline entries (run --write)', gd.stale)
   show('Raw event GROQ: NEW files (ratchet fails; read through @/lib/events/repo)', rd.added)
   show('Raw event GROQ: stale baseline entries (run --write)', rd.stale)
-  show('Audit (report-only): newly unaudited handlers', ad.added)
-  show('Audit (report-only): baseline entries now audited or gone (run --write)', ad.stale)
-  const failed = srd.added.length + srd.stale.length + srd.invalid.length + gd.added.length + gd.stale.length + rd.added.length + rd.stale.length
+  show('Audit: NEW unaudited handlers (ratchet fails; use withAudit)', ad.added)
+  show('Audit: baseline entries now audited or gone (run --write)', ad.stale)
+  const failed =
+    srd.added.length + srd.stale.length + srd.invalid.length + gd.added.length + gd.stale.length + rd.added.length + rd.stale.length + ad.added.length + ad.stale.length
   return flag('--check') && failed ? 1 : 0
 }
 

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { CONTAINER_TYPE_TO_OBJECT, type AccessObjectType } from '@/lib/access-objects'
 import { fireObjectCreatedRules } from '@/lib/object-created-rules'
-import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 import { isAdminClaims } from '@/lib/admin-auth'
 
 // GET /api/admin/access/objects — every object in the converged model, across

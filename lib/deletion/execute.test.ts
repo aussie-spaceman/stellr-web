@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // executeDeletion orchestrates a lot of collaborators; stub every side-effecting
 // one so the test can assert the erasure/removal CALLS the orchestrator makes
@@ -25,6 +26,17 @@ vi.mock('./external', () => ({ runExternalCleanup }))
 vi.mock('./preflight', () => ({ deletionPreflight }))
 vi.mock('@/lib/scholarship-cancel', () => ({ liveScholarshipOffers, cancelScholarshipsOnWithdrawal }))
 
+// Tables deleted from so far: the membership sync must see the assignments gone.
+const deletedTables: string[] = []
+const loadEventAssignees = vi.fn<(db: unknown, slug: string) => Promise<{ clerkUserId: string; tenantId: string | null }[] | null>>(async () => [])
+const syncEventManagerUnassigned = vi.fn(async (..._a: unknown[]): Promise<{ ok: true } | { ok: false; step: string; code: string }> => {
+  expect(deletedTables).toContain('event_manager_assignments')
+  return { ok: true }
+})
+const reportRoleSyncFailure = vi.fn(async (..._a: unknown[]) => {})
+vi.mock('@/lib/authz/role-sync', () => ({ loadEventAssignees, syncEventManagerUnassigned }))
+vi.mock('@/lib/authz/role-sync-report', () => ({ reportRoleSyncFailure }))
+
 // Canned reads keyed by (table, selected columns). Writes just succeed.
 const participantsById: Record<string, unknown>[] = [{ id: 'p1' }, { id: 'p2' }]
 const participantMembers: Record<string, unknown>[] = [{ member_id: 'mem1' }, { member_id: 'mem2' }]
@@ -42,7 +54,7 @@ vi.mock('@/lib/supabase', () => ({
       const b: Record<string, unknown> = { table, op: 'select', cols: '', count: false }
       const chain = {
         select: (cols: string, opts?: { head?: boolean }) => { b.cols = cols; b.count = !!opts?.head; return chain },
-        delete: () => { b.op = 'delete'; return chain },
+        delete: () => { b.op = 'delete'; deletedTables.push(table); return chain },
         update: () => { b.op = 'update'; return chain },
         eq: () => chain,
         neq: () => chain,
@@ -87,6 +99,43 @@ beforeEach(() => {
     liveScholarshipOffers, cancelScholarshipsOnWithdrawal]) fn.mockClear()
   for (const k of Object.keys(readErrors)) delete readErrors[k]
   registrationType = 'group'
+  deletedTables.length = 0
+  loadEventAssignees.mockClear()
+  syncEventManagerUnassigned.mockClear()
+  reportRoleSyncFailure.mockClear()
+})
+
+describe('executeDeletion — event manager memberships (S5 C9)', () => {
+  it('syncs each manager of a deleted event after its assignments are gone', async () => {
+    loadEventAssignees.mockResolvedValueOnce([{ clerkUserId: 'user_a', tenantId: null }, { clerkUserId: 'user_b', tenantId: STELLR_TENANT_ID }])
+    const result = await executeDeletion('event', 'colorado', { mode: 'hard' })
+    expect(result.deleted).toBe(true)
+    expect(syncEventManagerUnassigned).toHaveBeenCalledWith(expect.anything(), 'user_a', 'colorado', STELLR_TENANT_ID, null)
+    expect(syncEventManagerUnassigned).toHaveBeenCalledWith(expect.anything(), 'user_b', 'colorado', STELLR_TENANT_ID, STELLR_TENANT_ID)
+  })
+
+  it('reports a failed sync, and the deletion still completes', async () => {
+    loadEventAssignees.mockResolvedValueOnce([{ clerkUserId: 'user_a', tenantId: null }])
+    const failed = { ok: false as const, step: 'membership_delete', code: 'unknown' }
+    syncEventManagerUnassigned.mockResolvedValueOnce(failed)
+    const result = await executeDeletion('event', 'colorado', { mode: 'hard' })
+    expect(result.deleted).toBe(true)
+    expect(reportRoleSyncFailure).toHaveBeenCalledWith('event_delete', failed, expect.anything())
+  })
+
+  it('reports an unreadable assignee list, and the deletion still completes', async () => {
+    loadEventAssignees.mockResolvedValueOnce(null)
+    const result = await executeDeletion('event', 'colorado', { mode: 'hard' })
+    expect(result.deleted).toBe(true)
+    expect(syncEventManagerUnassigned).not.toHaveBeenCalled()
+    expect(reportRoleSyncFailure).toHaveBeenCalledWith('event_delete', expect.objectContaining({ ok: false, step: 'event_assignees' }), expect.anything())
+  })
+
+  it('does nothing for any other entity', async () => {
+    await executeDeletion('registration', 'r1', { mode: 'hard' })
+    expect(loadEventAssignees).not.toHaveBeenCalled()
+    expect(reportRoleSyncFailure).not.toHaveBeenCalled()
+  })
 })
 
 describe('executeDeletion — credential erasure (deep review MP-2 / MP-11)', () => {

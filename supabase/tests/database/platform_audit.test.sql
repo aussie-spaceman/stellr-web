@@ -15,7 +15,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(54);
+SELECT plan(69);
 
 -- Test tenants: A and B for normal chains, C and D for tampering.
 INSERT INTO public.tenants (id, slug, legal_name, display_name, country, payment_region, currency, time_zone) VALUES
@@ -245,6 +245,47 @@ SELECT is(
   (SELECT head_hash FROM public.platform_audit_verify(NULL)),
   'heads and verify agree on the platform chain head');
 SELECT is((SELECT count(*)::int FROM public.platform_audit_heads()), 5, 'one head per chain (A, B, C, D, platform)');
+
+-- ── 11. The webhook actor (migration 20261105052154) ────────────────────────
+SET LOCAL ROLE service_role;
+SELECT lives_ok(
+  $q$SELECT public.platform_audit_append('aaaaaaaa-0000-4000-8000-00000000000a', 'webhook:stripe', 'webhook', 'webhook.event.process')$q$,
+  'service_role appends a webhook actor');
+SELECT lives_ok(
+  $q$SELECT public.platform_audit_append('aaaaaaaa-0000-4000-8000-00000000000a', 'webhook:docu_sign-2', 'webhook', 'webhook.event.process')$q$,
+  'a provider may hold digits, an underscore and a hyphen');
+SELECT lives_ok(
+  $q$SELECT public.platform_audit_append('aaaaaaaa-0000-4000-8000-00000000000a', 'webhook:' || repeat('a', 32), 'webhook', 'webhook.event.process')$q$,
+  'a provider may be 32 characters');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'webhook:' || repeat('a', 33), 'webhook', 'a.b')$q$,
+  '23514', NULL, 'a provider may not be 33 characters');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'webhook:', 'webhook', 'a.b')$q$,
+  '23514', NULL, 'a provider may not be empty');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'webhook:Stripe', 'webhook', 'a.b')$q$,
+  '23514', NULL, 'a provider is lower-case');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'webhook:a.b', 'webhook', 'a.b')$q$,
+  '23514', NULL, 'a provider holds no dot');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'stripe', 'webhook', 'a.b')$q$,
+  '23514', NULL, 'a webhook actor carries the webhook: prefix');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'webhook:stripe', 'user', 'a.b')$q$,
+  '23514', NULL, 'a webhook actor cannot claim to be a user');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'webhook:stripe', 'cron', 'a.b')$q$,
+  '23514', NULL, 'a webhook actor cannot claim to be a cron');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'user_abc123', 'webhook', 'a.b')$q$,
+  '23514', NULL, 'a user id cannot claim to be a webhook');
+SELECT throws_ok($q$SELECT public.platform_audit_append(NULL, 'system', 'other', 'a.b')$q$,
+  '23514', NULL, 'an unknown actor kind is still refused');
+RESET ROLE;
+SELECT is((SELECT ok::text || '/' || checked || '/' || head_seq FROM public.platform_audit_verify('aaaaaaaa-0000-4000-8000-00000000000a')),
+  'true/17/17', 'the chain verifies across rows with a webhook actor');
+SELECT ok(
+  NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.platform_audit_events'::regclass
+               AND conname IN ('platform_audit_events_actor_kind_check', 'platform_audit_events_actor_check') AND NOT convalidated),
+  'both actor constraints are validated');
+SELECT is(
+  encode(public.platform_audit_digest(NULL, NULL, 1, 'webhook:stripe', 'webhook', 'webhook.event.process', NULL, NULL, NULL, '{}', '2026-11-05T10:00:00Z'), 'hex'),
+  'fc9b66570852b4d5110052aed974cec4a9d7665fb23a0b06cbb2197761ec9767',
+  'a webhook row''s digest matches the golden vector lib/audit/platform.test.ts checks');
 
 SELECT * FROM finish();
 ROLLBACK;

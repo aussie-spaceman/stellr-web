@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 
 // GET /api/admin/community/spaces/sources/search?type=event|training|mentoring|coaching&q=…
 // Powers the Access-tab object picker: resolve human-friendly options for linking

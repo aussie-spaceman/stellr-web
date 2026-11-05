@@ -351,7 +351,6 @@
     "lib/event-access.ts",
     "lib/event-admin.ts",
     "lib/event-portal.ts",
-    "lib/events/repo.ts",
     "lib/field-crypto-shadow.ts",
     "lib/group-status.ts",
     "lib/hubspot.ts",

@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 import {
   getVolunteerStatuses,
   getVolunteerTrainingProgress,

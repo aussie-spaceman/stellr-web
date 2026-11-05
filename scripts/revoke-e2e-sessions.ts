@@ -33,34 +33,48 @@ function clerkApi(secretKey: string | undefined, fetchImpl: typeof fetch) {
   if (!secretKey?.startsWith('sk_test_')) {
     throw new Error('Refusing to run: CLERK_SECRET_KEY must be a development (sk_test_) key.')
   }
-  return async (path: string, method = 'GET') => {
+  return async (path: string, method = 'GET', { missingOk = false } = {}) => {
     const res = await fetchImpl(`${API}${path}`, {
       method,
       headers: { Authorization: `Bearer ${secretKey}` },
     })
+    if (missingOk && res.status === 404) return null
     if (!res.ok) throw new Error(`Clerk ${method} ${path.split('?')[0].replace(/sess_\w+/, 'sess_…')} returned ${res.status}`)
     return res.json()
   }
 }
 
-/** Ends the listed sessions. One the run already signed out is left alone. */
+/**
+ * Ends the listed sessions. One the run already signed out is left alone, and so
+ * is one Clerk no longer has (404): a session that does not exist cannot be used.
+ * If Clerk has NONE of them the key is probably for another instance, so that is
+ * an error rather than a clean result.
+ */
 export async function revokeRecordedSessions(
   secretKey: string | undefined,
   ledger: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ recorded: number; revoked: number }> {
+): Promise<{ recorded: number; revoked: number; gone: number }> {
   const call = clerkApi(secretKey, fetchImpl)
   const ids = [...new Set(ledger.split('\n').map((line) => line.trim()).filter(Boolean))]
 
   let revoked = 0
+  let gone = 0
   for (const id of ids) {
     if (!/^sess_\w+$/.test(id)) throw new Error('The session ledger holds a line that is not a session id.')
-    const session = (await call(`/sessions/${id}`)) as { status: string }
+    const session = (await call(`/sessions/${id}`, 'GET', { missingOk: true })) as { status: string } | null
+    if (!session) {
+      gone += 1
+      continue
+    }
     if (session.status !== 'active') continue
     await call(`/sessions/${id}/revoke`, 'POST')
     revoked += 1
   }
-  return { recorded: ids.length, revoked }
+  if (ids.length > 0 && gone === ids.length) {
+    throw new Error('Clerk has none of the recorded sessions: is CLERK_SECRET_KEY for the same instance as the run?')
+  }
+  return { recorded: ids.length, revoked, gone }
 }
 
 /** Ends every active session of every fixture user. */
@@ -103,9 +117,11 @@ async function main() {
   } catch {
     throw new Error('No session ledger, so the sessions this run created cannot be ended.')
   }
-  const { recorded, revoked } = await revokeRecordedSessions(key, ledger)
+  const { recorded, revoked, gone } = await revokeRecordedSessions(key, ledger)
   rmSync(SESSION_LEDGER)
-  console.log(`Sessions recorded: ${recorded}. Revoked: ${revoked}. Already ended: ${recorded - revoked}.`)
+  console.log(
+    `Sessions recorded: ${recorded}. Revoked: ${revoked}. Already ended: ${recorded - revoked - gone}. No longer at Clerk: ${gone}.`,
+  )
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

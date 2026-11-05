@@ -70,7 +70,31 @@ describe('revokeRecordedSessions', () => {
     )
 
     expect(revoked).toEqual(['sess_live'])
-    expect(result).toEqual({ recorded: 2, revoked: 1 })
+    expect(result).toEqual({ recorded: 2, revoked: 1, gone: 0 })
+  })
+
+  it('carries on past a session Clerk no longer has, and still ends the rest', async () => {
+    const revoked: string[] = []
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const id = String(input).match(/sess_\w+/)![0]
+      if (init?.method === 'POST') {
+        revoked.push(id)
+        return json({ id, status: 'revoked' })
+      }
+      return id === 'sess_gone' ? new Response('{}', { status: 404 }) : json({ id, status: 'active' })
+    })
+
+    const result = await revokeRecordedSessions('sk_test_abc', 'sess_gone\nsess_live\n', fetchImpl as typeof fetch)
+
+    expect(revoked).toEqual(['sess_live'])
+    expect(result).toEqual({ recorded: 2, revoked: 1, gone: 1 })
+  })
+
+  it('fails when Clerk has none of the sessions, because the key may be for another instance', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 404 }))
+    await expect(
+      revokeRecordedSessions('sk_test_abc', 'sess_a\nsess_b\n', fetchImpl as typeof fetch),
+    ).rejects.toThrow(/none of the recorded sessions/)
   })
 
   it('rejects a ledger line that is not a session id, before it reaches a URL', async () => {

@@ -1,8 +1,8 @@
 // Tenant host resolution (multi-tenancy plan S5, slice B1).
 //
-// Maps a request's Host header to "Stellr" or to a tenant, for the proxy
-// rewrite that lands in a later slice. Library only: nothing imports this file
-// yet, so it changes no live behaviour. proxy.ts adopts it in B5.
+// Maps a request's Host header to "Stellr" or to a tenant, for the proxy rewrite.
+// proxy.ts (slice B5) calls it only when TENANT_ROUTING_ENABLED is 'true', so with
+// the flag off it changes no live behaviour.
 //
 // The rules, in order:
 //   1. TENANT_ROUTING_ENABLED is not exactly 'true'  -> Stellr. No other check.
@@ -261,6 +261,12 @@ export type TenantHostResolverOptions = {
 
 export type TenantHostResolver = {
   resolve(rawHost: string | null | undefined): Promise<TenantHostResolution>
+  /**
+   * The active, non-owner tenant with this slug, from the same cached map; null
+   * when routing is off, there is no such tenant, or the map cannot be loaded.
+   * For the tenant tree, which trusts its URL param only after this check.
+   */
+  activeTenantBySlug(slug: string): Promise<TenantHostEntry | null>
   /** Drops the cached map, for tests and for an explicit refresh. */
   reset(): void
 }
@@ -348,6 +354,15 @@ export function createTenantHostResolver(opts: TenantHostResolverOptions = {}): 
       }
       return { kind: 'tenant', host: cls.host, tenantId: entry.tenantId, tenantSlug: entry.tenantSlug }
     },
+    async activeTenantBySlug(slug) {
+      if (!tenantRoutingConfig(opts.env ?? process.env).enabled) return null
+      const loaded = await currentMap()
+      if (!loaded) return null
+      for (const entry of loaded.values()) {
+        if (entry.tenantSlug === slug && entry.tenantId !== STELLR_TENANT_ID) return entry
+      }
+      return null
+    },
     reset() {
       map = null
       loadedAt = 0
@@ -367,4 +382,10 @@ let defaultResolver: TenantHostResolver | null = null
 export function resolveTenantHost(rawHost: string | null | undefined): Promise<TenantHostResolution> {
   defaultResolver ??= createTenantHostResolver()
   return defaultResolver.resolve(rawHost)
+}
+
+/** The active, non-owner tenant with this slug, from the default resolver's map. */
+export function activeTenantBySlug(slug: string): Promise<TenantHostEntry | null> {
+  defaultResolver ??= createTenantHostResolver()
+  return defaultResolver.activeTenantBySlug(slug)
 }

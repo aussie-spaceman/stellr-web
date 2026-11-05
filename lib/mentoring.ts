@@ -88,6 +88,11 @@ export interface CohortFull {
   plannedSessions: number
   startDate: string | null
   isOpen: boolean
+  /**
+   * Whether a member may sign themselves up: the cohort is open and active, the
+   * same two conditions Discover lists by (listOpenCohorts).
+   */
+  takesRegistrations: boolean
   blurb: string | null
   freeForTierIds: string[]
   oneOffPriceCents: number | null
@@ -114,6 +119,7 @@ type RawCohort = {
   planned_sessions: number | null
   start_date: string | null
   is_open: boolean | null
+  lifecycle: string | null
   blurb: string | null
   free_for_tier_ids: string[] | null
   one_off_price_cents: number | null
@@ -135,6 +141,7 @@ function toCohortFull(c: RawCohort): CohortFull {
     plannedSessions: c.planned_sessions ?? 6,
     startDate: c.start_date,
     isOpen: !!c.is_open,
+    takesRegistrations: !!c.is_open && c.lifecycle === 'active',
     blurb: c.blurb,
     freeForTierIds: c.free_for_tier_ids ?? [],
     oneOffPriceCents: c.one_off_price_cents,
@@ -254,7 +261,7 @@ async function addToRosterActive(cohortId: string, memberId: string): Promise<vo
 
 export type PaidRosterResult =
   | { rostered: true }
-  | { rostered: false; reason: 'needs-agreement' }
+  | { rostered: false; reason: 'needs-agreement' | 'cohort-archived' }
 
 /**
  * Roster a member into a cohort after a paid entitlement booking confirms (the
@@ -269,14 +276,20 @@ export type PaidRosterResult =
  * records it for staff. It never throws for this, so the webhook does not treat
  * it as a failed booking and refund automatically. Report-only mode rosters as
  * before (the gate logs the would-block itself).
+ *
+ * A cohort archived while Checkout was open is held the same way: the member is
+ * not added, and staff decide. A cohort only closed to new sign-ups still takes
+ * the seat, because the member bought it while it was open.
  */
 export async function rosterAfterPaidBooking(cohortId: string, memberId: string): Promise<PaidRosterResult> {
   const { data: c } = await supabaseServer()
     .from('mentoring_cohorts')
-    .select('name')
+    .select('name, lifecycle')
     .eq('id', cohortId)
     .maybeSingle()
-  const containerName = (c as { name?: string | null } | null)?.name ?? undefined
+  const cohort = c as { name?: string | null; lifecycle?: string | null } | null
+  if (cohort?.lifecycle === 'archived') return { rostered: false, reason: 'cohort-archived' }
+  const containerName = cohort?.name ?? undefined
   const gate = await reportEnrollmentGate({ id: memberId }, { kind: 'cohort', containerId: cohortId, containerName })
   if (accessGatesEnforced() && !gate.unlocked) return { rostered: false, reason: 'needs-agreement' }
   await addToRosterActive(cohortId, memberId)
@@ -286,7 +299,7 @@ export async function rosterAfterPaidBooking(cohortId: string, memberId: string)
 /** Enroll into an open cohort using session credits (draws the cohort's planned sessions). */
 export async function enrollWithCredit(member: CommunityMember, cohortId: string): Promise<EnrollResult> {
   const cohort = await getCohortFull(cohortId)
-  if (!cohort || !cohort.isOpen) return { ok: false, reason: 'not-open' }
+  if (!cohort || !cohort.takesRegistrations) return { ok: false, reason: 'not-open' }
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return { ok: false, reason: 'already-enrolled' }
   // A seat already paid for or drawn but not rostered (a held paid seat): staff
@@ -313,7 +326,7 @@ export async function enrollWithCredit(member: CommunityMember, cohortId: string
 /** Enroll into a cohort that is free for this member (no credit spent). */
 export async function enrollFree(member: CommunityMember, cohortId: string): Promise<EnrollResult> {
   const cohort = await getCohortFull(cohortId)
-  if (!cohort || !cohort.isOpen) return { ok: false, reason: 'not-open' }
+  if (!cohort || !cohort.takesRegistrations) return { ok: false, reason: 'not-open' }
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return { ok: false, reason: 'already-enrolled' }
   if (access.kind !== 'free') return { ok: false, reason: 'needs-payment' }

@@ -4,6 +4,7 @@ import { runEntitlementsLifecycle } from '@/lib/entitlements'
 import { guardCron } from '@/lib/cron'
 import { startCronRun } from '@/lib/cron-runs'
 import { sendDailyErrorDigest } from '@/lib/app-errors'
+import { gcRateLimitStore } from '@/lib/rate-limit-store'
 
 // GET /api/cron/entitlements — runs daily (see vercel.json).
 // Re-grants per-period tier allowances (e.g. the quarterly free mentoring
@@ -15,6 +16,9 @@ import { sendDailyErrorDigest } from '@/lib/app-errors'
 // (lib/app-errors.ts) rather than adding a cron of its own. It runs whether or
 // not the lifecycle succeeded, records itself in cron_runs as 'error-digest',
 // and never throws, so neither job can take the other down.
+//
+// S5 B4: it also clears expired rate limit windows, once RATE_LIMIT_STORE is not
+// memory. In memory mode that step makes no call, and the response is unchanged.
 export async function GET(req: NextRequest) {
   const blocked = guardCron(req)
   if (blocked) return blocked
@@ -26,12 +30,14 @@ export async function GET(req: NextRequest) {
     const result = await runEntitlementsLifecycle()
     await run.finish(result as Record<string, unknown>)
     const errorDigest = await sendDailyErrorDigest(db)
-    return NextResponse.json({ ...result, errorDigest })
+    const rateLimitGc = await gcRateLimitStore(db)
+    return NextResponse.json({ ...result, errorDigest, ...(rateLimitGc ? { rateLimitGc } : {}) })
   } catch (err) {
     console.error('[cron/entitlements]:', err)
     run.fail('run', err)
     await run.finish({})
     const errorDigest = await sendDailyErrorDigest(db)
-    return NextResponse.json({ error: 'lifecycle failed', errorDigest }, { status: 500 })
+    const rateLimitGc = await gcRateLimitStore(db)
+    return NextResponse.json({ error: 'lifecycle failed', errorDigest, ...(rateLimitGc ? { rateLimitGc } : {}) }, { status: 500 })
   }
 }

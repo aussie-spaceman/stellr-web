@@ -15,6 +15,7 @@ import {
   allowedTenantFiles,
   classifyTenantSurface,
   isAllowedOnTenantHost,
+  tenantHostRoute,
   tenantSurfaceDecision,
   tenantSurfaceMatches,
   urlPatternForFile,
@@ -22,8 +23,8 @@ import {
 } from '@/lib/tenancy/tenant-surface'
 
 // S5 (multi-tenant plan), slice B2: the tenant-host route allow-list as data.
-// Not wired: nothing imports lib/tenancy/tenant-surface.ts yet. This test pins
-//   1. the manifest it classifies (474 entries, by class, as measured);
+// proxy.ts consults it from slice B5 (test/proxy-tenant-routing.test.ts). This test pins
+//   1. the manifest it classifies (476 entries, by class, as measured);
 //   2. that every manifest entry has exactly one decision, and no rule is stale;
 //   3. the SMMA rule: no community, home, store or academy route is allowed on
 //      a tenant host, and neither is admin, cron or a webhook;
@@ -35,18 +36,19 @@ import {
 const FILES = Object.keys(ROUTE_MANIFEST)
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
-// The manifest as measured on 4 Nov 2026 (dev 37cd2f7b). A new route changes
-// these numbers, and that change must come with its tenant-host decision.
+// The manifest as measured on 4 Nov 2026 (dev 37cd2f7b), plus the 2 tenant tree
+// pages from B5. A new route changes these numbers, and that change must come with
+// its tenant-host decision.
 const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
   tenant_staff: 0,
   participant: 126,
-  public: 111,
+  public: 113,
   webhook: 12,
   cron: 22,
   stellr_only: 203,
 }
-const MANIFEST_TOTAL = 474
+const MANIFEST_TOTAL = 476
 
 // The decisions. Moving a route between them is a deliberate diff here.
 const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
@@ -55,7 +57,7 @@ const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
   // files pinned under 'routes held back' below
   pending: 42,
   bypass: 4,
-  deny: 379,
+  deny: 381,
 }
 
 /** A concrete URL a manifest file serves, with sample values for its params. */
@@ -81,7 +83,7 @@ function sampleUrl(file: string): string {
 }
 
 describe('the manifest this classifies', () => {
-  it('has the measured class counts, 474 in total', () => {
+  it('has the measured class counts, 476 in total', () => {
     expect(FILES).toHaveLength(MANIFEST_TOTAL)
     const counts = Object.fromEntries(Object.keys(MANIFEST_CLASS_COUNTS).map((c) => [c, 0])) as Record<
       RouteClass,
@@ -215,7 +217,9 @@ describe('routes held back from allow', () => {
 })
 
 describe('proxy-bypass routes', () => {
-  const proxyMatches = (url: string) => unstable_doesMiddlewareMatch({ config: proxyConfig, url })
+  const proxyMatchesOn = (host: string, url: string) =>
+    unstable_doesMiddlewareMatch({ config: proxyConfig, url: `https://${host}${url}`, headers: { host } })
+  const proxyMatches = (url: string) => proxyMatchesOn('www.stellreducation.org', url)
 
   it('lists exactly the manifest routes whose URL the proxy matcher skips, each with a reason', () => {
     const skipped = FILES.filter((f) => !proxyMatches(sampleUrl(f))).sort()
@@ -228,12 +232,12 @@ describe('proxy-bypass routes', () => {
     ])
   })
 
-  // Known gap, pinned so it stays visible. The first matcher entry's extension
-  // lookahead is unanchored, so a dynamic non-API URL containing a listed
-  // extension skips the proxy and never reaches this allow-list. Fixing it
-  // changes live routing, so it is not a wave 1 change.
-  // TODO(B5): anchor the extension to the end of the path, or make tenant-host
-  // resolution fail closed when the proxy did not run, then flip this test.
+  // Matcher behaviour on Stellr hosts is unchanged by tenant routing. Every other
+  // host has the entry keyed on the host (B5), and the allow-list then denies these.
+  it.each(['/events/nevada.html', '/join/x.png', '/studio/a.js'])('leaves the matcher on a Stellr host unchanged for %s', (url) => {
+    expect(proxyMatches(url)).toBe(false)
+  })
+
   it.each([
     '/community/x.png',
     '/community/x.png/members',
@@ -241,9 +245,14 @@ describe('proxy-bypass routes', () => {
     '/events/nevada.html',
     '/join/x.png',
     '/studio/a.js',
-    '/credentials/a.png',
-  ])('known gap: %s skips the proxy', (url) => {
-    expect(proxyMatches(url)).toBe(false)
+  ])('reaches the proxy on a tenant host for %s, which denies it', (url) => {
+    expect(proxyMatchesOn('canary-academy.localhost', url)).toBe(true)
+    expect(tenantHostRoute(url)).toBe('denied')
+  })
+
+  it('takes a dot in an allowed route\'s param into the tenant tree, on a tenant host', () => {
+    expect(proxyMatchesOn('canary-academy.localhost', '/credentials/a.png')).toBe(true)
+    expect(tenantHostRoute('/credentials/a.png')).toBe('page')
   })
 
   it('keeps API URLs in the proxy even with a listed extension', () => {

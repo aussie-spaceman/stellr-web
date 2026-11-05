@@ -6,6 +6,10 @@
 // student names, Discord handles, or medical/dietary data. Only non-identifying
 // values (competition slug, participation_type, an opaque registration ref).
 
+// host-pure, not ./host: this file reaches the browser, and host.ts holds the
+// host-map loader and its secret-key handling.
+import { isStellrTrackingHost } from '@/lib/tenancy/host-pure'
+
 export type ParticipationType = 'competition' | 'event' | 'campaign'
 
 export interface DataLayerEvent {
@@ -14,11 +18,26 @@ export interface DataLayerEvent {
 }
 
 /**
- * Push an event onto the GTM dataLayer. No-op during SSR. Safe if GTM hasn't
- * loaded yet — GTM drains any queued pushes once its snippet runs.
+ * Whether trackers may run on the host this code is running on.
+ *
+ * Decided in the browser, because the root layout is prerendered and must not
+ * read the request: the server answers true and the browser has the last word
+ * before any tracker mounts. No zone suffix is passed, since browser code can't
+ * read server env. isStellrTrackingHost is an allow-list, so an unset or refused
+ * suffix keeps trackers on Stellr's own hosts and off every other host.
+ */
+export function trackingAllowedHere(): boolean {
+  if (typeof window === 'undefined') return true
+  return isStellrTrackingHost(window.location.hostname)
+}
+
+/**
+ * Push an event onto the GTM dataLayer. No-op during SSR and on any host that is
+ * not Stellr's own. Safe if GTM hasn't loaded yet — GTM drains any queued pushes
+ * once its snippet runs.
  */
 export function pushDataLayer(payload: DataLayerEvent): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || !trackingAllowedHere()) return
   window.dataLayer = window.dataLayer || []
   window.dataLayer.push(payload)
 }

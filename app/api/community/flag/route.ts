@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { memberCanSeeComment, memberCanSeePost } from '@/lib/spaces'
+import { memberCanSeeResource } from '@/lib/resources-catalogue'
 
 // Ids use z.guid() (any UUID-shaped string, as zod 3's uuid() was) across the
 // API: zod 4's z.uuid() also checks RFC version/variant bits, which the dev
@@ -32,6 +34,16 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   const { contentType, contentId, reason, note, containerRef } = parsed.data
 
+  // Only content the member can see can be reported. Same answer as for an id that
+  // does not exist.
+  const canSee =
+    contentType === 'post'
+      ? await memberCanSeePost(member, contentId)
+      : contentType === 'comment'
+        ? await memberCanSeeComment(member, contentId)
+        : await memberCanSeeResource(member, contentId, containerRef)
+  if (!canSee) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const db = supabaseServer()
 
   // Prevent duplicate flags from the same member on the same content.
@@ -52,7 +64,8 @@ export async function POST(req: Request) {
     flagged_by: member.id,
     reason: reason ?? null,
     note: note ?? null,
-    viewed_in_container: containerRef ?? null,
+    // Only a resource report keeps a container: the check above is what vouches for it.
+    viewed_in_container: contentType === 'resource' ? (containerRef ?? null) : null,
   })
 
   return NextResponse.json({ ok: true })

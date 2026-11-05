@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   unlocked: true,
   gate: vi.fn(),
   reserved: false,
+  takesRegistrations: true,
   enrollFree: vi.fn(async () => ({ ok: true }) as { ok: boolean; reason?: string }),
   enrollWithCredit: vi.fn(async () => ({ ok: true }) as { ok: boolean; reason?: string }),
   checkoutCreate: vi.fn(async () => ({ url: 'https://checkout.example/cs_1' })),
@@ -23,7 +24,7 @@ vi.mock('@/lib/community', () => ({
   communityWriteBlock: async () => null,
 }))
 vi.mock('@/lib/mentoring', () => ({
-  getCohortFull: async () => ({ id: 'c1', name: 'Rocketry', isOpen: true, oneOffPriceCents: 12000, oneOffStripePriceId: null }),
+  getCohortFull: async () => ({ id: 'c1', name: 'Rocketry', isOpen: true, takesRegistrations: h.takesRegistrations, oneOffPriceCents: 12000, oneOffStripePriceId: null }),
   resolveCohortAccess: async () => ({ enrolled: false, kind: 'paid' }),
   enrollFree: (...args: unknown[]) => h.enrollFree(...(args as [])),
   enrollWithCredit: (...args: unknown[]) => h.enrollWithCredit(...(args as [])),
@@ -100,6 +101,18 @@ beforeEach(() => {
   h.enforced = false
   h.unlocked = true
   h.reserved = false
+  h.takesRegistrations = true
+})
+
+describe('POST /api/community/mentoring/register — a cohort that takes no registrations', () => {
+  it.each(['free', 'credit', 'paid'] as const)('%s: refused, with nothing charged or enrolled', async (method) => {
+    h.takesRegistrations = false
+    const res = await register(method)
+    expect(res.status).toBe(404)
+    expect(h.checkoutCreate).not.toHaveBeenCalled()
+    expect(h.enrollFree).not.toHaveBeenCalled()
+    expect(h.enrollWithCredit).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/community/mentoring/register — paid seat, minor-agreement gate', () => {

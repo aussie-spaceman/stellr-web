@@ -408,6 +408,8 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/(admin)/admin/surveys/page.tsx': 'stellr_only',
   'app/(admin)/admin/surveys/questions/page.tsx': 'stellr_only',
   'app/(admin)/admin/surveys/questions/preview/page.tsx': 'stellr_only',
+  'app/%5Ft/[tenant]/page.tsx': 'public',
+  'app/%5Ft/[tenant]/[...rest]/page.tsx': 'public',
   'app/(auth)/sign-in/[[...sign-in]]/page.tsx': 'public',
   'app/(auth)/sign-up/[[...sign-up]]/page.tsx': 'public',
   'app/(flow)/check-in/[slug]/code/page.tsx': 'public',

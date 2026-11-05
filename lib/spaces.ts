@@ -553,6 +553,39 @@ export async function getSpaceAccessById(
   return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership, assignedRoles, memberRoles, suspensions)
 }
 
+/**
+ * Whether a member can see a post, by the rule the post page renders it by: the
+ * member can enter its space, and it is published. A platform admin also sees
+ * moderated posts, to review the decision. For a route that takes a post id from
+ * the request: an unseen post and a missing one answer the same.
+ */
+export async function memberCanSeePost(member: CommunityMember, postId: string): Promise<boolean> {
+  const { data: post } = await supabaseServer()
+    .from('community_posts')
+    .select('status, space_id')
+    .eq('id', postId)
+    .maybeSingle()
+  if (!post) return false
+  if (post.status !== 'published' && !member.isAdmin) return false
+  const access = await getSpaceAccessById(member, post.space_id as string)
+  return !!access?.canAccess
+}
+
+/**
+ * Whether a member can see a comment, by the same page's rule: the post is visible
+ * and the comment is published. An admin also sees a hidden comment, never a deleted one.
+ */
+export async function memberCanSeeComment(member: CommunityMember, commentId: string): Promise<boolean> {
+  const { data: comment } = await supabaseServer()
+    .from('community_comments')
+    .select('status, post_id')
+    .eq('id', commentId)
+    .maybeSingle()
+  if (!comment) return false
+  if (comment.status !== 'published' && (!member.isAdmin || comment.status === 'deleted')) return false
+  return memberCanSeePost(member, comment.post_id as string)
+}
+
 // ─── Derived audiences (who is really in a Space) ────────────────────────────
 //
 // Tier- and role-granted access is resolved at READ time and never writes a

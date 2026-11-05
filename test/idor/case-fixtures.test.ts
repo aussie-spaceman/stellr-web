@@ -58,7 +58,7 @@ describe('the fixture lists', () => {
   ]
 
   it('set only the honey columns that let a route go on to its check', () => {
-    const allowed: Record<string, unknown[]> = { type: ['group'], status: ['published'] }
+    const allowed: Record<string, unknown[]> = { type: ['group'], status: ['published'], is_archived: [false], access_type: ['open'] }
     for (const [file, f] of fixtures) {
       for (const [column, value] of Object.entries(f.honey ?? {})) {
         expect(allowed[column] ?? [], `${file} sets honey.${column}`).toContain(value)
@@ -117,6 +117,12 @@ describe('honey columns', () => {
     resetHarness('participant', { fixture: { reason: 'test', honey: { type: 'group' } } })
     const { data } = await read()
     expect((data as unknown as { type: string }).type).toBe('group')
+  })
+
+  it('a lifecycle reads as active, so a route reaches what comes after it', async () => {
+    resetHarness('participant')
+    const { data } = await supabaseServer().from('mentoring_cohorts').select('lifecycle').eq('id', HONEYTOKENS.id).maybeSingle()
+    expect((data as unknown as { lifecycle: string }).lifecycle).toBe('active')
   })
 
   it('cannot make the row the caller’s: identity columns are ignored', async () => {

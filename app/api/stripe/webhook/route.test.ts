@@ -402,6 +402,22 @@ describe('paid mentoring cohort booking: minor-agreement backstop', () => {
     // The payment is still logged as received.
     expect(h.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'payment_received' }))
   })
+
+  it('keeps the payment and tells staff why when the cohort has been archived', async () => {
+    current = makeDb({ stripe_webhook_events: [] })
+    h.rosterAfterPaidBooking.mockResolvedValueOnce({ rostered: false, reason: 'cohort-archived' })
+    const res = await post(bookingEvent('evt_archived'))
+
+    expect(res.status).toBe(200)
+    expect(h.refundsCreate).not.toHaveBeenCalled()
+    expect(h.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'paid_booking_held',
+      summary: expect.stringContaining('archived'),
+      metadata: expect.objectContaining({ reason: 'cohort-archived' }),
+    }))
+    expect(h.notifyCommunityAdmins).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('archived') }))
+    expect(h.notifyCommunityAdmins).toHaveBeenCalledWith(expect.objectContaining({ body: expect.not.stringContaining('participation agreement') }))
+  })
 })
 
 describe('invoice.paid zero-amount guard (PAY-1)', () => {

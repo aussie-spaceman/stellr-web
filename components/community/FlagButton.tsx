@@ -14,15 +14,18 @@ export function FlagButton({ contentType, contentId }: Props) {
   const [state, setState] = useState<'idle' | 'open' | 'done'>('idle')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   const submit = async () => {
     setSubmitting(true)
-    await fetch('/api/community/flag', {
+    setFailed(false)
+    const res = await fetch('/api/community/flag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contentType, contentId, reason }),
-    })
-    setState('done')
+    }).catch(() => null)
+    if (res?.ok) setState('done')
+    else setFailed(true)
     setSubmitting(false)
   }
 
@@ -41,6 +44,11 @@ export function FlagButton({ contentType, contentId }: Props) {
           maxLength={500}
           className="w-full rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-xs focus:border-brand-border focus:outline-hidden"
         />
+        {failed && (
+          <p role="alert" className="text-xs text-red-600">
+            We couldn&apos;t send that report. Refresh the page and try again.
+          </p>
+        )}
         <div className="flex items-center gap-2">
           <button
             onClick={submit}

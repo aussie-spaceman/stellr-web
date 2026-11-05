@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { signedDownloadUrl } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getSpaceAccessById } from '@/lib/spaces'
+import { isStandaloneLibraryFile } from '@/lib/resources-catalogue'
 
 // GET /api/community/resources/[id]/download
 // Validates the member's tier, then returns a short-lived signed URL.
@@ -50,18 +51,9 @@ export async function GET(
       return NextResponse.json({ error: 'No access to this resource' }, { status: 403 })
     }
   } else {
-    // No space and no event_ref: either a truly standalone library file (open to
-    // members) or a container-attached contribution. If it is attached to any
-    // container it is NOT standalone — it must be downloaded through the
-    // container-gated attachment route, which checks the member is actually in a
-    // container that holds it. Refuse here rather than leaking it.
-    const { data: attachments } = await db
-      .from('container_contents')
-      .select('container_id')
-      .eq('content_type', 'resource')
-      .eq('content_ref', id)
-      .limit(1)
-    if (attachments && attachments.length > 0) {
+    // No space and no event_ref: a standalone library file is open to members.
+    // Anything else goes through the container-gated attachment route.
+    if (!(await isStandaloneLibraryFile(id))) {
       return NextResponse.json({ error: 'No access to this resource' }, { status: 403 })
     }
   }

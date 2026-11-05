@@ -213,25 +213,48 @@ export interface HeldBackFixture {
   /** Where the Canary value lands (honey-db table, or the Stripe call). */
   writes: string[]
   fixture: CaseFixture
+  /**
+   * Set when the route has a rule of its own and the case stays held back: the honey
+   * columns that make that rule refuse. idor-routes.test.ts proves the same case then
+   * comes back `refused`, so the rule is pinned apart from the held-back outcome.
+   */
+  refusedWhen?: Record<string, unknown>
 }
+
+// C4-F1, C4-F2, C4-F3: the routes follow what the member can see, and refuse a
+// private Space or an archived cohort. An open Space and an open cohort are open to
+// every member, and no tenant column tells a Canary row from a real one. These stay
+// held back until B9 keeps community on Stellr.
+const CANARY_OPEN_SPACE_POST = { status: 'published', is_archived: false, access_type: 'open' }
 
 export const HELD_BACK_FIXTURES: Record<string, HeldBackFixture> = {
   'app/api/community/flag/route.ts': {
     method: 'POST',
     ref: 'C4-F1',
     writes: ['community_flags'],
-    fixture: { reason: 'contentType is a zod enum', body: { contentType: 'post' } },
+    refusedWhen: { access_type: 'private' },
+    fixture: {
+      reason: 'contentType is a zod enum, and only a published post in a live Space goes on to the access check',
+      honey: CANARY_OPEN_SPACE_POST,
+      body: { contentType: 'post' },
+    },
   },
   'app/api/community/reactions/route.ts': {
     method: 'POST',
     ref: 'C4-F2',
     writes: ['community_reactions'],
-    fixture: { reason: 'targetType is a zod enum', body: { targetType: 'post' } },
+    refusedWhen: { access_type: 'private' },
+    fixture: {
+      reason: 'targetType is a zod enum, and only a published post in a live Space goes on to the access check',
+      honey: CANARY_OPEN_SPACE_POST,
+      body: { targetType: 'post' },
+    },
   },
   'app/api/community/mentoring/register/route.ts': {
     method: 'POST',
     ref: 'C4-F3',
     writes: ['stripe.checkout.sessions.create'],
+    refusedWhen: { lifecycle: 'archived' },
     fixture: { reason: 'Stripe unset answers 503 on the paid path, after the cohort is read', ...STRIPE_CHECKOUT },
   },
   'app/api/credentials/[number]/events/route.ts': {
@@ -240,6 +263,10 @@ export const HELD_BACK_FIXTURES: Record<string, HeldBackFixture> = {
     writes: ['credential_events'],
     fixture: { reason: 'kind is an allow-list of share events', body: { kind: 'copy_link' } },
   },
+  // Still held. The route already orders only an active variant of an active product
+  // (pinned in its route.test.ts). The honey row is both, and the catalogue has no
+  // tenant column, so no check can tell it from a real one until the owner decides
+  // whether the catalogue gets a tenant or this outcome is accepted with a reason.
   'app/api/store/checkout/route.ts': {
     method: 'POST',
     ref: 'C4-F5',

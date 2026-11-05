@@ -3,9 +3,11 @@
 // source for the proxy's routing decision and for the Social Media Minimum Age
 // (SMMA) guardrail that keeps community off tenant hosts.
 //
-// NOT WIRED. Nothing imports this yet: it is data plus a matcher, pinned by
-// test/tenant-surface-routes.test.ts. Stellr's own hosts (www, app, previews,
-// localhost) never consult it; they serve every route exactly as today.
+// Data plus a matcher, pinned by test/tenant-surface-routes.test.ts. proxy.ts
+// consults it (slice B5) only for a host mapped to a tenant, which needs
+// TENANT_ROUTING_ENABLED. Stellr's own hosts (www, app, previews, localhost) never
+// consult it; they serve every route exactly as today. The one thing proxy.ts
+// reads from here on every request is isInternalTenantTreePath, a string check.
 //
 // Every entry in ROUTE_MANIFEST (lib/security/route-manifest.ts) takes exactly
 // one decision here:
@@ -25,10 +27,10 @@
 // cross-tenant ratchet. The SMMA tests here prove route reachability; the
 // import-closure lint (B8) covers what an allowed page pulls in.
 //
-// The matcher is not exhaustive for denied pages. Its extension lookahead is
-// unanchored, so any dynamic non-API URL containing a listed extension
-// (/community/x.png/members) also skips the proxy, and this list never runs for
-// it. The test pins that gap; B5 must close it before tenant hosts are served.
+// Matcher behaviour on Stellr hosts is unchanged by tenant routing. On every other
+// host a matcher entry keyed on the host means only _next, api/img and api/csp-report
+// skip the proxy. tenantHostRoute() below then decides, and a URL with a file
+// extension under a routed first segment is denied, not treated as a static file.
 //
 // Final allow-list membership is an owner open question; the test enforces
 // whatever is decided, and the pinned counts make every change a visible diff.
@@ -168,11 +170,13 @@ export const TENANT_SURFACE_BYPASS: readonly TenantSurfaceRule[] = [
   },
   {
     match: 'app/manifest.ts',
-    reason: 'served as /manifest.webmanifest, which the proxy matcher excludes by extension',
+    reason:
+      'served as /manifest.webmanifest, which the proxy matcher excludes by extension on a Stellr host; on a tenant host the proxy passes it through as a static file',
   },
   {
     match: 'app/app.webmanifest/route.ts',
-    reason: 'served as /app.webmanifest, which the proxy matcher excludes by extension',
+    reason:
+      'served as /app.webmanifest, which the proxy matcher excludes by extension on a Stellr host; on a tenant host the proxy passes it through as a static file',
   },
 ]
 
@@ -183,6 +187,10 @@ const ADMIN =
   "Stellr's admin portal: its gate trusts a Clerk role valid on every host, so it stays off tenant hosts until lib/authz checks tenant membership"
 
 export const TENANT_SURFACE_DENY: readonly TenantSurfaceRule[] = [
+  {
+    match: 'app/%5Ft/',
+    reason: 'the internal tenant tree: reached only through the proxy rewrite, never by its own URL',
+  },
   { match: 'app/(member)/community/', reason: SMMA },
   { match: 'app/api/community/', reason: SMMA },
   { match: 'app/(member)/home/', reason: `${SMMA} (home is the community landing)` },
@@ -313,8 +321,104 @@ function patterns(): RegExp[] {
   return allowedPatterns
 }
 
-/** The internal tenant tree (/_t/{slug}/…) is never requested directly, in any spelling. */
-const INTERNAL_TENANT_TREE = /^\/(?:_|%5f)t(?:\/|$)/i
+/**
+ * Whether a raw pathname names the internal tenant tree (/_t/{slug}/…), which is
+ * reached only through the proxy's rewrite and is never requested directly.
+ *
+ * It compares the decoded first segment, so every spelling Next could route is
+ * caught: /_t, /%5Ft, /%5ft, /_%74, /%5F%74, and a double encoding. It is
+ * case-insensitive, and runs on every proxied request, so anything that does not
+ * start with `_`, `%` or a separator leaves after one string test.
+ */
+export function isInternalTenantTreePath(pathname: string): boolean {
+  if (!/^[/\\]+[_%\\/]/.test(pathname)) return false
+  let path = pathname
+  for (let i = 0; i < 3 && path.includes('%'); i += 1) {
+    // Decode each segment alone, so one malformed escape later in the path cannot
+    // hide the first segment.
+    path = path
+      .split('/')
+      .map((part) => {
+        try {
+          return decodeURIComponent(part)
+        } catch {
+          return part
+        }
+      })
+      .join('/')
+  }
+  const first = path.replace(/^[/\\]+/, '').split(/[/\\]/, 1)[0]
+  return first.toLowerCase() === '_t'
+}
+
+/** The extensions proxy.ts's matcher treats as static files, anchored to the end of the path. */
+const STATIC_FILE = /\.(?:html?|css|js|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)$/i
+
+let routedSegments: ReadonlySet<string> | null = null
+
+/**
+ * The first URL segment of every manifest route, lower case. A dotted URL under
+ * one of these is a route that would otherwise render a page, not a static file.
+ * The bypass entries are real files as far as a tenant host is concerned.
+ */
+function firstRouteSegments(): ReadonlySet<string> {
+  if (routedSegments) return routedSegments
+  const out = new Set<string>()
+  for (const file of Object.keys(ROUTE_MANIFEST)) {
+    if (tenantSurfaceDecision(file) === 'bypass') continue
+    const segments = file
+      .replace(/^app\//, '')
+      .split('/')
+      .slice(0, -1)
+      .filter((part) => !/^\(.+\)$/.test(part))
+    if (segments[0]) out.add(segments[0].toLowerCase())
+  }
+  routedSegments = out
+  return out
+}
+
+/** A URL that can only be a file under public/ or a bypass entry: never a page or an API. */
+function isStaticFileOnTenantHost(pathname: string): boolean {
+  if (!STATIC_FILE.test(pathname) || /[%\\?#]/.test(pathname)) return false
+  const segments = pathname.split('/').slice(1)
+  if (segments.some((s) => s === '' || s === '.' || s === '..')) return false
+  return !firstRouteSegments().has(segments[0].toLowerCase())
+}
+
+/** How the proxy answers a path on a tenant host. */
+export type TenantHostRoute =
+  /** `/`: the tenant tree's own home page. */
+  | 'home'
+  /** `/robots.txt`: answer TENANT_HOST_ROBOTS_TXT. */
+  | 'robots'
+  /** An allowed page: rewrite into the tenant tree. */
+  | 'page'
+  /** An allowed API: forward with the trusted tenant headers. */
+  | 'api'
+  /** A file under public/: pass through, no session and no tenant headers. */
+  | 'static'
+  /** Everything else: 404. */
+  | 'denied'
+
+/**
+ * The tenant-host routing decision for a raw pathname. Deny by default.
+ *
+ * `/` is not on the allow-list, because the manifest's `/` is Stellr's marketing
+ * home. Decided in B5: on a tenant host it serves the tenant tree's own neutral
+ * home page (`app/%5Ft/[tenant]/page.tsx`), whose body holds no Stellr content and
+ * no tenant data, so a visitor who trims a link to the bare host gets a real answer
+ * and a pointer back to their link, and an active host is told apart from an
+ * unknown one (404). A later slice may replace that page with a tenant's event list.
+ * The root layout still wraps the tree, with Stellr's metadata and trackers, until
+ * B5c gives the tree its own.
+ */
+export function tenantHostRoute(pathname: string): TenantHostRoute {
+  if (pathname === '/') return 'home'
+  if (pathname === '/robots.txt') return 'robots'
+  if (isInternalTenantTreePath(pathname)) return 'denied'
+  if (isAllowedOnTenantHost(pathname)) return pathname.startsWith('/api/') ? 'api' : 'page'
+  return isStaticFileOnTenantHost(pathname) ? 'static' : 'denied'
+}
 
 /**
  * Whether a tenant host may serve this pathname. Deny by default: only the
@@ -324,7 +428,7 @@ const INTERNAL_TENANT_TREE = /^\/(?:_|%5f)t(?:\/|$)/i
 export function isAllowedOnTenantHost(pathname: string): boolean {
   if (typeof pathname !== 'string' || !pathname.startsWith('/')) return false
   if (/[?#\\]/.test(pathname)) return false
-  if (INTERNAL_TENANT_TREE.test(pathname)) return false
+  if (isInternalTenantTreePath(pathname)) return false
   const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
   if (path !== '/' && path.split('/').slice(1).some((s) => s === '' || s === '.' || s === '..')) {
     return false

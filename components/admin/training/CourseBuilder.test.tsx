@@ -166,3 +166,111 @@ describe('CourseBuilder certificate template — refusals are shown', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
+
+describe('CourseBuilder lessons — a Resource lesson made of attached resources', () => {
+  const lesson = {
+    id: 'l-1',
+    title: 'How to judge',
+    content_kind: 'link' as const,
+    status: 'published' as const,
+    section_id: 's-a',
+    display_order: 0,
+    estimated_minutes: 3,
+    body: null,
+    external_url: 'https://example.com/video',
+  }
+  const withLesson = { ...course, training_items: [lesson] }
+
+  // The resources panel asks the API what the lesson already has attached.
+  const attached = (resources: { id: string; kind: 'file'; title: string; external_url: null }[]) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+        return new Response(JSON.stringify({ resources }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+  const itemPatches = () => calls.filter((c) => c.url === '/api/admin/community/training/items' && c.method === 'PATCH').map((c) => c.body)
+
+  const switchToResource = async () => {
+    render(<CourseBuilder courses={[withLesson]} objects={[]} tiers={[]} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'How to judge' }))
+    await user.click(screen.getByRole('button', { name: 'Resource' }))
+    return user
+  }
+
+  it('saves without a second upload when a resource is already attached', async () => {
+    attached([{ id: 'r-1', kind: 'file', title: 'Judging pack', external_url: null }])
+    const user = await switchToResource()
+    await screen.findByText('Judging pack')
+    await user.click(screen.getByRole('button', { name: 'Save lesson' }))
+    await vi.waitFor(() => expect(itemPatches()).toHaveLength(1))
+    expect(itemPatches()[0]).toMatchObject({ id: 'l-1', contentKind: 'document' })
+    expect(uploadDirectToStorage).not.toHaveBeenCalled()
+  })
+
+  it('still asks for a file when there is nothing attached', async () => {
+    attached([])
+    const user = await switchToResource()
+    await screen.findByText('No resources attached.')
+    await user.click(screen.getByRole('button', { name: 'Save lesson' }))
+    expect(await screen.findByText('Choose a file to upload, or attach a resource below.')).toBeInTheDocument()
+    expect(itemPatches()).toEqual([])
+  })
+})
+
+describe('CourseBuilder sections — deleting one', () => {
+  const inAlpha = (id: string, display_order: number) => ({
+    id,
+    title: `Lesson ${id}`,
+    content_kind: 'link' as const,
+    status: 'published' as const,
+    section_id: 's-a',
+    display_order,
+    estimated_minutes: null,
+    body: null,
+  })
+  const deletes = () => calls.filter((c) => c.url.includes('/training/sections?id=') && c.method === 'DELETE')
+  const deleteAlpha = async () => {
+    render(<CourseBuilder courses={[{ ...course, training_items: [inAlpha('1', 0), inAlpha('2', 1)] }]} objects={[]} tiers={[]} />)
+    await userEvent.setup().click(screen.getAllByRole('button', { name: 'Delete section' })[0])
+  }
+
+  it('says its lessons stay visible to members, and does nothing when declined', async () => {
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('confirm', confirm)
+    await deleteAlpha()
+    expect(confirm.mock.calls[0]).toEqual([expect.stringContaining('Its 2 lessons stay in the course under “Not in a section”, and members will still see them.')])
+    expect(deletes()).toEqual([])
+  })
+
+  it('deletes once confirmed', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    await deleteAlpha()
+    await vi.waitFor(() => expect(deletes()).toHaveLength(1))
+  })
+})
+
+describe('CourseBuilder lessons — a new lesson goes after the last one', () => {
+  it('numbers from the highest order in the section, not the count', async () => {
+    const lessons = [0, 1, 3].map((display_order) => ({
+      id: `l-${display_order}`,
+      title: `Lesson ${display_order}`,
+      content_kind: 'link' as const,
+      status: 'published' as const,
+      section_id: 's-a',
+      display_order,
+      estimated_minutes: null,
+      body: null,
+    }))
+    render(<CourseBuilder courses={[{ ...course, training_items: lessons }]} objects={[]} tiers={[]} />)
+    const user = userEvent.setup()
+    await user.click(screen.getAllByRole('button', { name: 'Add lesson' })[0])
+    await user.type(screen.getByLabelText('Lesson title'), 'Next')
+    await user.click(screen.getAllByRole('button', { name: 'Add lesson' }).at(-1)!)
+    await vi.waitFor(() => expect(calls.some((c) => c.url === '/api/admin/community/training/items' && c.method === 'POST')).toBe(true))
+    const post = calls.find((c) => c.url === '/api/admin/community/training/items' && c.method === 'POST')!
+    expect(post.body).toMatchObject({ displayOrder: '4' })
+  })
+})

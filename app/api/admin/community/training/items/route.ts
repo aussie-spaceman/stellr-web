@@ -21,7 +21,8 @@ export const maxDuration = 60
 //           sectionId?  (group the lesson under a section)
 //           status?     ('draft' | 'published', default published)
 //           body?       (lesson notes shown beneath the featured media)
-//           storagePath (required for video|document — from /api/uploads/sign)
+//           storagePath (required for video, optional for document — from /api/uploads/sign;
+//                        a document lesson can be made of attached resources alone)
 //           externalUrl (required for google_doc|link — also accepts YouTube/Vimeo embeds)
 //           interactiveKey (for interactive — a key registered in lib/interactive-lessons-meta.ts)
 // PATCH (JSON) updates an existing lesson: { id, title?, body?, status?, sectionId?, displayOrder? }
@@ -61,8 +62,8 @@ export async function POST(req: Request) {
   // derived from the item id at view time (see lib/video-provider trainingRoomName).
   const needsFile = contentKind === 'video' || contentKind === 'document'
   const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
-  if (needsFile && !uploadPath) {
-    return NextResponse.json({ error: 'file required for video/document' }, { status: 400 })
+  if (contentKind === 'video' && !uploadPath) {
+    return NextResponse.json({ error: 'file required for video' }, { status: 400 })
   }
   if (needsUrl && !externalUrl) {
     return NextResponse.json({ error: 'externalUrl required for google_doc/link' }, { status: 400 })
@@ -170,6 +171,17 @@ export async function PATCH(req: Request) {
         if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, uploadPath, 'training')
       }
       // no file provided → keep existing storage_path (metadata-only edit)
+      else if (contentKind === 'document') {
+        // A Resource lesson needs a file of its own or an attached resource.
+        const [{ data: row }, { count }] = await Promise.all([
+          db.from('training_items').select('storage_path').eq('id', id).maybeSingle(),
+          db.from('training_item_resources').select('id', { count: 'exact', head: true }).eq('item_id', id),
+        ])
+        if (!row?.storage_path && !count) {
+          return NextResponse.json({ error: 'Upload a file or attach a resource first.' }, { status: 400 })
+        }
+        patch.external_url = null
+      }
     } else if (needsUrl) {
       if (!externalUrl) return NextResponse.json({ error: 'externalUrl required for this content type' }, { status: 400 })
       patch.external_url = externalUrl

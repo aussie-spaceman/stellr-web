@@ -121,6 +121,28 @@ test.describe('course builder', () => {
     expect(resources).toEqual([{ title: 'Rover guide', kind: 'link', external_url: 'https://example.com/rover' }])
   })
 
+  test('saves a Resource lesson whose only content is an attached resource', async ({ page }) => {
+    await page.getByRole('button', { name: /^One/ }).click()
+    await page.getByRole('button', { name: 'Add resource' }).click()
+    await page.getByPlaceholder('Title', { exact: true }).fill('Judging pack')
+    await page.getByPlaceholder('https://…').first().fill('https://example.com/pack')
+    await page.getByRole('button', { name: 'Add resource' }).click()
+    await expect(page.getByText('Judging pack')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Resource', exact: true }).click()
+    await expect(page.getByText('The attached resource below is enough for this lesson.')).toBeVisible()
+    await page.getByRole('button', { name: 'Save lesson' }).click()
+
+    await expect
+      .poll(async () => (await fixtureDb().from('training_items').select('content_kind').eq('id', lessons.One).single()).data?.content_kind)
+      .toBe('document')
+  })
+
+  test('refuses a Resource lesson with no file and nothing attached', async ({ page }) => {
+    const res = await page.request.patch(ITEMS, { data: { id: lessons.One, contentKind: 'document' } })
+    expect(res.status()).toBe(400)
+  })
+
   test('a failed recording says why, and can be dismissed', async ({ page }) => {
     await fixtureDb().from('recording_offloads').upsert({
       target_kind: 'training',

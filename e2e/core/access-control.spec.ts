@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import { expect, test } from '../fixtures/test'
 import { FIXTURES, storageStatePath } from '../fixtures/users'
 
@@ -117,20 +116,23 @@ test.describe('a member session is refused by the admin APIs', () => {
 })
 
 // deep review TEST-8: an event manager is scoped to the events they are assigned
-// to. Skipped until the fixture is provisioned (see e2e/fixtures/users.ts); when
-// it is, this proves the "cannot see another event" boundary end-to-end.
-const eventManagerReady =
-  Boolean(process.env.E2E_EVENT_MANAGER_PASSWORD) && fs.existsSync(storageStatePath('event_manager'))
-
+// to. This proves the "cannot see another event" boundary end-to-end. CI requires
+// the password, so it always runs there; locally it skips without one.
+//
+// The skip reads the password only, never whether the session file exists:
+// Playwright evaluates this while collecting tests, BEFORE the auth project has
+// run, and a skip decided then stands. On a clean checkout a file check kept
+// this test skipped even with the secret set and the sign-in working.
 test.describe('signed in as an event manager', () => {
-  test.skip(!eventManagerReady, 'event_manager fixture not provisioned (see e2e/fixtures/users.ts)')
-  test.use({ storageState: eventManagerReady ? storageStatePath('event_manager') : undefined })
+  test.skip(!process.env.E2E_EVENT_MANAGER_PASSWORD, 'E2E_EVENT_MANAGER_PASSWORD not set (see e2e/fixtures/users.ts)')
+  test.use({ storageState: storageStatePath('event_manager') })
 
   test('reaches its assigned event but is refused another', async ({ page }) => {
     await page.goto('/account')
-    // Assigned to seed-regional-challenge in the seed: that event's API answers.
+    // Assigned to seed-regional-challenge: that event's API answers. Exactly 200,
+    // because a 500 from a failed assignment lookup is not "reached".
     const assigned = await page.request.get('/api/admin/events/seed-regional-challenge/companies')
-    expect([401, 403], 'assigned event was refused').not.toContain(assigned.status())
+    expect(assigned.status(), 'assigned event did not answer').toBe(200)
     // Any other event: refused, so one manager cannot read another's roster.
     const other = await page.request.get('/api/admin/events/seed-some-other-event/companies')
     expect([401, 403], 'an unassigned event was NOT refused').toContain(other.status())

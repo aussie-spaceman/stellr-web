@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHmac } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { recordingStoragePath, recordingWithinSizeLimit } from './route'
+import { recordingStoragePath, recordingWithinSizeLimit } from '@/lib/recording-offload'
 
 // deep review TEST-1: the recording webhook has two authenticated paths, both of
 // which drive a server-side fetch(recordingUrl) + write into the private bucket —
@@ -15,11 +15,12 @@ import { recordingStoragePath, recordingWithinSizeLimit } from './route'
 
 const from = vi.fn(() => {
   const chain: Record<string, unknown> = {}
-  for (const m of ['update', 'eq', 'select']) chain[m] = () => chain
+  for (const m of ['update', 'upsert', 'eq', 'select']) chain[m] = () => chain
   return chain
 })
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from, storage: { from: () => ({ upload: async () => ({ error: null }) }) } }) }))
 vi.mock('@/lib/community', () => ({ RESOURCES_BUCKET: 'resources' }))
+vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: vi.fn() }))
 vi.mock('@/lib/watermark/video-queue', () => ({ enqueueVideoWatermark: vi.fn() }))
 
 async function load(jaas: string, legacy: string) {

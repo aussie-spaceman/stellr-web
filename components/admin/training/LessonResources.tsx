@@ -6,6 +6,13 @@ import { Plus, Trash2, FileText, Link2, Upload, X, Search } from 'lucide-react'
 
 // Per-lesson attached resources (files / links) shown beneath the lesson's
 // primary content on the member Course detail. Admin add/remove in the builder.
+//
+// A lesson that has not been created yet has no id to attach to, so in that case
+// the panel holds what the admin picks (`pending`), and the editor attaches it
+// with attachPendingResources once the lesson exists. A file stays in the browser
+// until then, so cancelling the new lesson leaves nothing behind in storage.
+
+const RESOURCES_API = '/api/admin/community/training/resources'
 
 interface Resource {
   id: string
@@ -21,7 +28,49 @@ interface CatalogueResult {
   sizeBytes: number | null
 }
 
-export function LessonResources({ itemId }: { itemId: string }) {
+export type PendingResource =
+  | { key: string; kind: 'link'; title: string; url: string }
+  | { key: string; kind: 'file'; title: string; file: File }
+  | { key: string; kind: 'existing'; title: string; resourceId: string }
+
+const postResource = (itemId: string, body: Record<string, unknown>) =>
+  postUpload(RESOURCES_API, JSON.stringify({ itemId, ...body }), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+/** Attach what was picked before the lesson existed. Returns the titles that failed. */
+export async function attachPendingResources(itemId: string, pending: PendingResource[]): Promise<string[]> {
+  const failed: string[] = []
+  for (const p of pending) {
+    let body: Record<string, unknown>
+    if (p.kind === 'file') {
+      const stored = await uploadDirectToStorage(p.file, 'training-item-resource')
+      if ('error' in stored) { failed.push(p.title); continue }
+      body = { kind: 'file', title: p.title, storagePath: stored.storagePath, fileType: stored.fileType }
+    } else if (p.kind === 'existing') {
+      body = { kind: 'existing', resourceId: p.resourceId }
+    } else {
+      body = { kind: 'link', title: p.title, externalUrl: p.url }
+    }
+    const result = await postResource(itemId, body)
+    if ('error' in result) failed.push(p.title)
+  }
+  return failed
+}
+
+export function LessonResources({
+  itemId,
+  pending = [],
+  onPendingChange,
+  onCountChange,
+}: {
+  /** Absent for a lesson not created yet: picks go to `pending` instead. */
+  itemId?: string
+  pending?: PendingResource[]
+  onPendingChange?: (next: PendingResource[]) => void
+  /** How many resources a saved lesson has attached, as they load and change. */
+  onCountChange?: (count: number) => void
+}) {
   const [resources, setResources] = useState<Resource[]>([])
   const [adding, setAdding] = useState(false)
   const [mode, setMode] = useState<'link' | 'file' | 'existing'>('link')
@@ -35,10 +84,12 @@ export function LessonResources({ itemId }: { itemId: string }) {
   const [searching, setSearching] = useState(false)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/admin/community/training/resources?itemId=${itemId}`)
+    if (!itemId) return
+    const res = await fetch(`${RESOURCES_API}?itemId=${itemId}`)
     if (res.ok) setResources((await res.json()).resources)
   }, [itemId])
   useEffect(() => { load() }, [load])
+  useEffect(() => { if (itemId) onCountChange?.(resources.length) }, [itemId, resources.length, onCountChange])
 
   // Search the Global Resources Catalogue (debounced) when in "existing" mode.
   useEffect(() => {
@@ -54,18 +105,21 @@ export function LessonResources({ itemId }: { itemId: string }) {
     return () => { active = false; clearTimeout(t) }
   }, [query, mode, adding])
 
-  // Every failure comes back as a message (postUpload), and is shown: a refused
-  // upload must not look like nothing happened.
-  const post = (body: Record<string, unknown>) =>
-    postUpload('/api/admin/community/training/resources', JSON.stringify({ itemId, ...body }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const keep = (p: PendingResource) => onPendingChange?.([...pending, p])
+  const newKey = () => `${Date.now()}-${pending.length}`
 
-  const attachExisting = async (resourceId: string) => {
+  const attachExisting = async (resourceId: string, resourceTitle: string) => {
+    if (!itemId) {
+      keep({ key: newKey(), kind: 'existing', title: resourceTitle, resourceId })
+      setAdding(false); setQuery(''); setCatalogue([])
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const result = await post({ kind: 'existing', resourceId })
+      // Every failure comes back as a message (postUpload), and is shown: a refused
+      // upload must not look like nothing happened.
+      const result = await postResource(itemId, { kind: 'existing', resourceId })
       if ('error' in result) return setError(result.error)
       setAdding(false); setQuery(''); setCatalogue([]); load()
     } finally {
@@ -77,20 +131,28 @@ export function LessonResources({ itemId }: { itemId: string }) {
     if (!title.trim()) return
     if (mode === 'file' && !file) return setError('Choose a file to upload.')
     if (mode === 'link' && !url.trim()) return setError('Add a URL for this resource.')
-    setBusy(true)
     setError(null)
+    const reset = () => { setTitle(''); setUrl(''); setFile(null); setAdding(false) }
+    if (!itemId) {
+      keep(mode === 'file'
+        ? { key: newKey(), kind: 'file', title: title.trim(), file: file as File }
+        : { key: newKey(), kind: 'link', title: title.trim(), url: url.trim() })
+      reset()
+      return
+    }
+    setBusy(true)
     try {
-      let result: Awaited<ReturnType<typeof post>>
+      let result: Awaited<ReturnType<typeof postResource>>
       if (mode === 'file') {
         // Bytes go browser → storage via a signed URL; only the path is posted.
         const stored = await uploadDirectToStorage(file as File, 'training-item-resource')
         if ('error' in stored) return setError(stored.error)
-        result = await post({ kind: 'file', title: title.trim(), storagePath: stored.storagePath, fileType: stored.fileType })
+        result = await postResource(itemId, { kind: 'file', title: title.trim(), storagePath: stored.storagePath, fileType: stored.fileType })
       } else {
-        result = await post({ kind: 'link', title: title.trim(), externalUrl: url.trim() })
+        result = await postResource(itemId, { kind: 'link', title: title.trim(), externalUrl: url.trim() })
       }
       if ('error' in result) return setError(result.error)
-      setTitle(''); setUrl(''); setFile(null); setAdding(false); load()
+      reset(); load()
     } finally {
       setBusy(false)
     }
@@ -98,23 +160,33 @@ export function LessonResources({ itemId }: { itemId: string }) {
 
   const remove = async (id: string) => {
     setResources((prev) => prev.filter((r) => r.id !== id))
-    await fetch(`/api/admin/community/training/resources?id=${id}`, { method: 'DELETE' })
+    await fetch(`${RESOURCES_API}?id=${id}`, { method: 'DELETE' })
   }
+
+  const rows = itemId
+    ? resources.map((r) => ({ key: r.id, isLink: r.kind === 'link', title: r.title, onRemove: () => remove(r.id) }))
+    : pending.map((p) => ({
+        key: p.key,
+        isLink: p.kind === 'link',
+        title: p.title,
+        onRemove: () => onPendingChange?.(pending.filter((x) => x.key !== p.key)),
+      }))
 
   return (
     <div className="rounded-xl border border-brand-border p-3">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Attached resources</p>
       <div className="space-y-1.5">
-        {resources.map((r) => (
-          <div key={r.id} className="flex items-center justify-between gap-2 rounded-md border border-brand-hairline px-3 py-2 text-sm">
+        {rows.map((r) => (
+          <div key={r.key} className="flex items-center justify-between gap-2 rounded-md border border-brand-hairline px-3 py-2 text-sm">
             <span className="flex min-w-0 items-center gap-2 text-brand-muted">
-              {r.kind === 'file' ? <FileText className="h-4 w-4 shrink-0 text-brand-muted-soft" /> : <Link2 className="h-4 w-4 shrink-0 text-brand-muted-soft" />}
+              {r.isLink ? <Link2 className="h-4 w-4 shrink-0 text-brand-muted-soft" /> : <FileText className="h-4 w-4 shrink-0 text-brand-muted-soft" />}
               <span className="truncate">{r.title}</span>
             </span>
-            <button onClick={() => remove(r.id)} className="shrink-0 text-brand-muted-soft hover:text-red-500" aria-label="Remove resource"><Trash2 className="h-3.5 w-3.5" /></button>
+            <button onClick={r.onRemove} className="shrink-0 text-brand-muted-soft hover:text-red-500" aria-label="Remove resource"><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
         ))}
-        {resources.length === 0 && !adding && <p className="text-xs text-brand-muted-soft">No resources attached.</p>}
+        {rows.length === 0 && !adding && <p className="text-xs text-brand-muted-soft">No resources attached.</p>}
+        {!itemId && rows.length > 0 && <p className="text-xs text-brand-muted-soft">These attach when you add the lesson.</p>}
       </div>
 
       {adding ? (
@@ -139,7 +211,7 @@ export function LessonResources({ itemId }: { itemId: string }) {
                 {catalogue.map((r) => (
                   <button
                     key={r.id}
-                    onClick={() => attachExisting(r.id)}
+                    onClick={() => attachExisting(r.id, r.title)}
                     disabled={busy}
                     className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm hover:bg-brand-canvas disabled:opacity-50"
                   >

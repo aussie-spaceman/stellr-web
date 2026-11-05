@@ -21,7 +21,8 @@ export const maxDuration = 60
 //           sectionId?  (group the lesson under a section)
 //           status?     ('draft' | 'published', default published)
 //           body?       (lesson notes shown beneath the featured media)
-//           storagePath (required for video|document — from /api/uploads/sign)
+//           storagePath (required for video, optional for document — from /api/uploads/sign;
+//                        a document lesson can be made of attached resources alone)
 //           externalUrl (required for google_doc|link — also accepts YouTube/Vimeo embeds)
 //           interactiveKey (for interactive — a key registered in lib/interactive-lessons-meta.ts)
 // PATCH (JSON) updates an existing lesson: { id, title?, body?, status?, sectionId?, displayOrder? }
@@ -61,8 +62,8 @@ export async function POST(req: Request) {
   // derived from the item id at view time (see lib/video-provider trainingRoomName).
   const needsFile = contentKind === 'video' || contentKind === 'document'
   const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
-  if (needsFile && !uploadPath) {
-    return NextResponse.json({ error: 'file required for video/document' }, { status: 400 })
+  if (contentKind === 'video' && !uploadPath) {
+    return NextResponse.json({ error: 'file required for video' }, { status: 400 })
   }
   if (needsUrl && !externalUrl) {
     return NextResponse.json({ error: 'externalUrl required for google_doc/link' }, { status: 400 })
@@ -127,6 +128,9 @@ export async function PATCH(req: Request) {
 
   const fields = (await req.json().catch(() => ({}))) as Record<string, unknown>
 
+  // Drag-and-drop: { moduleId, reorder: [{ id, sectionId, displayOrder }] }.
+  if (Array.isArray(fields.reorder)) return applyReorder(db, fields.moduleId, fields.reorder)
+
   const id = fields.id as string | undefined
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -167,6 +171,17 @@ export async function PATCH(req: Request) {
         if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, uploadPath, 'training')
       }
       // no file provided → keep existing storage_path (metadata-only edit)
+      else if (contentKind === 'document') {
+        // A Resource lesson needs a file of its own or an attached resource.
+        const [{ data: row }, { count }] = await Promise.all([
+          db.from('training_items').select('storage_path').eq('id', id).maybeSingle(),
+          db.from('training_item_resources').select('id', { count: 'exact', head: true }).eq('item_id', id),
+        ])
+        if (!row?.storage_path && !count) {
+          return NextResponse.json({ error: 'Upload a file or attach a resource first.' }, { status: 400 })
+        }
+        patch.external_url = null
+      }
     } else if (needsUrl) {
       if (!externalUrl) return NextResponse.json({ error: 'externalUrl required for this content type' }, { status: 400 })
       patch.external_url = externalUrl
@@ -192,6 +207,44 @@ export async function PATCH(req: Request) {
   if (error) {
     console.error('[training] item update error:', error)
     return NextResponse.json({ error: 'Could not update lesson' }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true })
+}
+
+// Move lessons within a course. Every placement is checked against the course
+// before any is written, so a bad request cannot half-apply.
+async function applyReorder(db: ReturnType<typeof supabaseServer>, moduleId: unknown, reorder: unknown[]) {
+  if (typeof moduleId !== 'string' || !moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
+  const moves = reorder as { id?: unknown; sectionId?: unknown; displayOrder?: unknown }[]
+  const valid = moves.every(
+    (m) =>
+      typeof m?.id === 'string' &&
+      (m.sectionId === null || typeof m.sectionId === 'string') &&
+      Number.isInteger(m.displayOrder) &&
+      (m.displayOrder as number) >= 0,
+  )
+  if (!valid) return NextResponse.json({ error: 'Invalid reorder' }, { status: 400 })
+  if (moves.length === 0) return NextResponse.json({ ok: true })
+
+  const [{ data: items }, { data: sections }] = await Promise.all([
+    db.from('training_items').select('id').eq('module_id', moduleId).in('id', moves.map((m) => m.id as string)),
+    db.from('training_sections').select('id').eq('module_id', moduleId),
+  ])
+  const itemIds = new Set((items ?? []).map((i) => i.id as string))
+  const sectionIds = new Set((sections ?? []).map((s) => s.id as string))
+  if (moves.some((m) => !itemIds.has(m.id as string) || (m.sectionId !== null && !sectionIds.has(m.sectionId as string)))) {
+    return NextResponse.json({ error: 'A lesson or section is not part of this course' }, { status: 400 })
+  }
+
+  const results = await Promise.all(
+    moves.map((m) =>
+      db.from('training_items').update({ section_id: m.sectionId, display_order: m.displayOrder }).eq('id', m.id as string).eq('module_id', moduleId),
+    ),
+  )
+  const failed = results.find((r) => r.error)
+  if (failed) {
+    console.error('[training] lesson reorder error:', failed.error)
+    return NextResponse.json({ error: 'Could not save the new lesson order' }, { status: 500 })
   }
   return NextResponse.json({ ok: true })
 }

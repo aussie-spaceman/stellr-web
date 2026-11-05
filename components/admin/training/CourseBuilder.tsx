@@ -12,7 +12,9 @@ import { INTERACTIVE_OPTIONS } from '@/lib/interactive-lessons-meta'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { ObjectAssignments, type AdminTier } from '@/components/admin/training/ObjectAssignments'
 import { RecordSession } from '@/components/admin/training/RecordSession'
-import { LessonResources } from '@/components/admin/training/LessonResources'
+import { LessonResources, attachPendingResources, type PendingResource } from '@/components/admin/training/LessonResources'
+import { UNSECTIONED, buildLayout, canStep, layoutMoves, moveLesson, sectionKey, stepLesson, type LessonLayout } from '@/lib/training-curriculum'
+import type { RecordingPhase } from '@/lib/recording-view'
 import type { TrainableObject } from '@/lib/training-admin'
 import type { AdminModule, AdminSection, AdminLesson } from '@/components/admin/community/TrainingManager'
 
@@ -49,11 +51,14 @@ export function CourseBuilder({
   objects,
   tiers,
   initialCourseId,
+  recordingPhases = {},
 }: {
   courses: AdminModule[]
   objects: TrainableObject[]
   tiers: AdminTier[]
   initialCourseId?: string
+  /** Lessons whose recording is not simply saved or absent, by lesson id. */
+  recordingPhases?: Record<string, RecordingPhase>
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -139,7 +144,7 @@ export function CourseBuilder({
             objects={objects}
             tiers={tiers}
           />
-          <Curriculum key={`curr-${course.id}`} course={course} onDone={() => router.refresh()} />
+          <Curriculum key={`curr-${course.id}`} course={course} recordingPhases={recordingPhases} onDone={() => router.refresh()} />
         </>
       )}
     </div>
@@ -337,7 +342,15 @@ function CertTemplate({ moduleId, hasTemplate, onDone }: { moduleId: string; has
 
 /* ─── Curriculum + lesson editor (2-col) ─────────────────────────────────── */
 
-function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => void }) {
+// Lesson-row chips, for a recording that is on its way or has failed.
+const RECORDING_CHIP: Partial<Record<RecordingPhase, { label: string; className: string }>> = {
+  recording: { label: 'Recording', className: 'bg-red-50 text-danger' },
+  processing: { label: 'Processing', className: 'bg-surface text-gold-ink' },
+  saving: { label: 'Saving', className: 'bg-surface text-gold-ink' },
+  failed: { label: 'Not saved', className: 'bg-red-50 text-danger' },
+}
+
+function Curriculum({ course: m, recordingPhases, onDone }: { course: AdminModule; recordingPhases: Record<string, RecordingPhase>; onDone: () => void }) {
   const sections = [...m.training_sections].sort((a, b) => a.display_order - b.display_order)
   // Editor target: a lesson id (edit) or { sectionId } (create) or null.
   const [editing, setEditing] = useState<{ lesson?: AdminLesson; sectionId: string | null } | null>(null)
@@ -359,8 +372,127 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
 
   const byId = new Map(sections.map((s) => [s.id, s]))
   const ordered = orderIds.map((id) => byId.get(id)).filter((s): s is AdminSection => !!s)
-  const lessonsIn = (sid: string | null) =>
-    m.training_items.filter((i) => i.section_id === sid).sort((a, b) => a.display_order - b.display_order)
+
+  // ── Lessons: where each sits while it is being dragged, and as last saved. ──
+  // Reset from the props whenever they change, the same way as the section order.
+  const lessonById = new Map(m.training_items.map((i) => [i.id, i]))
+  const lessonKey = m.training_items.map((i) => `${i.id}:${i.section_id}:${i.display_order}`).sort().join(',')
+  const makeLayout = () => buildLayout(m.training_items, sections.map((s) => s.id))
+  const [layout, setLayout] = useState<LessonLayout>(makeLayout)
+  // The order the server holds as far as this tab knows, updated as saves go out.
+  const savedLessons = useRef(new Map<string, { sectionId: string | null; displayOrder: number }>())
+  const [lessonDragId, setLessonDragId] = useState<string | null>(null)
+  const [lessonDrop, setLessonDrop] = useState<{ key: string; index: number } | null>(null)
+  // What the drop reads. A dragover's render can still be pending when drop fires,
+  // and the state would then land the lesson where the pointer was a moment ago.
+  const lessonDropRef = useRef<{ key: string; index: number } | null>(null)
+  const [refocusLesson, setRefocusLesson] = useState<{ id: string; dir: -1 | 1 } | null>(null)
+  const [lessonError, setLessonError] = useState<string | null>(null)
+  const [resourceNotice, setResourceNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fresh = makeLayout()
+    setLayout(fresh)
+    const saved = new Map<string, { sectionId: string | null; displayOrder: number }>()
+    for (const key of Object.keys(fresh)) {
+      fresh[key].forEach((id, displayOrder) => saved.set(id, { sectionId: lessonById.get(id)?.section_id ?? null, displayOrder: lessonById.get(id)?.display_order ?? displayOrder }))
+    }
+    savedLessons.current = saved
+  }, [lessonKey, idsKey]) // eslint-disable-line react-hooks/exhaustive-deps -- keyed on the joined strings; the arrays are rebuilt every render
+
+  const lessonsIn = (sid: string | null): AdminLesson[] =>
+    (layout[sectionKey(sid)] ?? []).map((id) => lessonById.get(id)).filter((l): l is AdminLesson => !!l)
+
+  const unsectioned = lessonsIn(null)
+  // The order sections appear on screen. The unsectioned group is listed last.
+  const layoutKeys = [...ordered.map((s) => s.id), ...(unsectioned.length > 0 ? [UNSECTIONED] : [])]
+
+  const saveLessons = async (next: LessonLayout) => {
+    const moves = layoutMoves(next, savedLessons.current)
+    if (moves.length === 0) return
+    for (const move of moves) savedLessons.current.set(move.id, { sectionId: move.sectionId, displayOrder: move.displayOrder })
+    setLessonError(null)
+    const res = await fetch('/api/admin/community/training/items', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ moduleId: m.id, reorder: moves }),
+    }).catch(() => null)
+    if (!res?.ok) setLessonError('Could not save the new lesson order. The list has been put back.')
+    onDone()
+    if (!res?.ok) setLayout(makeLayout())
+  }
+
+  // Rows stay where they are during a drag, with a line showing where the lesson
+  // will land. Moving the row live across sections would remount it, and a browser
+  // never delivers dragend to a drag source that has left the page.
+  const dragLessonOver = (toKey: string, toIndex: number) => {
+    if (!lessonDragId) return
+    const prev = lessonDropRef.current
+    if (prev?.key === toKey && prev.index === toIndex) return
+    lessonDropRef.current = { key: toKey, index: toIndex }
+    setLessonDrop(lessonDropRef.current)
+  }
+  // Anywhere on a section's card. Read from the rows on screen rather than the
+  // element under the pointer, so the header and the gaps between rows land
+  // somewhere sensible: before the first row whose middle is below the pointer.
+  // A collapsed section shows no rows, so the lesson joins the end of it.
+  const dragLessonOverCard = (toKey: string, card: HTMLElement, clientY: number) => {
+    if (!lessonDragId) return
+    const rows = [...card.querySelectorAll<HTMLElement>('[data-lesson-row]')]
+    const others = rows.filter((r) => r.dataset.lessonRow !== lessonDragId)
+    const end = (layout[toKey] ?? []).filter((id) => id !== lessonDragId).length
+    dragLessonOver(toKey, rows.length === 0 ? end : others.filter((r) => { const box = r.getBoundingClientRect(); return box.top + box.height / 2 < clientY }).length)
+  }
+  const dropLesson = () => {
+    const id = lessonDragId
+    const at = lessonDropRef.current
+    setLessonDragId(null)
+    setLessonDrop(null)
+    lessonDropRef.current = null
+    if (!id || !at) return
+    const next = moveLesson(layout, id, at.key, at.index)
+    if (next === layout) return
+    setLayout(next)
+    void saveLessons(next)
+  }
+  // Released outside any section, or cancelled with Escape: nothing moved.
+  const cancelLessonDrag = () => {
+    setLessonDragId(null)
+    setLessonDrop(null)
+    lessonDropRef.current = null
+  }
+
+  // The non-drag way to move a lesson (WCAG 2.5.7).
+  const stepLessonBy = (id: string, dir: -1 | 1) => {
+    const next = stepLesson(layout, id, dir, layoutKeys)
+    if (next === layout) return
+    setLayout(next)
+    setRefocusLesson({ id, dir })
+    const toKey = Object.keys(next).find((k) => next[k].includes(id)) ?? ''
+    const place = toKey === UNSECTIONED ? 'Not in a section' : byId.get(toKey)?.title ?? 'Section'
+    setMoveStatus(`“${lessonById.get(id)?.title ?? 'Lesson'}” moved to position ${next[toKey].indexOf(id) + 1} of ${next[toKey].length} in ${place}.`)
+    void saveLessons(next)
+  }
+  // Keep focus on the arrow pressed, or the other one once this one is disabled.
+  useEffect(() => {
+    if (!refocusLesson) return
+    const { id, dir } = refocusLesson
+    const target = canStep(layout, id, dir, layoutKeys) ? dir : (dir === -1 ? 1 : -1)
+    document.querySelector<HTMLButtonElement>(`[data-lesson-step="${id}:${target}"]`)?.focus()
+    setRefocusLesson(null)
+  }, [refocusLesson]) // eslint-disable-line react-hooks/exhaustive-deps -- runs once per move, after the row has re-rendered
+
+  const lessonProps = {
+    recordingPhases,
+    layout,
+    layoutKeys,
+    lessonDragId,
+    lessonDrop,
+    onStepLesson: stepLessonBy,
+    onLessonDragStart: setLessonDragId,
+    onLessonDragOverCard: dragLessonOverCard,
+    onLessonDragEnd: cancelLessonDrag,
+  }
 
   const createSection = async () => {
     if (!sectionTitle.trim()) return
@@ -394,6 +526,7 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
     onDone()
   }
   const persistOrder = async () => {
+    if (lessonDragId) { dropLesson(); return }
     const ids = orderIds; setDragId(null)
     await persist(ids)
   }
@@ -412,17 +545,19 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
     <div>
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
-        {ordered.length > 1 && <p className="text-xs text-brand-muted-soft">Drag sections to reorder</p>}
+        <p className="text-xs text-brand-muted-soft">{ordered.length > 1 ? 'Drag sections and lessons to reorder' : 'Drag lessons to reorder'}</p>
       </div>
       <p className="sr-only" aria-live="polite">{moveStatus}</p>
+      {lessonError && <p role="alert" className="mb-3 text-xs text-danger">{lessonError}</p>}
+      {resourceNotice && <p role="alert" className="mb-3 text-xs text-danger">{resourceNotice}</p>}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1.15fr]">
-        {/* Left — sections + lessons */}
-        <div className="space-y-3">
+        {/* Left — sections + lessons. min-w-0 so a grid track cannot outgrow a phone. */}
+        <div className="min-w-0 space-y-3">
           {ordered.map((s, idx) => (
             <SectionCard
               key={s.id}
-              moduleId={m.id}
+              {...lessonProps}
               section={s}
               lessons={lessonsIn(s.id)}
               selectedLessonId={editing?.lesson?.id ?? null}
@@ -440,6 +575,28 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
               onDone={onDone}
             />
           ))}
+
+          {/* Lessons with no section used to be missing from this list entirely,
+              and so could not be opened or moved. */}
+          {unsectioned.length > 0 && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); dragLessonOverCard(UNSECTIONED, e.currentTarget, e.clientY) }}
+              onDrop={(e) => { e.preventDefault(); if (lessonDragId) dropLesson() }}
+              className={`rounded-xl border border-dashed bg-white ${lessonDrop?.key === UNSECTIONED ? 'border-primary' : 'border-brand-border'}`}
+            >
+              <div className="border-b border-brand-hairline px-3 py-2.5">
+                <p className="text-sm font-bold text-brand-blue-dark">Not in a section</p>
+                <p className="text-xs text-brand-muted-soft">Drag these into a section to place them in the course.</p>
+              </div>
+              <LessonList
+                {...lessonProps}
+                listKey={UNSECTIONED}
+                lessons={unsectioned}
+                selectedLessonId={editing?.lesson?.id ?? null}
+                onSelectLesson={(lesson) => setEditing({ lesson, sectionId: null })}
+              />
+            </div>
+          )}
 
           {addingSection ? (
             <div className="flex items-center gap-2">
@@ -461,9 +618,10 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
           key={editing?.lesson?.id ?? editing?.sectionId ?? 'none'}
           moduleId={m.id}
           target={editing}
-          lessonCount={editing ? lessonsIn(editing.sectionId).length : 0}
-          onSaved={() => { setEditing(null); onDone() }}
+          nextOrder={editing ? Math.max(-1, ...lessonsIn(editing.sectionId).map((l) => l.display_order)) + 1 : 0}
+          onSaved={(notice) => { setResourceNotice(notice ?? null); setEditing(null); onDone() }}
           onCancel={() => setEditing(null)}
+          onChanged={onDone}
         />
       </div>
     </div>
@@ -473,11 +631,95 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
 const MOVE_BUTTON =
   'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-control text-content-muted hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent'
 
+// What every list of lessons needs in order to be dragged around.
+interface LessonDragProps {
+  recordingPhases: Record<string, RecordingPhase>
+  layout: LessonLayout
+  layoutKeys: string[]
+  lessonDragId: string | null
+  lessonDrop: { key: string; index: number } | null
+  onStepLesson: (id: string, dir: -1 | 1) => void
+  onLessonDragStart: (id: string) => void
+  onLessonDragOverCard: (toKey: string, card: HTMLElement, clientY: number) => void
+  onLessonDragEnd: () => void
+}
+
+function LessonList({
+  listKey, lessons, selectedLessonId, onSelectLesson, recordingPhases, layout, layoutKeys, lessonDragId, lessonDrop,
+  onStepLesson, onLessonDragStart, onLessonDragEnd,
+}: Omit<LessonDragProps, 'onLessonDragOverCard'> & {
+  listKey: string; lessons: AdminLesson[]; selectedLessonId: string | null; onSelectLesson: (l: AdminLesson) => void
+}) {
+  // Indexes are read with the dragged lesson lifted out of the list, as moveLesson does.
+  const others = lessons.filter((x) => x.id !== lessonDragId)
+  const lineAt = lessonDrop?.key === listKey ? lessonDrop.index : null
+  // Absolute, so showing it moves nothing. A line that took up space pushed the
+  // rows down, left the pointer in the gap above them, and sent the drop to the
+  // end of the section.
+  const dropLine = (edge: string) => <div className={`pointer-events-none absolute inset-x-1 ${edge} h-0.5 rounded-full bg-primary`} aria-hidden="true" />
+  return (
+    <div className="space-y-1 p-2">
+      {lessons.map((l) => {
+        const Icon = typeIcon(l.content_kind)
+        const active = l.id === selectedLessonId
+        const chip = RECORDING_CHIP[recordingPhases[l.id]]
+        const position = others.findIndex((x) => x.id === l.id)
+        return (
+          <div
+            key={l.id}
+            data-lesson-row={l.id}
+            draggable
+            onDragStart={(e) => {
+              // Firefox will not start a drag without data. Stop here so the
+              // section this row sits in does not treat it as its own drag.
+              e.dataTransfer.setData('text/plain', l.id)
+              e.dataTransfer.effectAllowed = 'move'
+              e.stopPropagation()
+              onLessonDragStart(l.id)
+            }}
+            onDragEnd={(e) => { e.stopPropagation(); onLessonDragEnd() }}
+            className={`group relative flex items-center gap-1 rounded-lg transition ${active ? 'bg-brand-soft' : 'hover:bg-brand-canvas'} ${lessonDragId === l.id ? 'opacity-50' : ''}`}
+            style={active ? { background: '#EAF0FE' } : undefined}
+          >
+            {lineAt !== null && position === lineAt && dropLine('-top-[3px]')}
+            {lineAt !== null && lineAt >= others.length && position === others.length - 1 && dropLine('-bottom-[3px]')}
+            <span className="shrink-0 cursor-grab pl-1 text-brand-muted-soft" aria-hidden="true"><GripVertical className="h-4 w-4" /></span>
+            <button onClick={() => onSelectLesson(l)} className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-1 pr-2 text-left text-sm">
+              <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" aria-hidden="true" />
+              <span className={`min-w-0 flex-1 truncate ${active ? 'font-semibold text-brand-blue-dark' : 'text-brand-muted'}`}>{l.title}</span>
+              {chip && <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${chip.className}`}>{chip.label}</span>}
+              {l.status === 'draft' && <span className="shrink-0 rounded-full bg-brand-hairline px-1.5 py-0.5 text-xs font-medium text-brand-muted-soft">Draft</span>}
+            </button>
+            {/* Always there on touch; on a mouse they appear with the row or on focus. */}
+            {([-1, 1] as const).map((dir) => (
+              <button
+                key={dir}
+                type="button"
+                data-lesson-step={`${l.id}:${dir}`}
+                onClick={() => onStepLesson(l.id, dir)}
+                disabled={!canStep(layout, l.id, dir, layoutKeys)}
+                aria-label={`Move ${l.title} ${dir === -1 ? 'up' : 'down'}`}
+                className={`${MOVE_BUTTON} mouse:opacity-0 mouse:group-hover:opacity-100 mouse:focus-visible:opacity-100`}
+              >
+                {dir === -1 ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+        )
+      })}
+      {lessons.length === 0 && (
+        <p className="px-3 py-1.5 text-xs text-brand-muted-soft">{lessonDragId ? 'Drop here to move the lesson into this section.' : 'No lessons yet.'}</p>
+      )}
+    </div>
+  )
+}
+
 function SectionCard({
-  moduleId, section: s, lessons, selectedLessonId, reorderable, isFirst, isLast, onMove, dragging,
+  section: s, lessons, selectedLessonId, reorderable, isFirst, isLast, onMove, dragging,
   onDragStart, onDragEnter, onDrop, onDragEnd, onSelectLesson, onAddLesson, onDone,
-}: {
-  moduleId: string; section: AdminSection; lessons: AdminLesson[]; selectedLessonId: string | null
+  recordingPhases, layout, layoutKeys, lessonDragId, lessonDrop, onStepLesson, onLessonDragStart, onLessonDragOverCard, onLessonDragEnd,
+}: LessonDragProps & {
+  section: AdminSection; lessons: AdminLesson[]; selectedLessonId: string | null
   reorderable: boolean; isFirst: boolean; isLast: boolean; onMove: (dir: -1 | 1) => void; dragging: boolean
   onDragStart: () => void; onDragEnter: () => void; onDrop: () => void; onDragEnd: () => void
   onSelectLesson: (l: AdminLesson) => void; onAddLesson: () => void; onDone: () => void
@@ -505,6 +747,11 @@ function SectionCard({
     if (res.ok) { setEditingTitle(false); onDone() }
   }
   const remove = async () => {
+    // A section's lessons outlive it, and members go on seeing them: say so first.
+    const kept = lessons.length === 0
+      ? ''
+      : ` ${lessons.length === 1 ? 'Its lesson stays' : `Its ${lessons.length} lessons stay`} in the course under “Not in a section”, and members will still see ${lessons.length === 1 ? 'it' : 'them'}. To remove a lesson, delete it separately.`
+    if (!confirm(`Delete “${s.title}”?${kept}`)) return
     const res = await fetch(`/api/admin/community/training/sections?id=${s.id}`, { method: 'DELETE' })
     if (res.ok) onDone()
   }
@@ -512,9 +759,9 @@ function SectionCard({
   return (
     <div
       onDragEnter={onDragEnter}
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(e) => { e.preventDefault(); onLessonDragOverCard(s.id, e.currentTarget, e.clientY) }}
       onDrop={(e) => { e.preventDefault(); onDrop() }}
-      className={`rounded-xl border bg-white transition ${dragging ? 'border-brand-blue opacity-60' : 'border-brand-border'}`}
+      className={`rounded-xl border bg-white transition ${dragging ? 'border-brand-blue opacity-60' : lessonDrop?.key === s.id ? 'border-primary' : 'border-brand-border'}`}
     >
       <div draggable={reorderable && !editingTitle} onDragStart={onDragStart} onDragEnd={onDragEnd} className="flex items-center gap-2 border-b border-brand-hairline px-3 py-2.5">
         {reorderable && <span className="cursor-grab text-brand-muted-soft"><GripVertical className="h-4 w-4" /></span>}
@@ -543,36 +790,41 @@ function SectionCard({
         <button onClick={remove} className="text-brand-muted-soft hover:text-red-500" aria-label="Delete section"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
       {open && (
-        <div className="space-y-1 p-2">
-          {lessons.map((l) => {
-            const Icon = typeIcon(l.content_kind)
-            const active = l.id === selectedLessonId
-            return (
-              <button key={l.id} onClick={() => onSelectLesson(l)} className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition ${active ? 'bg-brand-soft' : 'hover:bg-brand-canvas'}`} style={active ? { background: '#EAF0FE' } : undefined}>
-                <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" />
-                <span className={`min-w-0 flex-1 truncate ${active ? 'font-semibold text-brand-blue-dark' : 'text-brand-muted'}`}>{l.title}</span>
-                {l.status === 'draft' && <span className="shrink-0 rounded-full bg-brand-hairline px-1.5 py-0.5 text-xs font-medium text-brand-muted-soft">Draft</span>}
-              </button>
-            )
-          })}
-          {lessons.length === 0 && <p className="px-3 py-1.5 text-xs text-brand-muted-soft">No lessons yet.</p>}
-          <button onClick={onAddLesson} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-blue-dark">
+        <>
+          <LessonList
+            listKey={s.id}
+            lessons={lessons}
+            selectedLessonId={selectedLessonId}
+            onSelectLesson={onSelectLesson}
+            recordingPhases={recordingPhases}
+            layout={layout}
+            layoutKeys={layoutKeys}
+            lessonDragId={lessonDragId}
+            lessonDrop={lessonDrop}
+            onStepLesson={onStepLesson}
+            onLessonDragStart={onLessonDragStart}
+            onLessonDragEnd={onLessonDragEnd}
+          />
+          <button onClick={onAddLesson} className="mb-2 ml-2 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-blue-dark">
             <Plus className="h-3.5 w-3.5" /> Add lesson
           </button>
-        </div>
+        </>
       )}
     </div>
   )
 }
 
 function LessonEditor({
-  moduleId, target, lessonCount, onSaved, onCancel,
+  moduleId, target, nextOrder, onSaved, onCancel, onChanged,
 }: {
   moduleId: string
   target: { lesson?: AdminLesson; sectionId: string | null } | null
-  lessonCount: number
-  onSaved: () => void
+  /** One past the last lesson in the section, so a new lesson never ties with one. */
+  nextOrder: number
+  /** A notice is a problem the admin still needs to see once the editor has closed. */
+  onSaved: (notice?: string) => void
   onCancel: () => void
+  onChanged: () => void
 }) {
   const existing = target?.lesson
   const [contentKind, setContentKind] = useState<ContentKey>(existing?.content_kind ?? 'live')
@@ -585,6 +837,8 @@ function LessonEditor({
   const [status, setStatus] = useState<'draft' | 'published'>(existing?.status ?? 'published')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pendingResources, setPendingResources] = useState<PendingResource[]>([])
+  const [attachedCount, setAttachedCount] = useState(0)
 
   if (!target) {
     return (
@@ -605,11 +859,14 @@ function LessonEditor({
     (active.input === 'select' && interactiveKey !== (existing.interactive_key ?? '')) ||
     (active.input === 'file' && !!file)
   const showDropzone = active.input !== 'none' && (contentChanged || !existing)
+  // A Resource lesson can be made of attached resources alone: an existing
+  // catalogue file attached below is content, so it needs no second upload.
+  const hasResources = existing ? attachedCount > 0 : pendingResources.length > 0
 
   const save = async () => {
     if (!title.trim()) { setError('Add a lesson title.'); return }
     if (contentChanged && active.input === 'url' && !url.trim()) { setError('Add a URL for this lesson.'); return }
-    if (contentChanged && active.input === 'file' && !file) { setError('Choose a file to upload.'); return }
+    if (contentChanged && active.input === 'file' && !file && !hasResources) { setError('Choose a file to upload, or attach a resource below.'); return }
     if (contentChanged && active.input === 'select' && !interactiveKey) { setError('Choose a tutorial for this lesson.'); return }
     setBusy(true); setError(null)
     try {
@@ -676,7 +933,7 @@ function LessonEditor({
           title: title.trim(),
           contentKind,
           status,
-          displayOrder: String(lessonCount),
+          displayOrder: String(nextOrder),
           estimatedMinutes: minutes || undefined,
           body: body.trim() || undefined,
           externalUrl: active.input === 'url' ? url : undefined,
@@ -685,7 +942,14 @@ function LessonEditor({
           fileType: stored?.fileType,
         }),
       })
-      if (res.ok) onSaved(); else { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not add lesson.') }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not add lesson.'); return }
+      // The lesson exists from here, so a resource that fails must not leave this
+      // form open, where a second press would create the lesson twice.
+      const { id } = await res.json()
+      const failed = await attachPendingResources(id, pendingResources)
+      onSaved(failed.length > 0
+        ? `“${title.trim()}” was added, but ${failed.length === 1 ? 'this resource' : 'these resources'} could not be attached: ${failed.join(', ')}. Open the lesson to add ${failed.length === 1 ? 'it' : 'them'} again.`
+        : undefined)
     } finally {
       setBusy(false)
     }
@@ -745,7 +1009,11 @@ function LessonEditor({
             <active.Icon className="h-4 w-4 text-brand-muted" />
             <p className="text-sm font-semibold text-brand-blue-dark">{active.title}</p>
           </div>
-          <p className="mt-0.5 text-xs text-brand-muted-soft">{active.desc}</p>
+          <p className="mt-0.5 text-xs text-brand-muted-soft">
+            {active.input === 'file' && hasResources && !file
+              ? 'The attached resource below is enough for this lesson. Upload a file only if you also want it shown in the player.'
+              : active.desc}
+          </p>
           {active.input === 'url' && (
             <div className="mt-2">
               <Input type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label={`${active.title} URL`} />
@@ -774,7 +1042,7 @@ function LessonEditor({
       {/* 'live' (Record) — note for new lessons; full launch/record once saved. */}
       {contentKind === 'live' && (
         existing && existing.content_kind === 'live' ? (
-          <RecordSession itemId={existing.id} recordingStatus={existing.recording_status} />
+          <RecordSession itemId={existing.id} onChanged={onChanged} />
         ) : (
           <p className="rounded-xl border border-dashed border-brand-border bg-brand-canvas/50 p-4 text-xs text-brand-muted-soft">
             {active.desc} Save the lesson, then reopen it to launch the recording session.
@@ -783,7 +1051,9 @@ function LessonEditor({
       )}
 
       {/* Attached resources (files / links beneath the primary content). */}
-      {existing && <LessonResources itemId={existing.id} />}
+      {existing
+        ? <LessonResources itemId={existing.id} onCountChange={setAttachedCount} />
+        : <LessonResources pending={pendingResources} onPendingChange={setPendingResources} />}
 
       <Field label="Lesson notes" labelSize="small" hint="Optional — shown beneath the content.">
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Lesson notes (optional) — shown beneath the content" rows={3} />

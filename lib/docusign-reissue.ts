@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { classifyAgreement } from './docusign'
-import { dispatchAgreement, ISSUE_FAILED_PREFIX, type DispatchOutcome } from './docusign-agreements'
+import { adoptOpenEnvelope, dispatchAgreement, ISSUE_FAILED_PREFIX, type DispatchOutcome } from './docusign-agreements'
 import { remindEnvelopeRow, voidEnvelopeRow } from './esign/operations'
 import { maskEmail } from './utils'
 
@@ -8,6 +8,9 @@ import { maskEmail } from './utils'
 // DocuSign reminder and the retrospective script all come through here, so the
 // rules below are decided once.
 //
+//   live envelope left unlinked by a removal → link it to this row, then treat it
+//                                             as the live envelope below. (Removed
+//                                             and added back: 4 Nov 2026.)
 //   live envelope (created/sent/delivered)  → resend it to whoever hasn't signed.
 //                                             Free: no envelope quota, and any
 //                                             signature already given is kept.
@@ -49,19 +52,35 @@ export async function reissueParticipantAgreement(
   }
   if (opts.eventSlug && reg.event_slug !== opts.eventSlug) return { kind: 'not_found' }
 
-  const { data: env } = await db
+  const { data: rowEnv } = await db
     .from('agreements')
     .select('id, envelope_id, provider, status, reused_from')
     .eq('participant_id', participantId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  let env = rowEnv
 
   if (env?.reused_from) {
     return { kind: 'nothing_to_do', reason: 'on_file', message: 'Covered by an agreement already on file' }
   }
   if (env?.status === 'completed') {
     return { kind: 'nothing_to_do', reason: 'completed', message: 'Already signed' }
+  }
+
+  // Nothing live on this row, but this member may have a live envelope for this
+  // event with no row: it needs chasing, not replacing, so no quota and no prompt.
+  if (!(env && LIVE.has(env.status)) && p.member_id) {
+    const type = classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null, reg.school_address_state)
+    const adopted = type
+      ? await adoptOpenEnvelope(db, {
+          participantId,
+          memberId: p.member_id as string,
+          eventSlug: reg.event_slug,
+          type,
+        })
+      : null
+    if (adopted) env = adopted
   }
 
   if (env && LIVE.has(env.status)) {

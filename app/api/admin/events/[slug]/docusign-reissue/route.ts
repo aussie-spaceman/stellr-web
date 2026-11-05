@@ -3,6 +3,7 @@ import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
+import { describeDispatchOutcome } from '@/lib/docusign-status'
 
 // POST /api/admin/events/[slug]/docusign-reissue — the roster's "Reissue
 // DocuSign" action (admins + assigned event managers).
@@ -49,15 +50,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const actor = await actorFromAuth()
   const memberId = (part?.member_id as string | null) ?? actor.actorMemberId ?? null
   if (memberId) {
+    const issued = result.kind === 'reissued' && result.outcome === 'issued'
     await logActivity(
       {
         memberId,
         category: 'docusign',
-        action: result.kind === 'resent' ? 'docusign_resent' : 'docusign_reissued',
+        // "Issued" only when an envelope actually went out: this history is what
+        // staff read to see what a member was sent.
+        action: result.kind === 'resent' ? 'docusign_resent' : issued ? 'docusign_reissued' : 'docusign_reissue_no_send',
         summary:
           result.kind === 'resent'
             ? `DocuSign re-sent for ${slug} (${result.recipients} outstanding signer${result.recipients === 1 ? '' : 's'})`
-            : `New DocuSign issued for ${slug} (${result.outcome})`,
+            : issued
+              ? `New DocuSign issued for ${slug}`
+              : `DocuSign reissue for ${slug}: ${describeDispatchOutcome(result.outcome)}`,
         metadata: { participantId, eventSlug: slug, ...result },
         ...actor,
       },

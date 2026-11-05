@@ -36,6 +36,7 @@
     "watermark:check": "tsx scripts/check-watermarks.ts",
     "watermark:worker": "tsx scripts/watermark-worker.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
+    "seed:e2e-stack": "tsx scripts/seed-e2e-stack.ts",
     "seed:welcome-drips": "tsx scripts/seed-welcome-drips.ts",
     "set-admin": "tsx scripts/set-admin.ts",
     "verify:prod": "tsx scripts/verify-prod-services.ts",

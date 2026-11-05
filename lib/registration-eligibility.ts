@@ -19,7 +19,7 @@
 import { ageOn, appToday, isValidDob, onDate } from '@/lib/age'
 
 /** Nobody registering is older than this; a year typed as 0211 or 1811 is a typo. */
-const MAX_AGE = 120
+export const MAX_AGE = 120
 
 export interface RegistrationAgeOk {
   ok: true

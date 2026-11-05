@@ -33,6 +33,8 @@ const h = vi.hoisted(() => ({
   rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
   followUp: vi.fn(async (_db: unknown, _input: unknown) => ({})),
   sendEmail: vi.fn(async () => {}),
+  sheetsOn: false,
+  createSheet: vi.fn(async (_input: { enteredParticipants?: Array<Record<string, unknown>> }) => ({ url: 'https://sheet.test/1', spreadsheetId: 'sheet-1' })),
   afterTasks: [] as Array<() => Promise<unknown>>,
   // Captures every row passed to `.insert()`, keyed by table name.
   captures: {} as Record<string, unknown[]>,
@@ -109,7 +111,7 @@ vi.mock('@/lib/after-response', () => ({
 vi.mock('@/lib/email', () => ({ sendEmail: h.sendEmail, groupConfirmationEmail: () => ({ subject: '', html: '', text: '' }) }))
 vi.mock('@/lib/individual-payment', () => ({ ensureIndividualPayments: async () => {} }))
 vi.mock('@/lib/store/event-merch', () => ({ finalizeRegistrationMerch: async () => {} }))
-vi.mock('@/lib/google-sheets', () => ({ isGoogleSheetsConfigured: () => false, createGroupRegistrationSheet: async () => ({ url: '', spreadsheetId: '' }) }))
+vi.mock('@/lib/google-sheets', () => ({ isGoogleSheetsConfigured: () => h.sheetsOn, createGroupRegistrationSheet: h.createSheet }))
 vi.mock('@/lib/school-link', () => ({ linkMembersToSchoolByName: async () => {} }))
 vi.mock('@/lib/event-participation-sync', () => ({ recordEventParticipation: async () => {} }))
 vi.mock('@/lib/space-inheritance', () => ({ syncObjectSpaceRoster: async () => {}, reconcileEventSpaceRoster: async () => {} }))
@@ -172,6 +174,7 @@ beforeEach(() => {
   h.resolveDuplicate.mockReturnValue({ kind: 'none' })
   h.getUserList.mockResolvedValue({ data: [] })
   h.onFile = null
+  h.sheetsOn = false
   h.rlGuard.mockReturnValue(null)
 })
 
@@ -450,35 +453,87 @@ describe('POST /api/register/group — S0 age gate', () => {
     expectNothingWritten()
   })
 
-  it('a Member-ID-linked person with no date of birth on file is refused with a way forward', async () => {
+  it.each([
+    ['no date of birth', null],
+    ['an unreadable date of birth', '2999-01-01'],
+  ])('a Member ID whose record has %s gets the same refusal as an unknown ID, with a way forward', async (_l, date_of_birth) => {
     h.onFile = {
-      memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', nickname: null, email: 'lee@x.com', phone: null,
-      date_of_birth: null, grade: null, gender: null, t_shirt_size: null, ethnicity: [], dietary_requirements: [],
+      memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', member_last_name: 'Ng', nickname: null, email: 'lee@x.com', phone: null,
+      date_of_birth, grade: null, gender: null, t_shirt_size: null, ethnicity: [], dietary_requirements: [],
       health_conditions: null,
     }
-    const res = await post(body({ students: [STUDENT('s1@example.com'), { linked: true, existing_membership_id: 'STL-1' }] }))
+    const res = await post(body({ students: [STUDENT('s1@example.com'), { linked: true, existing_membership_id: 'STL-1', first_name: 'Sam', last_name: 'Ng' }] }))
     expect(res.status).toBe(400)
     const json = await res.json()
     expect(json.code).toBe('dob_missing')
-    expect(json.error).toMatch(/don't have a date of birth on file for Lee Ng/)
+    expect(json.error).toMatch(/couldn't use the Stellr Member ID for Sam Ng\. Check the ID and last name, or enter their details by hand/)
+    expect(json.error).not.toMatch(/Lee/)
     expectNothingWritten()
   })
 
-  it('a Member-ID-linked person whose date of birth on file is wrong is asked to correct it', async () => {
+  describe('a duplicate answers from what was submitted', () => {
+    const LINKED_SLOT = { linked: true, existing_membership_id: 'STL-1', first_name: 'Lee', last_name: 'Ng' }
+    const registered = (...emails: string[]) =>
+      h.findExistingRegistrations.mockResolvedValueOnce(new Map(emails.map((e) => [e, [{ registrationId: 'reg-old' }]])))
+
+    beforeEach(() => {
+      h.onFile = {
+        memberId: 'm-linked', first_name: 'Stored', last_name: 'Latest', member_last_name: 'Ng', nickname: null, email: 'lee.ng@example.com', phone: null,
+        date_of_birth: '2010-01-01', grade: null, gender: null, t_shirt_size: null, ethnicity: [], dietary_requirements: [],
+        health_conditions: null,
+      }
+    })
+
+    it('a duplicate names a Member ID slot as submitted, with no form of the stored address', async () => {
+      registered('lee.ng@example.com')
+      const res = await post(body({ students: [STUDENT('s1@example.com'), LINKED_SLOT] }))
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: 'Already registered for this event: Lee Ng' })
+      expectNothingWritten()
+    })
+
+    it('a duplicate shows a typed address as typed and names a Member ID slot as submitted', async () => {
+      registered('lee.ng@example.com', 's1@example.com')
+      const res = await post(body({ students: [STUDENT('s1@example.com'), LINKED_SLOT] }))
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: 'Already registered for this event: s1@example.com, Lee Ng' })
+      expectNothingWritten()
+    })
+
+    it('a typed address is shown as typed when a Member ID slot resolves to the same address', async () => {
+      registered('lee.ng@example.com')
+      const res = await post(body({ students: [STUDENT('lee.ng@example.com'), LINKED_SLOT] }))
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: 'Already registered for this event: lee.ng@example.com, Lee Ng' })
+      expectNothingWritten()
+    })
+  })
+
+  it('a linked slot’s sheet row carries the submitted name; a typed slot keeps what was typed', async () => {
+    h.sheetsOn = true
     h.onFile = {
-      memberId: 'm-linked', first_name: 'Lee', last_name: 'Ng', nickname: null, email: 'lee@x.com', phone: null,
-      date_of_birth: '2999-01-01', grade: null, gender: null, t_shirt_size: null, ethnicity: [], dietary_requirements: [],
-      health_conditions: null,
+      memberId: 'm-linked', first_name: 'Stored', last_name: 'Latest', member_last_name: 'Ng', nickname: null,
+      email: 'lee.ng@example.com', phone: '555-0100', date_of_birth: '2010-01-01', grade: '9', gender: 'Female',
+      t_shirt_size: 'M', ethnicity: [], dietary_requirements: ['Peanuts'], health_conditions: 'On file',
+      emergency_contact_first_name: 'Par', emergency_contact_last_name: 'Ent', emergency_contact_email: 'parent@example.com',
+      emergency_contact_phone: '555-0101', emergency_contact_relationship: 'Parent',
     }
-    const res = await post(body({ students: [STUDENT('s1@example.com'), { linked: true, existing_membership_id: 'STL-1' }] }))
-    expect(res.status).toBe(400)
-    const json = await res.json()
-    expect(json.code).toBe('dob_invalid')
-    expect(json.error).toMatch(/date of birth on file for Lee Ng's Stellr Member ID doesn't look right/)
-    // Members cannot edit their own date of birth; only staff can correct it.
-    expect(json.error).toMatch(/contact Stellr to correct it/)
-    expect(json.error).not.toMatch(/correct it in their profile/)
-    expectNothingWritten()
+    const res = await post(body({ students: [STUDENT('s1@example.com'), { linked: true, existing_membership_id: 'STL-1', first_name: 'Lee', last_name: 'Ng' }] }))
+    expect(res.status).toBe(201)
+
+    const { enteredParticipants } = h.createSheet.mock.calls[0][0]
+    expect(enteredParticipants?.[0]).toMatchObject({ email: 's1@example.com', date_of_birth: '2012-01-01' })
+    expect(enteredParticipants?.[1]).toEqual({
+      type: 'Student', first_name: 'Lee', last_name: 'Ng',
+      email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
+      dietary_requirements: [], health_conditions: '',
+      ec_first_name: '', ec_last_name: '', ec_email: '', ec_phone: '', ec_relationship: '',
+      school_email: '',
+    })
+    // The row links the member.
+    expect(participantRows().find((p) => p.member_id === 'm-linked')).toMatchObject({
+      email: 'lee.ng@example.com', health_conditions: 'On file', emergency_contact_email: 'parent@example.com',
+    })
   })
 
   it.each([

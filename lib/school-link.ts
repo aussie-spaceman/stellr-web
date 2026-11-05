@@ -19,10 +19,12 @@ function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Resolve a school selection to a schools.id, creating the school row if it
 // doesn't exist yet. When the caller supplies an explicit `id` (the registrant
-// chose an existing school), that id is used verbatim — no name match, no
-// create. Otherwise the name is matched case-insensitively on its normalized
+// chose an existing school), that id is used if it names an active school, and
+// otherwise links nothing — no name match, no create. Otherwise the name is matched case-insensitively on its normalized
 // form so registrations don't spawn near-duplicate schools. Returns null when
 // nothing was given or the lookup/insert fails (callers treat school linking as
 // non-fatal — the registration must never fail because of it).
@@ -30,7 +32,21 @@ async function resolveSchoolId(
   db: SupabaseClient,
   school: SchoolDetails
 ): Promise<string | null> {
-  if (school.id) return school.id
+  if (school.id) {
+    // Only a school the picker could have offered (the /api/schools/search filter).
+    if (!UUID_RE.test(String(school.id))) return null
+    const { data: picked, error: pickedError } = await db
+      .from('schools')
+      .select('id')
+      .eq('id', school.id)
+      .or('is_active.is.null,is_active.eq.true')
+      .maybeSingle()
+    if (pickedError) {
+      console.error('[school-link] Picked school lookup error:', pickedError)
+      return null
+    }
+    return (picked as { id: string } | null)?.id ?? null
+  }
 
   const name = school.name ? normalizeName(school.name) : ''
   if (!name) return null

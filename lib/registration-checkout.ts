@@ -107,7 +107,10 @@ export async function createRegistrationCheckout(
   }
 
   const event = opts.event === undefined ? await getEventBySlug(reg.event_slug) : opts.event
-  const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId ?? null
+  // No event means no way to know the fee, which is not the same as a free event
+  // (a document with no price). So no checkout is created.
+  if (!event) throw new RegistrationCheckoutError('no_price', 'This event’s fee could not be confirmed')
+  const stripePriceId = (event as { stripePriceId?: string }).stripePriceId ?? null
 
   // Fee per seat. A $0 price object — how free events are configured — must not
   // become a line item: Stripe can't open a session for a zero total.

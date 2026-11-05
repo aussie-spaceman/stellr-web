@@ -70,6 +70,22 @@ describe('syncParticipantsFromSheet — half-typed rows do not create phantoms',
   })
 })
 
+describe('syncParticipantsFromSheet — a row filled from the member record', () => {
+  it('is not rewritten by a sheet row with the same email', async () => {
+    const fake = fakeSupabase({
+      participants: [{
+        id: 'p1', registration_id: 'reg1', email: 'jane@x.com', details_from_member: true, health_conditions: 'kept',
+      }],
+    })
+    readSheetParticipants.mockResolvedValueOnce([
+      row({ first_name: 'Jane', email: 'jane@x.com', date_of_birth: '2011-04-05', health_conditions: 'typed' }),
+    ])
+    const result = await syncParticipantsFromSheet(fake.client, reg)
+    expect(fake.table('participants')[0].health_conditions).toBe('kept')
+    expect(result.updated).toBe(0)
+  })
+})
+
 // S0 (2 Nov 2026): the registration routes' date-of-birth check. A row whose
 // date of birth is blank or not a real past date is left out and reported —
 // not the whole sync — and syncs once it is fixed.

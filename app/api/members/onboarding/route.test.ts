@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // deep review MEM-3: onboarding is a POST anyone signed in can re-run. It must
 // refuse to revive an admin-deactivated (banned) account, and must refuse a
 // minor who re-submits an adult date of birth to escape the high-school bracket.
-const { state } = vi.hoisted(() => ({
+const { state, activity } = vi.hoisted(() => ({
+  activity: [] as Array<{ action: string }>,
   state: {
     userId: 'clerk-1' as string | null,
     clerkUser: null as Record<string, unknown> | null,
@@ -16,6 +17,10 @@ const { state } = vi.hoisted(() => ({
     agreements: [] as Array<{ envelope_type: string; status: string }>,
     /** Whether a conditional (`.is('clerk_user_id', null)`) update finds its row. */
     linkHits: true,
+    /** What the read of a picked school answers. */
+    school: { data: null, error: null } as { data: { id: string; name?: string; is_active?: boolean | null } | null; error: { message: string } | null },
+    schoolReads: [] as Array<Array<[string, string, unknown]>>,
+    upserts: [] as Array<{ table: string; payload: unknown }>,
     updates: 0,
     writes: [] as Array<{ table: string; payload: unknown; filters: Array<[string, string, unknown]> }>,
   },
@@ -60,11 +65,15 @@ vi.mock('@/lib/supabase', () => ({
           state.writes.push({ table, payload, filters })
           return chain
         },
-        upsert: () => chain,
+        upsert: (payload: unknown) => { state.upserts.push({ table, payload }); return chain },
         eq: (c: string, v: unknown) => { filters.push(['eq', c, v]); return chain },
         is: (c: string, v: unknown) => { filters.push(['is', c, v]); return chain },
         or: (s: string) => { filters.push(['or', s, null]); return chain },
         maybeSingle: async () => {
+          if (table === 'schools') {
+            state.schoolReads.push(filters)
+            return state.school
+          }
           if (table !== 'members') return { data: null, error: null }
           if (eqOf('clerk_user_id') !== undefined) return { data: state.byClerk, error: null }
           if (eqOf('email') !== undefined) return { data: state.byEmail, error: null }
@@ -80,7 +89,7 @@ vi.mock('@/lib/supabase', () => ({
 // resolve. No-op them so the module loads hermetically.
 vi.mock('@/lib/email-campaigns', () => ({ fireCampaignEvent: async () => {} }))
 vi.mock('@/lib/membership-grants', () => ({ applyGrantTrigger: async () => {} }))
-vi.mock('@/lib/activity-log', () => ({ logActivity: async () => {} }))
+vi.mock('@/lib/activity-log', () => ({ logActivity: async (e: { action: string }) => { activity.push(e) } }))
 vi.mock('@/lib/volunteer', () => ({
   grantVolunteerRole: async () => {},
   dispatchVolunteerAgreement: async () => {},
@@ -120,8 +129,86 @@ beforeEach(() => {
   state.participants = []
   state.agreements = []
   state.linkHits = true
+  state.school = { data: null, error: null }
+  state.schoolReads = []
+  state.upserts = []
   state.updates = 0
   state.writes = []
+  activity.length = 0
+})
+
+// C4-F6: a picked school is linked only if it is one the picker could have offered.
+describe('POST /api/members/onboarding — a picked school', () => {
+  const SCHOOL = '11111111-1111-4111-8111-111111111111'
+  const links = () => state.upserts.filter((u) => u.table === 'member_schools')
+  const linkedLogs = () => activity.filter((a) => a.action === 'school_linked')
+  const signedUp = () => {
+    state.byClerk = { id: 'm-1', is_active: true, date_of_birth: '1990-01-01' }
+  }
+
+  it('links a school that exists and is active', async () => {
+    signedUp()
+    state.school = { data: { id: SCHOOL, name: 'Denver High' }, error: null }
+    const res = await post({ ...ADULT_BODY, school_id: SCHOOL })
+    expect(res.status).toBe(200)
+    expect(links()).toHaveLength(1)
+    expect(links()[0].payload).toMatchObject({ member_id: 'm-1', school_id: SCHOOL, is_current: true })
+    expect(linkedLogs()).toHaveLength(1)
+    // The same filter as /api/schools/search: a deactivated school is not offered.
+    expect(state.schoolReads[0]).toContainEqual(['or', 'is_active.is.null,is_active.eq.true', null])
+  })
+
+  it('a school that does not resolve links nothing, logs no link, and onboarding still succeeds', async () => {
+    signedUp()
+    const res = await post({ ...ADULT_BODY, school_id: SCHOOL })
+    expect(res.status).toBe(200)
+    expect(links()).toEqual([])
+    expect(linkedLogs()).toEqual([])
+  })
+
+  it('an id that is not a uuid is never sent to the database', async () => {
+    signedUp()
+    const res = await post({ ...ADULT_BODY, school_id: 'not-a-uuid' })
+    expect(res.status).toBe(200)
+    expect(state.schoolReads).toEqual([])
+    expect(links()).toEqual([])
+  })
+
+  it('a failed read decides nothing: a retryable 500 before the profile is written', async () => {
+    signedUp()
+    state.school = { data: null, error: { message: 'boom' } }
+    const res = await post({ ...ADULT_BODY, school_id: SCHOOL })
+    expect(res.status).toBe(500)
+    expect(state.writes.filter((w) => w.table === 'members')).toEqual([])
+    expect(links()).toEqual([])
+  })
+
+  describe('added as new, by name', () => {
+    const NEW = { ...ADULT_BODY, school_id: 'new', new_school_name: 'Denver High' }
+
+    it('a name that matches an active school links it', async () => {
+      signedUp()
+      state.school = { data: { id: SCHOOL, is_active: true }, error: null }
+      expect((await post(NEW)).status).toBe(200)
+      expect(links()[0].payload).toMatchObject({ member_id: 'm-1', school_id: SCHOOL })
+    })
+
+    it('a name that matches a deactivated school links nothing, logs no link, and succeeds', async () => {
+      signedUp()
+      state.school = { data: { id: SCHOOL, is_active: false }, error: null }
+      expect((await post(NEW)).status).toBe(200)
+      expect(links()).toEqual([])
+      expect(linkedLogs()).toEqual([])
+    })
+
+    it('a failed read decides nothing: a retryable 500 before the profile is written', async () => {
+      signedUp()
+      state.school = { data: null, error: { message: 'boom' } }
+      expect((await post(NEW)).status).toBe(500)
+      expect(state.writes.filter((w) => w.table === 'members')).toEqual([])
+      expect(links()).toEqual([])
+    })
+  })
 })
 
 describe('POST /api/members/onboarding — re-entry guards (MEM-3)', () => {

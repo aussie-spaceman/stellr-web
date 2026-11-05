@@ -11,9 +11,7 @@ import {
 // 4 Nov 2026, for both the signed-in member and the brand-new participant. The
 // S5 handler split (A5) must keep every expectation here unchanged: status,
 // `code`, body, and the order of writes and side effects. If one of these
-// fails, the refactor changed behaviour; fix the refactor, not this file. A test
-// named KNOWN DEFECT is the exception: it records what happens, and is not a
-// contract to preserve.
+// fails, the refactor changed behaviour; fix the refactor, not this file.
 //
 // What is real: the route, lib/registration-eligibility, lib/registration (the
 // window), lib/clerk-provisioning (the COPPA login guard; only Clerk is faked)
@@ -249,21 +247,27 @@ describe('characterisation: POST /api/register/group-join — a member already o
     expect(h.createSignInToken).not.toHaveBeenCalled()
   })
 
-  // The route comment says "a lookup error leaves this false, so no token is
-  // minted". It does not: the error fields are discarded, so a failed read is
-  // "not found", and a caller whose email has no Clerk login gets a ticket plus
-  // a clerk_user_id write onto whatever row upsertMember resolved.
-  it('KNOWN DEFECT, fails open: a failed prior-member lookup reads as new, and mints a login', async () => {
+  // A failed read cannot tell new from existing, so it is not "not found": no
+  // upsert, no ticket and no clerk_user_id write, on any of the three reads.
+  it.each([
+    ['by email', 'email', 'kid@example.com', {}],
+    ['by school email', 'school_email', 'kid@example.com', {}],
+    ['by the submitted school address', 'email', OLD_ADDRESS, { school_email: OLD_ADDRESS }],
+  ])('a failed prior-member lookup %s is a retryable 503 with nothing written', async (_l, column, value, extra) => {
     rec.respond((c) =>
-      c.table === 'members' && c.op === 'select' ? { data: null, error: { message: 'boom' } } : baseResponder(c),
+      c.table === 'members' && c.op === 'select' && eqFilter(c, column, value)
+        ? { data: null, error: { message: 'boom' } }
+        : baseResponder(c),
     )
-    h.upsertMember.mockResolvedValue('m-prior')
-    expect(await settle(await post(newcomer()))).toEqual({
-      status: 201,
-      body: { success: true, eventSlug: 'colorado', eventTitle: 'Colorado', signInToken: 'tkt' },
+    expect(await settle(await post(newcomer(extra)))).toEqual({
+      status: 503,
+      body: { error: 'Registration is temporarily unavailable. Please try again shortly.' },
     })
-    expect(rec.writes()).toEqual(joinWrites({ newcomer: true, withLogin: true }))
-    expect(rec.calls.find((c) => c.op === 'update' && c.table === 'members')?.filters).toEqual([['eq', 'id', 'm-prior']])
+    expect(rec.writes()).toEqual([])
+    expect(h.upsertMember).not.toHaveBeenCalled()
+    expect(h.getUserList).not.toHaveBeenCalled()
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.createSignInToken).not.toHaveBeenCalled()
   })
 })
 

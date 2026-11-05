@@ -1,5 +1,6 @@
-import type { Page } from '@playwright/test'
+import type { Page, Response } from '@playwright/test'
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright'
+import { recordCreatedSession } from './session-ledger'
 import { FIXTURES, type FixtureRole } from './users'
 
 // Signs a fixture user in on `page`, making a NEW Clerk session, and proves it
@@ -9,24 +10,16 @@ import { FIXTURES, type FixtureRole } from './users'
 //
 // Against a protected deployment, apply the Vercel bypass before calling this
 // (e2e/fixtures/test.ts does it for specs; auth.setup does it itself).
-
-/**
- * Clerk's fixed code for `+clerk_test` addresses on a development instance. Not
- * a secret: identical across every Clerk dev instance, and only accepted for
- * test users — which is what makes an inbox-free sign-in possible.
- */
-const CLERK_TEST_CODE = '424242'
+//
+// Signs in by email: Clerk's helper uses CLERK_SECRET_KEY, server side, to mint
+// a one-use ticket that expires in 5 minutes, and the browser only sees that.
+// No password goes through the page. A password would be passed to
+// page.evaluate, and a Playwright trace records evaluate arguments, so a retried
+// sign-in would publish it in the report on this public repo. A ticket also
+// skips Clerk's new-device code, which the password route had to answer.
 
 export async function signInAs(page: Page, role: FixtureRole, baseURL: string | undefined): Promise<void> {
   const fixture = FIXTURES[role]
-  const password = process.env[fixture.passwordVar]
-  if (!password) {
-    throw new Error(
-      `${fixture.passwordVar} is not set — cannot sign in as ${role}.\n` +
-        'These are the passwords set when the fixture users were created in\n' +
-        "Clerk's development instance. Add them to .env.local.",
-    )
-  }
 
   // Must precede the first navigation: it installs the token the Clerk client
   // picks up on load.
@@ -55,41 +48,30 @@ export async function signInAs(page: Page, role: FixtureRole, baseURL: string | 
   // it never is, instead of slowing every action in the suite.
   await clerk.loaded({ page })
 
-  await clerk.signIn({
-    page,
-    signInParams: { strategy: 'password', identifier: fixture.email, password },
-  })
-
-  // Clerk challenges an unrecognised device with an emailed code, and the
-  // testing token does not bypass that — it stops bot detection, not the
-  // second factor. `+clerk_test` addresses accept a fixed code, so complete
-  // it through the Clerk client rather than its six-box UI.
-  await page.evaluate(async (code) => {
-    const clerkClient = (window as {
-      Clerk?: {
-        client?: {
-          signIn?: {
-            status?: string
-            prepareSecondFactor: (o: { strategy: string }) => Promise<unknown>
-            attemptSecondFactor: (o: { strategy: string; code: string }) => Promise<unknown>
-          }
-        }
-        setActive?: (o: { session: unknown }) => Promise<void>
-      }
-    }).Clerk
-    const signIn = clerkClient?.client?.signIn
-    if (signIn?.status !== 'needs_second_factor') return
-
-    await signIn.prepareSecondFactor({ strategy: 'email_code' }).catch(() => {})
-    const result = (await signIn.attemptSecondFactor({
-      strategy: 'email_code',
-      code,
-    })) as { status?: string; createdSessionId?: string }
-
-    if (result?.status === 'complete' && result.createdSessionId && clerkClient?.setActive) {
-      await clerkClient.setActive({ session: result.createdSessionId })
-    }
-  }, CLERK_TEST_CODE)
+  // Record the session from Clerk's response, the moment it exists. A sign-in
+  // that fails after this point still leaves a live session, and a failed run is
+  // the one whose report gets uploaded, so waiting until sign-in has succeeded
+  // would miss exactly the sessions that matter.
+  const recording: Promise<void>[] = []
+  const onResponse = (response: Response) => {
+    if (!new URL(response.url()).pathname.startsWith('/v1/client/sign_ins')) return
+    recording.push(
+      response
+        .json()
+        .then((body: { response?: { created_session_id?: string | null } }) => {
+          const sessionId = body.response?.created_session_id
+          if (sessionId) recordCreatedSession(sessionId)
+        })
+        .catch(() => {}),
+    )
+  }
+  page.on('response', onResponse)
+  try {
+    await clerk.signIn({ page, emailAddress: fixture.email })
+  } finally {
+    page.off('response', onResponse)
+    await Promise.all(recording)
+  }
 
   // Ask the Clerk client directly whether a user is attached. The helper
   // resolving is not the same as a session existing.

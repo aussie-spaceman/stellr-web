@@ -324,7 +324,18 @@ jobs:
         env:
           CI: 'true'
 
+      # This repo is public, so any signed-in GitHub user can download an
+      # artifact. A Playwright report records the fixture sign-ins, including
+      # the Clerk dev-browser token, and those stay usable for the session's 7
+      # days. So end the sessions this run created first, and upload only for a
+      # failed run: a green report helps nobody, and if the revoke failed
+      # nothing goes up.
+      # Flaky runs pass, so their traces are not uploaded either.
       - if: always() && steps.config.outputs.ready == 'true'
+        id: revoke-sessions
+        run: npx tsx scripts/revoke-e2e-sessions.ts
+
+      - if: failure() && steps.revoke-sessions.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report

@@ -12,12 +12,12 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { getAllEvents } from '@/lib/events/repo'
 
 export type EventRow = {
   slug: string
   date: string
   endDate?: string | null
-  status?: string | null
   registrationOpen?: boolean | null
 }
 
@@ -30,10 +30,9 @@ const ORIGIN = 'http://localhost:3000'
  */
 export function rankEvents(events: EventRow[], today: string): string[] {
   const lastDay = (e: EventRow) => e.endDate ?? e.date
-  const live = events.filter((e) => e.status !== 'cancelled')
-  const upcoming = live.filter((e) => lastDay(e) >= today).sort((a, b) => a.date.localeCompare(b.date))
-  const isOpen = (e: EventRow) => e.registrationOpen === true && e.status !== 'postponed'
-  const past = live.filter((e) => lastDay(e) < today).sort((a, b) => b.date.localeCompare(a.date))
+  const upcoming = events.filter((e) => lastDay(e) >= today).sort((a, b) => a.date.localeCompare(b.date))
+  const isOpen = (e: EventRow) => e.registrationOpen === true
+  const past = events.filter((e) => lastDay(e) < today).sort((a, b) => b.date.localeCompare(a.date))
   return [...upcoming.filter(isOpen), ...upcoming.filter((e) => !isOpen(e)), ...past].map((e) => e.slug)
 }
 
@@ -51,17 +50,11 @@ async function isOk(url: string): Promise<boolean> {
 }
 
 async function fetchEvents(): Promise<EventRow[]> {
-  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-  const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
-  if (!projectId) throw new Error('NEXT_PUBLIC_SANITY_PROJECT_ID is not set')
-  // Same filter as getAllEvents() in lib/sanity.ts: published live events.
-  const query = `*[_type == "event" && defined(slug.current) && defined(date) && (activityType == "live_event" || !defined(activityType))]{ "slug": slug.current, date, endDate, status, registrationOpen }`
-  const url = new URL(`https://${projectId}.api.sanity.io/v2024-01-01/data/query/${dataset}`)
-  url.searchParams.set('query', query)
-  url.searchParams.set('perspective', 'published')
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-  if (!res.ok) throw new Error(`Sanity answered ${res.status}`)
-  return ((await res.json()) as { result: EventRow[] }).result
+  const events = await getAllEvents()
+  if (!events) throw new Error('NEXT_PUBLIC_SANITY_PROJECT_ID is not set')
+  return (events as (Omit<EventRow, 'slug'> & { slug: { current: string } })[])
+    .filter((e) => e.date)
+    .map((e) => ({ slug: e.slug.current, date: e.date, endDate: e.endDate, registrationOpen: e.registrationOpen }))
 }
 
 async function chooseEventUrls(): Promise<string[]> {

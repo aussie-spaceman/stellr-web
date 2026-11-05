@@ -45,19 +45,6 @@ describe('rankEvents', () => {
     ).toEqual(['newer', 'old'])
   })
 
-  it('skips cancelled events and ranks postponed ones behind open ones', () => {
-    expect(
-      rankEvents(
-        [
-          { slug: 'cancelled', date: '2026-12-01', status: 'cancelled', registrationOpen: true },
-          { slug: 'postponed', date: '2026-12-02', status: 'postponed', registrationOpen: true },
-          { slug: 'open', date: '2027-01-01', registrationOpen: true },
-        ],
-        today,
-      ),
-    ).toEqual(['open', 'postponed'])
-  })
-
   it('returns nothing for no events', () => {
     expect(rankEvents([], today)).toEqual([])
   })

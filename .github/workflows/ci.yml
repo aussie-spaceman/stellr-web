@@ -388,11 +388,13 @@ jobs:
           E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
           E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+          E2E_EVENT_MANAGER_PASSWORD: ${{ secrets.E2E_EVENT_MANAGER_PASSWORD }}
         run: |
           missing=""
           for name in NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY SUPABASE_SECRET_KEY \
                       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY \
-                      E2E_MEMBER_PASSWORD E2E_TEACHER_PASSWORD E2E_ADMIN_PASSWORD; do
+                      E2E_MEMBER_PASSWORD E2E_TEACHER_PASSWORD E2E_ADMIN_PASSWORD \
+                      E2E_EVENT_MANAGER_PASSWORD; do
             [ -z "${!name}" ] && missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -443,7 +445,20 @@ jobs:
         env: *e2e-secrets
         run: npx playwright test
 
+      # This repo is public, so any signed-in GitHub user can download an
+      # artifact. A Playwright report records the fixture sign-ins, including
+      # the Clerk dev-browser token, and those stay usable for the session's 7
+      # days. So end the sessions this run created first, and upload only for a
+      # failed run: a green report helps nobody, and if the revoke failed
+      # nothing goes up.
+      # Flaky runs pass, so their traces are not uploaded either.
       - if: always() && steps.config.outputs.ready == 'true'
+        id: revoke-sessions
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
+        run: npx tsx scripts/revoke-e2e-sessions.ts
+
+      - if: failure() && steps.revoke-sessions.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report

@@ -33,10 +33,11 @@ import { signInAs } from './fixtures/sign-in'
 mkdirSync('e2e/.auth', { recursive: true })
 
 for (const role of Object.keys(FIXTURES) as FixtureRole[]) {
-  // deep review TEST-8: a fixture whose password secret is absent (e.g.
-  // event_manager, pending owner setup) is SKIPPED rather than failing the whole
-  // suite's setup project. The specs that use its session skip in turn when the
-  // storage file is missing, so adding a not-yet-provisioned fixture is safe.
+  // deep review TEST-8: a fixture whose password is absent (a local checkout
+  // without E2E_EVENT_MANAGER_PASSWORD, say) is SKIPPED rather than failing the
+  // whole setup project. A spec using that session must skip on the same variable,
+  // not on the storage file: that file does not exist yet when Playwright decides
+  // skips. CI fails closed on a missing password, so none of this skips there.
   const configured = Boolean(process.env[FIXTURES[role].passwordVar])
   setup(`sign in as ${role}`, async ({ page, baseURL }) => {
     setup.skip(!configured, `${FIXTURES[role].passwordVar} not set — fixture not provisioned`)

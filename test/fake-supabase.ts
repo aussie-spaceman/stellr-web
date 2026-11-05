@@ -93,6 +93,8 @@ export function fakeSupabase(
     // (`undefined ?? null === null`), so a broken query looked like it worked.
     // Tables not listed stay loose, so the existing suites are unaffected.
     schema?: Record<string, readonly string[]>
+    // PostgREST's max_rows: a select returns at most this many rows, with no error.
+    maxRows?: number
   } = {},
 ): FakeDb {
   const tables: Record<string, Row[]> = {}
@@ -161,6 +163,11 @@ export function fakeSupabase(
         filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
         return b
       },
+      overlaps(c: string, vs: unknown[]) {
+        filterCols.push(c)
+        filters.push((r) => Array.isArray(r[c]) && (r[c] as unknown[]).some((x) => vs.includes(x)))
+        return b
+      },
       not(c: string, op: string, v: unknown) {
         if (op !== 'is') throw new Error(`fake-supabase: unsupported not() operator ${op}`)
         filterCols.push(c)
@@ -222,6 +229,7 @@ export function fakeSupabase(
           out = [...out].sort((a, z) => (asc ? 1 : -1) * cmp(a[col], z[col]))
         }
         if (limitN !== null) out = out.slice(rangeFrom, rangeFrom + limitN)
+        if (opts.maxRows !== undefined) out = out.slice(0, opts.maxRows)
         if (countMode) return { data: head ? null : out, error: null, count: out.length }
         return shape(out)
       }

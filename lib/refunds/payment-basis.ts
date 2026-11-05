@@ -1,6 +1,6 @@
 import type Stripe from 'stripe'
 import type { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { currentSeatsInvoice, invoicePaymentIntent, loadRegistration, perSeatPaidCents } from '@/lib/group-billing'
 
 type Db = ReturnType<typeof supabaseServer>

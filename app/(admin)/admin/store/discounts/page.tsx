@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { listEventDiscounts, listTierDiscounts } from '@/lib/store/discounts'
-import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 import { DiscountMatrix, type EventOption } from '@/components/admin/store/DiscountMatrix'
 import { StoreNav } from '../StoreNav'
 import { requireAdminPage } from '@/lib/admin-auth'

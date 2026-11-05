@@ -11,6 +11,9 @@ import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refun
 import { applyRosterChange, voidOpenGroupInvoices } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
 import { cancelScholarshipsOnWithdrawal, liveScholarshipOffers } from '@/lib/scholarship-cancel'
+import { loadEventAssignees, syncEventManagerUnassigned, type EventAssignee, type RoleSyncResult } from '@/lib/authz/role-sync'
+import { reportRoleSyncFailure } from '@/lib/authz/role-sync-report'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
 type Db = ReturnType<typeof supabaseServer>
@@ -19,6 +22,21 @@ export class DeletionBlockedError extends Error {
   constructor(public blockers: { table: string; label: string; count: number }[]) {
     super('Deletion blocked by linked records')
     this.name = 'DeletionBlockedError'
+  }
+}
+
+/**
+ * S5 C9 dual-write: deleting an event removes its assignments, so a manager whose
+ * last one that was loses the membership. Reported, and never fails the deletion.
+ * The deletion route's guard is the Clerk admin claim, which is Stellr's.
+ */
+async function syncManagersOfDeletedEvent(db: Db, eventSlug: string, assignees: EventAssignee[] | null): Promise<void> {
+  const results: RoleSyncResult[] =
+    assignees === null
+      ? [{ ok: false, step: 'event_assignees', code: 'read' }]
+      : await Promise.all(assignees.map((a) => syncEventManagerUnassigned(db, a.clerkUserId, eventSlug, STELLR_TENANT_ID, a.tenantId)))
+  for (const result of results) {
+    await reportRoleSyncFailure('event_delete', result, { method: 'DELETE', routePath: 'lib/deletion/execute' })
   }
 }
 
@@ -172,6 +190,7 @@ export async function executeDeletion(
   // and carries DPA/financial state independent of any one student.) Capture
   // the registration id now, before the participant row disappears.
   const emptiedIndividualReg = def.type === 'participant' ? await individualRegToTidy(db, id) : null
+  const eventAssignees = def.type === 'event' ? await loadEventAssignees(db, id) : []
 
   for (const span of def.spans ?? []) {
     if (span.table === def.table && span.column === def.pk) continue
@@ -181,6 +200,8 @@ export async function executeDeletion(
 
   const { error } = await db.from(def.table).delete().eq(def.pk, id)
   if (error) throw new Error(`Hard delete failed: ${error.message}`)
+
+  if (def.type === 'event') await syncManagersOfDeletedEvent(db, id, eventAssignees)
 
   if (emptiedIndividualReg) {
     // Soft withdraw — preserves the DPA/financial/audit record while removing it

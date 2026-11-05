@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { generateBadgesPdf } from '@/lib/event-pdf'
 import { DEFAULT_BADGE_FORMAT, isBadgeFormat } from '@/lib/badge-layout'
 import {

@@ -48,6 +48,8 @@
 /test/baselines/**                  @aussie-spaceman
 /scripts/s5-inventory.mjs           @aussie-spaceman
 /lib/security/audit-coverage.ts     @aussie-spaceman
+/lib/audit/**                       @aussie-spaceman
+/scripts/audit-cap.mjs              @aussie-spaceman
 /lib/security/route-ast.ts          @aussie-spaceman
 /vitest.config.mts                  @aussie-spaceman
 
@@ -71,6 +73,15 @@
 /lib/analytics.ts                   @aussie-spaceman
 /e2e/core/tenant-tree-direct-404.spec.ts @aussie-spaceman
 /test/idor/**                       @aussie-spaceman
+/lib/security/route-guards.ts       @aussie-spaceman
+/lib/security/route-manifest.ts     @aussie-spaceman
+/lib/security/route-ast.ts          @aussie-spaceman
+/test/route-manifest.test.ts        @aussie-spaceman
+/test/authz-ratchet.test.ts         @aussie-spaceman
+/scripts/authz-idioms.mjs           @aussie-spaceman
+/scripts/idor-canary.mjs            @aussie-spaceman
+/scripts/tenant-host-cap.mjs        @aussie-spaceman
+/lib/security/stellr-only-dispositions.ts @aussie-spaceman
 
 # Build config: security headers, CSP and redirects
 /next.config.mjs                    @aussie-spaceman

@@ -4,6 +4,11 @@ import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { memberIdForClerkUser } from '@/lib/deletion/actor'
+import { loadAssignmentTenantId, syncEventManagerAssigned, syncEventManagerUnassigned } from '@/lib/authz/role-sync'
+import { reportRoleSyncFailure, roleSyncMetadata } from '@/lib/authz/role-sync-report'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+
+const ROUTE = '/api/admin/event-managers'
 
 // Admin-only management of Event Manager → event assignments.
 // Event Managers cannot manage assignments, only admins.
@@ -67,6 +72,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
+  // S5 C9 dual-write. A failure here is reported, and never fails the assignment.
+  // This route's guard is the Clerk admin claim, which is Stellr's. C21 passes the
+  // caller's authorised tenant when it converts the guard.
+  const sync = await syncEventManagerAssigned(db, clerkUserId, eventSlug, STELLR_TENANT_ID)
+  await reportRoleSyncFailure('event_manager_assign', sync, { method: 'POST', routePath: ROUTE })
+
   // deep review AUTH-6: an event-manager assignment grants access to that
   // event's roster — minors' details, medical notes, background summaries — so
   // who granted it must be recoverable. The target is keyed by clerk_user_id;
@@ -78,7 +89,7 @@ export async function POST(req: Request) {
     category: 'account',
     action: 'event_manager_assigned',
     summary: `Assigned as event manager for ${eventSlug}`,
-    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId },
+    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId, ...roleSyncMetadata(sync) },
   })
 
   return NextResponse.json({ assignment: data }, { status: 201 })
@@ -97,6 +108,7 @@ export async function DELETE(req: Request) {
   }
 
   const db = supabaseServer()
+  const assignmentTenantId = await loadAssignmentTenantId(db, clerkUserId, eventSlug)
   const { error } = await db
     .from('event_manager_assignments')
     .delete()
@@ -108,6 +120,10 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
+  // S5 C9 dual-write. A failure here is reported, and never fails the removal.
+  const sync = await syncEventManagerUnassigned(db, clerkUserId, eventSlug, STELLR_TENANT_ID, assignmentTenantId)
+  await reportRoleSyncFailure('event_manager_unassign', sync, { method: 'DELETE', routePath: ROUTE })
+
   // deep review AUTH-6: a revoke is as audit-worthy as a grant.
   await logActivity({
     ...(await actorFromAuth()),
@@ -115,7 +131,7 @@ export async function DELETE(req: Request) {
     category: 'account',
     action: 'event_manager_unassigned',
     summary: `Removed as event manager for ${eventSlug}`,
-    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId },
+    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId, ...roleSyncMetadata(sync) },
   })
 
   return NextResponse.json({ ok: true })

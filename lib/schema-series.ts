@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getEventsForSchema } from '@/lib/sanity'
+import { getEventsForSchema } from '@/lib/events/repo'
 import { getEventPrice } from '@/lib/event-pricing'
 import type { SeriesMember } from '@/lib/structured-data'
 

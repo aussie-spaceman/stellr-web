@@ -5,9 +5,10 @@
 // How to classify a new route: docs/SECURITY-route-manifest.md.
 //
 // The classes:
-//   platform_admin  Stellr platform staff acting across tenants. Admin guard.
-//   tenant_staff    A tenant's own staff, inside their tenant. Admin guard today;
-//                   S5 adds the tenant-membership check.
+//   platform_admin  Stellr platform staff acting across tenants. Must reach
+//                   lib/authz's platform check; a legacy admin guard does not count.
+//   tenant_staff    A tenant's own staff, inside their tenant. Must reach lib/authz's
+//                   tenant-membership check; a legacy admin guard does not count.
 //   participant     A signed-in member acting on their own records. Session guard.
 //   public          Anyone, no session needed (a capability token in the URL or
 //                   a cookie still counts as public). API handlers must be
@@ -40,7 +41,7 @@ export const ROUTE_CLASSES = [
 export type RouteClass = (typeof ROUTE_CLASSES)[number]
 
 export const ROUTE_MANIFEST: Record<string, RouteClass> = {
-  // ── API routes (305) ──────────────────────────────────────────────────
+  // ── API routes (307) ──────────────────────────────────────────────────
   'app/api/admin/access/conflicts/route.ts': 'stellr_only',
   'app/api/admin/access/objects/[id]/contents/route.ts': 'stellr_only',
   'app/api/admin/access/objects/[id]/gates/route.ts': 'stellr_only',

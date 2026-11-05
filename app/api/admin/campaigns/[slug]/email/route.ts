@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { sendEmail, campaignBroadcastEmail } from '@/lib/email'
 
 // Admin "Email everyone" — send one message to every teacher / student manager

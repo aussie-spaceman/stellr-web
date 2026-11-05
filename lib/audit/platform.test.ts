@@ -136,6 +136,22 @@ describe('canonical form and hash (golden vector shared with pgTAP)', () => {
     expect(rowHash(GOLDEN_HASH, canonicalRow(GOLDEN_NEXT))).toBe(GOLDEN_NEXT_HASH)
   })
 
+  it('a webhook row hashes the same here as in pgTAP', () => {
+    const canonical = canonicalRow({
+      tenant_id: null,
+      chain_seq: 1,
+      actor: 'webhook:stripe',
+      actor_kind: 'webhook',
+      action: 'webhook.event.process',
+      target_table: null,
+      target_id: null,
+      reason: null,
+      metadata_text: '{}',
+      occurred_at: '2026-11-05T10:00:00Z',
+    })
+    expect(rowHash(null, canonical)).toBe('fc9b66570852b4d5110052aed974cec4a9d7665fb23a0b06cbb2197761ec9767')
+  })
+
   it('length prefixes count UTF-8 bytes, not characters', () => {
     expect(canonicalRow({ ...GOLDEN, reason: 'é' })).toContain('|2:é|')
   })
@@ -396,6 +412,7 @@ describe('metadata and reason hygiene', () => {
   it('infers the actor kind', () => {
     expect(inferActorKind('system')).toBe('system')
     expect(inferActorKind('cron:apollo-reconcile')).toBe('cron')
+    expect(inferActorKind('webhook:stripe')).toBe('webhook')
     expect(inferActorKind('user_abc')).toBe('user')
   })
 })

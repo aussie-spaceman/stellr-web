@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 
 // deep review AUTH-1 / AUTH-N1: the page-side twin of test/route-guards.test.ts.
 //
@@ -30,14 +31,50 @@ function adminPages(): string[] {
 // A page-level authorisation call. requireAdminPage is the uniform guard added
 // by AUTH-N1; isAdminClaims and the inline role check are the pre-existing
 // top-of-loader guards on media/surveys/scholarships/docusigns/privacy-requests.
-const PAGE_GUARD = /requireAdminPage\(|isAdminClaims\(|role\s*(!==|===)\s*['"]admin['"]/
+// The rest are lib/authz: `.requireAdmin(` is its page adapter, the same shell gate
+// as requireAdminPage (scripts/authz-idioms.mjs keeps it from counting as converged).
+// requireEventSection, requireEventAccess and hasPortalAccess are left out on purpose:
+// they admit an event manager, which is the competitions and campaigns rule, not this
+// sweep's.
+const PAGE_GUARD =
+  /requireAdminPage\(|isAdminClaims\(|role\s*(!==|===)\s*['"]admin['"]|\.requireAdmin\(|requireStellrAdmin\(|isStellrAdmin\(|assertPlatformAdmin\(/
+// A tenant check answers for one tenant, not for Stellr, so it counts only on a page
+// the manifest has moved to tenant_staff.
+const TENANT_PAGE_GUARD = /requireTenantAdmin\(|requireTenantStaff\(|assertTenantRole\(/
+
+const guardsPage = (cls: string | undefined, code: string) =>
+  PAGE_GUARD.test(code) || (cls === 'tenant_staff' && TENANT_PAGE_GUARD.test(code))
 
 describe('admin page guards (static inventory)', () => {
+  it('knows the lib/authz page guards, and not the event-section one', () => {
+    const accepted = [
+      "await authz.page.requireAdmin()",
+      "await page.requireAdmin()",
+      "await page.requireStellrAdmin()",
+      "if (!(await isStellrAdmin())) notFound()",
+      "await assertPlatformAdmin()",
+    ]
+    expect(accepted.filter((code) => !guardsPage('stellr_only', code))).toEqual([])
+    expect(guardsPage('stellr_only', 'await page.requireEventSection()')).toBe(false)
+    expect(guardsPage('stellr_only', "await requireEventAccess('slug')")).toBe(false)
+    expect(guardsPage('stellr_only', 'if (!(await hasPortalAccess())) notFound()')).toBe(false)
+    // A same-file helper that borrows the name has to call through something real.
+    expect(guardsPage('stellr_only', 'await requireAdmin()')).toBe(false)
+  })
+
+  it('takes a tenant check only on a page moved to tenant_staff', () => {
+    const tenant = ['await page.requireTenantAdmin()', "await requireTenantStaff(tenantId, ['tenant_admin'])", "await assertTenantRole(tenantId, ['tenant_admin'])"]
+    for (const code of tenant) {
+      expect(guardsPage('stellr_only', code), code).toBe(false)
+      expect(guardsPage('tenant_staff', code), code).toBe(true)
+    }
+  })
+
   it('every admin page outside competitions/campaigns guards its loader', () => {
     const pages = adminPages()
     // Sanity: the sweep must actually find the pages, or the test is vacuously green.
     expect(pages.length).toBeGreaterThan(30)
-    const missing = pages.filter((p) => !PAGE_GUARD.test(readFileSync(`${BASE}/${p}`, 'utf8')))
+    const missing = pages.filter((p) => !guardsPage(ROUTE_MANIFEST[`${BASE}/${p}`], readFileSync(`${BASE}/${p}`, 'utf8')))
     expect(missing).toEqual([])
   })
 })

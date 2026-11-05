@@ -229,6 +229,28 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # S5 C5a: the legacy-authz baseline only falls. The unit test compares the
+      # tree with the baseline in the same tree, so it cannot see a baseline raised
+      # by regenerating it; this compares it with the merge base. A rise that is
+      # meant (an idiom added to the list) takes the label, then a new push: a re-run
+      # keeps the labels of the event it re-runs.
+      - name: Authz ratchet (no growth since the merge base)
+        run: npx tsx scripts/authz-idioms.mjs --since origin/dev
+        env:
+          AUTHZ_RATCHET_GROW_OK: ${{ contains(github.event.pull_request.labels.*.name, 'authz-ratchet-grow') }}
+
+      # S5 C6: the same for the routes tenant hosts serve. The cap only falls.
+      - name: Tenant-host IDOR cap (no growth since the merge base)
+        run: node scripts/tenant-host-cap.mjs --since origin/dev
+        env:
+          TENANT_HOST_CAP_GROW_OK: ${{ contains(github.event.pull_request.labels.*.name, 'tenant-host-cap-grow') }}
+
+      # S5 C7: the list of unaudited handlers only falls.
+      - name: Audit coverage cap (no growth since the merge base)
+        run: node scripts/audit-cap.mjs --since origin/dev
+        env:
+          AUDIT_CAP_GROW_OK: ${{ contains(github.event.pull_request.labels.*.name, 'audit-cap-grow') }}
+
       - name: Design-system lint
         run: npm run lint:tokens
 

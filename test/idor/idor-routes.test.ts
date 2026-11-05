@@ -17,11 +17,25 @@
 //     changed when the Canary row was removed (oracle), unless the snapshot
 //     records a reviewed `accepted` reason;
 //   - a stellr_only route does anything but refuse (401/403/404);
-//   - the outcome differs from test/idor/idor-snapshot.json.
+//   - the outcome differs from test/idor/idor-snapshot.json;
+//   - the audit events are wrong: auditCaseProblem in test/idor/harness.ts, on the
+//     participant cases here and the staff cases below. An ok mutating outcome on a
+//     handler the audit gate calls audited wrote exactly one event, with a catalogued
+//     action. That is vacuous for a handler still on
+//     test/baselines/unaudited-mutations.json, which test/audit-coverage.test.ts holds.
+//     test/idor/audit-cases.test.ts and the canary's audit entry prove it can fail.
 // And the suite fails when the case count differs from the manifest's count of
 // id-bearing routes, when a new id-bearing route is not in the snapshot, and
 // when more cases are `unexercised` (request validation refused before the id
 // was used) than MAX_UNEXERCISED.
+//
+// Every tenant_staff and platform_admin route handler (none yet), with or without an
+// id, also runs the staff personas, strict, with no accepted reason possible:
+// test/idor/harness.ts STAFF_PERSONAS_FOR and staffCaseProblem.
+// A refusal that changes with the row, or with a malformed id, fails there and is
+// only reported here for every other class: test/idor/reported-oracles.ts, pinned in the
+// snapshot's `reported4xxOracleCount` and `reported4xxOracleHash`.
+// test/idor/tenant-host-routes.test.ts enforces it on the routes tenant hosts serve.
 //
 // Regenerate after adding or changing an id-bearing route, then REVIEW the diff:
 //   npm run idor:snapshot
@@ -30,10 +44,11 @@
 import './mocks'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { idorTargets, type IdorTarget } from '@/lib/security/idor-targets'
+import { idorTargets, staffTargets, type IdorTarget } from '@/lib/security/idor-targets'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 import { applyEnv, CASE_FIXTURES, fixtureFor, HELD_BACK_FIXTURES } from './case-fixtures'
-import { FAILING_OUTCOMES, installNetworkGuard, runIdorCase, targetInput, type CaseResult, type Outcome } from './harness'
+import { FAILING_OUTCOMES, installNetworkGuard, routeAuditProblems, runIdorCase, runStaffTarget, targetInput, type CaseResult, type Outcome } from './harness'
+import { printReportedOracles, sealReportedOracles, type ReportedOracles } from './reported-oracles'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.idor.invalid'
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_idorharness'
@@ -51,7 +66,7 @@ const UPDATE = process.env.IDOR_UPDATE_SNAPSHOT === '1'
 const TODO = 'TODO: review'
 
 // Floor, so an emptied manifest or a broken analyser cannot pass with a small
-// count. 4 Nov 2026: 227 id-bearing route files (131 stellr_only, 64
+// count. 4 Nov 2026: 228 id-bearing route files (132 stellr_only, 64
 // participant, 30 public, 2 webhook).
 const MIN_TARGETS = 215
 
@@ -62,7 +77,8 @@ const MIN_TARGETS = 215
 // number can only go down. Lower it when a route starts being exercised.
 // test/idor/case-fixtures.ts gets the rest through. Of the 5 left, 4 are held back
 // there, because getting through shows a write carrying a Canary value, and
-// register/individual is Lane A's (it needs an event the suite does not model).
+// register/individual is Lane A's (it needs an event this suite does not model;
+// test/idor/tenant-host-routes.test.ts, which does, gets it to one).
 const MAX_UNEXERCISED = 5
 
 // Cases that ended in a 5xx: the harness could not model the path, so they
@@ -81,8 +97,14 @@ interface SnapshotTarget {
 interface Snapshot {
   _comment: string
   count: number
+  /** How many refusals differ, and a hash of the set: test/idor/reported-oracles.ts. Reported, not failed. */
+  reported4xxOracleCount?: number
+  reported4xxOracleHash?: string
   targets: Record<string, SnapshotTarget>
 }
+
+const STAFF_CLASSES = ['tenant_staff', 'platform_admin'] as const
+const isStaffClass = (c: string): c is (typeof STAFF_CLASSES)[number] => (STAFF_CLASSES as readonly string[]).includes(c)
 
 // scripts/idor-canary.mjs: `<route file>=<absolute path of a mutated copy>`.
 // The case for that route loads the copy instead, so the canary can prove the
@@ -94,6 +116,9 @@ const OVERRIDE = (() => {
   return { file: raw.slice(0, at), path: raw.slice(at + 1) }
 })()
 
+/** The source of the handler this case runs, so the gate reads what the case imports. */
+const sourceOf = (file: string) => readFileSync(OVERRIDE?.file === file ? OVERRIDE.path : file, 'utf8')
+
 const outcomeOf = (e: MethodEntry) => (typeof e === 'string' ? e : e.outcome)
 const acceptedOf = (e: MethodEntry | undefined) => (e && typeof e === 'object' ? e.accepted : undefined)
 
@@ -102,6 +127,9 @@ const snapshot: Snapshot = existsSync(SNAPSHOT_FILE)
   ? JSON.parse(readFileSync(SNAPSHOT_FILE, 'utf8'))
   : { _comment: '', count: 0, targets: {} }
 const observed = new Map<string, Record<string, CaseResult>>()
+// Staff cases that proved nothing under a named exception still count against the caps.
+const staffUnexercised: string[] = []
+const staffErrors: string[] = []
 let ran = 0
 
 installNetworkGuard()
@@ -119,11 +147,26 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
   it('finds the id-bearing routes and every one is classified in the manifest', () => {
     expect(targets.length).toBeGreaterThanOrEqual(MIN_TARGETS)
     for (const t of targets) expect(ROUTE_MANIFEST[t.file]).toBe(t.cls)
-    // Nothing is tenant-scoped yet (S5 moves routes to tenant_staff /
-    // platform_admin). When the first one moves, add a tenant-staff persona
-    // case for it here: a tenant-A admin naming a tenant-B id must be refused.
-    expect(targets.filter((t) => t.cls === 'tenant_staff' || t.cls === 'platform_admin')).toEqual([])
   })
+
+  // Every tenant_staff and platform_admin route handler, with or without an id. Empty until
+  // C15 and C16 move the first routes. test/idor/fixtures.test.ts runs the same functions
+  // over handlers with known guards, and the canary proves they can fail.
+  for (const t of staffTargets()) {
+    const cls = t.cls
+    if (!isStaffClass(cls)) continue
+    it(`${cls} ${t.urlPattern}: the staff personas are refused`, async () => {
+      const fixture = CASE_FIXTURES[t.file]
+      const restoreEnv = applyEnv(fixture?.env)
+      const mod = (await (OVERRIDE?.file === t.file ? import(OVERRIDE.path) : import(`../../${t.file}`)).finally(restoreEnv)) as Record<string, unknown>
+      const cases = await runStaffTarget({ file: t.file, cls, methods: t.methods, source: sourceOf(t.file) }, mod, targetInput(t), fixture?.staffUnproven)
+      for (const { method, persona, result, problem } of cases) {
+        if (result.outcome === 'unexercised') staffUnexercised.push(`${method} ${t.file} ${persona}`)
+        if (result.outcome === 'error') staffErrors.push(`${method} ${t.file} ${persona}`)
+        expect(problem, `${persona} ${t.file}\n${describeResult(result)}`).toBeNull()
+      }
+    })
+  }
 
   for (const t of targets) {
     it(`${t.cls} ${t.urlPattern} [${t.methods.join(',')}]`, async () => {
@@ -139,6 +182,7 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
         console.log(`${t.file}\n${Object.values(results).map(describeResult).join('\n')}`)
       }
       checkFixtureReachedTheId(t, results)
+      checkAudits(t, results)
       if (UPDATE) return
       checkTarget(t, results)
     })
@@ -165,13 +209,24 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
     expect(snapshot.count).toBe(targets.length)
   })
 
+  it('the refusals that differ are the ones the snapshot reports', () => {
+    if (UPDATE) return
+    const reported = reportedOracles()
+    const seal = sealReportedOracles(reported)
+    if (seal.hash !== snapshot.reported4xxOracleHash) printReportedOracles(reported)
+    expect(seal, `a refusal now differs, or stopped differing: run this suite locally to see the set, review, then \`npm run idor:snapshot\``).toEqual({
+      count: snapshot.reported4xxOracleCount,
+      hash: snapshot.reported4xxOracleHash,
+    })
+  })
+
   it(`no more than ${MAX_UNEXERCISED} cases are unexercised (refused as invalid before the id was used)`, () => {
     if (UPDATE) return
     const unexercised = [...observed.entries()].flatMap(([file, rs]) =>
       Object.values(rs)
         .filter((r) => r.outcome === 'unexercised')
         .map((r) => `${r.method} ${file}`),
-    )
+    ).concat(staffUnexercised)
     expect(unexercised.length, unexercised.join('\n')).toBeLessThanOrEqual(MAX_UNEXERCISED)
   })
 
@@ -181,7 +236,7 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
       Object.values(rs)
         .filter((r) => r.outcome === 'error')
         .map((r) => `${r.method} ${file}`),
-    )
+    ).concat(staffErrors)
     expect(errors.length, errors.join('\n')).toBeLessThanOrEqual(MAX_ERROR)
   })
 })
@@ -234,6 +289,10 @@ function checkFixtureReachedTheId(t: IdorTarget, results: Record<string, CaseRes
   }
 }
 
+function checkAudits(t: IdorTarget, results: Record<string, CaseResult>) {
+  expect(routeAuditProblems(t.file, sourceOf(t.file), Object.values(results)), `${t.file}\n${Object.values(results).map(describeResult).join('\n')}`).toEqual([])
+}
+
 function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
   const snap = snapshot.targets[t.file]
   expect(snap, `${t.file} is a new id-bearing route: run \`npm run idor:snapshot\` and review its outcomes`).toBeDefined()
@@ -249,6 +308,10 @@ function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
     const entry = snap.methods[m]
     const accepted = acceptedOf(entry)
     const detail = `${t.file}\n${describeResult(r)}`
+    if (isStaffClass(t.cls)) {
+      expect(accepted, `${detail}\n${t.cls} may not accept any outcome`).toBeUndefined()
+      expect([401, 403, 404], `${detail}\na ${t.cls} route must refuse a participant`).toContain(r.status)
+    }
     if (accepted !== undefined) {
       expect(accepted, `${detail}\nthe snapshot's accepted reason is still a TODO`).not.toBe(TODO)
       expect(accepted.length, `${detail}\nan accepted outcome needs a reason`).toBeGreaterThan(20)
@@ -264,12 +327,25 @@ function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
   }
 }
 
+function reportedOracles(): ReportedOracles {
+  const out: ReportedOracles = {}
+  for (const [file, rs] of [...observed.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const r of Object.values(rs)) if (r.reportedOracle) out[`${r.method} ${file}`] = r.reportedOracle.kind
+  }
+  return out
+}
+
 function writeSnapshot() {
+  const reported = reportedOracles()
+  const seal = sealReportedOracles(reported)
+  if (seal.hash !== snapshot.reported4xxOracleHash) printReportedOracles(reported)
   const out: Snapshot = {
     _comment:
       'Generated by `npm run idor:snapshot` (test/idor/idor-routes.test.ts). One entry per id-bearing route handler. ' +
       'A leak or honey_write outcome needs a reviewed `accepted` reason; the generator writes "TODO: review", which fails.',
     count: targets.length,
+    reported4xxOracleCount: seal.count,
+    reported4xxOracleHash: seal.hash,
     targets: {},
   }
   for (const t of targets) {
@@ -280,7 +356,7 @@ function writeSnapshot() {
       if (!r) throw new Error(`no result for ${t.file} ${m}`)
       const prevEntry = prev?.methods[m]
       const keep = acceptedOf(prevEntry)
-      const needsReason = FAILING_OUTCOMES.includes(r.outcome) ||(t.cls === 'stellr_only' && ![401, 403, 404].includes(r.status))
+      const needsReason = FAILING_OUTCOMES.includes(r.outcome) || (t.cls === 'stellr_only' && ![401, 403, 404].includes(r.status))
       if (keep !== undefined && prevEntry && outcomeOf(prevEntry) === r.outcome) methods[m] = { outcome: r.outcome, accepted: keep }
       else if (needsReason) methods[m] = { outcome: r.outcome, accepted: TODO }
       else methods[m] = r.outcome

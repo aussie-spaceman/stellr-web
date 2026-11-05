@@ -29,9 +29,8 @@
 // Choosing a context: only a positive read makes an event Stellr's. A Sanity
 // miss, a mirror miss or a mirror read error must never become stellrContext,
 // because a miss is exactly what a tenant event looks like in Sanity, and the
-// result would be no age floor. Don't use getEventTenantId (lib/events/repo.ts)
-// to choose: it answers STELLR_TENANT_ID on a miss and on a read error. Pass
-// what you have to eligibilityContextFromMirror, which refuses when it's empty.
+// result would be no age floor. Pass what you have to
+// eligibilityContextFromMirror, which refuses when it's empty.
 //
 // The participants trigger (A3) enforces the same tenant rule in Postgres as
 // a backstop; this is the check that gives the registrant a message first.

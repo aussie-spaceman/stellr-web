@@ -115,7 +115,7 @@ consumer, so every secret key in use has one named holder.
    for 401, `Invalid API key` or `SupabaseKeySlotError`.
 5. **GitHub Actions.** Add the repository secrets `DEV_SUPABASE_PUBLISHABLE_KEY`
    and `DEV_SUPABASE_SECRET_KEY` (the `github_ci` key). Let one CI run finish. To
-   pass, the e2e job must have **run** its steps: read the *Check configuration*
+   pass, the `e2e-tests` job must have **run** its steps: read the *Check configuration*
    and test step outcomes, not the badge. A skipped job proves nothing.
 6. **Laptops and worker.** Put the new pair in each `.env.local`, using that
    machine's own secret key, and delete the two legacy lines. Start

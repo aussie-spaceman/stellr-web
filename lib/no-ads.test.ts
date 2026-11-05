@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { isNoAdsPath, isStudentForAds, noAdsScript, NO_ADS_COOKIE } from '@/lib/no-ads'
 import { CONSENT_STORAGE_KEY, applyConsent } from '@/lib/consent'

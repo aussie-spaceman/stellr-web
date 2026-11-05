@@ -62,6 +62,9 @@ test.describe('volunteer mentor credential', () => {
     expect(error, error?.message).toBeNull()
 
     const admin = await browser.newContext({ storageState: storageStatePath('admin') })
+    // Load a page first, and keep it open, so these API calls carry a fresh Clerk
+    // session cookie. The saved one is short-lived and nothing else renews it.
+    await (await admin.newPage()).goto('/account')
     const base = `/api/admin/events/${SLUG}/credentials`
 
     // The mentors' own wording, kept apart from the students'.

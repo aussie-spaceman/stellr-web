@@ -217,7 +217,7 @@ cd ../stellr-web-promote-<YYYY-MM-DD>-record
 git add .claude/releases && git commit -m "Promotion record <date>: Promoted (#<n>, <sha>)"
 git push -u origin HEAD
 gh pr create --base dev --title "Promotion record <date>: Promoted (#<n>, <sha>)" --body-file <file>
-gh pr checks <m> --watch      # in a terminal; docs-only against dev: verify runs, e2e skips
+gh pr checks <m> --watch      # in a terminal; docs-only against dev: verify runs, e2e passes without testing
 git status --porcelain        # must print nothing
 cd ../stellr-web              # merge from the MAIN checkout, so gh removes the worktree
 gh pr merge <m> --merge --delete-branch

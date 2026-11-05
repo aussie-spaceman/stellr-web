@@ -137,7 +137,7 @@ Systems that hold or process personal data. "In code" means the repo calls or co
 
 ## 10. Testing
 
-- Unit tests (Vitest) and type checks run in CI on every push (`.github/workflows/ci.yml`, job `verify`). E-sign tests include tokens, retention, replicate, integrity, outbox, routing, seam.
+- Unit tests (Vitest) and type checks run in CI on every push (`.github/workflows/ci.yml`, jobs `unit` and `verify-build`, required through `verify`). E-sign tests include tokens, retention, replicate, integrity, outbox, routing, seam.
 - End-to-end tests (Playwright) drive the signing flow on dev (`e2e/core/esign-signing.spec.ts`, `registration-docusign.spec.ts`).
 - **Restore drill, quarterly** and after any key or folder change: `npx tsx scripts/esign-restore-drill.ts`. It decrypts a random sample, checks hashes, and compares the latest export's audit anchor with the live database. Record the date and result here.
 - **Full restore drill, monthly; the owner witnesses one each quarter** (`ops/backups/restore-drill.sh`, `docs/RUNBOOK-backups.md` §4). It restores the latest nightly, hourly and storage backups into a scratch Postgres and passes only if every table's row count and content hash match the manifest taken at backup time, every e-sign audit chain verifies, and every signed agreement's file matches its recorded hash. Run it in the same session as the e-sign drill above. Record each run:

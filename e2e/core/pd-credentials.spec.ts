@@ -34,6 +34,10 @@ test.describe('educator PD credential', () => {
 
   test('an admin issues hours once; the teacher sees them and downloads the certificate', async ({ browser }) => {
     const admin = await browser.newContext({ storageState: storageStatePath('admin') })
+    // Load a page first, and keep it open, so these API calls carry a fresh Clerk
+    // session cookie. The saved one is short-lived and nothing else renews it: this
+    // test got a 401 when it ran later in the suite (PR #523).
+    await (await admin.newPage()).goto('/account')
     const issue = (hours: number) =>
       admin.request.post(`/api/admin/events/${SLUG}/pd-credentials`, { data: { memberId: GRACE_ID, hours } })
 

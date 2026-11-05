@@ -5,7 +5,10 @@ import { config } from '@/proxy'
 // Every request the proxy matches is a run on Vercel's metered CPU, so its
 // matcher decides cost as well as auth. These pin both halves.
 
-const matches = (url: string) => unstable_doesMiddlewareMatch({ config, url })
+// On a Stellr host: any other host also takes the tenant routing entry (S5, B5,
+// test/proxy-tenant-routing.test.ts).
+const matches = (url: string) =>
+  unstable_doesMiddlewareMatch({ config, url: `http://localhost:3000${url}`, headers: { host: 'localhost:3000' } })
 
 describe('proxy matcher', () => {
   it('skips the image watermarker, which reads no session', () => {

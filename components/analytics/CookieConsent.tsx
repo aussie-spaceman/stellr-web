@@ -19,8 +19,15 @@ import { noAdsActive } from '@/lib/no-ads'
  * (ConsentMode.tsx) finds no stored choice, so a first-time visitor sees it at
  * first paint, not after hydration on a slow phone. The denied-by-default
  * Consent Mode state is applied by that script either way.
+ *
+ * `disabled` is for a host with no trackers, so nothing to ask about. The server
+ * can't see the host and has already sent the banner, so the first render still
+ * matches that markup for hydration; the mount effect then removes it, and reads
+ * and replays nothing.
  */
-export function CookieConsent() {
+export function CookieConsent({ disabled = false }: { disabled?: boolean }) {
+  /** Set once a disabled banner has been taken out of the page. */
+  const [removed, setRemoved] = useState(false)
   /** Reopened from the footer link (otherwise CSS decides whether it shows). */
   const [open, setOpen] = useState(false)
   /** No stored choice. null until mounted: before hydration CSS decides. */
@@ -29,6 +36,12 @@ export function CookieConsent() {
   const [current, setCurrent] = useState<boolean | null>(null)
 
   useEffect(() => {
+    if (disabled) {
+      document.documentElement.removeAttribute(CONSENT_NEEDED_ATTR)
+      setRemoved(true)
+      return
+    }
+
     const stored = readConsent()
     if (stored) {
       // Replay so Consent Mode reflects the stored choice on this page load.
@@ -50,7 +63,7 @@ export function CookieConsent() {
     }
     window.addEventListener(CONSENT_OPEN_EVENT, reopen)
     return () => window.removeEventListener(CONSENT_OPEN_EVENT, reopen)
-  }, [])
+  }, [disabled])
 
   function decide(ads: boolean) {
     writeConsent(ads)
@@ -79,6 +92,8 @@ export function CookieConsent() {
     setOpen(false)
     setNeeded(false)
   }
+
+  if (removed) return null
 
   // Before hydration, CSS (globals.css) shows it while <html> carries
   // CONSENT_NEEDED_ATTR; once mounted, `hidden` follows the stored choice and

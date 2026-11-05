@@ -2,7 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { memberMeetsTier, type CommunityMember } from '@/lib/community'
 import { managedContainerIds } from '@/lib/resource-upload'
 import { accessGatesEnforced, eventAccessGates } from '@/lib/access-gates'
-import { getAccessibleSpaceIds } from '@/lib/spaces'
+import { getAccessibleSpaceIds, getSpaceAccessById } from '@/lib/spaces'
 
 // Global Resources Catalogue — read path (Resources_Refactor handover, PR1).
 //
@@ -648,6 +648,88 @@ export async function getResourceDetail(
     viewedInContainerId: clicked.container_id as string,
     attachments,
   }
+}
+
+/**
+ * Whether a file with no Space and no event is a standalone library file, open to
+ * members. It is not one if a container holds it, as a resource or a recording, or
+ * if moderation has resolved a report of it in a container. Both routes that take a
+ * binary id from the request use this, so they cannot drift. It answers yes only when
+ * both reads succeed: a file it cannot check is not treated as a library file.
+ */
+export async function isStandaloneLibraryFile(resourceId: string): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: attachments, error: attachmentsError } = await db
+    .from('container_contents')
+    .select('container_id')
+    .eq('content_ref', resourceId)
+    .in('content_type', ['resource', 'recording'])
+    .limit(1)
+  if (attachmentsError || !attachments || attachments.length > 0) return false
+  const { data: moderated, error: moderatedError } = await db
+    .from('community_flags')
+    .select('id')
+    .eq('content_type', 'resource')
+    .eq('content_id', resourceId)
+    .eq('status', 'resolved')
+    .not('viewed_in_container', 'is', null)
+    .limit(1)
+  return !moderatedError && !!moderated && moderated.length === 0
+}
+
+/**
+ * Whether a member can see a resource (a binary id), for a route that takes one
+ * from the request.
+ *
+ *   - in a container the member is in: a Space lists its files whatever their
+ *     membership floor, and any other container applies the floor, as the catalogue
+ *     and the resource page do;
+ *   - or uploaded straight to a Space the member can enter;
+ *   - or a standalone library file (isStandaloneLibraryFile).
+ *
+ * The access gate is not applied: the resource page shows a file in a gated
+ * container, and this answers what the member can see, not what they can open.
+ *
+ * An event material with no attachment is seen only through its event's gated page,
+ * so it answers no here. A named `containerRef` must hold the file and be a container
+ * the member can see it in. An admin sees any file, and the same holds for the
+ * container they name.
+ */
+export async function memberCanSeeResource(
+  member: CommunityMember,
+  resourceId: string,
+  containerRef?: string,
+): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: resource } = await db
+    .from('community_resources')
+    .select('space_id, event_ref')
+    .eq('id', resourceId)
+    .maybeSingle()
+  if (!resource) return false
+
+  const { data: attachments } = await db
+    .from('container_contents')
+    .select('container_id, min_membership')
+    .eq('content_ref', resourceId)
+    .in('content_type', ['resource', 'recording'])
+  const holding = attachments ?? []
+  const named = containerRef ? holding.filter((a) => a.container_id === containerRef) : holding
+  if (member.isAdmin) return !containerRef || named.length > 0
+
+  const mine = holding.length > 0 ? await memberContainers(member) : new Map<string, ContainerMeta>()
+  const seenInContainer = named.some((a) => {
+    const container = mine.get(a.container_id as string)
+    if (!container) return false
+    return container.type === 'space' || passesMinMembership(member, (a.min_membership as number | null) ?? null)
+  })
+  if (containerRef || seenInContainer) return seenInContainer
+
+  if (resource.space_id) {
+    const access = await getSpaceAccessById(member, resource.space_id as string)
+    return !!access?.canAccess
+  }
+  return !resource.event_ref && (await isStandaloneLibraryFile(resourceId))
 }
 
 /**

@@ -891,7 +891,7 @@
     },
     "app/api/community/resources/[id]/download/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: community_resources, container_contents"
+      "reason": "auto: touches tenant or event-scoped tables; tables: community_resources"
     },
     "app/api/community/resources/attach/route.ts": {
       "class": "convert",
@@ -1461,6 +1461,10 @@
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: member_roles, mentoring_cohorts, object_roles, object_type_singleton_roles"
     },
+    "lib/rate-limit-store.ts": {
+      "class": "system",
+      "reason": "Calls rate_limit_take and rate_limit_gc, limiter counters that run before any user or tenant is resolved, with EXECUTE for service_role only, and writes its own rate-limit-gc row to cron_runs through the client the cron passes in. Reads no tenant data."
+    },
     "lib/recording-offload.ts": {
       "class": "convert",
       "reason": "Webhook and retry jobs that copy a JaaS recording into private storage and record the outcome in recording_offloads, with no signed-in user. Converts with the community area."
@@ -1499,7 +1503,7 @@
     },
     "lib/resources-catalogue.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: cohort_members, community_resources, community_spaces, container_contents, members, mentoring_cohorts (+4)"
+      "reason": "auto: touches tenant or event-scoped tables; tables: cohort_members, community_flags, community_resources, community_spaces, container_contents, members (+5)"
     },
     "lib/sessions.ts": {
       "class": "convert",
@@ -1519,7 +1523,7 @@
     },
     "lib/spaces.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: community_channels, community_space_invites, community_space_members, community_space_roles, community_space_sources, community_space_suspensions (+5)"
+      "reason": "auto: touches tenant or event-scoped tables; tables: community_channels, community_comments, community_posts, community_space_invites, community_space_members, community_space_roles (+7)"
     },
     "lib/store/auth.ts": {
       "class": "identity",

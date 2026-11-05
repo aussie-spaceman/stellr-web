@@ -6,7 +6,7 @@
 # using the password. These sessions commit. Their keys are random and the CI
 # database is thrown away, so never point this at a database you keep.
 #
-# Usage: scripts/ci-rate-limit-race.sh <db-container>
+# Usage: supabase/tests/ci-rate-limit-race.sh <db-container>
 set -euo pipefail
 
 container="${1:?usage: ci-rate-limit-race.sh <db-container>}"

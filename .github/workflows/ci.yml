@@ -677,7 +677,7 @@ jobs:
       # Separate psql sessions, which pgTAP's one transaction cannot give it.
       - if: steps.scope.outputs.run == 'true'
         name: Rate limiter concurrency
-        run: bash scripts/ci-rate-limit-race.sh "$DB_CONTAINER"
+        run: bash supabase/tests/ci-rate-limit-race.sh "$DB_CONTAINER"
 
       # Schema drift against production, from a schema-only dump the owner
       # takes and stores as the PROD_SCHEMA_DUMP secret (base64 of the dump,

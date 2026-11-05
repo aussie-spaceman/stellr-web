@@ -4,7 +4,7 @@
 -- directory. Covers: shape and privileges, the limit and its reset, a take across
 -- several windows, input checks, gc, and the JSON form PostgREST sends.
 --
--- Real concurrency is in scripts/ci-rate-limit-race.sh, the step after this one in
+-- Real concurrency is in supabase/tests/ci-rate-limit-race.sh, the step after this one in
 -- the same job, because one transaction cannot race itself.
 --
 -- Elsewhere the clock is frozen inside this transaction, since now() is its start

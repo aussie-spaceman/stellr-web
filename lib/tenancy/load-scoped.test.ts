@@ -347,7 +347,7 @@ describe('planScope', () => {
   })
 })
 
-describe('via_parent tables and the real schema', () => {
+describe('child tables and the real schema', () => {
   const dir = path.join(process.cwd(), 'supabase')
   const sql = [
     path.join(dir, 'baseline.sql'),
@@ -366,11 +366,15 @@ describe('via_parent tables and the real schema', () => {
     const altered = (sql.match(new RegExp(`ALTER TABLE (ONLY )?${c}\\s+ADD CONSTRAINT[^;]*?${ref}`, 'gi')) ?? []).length
     return inline + altered
   }
-  const children = Object.entries(TABLE_REGISTRY).filter(([, e]) => e.tenantColumn === 'via_parent')
+  const children = Object.entries(TABLE_REGISTRY).filter(([, e]) => e.tenantColumn === 'inherited')
   const short = (k: string) => k.replace(/^public\./, '')
 
+  // Exactly one matters beyond this file: a second foreign key between the same two
+  // tables makes PostgREST refuse every live embed of them that names no hint
+  // (PGRST201), so the composite foreign key cannot simply be added beside this one.
   it('all 10 either embed through exactly one foreign key or are listed as having none', () => {
     expect(children).toHaveLength(10)
+    expect(new Set(children.filter(([, e]) => e.noForeignKey).map(([k]) => k))).toEqual(VIA_PARENT_WITHOUT_FK)
     for (const [key, entry] of children) {
       const fks = foreignKeys(short(key), short(entry.parent!))
       if (VIA_PARENT_WITHOUT_FK.has(key)) {

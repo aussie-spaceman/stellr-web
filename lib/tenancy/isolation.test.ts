@@ -20,12 +20,24 @@ import { schemaSources, readSchemaInventory } from '../../scripts/lib/schema-tab
 import {
   TENANT_APP_NO_ACCESS_TABLES,
   TENANT_APP_READ_ONLY_TABLES,
+  TENANT_APP_UNWRITABLE_COLUMNS,
   TENANT_PARENT_REFS,
   SELF_REF_TABLES,
   guardWithCheck,
 } from './tenant-role'
 
 const MIGRATION = 'supabase/migrations/20261104200000_tenant_isolation_policies.sql'
+/** S5 C0b: the 10 child tables, and the guards that used to hold a key to them to NULL. */
+const CHILD_MIGRATION = 'supabase/migrations/20261106070726_via_parent_tenant_policies.sql'
+const inheritedTenantTables = () => tenantTables().filter((t) => TABLE_REGISTRY[t].tenantColumn === 'inherited')
+/** The S4 file for a table it wrote, the C0b file for a child table. */
+const policyFileFor = (t: string) => readFileSync(TABLE_REGISTRY[t].tenantColumn === 'inherited' ? CHILD_MIGRATION : MIGRATION, 'utf8')
+/** A table's guard as the migrations leave it: the last one written wins. */
+function lastGuard(t: string): string {
+  const all = readFileSync(MIGRATION, 'utf8') + readFileSync(CHILD_MIGRATION, 'utf8')
+  const from = all.lastIndexOf(`CREATE POLICY tenant_isolation_guard ON ${t} AS RESTRICTIVE`)
+  return all.slice(from, all.indexOf(';', from) + 1)
+}
 
 describe('cross-tenant pgTAP matrix (S4)', () => {
   it('supabase/tests/database/tenant_isolation.test.sql is up to date', () => {
@@ -33,9 +45,10 @@ describe('cross-tenant pgTAP matrix (S4)', () => {
     expect(readFileSync(OUTPUT, 'utf8')).toBe(generate())
   })
 
-  it('has a fixture for every own/derived tenant table, and none for anything else', () => {
+  it('has a fixture for every own/derived/inherited tenant table, and none for anything else', () => {
     expect(fixtureProblems()).toEqual([])
-    expect(tenantTables().length).toBe(35)
+    expect(tenantTables().length).toBe(45)
+    expect(inheritedTenantTables().length).toBe(10)
     expect(Object.keys(FIXTURES).sort()).toEqual(tenantTables())
   })
 
@@ -76,43 +89,153 @@ describe('cross-tenant pgTAP matrix (S4)', () => {
     expect(sql).toContain('SET LOCAL row_security = on;')
   })
 
-  it('keeps the via_parent child tables (no tenant_id yet) out of reach of the tenant role', () => {
+  it('still keeps a table with no tenant_id out of reach of the tenant role, should one ever be via_parent', () => {
+    expect(viaParentTables()).toEqual([])
+    const registry: Record<string, TableEntry> = {
+      ...TABLE_REGISTRY,
+      'public.schools': { class: 'event_scoped', tenantColumn: 'via_parent', parent: 'public.registrations' },
+    }
+    expect(viaParentTables(registry)).toEqual(['public.schools'])
+    expect(generate(registry)).toContain(`public.schools: no tenant_id yet (via_parent), so ${TENANT_ROLE} has no privilege on it at all`)
+  })
+
+  it('covers every child table, and refuses tenant_app any write to the append-only ones', () => {
     const sql = readFileSync(OUTPUT, 'utf8')
-    for (const t of viaParentTables()) expect(sql).toContain(`${t}: no tenant_id yet (via_parent), so ${TENANT_ROLE} has no privilege on it at all`)
-    const migration = readFileSync(MIGRATION, 'utf8')
-    for (const t of viaParentTables()) expect(migration).not.toMatch(new RegExp(`ON ${t.replace('.', '\\.')} TO tenant_app`))
+    for (const t of inheritedTenantTables()) expect(sql, t).toContain(`canary context: sees exactly its own rows of ${t}`)
+    for (const t of ['public.agreement_recipients', 'public.esign_access_log', 'public.esign_audit_events', 'public.survey_answers']) {
+      expect(TENANT_APP_READ_ONLY_TABLES).toContain(t)
+      expect(sql, t).toContain(`canary context: cannot INSERT into ${t} (read-only to ${TENANT_ROLE}; platform code writes it)`)
+    }
+  })
+
+  it('refuses tenant_app the identity columns of participants, and keeps the other columns writable', () => {
+    const sql = readFileSync(OUTPUT, 'utf8')
+    expect(TENANT_APP_UNWRITABLE_COLUMNS['public.participants']).toEqual(['member_id', 'membership_id'])
+    for (const col of TENANT_APP_UNWRITABLE_COLUMNS['public.participants']) {
+      expect(sql).toContain(`public.participants.${col}: ${TENANT_ROLE} may read it but not write it`)
+      expect(sql).toContain(`Stellr context: UPDATE of public.participants.${col} is refused`)
+      expect(sql).toContain(`canary context: INSERT into public.participants naming ${col} is refused`)
+    }
+    expect(sql).toContain('canary context: its other columns of public.participants stay writable')
+  })
+
+  it('section 7: another tenant\'s parent and a missing one get the same refusal, in both modes, on every writable child table', () => {
+    const sql = readFileSync(OUTPUT, 'utf8')
+    const writable = inheritedTenantTables().filter((t) => !TENANT_APP_READ_ONLY_TABLES.includes(t))
+    expect(writable).toHaveLength(6)
+    for (const mode of ['log', 'enforce']) {
+      for (const who of ['Stellr', 'canary']) {
+        for (const t of writable) {
+          for (const chk of ['insert_foreign_omitted', 'insert_missing_omitted', 'insert_foreign_supplied', 'insert_missing_supplied', 'update_foreign', 'update_missing']) {
+            expect(sql, `${mode} ${who} ${t} ${chk}`).toContain(`${mode} mode, ${who} context: ${t} ${chk} gets RLS's one refusal`.replace(/'/g, "''"))
+          }
+        }
+        for (const chk of ['under_age_foreign', 'null_dob_foreign', 'under_age_update_foreign']) {
+          expect(sql).toContain(`${mode} mode, ${who} context: participants ${chk} gets RLS''s refusal, not an eligibility reason`)
+        }
+      }
+      expect(sql).toContain(`${mode} mode, canary context: an under-age participant on its own event is still refused by eligibility`)
+    }
+  })
+})
+
+describe('the triggers that read a parent, in a tenant session', () => {
+  const EXPAND = readFileSync('supabase/migrations/20261106070722_via_parent_tenant_expand.sql', 'utf8')
+  const body = (fn: string) => new RegExp(`FUNCTION public\\.${fn}\\([\\s\\S]*?END \\$\\$;`).exec(EXPAND)?.[0] ?? ''
+
+  it('asks whether the session can see the parent before anything can raise', () => {
+    for (const [fn, call] of [
+      ['participants_assert_eligible', 'tenancy_hidden_from_tenant_session(reg.tenant_id, NULL)'],
+      ['registrations_assert_eligible', 'tenancy_hidden_from_tenant_session(NEW.tenant_id, NEW.event_slug)'],
+      ['tenancy_inherit_tenant_id', 'tenancy_hidden_from_tenant_session(CASE WHEN has_parent THEN derived END, NULL)'],
+    ]) {
+      const code = body(fn)
+      const asked = code.indexOf(call)
+      expect(asked, fn).toBeGreaterThan(-1)
+      expect(code.indexOf('RAISE EXCEPTION'), fn).toBeGreaterThan(asked)
+    }
+  })
+
+  it('answers false for every other session on its first line, so nothing changes for service_role', () => {
+    const code = body('tenancy_hidden_from_tenant_session')
+    expect(code).toMatch(/BEGIN\s+IF COALESCE\(current_setting\('role', true\), ''\) <> 'tenant_app' THEN\s+RETURN false;/)
+  })
+
+  it('only the two eligibility triggers changed from the A3 migration', () => {
+    const a3 = readFileSync('supabase/migrations/20261105041211_participants_eligibility.sql', 'utf8')
+    const a3Body = (fn: string) => new RegExp(`FUNCTION public\\.${fn}\\([\\s\\S]*?END \\$\\$;`).exec(a3)?.[0] ?? ''
+    const stepAside = /\n\s*IF public\.tenancy_hidden_from_tenant_session\([^\n]*\n\s*RETURN NEW;\n\s*END IF;\n/
+    for (const fn of ['participants_assert_eligible', 'registrations_assert_eligible']) {
+      expect(body(fn).replace(stepAside, '\n').replace(/\s+/g, ' '), fn).toBe(a3Body(fn).replace(/\s+/g, ' '))
+    }
+  })
+})
+
+describe('a parent that changes tenant', () => {
+  const CARRY = readFileSync('supabase/migrations/20261106074112_via_parent_tenant_carry.sql', 'utf8')
+  const triggers = [...CARRY.matchAll(/AFTER UPDATE ON public\.(\w+)\s+FOR EACH ROW\s+WHEN \(([^\n]*)\)\s+EXECUTE FUNCTION public\.tenancy_carry_children\(([^)]*)\)/g)]
+
+  it('carries every child table, by the key the registry names', () => {
+    const carried = triggers.flatMap(([, parent, , args]) => {
+      const a = args.split(',').map((s) => s.trim().replace(/'/g, ''))
+      return a.flatMap((v, i) => (i % 2 === 0 ? [`public.${v}|${a[i + 1]}|public.${parent}`] : []))
+    })
+    const want = inheritedTenantTables().map((t) => `${t}|${TABLE_REGISTRY[t].parentKey}|${TABLE_REGISTRY[t].parent}`)
+    expect(carried.sort()).toEqual(want.sort())
+  })
+
+  it('fires only on a move from one tenant to another, so Stellr and a backfill never reach it', () => {
+    expect(triggers).toHaveLength(7)
+    for (const [, parent, when] of triggers) {
+      expect(when, parent).toBe('OLD.tenant_id IS NOT NULL AND NEW.tenant_id IS NOT NULL AND OLD.tenant_id <> NEW.tenant_id')
+    }
+    // Not UPDATE OF: a registration changes tenant when the derivation trigger rewrites it.
+    expect(CARRY.replace(/--[^\n]*/g, '')).not.toMatch(/AFTER UPDATE OF/)
   })
 })
 
 describe('the S4 migration and the tenancy lint', () => {
-  it('writes both tenant policies, TO tenant_app only, for every own/derived table', () => {
-    const migration = readFileSync(MIGRATION, 'utf8')
+  it('writes both tenant policies, TO tenant_app only, for every own/derived/inherited table', () => {
     for (const t of tenantTables()) {
+      const migration = policyFileFor(t)
       expect(migration).toContain(`CREATE POLICY tenant_isolation ON ${t} AS PERMISSIVE FOR ALL TO tenant_app`)
       expect(migration).toContain(`CREATE POLICY tenant_isolation_guard ON ${t} AS RESTRICTIVE FOR ALL TO tenant_app`)
       if (TENANT_APP_READ_ONLY_TABLES.includes(t)) {
         expect(migration).toContain(`GRANT SELECT ON ${t} TO tenant_app;`)
         expect(migration).not.toMatch(new RegExp(`GRANT [^;]*(?:INSERT|UPDATE|DELETE)[^;]* ON ${t.replace('.', '\\.')} TO tenant_app`))
+      } else if (TENANT_APP_UNWRITABLE_COLUMNS[t]) {
+        // Whole-table INSERT or UPDATE would take in the columns it must not write.
+        expect(migration).toContain(`GRANT SELECT, DELETE ON ${t} TO tenant_app;`)
+        expect(migration).not.toMatch(new RegExp(`GRANT [^;(]*\\b(?:INSERT|UPDATE)\\b[^;(]* ON ${t.replace('.', '\\.')} TO tenant_app`))
+        expect(migration).toContain(`GRANT INSERT (%1$s), UPDATE (%1$s) ON ${t} TO tenant_app`)
+        expect(migration).toContain(`a.attname NOT IN (${TENANT_APP_UNWRITABLE_COLUMNS[t].map((c) => `'${c}'`).join(', ')})`)
       } else {
         expect(migration).toContain(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${t} TO tenant_app;`)
       }
     }
-    const code = migration.replace(/--[^\n]*/g, '')
+    const code = readFileSync(MIGRATION, 'utf8').replace(/--[^\n]*/g, '')
     expect(code).not.toMatch(/FORCE\s+ROW\s+LEVEL\s+SECURITY/i)
     expect(code.match(/CREATE\s+ROLE[^;]*/gi)).toEqual(['CREATE ROLE tenant_app NOLOGIN NOINHERIT NOBYPASSRLS'])
     expect(code).not.toMatch(/SECURITY\s+DEFINER/i)
     expect(code).not.toMatch(/ALTER\s+ROLE/i)
+    const childCode = readFileSync(CHILD_MIGRATION, 'utf8').replace(/--[^\n]*/g, '')
+    expect(childCode).not.toMatch(/FORCE\s+ROW\s+LEVEL\s+SECURITY|SECURITY\s+DEFINER|(?:CREATE|ALTER)\s+ROLE/i)
+    expect(childCode.match(/TO\s+[a-z_]+/gi)?.every((m) => /TO\s+tenant_app/i.test(m))).toBe(true)
   })
 
   it("each guard's WITH CHECK is exactly what lib/tenancy/tenant-role.ts says (event key and every parent key confined to the tenant)", () => {
-    const migration = readFileSync(MIGRATION, 'utf8')
     const via = new Set(viaParentTables())
     for (const t of tenantTables()) {
       const block = `CREATE POLICY tenant_isolation_guard ON ${t} AS RESTRICTIVE FOR ALL TO tenant_app
   USING (tenant_id = (SELECT public.app_tenant_id()))
   WITH CHECK (${guardWithCheck(t, TABLE_REGISTRY[t], via)});`
-      expect(migration, t).toContain(block)
+      expect(lastGuard(t), t).toBe(block)
     }
+    // No guard still holds a key to a child table to NULL.
+    const heldToNull = /AND \w+\.\w+ IS NULL(?! OR)/
+    expect(readFileSync(MIGRATION, 'utf8')).toMatch(heldToNull)
+    for (const t of tenantTables()) expect(lastGuard(t), t).not.toMatch(heldToNull)
+    expect(lastGuard('public.agreements')).toContain('EXISTS (SELECT 1 FROM public.participants p WHERE p.id = agreements.participant_id)')
     // A cross-tenant reference is the case the guard exists for: spot-check two.
     expect(guardWithCheck('public.group_join_tokens', TABLE_REGISTRY['public.group_join_tokens'], via)).toContain(
       'EXISTS (SELECT 1 FROM public.registrations p WHERE p.id = group_join_tokens.registration_id)',
@@ -127,6 +250,12 @@ describe('the S4 migration and the tenancy lint', () => {
     for (const r of TENANT_PARENT_REFS) {
       expect(tenantTables(), r.table).toContain(r.table)
       expect(tenantish.has(r.parent), r.parent).toBe(true)
+    }
+    // A child table's foreign key to its parent is a ref. The two esign logs have none.
+    for (const t of inheritedTenantTables()) {
+      const e = TABLE_REGISTRY[t]
+      const listed = TENANT_PARENT_REFS.some((r) => r.table === t && r.column === e.parentKey && r.parent === e.parent)
+      expect([t, listed]).toEqual([t, !e.noForeignKey])
     }
     const migration = readFileSync(MIGRATION, 'utf8')
     const fn = /CREATE OR REPLACE FUNCTION public\.tenant_self_ref_visible[\s\S]*?\$\$;/.exec(migration)?.[0] ?? ''

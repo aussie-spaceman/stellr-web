@@ -11,9 +11,12 @@ const h = vi.hoisted(() => ({
   db: null as unknown as FakeDb,
   ticket: null as { memberId: string; adminMemberId: string; issuedAt: number } | null,
   clerkUser: {} as Record<string, unknown> | Error,
+  viewer: { userId: 'clerk-admin', role: 'admin' } as { userId: string | null; role: string | null },
+  errorRows: [] as string[],
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({
+  auth: async () => ({ userId: h.viewer.userId, sessionClaims: h.viewer.role ? { metadata: { role: h.viewer.role } } : null }),
   clerkClient: async () => ({
     users: {
       getUser: async () => {
@@ -23,11 +26,18 @@ vi.mock('@clerk/nextjs/server', () => ({
     },
   }),
 }))
-vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('notFound') } }))
+vi.mock('next/navigation', () => ({
+  notFound: () => { throw new Error('notFound') },
+  redirect: (to: string) => { throw new Error(`redirect ${to}`) },
+}))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => h.db.client }))
-vi.mock('@/lib/admin-auth', async (importOriginal) => ({
-  isStaffRole: (await importOriginal<typeof import('@/lib/admin-auth')>()).isStaffRole,
-  requireAdminPage: async () => {},
+vi.mock('@/lib/app-errors', () => ({
+  routeLabel: (_a: string, route: string) => route,
+  errorDigest: () => 'digest',
+  recordBuiltAppError: async (_route: string, message: string) => {
+    h.errorRows.push(message)
+    return true
+  },
 }))
 vi.mock('@/lib/impersonation', () => ({ getImpersonation: async () => h.ticket }))
 vi.mock('@/lib/docusign-recipients', () => ({ loadRecipientsByEnvelopeRows: async () => new Map() }))
@@ -68,6 +78,28 @@ beforeEach(() => {
   h.db = fakeSupabase({ members: [TEACHER] })
   h.ticket = null
   h.clerkUser = {}
+  h.viewer = { userId: 'clerk-admin', role: 'admin' }
+  h.errorRows = []
+})
+
+describe('who reaches the page', () => {
+  it('signed out goes to sign-in', async () => {
+    h.viewer = { userId: null, role: null }
+    await expect(page('teams')).rejects.toThrow('redirect /sign-in')
+  })
+
+  it.each(['student', 'staff', null])('a signed-in %s gets a 404', async (role) => {
+    h.viewer = { userId: 'clerk-other', role }
+    await expect(page('teams')).rejects.toThrow('notFound')
+  })
+
+  // proxy.ts is what keeps an event manager out of /admin/members. This page guard has
+  // always let them through, and moving it on is a decision about who may see the page.
+  it.each(['admin', 'event_manager'])('a %s passes the page guard', async (role) => {
+    h.viewer = { userId: 'clerk-staff', role }
+    render(await page('teams'))
+    expect(screen.getByTestId('start')).toBeInTheDocument()
+  })
 })
 
 describe('admin account summary, Teams and Billing', () => {
@@ -118,6 +150,70 @@ describe('admin account summary for a staff member', () => {
   it('when Clerk cannot be asked, still offers the session: the start route makes the call', async () => {
     h.db = fakeSupabase({ members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }] })
     h.clerkUser = new Error('Clerk is down')
+    render(await page('teams'))
+    expect(screen.getByTestId('start')).toBeInTheDocument()
+  })
+
+  it('when the staff_roles read fails, still offers the session: only a positive answer counts here', async () => {
+    h.db = fakeSupabase({ members: [TEACHER] }, { failOn: (t) => (t === 'staff_roles' ? 'boom' : null) })
+    render(await page('teams'))
+    expect(screen.getByTestId('start')).toBeInTheDocument()
+  })
+
+  it('under postgres, when a role table cannot be read, still offers the session: only a positive answer counts here', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    try {
+      // The first read is the viewer's own, for the page guard. The next is the target's.
+      let reads = 0
+      h.db = fakeSupabase(
+        { members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }], platform_admins: [{ clerk_user_id: 'clerk-admin' }] },
+        { failOn: (t) => (t === 'platform_admins' && ++reads > 1 ? 'boom' : null) },
+      )
+      h.clerkUser = { publicMetadata: { role: 'student' } }
+      render(await page('teams'))
+      expect(reads).toBeGreaterThan(1)
+      expect(screen.getByTestId('start')).toBeInTheDocument()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('under shadow, when Clerk cannot be asked, leaves no role-mismatch row for a member who has not drifted', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'shadow')
+    try {
+      h.db = fakeSupabase({
+        members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }],
+        platform_admins: [{ clerk_user_id: 'clerk-admin' }],
+        tenant_memberships: [{ tenant_id: 'tenant', role: 'event_manager', member_id: TEACHER.id }],
+      })
+      h.clerkUser = new Error('Clerk is down')
+      render(await page('teams'))
+      expect(screen.getByTestId('start')).toBeInTheDocument()
+      expect(h.errorRows.filter((m) => m.includes('staff_target'))).toEqual([])
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('under shadow, with the Clerk answer in hand, a real difference is still reported', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'shadow')
+    try {
+      h.db = fakeSupabase({
+        members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }],
+        platform_admins: [{ clerk_user_id: 'clerk-admin' }],
+        tenant_memberships: [{ tenant_id: 'tenant', role: 'event_manager', member_id: TEACHER.id }],
+      })
+      h.clerkUser = { publicMetadata: { role: 'student' } }
+      render(await page('teams'))
+      expect(h.errorRows.filter((m) => m.includes('staff_target'))).toHaveLength(1)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('a student role on the Clerk record is not staff', async () => {
+    h.db = fakeSupabase({ members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }] })
+    h.clerkUser = { publicMetadata: { role: 'student' } }
     render(await page('teams'))
     expect(screen.getByTestId('start')).toBeInTheDocument()
   })

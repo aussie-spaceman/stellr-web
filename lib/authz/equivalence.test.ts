@@ -15,12 +15,18 @@
  *                    portal / event-manager answers follow the tables; the
  *                    harness pins exactly which answers move, and that every
  *                    admin-only and scope answer still agrees.
+ *
+ * Since C14 lib/admin-auth.ts is a shim over lib/authz, so "legacy" here is the frozen
+ * pre-C14 code in test/fixtures/authz-legacy.ts, mocked in for the module so that
+ * lib/event-access and the domain wrappers run on it too. Comparing with the live module
+ * would compare lib/authz with itself. The live module is held to the frozen one below.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   allScenarios,
   fakeDb,
   isSynced,
+  MEMBER,
   scenarioAuth,
   scenarioTables,
   USER,
@@ -28,7 +34,8 @@ import {
   type Scenario,
 } from '@/test/fixtures/authz-principal'
 
-vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn(), currentUser: vi.fn(async () => null) }))
+vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn(), clerkClient: vi.fn(), currentUser: vi.fn(async () => null) }))
+vi.mock('@/lib/admin-auth', () => import('@/test/fixtures/authz-legacy'))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: vi.fn() }))
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((to: string) => {
@@ -41,7 +48,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/community', () => ({ getSignedInMember: vi.fn(async () => null) }))
 vi.mock('@/lib/esign/native/template-admin', () => ({ TemplateAdminError: class extends Error {} }))
 
-import { auth } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import {
   currentUserHasScope,
@@ -51,7 +58,7 @@ import {
   isEventManagerClaims,
   isStaffRole,
   requireAdminPage,
-} from '@/lib/admin-auth'
+} from '@/test/fixtures/authz-legacy'
 import { requireEventAccess as legacyEventAccess } from '@/lib/event-access'
 import { requireScholarshipAdmin } from '@/lib/scholarship-admin'
 import { requireSurveyAdmin } from '@/lib/survey/admin-auth'
@@ -229,5 +236,132 @@ describe('authz equivalence with the legacy guard idioms', () => {
       expect(db.reads, s.name).toEqual(legacyReads)
       vi.stubEnv('AUTHZ_SOURCE', '')
     }
+  })
+})
+
+describe('lib/admin-auth, the shims, answer as the frozen legacy code did', () => {
+  const load = () => vi.importActual<typeof import('@/lib/admin-auth')>('@/lib/admin-auth')
+
+  async function answers(m: Awaited<ReturnType<typeof load>>, s: Scenario) {
+    const claims = scenarioAuth(s).sessionClaims
+    const out: Record<string, unknown> = {
+      isAdminClaims: m.isAdminClaims(claims),
+      isEventManagerClaims: m.isEventManagerClaims(claims),
+      hasAdminPortalAccess: m.hasAdminPortalAccess(claims),
+      isStaffRole: m.isStaffRole(s.claimsRole),
+      currentUserIsAdmin: await m.currentUserIsAdmin(),
+      requireAdminPage: await outcome(m.requireAdminPage),
+    }
+    for (const scope of SCOPES) out[`currentUserHasScope(${scope})`] = await m.currentUserHasScope(scope)
+    return out
+  }
+
+  it.each(scenarios.map((s) => [s.name, s] as const))('%s', async (_name, s) => {
+    use(s)
+    const legacyModule = await import('@/test/fixtures/authz-legacy')
+    const want = await answers(legacyModule as never, s)
+    const wantReads = [...db.reads]
+    db.reads.length = 0
+    expect(await answers(await load(), s)).toEqual(want)
+    expect(db.reads).toEqual(wantReads)
+  })
+
+  it('the claim predicates take any claim shape the same way', async () => {
+    const shim = await load()
+    const shapes = [null, undefined, {}, { metadata: null }, { metadata: {} }, { metadata: { role: 'Admin' } }, { metadata: { role: 7 } }, { metadata: { role: ['admin'] } }]
+    for (const c of shapes as Record<string, unknown>[]) {
+      expect(shim.isAdminClaims(c), JSON.stringify(c)).toBe(isAdminClaims(c))
+      expect(shim.isEventManagerClaims(c), JSON.stringify(c)).toBe(isEventManagerClaims(c))
+      expect(shim.hasAdminPortalAccess(c), JSON.stringify(c)).toBe(hasAdminPortalAccess(c))
+    }
+  })
+
+  it('isStaffRole takes any value the same way', async () => {
+    const shim = await load()
+    for (const v of [undefined, null, '', 'admin', 'event_manager', 'staff', 'Admin', 7, ['admin'], {}]) {
+      expect(shim.isStaffRole(v), String(v)).toBe(isStaffRole(v))
+    }
+    expect([...shim.STAFF_CLERK_ROLES]).toEqual(['admin', 'event_manager'])
+  })
+})
+
+describe('the view-as refusal, against the rule the start route held before C14', () => {
+  type Clerk = 'no_login' | 'not_found' | 'down' | { role: unknown }
+  const CLERK_STATES: Clerk[] = ['no_login', 'not_found', 'down', { role: undefined }, { role: 'admin' }, { role: 'event_manager' }, { role: 'student' }, { role: 'staff' }, { role: 7 }]
+
+  /** Word for word what app/api/admin/impersonation/route.ts answered: 403, 503, or carry on. */
+  function legacyRefusal(row: 'none' | 'held' | 'read_fails', clerk: Clerk): 403 | 503 | null {
+    if (row === 'read_fails') return 503
+    if (row === 'held') return 403
+    if (clerk === 'no_login' || clerk === 'not_found') return null
+    if (clerk === 'down') return 503
+    return isStaffRole(clerk.role) ? 403 : null
+  }
+
+  function target(row: 'none' | 'held' | 'read_fails', clerk: Clerk) {
+    const getUser = vi.fn(async () => {
+      if (clerk === 'not_found') throw Object.assign(new Error('no such user'), { status: 404 })
+      if (clerk === 'down') throw Object.assign(new Error('unavailable'), { status: 503 })
+      return { publicMetadata: { role: (clerk as { role: unknown }).role } }
+    })
+    vi.mocked(clerkClient).mockResolvedValue({ users: { getUser } } as never)
+    db = fakeDb({ staff_roles: row === 'held' ? [{ member_id: MEMBER, scopes: [] }] : [] })
+    if (row === 'read_fails') db.fail.add('staff_roles')
+    vi.mocked(supabaseServer).mockReturnValue(db.client)
+    return { getUser, args: { memberId: MEMBER, clerkUserId: clerk === 'no_login' ? null : USER } }
+  }
+
+  async function refusal(args: { memberId: string; clerkUserId: string | null }): Promise<403 | 503 | null> {
+    try {
+      return (await authz.isViewAsTargetStaff(args)) ? 403 : null
+    } catch {
+      return 503
+    }
+  }
+
+  const cases = (['none', 'held', 'read_fails'] as const).flatMap((row) => CLERK_STATES.map((clerk) => [row, clerk] as const))
+
+  it.each(cases)('row %s, Clerk %j', async (row, clerk) => {
+    const { args, getUser } = target(row, clerk)
+    vi.stubEnv('AUTHZ_SOURCE', 'clerk')
+    expect(await refusal(args)).toBe(legacyRefusal(row, clerk))
+    // The row is read first, so a holder or a failed read never reaches Clerk, as before.
+    if (row !== 'none' || clerk === 'no_login') expect(getUser).not.toHaveBeenCalled()
+    // And no read beyond the row: the rest is the Clerk record.
+    expect(db.reads).toEqual(['staff_roles'])
+  })
+
+  it('a staff_roles row with empty scopes refuses, though isStaffTarget alone would not count it', async () => {
+    const { args } = target('held', { role: 'student' })
+    expect(await authz.isStaffTarget({ clerkUserId: USER, clerkRole: 'student', memberId: MEMBER })).toBe(false)
+    expect(await refusal(args)).toBe(403)
+  })
+
+  it('under postgres a table role also refuses, and a failed table read is "could not confirm", not "is staff"', async () => {
+    const { args } = target('none', { role: 'student' })
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    db.tables.members = [{ id: MEMBER, clerk_user_id: USER }]
+    db.tables.tenant_memberships = [{ tenant_id: 'tenant', role: 'tenant_admin', member_id: MEMBER }]
+    expect(await refusal(args)).toBe(403)
+    db.tables.tenant_memberships = []
+    expect(await refusal(args)).toBe(null)
+    db.fail.add('tenant_memberships')
+    expect(await refusal(args)).toBe(503)
+  })
+
+  it('under postgres a staff membership in any tenant refuses: another tenant has no staff_roles row', async () => {
+    const { args } = target('none', { role: 'student' })
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    db.tables.members = [{ id: MEMBER, clerk_user_id: USER }]
+    db.tables.tenant_memberships = [{ tenant_id: 'another-tenant', role: 'staff', member_id: MEMBER }]
+    expect(await refusal(args)).toBe(403)
+  })
+
+  it.each(['clerk', 'shadow'])('under %s a staff membership changes nothing, and is not read for this rule', async (source) => {
+    const { args } = target('none', { role: 'student' })
+    vi.stubEnv('AUTHZ_SOURCE', source)
+    db.tables.members = [{ id: MEMBER, clerk_user_id: USER }]
+    db.tables.tenant_memberships = [{ tenant_id: 'another-tenant', role: 'staff', member_id: MEMBER }]
+    expect(await refusal(args)).toBe(null)
   })
 })

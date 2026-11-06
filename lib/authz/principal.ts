@@ -10,7 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { TenantRole } from '@/lib/tenancy/role-mapping'
-import type { Assignment, Membership, Principal } from './decide'
+import { roleFromClerkUser, type Assignment, type Membership, type Principal } from './decide'
 
 /** A role lookup failed. Callers deny (postgres) or keep the clerk answer (shadow). */
 export class AuthzLookupError extends Error {
@@ -132,6 +132,30 @@ export async function loadEventTenantId(db: SupabaseClient, slug: string): Promi
   const { data, error } = await db.from('events').select('tenant_id').eq('slug', slug).maybeSingle()
   if (error) throw new AuthzLookupError('events')
   return (data as { tenant_id?: string | null } | null)?.tenant_id ?? STELLR_TENANT_ID
+}
+
+/** The member has a staff_roles row, whatever its scopes. View-as refuses on the row alone. */
+export async function loadHoldsStaffRow(db: SupabaseClient, memberId: string): Promise<boolean> {
+  const { data, error } = await db.from('staff_roles').select('member_id').eq('member_id', memberId).maybeSingle()
+  if (error) throw new AuthzLookupError('staff_roles')
+  return Boolean(data)
+}
+
+/**
+ * The role on another user's Clerk record, for isStaffTarget. A 404 is an answer: a Clerk
+ * user that does not exist cannot sign in or hold a role (a missed user.deleted webhook
+ * leaves such ids behind). Any other error throws, so the caller can refuse.
+ */
+export async function loadTargetClerkRole(
+  client: { users: { getUser(id: string): Promise<{ publicMetadata?: unknown }> } },
+  clerkUserId: string,
+): Promise<{ exists: boolean; role: unknown }> {
+  try {
+    return { exists: true, role: roleFromClerkUser(await client.users.getUser(clerkUserId)) }
+  } catch (err) {
+    if ((err as { status?: number } | null)?.status === 404) return { exists: false, role: undefined }
+    throw err
+  }
 }
 
 /** The member's staff_roles.scopes (Stellr only), or null when none. */

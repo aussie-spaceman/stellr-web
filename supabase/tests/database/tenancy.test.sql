@@ -9,7 +9,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(245);
+SELECT plan(381);
 
 -- 1. Every table in public and entitlements is classified, and nothing else is.
 SELECT set_eq(
@@ -386,6 +386,66 @@ SELECT ok(EXISTS (
   WHERE i.indrelid = 'public.volunteer_event_interest'::regclass AND a.attname = 'tenant_id'
 ), 'public.volunteer_event_interest has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.volunteer_event_interest'::regclass), 'public.volunteer_event_interest has RLS enabled');
+SELECT has_column('public', 'agreement_recipients', 'tenant_id', 'public.agreement_recipients has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.agreement_recipients'::regclass AND a.attname = 'tenant_id'
+), 'public.agreement_recipients has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.agreement_recipients'::regclass), 'public.agreement_recipients has RLS enabled');
+SELECT has_column('public', 'credential_events', 'tenant_id', 'public.credential_events has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.credential_events'::regclass AND a.attname = 'tenant_id'
+), 'public.credential_events has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.credential_events'::regclass), 'public.credential_events has RLS enabled');
+SELECT has_column('public', 'esign_access_log', 'tenant_id', 'public.esign_access_log has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.esign_access_log'::regclass AND a.attname = 'tenant_id'
+), 'public.esign_access_log has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.esign_access_log'::regclass), 'public.esign_access_log has RLS enabled');
+SELECT has_column('public', 'esign_audit_events', 'tenant_id', 'public.esign_audit_events has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.esign_audit_events'::regclass AND a.attname = 'tenant_id'
+), 'public.esign_audit_events has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.esign_audit_events'::regclass), 'public.esign_audit_events has RLS enabled');
+SELECT has_column('public', 'member_group_members', 'tenant_id', 'public.member_group_members has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.member_group_members'::regclass AND a.attname = 'tenant_id'
+), 'public.member_group_members has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.member_group_members'::regclass), 'public.member_group_members has RLS enabled');
+SELECT has_column('public', 'participants', 'tenant_id', 'public.participants has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.participants'::regclass AND a.attname = 'tenant_id'
+), 'public.participants has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.participants'::regclass), 'public.participants has RLS enabled');
+SELECT has_column('public', 'store_order_items', 'tenant_id', 'public.store_order_items has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.store_order_items'::regclass AND a.attname = 'tenant_id'
+), 'public.store_order_items has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.store_order_items'::regclass), 'public.store_order_items has RLS enabled');
+SELECT has_column('public', 'store_returns', 'tenant_id', 'public.store_returns has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.store_returns'::regclass AND a.attname = 'tenant_id'
+), 'public.store_returns has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.store_returns'::regclass), 'public.store_returns has RLS enabled');
+SELECT has_column('public', 'survey_answers', 'tenant_id', 'public.survey_answers has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.survey_answers'::regclass AND a.attname = 'tenant_id'
+), 'public.survey_answers has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.survey_answers'::regclass), 'public.survey_answers has RLS enabled');
+SELECT has_column('public', 'survey_invitations', 'tenant_id', 'public.survey_invitations has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.survey_invitations'::regclass AND a.attname = 'tenant_id'
+), 'public.survey_invitations has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.survey_invitations'::regclass), 'public.survey_invitations has RLS enabled');
 SELECT col_not_null('public', 'events', 'tenant_id', 'public.events.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'tenant_domains', 'tenant_id', 'public.tenant_domains.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'tenant_memberships', 'tenant_id', 'public.tenant_memberships.tenant_id is NOT NULL');
@@ -613,6 +673,106 @@ SELECT ok(EXISTS (
     AND tg.tgenabled = 'O'
     AND encode(tg.tgargs, 'escape') = 'event_slug\000slug\000'
 ), 'public.volunteer_event_interest: derivation trigger on (event_slug, slug), enabled');
+SELECT col_is_null('public', 'agreement_recipients', 'tenant_id', 'public.agreement_recipients.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.agreement_recipients'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'envelope_row\000agreements\000'
+), 'public.agreement_recipients: inherit trigger on (envelope_row, agreements), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.agreement_recipients'::regclass AND c.confrelid = 'public.agreements'::regclass),
+  1, 'public.agreement_recipients: exactly one foreign key to public.agreements, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'credential_events', 'tenant_id', 'public.credential_events.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.credential_events'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'credential_id\000credentials\000'
+), 'public.credential_events: inherit trigger on (credential_id, credentials), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.credential_events'::regclass AND c.confrelid = 'public.credentials'::regclass),
+  1, 'public.credential_events: exactly one foreign key to public.credentials, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'esign_access_log', 'tenant_id', 'public.esign_access_log.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.esign_access_log'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'envelope_row\000agreements\000'
+), 'public.esign_access_log: inherit trigger on (envelope_row, agreements), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.esign_access_log'::regclass AND c.confrelid = 'public.agreements'::regclass),
+  0, 'public.esign_access_log: no foreign key to public.agreements, so it can outlive its parent');
+SELECT col_is_null('public', 'esign_audit_events', 'tenant_id', 'public.esign_audit_events.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.esign_audit_events'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'envelope_row\000agreements\000'
+), 'public.esign_audit_events: inherit trigger on (envelope_row, agreements), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.esign_audit_events'::regclass AND c.confrelid = 'public.agreements'::regclass),
+  0, 'public.esign_audit_events: no foreign key to public.agreements, so it can outlive its parent');
+SELECT col_is_null('public', 'member_group_members', 'tenant_id', 'public.member_group_members.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.member_group_members'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'group_id\000member_groups\000'
+), 'public.member_group_members: inherit trigger on (group_id, member_groups), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.member_group_members'::regclass AND c.confrelid = 'public.member_groups'::regclass),
+  1, 'public.member_group_members: exactly one foreign key to public.member_groups, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'participants', 'tenant_id', 'public.participants.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.participants'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'registration_id\000registrations\000'
+), 'public.participants: inherit trigger on (registration_id, registrations), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.participants'::regclass AND c.confrelid = 'public.registrations'::regclass),
+  1, 'public.participants: exactly one foreign key to public.registrations, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'store_order_items', 'tenant_id', 'public.store_order_items.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.store_order_items'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'order_id\000store_orders\000'
+), 'public.store_order_items: inherit trigger on (order_id, store_orders), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.store_order_items'::regclass AND c.confrelid = 'public.store_orders'::regclass),
+  1, 'public.store_order_items: exactly one foreign key to public.store_orders, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'store_returns', 'tenant_id', 'public.store_returns.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.store_returns'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'order_id\000store_orders\000'
+), 'public.store_returns: inherit trigger on (order_id, store_orders), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.store_returns'::regclass AND c.confrelid = 'public.store_orders'::regclass),
+  1, 'public.store_returns: exactly one foreign key to public.store_orders, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'survey_answers', 'tenant_id', 'public.survey_answers.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.survey_answers'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'response_id\000survey_responses\000'
+), 'public.survey_answers: inherit trigger on (response_id, survey_responses), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.survey_answers'::regclass AND c.confrelid = 'public.survey_responses'::regclass),
+  1, 'public.survey_answers: exactly one foreign key to public.survey_responses, so live embeds stay unambiguous');
+SELECT col_is_null('public', 'survey_invitations', 'tenant_id', 'public.survey_invitations.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.survey_invitations'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'distribution_id\000survey_distributions\000'
+), 'public.survey_invitations: inherit trigger on (distribution_id, survey_distributions), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.survey_invitations'::regclass AND c.confrelid = 'public.survey_distributions'::regclass),
+  1, 'public.survey_invitations: exactly one foreign key to public.survey_distributions, so live embeds stay unambiguous');
 
 -- 3. anon and authenticated cannot read the S3 tables; service_role can.
 SELECT ok(NOT has_table_privilege('anon', 'public.tenants', 'SELECT'), 'anon cannot read public.tenants');
@@ -642,6 +802,22 @@ SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_log_derivation(text
 SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_log_derivation(text, text, text, text)', 'EXECUTE'), 'authenticated cannot execute public.tenancy_log_derivation(text, text, text, text)');
 SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_backfill_tenant_ids()', 'EXECUTE'), 'anon cannot execute public.tenancy_backfill_tenant_ids()');
 SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_backfill_tenant_ids()', 'EXECUTE'), 'authenticated cannot execute public.tenancy_backfill_tenant_ids()');
+SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_inherit_tenant_id()', 'EXECUTE'), 'anon cannot execute public.tenancy_inherit_tenant_id()');
+SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_inherit_tenant_id()', 'EXECUTE'), 'authenticated cannot execute public.tenancy_inherit_tenant_id()');
+SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_backfill_child_tenant_ids(text[])', 'EXECUTE'), 'anon cannot execute public.tenancy_backfill_child_tenant_ids(text[])');
+SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_backfill_child_tenant_ids(text[])', 'EXECUTE'), 'authenticated cannot execute public.tenancy_backfill_child_tenant_ids(text[])');
+SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_backfill_child_tenant_ids(text[])', 'EXECUTE'), 'anon cannot execute public.tenancy_backfill_child_tenant_ids(text[])');
+SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_backfill_child_tenant_ids(text[])', 'EXECUTE'), 'authenticated cannot execute public.tenancy_backfill_child_tenant_ids(text[])');
+SELECT ok(NOT has_function_privilege('service_role', 'public.tenancy_backfill_child_tenant_ids(text[])', 'EXECUTE'), 'service_role cannot execute public.tenancy_backfill_child_tenant_ids(text[])');
+SELECT ok(NOT has_function_privilege('tenant_app', 'public.tenancy_backfill_child_tenant_ids(text[])', 'EXECUTE'), 'tenant_app cannot execute public.tenancy_backfill_child_tenant_ids(text[])');
+SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_carry_children()', 'EXECUTE'), 'anon cannot execute public.tenancy_carry_children()');
+SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_carry_children()', 'EXECUTE'), 'authenticated cannot execute public.tenancy_carry_children()');
+SELECT ok(NOT has_function_privilege('service_role', 'public.tenancy_carry_children()', 'EXECUTE'), 'service_role cannot execute public.tenancy_carry_children()');
+SELECT ok(NOT has_function_privilege('tenant_app', 'public.tenancy_carry_children()', 'EXECUTE'), 'tenant_app cannot execute public.tenancy_carry_children()');
+SELECT ok(NOT has_function_privilege('anon', 'public.tenancy_hidden_from_tenant_session(uuid, text)', 'EXECUTE'), 'anon cannot execute public.tenancy_hidden_from_tenant_session(uuid, text)');
+SELECT ok(NOT has_function_privilege('authenticated', 'public.tenancy_hidden_from_tenant_session(uuid, text)', 'EXECUTE'), 'authenticated cannot execute public.tenancy_hidden_from_tenant_session(uuid, text)');
+SELECT ok(NOT has_function_privilege('service_role', 'public.tenancy_hidden_from_tenant_session(uuid, text)', 'EXECUTE'), 'service_role cannot execute public.tenancy_hidden_from_tenant_session(uuid, text)');
+SELECT ok(NOT has_function_privilege('tenant_app', 'public.tenancy_hidden_from_tenant_session(uuid, text)', 'EXECUTE'), 'tenant_app cannot execute public.tenancy_hidden_from_tenant_session(uuid, text)');
 
 -- 4. Stellr is tenant #1 and the platform owner; the 14+ rule holds for everyone else.
 SELECT is(
@@ -835,6 +1011,174 @@ SELECT is((SELECT count(*)::int FROM public.tenant_memberships WHERE tenant_id I
 SELECT is((SELECT count(*)::int FROM public.training_assignments WHERE tenant_id IS NULL), 0, 'public.training_assignments: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.training_modules WHERE tenant_id IS NULL), 0, 'public.training_modules: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.volunteer_event_interest WHERE tenant_id IS NULL), 0, 'public.volunteer_event_interest: no NULL tenant_id after the backfill (NOT NULL-ready)');
+
+-- 7. Child tables take their tenant from the parent row, and a write that omits it keeps working.
+INSERT INTO public.events (tenant_id, slug, sanity_id, title, starts_at, time_zone, country, currency, grade_system) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'pgtap-kids', 'pgtap-kids-sanity', 'Kids', '2040-06-01T00:00:00Z', 'Australia/Sydney', 'AU', 'aud', 'au_years'),
+  ('00000000-0000-4000-8000-000000000001', 'pgtap-kids-stellr', 'pgtap-kids-stellr-sanity', 'Kids', '2040-06-01T00:00:00Z', 'UTC', 'US', 'usd', 'us_grades'),
+  ('00000000-0000-4000-8000-000000000001', 'pgtap-kids-stellr-b', 'pgtap-kids-stellr-b-sanity', 'Kids', '2040-06-01T00:00:00Z', 'UTC', 'US', 'usd', 'us_grades');
+INSERT INTO public.registrations (id, event_slug, event_title, type) VALUES
+  ('22222222-2222-4222-8222-000000000001', 'pgtap-kids', 'Kids', 'individual'),
+  ('22222222-2222-4222-8222-000000000002', 'pgtap-kids-stellr', 'Kids', 'individual'),
+  ('22222222-2222-4222-8222-000000000003', 'pgtap-kids-no-mirror', 'Kids', 'individual'),
+  ('22222222-2222-4222-8222-000000000004', 'pgtap-kids', 'Kids', 'individual');
+DELETE FROM public.tenancy_derivation_log;
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000001', '22222222-2222-4222-8222-000000000001', 'Pg', 'Tap', 'kid-01@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000001'), '11111111-1111-4111-8111-111111111111'::uuid, 'child: a write that omits tenant_id takes the tenant of its parent');
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000002', '22222222-2222-4222-8222-000000000002', 'Pg', 'Tap', 'kid-02@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000002'), '00000000-0000-4000-8000-000000000001'::uuid, 'child: a Stellr write that omits tenant_id is stamped Stellr');
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000003', '22222222-2222-4222-8222-000000000003', 'Pg', 'Tap', 'kid-03@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000003'), '00000000-0000-4000-8000-000000000001'::uuid, 'child: an unmirrored Stellr event still registers, through its stamped parent');
+SELECT is((SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE reason IN ('no_key', 'no_event', 'mismatch', 'error')), 0, 'child: none of those writes counts as an orphan');
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role, tenant_id) VALUES ('33333333-3333-4333-8333-000000000004', '22222222-2222-4222-8222-000000000001', 'Pg', 'Tap', 'kid-04@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant', '00000000-0000-4000-8000-000000000001');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000004'), '11111111-1111-4111-8111-111111111111'::uuid, 'log mode: a supplied tenant_id that disagrees with the parent is replaced');
+SELECT is((SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE table_name = 'public.participants' AND reason = 'mismatch'), 1, 'log mode: the disagreement is counted as mismatch');
+UPDATE public.participants SET nickname = 'x' WHERE id = '33333333-3333-4333-8333-000000000001';
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000001'), '11111111-1111-4111-8111-111111111111'::uuid, 'child: an update that names neither column leaves the tenant alone');
+UPDATE public.participants SET registration_id = '22222222-2222-4222-8222-000000000002' WHERE id = '33333333-3333-4333-8333-000000000004';
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000004'), '00000000-0000-4000-8000-000000000001'::uuid, 'child: moving to another parent takes that parent''s tenant');
+SELECT is((SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE table_name = 'public.participants' AND reason = 'mismatch'), 1, 'child: and that move names no tenant_id, so it is not a mismatch');
+SELECT throws_ok($q$INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000009', '22222222-2222-4222-8222-0000000000ff', 'Pg', 'Tap', 'kid-09@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant')$q$,
+  '23503', NULL, 'child: a parent that does not exist is still refused by its foreign key');
+DELETE FROM public.tenancy_derivation_log;
+ALTER TABLE public.registrations DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+INSERT INTO public.registrations (id, event_slug, event_title, type) VALUES ('22222222-2222-4222-8222-000000000005', 'pgtap-kids-stellr', 'Kids', 'individual');
+ALTER TABLE public.registrations ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+SELECT lives_ok($q$INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000005', '22222222-2222-4222-8222-000000000005', 'Pg', 'Tap', 'kid-05@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant')$q$, 'log mode: a parent the backfill has not reached does not block the write');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000005'), NULL::uuid, 'log mode: the child stays NULL with its parent');
+SELECT is((SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE table_name = 'public.participants' AND reason = 'no_event'), 1, 'log mode: that write is counted, because enforce would refuse it');
+DELETE FROM public.registrations WHERE id = '22222222-2222-4222-8222-000000000005';
+SELECT is((SELECT count(*)::int FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000005'), 0, 'child: deleting the parent still cascades');
+SELECT lives_ok($q$SELECT * FROM public.rename_event_slug('pgtap-kids-stellr', 'pgtap-kids-stellr-2')$q$,
+  'child: a Stellr slug rename goes through with participants on the event');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000002'), '00000000-0000-4000-8000-000000000001'::uuid, 'child: and they keep their tenant');
+-- A parent moved to another tenant takes its children: what the held-back foreign key's ON UPDATE CASCADE would do.
+UPDATE public.registrations SET event_slug = 'pgtap-kids' WHERE id = '22222222-2222-4222-8222-000000000003';
+SELECT is((SELECT tenant_id FROM public.registrations WHERE id = '22222222-2222-4222-8222-000000000003'), '11111111-1111-4111-8111-111111111111'::uuid, 'carry: the parent moved to the event''s tenant');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000003'), '11111111-1111-4111-8111-111111111111'::uuid, 'carry: and its child went with it, on a move a BEFORE trigger made');
+SELECT is((SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE table_name = 'public.participants' AND reason = 'mismatch'), 0, 'carry: following the parent is not counted as a mismatch');
+INSERT INTO public.agreements (id, event_slug, event_title, envelope_id, signer_name, signer_email, minor_name)
+  VALUES ('44444444-4444-4444-8444-000000000003', 'pgtap-kids', 'Kids', 'env-4444444403', 'Pg', 'signer@example.test', 'Tap');
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-000000000003', 'view', 'system');
+INSERT INTO public.agreement_recipients (envelope_row, recipient_id, name, email, status) VALUES ('44444444-4444-4444-8444-000000000003', 'r1', 'Pg', 'signer@example.test', 'created');
+UPDATE public.agreements SET event_slug = 'pgtap-kids-stellr-b' WHERE id = '44444444-4444-4444-8444-000000000003';
+SELECT is((SELECT tenant_id FROM public.agreement_recipients WHERE envelope_row = '44444444-4444-4444-8444-000000000003'), '00000000-0000-4000-8000-000000000001'::uuid, 'carry: agreement_recipients follows its agreement');
+SELECT is((SELECT tenant_id FROM public.esign_access_log WHERE envelope_row = '44444444-4444-4444-8444-000000000003'), '00000000-0000-4000-8000-000000000001'::uuid, 'carry: so does the access log');
+SELECT public.esign_append_audit('44444444-4444-4444-8444-000000000003', NULL, 'issued', NULL, NULL, '{}'::jsonb);
+SELECT throws_ok($q$UPDATE public.agreements SET event_slug = 'pgtap-kids' WHERE id = '44444444-4444-4444-8444-000000000003'$q$,
+  NULL, NULL, 'carry: an agreement with an audit trail cannot change tenant, because the trail is append-only');
+SELECT is((SELECT tenant_id FROM public.agreements WHERE id = '44444444-4444-4444-8444-000000000003'), '00000000-0000-4000-8000-000000000001'::uuid, 'carry: and the refused move left the agreement where it was');
+SELECT lives_ok($q$UPDATE public.agreements SET event_title = 'Kids 2' WHERE id = '44444444-4444-4444-8444-000000000003'$q$,
+  'carry: an update that keeps the tenant is untouched, audit trail or not');
+SELECT ok((SELECT count(*) = 7 AND bool_and(NOT tgisinternal AND tgenabled = 'O') FROM pg_trigger
+  WHERE tgname = 'zzz_tenancy_carry_children' AND tgfoid = 'public.tenancy_carry_children()'::regprocedure),
+  'carry: the seven parents each have the trigger');
+INSERT INTO public.agreements (id, event_slug, event_title, envelope_id, signer_name, signer_email, minor_name)
+  VALUES ('44444444-4444-4444-8444-000000000001', 'pgtap-kids', 'Kids', 'env-4444444401', 'Pg', 'signer@example.test', 'Tap');
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-000000000001', 'view', 'system');
+SELECT public.esign_append_audit('44444444-4444-4444-8444-000000000001', NULL, 'issued', NULL, NULL, '{}'::jsonb);
+SELECT is((SELECT tenant_id FROM public.esign_access_log WHERE envelope_row = '44444444-4444-4444-8444-000000000001'), '11111111-1111-4111-8111-111111111111'::uuid, 'esign: the access log takes the tenant of its agreement');
+SELECT is((SELECT tenant_id FROM public.esign_audit_events WHERE envelope_row = '44444444-4444-4444-8444-000000000001'), '11111111-1111-4111-8111-111111111111'::uuid, 'esign: the audit trail takes the tenant of its agreement');
+SELECT is(public.esign_verify_audit('44444444-4444-4444-8444-000000000001'), NULL::bigint, 'esign: the chain verifies with tenant_id on the row, which the hash does not cover');
+DELETE FROM public.agreements WHERE id = '44444444-4444-4444-8444-000000000001';
+SELECT is((SELECT count(*)::int FROM public.esign_access_log WHERE envelope_row = '44444444-4444-4444-8444-000000000001' AND tenant_id = '11111111-1111-4111-8111-111111111111'::uuid), 1, 'esign: the access log outlives the agreement and keeps its tenant');
+SELECT is((SELECT count(*)::int FROM public.esign_audit_events WHERE envelope_row = '44444444-4444-4444-8444-000000000001' AND tenant_id = '11111111-1111-4111-8111-111111111111'::uuid), 1, 'esign: so does the audit trail');
+DELETE FROM public.tenancy_derivation_log;
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-0000000000ff', 'view', 'system');
+SELECT is((SELECT COALESCE(sum(count), 0)::int FROM public.tenancy_derivation_log WHERE table_name = 'public.esign_access_log' AND reason = 'no_event'), 1, 'log mode: an access-log row with no agreement is written and counted');
+
+UPDATE public.tenancy_settings SET derivation_mode = 'enforce';
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000006', '22222222-2222-4222-8222-000000000004', 'Pg', 'Tap', 'kid-06@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000006'), '11111111-1111-4111-8111-111111111111'::uuid, 'enforce mode: a write that omits tenant_id still derives');
+SELECT throws_ok($q$INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role, tenant_id) VALUES ('33333333-3333-4333-8333-000000000007', '22222222-2222-4222-8222-000000000004', 'Pg', 'Tap', 'kid-07@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant', '00000000-0000-4000-8000-000000000001')$q$,
+  '23514', NULL, 'enforce mode: a tenant_id that disagrees with the parent is refused');
+SELECT throws_ok($q$INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-0000000000fe', 'view', 'system')$q$,
+  '23503', NULL, 'enforce mode: no parent and no tenant_id is refused');
+UPDATE public.tenancy_settings SET derivation_mode = 'log';
+INSERT INTO public.agreements (id, event_slug, event_title, envelope_id, signer_name, signer_email, minor_name)
+  VALUES ('44444444-4444-4444-8444-000000000002', 'pgtap-kids', 'Kids', 'env-4444444402', 'Pg', 'signer@example.test', 'Tap');
+INSERT INTO public.credentials (id, number, source, recipient_name, title, event_slug) VALUES ('55555555-5555-4555-8555-000000000001', 'PGTAP-1', 'manual', 'Pg', 'Tap', 'pgtap-kids');
+INSERT INTO public.survey_definitions (id, key, version, title, definition, definition_sha256) VALUES ('88888888-8888-4888-8888-000000000001', 'pgtap_child', 1, 'Pg', '{}'::jsonb, repeat('0', 64));
+INSERT INTO public.survey_distributions (id, definition_id, event_slug, event_date, event_time_zone, opens_at, closes_at)
+  VALUES ('77777777-7777-4777-8777-000000000001', '88888888-8888-4888-8888-000000000001', 'pgtap-kids', '2040-06-01'::date, 'UTC', '2040-06-02T00:00:00Z', '2040-06-20T00:00:00Z');
+INSERT INTO public.survey_responses (id, definition_id, event_slug, source, legacy_ref) VALUES ('66666666-6666-4666-8666-000000000001', '88888888-8888-4888-8888-000000000001', 'pgtap-kids', 'legacy_import', 'pgtap-child');
+ALTER TABLE public.participants DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.credential_events DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.survey_invitations DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.survey_answers DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.esign_audit_events DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.esign_access_log DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES ('33333333-3333-4333-8333-000000000008', '22222222-2222-4222-8222-000000000001', 'Pg', 'Tap', 'kid-08@example.test', '0', '2000-01-01'::date, '', 'M', '', 'high_school', 'participant');
+INSERT INTO public.credential_events (credential_id, kind) VALUES ('55555555-5555-4555-8555-000000000001', 'view');
+INSERT INTO public.survey_invitations (distribution_id, recipient_key, respondent_role, email, token_hash, updated_at)
+  VALUES ('77777777-7777-4777-8777-000000000001', 'email:pgtap@example.test', 'student', 'pgtap@example.test', 'pgtap-child-hash', '2026-01-01T00:00:00Z');
+INSERT INTO public.survey_answers (response_id, question_key, value_text) VALUES ('66666666-6666-4666-8666-000000000001', 'q1', 'kept');
+INSERT INTO public.esign_audit_events (envelope_row, event, hash) VALUES ('44444444-4444-4444-8444-000000000002', 'issued', 'pgtap-hash');
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-000000000002', 'view', 'system');
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-0000000000fd', 'view', 'system');
+ALTER TABLE public.participants ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.credential_events ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.survey_invitations ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.survey_answers ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.esign_audit_events ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+ALTER TABLE public.esign_access_log ENABLE TRIGGER zz_tenancy_derive_tenant_id;
+DELETE FROM public.tenancy_derivation_log;
+SELECT is((SELECT count(*)::int FROM public.participants WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.credential_events WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.survey_invitations WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.survey_answers WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.esign_audit_events WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.esign_access_log WHERE tenant_id IS NULL), 7, 'fixture: the rows that predate the column start with a NULL tenant_id');
+ALTER TABLE public.survey_invitations DISABLE TRIGGER survey_invitations_updated_at;
+ALTER TABLE public.esign_audit_events DISABLE TRIGGER esign_audit_events_guard;
+CREATE TEMP TABLE pgtap_child_backfill ON COMMIT DROP AS SELECT * FROM public.tenancy_backfill_child_tenant_ids(ARRAY[
+  'agreement_recipients',
+  'credential_events',
+  'esign_access_log',
+  'esign_audit_events',
+  'member_group_members',
+  'participants',
+  'store_order_items',
+  'store_returns',
+  'survey_answers',
+  'survey_invitations'
+]);
+ALTER TABLE public.esign_audit_events ENABLE TRIGGER esign_audit_events_guard;
+ALTER TABLE public.survey_invitations ENABLE TRIGGER survey_invitations_updated_at;
+SELECT set_eq('SELECT tbl FROM pgtap_child_backfill', ARRAY[
+    'agreement_recipients',
+    'credential_events',
+    'esign_access_log',
+    'esign_audit_events',
+    'member_group_members',
+    'participants',
+    'store_order_items',
+    'store_returns',
+    'survey_answers',
+    'survey_invitations'
+  ]::text[], 'the child backfill finds every inherited table from its trigger, and no derived one');
+SELECT is((SELECT count(*)::int FROM public.participants WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.credential_events WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.survey_invitations WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.survey_answers WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.esign_audit_events WHERE tenant_id IS NULL) + (SELECT count(*)::int FROM public.esign_access_log WHERE tenant_id IS NULL), 0, 'child backfill: the NULL rows now carry a tenant');
+SELECT is((SELECT tenant_id FROM public.participants WHERE id = '33333333-3333-4333-8333-000000000008'), '11111111-1111-4111-8111-111111111111'::uuid, 'child backfill: a row takes the tenant of its parent');
+SELECT is((SELECT tenant_id FROM public.credential_events WHERE credential_id = '55555555-5555-4555-8555-000000000001'), '11111111-1111-4111-8111-111111111111'::uuid, 'child backfill: credential_events');
+SELECT is((SELECT tenant_id FROM public.survey_answers WHERE response_id = '66666666-6666-4666-8666-000000000001'), '11111111-1111-4111-8111-111111111111'::uuid, 'child backfill: survey_answers, through its own redaction flag');
+SELECT is((SELECT value_text FROM public.survey_answers WHERE response_id = '66666666-6666-4666-8666-000000000001'), 'kept', 'child backfill: the answer itself is untouched');
+SELECT is((SELECT updated_at FROM public.survey_invitations WHERE distribution_id = '77777777-7777-4777-8777-000000000001'), '2026-01-01T00:00:00Z'::timestamptz, 'child backfill: survey_invitations.updated_at is untouched');
+SELECT is((SELECT tenant_id FROM public.esign_audit_events WHERE envelope_row = '44444444-4444-4444-8444-000000000002'), '11111111-1111-4111-8111-111111111111'::uuid, 'child backfill: the append-only audit trail');
+SELECT is((SELECT tenant_id FROM public.esign_access_log WHERE envelope_row = '44444444-4444-4444-8444-0000000000fd'), '00000000-0000-4000-8000-000000000001'::uuid, 'child backfill: a log row whose agreement is gone gets Stellr');
+SELECT is((SELECT count(*)::int FROM public.tenancy_derivation_log), 0, 'child backfill: nothing is logged');
+SELECT is((SELECT string_agg(tgenabled::text, '' ORDER BY tgname) FROM pg_trigger
+  WHERE (tgrelid = 'public.esign_audit_events'::regclass AND tgname = 'esign_audit_events_guard')
+     OR (tgrelid = 'public.survey_invitations'::regclass AND tgname = 'survey_invitations_updated_at')), 'OO',
+  'child backfill: the two triggers switched off for it are on again');
+SELECT ok(COALESCE(current_setting('stellr.survey_redaction', true), '') <> 'on', 'child backfill: the redaction flag is off again');
+SELECT throws_ok($q$UPDATE public.survey_answers SET value_text = 'x' WHERE response_id = '66666666-6666-4666-8666-000000000001'$q$, NULL, NULL, 'child backfill: survey_answers still refuses updates afterwards');
+SELECT throws_ok($q$UPDATE public.esign_audit_events SET hash = 'x' WHERE envelope_row = '44444444-4444-4444-8444-000000000002'$q$, NULL, NULL, 'child backfill: esign_audit_events still refuses updates afterwards');
+SELECT is((SELECT COALESCE(sum(rows_updated), 0)::int FROM public.tenancy_backfill_child_tenant_ids(ARRAY['participants', 'credential_events', 'survey_answers'])), 0, 'child backfill: re-running it changes nothing');
+SELECT is((SELECT count(*)::int FROM public.agreement_recipients WHERE tenant_id IS NULL), 0, 'public.agreement_recipients: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.credential_events WHERE tenant_id IS NULL), 0, 'public.credential_events: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.esign_access_log WHERE tenant_id IS NULL), 0, 'public.esign_access_log: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.esign_audit_events WHERE tenant_id IS NULL), 0, 'public.esign_audit_events: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.member_group_members WHERE tenant_id IS NULL), 0, 'public.member_group_members: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.participants WHERE tenant_id IS NULL), 0, 'public.participants: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.store_order_items WHERE tenant_id IS NULL), 0, 'public.store_order_items: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.store_returns WHERE tenant_id IS NULL), 0, 'public.store_returns: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.survey_answers WHERE tenant_id IS NULL), 0, 'public.survey_answers: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.survey_invitations WHERE tenant_id IS NULL), 0, 'public.survey_invitations: no NULL tenant_id after the backfill (NOT NULL-ready)');
 
 SELECT * FROM finish();
 ROLLBACK;

@@ -186,7 +186,7 @@ describe('route manifest: 100% classification', () => {
   // S5 C6: a file classed tenant_staff reaches a tenant-holding table only through
   // loadScoped, scopedQuery or tenantDb, so a bare `.from('registrations')` cannot be
   // the way in. Direct calls in the file; what a lib helper does is the IDOR personas' job.
-  it('a tenant_staff file queries no own, derived or via_parent table directly', () => {
+  it('a tenant_staff file queries no own, derived or inherited table directly', () => {
     const files = Object.entries(ROUTE_MANIFEST).filter(([, cls]) => cls === 'tenant_staff').map(([f]) => f)
     const failures = files.flatMap((f) => unscopedTableReads(f, src(f)).map((t) => `${f}: ${t}`))
     expect(failures, 'use loadScoped, scopedQuery or tenantDb').toEqual([])
@@ -599,6 +599,134 @@ describe('guard list: lib/authz', () => {
     expect(analyzeNamedExport('lib/x.ts', code, 'hidden.a')).toBeNull()
     // The object itself runs nothing, so it is never a guard.
     expect(analyzeNamedExport('lib/x.ts', code, 'page')!.calls.has('auth')).toBe(false)
+  })
+})
+
+describe('guard list: async rate limiter', () => {
+  const ASYNC = '@/lib/rate-limit-async'
+  const OPTS = '{ limit: 5, windowMs: 60_000, tenantId: null }'
+  const viaRateLimit = `const blocked = await rateLimit(req, 'schools', ${OPTS}); if (blocked) return blocked`
+  const viaLimit = `const d = await limit('k', ${OPTS}); if (!d.ok) return new Response(null, { status: 429 })`
+  const route = (imports: string, body: string) =>
+    `${imports}\nexport async function GET(req) { ${body}; return new Response() }`
+  // The same check the real routes get above, on a public handler.
+  const missing = (code: string) => {
+    const facts = analyzeRoute('app/api/fixture/route.ts', code).handlers[0]
+    return missingKinds({ key: 'app/api/fixture/route.ts#GET', file: 'app/api/fixture/route.ts', cls: 'public', facts }, false)
+  }
+  const SUPABASE = "import { supabaseServer } from '@/lib/supabase'"
+  const QUERY = "const db = supabaseServer(); const { data } = await db.from('schools').select('name').limit(8)"
+
+  it('a public route using only the async limiter counts as guarded', () => {
+    expect(missing(route(`import { rateLimit } from '${ASYNC}'`, viaRateLimit))).toEqual([])
+    expect(missing(route(`import { limit } from '${ASYNC}'`, viaLimit))).toEqual([])
+  })
+
+  it('a public route using neither limiter does not', () => {
+    expect(missing(route('', 'const a = 1'))).toEqual(['rate_limit'])
+    expect(missing(route(SUPABASE, QUERY))).toEqual(['rate_limit'])
+  })
+
+  it('still counts the sync limiter', () => {
+    expect(missing(route("import { rateLimitGuard } from '@/lib/rate-limit'", "const b = rateLimitGuard(req, 'x', { limit: 1, windowMs: 1 }); if (b) return b"))).toEqual([])
+    expect(missing(route("import { checkRateLimit } from '@/lib/rate-limit'", "if (!checkRateLimit('k', { limit: 1, windowMs: 1 }).ok) return 1"))).toEqual([])
+  })
+
+  it('reads an alias, a namespace, a relative path and a same-file helper', () => {
+    expect(missing(route(`import { rateLimit as rl } from '${ASYNC}'`, viaRateLimit.replace('rateLimit(', 'rl(')))).toEqual([])
+    expect(missing(route(`import * as rl from '${ASYNC}'`, viaLimit.replace('limit(', 'rl.limit(')))).toEqual([])
+    expect(missing(route("import { limit } from '../../../lib/rate-limit-async'", viaLimit))).toEqual([])
+    expect(missing(`import { rateLimit } from '${ASYNC}'
+      async function gate(req) { const b = await rateLimit(req, 'x', ${OPTS}); return b }
+      export async function GET(req) { const b = await gate(req); if (b) return b; return new Response() }`)).toEqual([])
+  })
+
+  describe('its answer has to decide something', () => {
+    const RL = `import { rateLimit } from '${ASYNC}'`
+    const LIM = `import { limit } from '${ASYNC}'`
+    const OK = 'return new Response()'
+    const USES_GATE = `const b = await gate(req); if (b) return b; ${OK}`
+    const gateReturns = `async function gate(req) { return await rateLimit(req, 'x', ${OPTS}) }`
+    const gateDecides = `async function gate(req) { const b = await rateLimit(req, 'x', ${OPTS}); if (b) return b; return null }`
+    const allowedReturns = `async function allowed() { const d = await limit('k', ${OPTS}); return d.ok }`
+    const allowedDecides = `async function allowed() { const d = await limit('k', ${OPTS}); if (!d.ok) return false; return true }`
+    const get = (imports: string, helper: string, body: string) =>
+      `${imports}\n${helper}\nexport async function GET(req) { ${body} }`
+
+    it.each([
+      ['a direct call whose result is thrown away', get(RL, '', `await rateLimit(req, 'x', ${OPTS}); ${OK}`)],
+      ['a direct call that is not awaited', get(RL, '', `const b = rateLimit(req, 'x', ${OPTS}); if (b) return b; ${OK}`)],
+      ['a limit() decision thrown away', get(LIM, '', `await limit('k', ${OPTS}); ${OK}`)],
+      ['a helper that hands back the un-awaited Promise', get(RL, `async function gate(req) { return rateLimit(req, 'x', ${OPTS}) }`, USES_GATE)],
+      ['a helper that is not awaited', get(RL, gateReturns, `gate(req); ${OK}`)],
+      ['a helper whose result is thrown away', get(RL, gateReturns, `await gate(req); ${OK}`)],
+      ['a helper only referenced, never called', get(RL, gateReturns, `const g = gate; ${OK}`)],
+      ['a limit() helper whose result is thrown away', get(LIM, allowedReturns, `await allowed(); ${OK}`)],
+      ['a helper that reads the answer, not awaited', get(RL, gateDecides, `gate(req); ${OK}`)],
+      ['a helper that reads the answer, result thrown away', get(RL, gateDecides, `await gate(req); ${OK}`)],
+      ['a limit() helper that reads .ok, result thrown away', get(LIM, allowedDecides, `await allowed(); ${OK}`)],
+      [
+        'a helper behind a helper, result thrown away',
+        get(RL, `${gateDecides}\nasync function outer(req) { const b = await gate(req); if (b) return b; return null }`, `await outer(req); ${OK}`),
+      ],
+    ])('refuses %s', (_label, code) => {
+      expect(missing(code)).toEqual(['rate_limit'])
+    })
+
+    it('refuses a helper that one caller ignores, in every handler that shares it', () => {
+      const code = `${RL}\n${gateDecides}
+        export async function GET(req) { ${USES_GATE} }
+        export async function POST(req) { await gate(req); ${OK} }`
+      for (const facts of analyzeRoute('app/api/fixture/route.ts', code).handlers) {
+        expect(satisfies(facts).has('rate_limit'), facts.name).toBe(false)
+      }
+    })
+
+    it.each([
+      ['a helper whose answer is returned', get(RL, gateReturns, USES_GATE)],
+      ['a helper that reads the answer and returns it', get(RL, gateDecides, USES_GATE)],
+      ['a helper behind a local name', get(RL, gateDecides, `const g = gate; const b = await g(req); if (b) return b; ${OK}`)],
+      ['a helper declared in the handler', `${RL}\nexport async function GET(req) { ${gateDecides}; ${USES_GATE} }`],
+      ['a limit() helper that returns .ok', get(LIM, allowedReturns, `if (!(await allowed())) return new Response(null, { status: 429 }); ${OK}`)],
+      ['a call inside a wrapper', `${RL}\nexport const GET = wrap(async (req) => { const b = await rateLimit(req, 'x', ${OPTS}); if (b) return b; ${OK} })`],
+      ['a handler exported by name', `${RL}\nasync function GET(req) { const b = await rateLimit(req, 'x', ${OPTS}); if (b) return b; ${OK} }\nexport { GET }`],
+    ])('accepts %s', (_label, code) => {
+      expect(missing(code)).toEqual([])
+    })
+  })
+
+  it('a query limit is not a rate limit', () => {
+    expect(missing(route(SUPABASE, QUERY))).toEqual(['rate_limit'])
+    // The same, in a file that imports the limiter and never calls it.
+    expect(missing(route(`${SUPABASE}\nimport { limit, rateLimit } from '${ASYNC}'`, QUERY))).toEqual(['rate_limit'])
+    // The options object and a local constant are not calls either.
+    expect(missing(route('', `const limit = 8; const rateLimit = { limit }; use(limit, rateLimit)`))).toEqual(['rate_limit'])
+  })
+
+  it('does not trust a look-alike', () => {
+    for (const spec of ['@/lib/not-rate-limit', '@/lib/rate-limit', '@/lib/rate-limit-async-old']) {
+      expect(missing(route(`import { rateLimit } from '${spec}'`, viaRateLimit)), spec).toEqual(['rate_limit'])
+      expect(missing(route(`import { limit } from '${spec}'`, viaLimit)), spec).toEqual(['rate_limit'])
+    }
+    expect(missing(`function rateLimit() { return null }
+      export async function GET(req) { const b = await rateLimit(req); if (b) return b; return 1 }`)).toEqual(['rate_limit'])
+    expect(missing(route('', "const g = { rateLimit: async () => null }; await g.rateLimit(req)"))).toEqual(['rate_limit'])
+  })
+
+  it('a rate limit is not a session', () => {
+    const facts = analyzeRoute('app/api/fixture/route.ts', route(`import { rateLimit } from '${ASYNC}'`, viaRateLimit)).handlers[0]
+    expect([...satisfies(facts)]).toEqual(['rate_limit'])
+    expect(missingKinds({ key: 'x', file: 'x', cls: 'participant', facts }, false)).toEqual(['session'])
+  })
+
+  it('a limiter that stops counting is no longer proved', () => {
+    const FILE = 'lib/rate-limit-async.ts'
+    const code = `import { checkRateLimit } from '@/lib/rate-limit'
+      async function decide(key, opts) { return checkRateLimit(key, opts) }
+      export function limit(key, opts) { return decide(key, opts) }
+      export async function rateLimit(req, route, opts) { return null }`
+    expect(baseKinds(analyzeNamedExport(FILE, code, 'limit')!).has('rate_limit')).toBe(true)
+    expect(baseKinds(analyzeNamedExport(FILE, code, 'rateLimit')!).has('rate_limit')).toBe(false)
   })
 })
 

@@ -155,12 +155,29 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'browsers post CSP violation reports with no session; 16 KB cap, per-IP rate limit, logs a scrubbed line, keeps nothing',
 }
 
+// The sync limiter by name, or a bare call to the async one in a file that imports
+// it. `limit(` alone would match every Supabase `.limit(8)`.
+const RATE_LIMITED = /checkRateLimit|rateLimitGuard|rate-limit-async['"][\s\S]*(?<![.\w])(limit|rateLimit)\(/
+
 describe('public routes (static inventory)', () => {
   it('every listed public route exists, reads no session, and is rate-limited', () => {
     for (const f of Object.keys(PUBLIC_ROUTES)) {
       const src = readFileSync(f, 'utf8')
       expect(src, f).not.toMatch(/\bauth\(\)|currentUser|getCurrentMember|cookies\(\)/)
-      expect(src, f).toMatch(/checkRateLimit|rateLimitGuard/)
+      expect(src, f).toMatch(RATE_LIMITED)
     }
+  })
+
+  it('the rate-limit net knows the async limiter, and a query limit is not one', () => {
+    const ASYNC = "import { limit, rateLimit } from '@/lib/rate-limit-async'\n"
+    expect(`${ASYNC}const b = await rateLimit(req, 'x', o)`).toMatch(RATE_LIMITED)
+    expect(`${ASYNC}const d = await limit('k', o)`).toMatch(RATE_LIMITED)
+    expect("const b = rateLimitGuard(req, 'x', o)").toMatch(RATE_LIMITED)
+    expect("const d = checkRateLimit('k', o)").toMatch(RATE_LIMITED)
+
+    expect('export async function GET() { return new Response() }').not.toMatch(RATE_LIMITED)
+    expect("db.from('schools').select('name').limit(8)").not.toMatch(RATE_LIMITED)
+    expect("const d = await limit('k', o)").not.toMatch(RATE_LIMITED)
+    expect(`${ASYNC}db.from('schools').select('name').limit(8)`).not.toMatch(RATE_LIMITED)
   })
 })

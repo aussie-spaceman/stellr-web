@@ -116,7 +116,7 @@ Migrations S5 expects, with no version assigned until created:
 | B3 | `cron_runs_tenant` | `cron_runs` gains nullable `tenant_id` and `parent_id`, plus a partial index. |
 | B4 | `rate_limit` | UNLOGGED table and 2 functions, EXECUTE for `service_role` only. |
 | B9 | `community_stellr_only_check` | CHECK (`tenant_id IS NULL OR` Stellr), NOT VALID then VALIDATE, on 4 tables: `community_spaces`, `community_resources`, `mentoring_cohorts`, `training_modules`. |
-| C0b | the S4 `via_parent` follow-up | `tenant_id` plus composite FK on the 10 `child()` tables. Created after A3. |
+| C0b | `via_parent_tenant_expand`, `_backfill`, `_policies`, `_carry` | `tenant_id` on the 10 `child()` tables, with a trigger that copies it from the parent. The composite FK is held back: see [C0b](#pr-amendments). Created after A3. |
 | C7 | `platform_audit_webhook_actor` | Widens `platform_audit_events.actor_kind` and the actor CHECK to `webhook`, with `actor ~ '^webhook:[a-z0-9_-]{1,32}$'`. |
 
 Lane C's "reserved, none planned" no longer holds: C0b and C7 both need one.
@@ -424,6 +424,25 @@ B7 does not stop that head script. Until B5c lands it still runs on a tenant hos
 **B9.** Four tables, not two. Closing the two community `TODO(S5)` snapshot entries points at the coaching request and training item-flag routes.
 
 **B10.** (b) seeds a second non-owner tenant (for example `canary-b.localhost`) and alternates between the two non-owner tenants. Alternating with `stellr.localhost` passes vacuously: Stellr is never rewritten into `/_t`, and with B6 every tenant page renders per request. If ISR stays an owner option, also run once in ISR mode. (c) also tries a denied path with a dotted suffix on a tenant host, and names host B's slug and token on host A's pages, in both directions. That includes a tenant's slug on the Stellr host at `/check-in/<slug>` and `/check-in/<slug>/code`, which have no tenant check of their own until A12. (d) counts third-party requests, and also asserts no hydration error, no `window.dataLayer` and no cookie banner, so it covers the head script as well as the five trackers.
+
+**C0b.** Scoped as `tenant_id` plus a composite FK. The composite FK is **held back**:
+
+- **Why.** Beside the existing single-column key it gives PostgREST two relationships between the same tables, and PostgREST then refuses every embed with no hint (PGRST201). Rosters, check-in and join links use such embeds. `lib/tenancy/load-scoped.test.ts` fails on a second FK.
+- **What replaces its cascade.** `zzz_tenancy_carry_children` moves children when a parent goes from one tenant to another, including when the derivation trigger does it from a new `event_slug`. A parent with `esign_audit_events` or `survey_answers` cannot change tenant, because those rows are immutable. For Stellr the trigger's WHEN clause is never true.
+- **Who adds the FK.** No slice owns it yet. It needs every unhinted embed of these relations hinted first, so it is a follow-up PR after A10 to A12. The two esign logs never get one, because each must outlive its agreement.
+- **What A10 to A12 depend on.** `tenant_id` and the carry trigger, not the FK. Each also needs `tenancy_cutover_checks` sections D2 and I at 0 first.
+
+What `tenant_app` may write is narrower than the other tenant tables, and later slices must say what they need:
+
+- `agreement_recipients` is read-only, alongside the three append-only evidence tables, because it holds signature evidence and signing-link state. **A11** names the columns it needs, in a migration, with a matrix test. No grant of the signature, consent or token columns.
+- `participants.member_id` and `membership_id` are not writable, and `participants` has per-column grants, so a later column is not writable until a migration says so. **A7 and A8** write through `service_role` for those two columns, or scope the global lookups in `lib/member-onfile.ts` and `app/api/members/lookup` by tenant first and then justify the grant. These lookups are the same ones A7's Member ID rule covers.
+
+Other things this slice leaves in place:
+
+- **Refusals.** In a tenant session, a parent the session cannot see gets RLS's one refusal (42501) from the inherit and eligibility triggers, in both derivation modes. `tenancy_derive_tenant_id`, from S3, still raises 23514 or 23503 on an event key in enforce mode, which tells a tenant whether another tenant's slug exists. Slugs are public on the event pages, but it needs the same step aside before the enforce flip.
+- **Known limit: the shared counter.** `tenant_app` holds USAGE on `participants_membership_id_seq`, which also feeds `members.membership_id`, because the column default needs it. So the numbers a tenant is given suggest how many participants and members exist across all tenants, and a session running `nextval` would use up ids. A tenant does not issue SQL, so that takes a slice that returns the value or calls it. A per-tenant numbering scheme would close it. Settle it before the first non-owner tenant.
+- **Response bodies.** Three routes return whole participant rows, so they now carry `tenant_id`: `GET /api/members/teams/[id]` for an organiser, `PATCH /api/members/teams/[id]/participants/[pid]`, and the add-participant POST through `lib/group-participant-add.ts`. For Stellr that is a constant already public in `lib/tenancy/constants.ts`. A8 names the columns on these routes.
+- **Production apply.** Apply the four files outside event hours: the first takes ACCESS EXCLUSIVE on 10 tables, the third on 15, and each lock taken stays held while the next waits.
 
 **C5.** Split so the audit chain does not wait on the rate limiter for no functional reason. C6 depends on C5a only.
 

@@ -1,7 +1,7 @@
-import { auth, clerkClient } from '@clerk/nextjs/server'
+import { auth } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { isAdminClaims, isStaffRole } from '@/lib/admin-auth'
+import { isStellrAdmin, isViewAsTargetStaff } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivityOrThrow, actorFromAuth, type Actor } from '@/lib/activity-log'
 import {
@@ -107,14 +107,9 @@ async function callerClerkId(): Promise<string | null> {
   }
 }
 
-/** Clerk says the user does not exist: a dangling clerk_user_id, not an outage. */
-function isClerkNotFound(err: unknown): boolean {
-  return (err as { status?: number } | null)?.status === 404
-}
-
 export async function POST(req: Request) {
-  const { userId, sessionClaims } = await auth()
-  if (!userId || !isAdminClaims(sessionClaims)) return refuse(403, 'Forbidden')
+  const { userId } = await auth()
+  if (!userId || !(await isStellrAdmin({ route: '/api/admin/impersonation' }))) return refuse(403, 'Forbidden')
 
   // No dedicated signing secret means no unforgeable ticket. Say so plainly
   // rather than falling back to some other key.
@@ -147,29 +142,14 @@ export async function POST(req: Request) {
   // answer is 404: a Clerk user that does not exist cannot sign in or hold a
   // role (a missed user.deleted webhook leaves such ids behind), and staff_roles
   // has already been checked, so that target is not staff.
-  const { data: staffRow, error: staffError } = await db
-    .from('staff_roles')
-    .select('member_id')
-    .eq('member_id', memberId)
-    .maybeSingle()
-  if (staffError) return refuse(503, 'Could not confirm this member is not staff, so view-as was not started. Try again.')
-  if (staffRow) return refuse(403, 'Cannot view as a staff member.')
-
   const targetClerkId = (member as { clerk_user_id: string | null }).clerk_user_id
-  if (targetClerkId) {
-    let role: unknown
-    try {
-      const client = await clerkClient()
-      const u = await client.users.getUser(targetClerkId)
-      role = (u.publicMetadata as { role?: unknown } | null)?.role
-    } catch (err) {
-      // A 404 leaves role unset: no Clerk user, so not staff.
-      if (!isClerkNotFound(err)) {
-        console.error('[impersonation] could not verify the target is not staff:', err)
-        return refuse(503, 'Could not confirm this member is not staff, so view-as was not started. Try again.')
-      }
+  try {
+    if (await isViewAsTargetStaff({ memberId, clerkUserId: targetClerkId }, { route: '/api/admin/impersonation' })) {
+      return refuse(403, 'Cannot view as a staff member.')
     }
-    if (isStaffRole(role)) return refuse(403, 'Cannot view as a staff member.')
+  } catch (err) {
+    console.error('[impersonation] could not verify the target is not staff:', err)
+    return refuse(503, 'Could not confirm this member is not staff, so view-as was not started. Try again.')
   }
 
   // The ticket is bound to the admin who starts it (lib/impersonation

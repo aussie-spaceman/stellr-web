@@ -13,7 +13,8 @@ import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { ViewAsBanner } from '@/components/admin/ViewAsBanner'
 import { StartViewAsSession } from '@/components/admin/StartViewAsSession'
-import { isStaffRole, requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
+import { roleFromClerkUser } from '@/lib/authz/decide'
 import { getImpersonation } from '@/lib/impersonation'
 
 export const metadata = { title: 'Admin — View As Member' }
@@ -33,7 +34,7 @@ export default async function ViewAsMemberPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ tab?: string }>
 }) {
-  await requireAdminPage()
+  await authz.page.requireAdmin({ route: '/admin/members/[id]/view-as' })
   const { id } = await params
   const db = supabaseServer()
 
@@ -80,12 +81,14 @@ export default async function ViewAsMemberPage({
   // The member's avatar comes from Clerk (same source as their own /account).
   let clerkUser: { imageUrl: string | null } | null = null
   let clerkRole: unknown
+  let clerkRoleKnown = !member.clerk_user_id
   if (member.clerk_user_id) {
     try {
       const client = await clerkClient()
       const u = await client.users.getUser(member.clerk_user_id)
       clerkUser = { imageUrl: u.imageUrl ?? null }
-      clerkRole = (u.publicMetadata as { role?: unknown } | null | undefined)?.role
+      clerkRole = roleFromClerkUser(u)
+      clerkRoleKnown = true
     } catch {
       // Member may not have a Clerk account yet — fall back to the placeholder.
     }
@@ -94,9 +97,18 @@ export default async function ViewAsMemberPage({
   // View-as refuses staff targets (app/api/admin/impersonation), so for staff
   // the Teams and Billing tabs say so up front rather than offer a session that
   // will be refused. Only a positive answer counts: if either lookup fails the
-  // tabs offer the session as usual, and the start route still refuses.
-  const { data: staffRow } = await db.from('staff_roles').select('member_id').eq('member_id', member.id).maybeSingle()
-  const isStaffTarget = Boolean(staffRow) || isStaffRole(clerkRole)
+  // tabs offer the session as usual, and the start route still refuses. Not
+  // isViewAsTargetStaff: that throws on a failed read, and it would ask Clerk a second time.
+  // With no Clerk answer there is no role to compare, so nothing is asked: under shadow that
+  // would read as a role mismatch for a member who has not drifted.
+  const holdsStaffRow = await authz.targetHoldsStaffRow(member.id).catch(() => false)
+  const staffTarget =
+    holdsStaffRow ||
+    (clerkRoleKnown &&
+      (await authz.isStaffTargetOrUnknown(
+        { clerkUserId: member.clerk_user_id ?? null, clerkRole, memberId: member.id },
+        { route: '/admin/members/[id]/view-as' },
+      )) === true)
 
   const { data: directoryPrefs } = await db
     .from('member_directory_prefs')
@@ -251,7 +263,7 @@ export default async function ViewAsMemberPage({
             </p>
             {viewingThisMember ? (
               <TeamsTab role={member.event_role} memberId={member.id} readOnly />
-            ) : isStaffTarget ? (
+            ) : staffTarget ? (
               <StaffNotViewable what="Teams" />
             ) : (
               <StartViewAsSession memberId={member.id} what="Teams" />
@@ -263,7 +275,7 @@ export default async function ViewAsMemberPage({
         {activeTab === 'billing' && showBilling && (
           viewingThisMember ? (
             <BillingHistory readOnly />
-          ) : isStaffTarget ? (
+          ) : staffTarget ? (
             <StaffNotViewable what="Billing details" />
           ) : (
             <StartViewAsSession memberId={member.id} what="Billing details" />

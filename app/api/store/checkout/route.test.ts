@@ -101,3 +101,41 @@ describe('POST /api/store/checkout (PAY-16 / PAY-15)', () => {
     expect(arg.lines[0].unitCents).toBe(2000)
   })
 })
+
+describe('POST /api/store/checkout: only sellable variants go on an order', () => {
+  const product = { id: 'p1', name: 'Tee', status: 'active', product_type: 'apparel' }
+  const variant = { sku: 'SKU', label: null, market_price_cents: 2000, active: true, product }
+
+  beforeEach(() => {
+    h.computeUnitPrice.mockResolvedValue({ base_cents: 2000, percent_off: 0, unit_cents: 2000 })
+  })
+
+  it.each([
+    ['an inactive variant', { active: false }],
+    ['a draft product', { product: { ...product, status: 'draft' } }],
+    ['an archived product', { product: { ...product, status: 'archived' } }],
+    ['a variant with no product', { product: null }],
+  ])('%s alone: refused, with no order and no Checkout', async (_name, patch) => {
+    tables.store_variants = [{ ...variant, id: 'v2', ...patch }]
+    const res = await post([{ variantId: 'v2', qty: 1 }])
+    expect(res.status).toBe(400)
+    expect(h.createPendingOrder).not.toHaveBeenCalled()
+    expect(h.sessionsCreate).not.toHaveBeenCalled()
+  })
+
+  it('an id that matches nothing: refused the same way', async () => {
+    const res = await post([{ variantId: 'nope', qty: 1 }])
+    expect(res.status).toBe(400)
+    expect(h.createPendingOrder).not.toHaveBeenCalled()
+  })
+
+  it('a cart with one sellable and one not: only the sellable line is ordered and charged', async () => {
+    tables.store_variants.push({ ...variant, id: 'v2', active: false })
+    const res = await post([{ variantId: 'v1', qty: 2 }, { variantId: 'v2', qty: 1 }])
+    expect(res.status).toBe(200)
+    const arg = h.createPendingOrder.mock.calls[0][0] as unknown as { lines: Array<{ variantId: string; qty: number }> }
+    expect(arg.lines.map((l) => [l.variantId, l.qty])).toEqual([['v1', 2]])
+    const session = (h.sessionsCreate.mock.calls as unknown as Array<[{ line_items: unknown[] }]>)[0][0]
+    expect(session.line_items).toHaveLength(1)
+  })
+})

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { requireEventAccess } from '@/lib/event-access'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { themeFromType, THEME_META, deadlineInfo, seasonLabel } from '@/lib/campaigns'
 import { CampaignEmailComposer } from '@/components/admin/campaigns/CampaignEmailComposer'
 

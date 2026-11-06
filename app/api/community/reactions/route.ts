@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { memberCanSeeComment, memberCanSeePost } from '@/lib/spaces'
 
 const reactionSchema = z.object({
   targetType: z.enum(['post', 'comment']),
@@ -46,6 +47,11 @@ export async function POST(req: Request) {
     await db.from('community_reactions').delete().eq('id', existing.id)
     return NextResponse.json({ reacted: false })
   }
+
+  // A new reaction needs a target the member can see, with the same answer as for
+  // an id that does not exist. Taking back their own, above, is always allowed.
+  const canSee = targetType === 'post' ? await memberCanSeePost(member, targetId) : await memberCanSeeComment(member, targetId)
+  if (!canSee) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { error } = await db.from('community_reactions').insert({
     target_type: targetType,

@@ -1,0 +1,89 @@
+name: Playwright browsers
+description: Installs Playwright's browsers and system libraries, from cache where possible.
+
+inputs:
+  browsers:
+    description: Space-separated browsers, for example "chromium webkit".
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The key carries the runner image OS too (ImageOS, e.g. ubuntu24): the
+    # builds are per OS release, so when ubuntu-latest moves to a new Ubuntu a
+    # cache from the old image must miss rather than restore.
+    - id: key
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        version=$(node -p "require('@playwright/test/package.json').version")
+        echo "value=${RUNNER_OS}-${ImageOS:-unknown}-${version}-${BROWSERS// /-}" >> "$GITHUB_OUTPUT"
+
+    # A browser download is ~90 MB and does not change within a Playwright release.
+    - id: browsers
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ steps.key.outputs.value }}
+
+    - if: steps.browsers.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: npx playwright install $BROWSERS
+
+    # The system libraries are not part of that cache. WebKit's come to 114 MB
+    # from the Ubuntu mirror, which usually takes 10 s, but twice on 4 Nov 2026
+    # ran at ~200 kB/s and took 9-10 minutes. apt only moves to its next mirror on
+    # a stall, so a slow connection never fails over. Keeping the packages means a
+    # normal run downloads almost nothing. apt checks every package against the
+    # signed index, so a restored file cannot install anything apt would not
+    # accept. The key changes weekly, seeded from the previous week, so Ubuntu
+    # updates do not pile up as repeat downloads.
+    - id: apt-week
+      shell: bash
+      run: echo "value=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+    - id: apt
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/apt-archives
+        key: playwright-apt-${{ steps.key.outputs.value }}-${{ steps.apt-week.outputs.value }}
+        restore-keys: playwright-apt-${{ steps.key.outputs.value }}-
+
+    # A package a security update has replaced is still downloaded, so the mirror
+    # can stall this. A stalled try is stopped and retried: apt keeps what it has
+    # fetched, and a fresh connection often lands somewhere faster. The last try
+    # has no limit of its own but the job's timeout, and failing fails the job.
+    - shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        archives="$HOME/apt-archives"
+        sudo mkdir -p "$archives/partial"
+        printf 'Dir::Cache::Archives "%s/";\nDPkg::Lock::Timeout "60";\n' "$archives" \
+          | sudo tee /etc/apt/apt.conf.d/99-playwright-cache > /dev/null
+        installed=false
+        for attempt in 1 2; do
+          if timeout -k 10 180 npx playwright install-deps $BROWSERS; then
+            installed=true
+            break
+          fi
+          echo "::warning::Installing browser libraries stopped after 3 minutes (try $attempt). The apt mirror is probably slow; retrying."
+          sudo dpkg --configure -a || true
+        done
+        [ "$installed" = true ] || npx playwright install-deps $BROWSERS
+        # Drop superseded versions, so the cache does not grow.
+        sudo apt-get autoclean -qq || true
+        # apt ran as root. actions/cache saves these as the runner user.
+        sudo rm -f "$archives/lock"
+        sudo chown -R "$USER" "$archives"
+
+    # Saved here, not at the end of the job, so a failing test does not stop the
+    # next run benefiting.
+    - if: steps.apt.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/apt-archives
+        key: ${{ steps.apt.outputs.cache-primary-key }}

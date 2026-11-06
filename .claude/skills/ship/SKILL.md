@@ -124,6 +124,14 @@ gh pr checks <n> --watch      # in a terminal; the desktop app waits differently
 `verify` runs the PII lint, typecheck, design-system lint, migration-name lint,
 the unit suite, and a full build.
 
+`verify` and `e2e` are the required checks, and each is a gate over jobs that
+do the work: `verify` over `verify-build` and `unit`, `e2e` over `e2e-tests`
+(the suite, behind the repo-wide lock) and `storybook`. A gate that reads
+"cancelled" in its log means another run took the one pending place in the
+queue: re-run the failed jobs. After the merge, the `dev` push reports `e2e`
+without running the suite if your PR already passed that exact tree. Its
+`changes` job names the run that did, and any other tree runs in full.
+
 **Waiting on CI in the Claude desktop app.** The app's Code tab does not allow
 polling CI: no `--watch`, no `gh` loop, and no Monitor, ScheduleWakeup, cron
 or `/loop`. ship, promote and close-out all wait the same way there:
@@ -146,7 +154,8 @@ gh run view <run-id> --json jobs --jq '.jobs[] | .name as $j | .steps[] | "\(.co
 
 The run id is the number after `/actions/runs/` in the links. A job's badge is
 not its steps: in Sept 2026 `e2e` reported a pass three times while every test
-step was skipped.
+step was skipped. The test step to look for is `e2e-tests / Run npx playwright
+test`. The gate's first line also says what it saw.
 
 The button is a wait, not a question. Where the next step is already agreed
 ("ship it", or asking for a close-out), do not turn it back into a yes/no such

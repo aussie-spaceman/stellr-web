@@ -16,9 +16,9 @@
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 import { randomBytes } from 'node:crypto'
 
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 const ADA = '00000000-0000-4000-a000-000000000001'
 
 /** Every row an e2e survey event created, by slug. */
@@ -52,8 +52,7 @@ async function removeEvent(db: SupabaseClient, slug: string) {
 
 async function main() {
   delete process.env.RESEND_API_KEY
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  if (!url.includes(DEV_PROJECT_REF)) throw new Error(`survey e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
+  const url = assertE2eSupabase()
   const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const [command, ...args] = process.argv.slice(2)
 

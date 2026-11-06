@@ -265,6 +265,28 @@ describe('createRegistrationCheckout — group', () => {
   })
 })
 
+describe('createRegistrationCheckout — an event that does not resolve', () => {
+  // No event means the fee is unknown, so no checkout is created, add-ons or not.
+  const individual = () =>
+    makeDb({
+      registration: { type: 'individual', status: 'pending' },
+      participant: { first_name: 'D', last_name: 'A', email: 'dan@example.com' },
+      addons: [{ name: 'T-shirt', qty: 1, unit_amount_cents: 2500 }],
+    }).db
+
+  it.each([
+    ['looked up here', {}],
+    ['handed in by the caller', { event: null }],
+  ])('refuses with no_price when it is %s, whatever add-ons are pending', async (_l, opts) => {
+    getEventBySlug.mockResolvedValue(null as never)
+    const { stripe, create } = makeStripe()
+
+    await expect(createRegistrationCheckout(individual(), stripe, 'reg-1', { ...URLS, ...opts }))
+      .rejects.toMatchObject({ code: 'no_price' })
+    expect(create).not.toHaveBeenCalled()
+  })
+})
+
 describe('createRegistrationCheckout — guards', () => {
   it.each([
     ['not_found', null],

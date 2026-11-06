@@ -96,6 +96,36 @@ describe('GET /api/members/teams/[id] for the organiser', () => {
     expect(teammate.health_conditions).toBe('epilepsy')
   })
 
+  it('shows a row filled from the member record by name and status only', async () => {
+    state.member = { id: 'teacher-1', email: 't@school.test' }
+    registration.participants[1] = { ...registration.participants[1], details_from_member: true } as never
+    try {
+      const body = await (await get()).json()
+      const linked = body.registration.participants.find((p: { id: string }) => p.id === 'p2')
+      expect(linked).toEqual({
+        id: 'p2', first_name: 'Kid', last_name: 'Two', event_role: 'participant',
+        event_companies: { number: 3, name: 'Orbit' }, details_hidden: true, is_minor: true,
+      })
+      expect(JSON.stringify(body)).not.toMatch(/epilepsy|parent2@home\.test|two@school\.test|2011-06-06/)
+      expect(body.registration.participants.find((p: { id: string }) => p.id === 'p1').health_conditions).toBe('asthma')
+    } finally {
+      delete (registration.participants[1] as { details_from_member?: boolean }).details_from_member
+    }
+  })
+
+  it('still shows an organiser their own linked row in full', async () => {
+    state.member = { id: 'student-2', email: 't@school.test' }
+    registration.participants[1] = { ...registration.participants[1], details_from_member: true } as never
+    try {
+      const body = await (await get()).json()
+      const own = body.registration.participants.find((p: { id: string }) => p.id === 'p2')
+      expect(own.health_conditions).toBe('epilepsy')
+      expect(own.details_hidden).toBeUndefined()
+    } finally {
+      delete (registration.participants[1] as { details_from_member?: boolean }).details_from_member
+    }
+  })
+
   it('mints a join link when the group has none', async () => {
     state.member = { id: 'teacher-1', email: 't@school.test' }
     const body = await (await get()).json()

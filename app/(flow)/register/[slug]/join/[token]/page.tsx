@@ -125,6 +125,21 @@ export default async function GroupJoinPage({ params }: PageProps) {
       .maybeSingle()
     alreadyRegistered = !!existing
   }
+  // On the roster under their other address: an organiser may have added them by
+  // their school address, and they sign in with their primary. Matched on the
+  // address, as the join route does (lib/registration/group-join/persist).
+  if (!alreadyRegistered && userId) {
+    const { data: member } = await db.from('members').select('school_email').eq('clerk_user_id', userId).maybeSingle()
+    if (member?.school_email) {
+      const { data: otherAddress } = await db
+        .from('participants')
+        .select('id')
+        .eq('registration_id', tokenRow.registration_id)
+        .eq('email', member.school_email)
+        .maybeSingle()
+      alreadyRegistered = !!otherAddress
+    }
+  }
 
   // Is every declared place already filled? Mirrors the cap enforced in the
   // group-join route so a forwarded link shows a clear "full" message rather than

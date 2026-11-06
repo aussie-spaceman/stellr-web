@@ -226,15 +226,16 @@ export async function findOfferForRegistration(
 /**
  * Links an offer to the registration the student has just created (or already
  * had), and records the discounted amount due on it. Idempotent; only an
- * unlinked offer, or one already on this registration, is changed.
+ * unlinked offer, or one already on this registration, is changed. True when the
+ * offer is now on this registration; nothing may treat it as covered otherwise.
  */
 export async function attachOfferToRegistration(
   db: SupabaseClient,
   offer: Pick<ScholarshipApplication, 'id' | 'percent_off' | 'registration_id'>,
   registration: { id: string; amount_due_cents: number | null; status: string },
   memberId: string | null,
-): Promise<void> {
-  if (offer.registration_id && offer.registration_id !== registration.id) return
+): Promise<boolean> {
+  if (offer.registration_id && offer.registration_id !== registration.id) return false
   const patch: Record<string, unknown> = { registration_id: registration.id }
   if (memberId) patch.member_id = memberId
   const { error } = await db.from('scholarship_applications').update(patch).eq('id', offer.id)
@@ -242,7 +243,7 @@ export async function attachOfferToRegistration(
     // Most likely the one-offer-per-registration index. Don't discount a
     // registration the offer isn't attached to.
     console.error('[scholarship] could not attach offer to registration:', error.message, { offer: offer.id, registration: registration.id })
-    return
+    return false
   }
   if (registration.status === 'pending' && offer.percent_off != null) {
     // amount_due_cents is the undiscounted fee until an offer lands on it, so
@@ -254,6 +255,7 @@ export async function attachOfferToRegistration(
         .eq('id', registration.id)
     }
   }
+  return true
 }
 
 // ── Stripe ────────────────────────────────────────────────────────────────────

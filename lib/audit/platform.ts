@@ -24,8 +24,15 @@ import { captureRequestError } from '@/lib/app-errors'
 
 export const AUDIT_FLAG = 'PLATFORM_AUDIT_ENABLED'
 
+/** The client audit lookups read through, when the caller did not supply one. */
+export function auditClient(): SupabaseClient {
+  return supabaseServer()
+}
+
 /** Longest an audit write may hold up its caller. */
 export const AUDIT_TIMEOUT_MS = 2_500
+/** Longest recording a failed write may add to that. */
+export const RECORD_FAILURE_TIMEOUT_MS = 500
 
 /** Bounds that match the table's CHECK constraints. */
 export const MAX_REASON = 500
@@ -54,12 +61,12 @@ const DENIED_WORDS = new Set([
 /** Fragments that mark a key as personal data even inside one lower-case word ("guardianphone"). */
 const DENIED_FRAGMENTS = ['name', 'email', 'phone', 'birth', 'medical', 'allerg', 'diagnos', 'address', 'postcode', 'password', 'secret']
 
-export type ActorKind = 'user' | 'system' | 'cron'
+export type ActorKind = 'user' | 'system' | 'cron' | 'webhook'
 
 export interface AuditInput {
   /** The tenant whose chain this goes on; null for a platform-level event. */
   tenantId: string | null
-  /** A Clerk user id, 'system', or 'cron:<job>'. */
+  /** A Clerk user id, 'system', 'cron:<job>' or 'webhook:<provider>'. */
   actor: string
   /** Inferred from actor when omitted. */
   actorKind?: ActorKind
@@ -86,10 +93,11 @@ export function auditEnabled(): boolean {
   return process.env[AUDIT_FLAG] === 'true'
 }
 
-/** 'system' → system, 'cron:x' → cron, anything else → user. */
+/** 'system' → system, 'cron:x' → cron, 'webhook:x' → webhook, anything else → user. */
 export function inferActorKind(actor: string): ActorKind {
   if (actor === 'system') return 'system'
   if (actor.startsWith('cron:')) return 'cron'
+  if (actor.startsWith('webhook:')) return 'webhook'
   return 'user'
 }
 
@@ -198,12 +206,20 @@ function timeout(ms: number): Promise<never> {
   })
 }
 
-async function recordFailure(err: unknown, action: string, db: SupabaseClient | undefined): Promise<void> {
+/**
+ * Log a failed audit and record it in app_errors. Never throws, and bounded: the
+ * database that refused the audit may be the one this writes to, and its client sets
+ * no timeout of its own.
+ */
+export async function recordAuditFailure(err: unknown, action: string, db?: SupabaseClient): Promise<void> {
   try {
     console.error('[platform-audit] write failed:', err instanceof Error ? err.message : err)
-    await captureRequestError(err, { method: 'AUDIT', path: 'platform_audit' }, { routePath: `audit:${action}` }, db ? { db } : {})
+    await Promise.race([
+      captureRequestError(err, { method: 'AUDIT', path: 'platform_audit' }, { routePath: `audit:${action}` }, db ? { db } : {}),
+      timeout(RECORD_FAILURE_TIMEOUT_MS),
+    ])
   } catch {
-    // captureRequestError never throws; this is belt and braces.
+    // Past the bound, or captureRequestError threw, which it should not: the log line stands.
   }
 }
 
@@ -237,7 +253,7 @@ export async function audit(input: AuditInput, opts: AuditOptions = {}): Promise
     if (!row || typeof row.id !== 'number') throw new Error('platform_audit_append returned no row')
     return { ok: true, id: row.id, seq: Number(row.chain_seq) }
   } catch (err) {
-    await recordFailure(err, input.action, db)
+    await recordAuditFailure(err, input.action, db)
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }

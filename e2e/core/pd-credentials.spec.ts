@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -19,12 +20,9 @@ import { storageStatePath } from '../fixtures/users'
 
 const SLUG = 'nevada-space-design-challenge'
 const GRACE_ID = '00000000-0000-4000-a000-000000000002' // supabase/seed.sql
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 
 async function removeGracePd() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  // Never against anything but the dev project.
-  expect(url, 'PD e2e cleanup runs only against the dev database').toContain(DEV_PROJECT_REF)
+  const url = assertE2eSupabase()
   const db = createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
   const { error } = await db.from('credentials').delete().eq('source', 'pd').eq('member_id', GRACE_ID)
   expect(error, `removing Grace's PD credentials: ${error?.message}`).toBeNull()
@@ -36,6 +34,10 @@ test.describe('educator PD credential', () => {
 
   test('an admin issues hours once; the teacher sees them and downloads the certificate', async ({ browser }) => {
     const admin = await browser.newContext({ storageState: storageStatePath('admin') })
+    // Load a page first, and keep it open, so these API calls carry a fresh Clerk
+    // session cookie. The saved one is short-lived and nothing else renews it: this
+    // test got a 401 when it ran later in the suite (PR #523).
+    await (await admin.newPage()).goto('/account')
     const issue = (hours: number) =>
       admin.request.post(`/api/admin/events/${SLUG}/pd-credentials`, { data: { memberId: GRACE_ID, hours } })
 

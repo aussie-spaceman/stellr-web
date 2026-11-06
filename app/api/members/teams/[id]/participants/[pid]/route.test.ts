@@ -80,6 +80,17 @@ describe('PATCH team participant — date of birth', () => {
     }), { params: Promise.resolve({ id: 'reg', pid: 'p1' }) })
   const stored = () => (state.db!.table('participants')[0] as Record<string, unknown>).date_of_birth
 
+  it('refuses any edit of a row filled from the member record, and returns none of it', async () => {
+    seed()
+    const row = state.db!.table('participants')[0] as Record<string, unknown>
+    row.details_from_member = true
+    row.health_conditions = 'kept'
+    const res = await patch({ health_conditions: '' })
+    expect(res.status).toBe(409)
+    expect(JSON.stringify(await res.json())).not.toContain('kept')
+    expect(row.health_conditions).toBe('kept')
+  })
+
   it.each([
     ['cleared', '', 'dob_missing'],
     ['unreadable', '31/12/2012', 'dob_invalid'],

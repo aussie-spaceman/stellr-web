@@ -33,6 +33,18 @@
 // `honeyAbsent` empties the tables of the honey row, for the differential run
 // that catches an existence oracle (a 2xx whose body changes with B's row).
 //
+// The other direction: `honeyTenantId` says whose row the honey row is. By
+// default Canary's; a Canary caller naming a Stellr record sets it to Stellr, and
+// an event manager naming another event in their own tenant does too. So a
+// tenant filter decides by the row's real tenant, in either direction.
+//
+// `honeyTokens` are further values the honey row's token columns answer to, for a
+// route that looks up a hash or a formatted token: a valid link of the other tenant,
+// which is what a tenant-host case has to name.
+//
+// `modelUuidErrors` makes a filter with a non-uuid value on a uuid column fail with
+// Postgres's 22P02, as the real database does, for the malformed-id run.
+//
 // Not a PostgREST implementation. Unknown builder methods are accepted and
 // ignored (they cannot widen a match: only filters narrow it), so a new query
 // shape cannot crash the harness into a false pass. auth.admin and realtime
@@ -58,12 +70,37 @@ export interface HoneyDbState {
   touched: boolean
   /** The differential run: no table holds the honey row. */
   honeyAbsent: boolean
+  /** Non-identity columns a case fixture sets on the honey row (test/idor/case-fixtures.ts). */
+  honeyColumns: Row
   /** Ids handed to inserted rows, per run so two runs are comparable. */
   insertSeq: number
+  /** The tenant the honey row belongs to. */
+  honeyTenantId: string
+  /** Further values the honey row's token columns answer to. */
+  honeyTokens: readonly string[]
+  /** A non-uuid value on a uuid column fails with 22P02. */
+  modelUuidErrors: boolean
+  /** What a named rpc answers, where a route stops unless it says yes (a send budget). */
+  rpcAnswers: Row
 }
 
-export function newHoneyDbState(callerRows: Record<string, Row[]> = {}, opts: { honeyAbsent?: boolean } = {}): HoneyDbState {
-  return { writes: [], honeyReads: [], callerRows, touched: false, honeyAbsent: opts.honeyAbsent === true, insertSeq: 0 }
+export function newHoneyDbState(
+  callerRows: Record<string, Row[]> = {},
+  opts: { honeyAbsent?: boolean; honeyColumns?: Row; honeyTenantId?: string; honeyTokens?: readonly string[]; modelUuidErrors?: boolean; rpcAnswers?: Row } = {},
+): HoneyDbState {
+  return {
+    rpcAnswers: opts.rpcAnswers ?? {},
+    writes: [],
+    honeyReads: [],
+    callerRows,
+    touched: false,
+    honeyAbsent: opts.honeyAbsent === true,
+    honeyColumns: opts.honeyColumns ?? {},
+    insertSeq: 0,
+    honeyTenantId: opts.honeyTenantId ?? CANARY_TENANT.id,
+    honeyTokens: opts.honeyTokens ?? [],
+    modelUuidErrors: opts.modelUuidErrors === true,
+  }
 }
 
 // ── column classification ────────────────────────────────────────────────────
@@ -73,7 +110,7 @@ const WILDCARD = Symbol('wildcard')
 const CANARY_ID = Symbol('canary-id')
 
 const OWNER =
-  /(^|_)(member|members|user|clerk|owner|author|creator|created_by|submitted_by|uploaded_by|requested_by|recipient|signer|holder|participant|guardian|parent|student|mentor|coach|coachee|teacher|host|requester|reporter|invitee|inviter|buyer|customer|contact|person|account)(_|$)/
+  /(^|_)(member|members|user|clerk|owner|author|creator|created_by|submitted_by|uploaded_by|requested_by|flagged_by|recipient|signer|holder|participant|guardian|parent|student|mentor|coach|coachee|teacher|host|requester|reporter|invitee|inviter|buyer|customer|contact|person|account)(_|$)/
 
 /**
  * The value an IDENTITY column holds on the honey row, or WILDCARD for a
@@ -81,6 +118,8 @@ const OWNER =
  */
 function identityValue(col: string): unknown {
   const c = col.toLowerCase()
+  // A link's bookkeeping, not the link: these say nothing about whose row it is.
+  if (c === 'token_version' || c === 'token_expires_at' || c === 'failed_token_attempts') return WILDCARD
   if (c === 'tenant_id') return CANARY_TENANT.id
   if (c === 'id' || c === 'uuid') return CANARY_ID
   if (c === 'clerk_user_id' || c === 'user_id' || c.endsWith('clerk_id') || c.endsWith('clerk_user_id')) return HONEYTOKENS.clerkUserId
@@ -107,7 +146,7 @@ function displayValue(col: string): unknown {
   if (/^(is|has|can|allow|show|requires?|enabled|active|published|visible)(_|$)/.test(c)) return true
   if (/(amount|price|total|count|cents|qty|quantity|seats|capacity|fee|minor|position|index|size|version|grade|age)/.test(c)) return 100
   if (/(^|_)(name|title|label)$/.test(c)) return HONEYTOKENS.personName
-  if (c === 'status' || c.endsWith('_status')) return 'active'
+  if (c === 'status' || c.endsWith('_status') || c === 'lifecycle') return 'active'
   if (c === 'role') return 'member'
   if (/(raw|metadata|data|payload|answers|settings|config|details|meta|json|branding)$/.test(c)) return { note: HONEYTOKENS.text }
   return HONEYTOKENS.text
@@ -125,6 +164,13 @@ function honeyColumnValue(col: string, echo: Echo = {}): unknown {
   return v
 }
 
+/** Who the honey row belongs to and what it answers to. Never shown when the row is read. */
+const HONEY_META = Symbol('honey-meta')
+interface HoneyMeta {
+  tenantId: string
+  tokens: readonly string[]
+}
+
 const DEFAULT_COLUMNS = [
   'id', 'tenant_id', 'member_id', 'clerk_user_id', 'event_slug', 'email', 'first_name', 'last_name',
   'name', 'title', 'status', 'notes', 'created_at',
@@ -135,14 +181,23 @@ const DEFAULT_COLUMNS = [
  * relations in the select (`participants(*)`, `event:events(title)`) are filled
  * with nested honey rows: an array for a plural name, an object otherwise.
  */
-function honeyRow(cols?: string, echo: Echo = {}): Row {
+function honeyRow(cols: string | undefined, echo: Echo, columns: Row, meta: HoneyMeta): Row {
   const target: Row = {}
+  Object.defineProperty(target, HONEY_META, { value: meta, enumerable: false })
   for (const c of DEFAULT_COLUMNS) target[c] = honeyColumnValue(c, echo)
+  target.tenant_id = 'tenant_id' in echo ? echo.tenant_id : meta.tenantId
+  for (const [c, v] of Object.entries(columns)) {
+    // Only a column that filters treat as a wildcard: never who the row belongs to.
+    if (identityValue(c) === WILDCARD) target[c] = v
+    // Naming an identity column only makes it enumerable, with its own Canary value, for
+    // a route that copies the row (`const { x, ...row } = data`). What was given is ignored.
+    else if (c !== 'tenant_id') target[c] = honeyColumnValue(c, echo)
+  }
   for (const part of splitTop((cols ?? '').replace(/\s+/g, ''))) {
     const m = part.match(/^(?:(\w+):)?(\w+)(?:![\w]+)?\((.*)\)$/)
     if (!m) continue
     const key = m[1] ?? m[2]
-    const nested = honeyRow(m[3])
+    const nested = honeyRow(m[3], {}, {}, meta)
     target[key] = /s$/.test(m[2]) && !m[1] ? [nested] : /s$/.test(key) ? [nested] : nested
   }
   return new Proxy(target, {
@@ -162,14 +217,30 @@ type Kind = 'honey' | 'caller'
 type Pred = (row: Row, kind: Kind) => boolean
 
 /**
+ * The column a filter is on. `raw->>'x'` is `raw`, and `parent.col` is the embed
+ * `parent` (a wildcard), except that a filter on an embedded parent's tenant or event
+ * is the row's identity: `registrations.tenant_id` (loadScoped's via_parent path).
+ */
+function filteredColumn(col: string): string {
+  const parts = col.split('->')[0].split('.')
+  const last = parts[parts.length - 1]
+  return parts.length > 1 && (last === 'tenant_id' || last === 'event_slug') ? last : parts[0]
+}
+
+/**
  * The value of `col` used for matching, or WILDCARD when any comparison
  * passes. A caller row compares strictly on the columns it has, and on every
  * identity column; anything else on it is a wildcard too, so a narrower select
  * (an `is_active` filter, say) does not hide the caller from themselves.
  */
 function matchValue(row: Row, kind: Kind, col: string): unknown {
-  const base = col.split('->')[0].split('.')[0]
-  if (kind === 'honey') return identityValue(base)
+  const base = filteredColumn(col)
+  if (kind === 'honey') {
+    const meta = (row as unknown as { [HONEY_META]: HoneyMeta })[HONEY_META]
+    if (base.toLowerCase() === 'tenant_id') return meta.tenantId
+    const v = identityValue(base)
+    return v === HONEYTOKENS.token && meta.tokens.length ? [v, ...meta.tokens] : v
+  }
   if (base in row) return row[base]
   return identityValue(base) === WILDCARD ? WILDCARD : undefined
 }
@@ -281,6 +352,10 @@ function notPred(col: string, p: Pred): Pred {
 
 // ── the client ───────────────────────────────────────────────────────────────
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** `*_id` columns that hold another system's id, not a uuid. */
+const TEXT_ID_COLUMN = /(sanity|stripe|hubspot|external|envelope_id|provider|docusign)/i
+
 const AUDIT_TABLE = /(audit|(^|_)logs?$|_log_|errors?$|rate_limit|webhook_events|security_events|tenancy_derivation)/
 
 function carriesHoneytoken(v: unknown, ignore: readonly string[] = []): string | null {
@@ -312,6 +387,8 @@ class Query {
   cols: string | undefined
   /** eq / in / match pins, echoed back by the honey row's columns. */
   echo: Echo = {}
+  /** A filter put a non-uuid value on a uuid column (only when the run models that). */
+  badUuid = false
 
   constructor(
     private db: HoneyDbState,
@@ -345,7 +422,7 @@ class Query {
     this.op = 'delete'
     return this
   }
-  eq(c: string, v: unknown) { return this.pin(c, v).add(opPred(c, 'eq', v), v) }
+  eq(c: string, v: unknown) { return this.checkUuid(c, v).pin(c, v).add(opPred(c, 'eq', v), v) }
   neq(c: string, v: unknown) { return this.add(opPred(c, 'neq', v), v) }
   gt(c: string, v: unknown) { return this.add(opPred(c, 'gt', v), v) }
   gte(c: string, v: unknown) { return this.add(opPred(c, 'gte', v), v) }
@@ -355,6 +432,7 @@ class Query {
   ilike(c: string, v: unknown) { return this.add(opPred(c, 'ilike', v), v) }
   is(c: string, v: unknown) { return this.add(opPred(c, 'is', v), v) }
   in(c: string, v: unknown) {
+    for (const x of asList(v)) this.checkUuid(c, x)
     const canary = asList(v).find((x) => isCanaryId(x) || carriesHoneytoken(x))
     if (canary !== undefined) this.pin(c, canary)
     return this.add(opPred(c, 'in', v), v)
@@ -380,6 +458,12 @@ class Query {
     if (typeof v === 'string' || typeof v === 'number') this.echo[base] = v
     return this
   }
+  private checkUuid(c: string, v: unknown) {
+    if (!this.db.modelUuidErrors || typeof v !== 'string' || UUID.test(v)) return this
+    const base = filteredColumn(c)
+    if (identityValue(base) === CANARY_ID && !TEXT_ID_COLUMN.test(base)) this.badUuid = true
+    return this
+  }
   single() {
     this.wantSingle = true
     return this
@@ -389,18 +473,22 @@ class Query {
     return this
   }
   private add(p: Pred, value?: unknown) {
-    if (isCanaryId(value) || carriesHoneytoken(value)) this.db.touched = true
+    if (isCanaryId(value) || carriesHoneytoken(value) || this.db.honeyTokens.includes(String(value))) this.db.touched = true
     this.preds.push(p)
     return this
   }
 
   private rows(): { row: Row; kind: Kind }[] {
     const caller = (this.db.callerRows[this.table] ?? []).map((r) => ({ row: { ...r }, kind: 'caller' as Kind }))
-    const all = this.db.honeyAbsent ? caller : [...caller, { row: honeyRow(this.cols, this.echo), kind: 'honey' as Kind }]
+    const meta: HoneyMeta = { tenantId: this.db.honeyTenantId, tokens: this.db.honeyTokens }
+    const all = this.db.honeyAbsent ? caller : [...caller, { row: honeyRow(this.cols, this.echo, this.db.honeyColumns, meta), kind: 'honey' as Kind }]
     return all.filter(({ row, kind }) => this.preds.every((p) => p(row, kind)))
   }
 
   exec(): { data: unknown; error: unknown; count?: number | null; status: number } {
+    if (this.badUuid) {
+      return { data: null, error: { code: '22P02', message: 'invalid input syntax for type uuid' }, status: 400 }
+    }
     if (this.op === 'rpc') {
       const hit = carriesHoneytoken(this.values)
       if (hit) {
@@ -411,7 +499,7 @@ class Query {
           detail: `arguments carry the Canary value ${hit} (the function's SQL is not modelled, so this counts as a write)`,
         })
       }
-      return { data: null, error: null, status: 200 }
+      return { data: this.db.rpcAnswers[this.table] ?? null, error: null, status: 200 }
     }
     if (this.op === 'insert' || this.op === 'upsert') {
       const list = (Array.isArray(this.values) ? this.values : [this.values]) as Row[]

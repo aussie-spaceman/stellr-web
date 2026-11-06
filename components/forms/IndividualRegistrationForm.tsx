@@ -325,7 +325,7 @@ export default function IndividualRegistrationForm({
 
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) {
-        if (payload.code === 'unfinished_registration') {
+        if (payload.code === 'registration_on_file') {
           setNotice({ kind: 'info', text: payload.error })
           setSubmitting(false)
           return

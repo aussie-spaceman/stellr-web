@@ -1,8 +1,10 @@
 'use client'
 
+import { Suspense } from 'react'
 import { usePathname } from 'next/navigation'
 import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { trackingAllowedHere } from '@/lib/analytics'
 import { isPrivatePath } from '@/lib/private-routes'
 import { CookieConsent } from './CookieConsent'
 import { GoogleTagManager } from './GoogleTagManager'
@@ -32,10 +34,25 @@ function dropPrivate<T extends { url: string }>(event: T): T | null {
  * reporting the private URL (beforeSend). GTM, once loaded on a public page,
  * stays loaded — as it did before — so links into private pages from public
  * ones should be full page loads (they are emailed or scanned in practice).
+ *
+ * A host that is not Stellr's own (a tenant host) loads none of them either,
+ * decided the same way: in the browser, before any tracker mounts. The server
+ * can't tell and sends the Stellr markup, so that branch keeps the two things in
+ * it that leave markup behind, or hydration would fail: the banner, which removes
+ * itself, and an empty stand-in for SpeedInsights' Suspense boundary.
  */
 export function SiteTracking() {
   const pathname = usePathname() ?? ''
   const isPrivate = isPrivatePath(pathname)
+
+  if (!trackingAllowedHere()) {
+    return isPrivate ? null : (
+      <>
+        <CookieConsent disabled />
+        <Suspense fallback={null} />
+      </>
+    )
+  }
 
   return (
     <>

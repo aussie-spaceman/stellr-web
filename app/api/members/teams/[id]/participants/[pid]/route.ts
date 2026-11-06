@@ -12,6 +12,7 @@ import { stripeClient } from '@/lib/stripe'
 import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
 import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
 import { checkRegistrationAge, isRegistrationMinor } from '@/lib/registration-eligibility'
+import { DETAILS_MEMBER_MANAGED, isDetailsHiddenFrom } from '@/lib/team-linked-details'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -49,6 +50,16 @@ export async function PATCH(
   // (teacher or student manager) or the nominated teacher POC (see lib/team-access).
   if (!ownsTeam(member, registration)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { data: target } = await db
+    .from('participants')
+    .select('member_id, details_from_member')
+    .eq('id', pid)
+    .eq('registration_id', registrationId)
+    .maybeSingle()
+  if (target && isDetailsHiddenFrom(target, member.id)) {
+    return NextResponse.json(DETAILS_MEMBER_MANAGED, { status: 409 })
   }
 
   const body = await req.json()

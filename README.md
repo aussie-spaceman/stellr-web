@@ -45,8 +45,10 @@ see [`docs/CONCURRENT-SESSIONS.md`](docs/CONCURRENT-SESSIONS.md).
 | `npm run test:e2e` | Playwright, against a dev deployment (`e2e/`) |
 | `npm run build` | `prebuild` regenerates tokens, then runs the token lint, migration-name lint and watermark check before `next build` |
 
-CI (`.github/workflows/ci.yml`) runs typecheck → token lint → unit tests → build on every
-PR to `dev` and `main`, and the E2E suite when its secrets are configured.
+CI (`.github/workflows/ci.yml`) runs typecheck, token lint, unit tests and a build on every
+PR to `dev` and `main`, then the E2E suite and Storybook checks. A push to `dev` or `main`
+skips those two if that exact tree has already passed them; `e2e-nightly.yml` re-runs
+everything on `dev` each night.
 
 ## Branches and deploys
 

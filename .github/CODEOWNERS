@@ -25,6 +25,7 @@
 /test/ci-e2e-fail-closed.test.ts    @aussie-spaceman
 /test/ci-supabase-keys.test.ts      @aussie-spaceman
 /test/critical-email-senders.test.ts @aussie-spaceman
+/test/cron-scope.test.ts            @aussie-spaceman
 /test/csp.test.ts                   @aussie-spaceman
 /test/csp-script-nonces.test.tsx    @aussie-spaceman
 /test/email-html-escaping.test.ts   @aussie-spaceman
@@ -34,8 +35,54 @@
 /test/ops-backups.test.ts           @aussie-spaceman
 /test/ops-governance.test.ts        @aussie-spaceman
 /test/proxy-matcher.test.ts         @aussie-spaceman
+/test/rate-limit-await.test.ts      @aussie-spaceman
+/test/rate-limit-proxy-closure.test.ts @aussie-spaceman
 /test/route-maxduration.test.ts     @aussie-spaceman
 /test/supabase-key-wiring.test.ts   @aussie-spaceman
+
+# S5 data-access ratchets: the shrink-only baselines and what measures them
+/test/service-role-ratchet.test.ts  @aussie-spaceman
+/test/events-facade-ratchet.test.ts @aussie-spaceman
+/test/audit-coverage.test.ts        @aussie-spaceman
+/test/optional-event-tenant-id.test.ts @aussie-spaceman
+/test/baselines/**                  @aussie-spaceman
+/scripts/s5-inventory.mjs           @aussie-spaceman
+/lib/security/audit-coverage.ts     @aussie-spaceman
+/lib/audit/**                       @aussie-spaceman
+/scripts/audit-cap.mjs              @aussie-spaceman
+/lib/security/route-ast.ts          @aussie-spaceman
+/vitest.config.mts                  @aussie-spaceman
+
+# S5 wave 1: authorisation, tenant routing, scoped loads, the age gate, and
+# their gate tests (inert until later slices import them)
+/lib/authz.ts                       @aussie-spaceman
+/lib/authz/**                       @aussie-spaceman
+/lib/tenancy/host.ts                @aussie-spaceman
+/lib/tenancy/host-pure.ts           @aussie-spaceman
+/lib/tenancy/tenant-surface.ts      @aussie-spaceman
+/lib/tenancy/load-scoped.ts         @aussie-spaceman
+/lib/tenancy/scope-context.ts       @aussie-spaceman
+/lib/registration/eligibility.ts    @aussie-spaceman
+/test/tenant-surface-routes.test.ts @aussie-spaceman
+/lib/tenancy/request-tenant.ts      @aussie-spaceman
+/test/proxy-tenant-routing.test.ts  @aussie-spaceman
+/test/tenant-tree-no-analytics.test.ts @aussie-spaceman
+/test/import-closure.ts             @aussie-spaceman
+/components/analytics/SiteTracking.tsx @aussie-spaceman
+/components/analytics/NoAdsStudentMarker.tsx @aussie-spaceman
+/lib/analytics.ts                   @aussie-spaceman
+/e2e/core/tenant-tree-direct-404.spec.ts @aussie-spaceman
+/test/idor/**                       @aussie-spaceman
+/lib/security/route-guards.ts       @aussie-spaceman
+/lib/security/route-manifest.ts     @aussie-spaceman
+/lib/security/route-ast.ts          @aussie-spaceman
+/test/route-manifest.test.ts        @aussie-spaceman
+/test/authz-ratchet.test.ts         @aussie-spaceman
+/scripts/authz-idioms.mjs           @aussie-spaceman
+/scripts/idor-canary.mjs            @aussie-spaceman
+/scripts/tenant-host-cap.mjs        @aussie-spaceman
+/lib/security/stellr-only-dispositions.ts @aussie-spaceman
+/test/registration/participants-eligibility-sql.test.ts @aussie-spaceman
 
 # Build config: security headers, CSP and redirects
 /next.config.mjs                    @aussie-spaceman

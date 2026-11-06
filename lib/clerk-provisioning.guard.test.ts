@@ -42,9 +42,9 @@ const SCRIPT_ALLOWLIST: Record<string, { count: number; why: string }> = {
 // invite: lib/group-registration-followup and lib/group-account-invites reach
 // Clerk only through lib/member-invite).
 const IMPORTERS: Record<string, number> = {
-  'app/api/register/individual/route.ts': 1,
-  'app/api/register/group/route.ts': 1,
-  'app/api/register/group-join/route.ts': 1,
+  'lib/registration/individual/stellr-hooks.ts': 1,
+  'lib/registration/group/stellr-hooks.ts': 1,
+  'lib/registration/group-join/identify.ts': 1,
   'lib/member-invite.ts': 2,
 }
 const GUARDED_EXPORTS = new Set(['guardedEnsureClerkUser', 'ensureClerkUserAndSignInToken'])

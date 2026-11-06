@@ -243,7 +243,9 @@ enforce mode (S4).
    read the platform-admin list. Then run it with `--apply` to write Stellr
    memberships. Only the owner adds `--platform-admins`, which writes
    `platform_admins`. Keep the dry-run output off the repo, because it lists
-   account ids.
+   account ids. Since S5, the admin screens and `scripts/set-admin.ts` keep these
+   rows in step, and `--check` reports drift. Run it after any role change made
+   in the Clerk dashboard: see `docs/AUTHZ.md`.
 4. **Fill in Stellr's tenant record:** the EIN and the legal entity name, if
    they differ from "Stellr Education":
    `UPDATE public.tenants SET ein = '..-.......', legal_name = '...' WHERE slug = 'stellr';`

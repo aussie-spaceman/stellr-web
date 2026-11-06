@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 
 /**
  * Check-in desk test events, made fresh for each spec and removed after.
@@ -11,17 +12,17 @@ import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
  * directly, not through registration.
  */
 
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 export const CHECK_IN_GROUP = 'E2E Lincoln MS'
 
 function db(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  if (!url.includes(DEV_PROJECT_REF)) throw new Error(`check-in e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
+  const url = assertE2eSupabase()
   return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 
 export function checkInConfigured(): boolean {
-  return (supabaseSecretKey() ?? '').length > 0 && (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes(DEV_PROJECT_REF)
+  // Only a missing key skips. An unrecognised database throws in db(): a skip
+  // there would turn a wrong target into a green run with the desk untested.
+  return (supabaseSecretKey() ?? '').length > 0
 }
 
 export async function createCheckInEvent(): Promise<string> {

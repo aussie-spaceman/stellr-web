@@ -14,6 +14,9 @@ beforeEach(() => {
         posted.push(JSON.parse(String(init.body)))
         return new Response('{}', { status: 200 })
       }
+      if (url.startsWith('/api/members/lookup?')) {
+        return new Response(JSON.stringify({ found: true, first_name: 'Ada', last_name: 'Lovelace' }), { status: 200 })
+      }
       throw new Error(`unexpected fetch ${url}`)
     }),
   )
@@ -68,5 +71,17 @@ describe('ParticipantForm', () => {
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
     expect(posted[0]).toMatchObject({ first_name: 'Ada', last_name: 'Lovelace', email: 'ada@example.org', event_role: 'adult' })
+  })
+
+  it('an accepted Member ID lookup posts the ID with the last name it matched', async () => {
+    const { user, dialog, onSaved } = setup()
+    await user.type(within(dialog).getByLabelText('Member ID (optional)'), '18')
+    await user.type(within(dialog).getByLabelText('Their last name, to confirm the member ID'), ' lovelace ')
+    await user.click(within(dialog).getByRole('button', { name: 'Look up' }))
+    await user.click(await within(dialog).findByRole('button', { name: 'Accept' }))
+    await user.click(screen.getByRole('button', { name: 'Add participant' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(posted[0]).toMatchObject({ linked: true, membership_id: '18', first_name: 'Ada', last_name: 'Lovelace' })
   })
 })

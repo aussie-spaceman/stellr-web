@@ -8,14 +8,18 @@
 // kind. Adding a new guard helper therefore means listing it here, which is a
 // visible, reviewed step, and the test checks the claim.
 import type { RouteClass } from './route-manifest'
-import { fileModule, type HandlerFacts } from './route-ast'
+import { CHECKED_USE_ORIGIN, fileModule, type CallUse, type HandlerFacts } from './route-ast'
 
-export type GuardKind = 'session' | 'admin' | 'webhook' | 'cron' | 'rate_limit'
+export type GuardKind = 'session' | 'admin' | 'tenant' | 'platform' | 'webhook' | 'cron' | 'rate_limit'
 
 /** The facts satisfies() reads (a HandlerFacts, or a slice of one). */
-export type CallFacts = Pick<HandlerFacts, 'calls' | 'origins' | 'comparesRoleToAdmin'>
+export type CallFacts = Pick<HandlerFacts, 'calls' | 'origins' | 'comparesRoleToAdmin' | 'uses'>
 
 const CLERK = '@clerk/nextjs/server'
+const AUTHZ = CHECKED_USE_ORIGIN
+const AUTHZ_DECIDE = 'lib/authz/decide'
+/** requireEventAccess called with an event named, as enforcedFacts() records it. */
+const EVENT_NAMED = 'requireEventAccess#slug'
 
 /**
  * Calls that ARE the check, each with the origins it is accepted from (see
@@ -32,6 +36,11 @@ export const BASE_GUARDS: Record<GuardKind, Record<string, readonly string[]>> =
   // comparison also counts, but only when the role is read from the session
   // claims AND Clerk's auth()/currentUser() is called (see baseKinds()).
   admin: { isAdminClaims: ['lib/admin-auth'], hasAdminPortalAccess: ['lib/admin-auth'] },
+  // The lib/authz primitives. The platform check also gives `admin`, and both give
+  // `session` (see withImplied()). A legacy admin check never gives `tenant` or
+  // `platform`. A lib/authz call counts only when its answer is used (enforcedFacts()).
+  tenant: { assertTenantRole: [AUTHZ] },
+  platform: { assertPlatformAdmin: [AUTHZ] },
   // Signature or shared-secret verification: library verifiers, node's
   // timingSafeEqual, and the repo's provider-specific verifiers.
   webhook: {
@@ -54,8 +63,14 @@ export const BASE_GUARDS: Record<GuardKind, Record<string, readonly string[]>> =
  * delegate) of every kind listed. A handler's call counts only when the helper
  * is imported from `file`. An admin helper also authenticates, so it
  * satisfies `session` as well (see satisfies() below).
+ *
+ * The key is the name a handler calls, unless `call` gives it (two helpers share
+ * a name while the legacy one lives). `export` is where the test finds the helper
+ * when it is not a top-level export of that name: `page.requireAdmin` is a method
+ * of the exported `page`. A handler's `authz.page.requireAdmin()` is recorded as
+ * requireAdmin, from lib/authz.
  */
-export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[] }> = {
+export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[]; call?: string; export?: string }> = {
   // session
   getCurrentMember: { file: 'lib/community.ts', kinds: ['session'] },
   getSignedInMember: { file: 'lib/community.ts', kinds: ['session'] },
@@ -82,16 +97,60 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[] 
   canManageStoreCatalog: { file: 'lib/store/auth.ts', kinds: ['admin'] },
   // The agreement-template editor routes' shared guard (returns null for a non-admin).
   adminName: { file: 'app/api/admin/esign/templates/guard.ts', kinds: ['admin'] },
+  // lib/authz composites. requireStellrAdmin answers for Stellr only and the
+  // portal check lets an event manager in, so neither is a `tenant` check.
+  // isStaffTarget (about someone else) and accessCoversEvent (about a row) do not
+  // decide whether the caller gets in, so they are deliberately not listed.
+  getPrincipal: { file: 'lib/authz.ts', kinds: ['session'] },
+  requireStellrAdmin: { file: 'lib/authz.ts', kinds: ['admin'] },
+  isStellrAdmin: { file: 'lib/authz.ts', kinds: ['admin'] },
+  hasPortalAccess: { file: 'lib/authz.ts', kinds: ['admin'] },
+  hasScope: { file: 'lib/authz.ts', kinds: ['admin'] },
+  requireTenantStaff: { file: 'lib/authz.ts', kinds: ['tenant'] },
+  // Same name as the lib/event-access helper above, which C25 deletes. Codemod T5
+  // re-points routes that stay stellr_only, so it is an admin check like the legacy
+  // one. It is a `tenant` check only when it names the event: only then does the
+  // answer hold in the event's own tenant and confine an event manager. Without a
+  // slug it passes an event manager with any or no assignment (decide.ts), so a route
+  // moving to tenant_staff passes a slug, or also calls requireTenantStaff.
+  'requireEventAccess@authz': { file: 'lib/authz.ts', kinds: ['admin'], call: 'requireEventAccess' },
+  'requireEventAccess@authz#slug': { file: 'lib/authz.ts', kinds: ['tenant'], call: EVENT_NAMED, export: 'requireEventAccess' },
+  // lib/authz page adapters. page.requireStellrAdmin and the api.* adapters are
+  // recorded under the composite's own name, listed above. requireAdmin stays while
+  // codemod T4 needs it; scripts/authz-idioms.mjs keeps it out of "converged".
+  requireAdmin: { file: 'lib/authz.ts', kinds: ['admin'], export: 'page.requireAdmin' },
+  requireTenantAdmin: { file: 'lib/authz.ts', kinds: ['tenant'], export: 'page.requireTenantAdmin' },
+  requireEventSection: { file: 'lib/authz.ts', kinds: ['admin'], export: 'page.requireEventSection' },
   // rate limit
   rateLimitGuard: { file: 'lib/rate-limit.ts', kinds: ['rate_limit'] },
   throttle: { file: 'lib/esign/native/http.ts', kinds: ['rate_limit'] },
 }
 
+/**
+ * The pure decisions that make a lib/authz check what it claims to be. Used only
+ * to prove the primitives and composites above: they decide through these, not
+ * through each other. A handler calling one gets nothing (it could pass in any
+ * principal), so these are not BASE_GUARDS.
+ */
+export const AUTHZ_DECISIONS: Partial<Record<GuardKind, Record<string, readonly string[]>>> = {
+  admin: {
+    decideStellrAdmin: [AUTHZ_DECIDE],
+    decidePortalAccess: [AUTHZ_DECIDE],
+    decideScope: [AUTHZ_DECIDE],
+    decideEventAccess: [AUTHZ_DECIDE],
+  },
+  tenant: {
+    decideTenantRole: [AUTHZ_DECIDE],
+    decideTenantStaff: [AUTHZ_DECIDE],
+    decideEventAccess: [AUTHZ_DECIDE],
+  },
+  platform: { decidePlatformAdmin: [AUTHZ_DECIDE] },
+}
+
 /** Which guard kinds a class's handlers must reach. */
 export const CLASS_REQUIREMENTS: Record<RouteClass, { kinds: GuardKind[]; firstStatement?: GuardKind }> = {
-  platform_admin: { kinds: ['admin'] },
-  // S5 adds a tenant-membership kind here when lib/authz.ts lands.
-  tenant_staff: { kinds: ['admin'] },
+  platform_admin: { kinds: ['platform'] },
+  tenant_staff: { kinds: ['tenant'] },
   stellr_only: { kinds: ['admin'] },
   participant: { kinds: ['session'] },
   webhook: { kinds: ['webhook'] },
@@ -111,6 +170,76 @@ export function callsClerkSession(f: Pick<CallFacts, 'calls' | 'origins'>): bool
   return calledFrom(f, 'auth', [CLERK]) || calledFrom(f, 'currentUser', [CLERK])
 }
 
+/**
+ * A platform check is an admin check (decide.ts: every platform admin is a Stellr
+ * admin), and an admin or tenant check cannot pass without a signed-in user. Never
+ * the other way round. A tenant check is NOT an admin check: holding a role in some
+ * tenant does not make anyone a Stellr admin, so it never meets stellr_only.
+ */
+export function withImplied(kinds: Set<GuardKind>): Set<GuardKind> {
+  if (kinds.has('platform')) kinds.add('admin')
+  if (kinds.has('admin') || kinds.has('tenant')) kinds.add('session')
+  return kinds
+}
+
+/** Exist only on lib/authz's `page`: they redirect or 404 themselves, and return nothing. */
+const AUTHZ_PAGE_ONLY = new Set(['requireAdmin', 'requireTenantAdmin', 'requireEventSection'])
+/** lib/authz checks whose first argument is the tenant being asked about. */
+const AUTHZ_TENANT_ARG = new Set(['assertTenantRole', 'requireTenantStaff'])
+
+/**
+ * Does this lib/authz call decide anything? Every lib/authz check except the page
+ * adapters returns its answer and never throws, so one has to be awaited and acted
+ * on. And a tenant check on a tenant the request names proves only that the caller
+ * belongs to the tenant they chose.
+ *
+ * What this cannot see: whether the tenant asked about is the tenant of the row the
+ * handler then touches, a tenant that reaches a same-file helper as a parameter, and
+ * a same-file helper that is itself never awaited. The tenant personas in the IDOR
+ * suite (C6) are what test the first two; so none of this alone is enough to move a
+ * route to tenant_staff.
+ */
+function enforces(name: string, use: CallUse): boolean {
+  if (!use.awaited) return false
+  if (use.receiver === 'page' || AUTHZ_PAGE_ONLY.has(name)) return true
+  if (!use.consumed) return false
+  return !(AUTHZ_TENANT_ARG.has(name) && use.firstArg === 'request')
+}
+
+/**
+ * The facts with every lib/authz call that decides nothing taken out, and the
+ * per-event form of requireEventAccess told apart from the section-level one.
+ * Legacy guards are left alone: they go at C25, and their results must not change.
+ */
+export function enforcedFacts<T extends CallFacts>(f: T): T {
+  const calls = new Set(f.calls)
+  const origins = new Map(f.origins)
+  const uses = new Map(f.uses)
+  for (const name of f.calls) {
+    const from = f.origins.get(name)
+    if (!from?.has(AUTHZ)) continue
+    const good = (f.uses.get(name) ?? []).filter((u) => enforces(name, u))
+    if (good.length === 0) {
+      const rest = new Set(from)
+      rest.delete(AUTHZ)
+      if (rest.size > 0) {
+        origins.set(name, rest)
+      } else {
+        origins.delete(name)
+        calls.delete(name)
+      }
+    } else if (name === 'requireEventAccess') {
+      const named = good.filter((u) => u.firstArg === 'value' || u.firstArg === 'request')
+      if (named.length > 0) {
+        calls.add(EVENT_NAMED)
+        origins.set(EVENT_NAMED, new Set([AUTHZ]))
+        uses.set(EVENT_NAMED, named)
+      }
+    }
+  }
+  return { ...f, calls, origins, uses }
+}
+
 /** The kinds the base idioms alone give (no delegates). An admin check implies a session. */
 export function baseKinds(f: CallFacts): Set<GuardKind> {
   const out = new Set<GuardKind>()
@@ -121,14 +250,22 @@ export function baseKinds(f: CallFacts): Set<GuardKind> {
   // (route-ast.ts), in code that also calls Clerk. A role read from a request
   // body or a database row never counts.
   if (f.comparesRoleToAdmin && callsClerkSession(f)) out.add('admin')
-  if (out.has('admin')) out.add('session')
+  return withImplied(out)
+}
+
+/** The kinds the lib/authz decisions alone give. For proving lib/authz helpers only: see AUTHZ_DECISIONS. */
+export function decisionKinds(f: Pick<CallFacts, 'calls' | 'origins'>): Set<GuardKind> {
+  const out = new Set<GuardKind>()
+  for (const [kind, guards] of Object.entries(AUTHZ_DECISIONS) as [GuardKind, Record<string, readonly string[]>][]) {
+    if (Object.entries(guards).some(([name, from]) => calledFrom(f, name, from))) out.add(kind)
+  }
   return out
 }
 
 /** The facts call the listed delegate, imported from its own file. */
-export function callsDelegate(f: Pick<CallFacts, 'calls' | 'origins'>, name: string): boolean {
-  const d = DELEGATE_GUARDS[name]
-  return !!d && calledFrom(f, name, [fileModule(d.file)])
+export function callsDelegate(f: Pick<CallFacts, 'calls' | 'origins'>, key: string): boolean {
+  const d = DELEGATE_GUARDS[key]
+  return !!d && calledFrom(f, d.call ?? key, [fileModule(d.file)])
 }
 
 /**
@@ -136,12 +273,12 @@ export function callsDelegate(f: Pick<CallFacts, 'calls' | 'origins'>, name: str
  * An admin check implies a session: it cannot pass without a signed-in user.
  */
 export function satisfies(f: CallFacts): Set<GuardKind> {
-  const out = baseKinds(f)
-  for (const [name, { kinds }] of Object.entries(DELEGATE_GUARDS)) {
-    if (callsDelegate(f, name)) for (const k of kinds) out.add(k)
+  const enforced = enforcedFacts(f)
+  const out = baseKinds(enforced)
+  for (const [key, { kinds }] of Object.entries(DELEGATE_GUARDS)) {
+    if (callsDelegate(enforced, key)) for (const k of kinds) out.add(k)
   }
-  if (out.has('admin')) out.add('session')
-  return out
+  return withImplied(out)
 }
 
 /**

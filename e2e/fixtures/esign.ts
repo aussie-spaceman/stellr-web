@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 
 /**
  * Stellr signing test agreements, made fresh for each spec and removed after.
@@ -16,16 +17,14 @@ import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
  * address, and in CI there is no Resend key at all.
  */
 
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 
 export function esignConfigured(): boolean {
   return (process.env.ESIGN_TOKEN_SECRET ?? '').length >= 32
 }
 
 function db(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   // The suite never runs against production; this file refuses to even try.
-  if (!url.includes(DEV_PROJECT_REF)) throw new Error(`esign e2e fixtures only run against the dev project (${DEV_PROJECT_REF})`)
+  const url = assertE2eSupabase()
   return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 

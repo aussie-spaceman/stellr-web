@@ -249,11 +249,14 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   // ── System plumbing ──────────────────────────────────────────────────────
   'public.app_errors': system(),
   'public.crawler_hits': system(),
+  // Stays system: its nullable tenant_id only labels a per-tenant child row
+  // (S5 B3). tenant_app has no grant on it (TENANT_APP_NO_ACCESS_TABLES).
   'public.cron_runs': system(),
   'public.email_send_quota': system(),
   'public.esign_email_budget': system(),
   'public.esign_provider_state': system(),
   'public.lead_capture_failures': system(),
+  'public.rate_limit_hits': system('limiter counters; a tenant is part of the hashed key, not a column'),
   'public.sheet_watch_channels': system(),
   'public.stripe_webhook_events': system(),
   'public.survey_email_budget': system(),

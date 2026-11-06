@@ -159,7 +159,7 @@ belong to.
 git add docs/handovers && git commit -m "Close-out <slug>: handover + tracker"
 git push -u origin HEAD
 gh pr create --base dev --title "Close-out <slug>: handover + tracker" --body-file <file>
-gh pr checks <n> --watch      # in a terminal; docs-only: verify runs, e2e reports "skipped"
+gh pr checks <n> --watch      # in a terminal; docs-only: verify runs, e2e passes without testing
 git status --porcelain        # must print nothing: all committed and pushed
 cd ../stellr-web              # merge from the MAIN checkout, not the worktree
 gh pr merge <n> --squash --delete-branch

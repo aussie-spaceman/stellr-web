@@ -15,7 +15,7 @@ const INVOICE_TIER_NAMES = new Set(['Catalyst', 'Innovator', 'Trailblazer'])
 // Issues a Stripe invoice (collection_method: send_invoice) for a membership tier
 // and emails it to the member. The tier is NOT granted here — the webhook grants a
 // one-time 12-month membership when invoice.paid fires. Mirrors the event-group
-// invoice pattern in app/api/register/group/route.ts.
+// invoice pattern in lib/registration/group/respond.ts.
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — see lib/impersonation.

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
+import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -23,11 +24,9 @@ test.use({ storageState: storageStatePath('teacher') })
 
 const EVENT = 'nevada-space-design-challenge'
 const TEACHER_ID = '00000000-0000-4000-a000-000000000002' // supabase/seed.sql
-const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 
 function devDb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  expect(url, 'these fixtures run only against the dev database').toContain(DEV_PROJECT_REF)
+  const url = assertE2eSupabase()
   return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
 }
 

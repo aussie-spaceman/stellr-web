@@ -20,6 +20,8 @@ import {
 } from '@/lib/pending-consent'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -264,18 +266,40 @@ export async function POST(req: Request) {
   const coppa = await mayLinkLogin(db, priorRow, dobCheck.dateOfBirth)
   if (!coppa.allowed) return guardianConsentRequired()
 
-  // Resolve school FK
-  let resolvedSchoolId: string | null = school_id && school_id !== 'new' ? school_id : null
-
-  if (school_id === 'new' && new_school_name?.trim()) {
-    const { data: existingSchool } = await db
+  // Resolve school FK. A picked id is linked only if it names a school the picker
+  // could have offered (the same filter as /api/schools/search). One that does not
+  // links nothing and the member carries on. A failed read decides nothing, before
+  // anything is written.
+  let resolvedSchoolId: string | null = null
+  if (school_id && school_id !== 'new' && UUID_RE.test(String(school_id))) {
+    const { data: pickedSchool, error: pickedSchoolError } = await db
       .from('schools')
       .select('id')
+      .eq('id', school_id)
+      .or('is_active.is.null,is_active.eq.true')
+      .maybeSingle()
+    if (pickedSchoolError) {
+      console.error('[onboarding] school lookup failed:', pickedSchoolError)
+      return tryAgain()
+    }
+    resolvedSchoolId = (pickedSchool as { id: string } | null)?.id ?? null
+  }
+
+  if (school_id === 'new' && new_school_name?.trim()) {
+    const { data: existingSchool, error: existingSchoolError } = await db
+      .from('schools')
+      .select('id, is_active')
       .eq('name', new_school_name.trim())
       .maybeSingle()
+    if (existingSchoolError) {
+      console.error('[onboarding] school lookup failed:', existingSchoolError)
+      return tryAgain()
+    }
 
     if (existingSchool) {
-      resolvedSchoolId = existingSchool.id
+      // A name that matches a deactivated school links nothing, like a picked one,
+      // and does not make a second school with that name.
+      resolvedSchoolId = existingSchool.is_active === false ? null : existingSchool.id
     } else {
       const { data: newSchool, error: schoolError } = await db
         .from('schools')

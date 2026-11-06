@@ -47,6 +47,47 @@ describe('GET resource download — gate (MEM-12)', () => {
     expect(signed).not.toHaveBeenCalled()
   })
 
+  it('refuses a recording in a container, as it does a resource', async () => {
+    state.db = fakeSupabase({
+      community_resources: [{ id: 'r-rec', storage_path: 'resources/r.mp4', title: 'Session', space_id: null, event_ref: null }],
+      container_contents: [{ id: 'cc2', container_id: 'co1', content_type: 'recording', content_ref: 'r-rec' }],
+    })
+    const res = await get('r-rec')
+    expect(res.status).toBe(403)
+    expect(signed).not.toHaveBeenCalled()
+  })
+
+  it('refuses a file moderation has resolved a report of in a container', async () => {
+    state.db = fakeSupabase({
+      community_resources: [{ id: 'r-mod', storage_path: 'resources/m.pdf', title: 'Reported', space_id: null, event_ref: null }],
+      community_flags: [{ id: 'f1', content_type: 'resource', content_id: 'r-mod', status: 'resolved', viewed_in_container: 'co1' }],
+    })
+    const res = await get('r-mod')
+    expect(res.status).toBe(403)
+    expect(signed).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['still pending', { status: 'pending', viewed_in_container: 'co1' }],
+    ['with no container', { status: 'resolved', viewed_in_container: null }],
+  ])('a report %s does not change a library file', async (_name, flag) => {
+    state.db = fakeSupabase({
+      community_resources: [{ id: 'r-lib', storage_path: 'resources/z.pdf', title: 'Handbook', space_id: null, event_ref: null }],
+      community_flags: [{ id: 'f1', content_type: 'resource', content_id: 'r-lib', ...flag }],
+    })
+    expect((await get('r-lib')).status).toBe(200)
+  })
+
+  it.each(['container_contents', 'community_flags'])('refuses a library file when the %s read fails, without signing', async (table) => {
+    state.db = fakeSupabase(
+      { community_resources: [{ id: 'r-lib', storage_path: 'resources/z.pdf', title: 'Handbook', space_id: null, event_ref: null }] },
+      { failOn: (t, action) => (t === table && action === 'select' ? 'read failed' : null) },
+    )
+    const res = await get('r-lib')
+    expect(res.status).toBe(403)
+    expect(signed).not.toHaveBeenCalled()
+  })
+
   it('still serves a genuinely standalone library file (no space, no event, no container)', async () => {
     state.db = fakeSupabase({
       community_resources: [{ id: 'r-lib', storage_path: 'resources/z.pdf', title: 'Handbook', space_id: null, event_ref: null }],

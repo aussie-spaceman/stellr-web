@@ -42,11 +42,24 @@ jobs:
   # previous push, so code whose dev-push run was cancelled by a later docs push
   # is not re-run here; it was already gated by e2e on its own PR, and the
   # dev → main promotion PR diffs everything.
+  #
+  # It also decides whether e2e is needed at all. A push to dev or main whose
+  # exact tree already passed e2e and Storybook has nothing new to test: all 18
+  # pushes to main from 12 Oct to 4 Nov repeated their promotion PR's tree, and
+  # about 30 of 41 dev pushes repeated their PR's. Each repeat took a turn in the
+  # queue, and gated nothing, because required checks apply before a merge. So
+  # this only ever skips on a push. Every PR and manual run tests in full, as does
+  # any push whose merged tree differs, such as two PRs merging close together.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      tree: ${{ steps.diff.outputs.tree }}
+      e2e: ${{ steps.tested.outputs.e2e }}
     steps:
       # Full history so any push's `before` resolves, but no blobs: the diff
       # below compares trees only. The pack is ~1 GB of old video blobs
@@ -81,15 +94,71 @@ jobs:
             code=false
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
           if [ "$code" = false ]; then
-            echo "Docs-only change: e2e skipped (a skipped job satisfies the required check)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Docs-only change: e2e skipped (the e2e gate job passes)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Fails closed: e2e is skipped only on proof that a run in this repository,
+      # from this workflow file, passed both jobs on this tree. An API error, an
+      # expired marker or a fork's marker all mean e2e runs. The tree includes
+      # this file, so the run that wrote the marker ran this same workflow.
+      - id: tested
+        env:
+          EVENT: ${{ github.event_name }}
+          CODE: ${{ steps.diff.outputs.code }}
+          TREE: ${{ steps.diff.outputs.tree }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          e2e=true
+          [ "$CODE" = false ] && e2e=false
+          if [ "$EVENT" = push ] && [ "$e2e" = true ]; then
+            runs=$(gh api "repos/$REPO/actions/artifacts?name=e2e-passed-tree-$TREE&per_page=30" \
+              --jq '.artifacts[] | select(.expired == false and .workflow_run.repository_id == .workflow_run.head_repository_id) | .workflow_run.id' \
+              2>/dev/null) || runs=""
+            for run in $runs; do
+              path=$(gh api "repos/$REPO/actions/runs/$run" --jq .path 2>/dev/null) || continue
+              [ "$path" = .github/workflows/ci.yml ] || continue
+              passed=$(gh api "repos/$REPO/actions/runs/$run/jobs?per_page=30" \
+                --jq '[.jobs[] | select((.name == "e2e-tests" or .name == "storybook") and .conclusion == "success")] | length' \
+                2>/dev/null) || continue
+              if [ "$passed" = 2 ]; then
+                e2e=false
+                echo "This tree already passed e2e and Storybook in run $run: https://github.com/$REPO/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
+                break
+              fi
+            done
+          fi
+          echo "e2e=$e2e" >> "$GITHUB_OUTPUT"
+
+  # Required check. Unit tests have a job of their own so they run alongside the
+  # build, and this job keeps the single name branch protection asks for. A
+  # required check that is SKIPPED counts as passed, so this must always run, and
+  # it passes only when both jobs did.
   verify:
+    name: verify
+    needs: [verify-build, unit]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          BUILD: ${{ needs.verify-build.result }}
+          UNIT: ${{ needs.unit.result }}
+        run: |
+          echo "verify-build: $BUILD; unit: $UNIT"
+          if [ "$BUILD" != success ] || [ "$UNIT" != success ]; then
+            echo "::error::verify needs verify-build and unit to pass (verify-build: $BUILD, unit: $UNIT)."
+            exit 1
+          fi
+
+  unit:
+    name: unit
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
-    env:
+    # The same placeholders as verify-build, so no test sees a different environment.
+    env: &verify-env
       # Placeholders. `next build` instantiates clients at module scope (see
       # lib/supabase.ts), so the build needs syntactically valid values — it
       # never connects to anything with them. Real values live in Vercel.
@@ -109,6 +178,25 @@ jobs:
       NEXT_PUBLIC_AUTH_APP_URL: https://app.stellreducation.org
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_placeholder
       CLERK_SECRET_KEY: sk_test_placeholder
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm run test
+
+  verify-build:
+    name: verify-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env: *verify-env
 
     steps:
       # Full history, no blobs (see `changes`), so the PII lint can find the
@@ -141,6 +229,28 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # S5 C5a: the legacy-authz baseline only falls. The unit test compares the
+      # tree with the baseline in the same tree, so it cannot see a baseline raised
+      # by regenerating it; this compares it with the merge base. A rise that is
+      # meant (an idiom added to the list) takes the label, then a new push: a re-run
+      # keeps the labels of the event it re-runs.
+      - name: Authz ratchet (no growth since the merge base)
+        run: npx tsx scripts/authz-idioms.mjs --since origin/dev
+        env:
+          AUTHZ_RATCHET_GROW_OK: ${{ contains(github.event.pull_request.labels.*.name, 'authz-ratchet-grow') }}
+
+      # S5 C6: the same for the routes tenant hosts serve. The cap only falls.
+      - name: Tenant-host IDOR cap (no growth since the merge base)
+        run: node scripts/tenant-host-cap.mjs --since origin/dev
+        env:
+          TENANT_HOST_CAP_GROW_OK: ${{ contains(github.event.pull_request.labels.*.name, 'tenant-host-cap-grow') }}
+
+      # S5 C7: the list of unaudited handlers only falls.
+      - name: Audit coverage cap (no growth since the merge base)
+        run: node scripts/audit-cap.mjs --since origin/dev
+        env:
+          AUDIT_CAP_GROW_OK: ${{ contains(github.event.pull_request.labels.*.name, 'audit-cap-grow') }}
+
       - name: Design-system lint
         run: npm run lint:tokens
 
@@ -150,9 +260,6 @@ jobs:
       # prebuild; a step of its own so a failure is named in the summary.
       - name: Migration lints
         run: npm run lint:migrations
-
-      - name: Unit tests
-        run: npm run test
 
       # ESLint (mobile review G3): accessibility (jsx-a11y), Next and hooks
       # rules. All warnings, but --max-warnings in package.json is today's
@@ -174,15 +281,62 @@ jobs:
             echo "::error::The server-only Supabase key reached the browser bundle."; exit 1
           fi
 
+  # Required check. A gate, so the name branch protection asks for stays the same
+  # while the work moves into jobs that can run apart. A required check that is
+  # SKIPPED counts as passed, so this must always run. It passes only for a
+  # docs-only change, a tree that already passed, or both jobs succeeding. A job
+  # that timed out or was pushed off a full queue (see e2e-tests) therefore shows
+  # red here: re-run the failed jobs.
   e2e:
     name: e2e
+    needs: [changes, verify, e2e-tests, storybook]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - id: gate
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          NEEDED: ${{ needs.changes.outputs.e2e }}
+          VERIFY: ${{ needs.verify.result }}
+          TESTS: ${{ needs.e2e-tests.result }}
+          STORYBOOK: ${{ needs.storybook.result }}
+          RAN: ${{ needs.e2e-tests.outputs.ran }}
+        run: |
+          echo "code: $CODE; e2e needed: $NEEDED; verify: $VERIFY; e2e-tests: $TESTS; storybook: $STORYBOOK; suite ran: $RAN"
+          if [ "$CODE" = false ]; then echo "Docs-only change: nothing to test."; exit 0; fi
+          if [ "$NEEDED" = false ]; then echo "This tree already passed: see the changes job."; exit 0; fi
+          if [ "$VERIFY" != success ]; then echo "::error::e2e did not run because verify did not pass ($VERIFY)."; exit 1; fi
+          if [ "$TESTS" != success ] || [ "$STORYBOOK" != success ]; then
+            echo "::error::e2e needs e2e-tests and storybook to pass (e2e-tests: $TESTS, storybook: $STORYBOOK). If one reads cancelled, re-run the failed jobs."
+            exit 1
+          fi
+          if [ "$RAN" = true ]; then echo "record=true" >> "$GITHUB_OUTPUT"; fi
+
+      # What the `changes` job looks for. Written last, so it exists only after
+      # everything above passed, and never for a run that skipped the suite.
+      - if: steps.gate.outputs.record == 'true' && needs.changes.outputs.tree != ''
+        env:
+          TREE: ${{ needs.changes.outputs.tree }}
+        run: echo "$TREE" > e2e-passed-tree.txt
+
+      - if: steps.gate.outputs.record == 'true' && needs.changes.outputs.tree != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-passed-tree-${{ needs.changes.outputs.tree }}
+          path: e2e-passed-tree.txt
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+
+  e2e-tests:
+    name: e2e-tests
     runs-on: ubuntu-latest
     needs: [verify, changes]
-    # Skipped (reported as passing) for docs-only changes — see `changes`.
-    # Fails closed: only an explicit code=false skips. If `changes` itself
-    # fails or times out, its output is empty and e2e runs — on 5 Oct a
-    # timed-out `changes` skipped e2e on every PR while `verify` showed green.
-    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.code != 'false' }}
+    # Fails closed: only an explicit false skips. If `changes` itself fails or
+    # times out, its output is empty and e2e runs — on 5 Oct a timed-out `changes`
+    # skipped e2e on every PR while `verify` showed green.
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
     timeout-minutes: 20
 
     # One e2e job at a time across the whole repo, not per ref. Every run, from
@@ -194,15 +348,26 @@ jobs:
     #
     # cancel-in-progress: false, so another ref's run never kills this suite
     # halfway through, with rows left mutated. The workflow-level group can
-    # still cancel it, but only for a newer push to the same PR. GitHub keeps
-    # only ONE pending job per group: if a third run queues while one runs and
-    # one waits, the waiting one is cancelled. Its e2e check then reads
-    # "cancelled"; re-run that job.
+    # still cancel it, but only for a newer push to the same PR.
+    #
+    # queue: max, because by default GitHub keeps only ONE pending job per group,
+    # and a third arrival cancels the waiting one with zero steps run. That hit 7
+    # of 59 jobs asking for this lock on 4-5 Nov 2026, each left red until a re-run
+    # or a new push (14 minutes to 4.5 hours). With max, up to 100 wait in roughly
+    # FIFO order. Past 100 GitHub cancels the job, and the e2e gate still reads that as
+    # red: a job that never ran can't pass. A wait doesn't use up timeout-minutes.
+    #
+    # Everything in this job holds up every other branch, so only what needs the
+    # shared rows belongs here. Storybook and Lighthouse have their own jobs.
     concurrency:
       group: e2e-dev-supabase
       cancel-in-progress: false
+      queue: max
 
-    env:
+    outputs:
+      ran: ${{ steps.config.outputs.ready }}
+
+    env: &e2e-env
       # Non-secret configuration. The dev Supabase project, never production —
       # e2e/global-setup.ts also refuses production hosts by name, but the URL
       # is pinned here so a mis-set secret cannot silently redirect the suite.
@@ -215,18 +380,9 @@ jobs:
       NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /account
       NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: /account/onboarding
       NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
-
-      # Secrets. Configure at Settings → Secrets and variables → Actions.
-      # Supabase: the publishable and secret keys only; the legacy
-      # anon/service_role secrets are no longer read
-      # (docs/RUNBOOK-supabase-api-keys.md, step 11).
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
-      SUPABASE_SECRET_KEY: ${{ secrets.DEV_SUPABASE_SECRET_KEY }}
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
-      E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
-      E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      # verify's build has already type-checked this code. See next.config.mjs.
+      SKIP_BUILD_TYPECHECK: '1'
+      ALLOW_UNCONFIGURED: ${{ vars.E2E_ALLOW_UNCONFIGURED }}
 
     steps:
       - uses: actions/checkout@v7
@@ -246,13 +402,26 @@ jobs:
       # setting the repository variable E2E_ALLOW_UNCONFIGURED=true.
       - name: Check configuration
         id: config
-        env:
-          ALLOW_UNCONFIGURED: ${{ vars.E2E_ALLOW_UNCONFIGURED }}
+        env: &e2e-secrets
+          # Secrets. Configure at Settings → Secrets and variables → Actions.
+          # Supabase: the publishable and secret keys only; the legacy
+          # anon/service_role secrets are no longer read
+          # (docs/RUNBOOK-supabase-api-keys.md, step 11). Given only to the steps
+          # that use them, so `npm ci` and the setup steps never see them.
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.DEV_SUPABASE_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
+          E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
+          E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+          E2E_EVENT_MANAGER_PASSWORD: ${{ secrets.E2E_EVENT_MANAGER_PASSWORD }}
         run: |
           missing=""
           for name in NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY SUPABASE_SECRET_KEY \
                       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY \
-                      E2E_MEMBER_PASSWORD E2E_TEACHER_PASSWORD E2E_ADMIN_PASSWORD; do
+                      E2E_MEMBER_PASSWORD E2E_TEACHER_PASSWORD E2E_ADMIN_PASSWORD \
+                      E2E_EVENT_MANAGER_PASSWORD; do
             [ -z "${!name}" ] && missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -285,72 +454,132 @@ jobs:
           echo "::add-mask::$secret"
           echo "ESIGN_TOKEN_SECRET=$secret" >> "$GITHUB_ENV"
 
-      # Cached by version: a browser download is ~90MB and does not change
-      # between runs of the same Playwright release. WebKit is for the
-      # mobile-safari project (e2e/mobile), the closest CI gets to an iPhone.
-      # The key carries the runner image OS too (ImageOS, e.g. ubuntu24): the
-      # browser builds are per OS release, so when ubuntu-latest moves to a new
-      # Ubuntu a cache from the old image must miss rather than restore.
+      # WebKit is for the mobile-safari project (e2e/mobile), the closest CI gets
+      # to an iPhone.
       - if: steps.config.outputs.ready == 'true'
-        id: pw-version
-        run: |
-          echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
-
-      - if: steps.config.outputs.ready == 'true'
-        uses: actions/cache@v6
-        id: pw-cache
+        uses: ./.github/actions/playwright-browsers
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.image }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
-
-      - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium webkit
-
-      # Deps only when the browser was cached — the system libraries are not.
-      - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium webkit
+          browsers: chromium webkit
 
       # Built and served here rather than tested against a Vercel preview.
       # Preview builds queue behind one another on this plan, and a suite that
       # waits on someone else's queue is a suite that gets skipped.
       - if: steps.config.outputs.ready == 'true'
+        env: *e2e-secrets
         run: npm run build
 
       - if: steps.config.outputs.ready == 'true'
+        env: *e2e-secrets
         run: npx playwright test
-        env:
-          CI: 'true'
 
+      # This repo is public, so any signed-in GitHub user can download an
+      # artifact. A Playwright report records the fixture sign-ins, including
+      # the Clerk dev-browser token, and those stay usable for the session's 7
+      # days. So end the sessions this run created first, and upload only for a
+      # failed run: a green report helps nobody, and if the revoke failed
+      # nothing goes up.
+      # Flaky runs pass, so their traces are not uploaded either.
       - if: always() && steps.config.outputs.ready == 'true'
+        id: revoke-sessions
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
+        run: npx tsx scripts/revoke-e2e-sessions.ts
+
+      - if: failure() && steps.revoke-sessions.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
 
-      # Storybook (mobile review G5): every story renders at phone width with
-      # no page error and no serious/critical axe issue (e2e/storybook). Here,
-      # not in verify, because this job already has Chromium installed.
-      - if: steps.config.outputs.ready == 'true'
-        name: Storybook stories (render + axe)
+  # Storybook (mobile review G5): every story renders at phone width with no
+  # page error and no serious/critical axe issue (e2e/storybook). Static files
+  # and a browser: no database, no secrets, so it needs neither the e2e lock nor
+  # the dev keys. Still required, through the e2e gate job.
+  storybook:
+    name: storybook
+    runs-on: ubuntu-latest
+    needs: [verify, changes]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - uses: ./.github/actions/playwright-browsers
+        with:
+          browsers: chromium
+
+      - name: Storybook stories (render + axe)
         run: |
           npm run build-storybook -- --quiet
           npx --yes http-server@14.1.1 storybook-static -p 6006 -a 127.0.0.1 -s &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:6006/index.json >/dev/null && break; sleep 1; done
           npm run test:storybook
 
-      # Lighthouse, mobile preset, on the production build this job already
-      # made: the budgets in lighthouserc.json (LCP 2.5s, TBT 200ms, CLS 0.1,
-      # script size, accessibility). Report-only for now — the step can't fail
-      # the job — so the numbers settle before any budget becomes a gate. Read
-      # the summary in the job log or the lighthouse-report artifact.
-      - if: steps.config.outputs.ready == 'true'
-        name: Lighthouse (mobile, report-only)
-        continue-on-error: true
-        run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.json
+  # Lighthouse, mobile preset, on a production build: the budgets in
+  # lighthouserc.json (LCP 2.5s, TBT 200ms, CLS 0.1, script size, accessibility).
+  # Report-only for now — the step can't fail the job — so the numbers settle
+  # before any budget becomes a gate. Read the summary in the job log or the
+  # lighthouse-report artifact. It only loads public pages, so it needs no lock
+  # and nothing waits for it. The server holds the dev keys; lhci itself, fetched
+  # from npm at run time, does not.
+  lighthouse:
+    name: lighthouse
+    runs-on: ubuntu-latest
+    needs: [verify, changes]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 15
+    env: *e2e-env
+    steps:
+      - uses: actions/checkout@v7
 
-      - if: always() && steps.config.outputs.ready == 'true'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      # The public Sanity project, read without a token. Without it lib/sanity.ts
+      # has no client: every event page 404s and the rest render without their
+      # CMS content, which is not the site people see. Only this job gets it (the
+      # e2e env is shared), so it goes in here rather than in the anchor.
+      - name: Read the CMS
+        run: |
+          echo "NEXT_PUBLIC_SANITY_PROJECT_ID=if8ubvbg" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SANITY_DATASET=production" >> "$GITHUB_ENV"
+
+      - env: *e2e-secrets
+        run: npm run build
+
+      - name: Start the app
+        env: *e2e-secrets
+        run: |
+          nohup npm start > "$RUNNER_TEMP/app.log" 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/ >/dev/null && exit 0; sleep 1; done
+          echo "::error::The app did not start."; tail -n 40 "$RUNNER_TEMP/app.log"; exit 1
+
+      # lhci aborts everything on one 404, so the event is chosen at run time and
+      # every URL is checked first (scripts/lighthouse-urls.ts).
+      - name: Lighthouse (mobile, report-only)
+        continue-on-error: true
+        run: |
+          npx tsx scripts/lighthouse-urls.ts "$RUNNER_TEMP/lighthouserc.json"
+          npx --yes @lhci/cli@0.15.1 autorun --config="$RUNNER_TEMP/lighthouserc.json"
+
+      # The job is green either way, so this is where a missing report shows.
+      - name: Lighthouse scores
+        if: always()
+        run: npx tsx scripts/lighthouse-summary.ts
+
+      - if: always()
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-report
@@ -468,6 +697,11 @@ jobs:
         name: pgTAP tests
         run: supabase test db supabase/tests/database
 
+      # Separate psql sessions, which pgTAP's one transaction cannot give it.
+      - if: steps.scope.outputs.run == 'true'
+        name: Rate limiter concurrency
+        run: bash supabase/tests/ci-rate-limit-race.sh "$DB_CONTAINER"
+
       # Schema drift against production, from a schema-only dump the owner
       # takes and stores as the PROD_SCHEMA_DUMP secret (base64 of the dump,
       # xz- or gzip-compressed or plain; see the runbook). CI never connects to
@@ -578,3 +812,154 @@ jobs:
           report | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::warning::The repository schema differs from the production dump: $n_prod object(s) only in production, $n_repo only in the repository, $n_changed with different definitions. Identifiers are in the job summary."
           exit 1
+
+  # The e2e suite on a disposable Supabase stack on this runner: no shared dev
+  # database, so no repo-wide queue and no fixture collisions between runs. Runs
+  # beside `e2e` to prove the two agree (docs/RUNBOOK-ci-database.md, "The
+  # e2e-local job"). Report-only: a failure shows red on the PR but does not fail
+  # the workflow, and it is not a required check. It holds no Supabase secret, and
+  # the stack's keys are the CLI's fixed local defaults, read from `supabase status`.
+  #
+  # No report artifact, unlike `e2e`: this repo's artifacts are public, and traces
+  # and videos of signed-in sessions are not needed to compare two runs.
+  e2e-local:
+    name: e2e-local
+    runs-on: ubuntu-latest
+    needs: [verify, changes]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
+    continue-on-error: true
+    # 5 more than `e2e`, for the stack, so a slow runner reads as a result here.
+    timeout-minutes: 25
+
+    env:
+      SUPABASE_CLI_VERSION: 2.105.0
+      NEXT_PUBLIC_APP_ENV: dev
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_AUTH_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /account
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: /account/onboarding
+      NEXT_PUBLIC_MEDIA_BASE_URL: https://l3zabozgfpz3vahd.public.blob.vercel-storage.com
+      # verify's build has already type-checked this code. See next.config.mjs.
+      SKIP_BUILD_TYPECHECK: '1'
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
+      E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
+      E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_EVENT_MANAGER_PASSWORD: ${{ secrets.E2E_EVENT_MANAGER_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # One `supabase start`: it does nothing if the database is already up, so
+      # services cannot be added after `supabase db start`. The CLI must not replay
+      # the migrations or seed (see the `db` job). Left out: what the suite never
+      # reaches. Realtime has no spec. Auth stays although the app signs in with
+      # Clerk: without it, `supabase status` doesn't report the API keys.
+      - name: Start the local stack
+        env:
+          SUPABASE_DB_MIGRATIONS_ENABLED: 'false'
+          SUPABASE_DB_SEED_ENABLED: 'false'
+        run: >-
+          supabase start
+          -x realtime,studio,imgproxy,mailpit,logflare,vector,postgres-meta,supavisor,edge-runtime
+
+      # NEXT_PUBLIC_* are inlined at build, so these must be set before `npm run
+      # build`. A URL that is not on this machine stops the job here.
+      - name: Point the job at the local stack
+        run: |
+          values="$(supabase status -o env)"
+          read_value() { echo "$values" | sed -n "s/^$1=\"\(.*\)\"$/\1/p"; }
+          url="$(read_value API_URL)"
+          public_key="$(read_value PUBLISHABLE_KEY)"
+          secret_key="$(read_value SECRET_KEY)"
+          case "$url" in
+            http://127.0.0.1:*) ;;
+            *) echo "::error::The local stack's API URL is not on this machine."; exit 1 ;;
+          esac
+          if [ -z "$public_key" ] || [ -z "$secret_key" ]; then
+            echo "::error::supabase status did not report the local keys."; exit 1
+          fi
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$url"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$public_key"
+            echo "SUPABASE_SECRET_KEY=$secret_key"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the database
+        run: bash scripts/e2e-stack-db.sh
+
+      # Reaching a table in each exposed schema through the gateway proves the
+      # schema reload landed, and that the secret key works with no bearer token.
+      # The tier count proves the membership_tiers trigger filled entitlements.tiers.
+      - name: Wait for PostgREST to see the schema
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null -H "apikey: $SUPABASE_SECRET_KEY" \
+                 "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/members?select=id&limit=1" \
+               && tiers="$(curl -fsS -H "apikey: $SUPABASE_SECRET_KEY" -H 'Accept-Profile: entitlements' \
+                 "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/tiers?select=code")"; then
+              count="$(echo "$tiers" | jq length)"
+              echo "PostgREST is ready; entitlements.tiers has $count rows."
+              [ "$count" -ge 12 ] && exit 0
+              echo "::error::Expected at least 12 tiers."; exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::PostgREST never served both schemas."; exit 1
+
+      - name: Seed documents, surveys and Clerk links
+        run: npm run seed:e2e-stack
+
+      - run: |
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          echo "ESIGN_TOKEN_SECRET=$secret" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/playwright-browsers
+        with:
+          browsers: chromium webkit
+
+      - run: npm run build
+
+      - run: npx playwright test
+        env:
+          CI: 'true'
+
+      # Nothing from this job is uploaded, so this is tidiness rather than the
+      # exposure fix it is in e2e-tests: no reason to leave 7-day sessions behind.
+      - if: always()
+        name: End this run's sessions
+        run: npx tsx scripts/revoke-e2e-sessions.ts
+
+      - if: always()
+        name: Summarise the run
+        run: |
+          if [ -f test-results/e2e-results.json ]; then
+            node scripts/e2e-report-summary.mjs test-results/e2e-results.json | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No Playwright report: the suite did not finish." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Fixture data only, so safe in this public log.
+      - if: failure()
+        name: Stack logs
+        run: |
+          for c in rest storage kong; do
+            echo "::group::$c"
+            docker logs --tail 80 "supabase_${c}_stellr-web" 2>&1 || true
+            echo "::endgroup::"
+          done

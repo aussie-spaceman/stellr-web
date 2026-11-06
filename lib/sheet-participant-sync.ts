@@ -116,7 +116,7 @@ async function syncFromSheet(
 
     const { data: existing } = await db
       .from('participants')
-      .select('id')
+      .select('id, details_from_member')
       .eq('registration_id', registration.id)
       .or(
         row.membership_id
@@ -124,6 +124,9 @@ async function syncFromSheet(
           : `email.eq.${email}`
       )
       .maybeSingle()
+
+    // A row filled from the member's own record is not the sheet's to rewrite.
+    if (existing?.details_from_member === true) continue
 
     const dob = ageCheck.dateOfBirth
     const { eventRole, ageBracket } = roleFromType(row.type, dob)
@@ -202,10 +205,11 @@ async function syncFromSheet(
         // don't manufacture a duplicate / a second consent + payment dispatch.
         const { data: raced } = await db
           .from('participants')
-          .select('id')
+          .select('id, details_from_member')
           .eq('registration_id', registration.id)
           .eq('email', email)
           .maybeSingle()
+        if (raced?.details_from_member === true) continue
         if (raced?.id) {
           await db.from('participants').update(payload).eq('id', raced.id)
           participantId = raced.id

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { artworkTheme, type ArtworkTheme } from '@/lib/artwork-theme'
 
 // ── Default artwork: what an event falls back to ─────────────────────────────

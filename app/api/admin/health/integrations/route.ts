@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { vercelTarget } from '@/lib/env'
 import { integrationEnvironments, isRealProductionApp } from '@/lib/env-guards'
 import { supabaseKeySlots } from '@/lib/supabase-keys'
+import { tenantRoutingConfig } from '@/lib/tenancy/host'
 
 // GET /api/admin/health/integrations
 //
@@ -20,6 +21,11 @@ import { supabaseKeySlots } from '@/lib/supabase-keys'
 // 'service_role') and which variable it came from: the check before the legacy
 // keys are disabled (docs/RUNBOOK-supabase-api-keys.md). Informational: it does
 // not feed `ok`.
+//
+// `tenantRouting` (S5, B5) says whether the flag is on and why the tenant zone
+// setting is unusable, if it is. Read it before attaching a tenant zone: with a bad
+// zone setting, hosts in that zone cannot be told from Stellr's. Never the zone
+// itself. Informational too: it does not feed `ok`.
 export async function GET() {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -41,10 +47,13 @@ export async function GET() {
         .map(([name, env]) => ({ integration: name, environment: env }))
     : []
 
+  const routing = tenantRoutingConfig()
+
   return NextResponse.json({
     deployment,
     environments,
     supabaseKeys: supabaseKeySlots(),
+    tenantRouting: { enabled: routing.enabled, suffixError: routing.suffixError },
     problems,
     ok: problems.length === 0,
   })

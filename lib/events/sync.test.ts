@@ -24,11 +24,16 @@ const nevada: SanityEventDoc = {
   state: 'NV',
 }
 
-/** A minimal stand-in for the supabase-js upsert chain. */
-function fakeDb(result: { error: { message: string } | null } = { error: null }) {
+/** A minimal stand-in for the supabase-js owner read and upsert chain. */
+function fakeDb(
+  result: { error: { message: string } | null } = { error: null },
+  owners: { data?: Record<string, unknown>[]; error?: { message: string } | null } = {},
+) {
   const upsert = vi.fn(async (_rows: unknown, _opts: unknown) => result)
-  const from = vi.fn((_table: string) => ({ upsert }))
-  return { db: { from } as unknown as SupabaseClient, from, upsert }
+  const inList = vi.fn(async (_col: string, _ids: string[]) => ({ data: owners.data ?? [], error: owners.error ?? null }))
+  const select = vi.fn((_cols: string) => ({ in: inList }))
+  const from = vi.fn((_table: string) => ({ upsert, select }))
+  return { db: { from } as unknown as SupabaseClient, from, upsert, inList }
 }
 
 describe('toEventRow', () => {
@@ -104,6 +109,51 @@ describe('upsertEventRows / syncEventFromSanity', () => {
     expect(await upsertEventRows(db, [row])).toEqual({ error: null })
     expect(from).toHaveBeenCalledWith('events')
     expect(upsert).toHaveBeenCalledWith([row], { onConflict: 'sanity_id' })
+  })
+
+  describe('a sync never changes who owns an event', () => {
+    const TENANT_B = '22222222-2222-4222-8222-222222222222'
+    const row = () => toEventRow(nevada, undefined, NOW)!
+    const written = (upsert: ReturnType<typeof fakeDb>['upsert']) => (upsert.mock.calls[0][0] as ReturnType<typeof row>[])[0]
+
+    it('republishing a document leaves an existing row with its tenant and currency', async () => {
+      const { db, upsert, inList } = fakeDb(undefined, { data: [{ sanity_id: 'evt-nevada', tenant_id: TENANT_B, currency: 'aud' }] })
+      expect(await upsertEventRows(db, [row()])).toEqual({ error: null })
+      expect(inList).toHaveBeenCalledWith('sanity_id', ['evt-nevada'])
+      expect(written(upsert)).toEqual({ ...row(), tenant_id: TENANT_B, currency: 'aud', synced_at: NOW.toISOString() })
+    })
+
+    it('the webhook path keeps the owner too', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [{ sanity_id: 'evt-nevada', tenant_id: TENANT_B, currency: 'usd' }] })
+      await syncEventMirrorSafe(db, { sanityId: 'evt-nevada' }, { fetcher: async () => nevada, report: vi.fn() })
+      expect(written(upsert).tenant_id).toBe(TENANT_B)
+    })
+
+    it('an Australian venue stays in AUD under its existing owner', async () => {
+      const au = toEventRow({ ...nevada, country: 'AU', state: null }, undefined, NOW)!
+      const { db, upsert } = fakeDb(undefined, { data: [{ sanity_id: 'evt-nevada', tenant_id: TENANT_B, currency: 'usd' }] })
+      await upsertEventRows(db, [au])
+      expect(written(upsert)).toMatchObject({ tenant_id: TENANT_B, currency: 'aud' })
+    })
+
+    it('a row already under the same tenant is written as mapped, so Stellr rows do not change', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [{ sanity_id: 'evt-nevada', tenant_id: STELLR_TENANT_ID, currency: 'aud' }] })
+      const r = row()
+      await upsertEventRows(db, [r])
+      expect(written(upsert)).toBe(r)
+    })
+
+    it('a new row takes the tenant it was given', async () => {
+      const { db, upsert } = fakeDb()
+      await syncEventFromSanity(db, { slug: 'x' }, { fetcher: async () => nevada, tenant: { tenantId: TENANT_B, currency: 'aud' } })
+      expect(written(upsert)).toMatchObject({ tenant_id: TENANT_B, currency: 'aud' })
+    })
+
+    it('writes nothing when the owners cannot be read', async () => {
+      const { db, upsert } = fakeDb(undefined, { error: { message: 'read failed' } })
+      expect(await upsertEventRows(db, [row()])).toEqual({ error: 'read failed' })
+      expect(upsert).not.toHaveBeenCalled()
+    })
   })
 
   it('writes nothing for an empty batch', async () => {

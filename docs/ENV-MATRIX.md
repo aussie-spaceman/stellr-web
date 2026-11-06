@@ -151,3 +151,27 @@ Ordered by what blocks what.
 5. ~~**Build the Resend recipient safelist**~~ **Done 9 Sept** — see §4.
    `lib/email.ts` is the only path to Resend (the waitlist script imports
    `sendEmail` rather than calling the API), so one guard covers every send.
+
+## 6. Tenancy flags (S5)
+
+The switches for the multi-tenancy conversion. **Unset is correct on both
+projects today:** each default leaves Stellr as it is. Nothing in the S5 PRs sets
+one. A flip is the owner's, on dev first, each followed by a redeploy of the newest
+READY deployment (`docs/TENANCY-S5.md`, Owner gates), because a running deployment
+does not pick up a new value.
+
+| Variable | Unset means | Other values | Read by | Before setting it |
+|---|---|---|---|---|
+| `AUTHZ_SOURCE` | `clerk`: the Clerk claim decides, as today | `shadow`, `postgres`. Anything unrecognised means `clerk`, and leaves an `app_errors` row | `lib/authz.ts` | `docs/AUTHZ.md`, "What must hold before a flip". No route decides through it yet, so setting it does nothing today |
+| `LOADSCOPED_MODE` | `off` | `shadow`, `enforce`. Anything unrecognised means `off`, and is reported once per instance | `lib/tenancy/load-scoped.ts` | Section D of `tenancy_cutover_checks` at 0 NULL (`docs/TENANCY-S5.md`, Owner gates). D4 writes the runbook |
+| `TENANT_DB_ENABLED` | `tenantDb` refuses to run | Exactly `true` turns it on | `lib/tenancy/db.ts` | The `tenant_app_login` role (owner gate). D4 writes the runbook |
+| `PLATFORM_AUDIT_ENABLED` | Audit writes nothing and reads no session | Exactly `true` turns it on | `lib/audit/platform.ts`, `lib/audit/route.ts` | The `platform_audit_webhook_actor` migration. Watch `platform_audit_events` against Supabase Free's 500 MB. Read `docs/PLATFORM-AUDIT.md` |
+| `RATE_LIMIT_STORE` | `memory`, today's per-instance limiter | `shadow`, `postgres`. Anything unrecognised means `memory` | `lib/rate-limit-store.ts` | The `rate_limit` migration and `RATE_LIMIT_KEY_SECRET`. Shadow first, and flip outside events |
+| `RATE_LIMIT_KEY_SECRET` | The limiter sends nothing to Postgres and uses memory | A secret of 32+ characters. **Different per project.** Changing it restarts every open window | `lib/rate-limit-store.ts` | Create it before any non-memory mode |
+| `TENANT_ROUTING_ENABLED` | Every host is Stellr, with one string comparison per request | Exactly `true` turns it on | `proxy.ts`, `lib/tenancy/host.ts`, `lib/tenancy/request-tenant.ts` | `docs/TENANCY-S5-routing.md`, "Turning it on". **Never attach a zone before this and the suffix are live and confirmed** |
+| `TENANT_HOST_SUFFIX` | No zone. With routing on, known Stellr hosts work and any other host answers 503 | The tenant zone as a suffix. Refused if it could swallow Stellr's hosts, or if it is a dev zone on production | `lib/tenancy/host.ts`. Reported by `GET /api/admin/health/integrations` as `tenantRouting.suffixError`, never the value | Same |
+
+Named by the plan, and **not read by any code yet**, so setting them does nothing:
+`TENANT_DATABASE_URL` (a server-only secret, needed for a deployed `tenantDb` flip,
+C11) and `TENANT_DB_AREAS` (per-area switch, C12). Add each to this table and to
+`.env.local.example` in the PR that reads it.

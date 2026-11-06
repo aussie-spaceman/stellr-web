@@ -42,10 +42,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'This registration has no payment outstanding.', code: 'not_pending' }, { status: 409 })
   }
 
-  const event = await getEventBySlug(reg.event_slug).catch(() => null)
+  // Fail closed, as the registration routes do: without the event neither the
+  // window nor the fee can be known. An outage is retryable; an event that no
+  // longer resolves needs a person, the same answer as an event with no price.
+  let event
+  try {
+    event = await getEventBySlug(reg.event_slug)
+  } catch (e) {
+    console.error('[register/pay] event lookup failed:', e)
+    return NextResponse.json({ error: 'Payment could not be started. Please try again shortly.' }, { status: 503 })
+  }
+  if (!event) {
+    return NextResponse.json(
+      { error: 'This event’s registration fee is misconfigured — please contact Stellr.', code: 'no_price' },
+      { status: 503 },
+    )
+  }
   // A scholarship offer holds the student's place past the close of
   // registration, as it does on the registration form.
-  if (event && !registrationIsOpen(event) && !(await findOfferForRegistration(db, reg.id))) {
+  if (!registrationIsOpen(event) && !(await findOfferForRegistration(db, reg.id))) {
     return NextResponse.json({ error: 'Registration for this event has closed.' }, { status: 403 })
   }
 
@@ -61,7 +76,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { url } = await createRegistrationCheckout(db, stripe, reg.id, {
-      event: event as { stripePriceId?: string } | null,
+      event: event as { stripePriceId?: string },
       customerEmail: null,
       successUrl,
       cancelUrl: payPageUrl(reg.event_slug, token, { cancelled: true }),

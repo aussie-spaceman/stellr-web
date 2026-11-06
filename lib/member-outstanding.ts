@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventsBySlugs } from '@/lib/sanity'
+import { getEventsBySlugs } from '@/lib/events/repo'
 import { registrationPaid } from '@/lib/payment-status'
 import { deriveCompliance, loadComplianceRecordsByMemberIds, requiresBackgroundCheck } from '@/lib/compliance'
 import { classifyAgreement } from '@/lib/docusign'

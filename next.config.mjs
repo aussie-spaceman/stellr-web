@@ -85,6 +85,19 @@ export function imagesConfig(env = process.env) {
   }
 }
 
+/**
+ * TypeScript settings for `next build`. CI's e2e and Lighthouse jobs run after
+ * `verify`, whose own build has already type-checked this exact code, so they
+ * set SKIP_BUILD_TYPECHECK=1 to save 45-55 s. Vercel always checks, whatever the
+ * variable says: a deployment is never built without its type check. Takes the
+ * env so next-config-typecheck.test.ts can check each case.
+ *
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function typescriptConfig(env = process.env) {
+  return { ignoreBuildErrors: env.SKIP_BUILD_TYPECHECK === '1' && !env.VERCEL }
+}
+
 // The member app's host, from the variable lib/env reads for APP_HOST. A dev or
 // preview deployment has one host, and both URL variables point at it.
 const APP_HOST = new URL(process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org').host
@@ -138,6 +151,7 @@ if (leakedSupabaseKey) {
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
   transpilePackages: ['@stellr/web-ui', '@stellr/icons'],
+  typescript: typescriptConfig(),
   // deep review TEST-12: the repo's lint (eslint.config.mjs) is deliberately
   // non-blocking and run on its own via `npm run lint`, not during the build.
   // Next 16 no longer lints during `next build` at all, so the old

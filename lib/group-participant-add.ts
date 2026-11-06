@@ -11,6 +11,7 @@ import { applyRosterChange, type Actor } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { resolveEmailPair } from '@/lib/member-email'
+import { confirmsMemberLastName, memberIdUnusableMessage, normalizeMembershipId } from '@/lib/membership-id'
 
 // Adding one person to a group registration's roster (4 Nov 2026).
 //
@@ -21,6 +22,11 @@ import { resolveEmailPair } from '@/lib/member-email'
 // rewrites an existing member, school link, event activity, consent form,
 // individual payment link and the group-billing step. The callers own the
 // access check; this function trusts that the caller may add to this group.
+//
+// The two differ on a Member ID link. For an organiser the ID counts only with the
+// member's last name and a usable date of birth on the record, and any other case
+// gets one refusal built from what was submitted; a linked row answers with the
+// submitted name. Neither rule applies to a staff caller.
 
 export interface GroupForAdd {
   id: string
@@ -56,7 +62,8 @@ export async function addParticipantToGroup(
   actor: Actor,
 ): Promise<AddParticipantResult> {
   const registrationId = registration.id
-  const logTag = actor.label === 'admin' ? '[admin/registrations/participants]' : '[teams/participants]'
+  const isStaff = actor.label === 'admin'
+  const logTag = isStaff ? '[admin/registrations/participants]' : '[teams/participants]'
 
   const insert: Record<string, unknown> = { registration_id: registrationId }
   for (const key of ALLOWED) {
@@ -69,29 +76,32 @@ export async function addParticipantToGroup(
   insert.email = emails.email
   insert.school_email = emails.school_email
 
-  // Duplicate guard — the optional Member ID lets the organiser catch someone
-  // who is already on the roster (e.g. added via the sheet) before re-adding
-  // them. Match on membership_id when supplied, otherwise on email.
-  const membershipId = (body.membership_id ?? '').toString().trim()
-  const email = emails.email
-  if (membershipId || email) {
-    const { data: dupe } = await db
-      .from('participants')
-      .select('id')
-      .eq('registration_id', registrationId)
-      .or(membershipId ? `membership_id.eq.${membershipId},email.eq.${email}` : `email.eq.${email}`)
-      .maybeSingle()
-    if (dupe) {
-      return { status: 409, body: { error: 'This person is already on the team roster.' } }
-    }
-  }
+  const submittedId = (body.membership_id ?? '').toString().trim()
+  const membershipId = normalizeMembershipId(submittedId) ?? submittedId
 
   // Member-ID-linked: build from the existing member's on-file record, reuse
   // their member (never overwrite), and skip the upsert below — same contract as
-  // the group registration route.
+  // the group registration route. The link is settled before the duplicate guard.
   let linkedMemberId: string | null = null
   if (body.linked && membershipId) {
     const onFile = await getMemberOnFileByMembershipId(db, membershipId)
+    // S5 A7: run assertEligible here on a tenant event, so a failing record gets
+    // member_id_unusable.
+    if (
+      !isStaff &&
+      (!onFile ||
+        !confirmsMemberLastName(body.last_name, onFile) ||
+        !checkRegistrationAge(onFile.date_of_birth).ok)
+    ) {
+      const submittedName = [body.first_name, body.last_name]
+        .filter((n) => typeof n === 'string')
+        .join(' ')
+        .trim()
+      return {
+        status: 400,
+        body: { code: 'member_id_unusable', error: memberIdUnusableMessage(submittedName || 'one person') },
+      }
+    }
     if (onFile) {
       linkedMemberId = onFile.memberId
       Object.assign(insert, {
@@ -107,13 +117,30 @@ export async function addParticipantToGroup(
         emergency_contact_relationship: onFile.emergency_contact_relationship,
         event_role: normalizeEventRole(onFile.event_role ?? insert.event_role),
         member_id: onFile.memberId,
+        details_from_member: true,
       })
+    }
+  }
+
+  // Duplicate guard — the optional Member ID lets the organiser catch someone
+  // who is already on the roster (e.g. added via the sheet) before re-adding
+  // them. Match on membership_id when supplied, otherwise on email.
+  const email = emails.email
+  if (membershipId || email) {
+    const { data: dupe } = await db
+      .from('participants')
+      .select('id')
+      .eq('registration_id', registrationId)
+      .or(membershipId ? `membership_id.eq.${membershipId},email.eq.${email}` : `email.eq.${email}`)
+      .maybeSingle()
+    if (dupe) {
+      return { status: 409, body: { error: 'This person is already on the team roster.' } }
     }
   }
 
   // S0 (2 Nov 2026): the same date-of-birth check as the registration routes,
   // before anything is written. Age is taken on today's date; this path has no
-  // event date.
+  // event date. An organiser's link has already passed it.
   const ageCheck = checkRegistrationAge(insert.date_of_birth, {
     name: [insert.first_name, insert.last_name].filter(Boolean).join(' ').trim() || 'this person',
   })
@@ -234,9 +261,14 @@ export async function addParticipantToGroup(
     return null
   })
 
+  // The answer names the slot as submitted.
+  const answered = linkedMemberId && !isStaff
+    ? { id: participant.id, first_name: text(body.first_name), last_name: text(body.last_name) }
+    : participant
+
   return {
     status: 201,
-    body: { participant, billing: { message: billing?.message ?? null, action: billing?.action ?? 'none' } },
+    body: { participant: answered, billing: { message: billing?.message ?? null, action: billing?.action ?? 'none' } },
     memberId,
   }
 }

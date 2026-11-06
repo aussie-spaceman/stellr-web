@@ -338,9 +338,19 @@ export async function clearPendingConsent(db: SupabaseClient, memberId: string, 
  * a missed hook, wherever the pending state is read. True when consent is on file.
  */
 export async function settlePendingConsent(db: SupabaseClient, memberId: string): Promise<boolean> {
-  if (!(await guardianConsentOnFile(db, memberId))) return false
-  await clearPendingConsent(db, memberId)
-  return true
+  return (await settlePendingConsentOutcome(db, memberId)).onFile
+}
+
+/**
+ * The same settling, and whether this call is the one that cleared the request:
+ * false on a failed write, or when a concurrent call got there first.
+ */
+export async function settlePendingConsentOutcome(
+  db: SupabaseClient,
+  memberId: string,
+): Promise<{ onFile: boolean; cleared: boolean }> {
+  if (!(await guardianConsentOnFile(db, memberId))) return { onFile: false, cleared: false }
+  return { onFile: true, cleared: await clearPendingConsent(db, memberId) }
 }
 
 /**
@@ -390,7 +400,7 @@ export async function sessionChildAwaitingConsentBlock(db: SupabaseClient): Prom
  */
 export async function signedInMemberForConsent(
   db: SupabaseClient,
-): Promise<{ id: string; email: string | null } | null> {
+): Promise<{ id: string; email: string | null; clerkUserId: string } | null> {
   const { auth } = await import('@clerk/nextjs/server')
   const { userId } = await auth()
   if (!userId) return null
@@ -400,7 +410,8 @@ export async function signedInMemberForConsent(
     .eq('clerk_user_id', userId)
     .eq('is_active', true)
     .maybeSingle()
-  return (data as { id: string; email: string | null } | null) ?? null
+  const member = data as { id: string; email: string | null } | null
+  return member ? { ...member, clerkUserId: userId } : null
 }
 
 export function consentPendingResponse(): NextResponse {

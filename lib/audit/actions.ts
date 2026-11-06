@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
 
   // Consent and uploads (A14)
   'consent.request.send',
+  'consent.request.settle',
   'upload.sign.create',
 
   // Public and store writes (B18)

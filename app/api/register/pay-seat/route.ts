@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
-import { registrationIsOpen } from '@/lib/registration'
 import { rateLimitGuard } from '@/lib/rate-limit'
 import { stripeClient } from '@/lib/stripe'
 import { createSeatCheckout, seatPayPageUrl } from '@/lib/individual-payment'
@@ -14,6 +12,8 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducatio
 // token is the capability, and all it can do is open a checkout whose amount is
 // fixed server-side. Mirrors /api/register/pay (the whole-registration pay link)
 // so a sheet-added student with no member account always has a way back to pay.
+// Works whether or not the event's registration is still open: closing it stops
+// new sign-ups, not payment for a place someone already holds.
 export async function POST(req: NextRequest) {
   const limited = rateLimitGuard(req, 'register/pay-seat', { limit: 20, windowMs: 10 * 60_000 })
   if (limited) return limited
@@ -47,18 +47,13 @@ export async function POST(req: NextRequest) {
 
   const { data: regRow } = await db
     .from('registrations')
-    .select('event_slug, event_title, member_pays_individually')
+    .select('event_slug, event_title, member_pays_individually, invoice_coupon_id')
     .eq('id', participant.registration_id)
     .maybeSingle()
-  const reg = regRow as { event_slug: string; event_title: string; member_pays_individually: boolean } | null
+  const reg = regRow as { event_slug: string; event_title: string; member_pays_individually: boolean; invoice_coupon_id: string | null } | null
   if (!reg) return NextResponse.json({ error: 'This link isn’t valid.' }, { status: 404 })
   if (!reg.member_pays_individually) {
-    return NextResponse.json({ error: 'This registration isn’t paid per person.', code: 'not_individual' }, { status: 409 })
-  }
-
-  const event = await getEventBySlug(reg.event_slug).catch(() => null)
-  if (event && !registrationIsOpen(event)) {
-    return NextResponse.json({ error: 'Registration for this event has closed.' }, { status: 403 })
+    return NextResponse.json({ error: 'This group now pays together, so nothing is due from you here.', code: 'not_individual' }, { status: 409 })
   }
 
   const stripe = stripeClient()
@@ -73,6 +68,7 @@ export async function POST(req: NextRequest) {
       // The payer is often a parent who isn't signed in — let them enter their own
       // email for the receipt (same choice as the registration pay page).
       customerEmail: null,
+      couponId: reg.invoice_coupon_id,
       successUrl: `${SITE_URL}/register/${reg.event_slug}/confirmation?id=${participant.registration_id}&type=group&payment=success`,
       cancelUrl: seatPayPageUrl(reg.event_slug, token, { cancelled: true }),
     })

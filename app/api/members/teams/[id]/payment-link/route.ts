@@ -7,6 +7,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { seatDiscount } from '@/lib/individual-payment'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -52,7 +53,7 @@ export async function POST(
   // Load registration to get event slug
   const { data: registration } = await db
     .from('registrations')
-    .select('event_slug, event_title')
+    .select('event_slug, event_title, invoice_coupon_id')
     .eq('id', registrationId)
     .maybeSingle()
 
@@ -75,8 +76,7 @@ export async function POST(
     // The money-back guarantee, on Stripe's page above the Pay button.
     custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
-    // Surfaces the "Add promotion code" field for codes set up in Stripe.
-    allow_promotion_codes: true,
+    ...(await seatDiscount(stripe, registration.invoice_coupon_id as string | null)),
     line_items: [{ price: stripePriceId, quantity: 1 }],
     customer_email: member.email,
     metadata: {

@@ -26,10 +26,12 @@ describe('registrationPaid', () => {
     expect(registrationPaid({})).toBe(false)
   })
 
-  it('individual_payment_status does not mark an invoiced reg paid', () => {
-    // For an invoiced group the invoice gate is authoritative, not a stray
-    // individual status.
-    expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: 'paid' })).toBe(false)
+  it('a place paid individually stays paid when the group moves to an invoice', () => {
+    // The group changed how it pays (lib/group-payment-change). This person paid
+    // and their place isn't on the invoice, so the unpaid invoice says nothing
+    // about them. Everyone else on the group still waits for the invoice.
+    expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: 'paid' })).toBe(true)
+    expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: null })).toBe(false)
   })
 
   it('waived (free event, members pay individually) is settled, not outstanding', () => {

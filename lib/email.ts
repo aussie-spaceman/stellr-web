@@ -796,6 +796,68 @@ export function groupPaymentConfirmedEmail({
   return { subject, html, text }
 }
 
+// How a group pays has changed (lib/group-payment-change.ts). The organizer hears
+// whoever made the change, and any cancelled invoice is named so it isn't paid.
+export function groupPaymentMethodChangedEmail({
+  firstName, eventTitle, registrationId, methodLabel, cancelledInvoices, nextStep, paidPlaces, payUrl,
+}: {
+  firstName: string; eventTitle: string; registrationId: string; methodLabel: string
+  cancelledInvoices: string[]; nextStep: string; paidPlaces: number; payUrl: string | null
+}) {
+  const cancelled = cancelledInvoices.length > 0
+    ? `Invoice ${cancelledInvoices.join(', ')} is cancelled, so please don't pay it.`
+    : ''
+  const paid = paidPlaces > 0
+    ? `${paidPlaces} ${paidPlaces === 1 ? 'place' : 'places'} already paid individually ${paidPlaces === 1 ? 'stays' : 'stay'} paid.`
+    : ''
+  const subject = `Your group's payment method has changed — ${eventTitle}`
+  const html = emailLayout({
+    heading: 'Payment Method Changed',
+    bodyHtml: `
+        <p>Hi ${esc(firstName)},</p>
+        <p>Your group for <strong>${esc(eventTitle)}</strong> now pays by: <strong>${esc(methodLabel)}</strong>.</p>
+        ${cancelled ? `<p>${esc(cancelled)}</p>` : ''}
+        <p>${esc(nextStep)}</p>
+        ${paid ? `<p>${esc(paid)}</p>` : ''}
+        ${payUrl ? `<div style="margin:28px 0;text-align:center"><a href="${payUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">Pay Now →</a></div>` : ''}
+        <p style="color:#6b7280;font-size:14px">Didn't expect this? Reply to this email and we'll sort it out.</p>
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${esc(registrationId)}</span></p>`,
+  })
+  const text = [
+    `Hi ${firstName},`,
+    `Your group for ${eventTitle} now pays by: ${methodLabel}.`,
+    cancelled,
+    nextStep,
+    paid,
+    payUrl ? `Pay here: ${payUrl}` : '',
+    `Didn't expect this? Reply to this email and we'll sort it out.`,
+    `Reference: ${registrationId}`,
+    '— Stellr Education',
+  ].filter(Boolean).join('\n\n')
+  return { subject, html, text }
+}
+
+// Sent to anyone holding an individual payment link when their group moves to
+// paying together, so nobody pays for a place the organizer is now covering.
+export function groupSeatPaymentNoLongerDueEmail({
+  firstName, eventTitle, registrationId,
+}: {
+  firstName: string; eventTitle: string; registrationId: string
+}) {
+  const subject = `No payment needed from you — ${eventTitle}`
+  const html = emailLayout({
+    heading: 'No Payment Needed From You',
+    bodyHtml: `
+        <p>Hi ${esc(firstName)},</p>
+        <p>Your group for <strong>${esc(eventTitle)}</strong> now pays together through its organizer, so you don't need to pay for your place. The payment link we sent you has stopped working.</p>
+        <p>Your registration is unchanged, and there's nothing you need to do.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Ask your group's organizer or reply to this email.</p>
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${esc(registrationId)}</span></p>`,
+  })
+  const text = `Hi ${firstName},\n\nYour group for ${eventTitle} now pays together through its organizer, so you don't need to pay for your place. The payment link we sent you has stopped working.\n\nYour registration is unchanged, and there's nothing you need to do.\n\nReference: ${registrationId}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
 // ── Event-manager outstanding-item reminders ──────────────────────────────────
 // One email per participant covering whatever is outstanding (payment,
 // DocuSign, or both). For minors the emergency contact is CC'd; for group

@@ -26,6 +26,7 @@ export const AUDIT_ACTIONS = [
   'registration.seat_payment.start',
   'registration.participant.create',
   'registration.participant.update',
+  'registration.payment_method.change',
 
   // Consent and uploads (A14)
   'consent.request.send',

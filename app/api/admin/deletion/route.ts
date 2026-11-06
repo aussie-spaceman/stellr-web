@@ -4,6 +4,10 @@ import { isAdminClaims } from '@/lib/admin-auth'
 import { executeDeletion, DeletionBlockedError } from '@/lib/deletion/execute'
 import { memberIdForClerkUser } from '@/lib/deletion/actor'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // DELETE /api/admin/deletion  { entity, id, mode: 'soft' | 'hard', refundChoice?: 'cash' | 'none', refundNote? }
 // Central admin delete. Blocks (409) with the dependent list when linked records
 // remain; otherwise runs external cleanup + soft/hard delete.

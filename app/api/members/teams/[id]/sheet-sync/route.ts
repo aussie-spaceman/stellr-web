@@ -7,6 +7,10 @@ import { syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
 import { randomUUID } from 'crypto'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // POST /api/members/teams/[id]/sheet-sync
 // Reads the linked Google Sheet and upserts participant records.
 // Also registers a push notification channel if one isn't active.

@@ -9,6 +9,10 @@
   "ignoreCommand": "bash scripts/vercel-ignore-build.sh",
   "crons": [
     {
+      "path": "/api/cron/group-invoice-sync",
+      "schedule": "45 9 * * *"
+    },
+    {
       "path": "/api/cron/docusign-reminders",
       "schedule": "0 9 * * *"
     },

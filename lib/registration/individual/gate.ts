@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { normalizeEmail } from '@/lib/member-enums'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { registrationIsOpen, type RegistrationGateSource } from '@/lib/registration'
 import { getCurrentMember } from '@/lib/community'
@@ -7,6 +8,7 @@ import { sessionChildAwaitingConsentBlock } from '@/lib/pending-consent'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { stripeClient } from '@/lib/stripe'
 import { findOfferByToken, type ScholarshipApplication } from '@/lib/scholarships'
+import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
 import { ageRefused, refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import { answerDuplicate } from './duplicates'
 import { hasSchool, registrantEmails, type IndividualBody } from './parse'
@@ -130,6 +132,23 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   const ageCheck = checkRegistrationAge(body.date_of_birth, { eventDate: event.date ?? null })
   if (!ageCheck.ok) return refuse(ageRefused(ageCheck))
 
+  // Signed in, the registration is for the account holder, and it writes to their
+  // own row. A different date of birth means this is someone else, such as a child
+  // on a parent's account, or a date that would change which agreement is sent.
+  // Members cannot change their date of birth themselves.
+  const storedDateOfBirth = sessionMember?.date_of_birth
+    ? checkRegistrationAge(sessionMember.date_of_birth, { eventDate: event.date ?? null })
+    : null
+  if (storedDateOfBirth?.ok && storedDateOfBirth.dateOfBirth !== ageCheck.dateOfBirth) {
+    return refuse(NextResponse.json(
+      {
+        code: 'date_of_birth_differs',
+        error: 'This date of birth doesn’t match the account you’re signed in with. To register someone else, sign out and use a different email address for them. If the date on your account is wrong, please contact us.',
+      },
+      { status: 409 },
+    ))
+  }
+
   const db = deps.serviceClient()
 
   const duplicateAnswer = await answerDuplicate(db, {
@@ -140,6 +159,29 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
     scholarship,
   })
   if (duplicateAnswer) return refuse(duplicateAnswer)
+
+  // Not on this event, but on file: they sign in before anything is written in
+  // that member's name (lib/registration/member-on-file). An offer sent to this
+  // address is the exception: making it can create the member row, its link went
+  // to this address, and a 13-17-year-old may have no way to make a login yet.
+  const offerIsForThisAddress = !!scholarship && normalizeEmail(scholarship.email) === email
+  if (!sessionMember && !offerIsForThisAddress) {
+    const onFile = await findMemberOnFile(db, email, schoolEmail)
+    if (!onFile.ok) {
+      console.error('[register/individual] prior-member lookup failed:', onFile.error)
+      return refuse(temporarilyUnavailable())
+    }
+    if (onFile.onFile) {
+      return refuse(NextResponse.json(
+        {
+          code: SIGN_IN_REQUIRED,
+          school_address_only: onFile.schoolAddressOnly,
+          error: 'This email is already on file with Stellr. Sign in with the address you first used with us and you’ll come back here to register. If you can’t, or a parent or guardian is helping you, contact us and we’ll help.',
+        },
+        { status: 409 },
+      ))
+    }
+  }
 
   // A new registration, with an offer already on another one. An offer covers one
   // registration, and a live token alone must not make a second one free.

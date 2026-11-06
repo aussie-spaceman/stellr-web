@@ -83,7 +83,9 @@ export async function persistIndividualRegistration(gated: GatedRegistration, bo
   // Did THIS request create the member row (vs. one already on file)? Captured
   // before the upsert and used to decide whether a silent sign-in token is
   // safe — never hand an anonymous caller a session for an existing member
-  // (deep review C-1). A failed read cannot tell new from existing, so it is a
+  // (deep review C-1). The gate has already asked an anonymous caller on file to
+  // sign in, so for them this is the backstop: a row created since those reads, or
+  // an offer sent to this address. A failed read cannot tell new from existing, so it is a
   // retryable refusal: the registration above is taken back and nothing else
   // is written.
   const priorLookupFailed = async (error: unknown): Promise<PersistResult> => {

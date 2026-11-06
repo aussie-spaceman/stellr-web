@@ -247,6 +247,7 @@
     "app/api/cron/docusign-reminders/route.ts",
     "app/api/cron/entitlements/route.ts",
     "app/api/cron/event-emails/route.ts",
+    "app/api/cron/group-invoice-sync/route.ts",
     "app/api/cron/hubspot-event-options/route.ts",
     "app/api/cron/hubspot-lifecycle/route.ts",
     "app/api/cron/lead-capture-failures/route.ts",

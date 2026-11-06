@@ -4,6 +4,10 @@ import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { addParticipantToGroup, GROUP_FOR_ADD_COLUMNS, type GroupForAdd } from '@/lib/group-participant-add'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // POST /api/admin/registrations/[id]/participants — staff add a person to a
 // group's roster from the admin event roster (4 Nov 2026). Admins, and the
 // event's managers for their own events: the same rule as the roster's other

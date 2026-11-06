@@ -159,7 +159,7 @@
     },
     "app/(flow)/register/[slug]/join/[token]/page.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: group_join_tokens, participants, registrations, schools"
+      "reason": "auto: touches tenant or event-scoped tables; tables: group_join_tokens, members, participants, registrations, schools"
     },
     "app/(flow)/register/[slug]/pay-seat/[token]/page.tsx": {
       "class": "convert",
@@ -988,6 +988,10 @@
     "app/api/cron/event-emails/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: event_emails"
+    },
+    "app/api/cron/group-invoice-sync/route.ts": {
+      "class": "convert",
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/cron/hubspot-event-options/route.ts": {
       "class": "convert",

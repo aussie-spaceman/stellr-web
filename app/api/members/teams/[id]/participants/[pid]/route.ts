@@ -14,6 +14,10 @@ import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
 import { checkRegistrationAge, isRegistrationMinor } from '@/lib/registration-eligibility'
 import { DETAILS_MEMBER_MANAGED, isDetailsHiddenFrom } from '@/lib/team-linked-details'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
   req: NextRequest,
@@ -245,6 +249,7 @@ export async function DELETE(
     registrationId,
     change: { kind: 'removed' },
     eventRole: participant.event_role,
+    participantIds: [pid],
     actor: { memberId: member.id, label: isManager ? 'organiser' : 'participant' },
   }).catch((err) => {
     console.error('[teams/participants/pid] billing update error:', err)

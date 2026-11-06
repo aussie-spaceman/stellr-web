@@ -56,6 +56,7 @@ export const CRON_SCOPES: Readonly<Record<string, CronScopeEntry>> = {
   'docusign-reminders': { scope: 'per_tenant', why: 'native e-sign reminders (B14); the DocuSign part stays Stellr-only' },
   entitlements: { scope: 'platform', why: 'entitlement lifecycle and the daily platform error digest' },
   'event-emails': { scope: 'per_tenant', why: 'event emails for any tenant (B14)' },
+  'group-invoice-sync': { scope: 'per_tenant', why: "a group's own unpaid invoice, for any tenant" },
   'hubspot-event-options': { scope: 'stellr_only', why: "Stellr's HubSpot; syncs only Stellr events (B11)" },
   'hubspot-lifecycle': { scope: 'stellr_only', why: "Stellr's HubSpot" },
   'lead-capture-failures': { scope: 'stellr_only', why: "Stellr's lead capture" },

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, registrationPaymentLinkEmail } from '@/lib/email'
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
+import { billableSeats, paidSeatCount } from '@/lib/group-billing'
 
 // Email the durable pay link for a pending card registration.
 //
@@ -95,7 +96,7 @@ export async function sendPayLinkEmail(
     }
   } else {
     firstName = reg.teacher_first_name?.trim() || firstName
-    seats = (reg.adult_count ?? 0) + (reg.student_count ?? 0) || undefined
+    seats = billableSeats((reg.adult_count ?? 0) + (reg.student_count ?? 0), await paidSeatCount(db, reg.id)) || undefined
     to.push(reg.teacher_email ?? '', reg.teacher_poc_email ?? '')
   }
   to.push(...(opts.extraRecipients ?? []))

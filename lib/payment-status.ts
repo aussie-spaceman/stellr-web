@@ -25,6 +25,8 @@ export type PaymentPillState =
 // without a database, and so "what does this payment state mean" has one home.
 export function paymentPill(facts: RegistrationPaymentFacts): PaymentPillState {
   const paid = registrationPaid(facts)
+  // A place paid individually before the group moved to an invoice is a real receipt.
+  if (facts.individualPaymentStatus === 'paid') return 'link_paid'
   if (facts.invoiceRequested) return paid ? 'invoice_paid' : 'invoice_issued'
   // Checked before `paid` because registrationPaid() counts 'waived' as paid —
   // settled, but no money changed hands, which staff reconciling payments need
@@ -34,6 +36,8 @@ export function paymentPill(facts: RegistrationPaymentFacts): PaymentPillState {
 }
 
 export function registrationPaid(facts: RegistrationPaymentFacts): boolean {
+  // First: a place someone paid for stays paid if the group later changes how it pays.
+  if (facts.individualPaymentStatus === 'paid') return true
   if (facts.invoiceRequested) return facts.invoicePaidAt != null
   return (
     facts.status === 'confirmed' ||

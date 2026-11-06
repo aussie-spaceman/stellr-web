@@ -62,7 +62,7 @@ const GROUPS: readonly DispositionGroup[] = [
       'agreements/[id]/correct-recipient', 'campaigns/[slug]/email', 'credentials/[id]/resend', 'credentials/[id]/revoke',
       'docusigns/[id]/credential-sharing', 'docusigns/[id]/download', 'docusigns/[id]/resend', 'event-managers',
       'event-participations/[id]', 'media/do-not-use', 'refunds/preview', 'registrations/[id]/finish-setup',
-      'registrations/[id]/invoice', 'registrations/[id]/participants', 'surveys/responses/[id]/withdraw-quote',
+      'registrations/[id]/invoice', 'registrations/[id]/participants', 'registrations/[id]/payment-method', 'surveys/responses/[id]/withdraw-quote',
     ],
   },
   {

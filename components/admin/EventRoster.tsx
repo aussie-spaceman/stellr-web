@@ -15,6 +15,7 @@ import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailB
 import { FixGuardianEmailButton } from '@/components/admin/FixGuardianEmailButton'
 import { FinishSetupButton } from '@/components/admin/FinishSetupButton'
 import { GroupInvoiceButton } from '@/components/admin/GroupInvoiceButton'
+import { GroupPaymentMethod } from '@/components/registration/GroupPaymentMethod'
 import { AdminAddParticipantButton } from '@/components/admin/AdminAddParticipantButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
@@ -440,6 +441,13 @@ export default function EventRoster({
                   )}
                   {group.type === 'group' && group.invoiceRequested && (
                     <GroupInvoiceButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
+                  )}
+                  {group.type === 'group' && (
+                    <GroupPaymentMethod
+                      endpoint={`/api/admin/registrations/${group.registrationId}/payment-method`}
+                      groupLabel={group.groupLabel ?? 'This group'}
+                      variant="link"
+                    />
                   )}
                   {group.type === 'group' && (
                     <DeleteEntityButton

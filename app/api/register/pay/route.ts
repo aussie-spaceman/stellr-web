@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { registrationIsOpen } from '@/lib/registration'
 import { rateLimitGuard } from '@/lib/rate-limit'
 import { stripeClient } from '@/lib/stripe'
 import {
@@ -9,14 +8,15 @@ import {
   RegistrationCheckoutError,
   payPageUrl,
 } from '@/lib/registration-checkout'
-import { findOfferForRegistration } from '@/lib/scholarships'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 // POST /api/register/pay  { token }
 // Mints a Stripe Checkout for the pending registration behind a pay token.
 // Unauthenticated by design — the token is the capability, and the only thing
-// it can do is open a checkout whose amount is fixed server-side.
+// it can do is open a checkout whose amount is fixed server-side. The link works
+// whether or not the event's registration is still open: closing registration
+// stops new sign-ups, not payment for a place someone already holds.
 export async function POST(req: NextRequest) {
   const limited = rateLimitGuard(req, 'register/pay', { limit: 20, windowMs: 10 * 60_000 })
   if (limited) return limited
@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'This registration has no payment outstanding.', code: 'not_pending' }, { status: 409 })
   }
 
-  // Fail closed, as the registration routes do: without the event neither the
-  // window nor the fee can be known. An outage is retryable; an event that no
+  // Fail closed, as the registration routes do: without the event the fee can't
+  // be known. An outage is retryable; an event that no
   // longer resolves needs a person, the same answer as an event with no price.
   let event
   try {
@@ -58,12 +58,6 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     )
   }
-  // A scholarship offer holds the student's place past the close of
-  // registration, as it does on the registration form.
-  if (!registrationIsOpen(event) && !(await findOfferForRegistration(db, reg.id))) {
-    return NextResponse.json({ error: 'Registration for this event has closed.' }, { status: 403 })
-  }
-
   const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments are not configured.' }, { status: 503 })
 

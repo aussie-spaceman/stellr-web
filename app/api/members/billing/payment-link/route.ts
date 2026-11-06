@@ -7,6 +7,7 @@ import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { createRegistrationCheckout, RegistrationCheckoutError } from '@/lib/registration-checkout'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { seatDiscount } from '@/lib/individual-payment'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { data: registration } = await db
     .from('registrations')
-    .select('event_slug, event_title, type, status, member_pays_individually')
+    .select('event_slug, event_title, type, status, member_pays_individually, invoice_coupon_id')
     .eq('id', registrationId)
     .maybeSingle()
   if (!registration) return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
@@ -110,8 +111,7 @@ export async function POST(req: NextRequest) {
     // The money-back guarantee, on Stripe's page above the Pay button.
     custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
-    // Surfaces the "Add promotion code" field for codes set up in Stripe.
-    allow_promotion_codes: true,
+    ...(await seatDiscount(stripe, registration.invoice_coupon_id as string | null)),
     line_items: [{ price: stripePriceId, quantity: 1 }],
     client_reference_id: registrationId,
     customer_email: member.email,

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { supabaseServer } from '@/lib/supabase'
+import { billableSeats, paidSeatCount } from '@/lib/group-billing'
 import { getEventBySlug } from '@/lib/sanity'
-import { registrationIsOpen } from '@/lib/registration'
 import { maskEmail } from '@/lib/utils'
 import { findOfferForRegistration } from '@/lib/scholarships'
 import PayNowButton from './PayNowButton'
@@ -98,23 +98,13 @@ export default async function RegistrationPayPage({ params, searchParams }: Page
     )
   }
 
-  const event = await getEventBySlug(slug).catch(() => null)
-  // A scholarship offer holds the student's place past the close of
-  // registration (the pay route allows it on the same rule).
   const scholarship = await findOfferForRegistration(db, reg.id)
-  if (event && !registrationIsOpen(event) && !scholarship) {
-    return (
-      <Shell icon="⏰" title="Registration has closed">
-        <p className="text-content-body mb-6">Registration for <strong>{reg.event_title}</strong> is no longer open, so this payment link has stopped working. Reply to your registration email if you think that&apos;s a mistake.</p>
-        <Link href="/events" className="btn-primary">Browse Events</Link>
-      </Shell>
-    )
-  }
 
   // Who and how much — first name only.
   let firstName = reg.teacher_first_name?.trim() ?? ''
   let emailForNote = reg.teacher_email ?? ''
-  const seats = (reg.adult_count ?? 0) + (reg.student_count ?? 0)
+  // Places already paid individually aren't part of this payment.
+  const seats = billableSeats((reg.adult_count ?? 0) + (reg.student_count ?? 0), await paidSeatCount(db, reg.id))
   if (reg.type === 'individual') {
     const { data: partRow } = await db
       .from('participants')

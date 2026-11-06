@@ -65,18 +65,9 @@ describe('POST /api/register/pay', () => {
     expect(await res.json()).toMatchObject({ code: 'already_paid' })
   })
 
-  it('403s when registration for the event has closed', async () => {
+  it('takes payment after registration for the event has closed: the place is already held', async () => {
     regLookup.mockResolvedValue({ data: { id: 'reg-1', event_slug: 'colorado', type: 'individual', status: 'pending' }, error: null })
     getEventBySlug.mockResolvedValue({ registrationOpenDate: '2020-01-01', registrationCloseDate: '2020-02-01' })
-    const res = await post({ token: TOKEN })
-    expect(res.status).toBe(403)
-    expect(createRegistrationCheckout).not.toHaveBeenCalled()
-  })
-
-  it('lets a scholarship registration pay after registration has closed', async () => {
-    regLookup.mockResolvedValue({ data: { id: 'reg-1', event_slug: 'colorado', type: 'individual', status: 'pending' }, error: null })
-    getEventBySlug.mockResolvedValue({ registrationOpenDate: '2020-01-01', registrationCloseDate: '2020-02-01' })
-    findOfferForRegistration.mockResolvedValue({ id: 'sch-1', percent_off: 50 })
     const res = await post({ token: TOKEN })
     expect(res.status).toBe(200)
     expect(createRegistrationCheckout).toHaveBeenCalledOnce()

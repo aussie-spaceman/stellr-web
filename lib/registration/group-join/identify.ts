@@ -5,15 +5,13 @@ import { AUTH_APP_URL } from '@/lib/env'
 import { upsertMember } from '@/lib/member-sync'
 import { childAwaitingConsentBlock } from '@/lib/pending-consent'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import { personFromDetails, personFromProfile, type JoinMemberProfile, type JoinPerson } from './parse'
 
 // POST /api/register/group-join, who is joining: a signed-in member, or someone
 // new. Identity is resolved here, before persist admits anyone to the group. The
 // order is pinned by app/api/register/group-join/route.branches.test.ts.
-
-/** The join form answers this code by asking the person to sign in. */
-export const SIGN_IN_REQUIRED = 'sign_in_required'
 
 /**
  * The person, their member row, and the sign-in token when one was minted. The
@@ -86,39 +84,18 @@ export async function identifyNewParticipant(
   if (!parsed.ok) return parsed
   const { person } = parsed
 
-  // Is this email already on file? This caller has not proven it is theirs, so
-  // nothing may follow in that member's name: no login, no school, no event
-  // activity, no Space, no agreement. They sign in, and join by
-  // identifySignedInMember, which holds their consent and stored date-of-birth
-  // checks. A failed read cannot tell new from existing, so it is a retryable
-  // refusal, before anything is written.
-  // Both addresses count (4 Nov 2026): upsertMember also links by the school
-  // address, so a submitted school_email naming an existing member must not
-  // read as "new". The fourth read is an address another member holds as their
-  // school address, which upsertMember would copy onto a second row.
-  const { data: priorJoiner, error: priorJoinerError } = await db
-    .from('members').select('id').eq('email', person.email).maybeSingle()
-  const { data: priorBySchool, error: priorBySchoolError } = await db
-    .from('members').select('id').eq('school_email', person.email).limit(1).maybeSingle()
-  const separateSchoolAddress = person.school_email && person.school_email !== person.email ? person.school_email : null
-  const { data: priorSchoolAddr, error: priorSchoolAddrError } = separateSchoolAddress
-    ? await db.from('members').select('id').eq('email', separateSchoolAddress).maybeSingle()
-    : { data: null, error: null }
-  const { data: priorSchoolHolder, error: priorSchoolHolderError } = separateSchoolAddress
-    ? await db.from('members').select('id').eq('school_email', separateSchoolAddress).limit(1).maybeSingle()
-    : { data: null, error: null }
-  const priorLookupError = priorJoinerError ?? priorBySchoolError ?? priorSchoolAddrError ?? priorSchoolHolderError
-  if (priorLookupError) {
-    console.error('[register/group-join] prior-member lookup failed:', priorLookupError)
+  // On file: they sign in, and join by identifySignedInMember, before anything is
+  // written (lib/registration/member-on-file).
+  const onFile = await findMemberOnFile(db, person.email, person.school_email)
+  if (!onFile.ok) {
+    console.error('[register/group-join] prior-member lookup failed:', onFile.error)
     return refuse(temporarilyUnavailable())
   }
-  if (priorJoiner || priorBySchool || priorSchoolAddr || priorSchoolHolder) {
+  if (onFile.onFile) {
     return refuse(NextResponse.json(
       {
         code: SIGN_IN_REQUIRED,
-        // A login made with a school address does not reach the member it belongs
-        // to, so the form must not suggest making one with that address.
-        school_address_only: !priorJoiner && !priorSchoolAddr,
+        school_address_only: onFile.schoolAddressOnly,
         error: 'This email is already on file with Stellr. Sign in with the address you first used with us and you’ll come back here to join. If you can’t, or a parent or guardian is helping you, ask your group organiser to add you.',
       },
       { status: 409 },

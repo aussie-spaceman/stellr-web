@@ -130,7 +130,10 @@ export async function getRegistrationPrefill(
     last_name: str(p.last_name) ?? str(mr.last_name) ?? m.last_name ?? undefined,
     nickname: str(p.nickname) ?? str(mr.nickname),
     phone: str(p.phone) ?? str(mr.phone),
-    date_of_birth: str(p.date_of_birth) ?? str(mr.date_of_birth),
+    // The member's own record first, unlike the fields around it: the individual
+    // route refuses a date that differs from it, and a roster row can hold a date
+    // someone else typed.
+    date_of_birth: str(mr.date_of_birth) ?? str(p.date_of_birth),
     grade: str(p.grade) ?? denormalizeGrade(mr.grade),
     gender: str(p.gender) ?? denormalizeGender(mr.gender),
     t_shirt_size: str(p.t_shirt_size) ?? denormalizeTshirt(mr.tshirt_size),

@@ -275,7 +275,7 @@ On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #54
 | A0 + | Merged. Added for the wave 1 `KNOWN DEFECT` tests | A defect fix: register routes fail closed on a failed read. Stellr sees a change only when a read has already failed |
 | A3 | Merged | Platform-owner early return. One added lookup per participant write, and a failed read fails the write |
 | A4, A5, A6 | Merged | Pure refactors, pinned by branch tests that passed on the unsplit routes first |
-| A5 + | Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link asks an email on file to sign in, and the register forms give one answer for an address on file to anyone not signed in as it |
+| A5 + | Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link and the individual form ask an email on file to sign in, and the register forms give one answer for an address already on the event to anyone not signed in as it |
 | A6 + | Merged. Owner decision, 5 Nov | **Not a no-op:** organisers see a Member ID linked row by name and status only, for rows linked from now on (`lib/team-linked-details.ts`) |
 | B0 + | Merged. Added for the wave 1 follow-ups | Defect fixes on community reports and reactions, cohort sign-up and library files |
 | B3 | Merged | No route imports the runner. `lastCronResult` works with or without the migration |

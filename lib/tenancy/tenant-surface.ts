@@ -126,7 +126,7 @@ export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
   {
     match: 'app/api/uploads/sign/route.ts',
     reason:
-      'the upload purpose comes from the request body, so this path admits admin and community purposes; needs a per-purpose tenant-host gate and tenant-prefixed storage paths first',
+      "the upload purpose comes from the request body, so this path admits admin and community purposes; needs a per-purpose tenant-host gate and tenant-prefixed storage paths first. Its audit row takes the chain from the host, so the allow review also decides it: an event purpose should use the event's own tenant, refusing or using the platform chain when host and event disagree",
   },
   {
     match: 'app/(member)/account/page.tsx',
@@ -136,7 +136,7 @@ export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
   {
     match: 'app/api/consent/request/route.ts',
     reason:
-      "a member's own guardian-consent request, but today it acts on the Stellr membership consent form only (lib/pending-consent); review before allowing",
+      "a member's own guardian-consent request, but today it acts on the Stellr membership consent form only (lib/pending-consent); review before allowing. Its audit row takes the chain from the host, and members is not tenant-owned, so the review also decides whether a minor's ids may go on a tenant's chain at all",
   },
   {
     match: 'app/api/members/',

@@ -296,7 +296,7 @@ export default function GroupJoinClient({
           </div>
         )}
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-          <Link href="/account" className="btn-primary">View My Account →</Link>
+          <a href="/account" className="btn-primary">View My Account →</a>
           <Link href={`/events/${eventSlug}`} className="btn-outline">Event Details</Link>
         </div>
       </div>
@@ -340,7 +340,7 @@ export default function GroupJoinClient({
 
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
             Your Stellr member profile will be used for this registration. You can update your details in{' '}
-            <Link href="/account" className="underline hover:no-underline">My Account</Link>.
+            <a href="/account" className="underline hover:no-underline">My Account</a>.
           </div>
 
           {error && (
@@ -372,9 +372,9 @@ export default function GroupJoinClient({
               Log in and we&apos;ll use your existing member details — no need to fill this in again.
             </p>
           </div>
-          <Link href={signInUrl} className="btn-primary whitespace-nowrap py-3 px-6 text-center">
+          <a href={signInUrl} className="btn-primary whitespace-nowrap py-3 px-6 text-center">
             Log in to register →
-          </Link>
+          </a>
         </div>
       </div>
 
@@ -521,7 +521,7 @@ export default function GroupJoinClient({
                   {refusedOnFile && schoolAddressOnly
                     ? 'Sign in with your main email address, not your school one, and you’ll come back here to join — '
                     : 'Sign in with the address you first used with us, or create your login with it, and you’ll come back here to join — '}
-                  <Link href={signInUrl} className="underline hover:no-underline font-medium">sign in →</Link>
+                  <a href={signInUrl} className="underline hover:no-underline font-medium">sign in →</a>
                 </p>
                 <p className="mt-1">
                   If that doesn&apos;t work, or a parent or guardian is helping you, ask your group organiser to add you. They can also tell you if you&apos;re already in this group.
@@ -539,7 +539,7 @@ export default function GroupJoinClient({
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Link href={`/events/${eventSlug}`} className="btn-outline flex-1 text-center py-3">Cancel</Link>
           {showSignInPrompt ? (
-            needsAnAdult ? null : <Link href={signInUrl} className="btn-primary flex-1 py-3 text-center">Sign in to join →</Link>
+            needsAnAdult ? null : <a href={signInUrl} className="btn-primary flex-1 py-3 text-center">Sign in to join →</a>
           ) : (
             <button type="submit" disabled={submitting} className="btn-primary flex-1 py-3 disabled:opacity-60">
               {submitting ? 'Joining…' : 'Join Group →'}

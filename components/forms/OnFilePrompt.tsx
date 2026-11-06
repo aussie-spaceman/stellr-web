@@ -65,15 +65,15 @@ export function OnFilePrompt({ schoolAddressOnly, signInUrl, onboardingUrl, sign
       ) : signedIn ? (
         <p className="mt-1">
           We couldn&apos;t match your login to it.{' '}
-          <Link href={onboardingUrl} {...newTab} className="underline hover:no-underline font-medium">Finish setting up your account</Link>
+          <a href={onboardingUrl} {...newTab} className="underline hover:no-underline font-medium">Finish setting up your account</a>
           {keepEntries ? `, ${afterwards}` : ' and you’ll come back here.'} Or {contact} and we&apos;ll help.
         </p>
       ) : (
         <>
           <p className="mt-1">
-            <Link href={signInUrl} {...newTab} className="underline hover:no-underline font-medium">
+            <a href={signInUrl} {...newTab} className="underline hover:no-underline font-medium">
               {schoolAddressOnly ? 'Sign in with your main email address' : 'Sign in with the address you first used with us'}
-            </Link>
+            </a>
             {schoolAddressOnly ? ', not your school one, ' : ', or create your login with it, '}
             {afterwards}
           </p>

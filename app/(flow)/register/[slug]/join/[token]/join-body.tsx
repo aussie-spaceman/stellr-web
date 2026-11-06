@@ -186,7 +186,7 @@ export async function groupJoinBody({
             <div className="text-4xl">✅</div>
             <h2 className="text-xl font-bold text-ink">You&apos;re registered!</h2>
             <p className="text-content-body">You&apos;ve joined this group for <strong>{tokenRow.event_title}</strong>.</p>
-            <Link href="/account" className="btn-primary inline-block mt-4">View My Account →</Link>
+            <a href="/account" className="btn-primary inline-block mt-4">View My Account →</a>
           </div>
         ) : groupFull ? (
           <div className="bg-white rounded-xl border border-line p-8 text-center space-y-4">

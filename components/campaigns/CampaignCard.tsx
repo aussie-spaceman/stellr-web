@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Orbit, Environment } from '@stellr/icons'
 import { CampaignCardAction } from './CampaignMemberAware'
 import { CardPills } from '@/components/ui/CardPills'

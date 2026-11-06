@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight, CheckCircle, Users, Lightbulb, Briefcase, Award } from 'lucide-react'
 
 export const metadata: Metadata = {

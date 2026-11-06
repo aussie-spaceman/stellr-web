@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, ShoppingBag } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'

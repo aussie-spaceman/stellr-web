@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 // chips work in the browser (EventsBoard), and a signed-in member's
 // "Registered" badges fill in there too (CampaignCardAction), so nothing here
 // reads the request and the page is served from the CDN.
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 // One sortable item per card so Events and Campaigns share a single grid,
 // ordered by the date that matters: event day for Events, proposal deadline

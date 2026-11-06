@@ -45,6 +45,14 @@ const REQUIRED_PARAMS = ['w', 'h', 'fit', 'fm', 'q']
 // The original's pixel size, from the asset filename `<hash>-<w>x<h>.<ext>`.
 const ASSET_FILENAME = /^[0-9a-f]+-(\d+)x(\d+)\.[a-z]+$/
 
+/**
+ * The CDN cache tag for every stamped copy of one Sanity asset, whatever its width
+ * or crop, used to delete them when a photo is removed. Pass a validated filename.
+ */
+export function sanityImageCacheTag(filename: string): string {
+  return `sanity-image-${filename.split('-')[0]}`
+}
+
 export function sanityAssetSize(filename: string): { width: number; height: number } | null {
   const m = ASSET_FILENAME.exec(filename)
   return m ? { width: Number(m[1]), height: Number(m[2]) } : null

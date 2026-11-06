@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { pushDataLayer } from '@/lib/analytics'
 import { CONSENT_NEEDED_ATTR, CONSENT_OPEN_EVENT, applyConsent, readConsent, writeConsent } from '@/lib/consent'
 import { noAdsActive } from '@/lib/no-ads'

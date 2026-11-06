@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     "Cost should never be the reason you don't compete. Apply for a Stellr scholarship to cover part or all of the participation fee for the competition or workshop you're applying to.",
 }
 
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 /* Fallback list when Sanity is unconfigured or returns no open events. */
 const FALLBACK_ACTIVITIES = [

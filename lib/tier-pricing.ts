@@ -13,7 +13,7 @@ import { MEMBERSHIP_PRICES_TAG } from '@/lib/price-cache'
 // membership_tiers cents columns (annual_cost_cents / monthly_cost_cents) are
 // kept only as a fallback for when Stripe is unavailable or unconfigured.
 //
-// Result is cached for an hour (PRICE_CACHE_SECONDS) and tagged
+// Result is cached for 6 hours (PRICE_CACHE_SECONDS) and tagged
 // MEMBERSHIP_PRICES_TAG, which the Stripe webhook revalidates on any price or
 // product change (lib/price-cache). Display only: checkout reads the tier row
 // itself, so a cached figure is never what's charged. Server-only.
@@ -21,15 +21,15 @@ import { MEMBERSHIP_PRICES_TAG } from '@/lib/price-cache'
 // A tier's price changes by giving its membership_tiers row a new Stripe price
 // ID, and that row edit raises no event of its own. Archive the old price in
 // Stripe afterwards: the archive event refreshes the site. Otherwise the new
-// figure shows within about two hours.
+// figure shows within about twelve hours.
 //
 // Don't shorten the window. Inside an ISR page, unstable_cache's revalidate
 // becomes the PAGE's window too, and the old 60s made the homepage,
 // /competitions and /membership re-render every minute they were visited —
 // about half of the site's Vercel function CPU (21 Oct 2026).
 
-/** An hour: the same window as the ISR pages that show these prices. */
-export const PRICE_CACHE_SECONDS = 3600
+/** 6 hours: the same window as the ISR pages that show these prices. */
+export const PRICE_CACHE_SECONDS = 21600
 
 export interface TierPrice {
   name: string

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Button } from '@stellr/web-ui'
 
 // deep review PUB-9: the public site had no error boundary at all, so any thrown

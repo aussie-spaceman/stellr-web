@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { supabaseServer } from '@/lib/supabase'
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
 import {

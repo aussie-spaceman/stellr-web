@@ -1,7 +1,7 @@
 'use client'
 
 import { Children, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { EventsFilterBar, type EventFilters } from './EventsFilterBar'
 
 /** What the board needs to know about each card to filter it. */

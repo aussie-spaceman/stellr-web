@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Global, Team, Satellite, Idea, Launch, Environment } from '@stellr/icons'
 import { Hero, Eyebrow, Button, CtaBand, StepCard, PathwayCard } from '@stellr/web-ui'
 import { WorkCard } from '@/components/sections/WorkCard'

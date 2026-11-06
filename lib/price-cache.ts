@@ -1,7 +1,7 @@
 import { revalidateTag } from 'next/cache'
 
-// The Stripe prices public pages show are cached for an hour (lib/tier-pricing,
-// lib/event-pricing): any shorter and their ISR pages re-render every minute.
+// The Stripe prices public pages show are cached for 6 hours (lib/tier-pricing,
+// lib/event-pricing): a shorter window makes their ISR pages re-render that often.
 // So that a price change in Stripe still reaches the site at once, the Stripe
 // webhook calls revalidatePriceCaches() on the events below.
 

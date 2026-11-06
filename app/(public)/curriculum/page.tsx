@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight, Check } from 'lucide-react'
 import { Document, Award, Orbit, Environment } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to our International Summer Camp.',
 }
 
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 /* Teacher questions, answered in plain text — rendered visibly and as FAQPage
    JSON-LD from the same strings. Keep in step with the Material levels section

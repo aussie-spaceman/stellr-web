@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Global } from '@stellr/icons'
 import { STELLR_EIN } from '@/lib/org'
 

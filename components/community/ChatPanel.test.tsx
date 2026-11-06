@@ -55,6 +55,33 @@ describe('ChatPanel', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
   })
 
+  it('polls every 8 s while in view, stops while hidden, and reloads on return', async () => {
+    vi.useFakeTimers()
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    try {
+      render(<ChatPanel channelId="c1" selfMemberId="me" title="Cohort chat" />)
+      const polls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/community/chat?')).length
+      expect(polls()).toBe(1)
+
+      // A moderator's delete reaches other members through this poll: don't lengthen it.
+      await vi.advanceTimersByTimeAsync(8000)
+      expect(polls()).toBe(2)
+
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(80_000)
+      expect(polls()).toBe(2)
+
+      visibility.mockReturnValue('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(polls()).toBe(3)
+    } finally {
+      visibility.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('shows flag and delete on touch screens, hiding them for hover only under a mouse', async () => {
     render(<ChatPanel channelId="c1" selfMemberId="me" title="Cohort chat" canModerate />)
     await screen.findByText('Hello all')

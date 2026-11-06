@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Check } from 'lucide-react'
 import { Document, Team } from '@stellr/icons'
 import { Button, Eyebrow, InfoPill } from '@stellr/web-ui'

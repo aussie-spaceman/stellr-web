@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import {
   GRANT_AMOUNTS,
   GRANT_PAYMENT_DATE,

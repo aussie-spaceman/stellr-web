@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, Menu, X } from 'lucide-react'
 import { hasSessionHint } from '@/lib/session-hint'
@@ -26,7 +26,7 @@ type NavLink = {
   label: string
   /** The section's own landing page on www, when it has one. */
   href?: string
-  dropdown: { label: string; href: string; prefetch?: false }[]
+  dropdown: { label: string; href: string }[]
 }
 
 const navLinks: NavLink[] = [
@@ -36,7 +36,7 @@ const navLinks: NavLink[] = [
     dropdown: [
       { label: 'Competitions', href: '/competitions' },
       { label: 'Curriculum', href: '/curriculum' },
-      { label: 'Teacher Grant', href: '/grant', prefetch: false }, // dynamic: a prefetch renders it on the server
+      { label: 'Teacher Grant', href: '/grant' },
       { label: 'Events & Campaigns', href: '/events' },
       { label: 'Scholarships', href: '/scholarship' },
       { label: 'Host An Event', href: '/host-an-event' },
@@ -291,7 +291,6 @@ export function Navbar() {
                         <li key={item.href}>
                           <Link
                             href={item.href}
-                            prefetch={item.prefetch}
                             aria-current={pathname === item.href ? 'page' : undefined}
                             className="block px-4 py-2.5 text-sm text-content transition-colors hover:bg-surface hover:text-midnight"
                           >
@@ -339,7 +338,6 @@ export function Navbar() {
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        prefetch={item.prefetch}
                         aria-current={pathname === item.href ? 'page' : undefined}
                         className="block px-4 py-2.5 text-sm text-content transition-colors hover:bg-surface hover:text-midnight"
                       >
@@ -420,7 +418,6 @@ export function Navbar() {
                         <li key={item.href}>
                           <Link
                             href={item.href}
-                            prefetch={item.prefetch}
                             aria-current={pathname === item.href ? 'page' : undefined}
                             className="flex min-h-11 items-center px-3 text-sm text-content hover:text-midnight"
                             onClick={() => closeMobile(false)}

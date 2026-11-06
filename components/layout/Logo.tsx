@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import Image from 'next/image'
 
 /** The horizontal lockup (mark + wordmark): a 960×318 PNG rendered from the brand SVG. */

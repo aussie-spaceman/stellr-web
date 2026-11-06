@@ -93,6 +93,7 @@ jobs:
           sparse-checkout: |
             package.json
             package-lock.json
+            osv-scanner.toml
           sparse-checkout-cone-mode: false
 
       - name: Scan package-lock.json
@@ -100,7 +101,7 @@ jobs:
           IMAGE: ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0 # v2.7.0
         run: |
           set +e
-          docker run --rm -v "$PWD:/src:ro" "$IMAGE" scan source --lockfile=/src/package-lock.json --format=markdown > osv.md
+          docker run --rm -v "$PWD:/src:ro" "$IMAGE" scan source --config=/src/osv-scanner.toml --lockfile=/src/package-lock.json --format=markdown > osv.md
           code=$?
           set -e
           cat osv.md

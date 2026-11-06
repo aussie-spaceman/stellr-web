@@ -1,0 +1,7 @@
+# Advisories accepted on purpose. Each needs a reason and an expiry, so it comes
+# back for a fresh look. docs/RUNBOOK-security-scans.md.
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-02-05
+reason = "deepmerge 4.3.1 has no fixed release. It is a dev dependency of style-dictionary, which only merges this repo's own design/tokens.json at build time, so no outside input reaches it and it is not in the app's runtime. Re-check for a fixed release, or a style-dictionary without it, by the expiry."

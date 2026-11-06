@@ -8,7 +8,7 @@ of it touches the dev or production projects, and none of it holds a secret.
 | Check | Where | Blocking? | Turn it into a gate |
 |---|---|---|---|
 | Semgrep CE, repo rules in `.semgrep/` | `security.yml` → `semgrep` | No | Repo variable `SEMGREP_ENFORCE=true`, then make `semgrep` a required check |
-| OSV-Scanner on `package-lock.json` | `security.yml` → `osv-scanner` | No (4 advisories open in transitive dev/build deps) | Clear them, then `OSV_ENFORCE=true` |
+| OSV-Scanner on `package-lock.json` | `security.yml` → `osv-scanner` | No. One advisory accepted, with a reason and an expiry, in `osv-scanner.toml` | The owner sets `OSV_ENFORCE=true` once a run passes |
 | gitleaks on the commits a PR or push adds | `security.yml` → `gitleaks` | No (not yet run in CI) | After a green run, `GITLEAKS_ENFORCE=true` |
 | lockfile-lint + `npm audit signatures` | `security.yml` → `supply-chain` | Yes (both passed when added) | Add `supply-chain` to the required checks |
 

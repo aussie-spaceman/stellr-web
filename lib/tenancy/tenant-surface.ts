@@ -153,7 +153,8 @@ export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
   },
   {
     match: 'app/api/privacy-requests/',
-    reason: "a privacy request on a tenant host goes to the organiser's controller process, not yet designed",
+    reason:
+      "a privacy request on a tenant host goes to the organiser's controller process, not yet designed. Both routes audit to Stellr's chain, so allowing them must also resolve the chain",
   },
 ]
 

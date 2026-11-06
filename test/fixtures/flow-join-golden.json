@@ -1,0 +1,1119 @@
+{
+ "no such link": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": {
+     "type": "div",
+     "props": {
+      "className": "max-w-md text-center",
+      "children": [
+       {
+        "type": "div",
+        "props": {
+         "className": "text-5xl mb-4",
+         "children": "🔗"
+        }
+       },
+       {
+        "type": "h1",
+        "props": {
+         "className": "text-xl font-bold text-ink mb-2",
+         "children": "Invalid Link"
+        }
+       },
+       {
+        "type": "p",
+        "props": {
+         "className": "text-content-body mb-6",
+         "children": "This registration link is not valid. Please check with your group organizer."
+        }
+       },
+       {
+        "type": "LinkComponent",
+        "props": {
+         "href": "/events",
+         "className": "btn-primary",
+         "children": "Browse Events"
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-md text-center\"><div class=\"text-5xl mb-4\">🔗</div><h1 class=\"text-xl font-bold text-ink mb-2\">Invalid Link</h1><p class=\"text-content-body mb-6\">This registration link is not valid. Please check with your group organizer.</p><a class=\"btn-primary\" href=\"/events\">Browse Events</a></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")"
+  ]
+ },
+ "token read fails": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": {
+     "type": "div",
+     "props": {
+      "className": "max-w-md text-center",
+      "children": [
+       {
+        "type": "div",
+        "props": {
+         "className": "text-5xl mb-4",
+         "children": "🔗"
+        }
+       },
+       {
+        "type": "h1",
+        "props": {
+         "className": "text-xl font-bold text-ink mb-2",
+         "children": "Invalid Link"
+        }
+       },
+       {
+        "type": "p",
+        "props": {
+         "className": "text-content-body mb-6",
+         "children": "This registration link is not valid. Please check with your group organizer."
+        }
+       },
+       {
+        "type": "LinkComponent",
+        "props": {
+         "href": "/events",
+         "className": "btn-primary",
+         "children": "Browse Events"
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-md text-center\"><div class=\"text-5xl mb-4\">🔗</div><h1 class=\"text-xl font-bold text-ink mb-2\">Invalid Link</h1><p class=\"text-content-body mb-6\">This registration link is not valid. Please check with your group organizer.</p><a class=\"btn-primary\" href=\"/events\">Browse Events</a></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")"
+  ]
+ },
+ "expired link": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": {
+     "type": "div",
+     "props": {
+      "className": "max-w-md text-center",
+      "children": [
+       {
+        "type": "div",
+        "props": {
+         "className": "text-5xl mb-4",
+         "children": "⏰"
+        }
+       },
+       {
+        "type": "h1",
+        "props": {
+         "className": "text-xl font-bold text-ink mb-2",
+         "children": "Link Expired"
+        }
+       },
+       {
+        "type": "p",
+        "props": {
+         "className": "text-content-body mb-6",
+         "children": [
+          "This registration link expired on ",
+          "Jan 15, 2000",
+          ". Please contact your group organizer for a new link."
+         ]
+        }
+       },
+       {
+        "type": "LinkComponent",
+        "props": {
+         "href": "/events",
+         "className": "btn-primary",
+         "children": "Browse Events"
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-md text-center\"><div class=\"text-5xl mb-4\">⏰</div><h1 class=\"text-xl font-bold text-ink mb-2\">Link Expired</h1><p class=\"text-content-body mb-6\">This registration link expired on Jan 15, 2000. Please contact your group organizer for a new link.</p><a class=\"btn-primary\" href=\"/events\">Browse Events</a></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")"
+  ]
+ },
+ "registration read fails": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": {
+     "type": "div",
+     "props": {
+      "className": "max-w-md text-center",
+      "children": [
+       {
+        "type": "div",
+        "props": {
+         "className": "text-5xl mb-4",
+         "children": "⚠️"
+        }
+       },
+       {
+        "type": "h1",
+        "props": {
+         "className": "text-xl font-bold text-ink mb-2",
+         "children": "Something went wrong"
+        }
+       },
+       {
+        "type": "p",
+        "props": {
+         "className": "text-content-body mb-6",
+         "children": "We couldn't load this group registration. Please try again shortly, or contact your group organizer."
+        }
+       },
+       {
+        "type": "LinkComponent",
+        "props": {
+         "href": "/events",
+         "className": "btn-primary",
+         "children": "Browse Events"
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-md text-center\"><div class=\"text-5xl mb-4\">⚠️</div><h1 class=\"text-xl font-bold text-ink mb-2\">Something went wrong</h1><p class=\"text-content-body mb-6\">We couldn&#x27;t load this group registration. Please try again shortly, or contact your group organizer.</p><a class=\"btn-primary\" href=\"/events\">Browse Events</a></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")"
+  ]
+ },
+ "signed out, the form": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": false,
+         "isAuthenticated": false,
+         "prefill": null,
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:false,&quot;prefill&quot;:null,&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed out, state from the schools table": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "CO",
+         "memberPaysIndividually": false,
+         "isAuthenticated": false,
+         "prefill": null,
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;CO&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:false,&quot;prefill&quot;:null,&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "schools.select(\"state\").ilike(\"name\", \"Test High\").limit(1)",
+   "currentUser()",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed out, older registration with no counts": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": false,
+         "isAuthenticated": false,
+         "prefill": null,
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:false,&quot;prefill&quot;:null,&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed out, group full": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "bg-white rounded-xl border border-line p-8 text-center space-y-4",
+         "children": [
+          {
+           "type": "div",
+           "props": {
+            "className": "text-4xl",
+            "children": "🎟️"
+           }
+          },
+          {
+           "type": "h2",
+           "props": {
+            "className": "text-xl font-bold text-ink",
+            "children": "This group is full"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-content-body",
+            "children": [
+             "Every place ",
+             "Grace Hopper",
+             " registered for ",
+             {
+              "type": "strong",
+              "props": {
+               "children": "Nevada Design Challenge"
+              }
+             },
+             " has been filled. Please contact your group organizer if you think this is a mistake."
+            ]
+           }
+          },
+          {
+           "type": "LinkComponent",
+           "props": {
+            "href": "/events/nv",
+            "className": "btn-primary inline-block mt-4",
+            "children": "View Event →"
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div class=\"bg-white rounded-xl border border-line p-8 text-center space-y-4\"><div class=\"text-4xl\">🎟️</div><h2 class=\"text-xl font-bold text-ink\">This group is full</h2><p class=\"text-content-body\">Every place Grace Hopper registered for <strong>Nevada Design Challenge</strong> has been filled. Please contact your group organizer if you think this is a mistake.</p><a class=\"btn-primary inline-block mt-4\" href=\"/events/nv\">View Event →</a></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed out, student manager and pay individually": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Student Manager",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": true,
+         "isAuthenticated": false,
+         "prefill": null,
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Student Manager&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:true,&quot;isAuthenticated&quot;:false,&quot;prefill&quot;:null,&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "event read fails, default grade band": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": false,
+         "isAuthenticated": false,
+         "prefill": null,
+         "gradeMin": 9,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:false,&quot;prefill&quot;:null,&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed in, the form with their prefill": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": false,
+         "isAuthenticated": true,
+         "prefill": {
+          "memberId": "m-1",
+          "email": "member@example.test",
+          "first_name": "Pre"
+         },
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:true,&quot;prefill&quot;:{&quot;memberId&quot;:&quot;m-1&quot;,&quot;email&quot;:&quot;member@example.test&quot;,&quot;first_name&quot;:&quot;Pre&quot;},&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"member@example.test\")",
+   "members.select(\"school_email\").eq(\"clerk_user_id\", \"user_1\")",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)",
+   "getRegistrationPrefill()"
+  ]
+ },
+ "signed in, prefill fails": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": false,
+         "isAuthenticated": true,
+         "prefill": null,
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:true,&quot;prefill&quot;:null,&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"member@example.test\")",
+   "members.select(\"school_email\").eq(\"clerk_user_id\", \"user_1\")",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)",
+   "getRegistrationPrefill()"
+  ]
+ },
+ "signed in, already on the roster": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "bg-white rounded-xl border border-line p-8 text-center space-y-4",
+         "children": [
+          {
+           "type": "div",
+           "props": {
+            "className": "text-4xl",
+            "children": "✅"
+           }
+          },
+          {
+           "type": "h2",
+           "props": {
+            "className": "text-xl font-bold text-ink",
+            "children": "You're registered!"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-content-body",
+            "children": [
+             "You've joined this group for ",
+             {
+              "type": "strong",
+              "props": {
+               "children": "Nevada Design Challenge"
+              }
+             },
+             "."
+            ]
+           }
+          },
+          {
+           "type": "LinkComponent",
+           "props": {
+            "href": "/account",
+            "className": "btn-primary inline-block mt-4",
+            "children": "View My Account →"
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div class=\"bg-white rounded-xl border border-line p-8 text-center space-y-4\"><div class=\"text-4xl\">✅</div><h2 class=\"text-xl font-bold text-ink\">You&#x27;re registered!</h2><p class=\"text-content-body\">You&#x27;ve joined this group for <strong>Nevada Design Challenge</strong>.</p><a class=\"btn-primary inline-block mt-4\" href=\"/account\">View My Account →</a></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"member@example.test\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed in, on the roster under their school address": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "bg-white rounded-xl border border-line p-8 text-center space-y-4",
+         "children": [
+          {
+           "type": "div",
+           "props": {
+            "className": "text-4xl",
+            "children": "✅"
+           }
+          },
+          {
+           "type": "h2",
+           "props": {
+            "className": "text-xl font-bold text-ink",
+            "children": "You're registered!"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-content-body",
+            "children": [
+             "You've joined this group for ",
+             {
+              "type": "strong",
+              "props": {
+               "children": "Nevada Design Challenge"
+              }
+             },
+             "."
+            ]
+           }
+          },
+          {
+           "type": "LinkComponent",
+           "props": {
+            "href": "/account",
+            "className": "btn-primary inline-block mt-4",
+            "children": "View My Account →"
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div class=\"bg-white rounded-xl border border-line p-8 text-center space-y-4\"><div class=\"text-4xl\">✅</div><h2 class=\"text-xl font-bold text-ink\">You&#x27;re registered!</h2><p class=\"text-content-body\">You&#x27;ve joined this group for <strong>Nevada Design Challenge</strong>.</p><a class=\"btn-primary inline-block mt-4\" href=\"/account\">View My Account →</a></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"member@example.test\")",
+   "members.select(\"school_email\").eq(\"clerk_user_id\", \"user_1\")",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"school@example.test\")",
+   "getEventBySlug(nv)"
+  ]
+ },
+ "signed in, school address not on the roster": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "Group Registration — ",
+             "Test High"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": {
+        "type": "GroupJoinClient",
+        "props": {
+         "token": "tok",
+         "eventTitle": "Nevada Design Challenge",
+         "eventSlug": "nv",
+         "organiserName": "Grace Hopper",
+         "organiserRole": "Teacher",
+         "schoolName": "Test High",
+         "schoolState": "NV",
+         "memberPaysIndividually": false,
+         "isAuthenticated": true,
+         "prefill": {
+          "memberId": "m-1",
+          "email": "member@example.test",
+          "first_name": "Pre"
+         },
+         "gradeMin": 7,
+         "gradeMax": 12
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">Group Registration — Test High</p></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"join\" data-props=\"{&quot;token&quot;:&quot;tok&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;eventSlug&quot;:&quot;nv&quot;,&quot;organiserName&quot;:&quot;Grace Hopper&quot;,&quot;organiserRole&quot;:&quot;Teacher&quot;,&quot;schoolName&quot;:&quot;Test High&quot;,&quot;schoolState&quot;:&quot;NV&quot;,&quot;memberPaysIndividually&quot;:false,&quot;isAuthenticated&quot;:true,&quot;prefill&quot;:{&quot;memberId&quot;:&quot;m-1&quot;,&quot;email&quot;:&quot;member@example.test&quot;,&quot;first_name&quot;:&quot;Pre&quot;},&quot;gradeMin&quot;:7,&quot;gradeMax&quot;:12}\"></div></div></div>",
+  "reads": [
+   "auth()",
+   "group_join_tokens.select(\"*\").eq(\"token\", \"tok\").eq(\"event_slug\", \"nv\")",
+   "registrations.select(\"teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count\").eq(\"id\", \"reg-1\")",
+   "currentUser()",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"member@example.test\")",
+   "members.select(\"school_email\").eq(\"clerk_user_id\", \"user_1\")",
+   "participants.select(\"id\").eq(\"registration_id\", \"reg-1\").eq(\"email\", \"school@example.test\")",
+   "participants.select(\"*\", {\"count\":\"exact\",\"head\":true}).eq(\"registration_id\", \"reg-1\")",
+   "getEventBySlug(nv)",
+   "getRegistrationPrefill()"
+  ]
+ }
+}

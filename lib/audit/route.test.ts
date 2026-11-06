@@ -284,6 +284,14 @@ describe('withAudit', () => {
     }
   })
 
+  it('a spec that answers with nothing is a recorded failure, not a silent skip', async () => {
+    const { db, rpc } = fakeDb()
+    const res = new Response('ok')
+    expect(await withAudit((() => null) as never, async () => res, { ...on, db })()).toBe(res)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(capture).toHaveBeenCalledTimes(1)
+  })
+
   it('a spec function sees the request and the answer, and one that throws costs only the event', async () => {
     const { db, rpc } = fakeDb()
     const seen = vi.fn()

@@ -14,7 +14,13 @@ import {
   docusignSentToGuardianEmail,
 } from '@/lib/email'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/docusign-reminders
 // Vercel cron calls this daily at 09:00 UTC (see vercel.json).
@@ -45,7 +51,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // chases after this; the rest are picked up by the next daily run.
 const CHASE_BUDGET_MS = 90_000
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -218,4 +224,4 @@ export async function GET(req: NextRequest) {
   console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address, ${deferred} deferred — out of time)`)
   await run.finish({ processed, eligible: envelopes.length, skippedBounced, deferred, outbox })
   return NextResponse.json({ processed, skippedBounced, deferred })
-}
+})

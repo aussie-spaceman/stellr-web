@@ -96,6 +96,8 @@ export function fillBlanksFromStored(
 //     C-3, findings REG-2 + PUB-1). A new email is still created either way.
 export interface UpsertMemberOptions {
   onExisting?: 'update' | 'skip'
+  /** Called with the new id when this call inserted the row, and at no other time. */
+  onCreated?: (id: string) => void
 }
 
 export async function upsertMember(
@@ -221,6 +223,7 @@ export async function upsertMember(
       return null
     }
     memberId = data?.id ?? null
+    if (memberId) opts.onCreated?.(memberId)
   }
 
   // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.

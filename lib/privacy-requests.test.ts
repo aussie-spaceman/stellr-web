@@ -2,17 +2,50 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
-const { sent, notify } = vi.hoisted(() => ({ sent: [] as { to: string; text: string; critical?: boolean }[], notify: vi.fn(async () => {}) }))
-vi.mock('@/lib/email', () => ({ sendEmail: async (m: { to: string; text: string; critical?: boolean }) => { sent.push(m); return { id: 're_1' } } }))
+const { sent, notify, sendFails } = vi.hoisted(() => ({
+  sent: [] as { to: string; text: string; critical?: boolean }[],
+  notify: vi.fn(async () => {}),
+  sendFails: { now: false },
+}))
+vi.mock('@/lib/email', () => ({
+  sendEmail: async (m: { to: string; text: string; critical?: boolean }) => {
+    if (sendFails.now) throw new Error('provider down')
+    sent.push(m)
+    return { id: 're_1' }
+  },
+}))
 vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: notify }))
 
-import { confirmRequest, findMatches, purgeRequests, requestSchema, resolveRequest, submitRequest } from './privacy-requests'
+import {
+  confirmRequest as applyConfirmation,
+  findMatches,
+  purgeRequests,
+  readRequestLink,
+  RequestEmailFailed,
+  requestHeldBack,
+  requestSchema,
+  resolveRequest,
+  submitRequest as recordRequest,
+} from './privacy-requests'
 
 const valid = { kind: 'deletion', relationship: 'parent_guardian', requesterName: 'Pat Lee', requesterEmail: 'Pat@Example.test', subjectName: 'Sam Lee' }
 const linkIn = (text: string) => /\/privacy\/request\/confirm#(\S+)/.exec(text)?.[1] as string
 
+type Db = Parameters<typeof recordRequest>[0]
+type Input = Parameters<typeof recordRequest>[1]
+
+/** What the form route does. */
+const submitRequest = async (db: Db, input: Input) => ((await requestHeldBack(db, input)) ? null : recordRequest(db, input))
+
+/** What the confirm route does. */
+async function confirmRequest(db: Db, token: string, meta: { ip: string | null }) {
+  const link = await readRequestLink(db, token)
+  return link.state === 'open' ? (await applyConfirmation(db, link, meta)).state : link.state
+}
+
 beforeEach(() => {
   sent.length = 0
+  sendFails.now = false
   vi.clearAllMocks()
   vi.stubEnv('ESIGN_TOKEN_SECRET', 'k'.repeat(48))
 })
@@ -63,6 +96,33 @@ describe('a request, from form to answer', () => {
     const db = fakeSupabase({ privacy_requests: [] })
     for (let i = 0; i < 5; i++) await submitRequest(db.client, requestSchema.parse(valid))
     expect(sent).toHaveLength(3)
+  })
+
+  it('returns the row it recorded, for the audit event, and null once over the limit', async () => {
+    const db = fakeSupabase({ privacy_requests: [] })
+    const ids = []
+    for (let i = 0; i < 4; i++) ids.push(await submitRequest(db.client, requestSchema.parse(valid)))
+    expect(ids.slice(0, 3)).toEqual(db.table('privacy_requests').map((r) => r.id))
+    expect(ids[3]).toBeNull()
+  })
+
+  it('a send that fails still tells the caller which row was saved', async () => {
+    const db = fakeSupabase({ privacy_requests: [] })
+    sendFails.now = true
+    const failure = await recordRequest(db.client, requestSchema.parse(valid)).catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(RequestEmailFailed)
+    expect((failure as RequestEmailFailed).message).toBe('provider down')
+    expect((failure as RequestEmailFailed).requestId).toBe(db.table('privacy_requests')[0].id)
+  })
+
+  it('confirming names the row, and a second confirm of the same open link reports already_confirmed', async () => {
+    const db = fakeSupabase({ privacy_requests: [] })
+    const id = await recordRequest(db.client, requestSchema.parse(valid))
+    const link = await readRequestLink(db.client, linkIn(sent[0].text))
+    if (link.state !== 'open') throw new Error(`expected an open link, got ${link.state}`)
+    expect(await applyConfirmation(db.client, link, { ip: null })).toEqual({ state: 'confirmed', requestId: id })
+    expect(await applyConfirmation(db.client, link, { ip: null })).toEqual({ state: 'already_confirmed', requestId: id })
+    expect(notify).toHaveBeenCalledTimes(1)
   })
 })
 

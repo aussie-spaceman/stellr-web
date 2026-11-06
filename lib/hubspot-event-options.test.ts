@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 vi.mock('@/lib/email', () => ({ sendEmail: vi.fn(async () => {}) }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({}) }))
@@ -314,14 +315,78 @@ describe('syncEventOptions', () => {
 
   it('refuses to write when Sanity has no live events, rather than hiding everything', async () => {
     stubPortal()
-    const result = await syncEventOptions({ apply: true, now: NOW, events: NOT_LIVE })
+    const result = await syncEventOptions({ apply: true, now: NOW, events: NOT_LIVE, allTenants: true })
     expect(result.refused).toMatch(/No live events/)
     expect(calls).toEqual([])
   })
 
+  describe('stellrOnlyDb', () => {
+    /** The first page holds the result; the page after it is empty, as PostgREST's would be. */
+    const mirror = (result: { data: unknown; error: unknown }) => {
+      const range = async (from: number) => (from === 0 ? result : { data: [], error: null })
+      return { from: () => ({ select: () => ({ neq: () => ({ order: () => ({ range }) }) }) }) } as unknown as SupabaseClient
+    }
+
+    it('leaves the sync exactly as it was when no other tenant owns an event', async () => {
+      stubPortal()
+      const plain = await syncEventOptions({ apply: false, now: NOW, events: EVENTS, allTenants: true })
+      const plainCalls = calls
+      stubPortal()
+      const scoped = await syncEventOptions({ apply: false, now: NOW, events: EVENTS, stellrOnlyDb: mirror({ data: [], error: null }) })
+      expect(scoped).toEqual(plain)
+      expect(calls).toEqual(plainCalls)
+    })
+
+    it('leaves out an event another tenant owns', async () => {
+      stubPortal()
+      const plain = await syncEventOptions({ apply: false, now: NOW, events: EVENTS, allTenants: true })
+      const theirs = plain.liveEvents[0]
+      expect(EVENTS.map((e) => e.slug)).toContain(theirs)
+      stubPortal()
+      const scoped = await syncEventOptions({
+        apply: false, now: NOW, events: EVENTS, stellrOnlyDb: mirror({ data: [{ slug: theirs, sanity_id: 'sanity-theirs' }], error: null }),
+      })
+      expect(scoped.liveEvents).toEqual(plain.liveEvents.filter((s) => s !== theirs))
+    })
+
+    it('knows a renamed event by its document id, while the mirror still has the old slug', async () => {
+      const withIds = EVENTS.map((e) => ({ ...e, _id: `sanity-${e.slug}` }))
+      stubPortal()
+      const plain = await syncEventOptions({ apply: false, now: NOW, events: withIds, allTenants: true })
+      const renamed = plain.liveEvents[0]
+      stubPortal()
+      const scoped = await syncEventOptions({
+        apply: false, now: NOW, events: withIds,
+        stellrOnlyDb: mirror({ data: [{ slug: 'the-old-slug', sanity_id: `sanity-${renamed}` }], error: null }),
+      })
+      expect(scoped.liveEvents).toEqual(plain.liveEvents.filter((s) => s !== renamed))
+    })
+
+    it('does not drop a Stellr event that has taken a tenant event\'s old slug', async () => {
+      const withIds = EVENTS.map((e) => ({ ...e, _id: `sanity-${e.slug}` }))
+      stubPortal()
+      const plain = await syncEventOptions({ apply: false, now: NOW, events: withIds, allTenants: true })
+      stubPortal()
+      const scoped = await syncEventOptions({
+        apply: false, now: NOW, events: withIds,
+        stellrOnlyDb: mirror({ data: [{ slug: plain.liveEvents[0], sanity_id: 'sanity-some-other-document' }], error: null }),
+      })
+      expect(scoped.liveEvents).toEqual(plain.liveEvents)
+    })
+
+    it('refuses, and writes nothing, when the mirror cannot be read', async () => {
+      stubPortal()
+      const result = await syncEventOptions({
+        apply: true, now: NOW, events: EVENTS, stellrOnlyDb: mirror({ data: null, error: { message: 'down' } }),
+      })
+      expect(result.refused).toMatch(/which tenant owns/)
+      expect(calls).toEqual([])
+    })
+  })
+
   it('writes nothing on a dry run', async () => {
     stubPortal()
-    const result = await syncEventOptions({ apply: false, now: NOW, events: EVENTS })
+    const result = await syncEventOptions({ apply: false, now: NOW, events: EVENTS, allTenants: true })
     expect(calls.filter((c) => c.method === 'PATCH')).toEqual([])
     expect(result.properties.find((p) => p.object === 'contacts' && p.property === 'event')?.status).toBe(
       'would-update',
@@ -330,7 +395,7 @@ describe('syncEventOptions', () => {
 
   it('applies the plan with hidden flags and the managed-by note', async () => {
     stubPortal()
-    const result = await syncEventOptions({ apply: true, now: NOW, events: EVENTS })
+    const result = await syncEventOptions({ apply: true, now: NOW, events: EVENTS, allTenants: true })
     expect(result.ok).toBe(true)
 
     const patch = calls.find((c) => c.method === 'PATCH' && c.url.endsWith('/contacts/event'))!
@@ -342,7 +407,7 @@ describe('syncEventOptions', () => {
 
   it('drops the unused stale deal values after counting them', async () => {
     stubPortal()
-    await syncEventOptions({ apply: true, now: NOW, events: EVENTS })
+    await syncEventOptions({ apply: true, now: NOW, events: EVENTS, allTenants: true })
     const searches = calls.filter((c) => c.url.includes('/deals/search'))
     expect(searches).toHaveLength(3)
     const patch = calls.find((c) => c.method === 'PATCH' && c.url.endsWith('/deals/event'))!
@@ -353,7 +418,7 @@ describe('syncEventOptions', () => {
 
   it('records a failed object and carries on with the rest', async () => {
     stubPortal({ dealWrite: 403 })
-    const result = await syncEventOptions({ apply: true, now: NOW, events: EVENTS })
+    const result = await syncEventOptions({ apply: true, now: NOW, events: EVENTS, allTenants: true })
     expect(result.ok).toBe(false)
     const contacts = result.properties.filter((p) => p.object === 'contacts')
     expect(contacts.every((p) => p.status !== 'failed')).toBe(true)

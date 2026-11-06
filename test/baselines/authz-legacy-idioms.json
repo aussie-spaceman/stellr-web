@@ -690,9 +690,6 @@
       "requireAdminPage": 1,
       "roleTableRead": 1
     },
-    "lib/community.ts": {
-      "isAdminClaims": 1
-    },
     "lib/deletion/external.ts": {
       "clerkRoleRead": 1,
       "portalRoleList": 1
@@ -707,6 +704,9 @@
       "roleTableRead": 1
     },
     "lib/impersonation.ts": {
+      "isAdminClaims": 1
+    },
+    "lib/member-session.ts": {
       "isAdminClaims": 1
     },
     "lib/notify.ts": {

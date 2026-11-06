@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/campaign-events — runs daily (see vercel.json). Translates
 // date-based membership milestones into campaign events. Currently:
@@ -10,7 +16,7 @@ import { startCronRun } from '@/lib/cron-runs'
 // fireCampaignEvent is a no-op when no matching campaign is active, and the
 // campaign send ledger dedups (dedup_key = the expiry date), so re-runs and the
 // 1-day scan window can never double-send for a given renewal cycle.
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('campaign-events', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -53,4 +59,4 @@ export async function GET(req: NextRequest) {
 
   await run.finish({ candidates: memberships?.length ?? 0, fired })
   return NextResponse.json({ window: { from: from.toISOString(), to: to.toISOString() }, candidates: memberships?.length ?? 0, fired })
-}
+})

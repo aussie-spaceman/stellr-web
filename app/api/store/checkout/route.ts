@@ -10,6 +10,7 @@ import { assertLiveCredentials } from '@/lib/env-guards'
 import { getActiveTierIdsByMember } from '@/lib/tiers-server'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { auditMutation } from '@/lib/audit/route'
 
 // Storefront checkout. Re-derives every price server-side (tier discount applied
 // for logged-in members), creates a pending order, and returns a Stripe Checkout
@@ -104,6 +105,19 @@ export async function POST(req: Request) {
   if (lines.length === 0) return NextResponse.json({ error: 'No purchasable items in cart' }, { status: 400 })
 
   const { orderId } = await createPendingOrder({ memberId, email, lines })
+
+  // docs/TENANCY-S5.md, B18. Written as soon as the order exists, so a Stripe failure
+  // below still leaves the record. The order's id and a count: no address, no prices.
+  await auditMutation(
+    {
+      action: 'store.checkout.create',
+      actor: { userId },
+      tenant: { stellr: true },
+      target: { table: 'store_orders', id: orderId },
+      metadata: { line_count: lines.length, guest: memberId === null },
+    },
+    { afterResponse: true },
+  )
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   // deep review PAY-15: refuse to take money on a production deployment holding

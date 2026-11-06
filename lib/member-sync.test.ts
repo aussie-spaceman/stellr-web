@@ -35,6 +35,25 @@ function makeDb(existingMember: { id: string; event_role?: string } | null) {
   return { db: db as never, calls }
 }
 
+describe('upsertMember — onCreated', () => {
+  const input = { email: 'jane@example.com', first_name: 'Jane', last_name: 'Doe' }
+
+  it('fires with the new id when the row was inserted', async () => {
+    const { db } = makeDb(null)
+    const onCreated = vi.fn()
+    expect(await upsertMember(db, input, { onExisting: 'skip', onCreated })).toBe('new-id')
+    expect(onCreated).toHaveBeenCalledTimes(1)
+    expect(onCreated).toHaveBeenCalledWith('new-id')
+  })
+
+  it.each(['skip', 'update'] as const)('does not fire when a member was matched (onExisting: %s)', async (onExisting) => {
+    const { db } = makeDb({ id: 'existing-1', event_role: 'teacher' })
+    const onCreated = vi.fn()
+    expect(await upsertMember(db, input, { onExisting, onCreated })).toBe('existing-1')
+    expect(onCreated).not.toHaveBeenCalled()
+  })
+})
+
 describe('upsertMember — email cross-reference against existing members', () => {
   it('updates the matched member and never blanks fields left empty', async () => {
     const { db, calls } = makeDb({ id: 'existing-1', event_role: 'teacher' })

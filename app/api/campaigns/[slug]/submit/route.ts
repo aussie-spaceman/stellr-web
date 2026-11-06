@@ -8,14 +8,28 @@ import { deadlineInfo } from '@/lib/campaigns'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
+import { withAudit } from '@/lib/audit/route'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
 
+// The registration a request was for, which withAudit's spec cannot otherwise see. The
+// file's name and the judges' notes stay out of the event: a student wrote them.
+const submittedFor = new WeakMap<Request, string>()
 
 // Upload + submit a campaign proposal (file + optional judges' notes). One
 // deliverable per registration; re-submitting replaces the stored file.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'campaign.submission.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'registrations', id: submittedFor.get(req) ?? null },
+  }),
+  submitProposal,
+)
+
+async function submitProposal(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await params
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -28,6 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     const reg = await getMemberCampaignRegistration(member.id, slug)
     if (!reg) return NextResponse.json({ error: 'You are not registered for this campaign.' }, { status: 404 })
+    submittedFor.set(req, reg.id)
 
     // The bytes went browser → storage via /api/uploads/sign; only the path
     // arrives here. The 25MB this route used to advertise was never reachable —

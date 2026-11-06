@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { dispatchTeamProfiles } from '@/lib/team-profile/store'
 
@@ -11,7 +12,7 @@ export const maxDuration = 60
 // (lib/esign/completion.ts) or at registration when paperwork is already on
 // file (lib/docusign-agreements.ts). This daily sweep sends any those missed,
 // for every upcoming competition. Idempotent: one profile per participant.
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('team-profiles', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -26,4 +27,4 @@ export async function GET(req: NextRequest) {
     await run.finish({})
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
-}
+})

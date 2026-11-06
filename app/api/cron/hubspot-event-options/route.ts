@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { isRealProductionApp } from '@/lib/env-guards'
 import { syncEventOptions } from '@/lib/hubspot-event-options'
@@ -15,8 +16,12 @@ import { syncEventOptions } from '@/lib/hubspot-event-options'
 // last school year's options on 1 August, which no edit triggers.
 
 export const dynamic = 'force-dynamic'
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('hubspot-event-options', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -26,7 +31,7 @@ export async function GET(req: NextRequest) {
   // One HubSpot portal, no sandbox: guardCron already limits this to
   // APP_ENV=prod; the second check keeps the dev project's production target
   // (VERCEL_ENV=production there too) from ever writing.
-  const result = await syncEventOptions({ apply: isRealProductionApp() })
+  const result = await syncEventOptions({ apply: isRealProductionApp(), stellrOnlyDb: db })
 
   const summary = {
     ok: result.ok,
@@ -55,4 +60,4 @@ export async function GET(req: NextRequest) {
 
   await run.finish(summary)
   return NextResponse.json(summary, { status: 200 })
-}
+})

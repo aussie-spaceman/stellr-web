@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getEventsBySlugs } from '@/lib/sanity'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // ── The check-in banner: one QR code for every event ─────────────────────────
 //
@@ -80,9 +81,30 @@ export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-/** Every event with check-in switched on, with its title, dates and setting from Sanity. */
+const openSettings = (db: SupabaseClient) => db.from('event_settings').select('event_slug, check_in_token').eq('check_in_open', true)
+
+type SettingRows = { data: { event_slug: unknown; check_in_token: unknown }[] | null; error: { message: string } | null }
+
+/**
+ * Every Stellr event with check-in switched on, with its title, dates and setting from
+ * Sanity, for Stellr's banner and desk. Other organisers' open check-ins stay out of it:
+ * a NULL tenant_id is a Stellr row the backfill hasn't reached, and every row is one or
+ * the other until a second tenant has an event, so today this returns every open row.
+ */
 export async function loadOpenCheckIns(db: SupabaseClient): Promise<OpenCheckIn[]> {
-  const { data: rows, error } = await db.from('event_settings').select('event_slug, check_in_token').eq('check_in_open', true)
+  return withEventDetails(await openSettings(db).or(`tenant_id.is.null,tenant_id.eq.${STELLR_TENANT_ID}`))
+}
+
+/**
+ * One tenant's open check-ins: a tenant page's banner must not send a phone to another
+ * organiser's event. An empty id throws, rather than reading everyone's.
+ */
+export async function loadOpenCheckInsForTenant(db: SupabaseClient, tenantId: string): Promise<OpenCheckIn[]> {
+  if (!tenantId) throw new Error('Failed to load open check-ins: no tenant id')
+  return withEventDetails(await openSettings(db).eq('tenant_id', tenantId))
+}
+
+async function withEventDetails({ data: rows, error }: SettingRows): Promise<OpenCheckIn[]> {
   if (error) throw new Error(`Failed to load open check-ins: ${error.message}`)
   if (!rows?.length) return []
 

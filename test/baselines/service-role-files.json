@@ -153,13 +153,13 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
-    "app/(flow)/register/[slug]/individual/page.tsx": {
+    "app/(flow)/register/[slug]/individual/individual-body.tsx": {
       "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
+      "reason": "The individual registration page's body, moved here unchanged from its page.tsx by S5 B5b so a tenant page can reuse it without the tracking. Reads the scholarship offer and event add-ons signed out, with no session to scope them. Same access as before the move, for the area conversion to decide."
     },
-    "app/(flow)/register/[slug]/join/[token]/page.tsx": {
+    "app/(flow)/register/[slug]/join/[token]/join-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: group_join_tokens, members, participants, registrations, schools"
+      "reason": "The group join page's body, moved here unchanged from its page.tsx by S5 B5b so a tenant page can reuse it without the prefill. Reads the join link, its registration and roster for someone who may not be signed in, by the link's token. Same access as before the move, for the area conversion to decide."
     },
     "app/(flow)/register/[slug]/pay-seat/[token]/page.tsx": {
       "class": "convert",
@@ -1355,7 +1355,7 @@
     },
     "lib/community.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: community_space_members, community_space_training, community_spaces, content_entitlements, content_prerequisites, members (+2)"
+      "reason": "auto: touches tenant or event-scoped tables; tables: community_space_members, community_space_training, community_spaces, content_entitlements, content_prerequisites, training_items (+1)"
     },
     "lib/compliance-admin.ts": {
       "class": "identity",
@@ -1440,6 +1440,10 @@
     "lib/member-roles.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: member_roles, members"
+    },
+    "lib/member-session.ts": {
+      "class": "convert",
+      "reason": "Resolves the signed-in Clerk user to their own members row and memberships, moved unchanged from lib/community.ts (B8). Passes the client to the consent check; review before converting."
     },
     "lib/membership-grants.ts": {
       "class": "convert",
@@ -1557,6 +1561,10 @@
       "class": "convert",
       "reason": "The tenant host resolver (S5 B1) reads the host map over raw PostgREST with the secret key, because it runs in the proxy on the Edge before any tenant is known and supabase-js is not Edge-safe there. Inert until TENANT_ROUTING_ENABLED and the proxy wiring land. Class left at the conservative convert until a person reviews it."
     },
+    "lib/tenancy/tenant-records.ts": {
+      "class": "convert",
+      "reason": "The tenant tree's record checks (S5 B5b). Each reads a record's tenant_id by slug or token for a signed-out visitor, before any page renders, and compares it to the tenant from the URL param. It runs only under app/%5Ft, so nothing reaches it with TENANT_ROUTING_ENABLED off. A tenantDb client can't be used yet: the check is what decides the record is this tenant's, and TENANT_DB_ENABLED is off."
+    },
     "lib/tier-pricing.ts": {
       "class": "stellr_only",
       "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: membership_tiers"
@@ -1636,6 +1644,10 @@
     "scripts/fix-event-slug.ts": {
       "class": "script",
       "reason": "auto: operator script, run by hand"
+    },
+    "scripts/hubspot-sync-event-options.ts": {
+      "class": "script",
+      "reason": "Operator script, run by hand: reads public.events so that --apply leaves another tenant's events out of Stellr's HubSpot portal, as the cron and webhook do. No browser or request reaches it."
     },
     "scripts/map-tenancy-roles.ts": {
       "class": "script",

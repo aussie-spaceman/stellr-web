@@ -7,18 +7,6 @@
     "app/(flow)/check-in/[slug]/page.tsx": [
       "getEventBySlug"
     ],
-    "app/(flow)/register/[slug]/confirmation/page.tsx": [
-      "getEventBySlug"
-    ],
-    "app/(flow)/register/[slug]/group/page.tsx": [
-      "getEventBySlug"
-    ],
-    "app/(flow)/register/[slug]/individual/page.tsx": [
-      "getEventBySlug"
-    ],
-    "app/(flow)/register/[slug]/join/[token]/page.tsx": [
-      "getEventBySlug"
-    ],
     "app/(flow)/register/[slug]/page.tsx": [
       "getEventBySlug"
     ],

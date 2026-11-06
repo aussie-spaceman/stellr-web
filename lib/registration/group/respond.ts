@@ -168,26 +168,12 @@ async function collectPayment(
       // × total_participants) was a second, independent calc that could — and did —
       // diverge from the stored amount and silently collapse to $0.00 (unit_amount
       // defaulting to 0), finalising and emailing a $0 invoice for a paid event.
-      let invoiceAmountCents = amountDueCents
-      let perSeatCents = feeUnitAmount ?? 0
-      // Transient recovery: if the early price lookup failed (feeUnitAmount null →
-      // amountDueCents collapsed to 0) but THIS retrieve succeeded, re-derive the
-      // amount from the price we just fetched and persist it, so the stored
-      // amount_due_cents always matches what is actually billed. Without this, a
-      // blip on the first lookup silently dropped a correctly-priced invoice while
-      // the UI told the organiser one was sent.
-      if (feeUnitAmount === null) {
-        perSeatCents = priceObj.unit_amount ?? 0
-        invoiceAmountCents = perSeatCents * (total_participants ?? 0)
-        if (invoiceAmountCents > 0) {
-          await db.from('registrations').update({ amount_due_cents: invoiceAmountCents }).eq('id', regId)
-        }
-      }
-      // Guard: never finalise/send a non-positive invoice for a paid event. The
-      // positively-resolved-$0 case is already rejected up front (before any
-      // records exist); this backstop only remains reachable when the early lookup
-      // failed AND the price genuinely resolves to 0 — leave the registration
-      // unpaid for admin follow-up rather than sending a bogus $0.00 invoice.
+      const invoiceAmountCents = amountDueCents
+      const perSeatCents = feeUnitAmount ?? 0
+      // Guard: never finalise/send a non-positive invoice for a paid event. A $0
+      // total and a price that can't be read are both refused up front (before any
+      // records exist), so this is only a backstop: leave the registration unpaid
+      // for admin follow-up rather than sending a bogus $0.00 invoice.
       if (invoiceAmountCents <= 0) {
         console.error('[register/group] invoice NOT sent — non-positive amount', {
           eventSlug: event_slug, stripePriceId, perSeatCents,

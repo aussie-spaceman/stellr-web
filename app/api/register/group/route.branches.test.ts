@@ -610,11 +610,41 @@ describe('branches: POST /api/register/group — the price', () => {
     expect(h.merch).not.toHaveBeenCalled()
   })
 
-  it('a failed price lookup is $0 owing but pending, never a free confirmation', async () => {
+  it.each([
+    ['an invoice', { payment_method: 'invoice' }],
+    ['a card', { payment_method: 'card' }],
+    ['members paying individually', { payment_method: 'individual', member_pays_individually: true }],
+    ['no way of paying', { payment_method: 'none' }],
+  ])('a price that cannot be read refuses %s as a retryable 503, before anything happens', async (_l, overrides) => {
+    const boom = new Error('boom')
+    h.priceRetrieve.mockRejectedValue(boom)
+    expect(await settle(await post(body(overrides)))).toEqual(refused(
+      503,
+      'Registration is temporarily unavailable. Please try again shortly.',
+    ))
+    nothingNew()
+    expect(h.priceRetrieve).toHaveBeenCalledTimes(1)
+    expect(h.provision).not.toHaveBeenCalled()
+    expect(h.createSheet).not.toHaveBeenCalled()
+    expect(h.invoice).not.toHaveBeenCalled()
+    expect(h.checkout).not.toHaveBeenCalled()
+    expect(h.sendEmail).not.toHaveBeenCalled()
+    expect(errors).toHaveBeenCalledWith('[register/group] price lookup failed:', 'colorado', 'price_x', boom)
+  })
+
+  it('a free event has no price to read, so a Stripe failure cannot refuse it', async () => {
+    h.getEventBySlug.mockResolvedValue(OPEN_EVENT)
     h.priceRetrieve.mockRejectedValue(new Error('boom'))
     expect((await post(body())).status).toBe(201)
-    expect(registrationRow()).toMatchObject({ amount_due_cents: 0, status: 'pending' })
-    expect(h.merch).not.toHaveBeenCalled()
+    expect(h.priceRetrieve).not.toHaveBeenCalled()
+    expect(registrationRow()).toMatchObject({ amount_due_cents: 0, status: 'confirmed' })
+  })
+
+  it('a campaign collects nothing, so a price left on its document cannot refuse it', async () => {
+    h.getEventBySlug.mockResolvedValue({ ...PRICED, activityType: 'campaign', registrationOpen: true })
+    h.priceRetrieve.mockRejectedValue(new Error('boom'))
+    expect((await post(body())).status).toBe(201)
+    expect(registrationRow()).toMatchObject({ type: 'campaign', status: 'confirmed', amount_due_cents: 0 })
   })
 
   it('a $0 price is a free event: confirmed, with merch finalised', async () => {
@@ -1043,21 +1073,20 @@ describe('branches: POST /api/register/group — the invoice', () => {
     expect(h.invoice).not.toHaveBeenCalled()
   })
 
-  it('a first lookup that failed is recovered: the amount is re-derived and stored', async () => {
+  it('a first read that fails is refused, even if a second read would have worked', async () => {
     h.priceRetrieve.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ unit_amount: 100, currency: 'cad' })
-    expect((await post(invoiced())).status).toBe(201)
-    expect(rec.payloads('update', 'registrations')).toContainEqual({ amount_due_cents: 300 })
-    expect(h.invoice.mock.calls[0][2]).toMatchObject({ amountCents: 300, perSeatCents: 100, currency: 'cad' })
+    expect((await post(invoiced())).status).toBe(503)
+    expect(rec.writes()).toEqual(NOTHING_WRITTEN)
+    expect(h.invoice).not.toHaveBeenCalled()
   })
 
-  it('recovered at $0: no invoice, nothing stored, and it is logged', async () => {
-    h.priceRetrieve.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ unit_amount: 0, currency: 'usd' })
+  it('a second read that fails sends no invoice, keeps the amount, and the registration completes', async () => {
+    const boom = new Error('boom')
+    h.priceRetrieve.mockResolvedValueOnce({ unit_amount: 13500, currency: 'usd' }).mockRejectedValueOnce(boom)
     expect((await post(invoiced())).status).toBe(201)
+    expect(registrationRow()).toMatchObject({ amount_due_cents: 40500, status: 'pending', invoice_requested: true })
     expect(h.invoice).not.toHaveBeenCalled()
-    expect(rec.payloads('update', 'registrations').some((p) => 'amount_due_cents' in (p as Person))).toBe(false)
-    expect(errors).toHaveBeenCalledWith('[register/group] invoice NOT sent — non-positive amount', {
-      eventSlug: 'colorado', stripePriceId: 'price_x', perSeatCents: 0, total_participants: 3, invoiceAmountCents: 0,
-    })
+    expect(errors).toHaveBeenCalledWith('Stripe invoice error (non-fatal):', boom)
   })
 
   it('a registrant with no member id is invoiced with null', async () => {

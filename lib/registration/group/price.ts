@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { collectsNothing } from '@/lib/event-pricing'
 import { stripeClient } from '@/lib/stripe'
-import { refuse, type Refusable } from '../refusal'
+import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import type { GroupBody } from './parse'
 
 /** What this registration owes, as far as the gate could tell. */
 export interface GroupPrice {
   amountDueCents: number
-  /** null = price never resolved (no price / lookup failed). */
+  /** null = no price was read: none on the event, Stripe off, or a campaign's lookup failed. */
   feeUnitAmount: number | null
   /** The event has a price and Stripe is configured, so seats can be billed. */
   canBill: boolean
@@ -19,7 +19,7 @@ export interface GroupPrice {
  * collect it. Every refusal here comes before any record exists.
  */
 export async function priceGroupRegistration(
-  event: { stripePriceId?: string } | null,
+  event: { stripePriceId?: string; activityType?: string } | null,
   body: Pick<GroupBody, 'event_slug' | 'payment_method' | 'total_participants'>,
 ): Promise<Refusable<{ price: GroupPrice }>> {
   const { event_slug, payment_method, total_participants } = body
@@ -27,7 +27,7 @@ export async function priceGroupRegistration(
   // Amount owed for this registration: per-seat event fee × seats, or 0 when the
   // event has no Stripe price (campaigns / free events). Drives the payment gate.
   let amountDueCents = 0
-  let feeUnitAmount: number | null = null // null = price never resolved (no price / lookup failed)
+  let feeUnitAmount: number | null = null
   const feePriceId = event?.stripePriceId
   const feeStripe = stripeClient()
   if (feePriceId && feeStripe) {
@@ -36,7 +36,13 @@ export async function priceGroupRegistration(
       feeUnitAmount = pr.unit_amount ?? 0
       amountDueCents = feeUnitAmount * (total_participants ?? 0)
     } catch (e) {
-      console.error('[register/group] price lookup failed (amount_due defaults 0):', e)
+      console.error('[register/group] price lookup failed:', event_slug, feePriceId, e)
+      // The event has a fee and we don't know it, so this registration's amount
+      // can't be recorded, whichever way it pays: refuse it before anything is
+      // written, and the organiser tries again. A campaign is the exception. It
+      // collects nothing and the field doesn't apply to it, so a price left on its
+      // document must not stop anyone entering.
+      if (event?.activityType !== 'campaign') return refuse(temporarilyUnavailable())
     }
   }
 
@@ -44,10 +50,7 @@ export async function priceGroupRegistration(
   // registration left 'pending' would sit there forever with no path to
   // 'confirmed' (campaigns already dodge this by confirming at creation).
   // Free is either no price configured at all, or an explicit $0 price object
-  // — the way free events are deliberately set up. A price that exists but
-  // failed to resolve also leaves amountDueCents at 0, but that is a transient
-  // error, not a free event: `feeUnitAmount` stays null there, so the
-  // registration correctly stays pending rather than being confirmed unpaid.
+  // — the way free events are deliberately set up.
   const nothingToCollect = collectsNothing(feePriceId, feeUnitAmount)
 
   // Stripe rejects any charge below its per-currency minimum (~$0.50 USD). If a
@@ -56,8 +59,8 @@ export async function priceGroupRegistration(
   // rather than doing all the record-creation work and then blowing up on
   // the unguarded Stripe call at the very end (which orphaned the registration,
   // participants, DocuSign envelopes, sheet and emails, and 500'd the request).
-  // `feeUnitAmount !== null` guards against a transient price-lookup failure —
-  // we only reject when we positively resolved a sub-minimum amount.
+  // `feeUnitAmount !== null`: this is only for an amount we positively resolved.
+  // No price at all has its own refusal below.
   const STRIPE_MIN_CHARGE_CENTS = 50
   if (
     payment_method === 'card' &&
@@ -94,8 +97,7 @@ export async function priceGroupRegistration(
   // invoice_requested=true, the invoice block in respond would skip the send, and
   // every member surface would show "Invoice sent to organiser" for an invoice
   // that never existed. (`feeUnitAmount !== null` = we only reject on a
-  // positively-resolved zero; a transient lookup failure is recovered inside
-  // the invoice block instead.)
+  // positively-resolved zero. No price at all is the next refusal.)
   if (
     payment_method === 'invoice' &&
     feeUnitAmount !== null &&

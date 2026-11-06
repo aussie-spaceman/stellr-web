@@ -1,5 +1,5 @@
 import { normalizeEventRole, normalizeEmail } from '@/lib/member-enums'
-import { resolveEmailPair } from '@/lib/member-email'
+import { resolveEmailPair, schoolEmailToStore } from '@/lib/member-email'
 
 // POST /api/register/group, the shape of what comes in. The route names each field
 // itself (see the note there); nothing here validates: these are the types the
@@ -100,6 +100,7 @@ export function settleAddresses(body: GroupBody, sessionEmail: string | null | u
   }
 
   if (teacher?.email) teacher.email = normalizeEmail(teacher.email)
+  if (teacher) teacher.school_email = schoolEmailToStore(teacher.school_email)
   // Personal takes primacy (lib/member-email): a participant given only a
   // school address has it as their primary; school_email keeps the school one.
   for (const p of [...(additional_adults ?? []), ...(students ?? [])]) {

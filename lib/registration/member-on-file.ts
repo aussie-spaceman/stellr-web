@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Is this address already on file? A caller with no session has not proven an
-// address is theirs, so the join link and the individual form ask them to sign in
-// before anything is written.
+// address is theirs, so the join link, the individual form and the group form's
+// organiser are asked to sign in before anything is written.
 
 /** The forms answer this code by asking the person to sign in. */
 export const SIGN_IN_REQUIRED = 'sign_in_required'

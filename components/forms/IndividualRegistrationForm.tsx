@@ -6,7 +6,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 import { SCHOOL_EMAIL_LABEL, showsSchoolEmail } from '@/lib/member-email'
 import { z } from 'zod'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
@@ -18,6 +17,7 @@ import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import { authPath } from '@/lib/auth-path'
 import { ageFromDob } from '@/lib/utils'
+import { OnFilePrompt, needsAnAdultToRegister } from '@/components/forms/OnFilePrompt'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 export interface ScholarshipFormOffer {
@@ -116,42 +116,6 @@ function CheckboxGroup({ legend, options, selected, onToggle, error }: {
   )
 }
 
-
-/** The answer when the email is already on file: what this person can do next. */
-function OnFilePrompt({ schoolAddressOnly, signInUrl, onboardingUrl, signedIn, needsAnAdult }: {
-  schoolAddressOnly: boolean
-  signInUrl: string
-  onboardingUrl: string
-  signedIn: boolean
-  needsAnAdult: boolean
-}) {
-  const contact = <Link href="/contact" className="underline hover:no-underline font-medium">contact us</Link>
-  return (
-    <div role="status" className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-      <p className="font-medium">This email is already on file with Stellr</p>
-      {needsAnAdult ? (
-        <p className="mt-1">A parent or guardian needs to help with this one. Please ask them to {contact}, and we&apos;ll help.</p>
-      ) : signedIn ? (
-        <p className="mt-1">
-          We couldn&apos;t match your login to it.{' '}
-          <Link href={onboardingUrl} className="underline hover:no-underline font-medium">Finish setting up your account</Link>{' '}
-          and you&apos;ll come back here, or {contact} and we&apos;ll help.
-        </p>
-      ) : (
-        <>
-          <p className="mt-1">
-            {schoolAddressOnly
-              ? 'Sign in with your main email address, not your school one, and you’ll come back here to register — '
-              : 'Sign in with the address you first used with us, or create your login with it, and you’ll come back here to register — '}
-            <Link href={signInUrl} className="underline hover:no-underline font-medium">sign in →</Link>
-          </p>
-          <p className="mt-1">If that doesn&apos;t work, or a parent or guardian is helping you, {contact} and we&apos;ll help.</p>
-        </>
-      )}
-      <p className="mt-1">Signing in registers the person the account belongs to. Registering someone else, such as a child who shares this email? Use a different address for them.</p>
-    </div>
-  )
-}
 
 export default function IndividualRegistrationForm({
   eventSlug,
@@ -709,10 +673,7 @@ export default function IndividualRegistrationForm({
               signedIn={!!isSignedIn}
               // A child with no login cannot make one until a parent has consented,
               // so they are never pointed at sign-up.
-              needsAnAdult={(() => {
-                const age = ageFromDob(dob ?? '')
-                return !Number.isFinite(age) || age < 13
-              })()}
+              needsAnAdult={needsAnAdultToRegister(ageFromDob(dob ?? ''))}
             />
           )}
 

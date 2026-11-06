@@ -275,7 +275,7 @@ On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #54
 | A0 + | Merged. Added for the wave 1 `KNOWN DEFECT` tests | A defect fix: register routes fail closed on a failed read. Stellr sees a change only when a read has already failed |
 | A3 | Merged | Platform-owner early return. One added lookup per participant write, and a failed read fails the write |
 | A4, A5, A6 | Merged | Pure refactors, pinned by branch tests that passed on the unsplit routes first |
-| A5 + | Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link and the individual form ask an email on file to sign in, and the register forms give one answer for an address already on the event to anyone not signed in as it |
+| A5 + | Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link, the individual form and the group form's organiser ask an email on file to sign in, and the register forms give one answer for an address already on the event to anyone not signed in as it |
 | A6 + | Merged. Owner decision, 5 Nov | **Not a no-op:** organisers see a Member ID linked row by name and status only, for rows linked from now on (`lib/team-linked-details.ts`) |
 | B0 + | Merged. Added for the wave 1 follow-ups | Defect fixes on community reports and reactions, cohort sign-up and library files |
 | B3 | Merged | No route imports the runner. `lastCronResult` works with or without the migration |
@@ -351,6 +351,7 @@ On top of [Owner gates](#owner-gates).
 | B5 | Add to `Real tenant hosts`: `TENANT_ROUTING_ENABLED` stays off for any deployment with a zone attached until B5c and B10(d) pass, and A7, C6 and B10(c) pass |
 | C5a | Turn on the required code-owner ruleset. `.github/CODEOWNERS` only requests review until then. And confirm a PR label is enough to raise a ratchet |
 | C6 | Whether per-route lists of differing refusals stay in the public repo, or become totals and a hash of the list. A CI artifact is not an option, because artifacts on a public repo are public. And which capability-token outcomes to accept before the S5 gate |
+| A5 + | People an organiser enters, on the group form. With no session, naming someone on file as a student or adult still links them to the group. Their profile is not rewritten, and the owner's choice is what else to hold back until they confirm. The slice reports hold the detail |
 | C9 | Run `--check` on `dev`, then production, before shadow, and decide what to do with any stale rows. Confirm a Clerk revoke through `set-admin` should go ahead when the Postgres write is refused |
 
 ### Docs still owed

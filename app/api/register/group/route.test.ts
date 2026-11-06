@@ -61,11 +61,11 @@ function makeDb(captures: Record<string, unknown[]>) {
         const rows = Array.isArray(state.payload) ? state.payload : [state.payload]
         return { data: rows.map((r: Record<string, unknown>) => ({ id: `m-${String(r.email)}`, email: r.email })), error: null }
       }
-      if (table === 'members' && state.op === 'select') return { data: [], error: null }
+      if (table === 'members' && state.op === 'select') return { data: state.single ? null : [], error: null }
       return { data: null, error: null }
     }
     const chain: Record<string, unknown> = {
-      select: () => chain, eq: () => chain, in: () => chain, not: () => chain, is: () => chain,
+      select: () => chain, eq: () => chain, in: () => chain, not: () => chain, is: () => chain, limit: () => chain,
       insert: (p: unknown) => { state.op = 'insert'; state.payload = p; (captures[table] ||= []).push(p); return chain },
       upsert: (p: unknown) => { state.op = 'upsert'; state.payload = p; (h.upserts[table] ||= []).push(p); return chain },
       update: (p: unknown) => { state.op = 'update'; state.payload = p; return chain },

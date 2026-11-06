@@ -139,7 +139,7 @@ describe('IndividualRegistrationForm — an email already on file', () => {
   it('asks them to sign in, keeping the way back, query included, and shows no error', async () => {
     window.history.replaceState(null, '', '/register/test-event/individual?scholarship=tok')
     await submitAndRefuse(complete)
-    expect(screen.getByRole('link', { name: /sign in/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(
       'href',
       `/sign-in?next=${encodeURIComponent('/register/test-event/individual?scholarship=tok')}`,
     )
@@ -150,7 +150,8 @@ describe('IndividualRegistrationForm — an email already on file', () => {
 
   it('a match only on a school address never suggests making a login with it', async () => {
     await submitAndRefuse(complete, true)
-    expect(screen.getByText(/your main email address, not your school one/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sign in with your main email address' })).toBeInTheDocument()
+    expect(screen.getByText(/not your school one/)).toBeInTheDocument()
     expect(screen.queryByText(/create your login/)).toBeNull()
   })
 
@@ -158,7 +159,7 @@ describe('IndividualRegistrationForm — an email already on file', () => {
     await submitAndRefuse({ ...complete, date_of_birth: `${new Date().getFullYear() - 10}-01-01` })
     expect(screen.getByText(/A parent or guardian needs to help/)).toBeInTheDocument()
     expect(screen.queryByText(/create your login/)).toBeNull()
-    expect(screen.queryByRole('link', { name: /sign in/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /sign in/i })).toBeNull()
     expect(screen.getByRole('link', { name: 'contact us' })).toBeInTheDocument()
   })
 
@@ -170,7 +171,7 @@ describe('IndividualRegistrationForm — an email already on file', () => {
       'href',
       `/account/onboarding?next=${encodeURIComponent('/register/test-event/individual')}`,
     )
-    expect(screen.queryByRole('link', { name: /sign in/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /sign in/i })).toBeNull()
     expect(screen.queryByText(/address you’re signed in with/)).toBeNull()
   })
 

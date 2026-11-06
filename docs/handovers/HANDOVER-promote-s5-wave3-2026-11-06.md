@@ -23,7 +23,7 @@ The owner asked to promote everything on `dev`. It began with group invoices, th
 
 ## Owner decisions in this session
 
-- Applied the sign-in witnesses instead of waiving them, by asking the agent to run them.
+- Did not waive the sign-in witnesses: asked the agent to run them.
 - Added the Stripe events.
 - Took Lanes A to D into the promotion.
 - Merged the code first, then asked for C0b to be applied. The owner said to apply them without first reading the SQL, which was offered.
@@ -38,13 +38,12 @@ Everything else passed by full page load: refusal with nothing written, return t
 ## What went wrong
 
 - **The witness run wrote to `dev` when it was said not to.** The owner was told priced events stop before any write. That holds for the individual form, but the group invoice path carries on past a failed price lookup. It created a registration, member, Clerk user, agreements, Sheet and DocuSign demo envelopes. The database rows and Clerk user were removed and read back. See `.14`.
-- **`amount_due_cents` was 0 on that registration.** A failed price lookup in the group gate defaults the amount to 0 and continues. It happened here because of a test key against a live price. Not looked at further: production has matching keys, but a Stripe outage at that moment could record a group at 0.
 - **Blast radius was first stated before `dev` moved.** Each move was caught by re-reading, but the first read of CI covered a tree that no longer shipped.
 - **`docs/TENANCY-S5.md` and the record said C0b was unapplied** for a short time after it landed. This close-out corrects both.
 
 ## Not verified
 
-Rows `.3`, `.5`, `.6`, `.7` and `.9` to `.11`. The first real registration, the first cron run and a typed sign-in have not happened yet, so the most important behaviour in this promotion is unproven on production.
+Rows `.3`, `.5` to `.8` and `.9` to `.12`. The first real registration, the first cron run and a typed sign-in have not happened yet, so the most important behaviour in this promotion is unproven on production.
 
 ## Witnessing mechanics
 

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // POST /api/webhooks/google-sheets
 // Receives Google Drive push notifications when a watched sheet is modified.
 export async function POST(req: NextRequest) {

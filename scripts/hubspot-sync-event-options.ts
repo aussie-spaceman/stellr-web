@@ -12,7 +12,9 @@
  * the live CRM's dropdowns, which is why it is not the default.
  *
  * Env: HUBSPOT_ACCESS_TOKEN (crm.schemas.contacts.write, crm.schemas.deals.write,
- * forms), the Sanity read vars, and HUBSPOT_FORM_EVENT_NOTIFY for the form.
+ * forms), the Sanity read vars, HUBSPOT_FORM_EVENT_NOTIFY for the form, and the
+ * Supabase vars: events another tenant owns are read from the events mirror and
+ * left out. Point them at the database that goes with this Sanity dataset.
  */
 
 import * as dotenv from 'dotenv'
@@ -30,9 +32,10 @@ async function main() {
   // scope, and a static import would evaluate them before dotenv has run (see
   // scripts/notify-event-waitlist.ts).
   const { syncEventOptions } = await import('../lib/hubspot-event-options')
+  const { supabaseServer } = await import('../lib/supabase')
 
   console.log(APPLY ? 'Applying to the live HubSpot portal…\n' : 'Dry run — nothing is written. Pass --apply to write.\n')
-  const result = await syncEventOptions({ apply: APPLY })
+  const result = await syncEventOptions({ apply: APPLY, stellrOnlyDb: supabaseServer() })
 
   if (result.refused) {
     console.error(`Refused: ${result.refused}`)

@@ -1,11 +1,12 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import IndividualRegistrationForm from './IndividualRegistrationForm'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
-vi.mock('@clerk/nextjs', () => ({ useAuth: () => ({ isSignedIn: false }) }))
+const session = vi.hoisted(() => ({ isSignedIn: false }))
+vi.mock('@clerk/nextjs', () => ({ useAuth: () => ({ isSignedIn: session.isSignedIn }) }))
 vi.mock('@clerk/nextjs/legacy', () => ({ useSignIn: () => ({ signIn: null, setActive: vi.fn(), isLoaded: false }) }))
 
 // A signed-in student whose step-1 details are complete, so Continue reaches step 2.
@@ -101,5 +102,81 @@ describe('IndividualRegistrationForm — errors', () => {
     const ethnicity = screen.getByRole('group', { name: /Ethnicity/ })
     await waitFor(() => expect(within(ethnicity).getAllByRole('checkbox')[0]).toHaveFocus())
     expect(within(ethnicity).getByText('Select at least one')).toBeInTheDocument()
+  })
+})
+
+describe('IndividualRegistrationForm — an email already on file', () => {
+  const complete: RegistrationPrefill = {
+    ...completeStep1,
+    emergency_contact_first_name: 'Pat',
+    emergency_contact_last_name: 'Parent',
+    emergency_contact_email: 'parent@example.test',
+    emergency_contact_phone: '5550000001',
+    emergency_contact_relationship: 'Parent',
+    ethnicity: ['Prefer Not To Say'],
+    dietary_requirements: ['None'],
+  }
+
+  async function submitAndRefuse(prefill: RegistrationPrefill, schoolOnly = false) {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({ code: 'sign_in_required', error: 'server copy', school_address_only: schoolOnly }),
+    })))
+    const user = userEvent.setup()
+    renderForm(prefill)
+    await user.click(screen.getByRole('button', { name: /Continue/ }))
+    await user.click(await screen.findByRole('button', { name: 'Submit Registration' }))
+    await screen.findByText('This email is already on file with Stellr')
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    session.isSignedIn = false
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('asks them to sign in, keeping the way back, query included, and shows no error', async () => {
+    window.history.replaceState(null, '', '/register/test-event/individual?scholarship=tok')
+    await submitAndRefuse(complete)
+    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(
+      'href',
+      `/sign-in?next=${encodeURIComponent('/register/test-event/individual?scholarship=tok')}`,
+    )
+    expect(screen.getByText(/create your login with it/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'contact us' })).toHaveAttribute('href', '/contact')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('a match only on a school address never suggests making a login with it', async () => {
+    await submitAndRefuse(complete, true)
+    expect(screen.getByRole('link', { name: 'Sign in with your main email address' })).toBeInTheDocument()
+    expect(screen.getByText(/not your school one/)).toBeInTheDocument()
+    expect(screen.queryByText(/create your login/)).toBeNull()
+  })
+
+  it('someone who needs an adult is pointed to us, with no sign-in or login to make', async () => {
+    await submitAndRefuse({ ...complete, date_of_birth: `${new Date().getFullYear() - 10}-01-01` })
+    expect(screen.getByText(/A parent or guardian needs to help/)).toBeInTheDocument()
+    expect(screen.queryByText(/create your login/)).toBeNull()
+    expect(screen.queryByRole('link', { name: /sign in/i })).toBeNull()
+    expect(screen.getByRole('link', { name: 'contact us' })).toBeInTheDocument()
+  })
+
+  it('signed in with no member matched, it offers account setup and the way back, and names no cause', async () => {
+    window.history.replaceState(null, '', '/register/test-event/individual')
+    session.isSignedIn = true
+    await submitAndRefuse(complete)
+    expect(screen.getByRole('link', { name: 'Finish setting up your account' })).toHaveAttribute(
+      'href',
+      `/account/onboarding?next=${encodeURIComponent('/register/test-event/individual')}`,
+    )
+    expect(screen.queryByRole('link', { name: /sign in/i })).toBeNull()
+    expect(screen.queryByText(/address you’re signed in with/)).toBeNull()
+  })
+
+  it('says before they sign in that signing in registers the account holder', async () => {
+    await submitAndRefuse(complete)
+    expect(screen.getByText(/Signing in registers the person the account belongs to/)).toBeInTheDocument()
   })
 })

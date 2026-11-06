@@ -6,16 +6,25 @@
 //   per_tenant   works over event data that belongs to any tenant; moves onto
 //                runPerTenant (lib/cron-tenants.ts) in B13 and B14
 //   stellr_only  Stellr's own products, integrations or staff inbox; limited to
-//                Stellr data where it reads event-scoped tables (B11)
+//                Stellr data where it reads event-scoped tables (B11, stellrRows
+//                in lib/tenancy/stellr-scope.ts). Rows with a NULL tenant_id
+//                count as Stellr's
 //   platform     operates the platform itself, not any tenant's data
 //
-// Two more things the classification alone does not say:
+// Three more things the classification alone does not say:
 //
-//   identityAudience  the cron picks people from public.members, which is shared
-//                     across tenants, with no tenant limit. stellr_only states
-//                     where it should end up, not what it does today, and B11's
-//                     event-table limits do not touch this read. No slice claims
-//                     it yet; test/cron-scope.test.ts pins the list.
+//   identityAudience  the cron picks people to contact or grant to from
+//                     public.members, which is shared across tenants, with no
+//                     tenant limit. stellr_only states where it should end up, not
+//                     what it does today. B11 deliberately leaves these reads as
+//                     they are: members has no tenant column for stellrRows to
+//                     filter on, and who counts as Stellr's member is the open owner
+//                     decision (docs/TENANCY-S5.md, B3). It must be settled before
+//                     the first non-owner event. test/cron-scope.test.ts pins the
+//                     list.
+//   identityRead      the cron reads public.members for a reason other than picking
+//                     an audience, and that read stays as wide as it is today. The
+//                     text says why.
 //   inactiveTenants   'run' means B13 passes includeInactive to runPerTenant, so
 //                     suspended and archived tenants are still reached.
 
@@ -25,6 +34,7 @@ export interface CronScopeEntry {
   scope: CronScope
   why: string
   identityAudience?: string
+  identityRead?: string
   inactiveTenants?: 'run'
 }
 
@@ -56,10 +66,16 @@ export const CRON_SCOPES: Readonly<Record<string, CronScopeEntry>> = {
   'docusign-reminders': { scope: 'per_tenant', why: 'native e-sign reminders (B14); the DocuSign part stays Stellr-only' },
   entitlements: { scope: 'platform', why: 'entitlement lifecycle and the daily platform error digest' },
   'event-emails': { scope: 'per_tenant', why: 'event emails for any tenant (B14)' },
+  'group-invoice-sync': { scope: 'per_tenant', why: "a group's own unpaid invoice, for any tenant" },
   'hubspot-event-options': { scope: 'stellr_only', why: "Stellr's HubSpot; syncs only Stellr events (B11)" },
   'hubspot-lifecycle': { scope: 'stellr_only', why: "Stellr's HubSpot" },
   'lead-capture-failures': { scope: 'stellr_only', why: "Stellr's lead capture" },
-  'membership-expiry': { scope: 'stellr_only', why: 'Stellr membership; reads pending consent (B11)' },
+  'membership-expiry': {
+    scope: 'stellr_only',
+    why: 'Stellr membership and pending consent',
+    identityRead:
+      'the consent purge has no event-scoped work list. Its participants and agreements reads only hold an account back from deletion, so they keep counting every tenant: limiting them would delete a person another tenant still holds records for',
+  },
   'motion-bookings': { scope: 'stellr_only', why: "Stellr's calendar and HubSpot" },
   'session-reminders': { scope: 'stellr_only', why: 'Stellr coaching sessions' },
   'survey-retention': {
@@ -69,6 +85,11 @@ export const CRON_SCOPES: Readonly<Record<string, CronScopeEntry>> = {
   },
   surveys: { scope: 'per_tenant', why: 'post-event surveys of any tenant (B13)' },
   'team-profiles': { scope: 'per_tenant', why: 'team profiles of any tenant (B13)' },
-  'training-reminders': { scope: 'stellr_only', why: 'Stellr training; reads event-scoped assignments (B11)' },
-  'weekly-digest': { scope: 'stellr_only', why: "Stellr's staff digest; reads event-scoped tables (B11)" },
+  'training-reminders': { scope: 'stellr_only', why: "Stellr training; reads event-scoped assignments, and skips another tenant's events and cohorts (B11)" },
+  'weekly-digest': {
+    scope: 'stellr_only',
+    why: "Stellr's staff digest; event-scoped reads limited to Stellr (B11)",
+    identityRead:
+      'new and departed members, new mentors and the verification queue come from members, so a tenant registrant with a member record would be counted. Same owner decision as identityAudience. Reactions name no Space, so they count every tenant too',
+  },
 }

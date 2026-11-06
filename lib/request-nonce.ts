@@ -1,6 +1,6 @@
 import 'server-only'
 import { headers } from 'next/headers'
-import { NONCE_HEADER } from '@/lib/csp'
+import { NONCE_HEADER } from '@/lib/csp-nonce-header'
 
 /**
  * This request's CSP nonce, as proxy.ts set it (lib/csp.ts), or undefined on a

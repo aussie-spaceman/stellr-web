@@ -21,8 +21,8 @@
 //    could attach its row to another tenant's registration or module: the FK
 //    check runs as the table owner, so it succeeds, and its 23503 error would
 //    also reveal whether another tenant's id exists. A key to a via_parent
-//    table (no tenant_id yet, so no grant to tenant_app) must be NULL until
-//    that table gets its own column.
+//    table (no tenant_id, so no grant to tenant_app) must be NULL. No table is
+//    via_parent since S5 C0b, so today this applies to nothing.
 //
 // supabase/tests/database/tenant_isolation.test.sql (generated) checks
 // TENANT_PARENT_REFS against the real foreign keys, so a new foreign key
@@ -30,12 +30,36 @@
 //
 // Dependency-free: Node imports this file directly from the generator.
 
-/** Tenant tables tenant_app may read (own tenant only) but never write. */
+/**
+ * Tenant tables tenant_app may read (own tenant only) but never write. Beyond
+ * the routing tables above: the three append-only evidence tables (S5 C0b). They
+ * are written once, through sealed functions or by service_role, so a tenant
+ * session writing directly could only add rows to its own evidence. And
+ * agreement_recipients, which holds what a signer attested to and the state that
+ * revokes a signing link. No trigger protects those columns, and no slice writes
+ * them through tenantDb until A11, which must say which columns it needs.
+ */
 export const TENANT_APP_READ_ONLY_TABLES: readonly string[] = [
+  'public.agreement_recipients',
+  'public.esign_access_log',
+  'public.esign_audit_events',
   'public.events',
+  'public.survey_answers',
   'public.tenant_domains',
   'public.tenant_memberships',
 ]
+
+/**
+ * Columns tenant_app may read but not write, on a table it otherwise writes. These
+ * tables get INSERT and UPDATE per column, so a column added later is not writable
+ * until a migration says so. participants.member_id and membership_id are identity
+ * keys that Stellr's global lookups trust across tenants (lib/member-onfile.ts,
+ * app/api/members/lookup), so a row a tenant wrote must not be able to claim them.
+ * A slice that needs one justifies it, and scopes those lookups first (A7).
+ */
+export const TENANT_APP_UNWRITABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  'public.participants': ['member_id', 'membership_id'],
+}
 
 /**
  * Platform-level tables that carry a tenant_id but are classified platform or
@@ -53,7 +77,7 @@ export const TENANT_APP_NO_ACCESS_TABLES: Readonly<Record<string, string>> = {
 }
 
 export interface TenantParentRef {
-  /** The referencing tenant table (own/derived). */
+  /** The referencing tenant table (own/derived/inherited). */
   table: string
   /** Its foreign-key column. */
   column: string
@@ -61,11 +85,13 @@ export interface TenantParentRef {
   parent: string
 }
 
-/** Every single-column foreign key from an own/derived tenant table to a tenant table (tenant_id itself excluded). */
+/** Every single-column foreign key from an own/derived/inherited tenant table to a tenant table (tenant_id itself excluded). */
 export const TENANT_PARENT_REFS: readonly TenantParentRef[] = [
+  { table: 'public.agreement_recipients', column: 'envelope_row', parent: 'public.agreements' },
   { table: 'public.agreements', column: 'participant_id', parent: 'public.participants' },
   { table: 'public.agreements', column: 'reused_from', parent: 'public.agreements' },
   { table: 'public.community_resources', column: 'space_id', parent: 'public.community_spaces' },
+  { table: 'public.credential_events', column: 'credential_id', parent: 'public.credentials' },
   { table: 'public.credentials', column: 'module_id', parent: 'public.training_modules' },
   { table: 'public.credentials', column: 'participant_id', parent: 'public.participants' },
   { table: 'public.event_award_assignments', column: 'company_id', parent: 'public.event_companies' },
@@ -75,11 +101,20 @@ export const TENANT_PARENT_REFS: readonly TenantParentRef[] = [
   { table: 'public.event_refunds', column: 'registration_id', parent: 'public.registrations' },
   { table: 'public.group_invoices', column: 'registration_id', parent: 'public.registrations' },
   { table: 'public.group_join_tokens', column: 'registration_id', parent: 'public.registrations' },
+  { table: 'public.member_group_members', column: 'group_id', parent: 'public.member_groups' },
   { table: 'public.mentoring_cohorts', column: 'parent_container_id', parent: 'public.mentoring_cohorts' },
   { table: 'public.mentoring_cohorts', column: 'registration_id', parent: 'public.registrations' },
+  { table: 'public.participants', column: 'company_id', parent: 'public.event_companies' },
+  { table: 'public.participants', column: 'registration_id', parent: 'public.registrations' },
   { table: 'public.scholarship_applications', column: 'registration_id', parent: 'public.registrations' },
+  { table: 'public.store_order_items', column: 'batch_id', parent: 'public.merch_batches' },
+  { table: 'public.store_order_items', column: 'order_id', parent: 'public.store_orders' },
   { table: 'public.store_orders', column: 'registration_id', parent: 'public.registrations' },
   { table: 'public.store_orders', column: 'source_order_id', parent: 'public.store_orders' },
+  { table: 'public.store_returns', column: 'order_id', parent: 'public.store_orders' },
+  { table: 'public.survey_answers', column: 'response_id', parent: 'public.survey_responses' },
+  { table: 'public.survey_invitations', column: 'distribution_id', parent: 'public.survey_distributions' },
+  { table: 'public.survey_invitations', column: 'participant_id', parent: 'public.participants' },
   { table: 'public.survey_responses', column: 'distribution_id', parent: 'public.survey_distributions' },
   { table: 'public.survey_responses', column: 'invitation_id', parent: 'public.survey_invitations' },
   { table: 'public.survey_responses', column: 'participant_id', parent: 'public.participants' },

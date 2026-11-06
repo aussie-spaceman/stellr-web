@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, staffAlertEmail } from '@/lib/email'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { loadMemberDigest, outstandingCount } from '@/lib/admin-digest'
 import { renderDigestEmail } from '@/lib/admin-digest-email'
@@ -50,7 +51,7 @@ async function alreadySent(db: SupabaseClient, now: Date): Promise<boolean> {
   return (data ?? []).length > 0
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('weekly-digest', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -112,4 +113,4 @@ export async function GET(req: NextRequest) {
   }
   await run.finish(result)
   return NextResponse.json(result, { status: delivered > 0 ? 200 : 500 })
-}
+})

@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
 
   // Consent and uploads (A14)
   'consent.request.send',
+  'consent.request.settle',
   'upload.sign.create',
 
   // Public and store writes (B18)
@@ -38,6 +39,7 @@ export const AUDIT_ACTIONS = [
   'scholarship.application.create',
   'store.checkout.create',
   'store.order.reship',
+  'store.order.stale_reship_cancel',
   'privacy.request.create',
   'privacy.request.confirm',
   'teacher_grant.application.create',

@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { captureLead, sendEmail, upsertMember, linkMembersToSchoolByName, autoGrantBaseMembership, dbState } = vi.hoisted(() => ({
-  // Controls the route's "does this member already exist?" lookup (C-3).
-  dbState: { priorMember: null as { id: string } | null },
-  upsertMember: vi.fn(async (_db: unknown, _input: unknown, _opts?: unknown): Promise<string | null> => 'member-1'),
+const { captureLead, sendEmail, upsertMember, linkMembersToSchoolByName, autoGrantBaseMembership } = vi.hoisted(() => ({
+  upsertMember: vi.fn(),
   linkMembersToSchoolByName: vi.fn(async () => undefined),
   autoGrantBaseMembership: vi.fn(async () => undefined),
   captureLead: vi.fn(async (_input: unknown) => ({
@@ -21,15 +19,8 @@ vi.mock('@/lib/hubspot', async () => {
 })
 vi.mock('@/lib/email', () => ({ sendEmail }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null, HOUR_MS: 3_600_000 }))
-// The route looks up whether a member already exists (C-3: never modify an
-// existing member from this anonymous form). dbState.priorMember drives it.
-vi.mock('@/lib/supabase', () => ({
-  supabaseServer: () => ({
-    from: () => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: dbState.priorMember, error: null }) }) }),
-    }),
-  }),
-}))
+// The handle only reaches the mocks below.
+vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({}) }))
 vi.mock('@/lib/member-sync', () => ({ upsertMember }))
 vi.mock('@/lib/school-link', () => ({ linkMembersToSchoolByName }))
 vi.mock('@/lib/auto-membership-grant', () => ({ autoGrantBaseMembership }))
@@ -75,11 +66,14 @@ const lastMember = () => upsertMember.mock.calls.at(-1)?.[1] as any
 beforeEach(() => {
   captureLead.mockClear()
   sendEmail.mockClear()
-  upsertMember.mockClear()
-  upsertMember.mockResolvedValue('member-1')
+  upsertMember.mockReset()
+  // As the real one does for a new address: says it inserted the row, and returns the id.
+  upsertMember.mockImplementation(async (_db: unknown, _input: unknown, opts?: { onCreated?: (id: string) => void }) => {
+    opts?.onCreated?.('member-1')
+    return 'member-1'
+  })
   linkMembersToSchoolByName.mockClear()
   autoGrantBaseMembership.mockClear()
-  dbState.priorMember = null
 })
 
 describe('POST /api/teacher-grant', () => {
@@ -113,14 +107,26 @@ describe('POST /api/teacher-grant', () => {
     // An attacker POSTs this form with a student's school address. The member
     // already exists; the route must not rewrite their DOB/age/role and must not
     // run the grant off anonymous input.
-    dbState.priorMember = { id: 'existing-kid' }
+    upsertMember.mockResolvedValueOnce('existing-kid')
     const res = await post({ ...VALID, email: 'kid@lincolnhigh.edu', dateOfBirth: '1980-01-01' })
 
     expect(res.status).toBe(200)
     // upsertMember is called with onExisting:'skip' so it returns the id without writing.
     expect(upsertMember).toHaveBeenCalledTimes(1)
-    expect(upsertMember.mock.calls[0][2]).toEqual({ onExisting: 'skip' })
+    expect(upsertMember.mock.calls[0][2]).toMatchObject({ onExisting: 'skip' })
     // No signup side effects for an existing member reached from anonymous input.
+    expect(linkMembersToSchoolByName).not.toHaveBeenCalled()
+    expect(autoGrantBaseMembership).not.toHaveBeenCalled()
+  })
+
+  it('runs the signup steps only for a member this request created, whatever id comes back', async () => {
+    upsertMember.mockResolvedValueOnce('member-on-file')
+
+    const res = await post(VALID)
+
+    expect(res.status).toBe(200)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(captureLead).toHaveBeenCalledTimes(1)
     expect(linkMembersToSchoolByName).not.toHaveBeenCalled()
     expect(autoGrantBaseMembership).not.toHaveBeenCalled()
   })

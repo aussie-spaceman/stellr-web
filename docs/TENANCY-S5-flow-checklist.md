@@ -59,7 +59,7 @@ Each row needs a window, a note of what was seen, and the owner's sign-off.
 
 ## The crons
 
-All 22, from `vercel.json` and `lib/cron-scope.ts`. Schedules are UTC. Evidence is the `cron_runs` ledger, which every cron writes through `lib/cron-runs.ts`. `ok` is false when any failure was recorded, and a run killed mid-way never finishes.
+All 23, from `vercel.json` and `lib/cron-scope.ts`. Schedules are UTC. Evidence is the `cron_runs` ledger, which every cron writes through `lib/cron-runs.ts`. `ok` is false when any failure was recorded, and a run killed mid-way never finishes.
 
 ```sql
 SELECT job,
@@ -90,6 +90,7 @@ On `dev` these rows prove little: the crons decline there, because `guardCron()`
 | `docusign-reminders` | 09:00 daily | Per tenant | | |
 | `entitlements` | 05:00 daily. Also sends the error digest | Platform | | |
 | `event-emails` | 15:00, 17:00, 19:00 daily | Per tenant | | |
+| `group-invoice-sync` | 09:45 daily | Per tenant | | |
 | `hubspot-event-options` | 04:45 daily | Stellr-only | | |
 | `hubspot-lifecycle` | 04:00 daily | Stellr-only | | |
 | `lead-capture-failures` | 13:00 Mondays | Stellr-only | | |

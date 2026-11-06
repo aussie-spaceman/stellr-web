@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { dispatchDueCampaigns } from '@/lib/email-campaigns'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 
 // deep review INT-6: a broadcast is sequential Resend calls, so give the loop
@@ -11,7 +12,7 @@ export const maxDuration = 60
 // GET /api/cron/campaigns — runs hourly (see vercel.json). Sends every scheduled
 // campaign whose send time has arrived. Idempotent via the email_campaign_sends
 // ledger, so a retried or overlapping run never double-sends.
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('campaigns', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -28,4 +29,4 @@ export async function GET(req: NextRequest) {
     await run.finish({})
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
-}
+})

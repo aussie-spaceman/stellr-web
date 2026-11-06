@@ -7,6 +7,7 @@ import { getAllEvents, type StellarEvent } from '@/lib/sanity'
 import { getCurrentMember } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { scholarshipReceivedEmail, scholarshipStaffAlertEmail } from '@/lib/scholarship-emails'
+import { auditMutation } from '@/lib/audit/route'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -38,14 +39,35 @@ export async function POST(req: Request) {
   // as that member's application.
   const blocked = await assertNotImpersonating()
   if (blocked) return blocked
+  const parsed = schema.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+
+  const { response, applicationId } = await fileApplication(parsed.data)
+
+  // docs/TENANCY-S5.md, B18. An applicant may be a child, and the form asks no age, so
+  // the event holds the row's id and nothing from the form.
+  await auditMutation(
+    {
+      action: 'scholarship.application.create',
+      actor: { session: true },
+      tenant: { stellr: true },
+      target: { table: 'scholarship_applications', id: applicationId },
+      metadata: { saved: applicationId !== null, status: response.status },
+    },
+    { afterResponse: true },
+  )
+  return response
+}
+
+/** Save and email an application. Never throws: a failure is the 500 it answers with. */
+async function fileApplication(input: z.infer<typeof schema>): Promise<{ response: Response; applicationId: string | null }> {
+  let applicationId: string | null = null
   try {
-    const parsed = schema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
-    const { firstName, lastName, email, activity, brief } = parsed.data
-    const phone = parsed.data.phone || null
-    const school = parsed.data.school || null
+    const { firstName, lastName, email, activity, brief } = input
+    const phone = input.phone || null
+    const school = input.school || null
     const name = `${firstName} ${lastName}`
 
     // The application is saved before anything else, so the admin review queue
@@ -76,6 +98,7 @@ export async function POST(req: Request) {
       .select('id')
       .single()
     if (insertError) console.error('[scholarship] application insert failed (emailing anyway):', insertError)
+    applicationId = row?.id ?? null
 
     const reviewUrl = row ? `${APP_URL}/admin/scholarships/${row.id}` : `${APP_URL}/admin/scholarships`
     const staff = scholarshipStaffAlertEmail({ name, email, phone, activity, school, brief, reviewUrl })
@@ -98,9 +121,9 @@ export async function POST(req: Request) {
     // `scholarship_applications` and emailed to staff for review, so nothing is
     // lost by not marketing-capturing it.
 
-    return NextResponse.json({ ok: true })
+    return { response: NextResponse.json({ ok: true }), applicationId }
   } catch (err) {
     console.error('[scholarship] Unexpected error:', err)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return { response: NextResponse.json({ error: 'Server error' }, { status: 500 }), applicationId }
   }
 }

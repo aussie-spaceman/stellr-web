@@ -217,26 +217,55 @@ describe('characterisation: POST /api/register/individual — a member already o
   ]
 
   it.each([
-    ['their email', 'email', 'kid@example.com', {}],
-    ['their school email', 'school_email', 'kid@example.com', {}],
-    ['the school address submitted beside a new email', 'email', 'old@school.example.com', { school_email: 'old@school.example.com' }],
-  ])('found by %s: linked, no login, and their row untouched', async (_l, column, value, extra) => {
+    ['their email', 'email', 'kid@example.com', {}, false],
+    ['their school email', 'school_email', 'kid@example.com', {}, true],
+    ['the school address submitted beside a new email', 'email', 'old@school.example.com', { school_email: 'old@school.example.com' }, false],
+    ['a school address another member holds', 'school_email', 'old@school.example.com', { school_email: 'old@school.example.com' }, true],
+  ])('found by %s: asked to sign in, with nothing written and nothing in their name', async (_l, column, value, extra, schoolOnly) => {
     priorMember(column, value)
     expect(await settle(await post(extra))).toEqual({
+      status: 409,
+      body: {
+        code: 'sign_in_required',
+        school_address_only: schoolOnly,
+        error: 'This email is already on file with Stellr. Sign in with the address you first used with us and you’ll come back here to register. If you can’t, or a parent or guardian is helping you, contact us and we’ll help.',
+      },
+    })
+    expect(rec.writes()).toEqual([])
+    expect(h.linkSchool).not.toHaveBeenCalled()
+    expect(h.dispatch).not.toHaveBeenCalled()
+    expect(h.getUserList).not.toHaveBeenCalled()
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.createSignInToken).not.toHaveBeenCalled()
+  })
+
+  it('a row that appears after the gate’s reads is linked, not rewritten, with no login', async () => {
+    let emailReads = 0
+    rec.respond((c) => {
+      if (c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', 'kid@example.com')) {
+        emailReads += 1
+        return { data: emailReads > 1 ? { id: 'm-late' } : null, error: null }
+      }
+      return undefined
+    })
+    expect((await post()).status).toBe(201)
+    expect(rec.payloads('upsert', 'members')).toEqual([])
+    expect(h.createSignInToken).not.toHaveBeenCalled()
+    const [row] = rec.payloads('insert', 'participants') as Record<string, unknown>[]
+    expect(row.member_id).toBe('m-late')
+  })
+
+  it('signed in as a member found only by the other address, it is linked, with no row rewritten', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com' })
+    priorMember('school_email', 'kid@example.com')
+    expect(await settle(await post())).toEqual({
       status: 201,
       body: { registrationId: 'reg-1', checkoutUrl: null, signInToken: null },
     })
     expect(rec.writes()).toEqual(NO_MEMBER_WRITES)
-    expect(rec.payloads('upsert', 'members')).toEqual([])
-    expect(rec.payloads('update', 'members')).toEqual([])
-    expect(h.getUserList).not.toHaveBeenCalled()
-    expect(h.createUser).not.toHaveBeenCalled()
-    expect(h.createSignInToken).not.toHaveBeenCalled()
-    // Linked to the prior member; no school is linked to them.
     const [row] = rec.payloads('insert', 'participants') as Record<string, unknown>[]
     expect(row).toMatchObject({ member_id: 'm-prior', email: 'kid@example.com' })
     expect(h.linkSchool.mock.calls[0][1]).toEqual([])
-    expect(h.dispatch).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ memberId: 'm-prior' }))
   })
 
   it('a new member whose email already has a Clerk login gets no token and no link', async () => {
@@ -251,12 +280,13 @@ describe('characterisation: POST /api/register/individual — a member already o
   })
 
   // A failed read cannot tell new from existing, so it is not "not found": no
-  // upsert, no ticket, no clerk_user_id write, and the registration is taken back.
+  // upsert, no ticket, no clerk_user_id write, and nothing is written at all.
   it.each([
     ['by email', 'email', 'kid@example.com', {}],
     ['by school email', 'school_email', 'kid@example.com', {}],
     ['by the submitted school address', 'email', 'old@school.example.com', { school_email: 'old@school.example.com' }],
-  ])('a failed prior-member lookup %s is a retryable 503 with nothing kept', async (_l, column, value, extra) => {
+    ['by a school address another member holds', 'school_email', 'old@school.example.com', { school_email: 'old@school.example.com' }],
+  ])('a failed prior-member lookup %s is a retryable 503 with nothing written', async (_l, column, value, extra) => {
     rec.respond((c) =>
       c.table === 'members' && c.op === 'select' && eqFilter(c, column, value)
         ? { data: null, error: { message: 'boom' } }
@@ -266,14 +296,26 @@ describe('characterisation: POST /api/register/individual — a member already o
       status: 503,
       body: { error: 'Registration is temporarily unavailable. Please try again shortly.' },
     })
-    expect(rec.writes()).toEqual(['insert registrations', 'delete registrations'])
+    expect(rec.writes()).toEqual([])
     expect(h.getUserList).not.toHaveBeenCalled()
     expect(h.createUser).not.toHaveBeenCalled()
     expect(h.createSignInToken).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('a delete that fails on the way out is logged with the registration id, and is still the 503', async () => {
+  it('signed in, a failed lookup takes the registration back, and is the 503', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com' })
+    rec.respond((c) =>
+      c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', 'kid@example.com')
+        ? { data: null, error: { message: 'boom' } }
+        : undefined,
+    )
+    expect((await post()).status).toBe(503)
+    expect(rec.writes()).toEqual(['insert registrations', 'delete registrations'])
+  })
+
+  it('signed in, a delete that fails on the way out is logged with the registration id, and is still the 503', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com' })
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     rec.respond((c) => {
       if (c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', 'kid@example.com')) return { data: null, error: { message: 'boom' } }
@@ -499,6 +541,8 @@ describe('characterisation: POST /api/register/individual — rows written', () 
   it('writes this registration, member and participant, reads and all, in this order', async () => {
     expect((await post()).status).toBe(201)
     expect(rec.log).toEqual([
+      'select members', // the gate: on file by email?
+      'select members', // the gate: on file by school_email?
       'insert registrations',
       'select members', // prior member by email
       'select members', // prior member by school_email

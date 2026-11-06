@@ -18,6 +18,12 @@ export const metadata: Metadata = {
 // so registration gets its own provider; the rest of the public site has none.
 // Every registration page already renders per request (each reads the
 // session), so reading the CSP nonce here costs nothing extra.
+//
+// prefetchUI={false} keeps Clerk's prebuilt UI out of these pages, and an in-app
+// navigation keeps the same Clerk instance. So a next/link from here to a page
+// that renders that UI (sign-in, sign-up, or any member page's avatar) crashes it:
+// "Clerk was not loaded with Ui components". Those links must be plain <a>, which
+// loads the page afresh. test/register-links-to-clerk-ui.test.ts holds this.
 export default async function RegisterLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider prefetchUI={false} appearance={clerkAppearance} nonce={await requestNonce()}>

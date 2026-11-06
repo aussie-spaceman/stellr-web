@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight, Users, Trophy, Rocket, GraduationCap, BookOpen, HeartHandshake, Microscope } from 'lucide-react'
 import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 }
 
 // Revalidate every 60 minutes
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 const roleCards = [
   { label: 'Student', icon: GraduationCap, href: '/students' },

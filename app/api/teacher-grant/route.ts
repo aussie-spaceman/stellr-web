@@ -18,6 +18,7 @@ import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { GENDERS } from '@/lib/registration-constants'
 import { GRANT_DEMOGRAPHIC, GRANT_PROGRAM_YEAR } from '@/lib/grant'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { auditMutation } from '@/lib/audit/route'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -73,28 +74,58 @@ export async function POST(req: Request) {
   const limited = rateLimitGuard(req, 'teacher-grant', { limit: 3, windowMs: HOUR_MS })
   if (limited) return limited
 
+  let parsed: ReturnType<typeof schema.safeParse>
   try {
-    const parsed = schema.safeParse(await req.json())
+    parsed = schema.safeParse(await req.json())
+  } catch (err) {
+    console.error('[teacher-grant] Unexpected error:', err)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+  }
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: 'Some answers need attention.',
-          fields: [...new Set(parsed.error.issues.map((i) => String(i.path[0])))],
-        },
-        { status: 400 },
-      )
-    }
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: 'Some answers need attention.',
+        fields: [...new Set(parsed.error.issues.map((i) => String(i.path[0])))],
+      },
+      { status: 400 },
+    )
+  }
 
-    const v = parsed.data
+  // Honeypot tripped: accept silently. A 400 here teaches the bot to retry
+  // with the field cleared.
+  if (parsed.data.website) {
+    console.warn('[spam] honeypot teacher-grant')
+    return NextResponse.json({ ok: true })
+  }
 
-    // Honeypot tripped: accept silently. A 400 here teaches the bot to retry
-    // with the field cleared.
-    if (v.website) {
-      console.warn('[spam] honeypot teacher-grant')
-      return NextResponse.json({ ok: true })
-    }
+  const { response, signedUp } = await submitApplication(parsed.data, req)
 
+  // docs/TENANCY-S5.md, B18. The member this request created, if any, and nothing from the
+  // form. member_created is false in every other case, so the event does not say why.
+  await auditMutation(
+    {
+      action: 'teacher_grant.application.create',
+      actor: { userId: null },
+      tenant: { stellr: true },
+      target: { table: 'members', id: signedUp },
+      metadata: {
+        member_created: signedUp !== null,
+        status: response.status,
+      },
+    },
+    { afterResponse: true },
+  )
+  return response
+}
+
+/** Send and record one application. Never throws: a failure is the 500 it answers with. */
+async function submitApplication(
+  v: z.output<typeof schema>,
+  req: Request,
+): Promise<{ response: Response; signedUp: string | null }> {
+  let signedUp: string | null = null
+  try {
     const name = `${v.firstName} ${v.lastName}`
     const activities = GRANT_ACTIVITIES[v.plannedActivities]
     const rows: [string, string][] = [
@@ -225,7 +256,7 @@ export async function POST(req: Request) {
       console.warn('[teacher-grant] date of birth not a real adult date: no Educator record made', {
         reason: educatorAge.ok ? 'under_18' : educatorAge.reason,
       })
-      return NextResponse.json({ ok: true })
+      return { response: NextResponse.json({ ok: true }), signedUp }
     }
     try {
       const db = supabaseServer()
@@ -234,10 +265,9 @@ export async function POST(req: Request) {
       // for the submitted email — otherwise anyone could rewrite any member's
       // DOB, age bracket, role, school link and grant by naming their address
       // (deep review C-6/PUB-1). `onExisting: 'skip'` returns the existing id
-      // without touching the row; we then run the signup side effects only when
-      // this request actually created the member.
-      const { data: priorMember } = await db
-        .from('members').select('id').eq('email', v.email).maybeSingle()
+      // without touching the row, and `onCreated` fires only when this call
+      // inserted one, so that alone decides whether the signup steps run.
+      let created = false
       const memberId = await upsertMember(db, {
         email: v.email,
         first_name: v.firstName,
@@ -247,14 +277,15 @@ export async function POST(req: Request) {
         gender: v.gender,
         age_bracket: 'adult',
         event_role: 'teacher',
-      }, { onExisting: 'skip' })
+      }, { onExisting: 'skip', onCreated: () => { created = true } })
 
-      if (priorMember) {
+      if (memberId && !created) {
         // Existing member — the application still reached the inbox and HubSpot
         // above; the record itself is left untouched and no grant is re-applied
         // from anonymous input.
-        console.info('[teacher-grant] existing member, record not modified', priorMember.id)
+        console.info('[teacher-grant] existing member, record not modified', memberId)
       } else if (memberId) {
+        signedUp = memberId
         await linkMembersToSchoolByName(db, [memberId], {
           name: v.schoolName,
           address_city: v.schoolCity,
@@ -268,9 +299,9 @@ export async function POST(req: Request) {
       console.error('[teacher-grant] Educator registration failed (non-fatal):', err)
     }
 
-    return NextResponse.json({ ok: true })
+    return { response: NextResponse.json({ ok: true }), signedUp }
   } catch (err) {
     console.error('[teacher-grant] Unexpected error:', err)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return { response: NextResponse.json({ error: 'Server error' }, { status: 500 }), signedUp }
   }
 }

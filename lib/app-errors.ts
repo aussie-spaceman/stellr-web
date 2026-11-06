@@ -182,6 +182,28 @@ export async function captureRequestError(
   }
 }
 
+/**
+ * Write a row whose text the caller built from fixed labels and validated ids,
+ * so it skips the scrubber (which would blank a uuid the row exists to carry).
+ * Never hand it text from a request or an error. Same rate limit as every other
+ * write here. Never throws. False only when a write was tried and failed.
+ */
+export async function recordBuiltAppError(route: string, message: string, digest: string): Promise<boolean> {
+  try {
+    const count = takeWrite(digest, Date.now())
+    if (count === 0) return true
+    const { error } = await supabaseServer().rpc('record_app_error', {
+      p_digest: digest,
+      p_route: route,
+      p_message: message,
+      p_count: count,
+    })
+    return !error
+  } catch {
+    return false
+  }
+}
+
 // ── Daily digest ─────────────────────────────────────────────────────────────
 
 export interface AppErrorRow {

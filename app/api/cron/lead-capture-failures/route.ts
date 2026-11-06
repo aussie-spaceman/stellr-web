@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/lead-capture-failures — runs weekly (see vercel.json).
@@ -17,13 +18,17 @@ import { startCronRun } from '@/lib/cron-runs'
 // ignored alert is the same as no alert.
 
 export const dynamic = 'force-dynamic'
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 
 /** Shown in the alert so the oldest unresolved item is visible at a glance. */
 const SAMPLE_SIZE = 10
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('lead-capture-failures', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -87,4 +92,4 @@ export async function GET(req: NextRequest) {
   console.log(`[cron:lead-capture-failures] ${unresolved} unresolved, alerted ${CONTACT_EMAIL}`)
   await run.finish({ unresolved, alerted: true })
   return NextResponse.json({ unresolved, oldest, alerted: true }, { status: 200 })
-}
+})

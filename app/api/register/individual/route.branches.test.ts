@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   impersonation: vi.fn(),
   consentBlock: vi.fn(),
   rateLimit: vi.fn(),
+  auth: vi.fn(),
   findOffer: vi.fn(),
   attachOffer: vi.fn(),
   confirm: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: h.impersonation 
 vi.mock('@/lib/pending-consent', () => ({ sessionChildAwaitingConsentBlock: h.consentBlock }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.provision }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rateLimit, HOUR_MS: 3_600_000 }))
+vi.mock('@clerk/nextjs/server', () => ({ auth: h.auth }))
 vi.mock('@/lib/scholarships', () => ({ findOfferByToken: h.findOffer, attachOfferToRegistration: h.attachOffer }))
 vi.mock('@/lib/stripe', () => ({
   stripeClient: () => (h.stripeOn ? { prices: { retrieve: h.priceRetrieve } } : null),
@@ -149,6 +151,7 @@ beforeEach(() => {
   h.stripeOn = false
   const hook = (fn: typeof h.linkSchool, label: string, result?: unknown) =>
     fn.mockImplementation(async () => { rec.event(label); return result })
+  h.auth.mockResolvedValue({ userId: null })
   h.rateLimit.mockImplementation(() => { rec.event('gate rateLimit'); return null })
   hook(h.impersonation, 'gate impersonation', null)
   hook(h.consentBlock, 'gate consent', null)
@@ -178,13 +181,81 @@ beforeEach(() => {
 /** The log without the gate's reads: writes, shadow syncs and hooks, in order. */
 const writes = () => rec.log.filter((l) => !l.startsWith('select ') && !l.startsWith('gate '))
 
+describe('POST /api/register/individual — the rate limit', () => {
+  it('a signed-in retry has its own count, under a wider cap per event', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    await post()
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], c[2].limit, c[3]])).toEqual([
+      ['register-individual-session', 30, 'colorado'],
+      ['register-individual', 3, 'colorado:user_1'],
+    ])
+  })
+
+  it('new accounts cannot multiply that count: the cap answers first', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    h.rateLimit.mockReturnValueOnce(new Response(null, { status: 429 }))
+    expect((await post()).status).toBe(429)
+    expect(h.rateLimit).toHaveBeenCalledTimes(1)
+    expect(writes()).toEqual([])
+  })
+
+  it('a failed session read counts as signed out', async () => {
+    h.auth.mockRejectedValue(new Error('clerk down'))
+    await post()
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], c[3]])).toEqual([['register-individual', 'colorado']])
+  })
+})
+
+describe('POST /api/register/individual — who the registration is for', () => {
+  const onFile = () =>
+    rec.respond((c) =>
+      c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', 'kid@example.com')
+        ? { data: { id: 'm-prior' }, error: null }
+        : undefined,
+    )
+
+  it('an offer sent to this address does not need a sign-in, whatever its case or spacing', async () => {
+    onFile()
+    h.findOffer.mockResolvedValue({ ...FULL_OFFER, email: ' Kid@Example.com ' })
+    expect((await post({ scholarship_token: 'tok' })).status).toBe(201)
+  })
+
+  it('an offer sent to another address does not excuse the sign-in', async () => {
+    onFile()
+    h.findOffer.mockResolvedValue({ ...FULL_OFFER, email: 'other@example.com' })
+    const res = await settle(await post({ scholarship_token: 'tok' }))
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ code: 'sign_in_required' })
+    expect(writes()).toEqual([])
+  })
+
+  it('signed in, a different date of birth is refused before anything is written', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com', date_of_birth: '1980-02-03' })
+    const res = await settle(await post({ date_of_birth: '2010-05-01' }))
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ code: 'date_of_birth_differs' })
+    expect(writes()).toEqual([])
+    expect(h.findExisting).not.toHaveBeenCalled()
+  })
+
+  it('signed in, the stored date with a time still matches the same day', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com', date_of_birth: '2010-05-01T00:00:00Z' })
+    expect((await post({ date_of_birth: '2010-05-01' })).status).toBe(201)
+  })
+
+  it('signed in with no stored date of birth, the typed one stands', async () => {
+    h.getCurrentMember.mockResolvedValue({ email: 'kid@example.com', date_of_birth: null })
+    expect((await post({ date_of_birth: '2010-05-01' })).status).toBe(201)
+  })
+})
+
 describe('POST /api/register/individual — the gate, in order', () => {
   it('reads in this order, and writes nothing until the last check has passed', async () => {
     h.stripeOn = true
     h.getEventBySlug.mockImplementation(async () => { rec.event('gate event'); return PRICED })
-    h.findOffer.mockImplementation(async () => { rec.event('gate findOffer'); return HALF_OFFER })
+    h.findOffer.mockImplementation(async () => { rec.event('gate findOffer'); return { ...HALF_OFFER, email: 'other@example.com' } })
     await post({ scholarship_token: 'tok' })
-    expect(rec.log.slice(0, 9)).toEqual([
+    expect(rec.log.slice(0, 11)).toEqual([
       'gate rateLimit',
       'gate impersonation',
       'gate consent',
@@ -192,6 +263,8 @@ describe('POST /api/register/individual — the gate, in order', () => {
       'gate findOffer',
       'gate event',
       'gate findExisting',
+      'select members', // on file by email?
+      'select members', // on file by school_email?
       'gate price',
       'insert registrations',
     ])

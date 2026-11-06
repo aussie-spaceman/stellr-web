@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Check, AlertCircle } from 'lucide-react'
 
 // Transient confirmation toast: bottom-center, dark navy pill, green check,

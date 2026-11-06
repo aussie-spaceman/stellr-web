@@ -87,6 +87,38 @@ describe('getImpersonation', () => {
 // The write guard and the member resolver each look the issuer up. If the
 // guard read a failed lookup as "no session" while the resolver's own lookup
 // succeeded, an admin's write would run against the viewed member's account.
+describe('when the role check itself cannot answer (AUTHZ_SOURCE=postgres only)', () => {
+  beforeEach(() => {
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    h.db = fakeSupabase(
+      { members: [ADMIN, KID] },
+      { failOn: (t) => (t === 'platform_admins' || t === 'tenant_memberships' ? 'boom' : null) },
+    )
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('a real ticket is unverified, not "no session": a write is refused, and nothing is shown as the member', async () => {
+    h.cookie = ticketFor(KID.id)
+    const blocked = await assertNotImpersonating()
+    expect(blocked?.status).toBe(503)
+    expect(await mayBeViewingAs()).toBe(true)
+    expect(await getImpersonation()).toBeNull()
+  })
+
+  it('a forged ticket is still no session', async () => {
+    h.cookie = `${ticketFor(KID.id)}x`
+    expect(await assertNotImpersonating()).toBeNull()
+  })
+
+  it('a signed-out caller is still no session', async () => {
+    h.userId = null
+    h.cookie = ticketFor(KID.id)
+    expect(await assertNotImpersonating()).toBeNull()
+  })
+})
+
 describe('assertNotImpersonating', () => {
   it('lets a request with no view-as cookie through', async () => {
     expect(await assertNotImpersonating()).toBeNull()

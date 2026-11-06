@@ -115,7 +115,10 @@ describe('/api/img Sanity project pinning + content-type (MEM-2 / PUB-3)', () =>
     expect(res.headers.get('content-type')).toBe('image/webp')
     expect(res.headers.get('x-content-type-options')).toBe('nosniff')
     expect(res.headers.get('content-security-policy')).toContain("default-src 'none'")
-    expect(res.headers.get('cache-control')).toContain('immutable')
+    // A browser copy can't be recalled, so it's short. The CDN copy can be deleted by tag.
+    expect(res.headers.get('cache-control')).toBe('public, max-age=86400')
+    expect(res.headers.get('vercel-cdn-cache-control')).toBe('public, max-age=31536000')
+    expect(res.headers.get('vercel-cache-tag')).toBe(`sanity-image-${FILE.split('-')[0]}`)
   })
 
   it('serves an image whose crop is the whole original (no rect)', async () => {

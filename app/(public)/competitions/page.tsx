@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { Launch, Environment } from '@stellr/icons'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
@@ -203,7 +203,7 @@ const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
 
 // Static, refreshed hourly. Tier prices come from a cache that a Stripe price
 // edit can bust (lib/tier-pricing.ts), which refreshes this page with it.
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 export default async function CompetitionsPage() {
   // The series nodes describe themselves from the events that make them up —

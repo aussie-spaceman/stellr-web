@@ -107,7 +107,7 @@ export async function POST(req: Request) {
   let hubspotOptions: string | Record<string, unknown> = 'skipped: not the production app'
   if (isRealProductionApp()) {
     try {
-      const r = await syncEventOptions({ apply: true })
+      const r = await syncEventOptions({ apply: true, stellrOnlyDb: db })
       hubspotOptions = {
         ok: r.ok,
         refused: r.refused,

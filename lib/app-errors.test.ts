@@ -11,6 +11,7 @@ import {
   errorDigest,
   MAX_MESSAGE,
   MAX_WRITES_PER_MINUTE,
+  recordBuiltAppError,
   renderErrorDigest,
   resetErrorCaptureState,
   routeLabel,
@@ -120,6 +121,18 @@ describe('captureRequestError', () => {
     // No injected db → supabaseServer() throws (mocked) → swallowed.
     await expect(captureRequestError('plain string', {}, {})).resolves.toBeUndefined()
     await expect(captureRequestError(null, {}, {})).resolves.toBeUndefined()
+  })
+})
+
+describe('recordBuiltAppError', () => {
+  it('never throws, and says a failed write failed', async () => {
+    // supabaseServer() throws (mocked). lib/authz/authz.test.ts covers the write itself.
+    await expect(recordBuiltAppError('AUTHZ /x', 'authz_mismatch', 'digest-a')).resolves.toBe(false)
+  })
+
+  it('a write the rate limit holds back is not a failure', async () => {
+    takeWrite('digest-b', Date.now())
+    await expect(recordBuiltAppError('AUTHZ /x', 'authz_mismatch', 'digest-b')).resolves.toBe(true)
   })
 })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { lastCronResult, startCronRun } from '@/lib/cron-runs'
 import { sendEmail, staffAlertEmail } from '@/lib/email'
 import { fetchEngagedProspects, reconcileProspects } from '@/lib/apollo-reconcile'
@@ -61,7 +62,7 @@ const MAX_PER_RUN = 200
  */
 const RUN_BUDGET_MS = 40_000
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('apollo-reconcile', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
   const startedAt = Date.now()
@@ -163,4 +164,4 @@ export async function GET(req: NextRequest) {
     await run.finish({ nextOffset: resumeAt })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
-}
+})

@@ -365,9 +365,22 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 // /api/csp-report (browser CSP reports) is skipped for the same reason: it reads
 // no session, and a page can send several reports.
 //
-// The first entry leaves out URLs with a static file extension. The last two entries
-// are for tenant routing (S5, B5), and neither adds a proxy run for normal Stellr
-// traffic:
+// /_vercel/ (Vercel's analytics beacons) is also left out: it reads no session, and
+// otherwise takes the slower Clerk path. Add an exact path like this one, not an
+// extension: skipping .txt or .xml would also let /admin/x.txt or /credentials/x.txt
+// past the admin check, rate limit and private-route header.
+//
+// The first entry leaves out URLs with a static file extension. That test looks at the
+// whole path and has no end boundary, so /admin/members/x.css and /admin/x.js/y match
+// it. Those paths are safe today only because auth() throws without this proxy and each
+// page has its own guard. A client can forge a signed-out Clerk header on a skipped path
+// to stop the throw, which would leave only the page guards, so the third entry always
+// runs the proxy under the gated prefixes. No real file is served from them, so normal
+// traffic gains no runs. /check-in-desk-sw.js is a root file, not under /check-in/. A new
+// gated route group needs its prefix added here.
+//
+// The last two entries are for tenant routing (S5, B5), and neither adds a proxy run for
+// normal Stellr traffic:
 //   - A first segment starting with `%`, or `_t` or an encoded `_t`. The tenant tree
 //     must 404 by every spelling, with or without an extension, on every host. The
 //     proxy compares the decoded segment; anything else starting `%` just carries on.
@@ -379,8 +392,9 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 //     here and in host-pure.ts, or each of its static files runs the proxy and Clerk.
 export const config = {
   matcher: [
-    '/((?!_next|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
+    '/((?!_next|_vercel/|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
     '/((?!api/img(?:/|$)|api/csp-report(?:/|$))(?:api|trpc).*)',
+    '/((?:admin|account|community|home|campaigns|credentials|team-profile|survey|register|sign|check-in|scholarship/offer)(?:/.*)?)',
     '/((?:%|_(?:[tT](?:/|$)|%)).*)',
     {
       source: '/((?!_next(?:/|$)|api/img(?:/|$)|api/csp-report(?:/|$)).*)',

@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   getCurrentMember: vi.fn(),
   impersonation: vi.fn(),
   rateLimit: vi.fn(),
+  auth: vi.fn(),
   stripe: null as unknown,
   priceRetrieve: vi.fn(),
   findExisting: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/community', () => ({ getCurrentMember: h.getCurrentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: h.impersonation }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rateLimit, HOUR_MS: 3_600_000 }))
+vi.mock('@clerk/nextjs/server', () => ({ auth: h.auth }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => h.stripe }))
 vi.mock('@/lib/registration-duplicates', () => ({
   findExistingRegistrations: h.findExisting,
@@ -155,6 +157,7 @@ beforeEach(() => {
   h.getEventBySlug.mockResolvedValue(OPEN_EVENT)
   h.getCurrentMember.mockResolvedValue(null)
   h.impersonation.mockResolvedValue(null)
+  h.auth.mockResolvedValue({ userId: null })
   h.rateLimit.mockReturnValue(null)
   h.priceRetrieve.mockResolvedValue({ unit_amount: 13500, currency: 'usd' })
   h.findExisting.mockResolvedValue(new Map())
@@ -328,6 +331,30 @@ describe('branches: POST /api/register/group — the group’s shape', () => {
     })))).toEqual(mismatch(3, 4, 1, 3))
     expect(h.findExisting).toHaveBeenCalledTimes(3)
     expect(rec.writes()).toEqual(NOTHING_WRITTEN)
+  })
+})
+
+describe('branches: POST /api/register/group — the rate limit', () => {
+  it('a signed-in retry has its own count, under a wider cap per event', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    await post(body())
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], c[2].limit, c[3]])).toEqual([
+      ['register-group-session', 30, 'colorado'],
+      ['register-group', 3, 'colorado:user_1'],
+    ])
+  })
+
+  it('new accounts cannot multiply that count: the cap answers first', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    h.rateLimit.mockReturnValueOnce(new Response(null, { status: 429 }))
+    expect((await post(body())).status).toBe(429)
+    expect(h.rateLimit).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed session read counts as signed out', async () => {
+    h.auth.mockRejectedValue(new Error('clerk down'))
+    await post(body())
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], c[3]])).toEqual([['register-group', 'colorado']])
   })
 })
 

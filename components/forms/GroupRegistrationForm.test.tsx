@@ -5,7 +5,7 @@ import GroupRegistrationForm from './GroupRegistrationForm'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
-vi.mock('@clerk/nextjs', () => ({ useAuth: () => ({ isSignedIn: false }) }))
+vi.mock('@clerk/nextjs', () => ({ useAuth: () => ({ isSignedIn: false }), useClerk: () => ({}) }))
 vi.mock('@clerk/nextjs/legacy', () => ({ useSignIn: () => ({ signIn: null, setActive: vi.fn(), isLoaded: false }) }))
 
 // A signed-in teacher whose own details are complete, so Continue reaches step 2.

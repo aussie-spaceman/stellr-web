@@ -162,6 +162,25 @@ rule (`lib/survey/media.ts`), which combines:
 The same do-not-use list covers **survey quotes** (D17, Privacy §2 and §3.12,
 Terms §11.3) as well as photos, videos, name and work.
 
+**Removing a published photo.** The Privacy Policy promises removal at any time,
+and taking it off the page is not enough: stamped copies are cached.
+
+1. Remove the image from the Sanity document and publish, which refreshes the
+   pages. Then delete the asset itself in Sanity's media library.
+2. Delete the cached copies. The tag is the hash at the start of the asset's
+   filename (`<hash>-<w>x<h>.<ext>`). From a checkout linked to `stellr-web`:
+   `npx vercel cache dangerously-delete --tag sanity-image-<hash>`. Don't use
+   `invalidate`: it keeps serving the old copy while it refreshes. An image stamped
+   before this tag existed has no tag, so if the check below still returns it, run
+   `npx vercel cache purge --type cdn`.
+3. Check: `curl -sI` the old `/api/img` URL. It must no longer return 200.
+4. A photo in `public/` or the Blob media store is not in Sanity: delete the file,
+   and for `public/`, deploy.
+
+A browser that already loaded the image can keep its copy for up to a day (a year
+for images stamped before this change), and copies other people saved can't be
+recalled. Say so in the reply to the person asking.
+
 **Opt-out emails** to privacy@stellreducation.org from a student aged 13+ or a
 parent/guardian are not in the data: log them, reply to confirm, and keep them
 on a short manual list beside the export. Either opt-out (student or parent)

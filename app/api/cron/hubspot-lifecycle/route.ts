@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { searchContacts, setLifecycleStage } from '@/lib/hubspot'
 import { HS, LEAD_SOURCE_LIFECYCLE, LEAD_SOURCES, SUBSCRIBER_LEAD_SOURCES } from '@/lib/hubspot-fields'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/hubspot-lifecycle — runs daily (see vercel.json).
@@ -34,6 +35,10 @@ import { startCronRun } from '@/lib/cron-runs'
 // matches `lifecyclestage = lead` exactly.
 
 export const dynamic = 'force-dynamic'
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 /** How far back to reconcile. Long enough to survive a couple of failed runs. */
 const LOOKBACK_DAYS = 3
@@ -41,7 +46,7 @@ const LOOKBACK_DAYS = 3
 /** Bounded so a runaway filter cannot rewrite the whole database. */
 const MAX_PER_RUN = 100
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('hubspot-lifecycle', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -114,4 +119,4 @@ export async function GET(req: NextRequest) {
   for (const f of failed) run.fail(f.email ?? 'unknown', f.error ?? 'setLifecycleStage failed')
   await run.finish(summary)
   return NextResponse.json(summary, { status: 200 })
-}
+})

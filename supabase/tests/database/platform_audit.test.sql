@@ -15,7 +15,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(69);
+SELECT plan(71);
 
 -- Test tenants: A and B for normal chains, C and D for tampering.
 INSERT INTO public.tenants (id, slug, legal_name, display_name, country, payment_region, currency, time_zone) VALUES
@@ -286,6 +286,15 @@ SELECT is(
   encode(public.platform_audit_digest(NULL, NULL, 1, 'webhook:stripe', 'webhook', 'webhook.event.process', NULL, NULL, NULL, '{}', '2026-11-05T10:00:00Z'), 'hex'),
   'fc9b66570852b4d5110052aed974cec4a9d7665fb23a0b06cbb2197761ec9767',
   'a webhook row''s digest matches the golden vector lib/audit/platform.test.ts checks');
+
+-- ── The row lib/cron-audit.ts writes: a run spans tenants, so the platform chain ──
+SET LOCAL ROLE service_role;
+SELECT lives_ok(
+  $q$SELECT public.platform_audit_append(NULL, 'cron:team-profiles', 'cron', 'cron.run.finish', NULL, NULL, NULL, '{"status": 200}')$q$,
+  'a cron run''s event goes on the platform chain');
+RESET ROLE;
+SELECT is((SELECT ok FROM public.platform_audit_verify(NULL)), true,
+  'the platform chain verifies across a cron row');
 
 SELECT * FROM finish();
 ROLLBACK;

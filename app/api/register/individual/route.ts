@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
@@ -47,11 +48,20 @@ export async function POST(req: NextRequest) {
     // by event slug so one venue's families registering for one event aren't
     // lumped with that IP's traffic to other events; limit stays tight because
     // the quota is shared.
+    // A signed-in retry has its own count: an email on file is asked to sign in
+    // first, and that refusal must not use up the household's or school's shared
+    // allowance. A wider cap per event stops new accounts multiplying that count.
+    const eventKey = typeof fields.event_slug === 'string' ? fields.event_slug : undefined
+    const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
+    if (userId) {
+      const eventCapped = rateLimitGuard(req, 'register-individual-session', { limit: 30, windowMs: HOUR_MS }, eventKey)
+      if (eventCapped) return eventCapped
+    }
     const rateLimited = rateLimitGuard(
       req,
       'register-individual',
       { limit: 3, windowMs: HOUR_MS },
-      typeof fields.event_slug === 'string' ? fields.event_slug : undefined,
+      userId ? `${eventKey}:${userId}` : eventKey,
     )
     if (rateLimited) return rateLimited
 

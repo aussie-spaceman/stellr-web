@@ -3,6 +3,7 @@ import { logActivity } from '@/lib/activity-log'
 import { applyGrantTrigger } from '@/lib/membership-grants'
 import { ensureRosterMembership } from '@/lib/container-sync'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Records a member's event registration into event_participations so the event
 // surfaces in the "Event Activity" lists on the member portal, the admin member
@@ -45,32 +46,8 @@ export async function recordEventParticipation(
     // all of them at once. Idempotent + non-fatal, like everything in this file.
     await syncObjectSpaceRoster(db, 'event', p.eventSlug, p.memberId)
 
-    const { data: existing } = await db
-      .from('event_participations')
-      .select('id')
-      .eq('member_id', p.memberId)
-      .eq('event_slug', p.eventSlug)
-      .maybeSingle()
-    if (existing) return
-
-    const { error } = await db.from('event_participations').insert({
-      member_id: p.memberId,
-      event_slug: p.eventSlug,
-      event_title: p.eventTitle || null,
-      event_year: p.eventYear ?? new Date().getFullYear(),
-      status: 'approved',
-    })
-    if (error) {
-      console.error('[event-participation] insert error (non-fatal):', error)
-    } else {
-      await logActivity({
-        memberId: p.memberId,
-        category: 'event',
-        action: 'event_registered',
-        summary: `Registered for ${p.eventTitle || p.eventSlug}`,
-        metadata: { eventSlug: p.eventSlug, eventTitle: p.eventTitle ?? null },
-        actorType: 'system',
-      }, db)
+    const inserted = await insertParticipationRow(db, { ...p, memberId: p.memberId, eventSlug: p.eventSlug })
+    if (inserted) {
       // Competition registration grant rules (e.g. school student → Pathfinder,
       // or N workshop/cohort credits). The rule's role condition decides who
       // qualifies; non-matchers are a no-op. Seeded on the event slug so a credit
@@ -82,11 +59,56 @@ export async function recordEventParticipation(
   }
 }
 
+/**
+ * The event_participations row and its activity entry, with no roster, Space or
+ * membership write. True when this call added the row. An existing row or a failed
+ * insert is false.
+ */
+async function insertParticipationRow(
+  db: SupabaseClient,
+  p: { memberId: string; eventSlug: string; eventTitle?: string | null; eventYear?: number | null },
+): Promise<boolean> {
+  const { data: existing } = await db
+    .from('event_participations')
+    .select('id')
+    .eq('member_id', p.memberId)
+    .eq('event_slug', p.eventSlug)
+    .maybeSingle()
+  if (existing) return false
+
+  const { error } = await db.from('event_participations').insert({
+    member_id: p.memberId,
+    event_slug: p.eventSlug,
+    event_title: p.eventTitle || null,
+    event_year: p.eventYear ?? new Date().getFullYear(),
+    status: 'approved',
+  })
+  if (error) {
+    console.error('[event-participation] insert error (non-fatal):', error)
+    return false
+  }
+  await logActivity({
+    memberId: p.memberId,
+    category: 'event',
+    action: 'event_registered',
+    summary: `Registered for ${p.eventTitle || p.eventSlug}`,
+    metadata: { eventSlug: p.eventSlug, eventTitle: p.eventTitle ?? null },
+    actorType: 'system',
+  }, db)
+  return true
+}
+
 // Convenience wrapper for the team/portal/sheet paths that don't carry the event
 // inline: look up the registration's event slug + title and record participation
 // for every supplied member. Mirrors linkMembersToRegistrationSchool so the
 // sheet-sync, Google-Sheets webhook, and portal add-participant routes stay
 // one-liners. Non-fatal + idempotent.
+//
+// These paths act on a registration by id from Stellr's own host, so the tenant
+// comes from the row. Everything recordEventParticipation does is Stellr's alone
+// (lib/community/event-hooks), so another tenant's registration records nothing.
+// A NULL tenant_id is Stellr's: the column is nullable and every other tenant's row
+// is stamped by its trigger.
 export async function recordEventParticipationForRegistration(
   db: SupabaseClient,
   registrationId: string,
@@ -97,10 +119,11 @@ export async function recordEventParticipationForRegistration(
     if (ids.length === 0) return
     const { data: reg, error } = await db
       .from('registrations')
-      .select('event_slug, event_title')
+      .select('event_slug, event_title, tenant_id')
       .eq('id', registrationId)
       .maybeSingle()
     if (error || !reg?.event_slug) return
+    if (reg.tenant_id && reg.tenant_id !== STELLR_TENANT_ID) return
     await Promise.all(
       ids.map((memberId) =>
         recordEventParticipation(db, {

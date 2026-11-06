@@ -34,9 +34,12 @@
  *      index, or a trigger it disables and never re-enables. The lint fails
  *      closed: such a statement fails unless UNPARSED_ALLOWLIST names its
  *      file and kind, with the reason it is safe;
- *  10. (S4) an `own` or `derived` table lacks either tenant policy,
- *      tenant_isolation or tenant_isolation_guard, at the end of the
- *      migration history (isolationPolicyProblems).
+ *  10. (S4) an `own`, `derived` or `inherited` table lacks either tenant
+ *      policy, tenant_isolation or tenant_isolation_guard, at the end of the
+ *      migration history (isolationPolicyProblems);
+ *  11. (S5 C0b) an `inherited` table lacks tenant_id, an index led by it, its
+ *      parent key column, or the zz_tenancy_derive_tenant_id trigger calling
+ *      tenancy_inherit_tenant_id with matching arguments.
  *
  * Dependency-free (Node runs the .ts registry directly).
  */
@@ -47,6 +50,8 @@ import { S3_FIRST_MIGRATION } from '../lib/tenancy/constants.ts'
 
 export const DERIVE_TRIGGER = 'zz_tenancy_derive_tenant_id'
 export const DERIVE_FUNCTION = 'public.tenancy_derive_tenant_id'
+/** The same trigger name on an `inherited` table calls this instead (S5 C0b). */
+export const INHERIT_FUNCTION = 'public.tenancy_inherit_tenant_id'
 
 /**
  * Statements the inventory cannot follow that a reviewer has checked by hand.
@@ -92,9 +97,22 @@ export function checkTenancy(tables, registry = TABLE_REGISTRY, issues = [], all
 
     for (const p of entryProblems(name, entry, registry)) problems.push(p)
 
-    if (entry.tenantColumn === 'own' || entry.tenantColumn === 'derived') {
+    if (entry.tenantColumn === 'own' || entry.tenantColumn === 'derived' || entry.tenantColumn === 'inherited') {
       if (!t.columns.has('tenant_id')) problems.push(`${name}: ${entry.tenantColumn} but has no tenant_id column`)
       else if (!t.indexed.has('tenant_id')) problems.push(`${name}: tenant_id has no index led by it`)
+    }
+
+    if (entry.tenantColumn === 'inherited' && entry.parent && entry.parentKey) {
+      if (!t.columns.has(entry.parentKey)) problems.push(`${name}: parent key column ${entry.parentKey} does not exist`)
+      const parent = entry.parent.replace(/^public\./, '')
+      const trg = t.triggers.get(DERIVE_TRIGGER)
+      if (!trg || trg.function !== INHERIT_FUNCTION) {
+        problems.push(`${name}: inherited but has no ${DERIVE_TRIGGER} trigger calling ${INHERIT_FUNCTION}`)
+      } else if (trg.args[0] !== entry.parentKey || trg.args[1] !== parent) {
+        problems.push(`${name}: ${DERIVE_TRIGGER} arguments (${trg.args.join(', ')}) do not match parent (${entry.parentKey}, ${parent})`)
+      } else if (trg.enabled === false) {
+        problems.push(`${name}: ${DERIVE_TRIGGER} is disabled`)
+      }
     }
 
     if (entry.tenantColumn === 'derived' && entry.eventKey) {
@@ -132,9 +150,9 @@ export function checkTenancy(tables, registry = TABLE_REGISTRY, issues = [], all
 }
 
 /**
- * S4: the two tenant policies every 'own' / 'derived' table must carry
- * (20261104200000_tenant_isolation_policies.sql). A table added later writes
- * both in its own migration.
+ * S4: the two tenant policies every 'own' / 'derived' / 'inherited' table must
+ * carry (20261104200000_tenant_isolation_policies.sql). A table added later
+ * writes both in its own migration.
  */
 export const ISOLATION_POLICIES = ['tenant_isolation', 'tenant_isolation_guard']
 
@@ -145,7 +163,7 @@ const POLICY_STATEMENT =
   /\b(create|drop)\s+policy\s+(?:if\s+exists\s+)?"?(tenant_isolation(?:_guard)?)"?\s+on\s+(?:only\s+)?(?:("?[a-z_][a-z0-9_$]*"?)\s*\.\s*)?("?[a-z_][a-z0-9_$]*"?)/gi
 
 /**
- * Own/derived tables missing a tenant policy at the end of the migration
+ * Own/derived/inherited tables missing a tenant policy at the end of the migration
  * history (a later DROP without a re-CREATE counts as missing). Skipped
  * entirely while no migration at or after S4 exists (a pre-S4 checkout).
  *
@@ -161,7 +179,7 @@ export function isolationPolicyProblems(sources, registry = TABLE_REGISTRY) {
   }
   const problems = []
   for (const [table, e] of Object.entries(registry)) {
-    if (e.tenantColumn !== 'own' && e.tenantColumn !== 'derived') continue
+    if (e.tenantColumn !== 'own' && e.tenantColumn !== 'derived' && e.tenantColumn !== 'inherited') continue
     for (const p of ISOLATION_POLICIES) {
       if (!present.get(`${table}|${p}`)) {
         problems.push(`${table}: ${e.tenantColumn} tenant table without the ${p} policy TO tenant_app (see docs/TENANCY-S4.md)`)

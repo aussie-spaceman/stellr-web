@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { dispatchDueDrips } from '@/lib/email-campaigns'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/campaign-drip — runs daily (see vercel.json). Sends the queued
 // steps of multi-email drip sequences whose delay has elapsed.
@@ -11,7 +17,7 @@ import { startCronRun } from '@/lib/cron-runs'
 // Eligibility (consent, active, tier) is re-checked at send time inside
 // dispatchDueDrips, so an unsubscribe part-way through a sequence takes effect.
 // Claiming each row before sending makes overlapping ticks safe.
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('campaign-drip', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -28,4 +34,4 @@ export async function GET(req: NextRequest) {
     await run.finish({})
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
-}
+})

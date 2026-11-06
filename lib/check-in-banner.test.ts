@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 const getEventsBySlugs = vi.fn()
 vi.mock('@/lib/sanity', () => ({ getEventsBySlugs: (...a: unknown[]) => getEventsBySlugs(...a) }))
 
-import { canSeeCheckIn, checkInsVisibleTo, loadOpenCheckIns, pickBannerEvent, type OpenCheckIn } from './check-in-banner'
+import { canSeeCheckIn, checkInsVisibleTo, loadOpenCheckIns, loadOpenCheckInsForTenant, pickBannerEvent, type OpenCheckIn } from './check-in-banner'
 
 const open = (over: Partial<OpenCheckIn>): OpenCheckIn => ({
   slug: 'nevada',
@@ -51,7 +52,7 @@ describe('pickBannerEvent', () => {
 
 describe('loadOpenCheckIns', () => {
   const dbReturning = (result: { data: unknown; error: unknown }) => {
-    const eq = vi.fn().mockResolvedValue(result)
+    const eq = vi.fn(() => ({ or: vi.fn().mockResolvedValue(result) }))
     const db = { from: vi.fn(() => ({ select: vi.fn(() => ({ eq })) })) } as unknown as SupabaseClient
     return { db, eq }
   }
@@ -92,6 +93,46 @@ describe('loadOpenCheckIns', () => {
     expect(await loadOpenCheckIns(dbReturning({ data: [], error: null }).db)).toEqual([])
     expect(getEventsBySlugs).not.toHaveBeenCalled()
     await expect(loadOpenCheckIns(dbReturning({ data: null, error: { message: 'boom' } }).db)).rejects.toThrow('boom')
+  })
+})
+
+describe('whose open check-ins', () => {
+  const chain = (result: { data: unknown; error: unknown }) => {
+    const calls: unknown[][] = []
+    const builder = {
+      select: () => builder,
+      eq: (...a: unknown[]) => (calls.push(['eq', ...a]), builder),
+      or: (...a: unknown[]) => (calls.push(['or', ...a]), builder),
+      then: (done: (v: unknown) => void) => done(result),
+    }
+    return { db: { from: () => builder } as unknown as SupabaseClient, calls }
+  }
+  const NOTHING = { data: [], error: null }
+
+  beforeEach(() => getEventsBySlugs.mockReset())
+
+  it("Stellr's list keeps to Stellr's rows and rows with no tenant, so a tenant's token never reaches its banner", async () => {
+    const { db, calls } = chain(NOTHING)
+    await loadOpenCheckIns(db)
+    expect(calls).toEqual([
+      ['eq', 'check_in_open', true],
+      ['or', `tenant_id.is.null,tenant_id.eq.${STELLR_TENANT_ID}`],
+    ])
+  })
+
+  it("a tenant's list reads only that tenant's rows", async () => {
+    const { db, calls } = chain(NOTHING)
+    await loadOpenCheckInsForTenant(db, 'tenant-a')
+    expect(calls).toEqual([
+      ['eq', 'check_in_open', true],
+      ['eq', 'tenant_id', 'tenant-a'],
+    ])
+  })
+
+  it("an empty tenant id throws, and doesn't read everyone's", async () => {
+    const { db, calls } = chain(NOTHING)
+    await expect(loadOpenCheckInsForTenant(db, '')).rejects.toThrow('no tenant id')
+    expect(calls).toEqual([])
   })
 })
 

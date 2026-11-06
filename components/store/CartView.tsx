@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Trash2, Loader2, ShoppingBag } from 'lucide-react'
 import { getCart, setQty, removeFromCart, type CartItem } from '@/lib/store/cart-client'
 import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'

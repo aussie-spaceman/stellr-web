@@ -121,6 +121,11 @@ export function portalRoleFromClaims(claims: Claims): 'admin' | 'event_manager' 
   return role === 'admin' || role === 'event_manager' ? role : null
 }
 
+/** The role on a Clerk user record: what isStaffTarget takes as `clerkRole`. Not a string check: the decision makes that. */
+export function roleFromClerkUser(user: { publicMetadata?: unknown } | null | undefined): unknown {
+  return (user?.publicMetadata as { role?: unknown } | null | undefined)?.role
+}
+
 // ── Primitives ──────────────────────────────────────────────────────────────
 
 function hasMembership(p: Principal, tenantId: string, roles: readonly TenantRole[]): TenantRole | null {
@@ -183,10 +188,12 @@ export function decideTenantRole(p: Principal, tenantId: string, roles: readonly
 /**
  * A Stellr admin: the clerk 'admin' claim, or (postgres) a platform admin or a
  * tenant_admin of Stellr. Replaces isAdminClaims / currentUserIsAdmin and the
- * admin-only wrappers.
+ * admin-only wrappers. Only from Stellr (`contextTenantId`): on another tenant's
+ * host nobody is a Stellr admin, in either source.
  */
-export function decideStellrAdmin(p: Principal, source: DecisionSource): Decision {
+export function decideStellrAdmin(p: Principal, source: DecisionSource, contextTenantId: string = STELLR_TENANT_ID): Decision {
   if (!p.userId) return DENY_401
+  if (contextTenantId !== STELLR_TENANT_ID) return DENY_403
   if (source === 'clerk') return decidePlatformAdmin(p, 'clerk')
   if (p.platformAdmin) return { ok: true, via: 'platform', tenantId: STELLR_TENANT_ID }
   return decideTenantRole(p, STELLR_TENANT_ID, ['tenant_admin'], 'postgres')

@@ -146,7 +146,15 @@ function findUnawaitedCalls(fileName: string, src: string): string[] {
     else if (api === 'rateLimit' && !reachesReturn(parent)) report(node, `the response from ${shown}() never reaches a return`)
   }
 
+  /** Whether this identifier declares a local that hides an imported name. */
+  const shadowsImport = (node: ts.Identifier) => {
+    const parent = node.parent
+    const declares = (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent) || ts.isFunctionDeclaration(parent)) && parent.name === node
+    return declares && (names.has(node.text) || namespaces.has(node.text))
+  }
+
   const visit = (node: ts.Node) => {
+    if (ts.isIdentifier(node) && shadowsImport(node)) report(node, `${node.text} hides the imported limiter, so alias the import`)
     if (ts.isCallExpression(node)) {
       const api = apiNameOf(node.expression)
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && isAsyncModule(node.arguments[0].text)) {
@@ -262,6 +270,17 @@ describe('findUnawaitedCalls', () => {
     it('does not mistake an option or a property of the same name for it', () => {
       const src = `${IMPORT}export const opts = { limit: 1, windowMs: 1 }\nexport const n = opts.limit\ninterface X { limit: number }\nexport type Y = X\n`
       expect(findUnawaitedCalls('a.ts', src)).toEqual([])
+      expect(findUnawaitedCalls('a.ts', `${IMPORT}export function f(o: { limit: number }) {\n  const { limit: max } = o\n  return max\n}\n`)).toEqual([])
+    })
+
+    it('fails on a local that hides the import, even when the call looks right', () => {
+      const body = (code: string) => `${IMPORT}export async function f(o: { limit: number }) {\n${code}\n}\n`
+      const hidden = 'hides the imported limiter'
+      expect(findUnawaitedCalls('a.ts', body("  const limit = async () => ({ ok: true })\n  const d = await limit('k')\n  return d.ok"))).toEqual([`a.ts:3 limit ${hidden}, so alias the import`])
+      expect(findUnawaitedCalls('a.ts', body('  const { limit } = o\n  return limit'))).toEqual(expect.arrayContaining([expect.stringContaining(hidden)]))
+      expect(findUnawaitedCalls('a.ts', `${IMPORT}export function f(rateLimit: number) {\n  return 1\n}\n`)).toEqual([`a.ts:2 rateLimit ${hidden}, so alias the import`])
+      expect(findUnawaitedCalls('a.ts', `${IMPORT}function limit() {\n  return 1\n}\n`)).toEqual([`a.ts:2 limit ${hidden}, so alias the import`])
+      expect(findUnawaitedCalls('a.ts', "import { limit as take } from '@/lib/rate-limit-async'\nexport function f(limit: number) {\n  return limit\n}\n")).toEqual([])
     })
   })
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrationIsOpen, type RegistrationGateSource } from '@/lib/registration'
 import { getCurrentMember } from '@/lib/community'
+import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import { answerDuplicates } from './duplicates'
 import { GROUP_SIZE_MAX, isValidCount, settleAddresses, type GroupBody, type ParticipantPayload, type TeacherPayload } from './parse'
@@ -172,6 +173,29 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
   // registration, and that must never happen for a tenant.
   const duplicate = await answerDuplicates(db, body, teacher, event, sessionMember?.email, linkedSlotNames)
   if (duplicate) return refuse(duplicate)
+
+  // The organiser is not on this event, but is on file: they sign in before
+  // anything is written in that member's name (lib/registration/member-on-file).
+  // People they enter are not asked, because the organiser is naming them, not
+  // claiming to be them. Their profile is not rewritten, but the group's other
+  // effects still follow for them: docs/TENANCY-S5.md, Owner decisions.
+  if (!sessionMember) {
+    const onFile = await findMemberOnFile(db, teacher.email, teacher.school_email)
+    if (!onFile.ok) {
+      console.error('[register/group] prior-member lookup failed:', onFile.error)
+      return refuse(temporarilyUnavailable())
+    }
+    if (onFile.onFile) {
+      return refuse(NextResponse.json(
+        {
+          code: SIGN_IN_REQUIRED,
+          school_address_only: onFile.schoolAddressOnly,
+          error: 'This email is already on file with Stellr. Sign in with the address you first used with us, then submit again. If you can’t, or a parent or guardian is helping you, contact us and we’ll help.',
+        },
+        { status: 409 },
+      ))
+    }
+  }
 
   // Declared group size, normalised to ABSOLUTE totals so adult_count +
   // student_count == total participants regardless of role. For a teacher the

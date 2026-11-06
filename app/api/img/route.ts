@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 import { watermarkImageBuffer } from '@/lib/watermark/image'
-import { isSiteSanityImage, sanityAssetSize } from '@/lib/sanity-image-params'
+import { SANITY_IMAGE_QUALITY, isSiteSanityImage, sanityAssetSize, sanityImageCacheTag } from '@/lib/sanity-image-params'
 
 // On-the-fly watermarker for CMS/CDN images (Sanity). Fetches the source image,
-// bakes "© Stellr Education" into the bottom-right, and returns it with immutable
-// cache headers so Vercel's CDN serves the stamped bytes after the first hit.
+// bakes "© Stellr Education" into the bottom-right, and returns it so Vercel's CDN
+// serves the stamped bytes after the first hit.
+//
+// The CDN keeps it for a year under a per-asset cache tag; browsers keep it for a
+// day. A CDN copy can be deleted and a browser's cannot, and the Privacy Policy
+// promises a photo can be removed at any time. To remove one:
+// docs/RUNBOOK-privacy-retention-and-deletion.md, Part C.
 //
 // Locked to Stellr's own Sanity project so this can't be used as an open image
 // proxy. Sanity URLs already carry the asset hash + transform params, so they
@@ -23,6 +28,11 @@ export const runtime = 'nodejs'
 // proxy for arbitrary bytes.
 const ALLOWED_IMAGE_TYPE = /^image\/(jpeg|png|webp|avif|gif)(;|$)/
 const MAX_UPSTREAM_BYTES = 15 * 1024 * 1024 // 15 MB — generous for a CMS photo
+const BROWSER_CACHE_SECONDS = 24 * 60 * 60
+const CDN_CACHE_SECONDS = 365 * 24 * 60 * 60
+// Below sharp's default of 4. This route runs on metered CPU, and Sanity has
+// already resized and compressed the image at the same quality.
+const WEBP_EFFORT = 2
 
 export async function GET(req: Request) {
   const src = new URL(req.url).searchParams.get('src')
@@ -53,7 +63,8 @@ export async function GET(req: Request) {
 
   // One asset file directly under the dataset, requested with exactly the
   // transforms lib/sanity-image.ts emits: a preset width, webp, q75, cropped.
-  const asset = sanityAssetSize(origin.pathname.slice(allowedPrefix.length))
+  const filename = origin.pathname.slice(allowedPrefix.length)
+  const asset = sanityAssetSize(filename)
   if (!asset || origin.hash || !isSiteSanityImage(origin.searchParams, asset)) {
     return NextResponse.json({ error: 'image not allowed' }, { status: 400 })
   }
@@ -85,7 +96,7 @@ export async function GET(req: Request) {
   // primitive (a non-image sharp rejected came straight back untouched).
   let out: Buffer
   try {
-    out = await watermarkImageBuffer(input)
+    out = await watermarkImageBuffer(input, { webp: { quality: SANITY_IMAGE_QUALITY, effort: WEBP_EFFORT } })
   } catch (err) {
     console.error('[img] watermark failed:', err)
     return NextResponse.json({ error: 'processing failed' }, { status: 502 })
@@ -99,8 +110,9 @@ export async function GET(req: Request) {
       // Defence in depth: even a byte-for-byte passthrough (sharp returns the
       // input for sub-96px images) can't run script under this CSP.
       'Content-Security-Policy': "default-src 'none'; sandbox",
-      // Immutable: the src URL changes whenever the asset or transform changes.
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': `public, max-age=${BROWSER_CACHE_SECONDS}`,
+      'Vercel-CDN-Cache-Control': `public, max-age=${CDN_CACHE_SECONDS}`,
+      'Vercel-Cache-Tag': sanityImageCacheTag(filename),
     },
   })
 }

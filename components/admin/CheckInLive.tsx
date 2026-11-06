@@ -50,7 +50,9 @@ interface LiveState {
 type View = 'people' | 'groups'
 type Patches = Record<string, Partial<DeskParticipant>>
 
-const POLL_MS = 5000
+// Each poll runs a function and the proxy on metered CPU. A tap or scan syncs at
+// once, so this only sets how soon a desk sees phones and other desks.
+const POLL_MS = 10_000
 const DETAILS_MS = 3 * 60 * 1000
 const REQUEST_TIMEOUT_MS = 8000
 const NOTICE_MS = 45_000
@@ -71,7 +73,7 @@ const firstName = (full: string | null | undefined) => full?.trim().split(/\s+/)
 // The registration desk's console (PRD 6.7), built for a tablet on a stand or a
 // phone in a volunteer's hand: big touch targets, and a list in a fixed
 // first-name order so a row never moves under a finger when someone checks in
-// (CO, Oct 2026). Taps update the row at once; a 5-second poll picks up phones
+// (CO, Oct 2026). Taps update the row at once; a 10-second poll picks up phones
 // checking themselves in.
 //
 // School groups arrive by the busload (check-in app review, Oct 2026), so the

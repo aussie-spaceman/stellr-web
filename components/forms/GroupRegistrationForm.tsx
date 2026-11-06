@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, useClerk } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Field, Fieldset, Choice, Input, Select, Textarea } from '@stellr/web-ui'
@@ -19,6 +19,9 @@ import { resolveSchoolPayload } from '@/lib/school-utils'
 import { isValidEmail } from '@/lib/member-enums'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
+import { authPath } from '@/lib/auth-path'
+import { ageFromDob } from '@/lib/utils'
+import { OnFilePrompt, adoptSessionFromAnotherTab, needsAnAdultToRegister, signedInAsSomeoneElse } from '@/components/forms/OnFilePrompt'
 import { StepBar as SharedStepBar } from '@/components/registration/StepBar'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -536,6 +539,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
+  const clerk = useClerk()
   const [step, setStep] = useState<1 | 2>(1)
   const [registrantRole, setRegistrantRole] = useState<RegistrantRole>('teacher')
 
@@ -615,6 +619,14 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   // Submit outcome. 'info' is the "we've emailed you a link" answer to an
   // unfinished registration — not a failure, so it isn't painted red.
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  // The organiser's email is on file. Sign-in opens in a new tab, so a roster
+  // typed here is still here when they come back and submit again.
+  const [onFile, setOnFile] = useState<{ schoolAddressOnly: boolean } | null>(null)
+  // The same-tab sign-in note would lose a roster, so it goes once one may exist.
+  const [rosterStarted, setRosterStarted] = useState(false)
+  useEffect(() => {
+    if (step === 2) setRosterStarted(true)
+  }, [step])
   const setError = (text: string | null) => setNotice(text ? { kind: 'error', text } : null)
   const [dpaAgreed, setDpaAgreed] = useState(false)
   const [dpaError, setDpaError] = useState(false)
@@ -799,6 +811,18 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   async function handleFinalSubmit() {
     setSubmitting(true)
     setError(null)
+    // Coming back after being asked to sign in, in another tab.
+    if (onFile) {
+      await adoptSessionFromAnotherTab(clerk)
+      setOnFile(null)
+      const typedEmail = registrantRole === 'teacher' ? tf.getValues('email') : sf.getValues('email')
+      const otherPerson = signedInAsSomeoneElse(clerk.user?.primaryEmailAddress?.emailAddress, typedEmail)
+      if (otherPerson) {
+        setError(otherPerson)
+        setSubmitting(false)
+        return
+      }
+    }
 
     const incomplete = validateParticipants()
     if (incomplete) {
@@ -915,6 +939,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
           setSubmitting(false)
           return
         }
+        if (payload.code === 'sign_in_required') {
+          setOnFile({ schoolAddressOnly: payload.school_address_only === true })
+          setSubmitting(false)
+          return
+        }
         throw new Error(payload.error ?? 'Registration failed')
       }
 
@@ -976,6 +1005,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
     return (
       <div ref={rootRef} className="space-y-6">
         <StepBar step={1} />
+        {!isSignedIn && !prefill && !rosterStarted && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+            <span className="font-medium">Registered with Stellr before?</span>{' '}
+            <a href={authPath(`/register/${eventSlug}/group`)} className="underline hover:no-underline font-medium">Sign in first</a>{' '}
+            so your details are filled in and you won&apos;t be asked to partway through.
+          </div>
+        )}
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Your Details</h2>
           <p className="text-sm text-content-body">Step 2 of 4 — Your information as the group organizer</p>
@@ -1383,6 +1419,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         >
           {notice.text}
         </div>
+      )}
+
+      {onFile && (
+        <OnFilePrompt
+          {...onFile}
+          keepEntries
+          signInUrl={authPath(null)}
+          onboardingUrl="/account/onboarding"
+          signedIn={!!isSignedIn}
+          needsAnAdult={needsAnAdultToRegister(ageFromDob((registrantRole === 'teacher' ? tf.getValues('date_of_birth') : sf.getValues('date_of_birth')) ?? ''))}
+        />
       )}
 
       <div className="flex gap-3">

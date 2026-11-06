@@ -4,7 +4,7 @@ Stage 5 of the multi-tenancy plan converts the app to tenancy and moves authoris
 
 It merges the six S5 area analyses with the review that followed them, at `dev` `c1e41eb8` (4 Nov 2026). Where this file disagrees with the plan or the scoping output, this file wins. Where it disagrees with a committed baseline (`test/baselines/**`), the baseline wins. Where it departs from the review, it says so and why.
 
-Sibling records: `docs/TENANCY-S3.md`, `docs/TENANCY-S4.md`, `docs/S4-SPIKE.md`, `docs/TENANCY-S5-routing.md` (D2), `docs/AUTHZ.md` (D3), `docs/TENANCY-S5-registration.md` (D5), `docs/TENANCY-S5-flow-checklist.md` (D7). Later Lane D PRs add the data and cron records (D4, D6). What wave 2 built, and what it corrected here, is under [Wave 2 status](#wave-2-status).
+Sibling records: `docs/TENANCY-S3.md`, `docs/TENANCY-S4.md`, `docs/S4-SPIKE.md`, `docs/TENANCY-S5-routing.md` (D2), `docs/AUTHZ.md` (D3), `docs/TENANCY-S5-registration.md` (D5), `docs/TENANCY-S5-flow-checklist.md` (D7), `docs/S5-CRONS-LIMITS-SMMA.md` and `docs/RUNBOOK-waf-rule.md` (D6). The SMMA self-assessment is held privately pending the owner's decision. D4 still owes the data record. What each wave built, and what it corrected here, is under [Wave 2 status](#wave-2-status) and [Wave 3 status](#wave-3-status).
 
 ## What may merge when
 
@@ -58,7 +58,7 @@ The scoped globs `lib/credentials/**` and `lib/check-in*/**` matched nothing, an
 - `components/analytics/**`, `lib/analytics.ts`
 - `lib/community.ts`, `lib/community/**`, `lib/member-session.ts`, `lib/event-participation-sync.ts`, `lib/auto-membership-grant.ts`, `lib/notify.ts`, `lib/email.ts`, `lib/event-emails/**`, `lib/email-budget.ts`
 - `lib/event-space-sync.ts`, `lib/spaces*.ts`, `lib/space-*.ts`, `lib/resource-upload.ts`, `lib/resource-finalise.ts`, `lib/mentoring.ts`, `lib/coaching.ts`, `lib/container-sync.ts`
-- `lib/cron.ts`, `lib/cron-runs.ts`, `lib/cron-tenants.ts`, `lib/cron-scope.ts`, `app/api/cron/**`
+- `lib/cron.ts`, `lib/cron-runs.ts`, `lib/cron-tenants.ts`, `lib/cron-scope.ts`, `lib/cron-audit.ts`, `app/api/cron/**`
 - `lib/admin-digest.ts`, `lib/compliance-notify.ts`, `lib/membership-grants.ts`, `lib/training-reminders.ts`, `lib/survey/run.ts`, `lib/survey/retention.ts`, `lib/team-profile/store.ts`
 - `lib/rate-limit.ts`, `lib/rate-limit-store.ts`, and the async module B4 adds
 - `app/api/members/**` except `teams/**`, `app/api/community/**`, and any non-admin `app/api/**` route Lane A does not claim
@@ -116,7 +116,7 @@ Migrations S5 expects, with no version assigned until created:
 | B3 | `cron_runs_tenant` | `cron_runs` gains nullable `tenant_id` and `parent_id`, plus a partial index. |
 | B4 | `rate_limit` | UNLOGGED table and 2 functions, EXECUTE for `service_role` only. |
 | B9 | `community_stellr_only_check` | CHECK (`tenant_id IS NULL OR` Stellr), NOT VALID then VALIDATE, on 4 tables: `community_spaces`, `community_resources`, `mentoring_cohorts`, `training_modules`. |
-| C0b | the S4 `via_parent` follow-up | `tenant_id` plus composite FK on the 10 `child()` tables. Created after A3. |
+| C0b | `via_parent_tenant_expand`, `_backfill`, `_policies`, `_carry` | `tenant_id` on the 10 `child()` tables, with a trigger that copies it from the parent. The composite FK is held back: see [C0b](#pr-amendments). Created after A3. |
 | C7 | `platform_audit_webhook_actor` | Widens `platform_audit_events.actor_kind` and the actor CHECK to `webhook`, with `actor ~ '^webhook:[a-z0-9_-]{1,32}$'`. |
 
 Lane C's "reserved, none planned" no longer holds: C0b and C7 both need one.
@@ -205,7 +205,7 @@ The route counts use one regex: `MUT='export[[:space:]]+(async[[:space:]]+)?(fun
 | B9 + | Community unreachable on tenant hosts, 4-table CHECK | B5, B8 | later |
 | B10a + | Routing harness: Playwright tenant-host project, fixtures, and check (a), the flag-off and flag-on body hash | B5 | later |
 | B10 + | Remaining gates: (b) warm cache, (c) Host spoof, (d) 0 trackers | B5b, B5c, B6, B7, B9, B10a | later |
-| B11 | Stellr-only crons limited to Stellr data; `maxDuration` on all 22 | B3 | later |
+| B11 | Stellr-only crons limited to Stellr data; `maxDuration` on all 23 | B3 | later |
 | B12 | Cron audit hook | B3, C7 | later |
 | B13 | Per-tenant surveys, team-profile and survey-retention crons | B3, B11 | later |
 | B14 | Per-tenant event emails and e-sign reminders, tenant email share | B3, B11 | later |
@@ -268,14 +268,14 @@ B5d is added by this file: the review listed the gap but no fix. It has hunks in
 
 ## Wave 2 status
 
-On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #540, Lane B #534, Lane C #535. Nothing here is on production. Every PR not listed is still to build.
+**Merged** means squashed into `dev` on 5 Nov 2026, one PR per lane: Lane A #540, Lane B #534, Lane C #535, Lane D #547. **Waves 1 and 2 are on production:** promoted in #548 (`5386f5e7`) with the owner's yes, READY on 6 Nov UTC (`.claude/releases/promote-2026-11-05.md`). The flags stay as they were: no flip was part of that promotion, and production's values were not read, because the connector refuses env listing. Every PR not listed here or under wave 3 is still to build.
 
 | PR | State | Flag, or why it is a no-op for Stellr |
 |---|---|---|
 | A0 + | Merged. Added for the wave 1 `KNOWN DEFECT` tests | A defect fix: register routes fail closed on a failed read. Stellr sees a change only when a read has already failed |
 | A3 | Merged | Platform-owner early return. One added lookup per participant write, and a failed read fails the write |
 | A4, A5, A6 | Merged | Pure refactors, pinned by branch tests that passed on the unsplit routes first |
-| A5 + | Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link asks an email on file to sign in, and the register forms give one answer for an address on file to anyone not signed in as it |
+| A5 + | Merged in #549. Owner decision, 5 Nov. Added ahead of A7 | **Not a no-op:** a join link, the individual form and the group form's organiser ask an email on file to sign in, and the register forms give one answer for an address already on the event to anyone not signed in as it |
 | A6 + | Merged. Owner decision, 5 Nov | **Not a no-op:** organisers see a Member ID linked row by name and status only, for rows linked from now on (`lib/team-linked-details.ts`) |
 | B0 + | Merged. Added for the wave 1 follow-ups | Defect fixes on community reports and reactions, cohort sign-up and library files |
 | B3 | Merged | No route imports the runner. `lastCronResult` works with or without the migration |
@@ -286,9 +286,9 @@ On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #54
 | C7 | Merged | `PLATFORM_AUDIT_ENABLED`. No route imports it yet |
 | C8 | Merged | The facade returns `lib/sanity`'s result by reference |
 | C9 | Merged | Under `AUTHZ_SOURCE=clerk` nothing reads the rows it writes. A failed write changes no response |
-| D2, D3, D5, D7 | This docs PR | Docs |
+| D2, D3, D5, D7 | Merged in #547 | Docs |
 
-**Migrations, stamped.** All five are on the `dev` database, with the ledger re-read after applying. None is on production: each needs the owner's approval, and must land before the code that needs it (see [Migrations](#migrations)).
+**Migrations, stamped.** All five are on the `dev` database and on production. **The route to production differed from [Migrations](#migrations).** They went through the Supabase MCP on 5 Nov, with the owner's yes for each file and for the route, because `prod-migrate` found no `PROD_DATABASE_URL`. Each ledger row was realigned to its file's version and `db:status --prod` re-read. The `prod-migrations` environment that run created has no reviewers, branch rule or secret, and `prod-migrate` is still unproven.
 
 | PR | File |
 |---|---|
@@ -296,14 +296,17 @@ On 5 Nov 2026. **Merged** means squashed into `dev`, one PR per lane: Lane A #54
 | A3 | `20261105041211_participants_eligibility.sql` |
 | B4 | `20261105042629_rate_limit.sql` |
 | C7 | `20261105052154_platform_audit_webhook_actor.sql` |
-| A6 + | `20261105131500_participants_details_from_member.sql`. `GET /api/members/teams` names this column, so it must reach production before Lane A's code |
+| A6 + | `20261105131500_participants_details_from_member.sql`. `GET /api/members/teams` names this column, so it was applied first |
 
 **Proven on `dev`.** pgTAP passed on all five in CI's `db` job, and B4's race test passed. B5's host-keyed matcher entry passed its live check on the `dev` alias (`docs/TENANCY-S5-routing.md`).
 
 **Not yet proven.**
 
-- The real-registration witness for A4 to A6 (see [Owner gates](#owner-gates)) is still owed.
-- The team page's linked-row view has unit tests only. It has not been opened in a browser.
+- **The real-registration witness for A4 to A6 was waived, not done.** The owner waived it for the promotion on 5 Nov, and #549's own list likewise. No real registration has been seen through the split routes, on `dev` or production, so coverage is unit and characterisation tests.
+- The team page's linked-row view has unit tests only. It has not been opened in a browser, and `details_from_member` was true on 0 production rows on 5 Nov.
+- A real participant write through A3's trigger on production has not been confirmed.
+- Active CPU under real traffic with B5's matcher entry is unmeasured.
+- The parity query proves nothing on production yet: `events` had 0 rows there on 5 Nov, and the mirror backfill is owed.
 
 ### What wave 2 corrected
 
@@ -347,16 +350,107 @@ On top of [Owner gates](#owner-gates).
 | B3 | `alumni-upgrades`, `campaigns`, `campaign-drip` and `campaign-events` pick people from shared `members` with no tenant limit, and no slice claims this. Once tenant registrants exist as members they could receive Stellr marketing or Alumni grants. Name a slice, or record that it is acceptable |
 | B3 | Retention for inactive tenants: `survey-retention` is assumed to keep running for them |
 | B4 | Whether the nightly backup holds the hashed limiter counters: exclude `rate_limit_hits` from `ops/backups/backup.sh`, or keep them and say so in `docs/RUNBOOK-backups.md` |
-| B5 | Before any promotion carrying B5: accept the host-keyed matcher entry. Its live check passed on the `dev` alias on 5 Nov |
+| B5 | **Settled, 5 Nov:** the owner accepted the host-keyed matcher entry for #548. Its live check passed on the `dev` alias |
 | B5 | Add to `Real tenant hosts`: `TENANT_ROUTING_ENABLED` stays off for any deployment with a zone attached until B5c and B10(d) pass, and A7, C6 and B10(c) pass |
+| B5b | What a tenant's registration form may prefill for a signed-in member. Today nothing: a member's earlier answers, which can be a minor's, stay with the organiser who collected them. Name and email, or this tenant's own rows, are the options |
 | C5a | Turn on the required code-owner ruleset. `.github/CODEOWNERS` only requests review until then. And confirm a PR label is enough to raise a ratchet |
 | C6 | Whether per-route lists of differing refusals stay in the public repo, or become totals and a hash of the list. A CI artifact is not an option, because artifacts on a public repo are public. And which capability-token outcomes to accept before the S5 gate |
+| A5 + | People an organiser enters, on the group form. With no session, naming someone on file as a student or adult still links them to the group. Their profile is not rewritten, and the owner's choice is what else to hold back until they confirm. The slice reports hold the detail |
 | C9 | Run `--check` on `dev`, then production, before shadow, and decide what to do with any stale rows. Confirm a Clerk revoke through `set-admin` should go ahead when the Postgres write is refused |
 
-### Docs still owed
+### Docs owed at the end of wave 2
 
-- **D4:** `docs/SECURITY-route-manifest.md` still says `platform_admin` and `tenant_staff` need "an admin check" and that a test asserts they are empty. C5a and C6 changed both. D4's data and audit runbook is also still to write, and `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `PLATFORM_AUDIT_ENABLED` point to it from `docs/ENV-MATRIX.md`.
-- **D6:** the crons, limiter and SMMA record, and the WAF runbook.
+D6 is now delivered: see [Wave 3 status](#wave-3-status).
+
+- **D4:** `docs/SECURITY-route-manifest.md` still says `platform_admin` and `tenant_staff` need "an admin check" and that a test asserts they are empty. C5a and C6 changed both. D4's data and audit runbook is also still to write, and `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `PLATFORM_AUDIT_ENABLED` point to it from `docs/ENV-MATRIX.md`. The runbook says that crons write no event on dev (B12, `lib/cron-audit.ts`), so a green dev flip says nothing about them: the cron proof is the first production `cron.run.finish` rows after the flip, checked against that day's `cron_runs`.
+- **D6:** the crons, limiter and SMMA record, and the WAF runbook. The record says that a run killed at `maxDuration`, or whose after-response write is lost, leaves no `cron.run.finish` event, so "100% of mutations audited" means every finished run. Once `PLATFORM_AUDIT_ENABLED` is on, compare those rows with `cron_runs`, whose started rows show any run that never finished.
+
+## Wave 3 status
+
+**Merged** means squashed into `dev` on 6 Nov 2026, one PR per lane: Lane A #562, Lane B #563, Lane C #564. Lane D, this docs PR, follows them. Nothing here is on production, and no promotion is planned as part of it. Every PR not listed here or under wave 2 is still to build.
+
+| PR | State | Flag, or why it is a no-op for Stellr |
+|---|---|---|
+| A14 | Merged in #562 | `PLATFORM_AUDIT_ENABLED`. With it off, the route helpers return before reading a session or writing. `uploads/sign` caps its own audit rows at 120 an hour per user, per purpose and per instance |
+| B5b | Merged in #563 | The tree is reached only with `TENANT_ROUTING_ENABLED`, and 404s by its own URL. Stellr's bodies are called as plain functions, pinned by golden files written on the unsplit pages. `loadOpenCheckIns` gains the Stellr-or-NULL filter |
+| B8 | Merged in #563 | Code moves, with the same exports. `recordEventParticipationForRegistration` gains one column read, and refuses only another tenant's row. Nothing imports the hooks yet |
+| B10a | Merged in #563 | Tests and CI only. `tenant-host-routing` is report-only |
+| B11 | Merged in #563 | The Stellr-or-NULL filter matches every row today. **Three things do change:** the digest, `training-reminders` and the HubSpot option sync each add a read of `events`, and fail closed if it fails. `maxDuration` is now declared on all 23 |
+| B12, B18 | Merged in #563 | `PLATFORM_AUDIT_ENABLED`. An audit failure changes no response |
+| C0b | Merged in #564, **part of the slice held back** | Expand-only, and the carry trigger's WHEN is never true for Stellr. **Not free:** each child insert gains a tenant lookup, and `select('*')` results gain `tenant_id`, including three route bodies (see [C0b](#pr-amendments)). The composite FK is not built |
+| C5b | Merged in #564 | Static check only. No route calls the async limiter |
+| C10 | Merged in #564, **not run on the app** | A tool and its tests. No app file changed |
+| C14 | Merged in #564, **partial** | `AUTHZ_SOURCE=clerk` keeps every answer and adds no role-table read. **The first runtime use of `lib/authz` for a decision.** `app/(member)/layout.tsx` and `NavUserButton` did not move, because they serve ordinary members and `docs/AUTHZ.md` asks for a sampling decision first |
+| D6 | This docs PR | Docs |
+
+**Migrations, stamped.** Only C0b has any, four files to apply in order, each as its own step:
+
+| File | What it does |
+|---|---|
+| `20261106070722_via_parent_tenant_expand.sql` | Nullable `tenant_id`, index and derive trigger on the 10 child tables |
+| `20261106070724_via_parent_tenant_backfill.sql` | Idempotent backfill |
+| `20261106070726_via_parent_tenant_policies.sql` | `tenant_app` grants and policies |
+| `20261106074112_via_parent_tenant_carry.sql` | Moves children when a parent changes tenant |
+
+All four are on the `dev` database, applied on 6 Nov after #564's `db` job passed, with the ledger realigned to each file's version and re-read. None is on production. Production needs the owner's yes, outside event hours: the first takes ACCESS EXCLUSIVE on 10 tables and the third on 15, and production's row counts were not read, so any timing is an estimate. Decide the route first, since `prod-migrate` is unproven (see wave 2).
+
+- **`20261106070724_via_parent_tenant_backfill.sql` must run in a single transaction,** by `prod-migrate` or explicit `BEGIN`/`COMMIT`. Afterwards, check `pg_trigger` to confirm `esign_audit_events_guard` and `survey_invitations_updated_at` are enabled.
+- **Apply outside event hours and outside active survey submission and signing,** because `20261106070726_via_parent_tenant_policies.sql` takes table locks that can abort a concurrent write.
+
+**Proven.**
+
+- B10a's check (a) ran on a real production build, 14 of 14, with no differences on any host, and `tenant-host-routing` passed step by step on GitHub Actions in #563 and #564.
+- pgTAP passed on B12's new test in #563's `db` job, and on C0b's migrations in #564's.
+- On the `dev` database after applying: `tenancy_cutover_checks` sections D2 and I at 0 on all 10 tables, `esign_audit_events_guard` and `survey_invitations_updated_at` enabled, and `tenant_app` unable to write `participants.member_id` or insert into `esign_audit_events`.
+
+**Not yet proven.**
+
+- **B5b's "same page" proof is a tree and HTML comparison under mocks,** not a byte comparison of real builds with real records. The harness has no CMS, so register bodies answer 404 there.
+- **B11 and B12 prove nothing until production crons run,** because crons decline on `dev`. Check the first production `cron_runs` rows against the previous day's, and the digest in an inbox.
+- **No record shows `AUTHZ_SOURCE=shadow` running in a deployment,** so C14's first real comparison is still to come.
+- **The WAF rules.** Read the Firewall page and the plan's rule allowance when working through `docs/RUNBOOK-waf-rule.md`.
+- **The actor on audit rows written inside `after()` with `{ session: true }`** (scholarship, campaigns submit, store reship) needs one real row checked on `dev` before `PLATFORM_AUDIT_ENABLED` goes on production.
+
+### What wave 3 corrected
+
+| This file said | Now | Source |
+|---|---|---|
+| 22 crons, 27 schedules, in several places above | **23 and 28**: `group-invoice-sync` came later. Read 23 wherever a row above says 22 | `lib/cron-scope.ts`, `vercel.json` |
+| B13 and B14 cover the per-tenant crons | Not `group-invoice-sync`: it is `per_tenant`, and neither lists it. Safe until priced tenant events exist (S9), but it needs a slice | `docs/S5-CRONS-LIMITS-SMMA.md` |
+| Unaudited: 268 mutations, 23 crons | **Crons 0** (B12). **Mutations 257** once A14 (2) and B18 (9) are both in; regenerated, never typed in | `test/baselines/unaudited-mutations.json` |
+| Authz legacy idioms 222 files, 328 sites | **218, 309** (C14). C10's dry run says what the tool can reach: 328 to 78, but only by moving 33 pages to `pageRequireAdmin`, which still counts | `test/baselines/authz-legacy-idioms.json` |
+| C0b adds a composite FK | **Held back.** No slice owns it yet | [C0b](#pr-amendments) |
+| B8's baseline: 6 modules, 9 table files | **10 modules, 38 first-step imports, 17 table files, 0 channels,** after review widened the check. They fall from there, and they are not 0 | `test/tenant-surface-baseline.json` |
+| `syncMemberOptionSelections` has no decision | Wrapped, as are `resolveAndLinkSchool` and `linkMembersToRegistrationSchool` | `lib/community/event-hooks.ts` |
+| Crons audit through `withAudit` | Through `withCronAudit`, which writes nothing outside production. "100% of mutations audited" means every run that finished and whose event was not lost | `lib/cron-audit.ts` |
+| Extend the WAF rule to `/credentials/`, then tenant hosts | **Separate rules**, because one rule appears to keep one count per IP across all it matches, and a venue shares an IP. Not measured | `docs/RUNBOOK-waf-rule.md` |
+| Limiter problems log to `app_errors` (scoping) | `console.error`, once a minute per instance | `lib/rate-limit-store.ts` |
+
+### Owner decisions wave 3 raised
+
+On top of [Owner gates](#owner-gates) and the wave 2 list. Slice reports hold the detail where the behaviour is live.
+
+| From | Decision |
+|---|---|
+| A14 | Decide how consent audit rows relate to the purge, before `PLATFORM_AUDIT_ENABLED` and `MINOR_SELF_SIGNUP_ENABLED` are both on. Take legal input. Neither flag is on by default |
+| A14 | Review the limits on upload signing before the audit flag goes on. Any change there is live behaviour, so it needs its own flag or review |
+| B8 | Should a tenant event write `event_participations` and the activity log? Set to no, because Stellr's account and staff pages read them with no tenant scope. Yes first needs a slice to scope those reads, ahead of A7. Withheld rows can be rebuilt from `participants` and `registrations` |
+| B10a | Whether check (a) never comparing signed-in or real-record pages with routing on is accepted, or a slice takes it. The plan points this at D7's sign-off |
+| B11 | Confirm the agent-written reason on the service-role ratchet entry for `scripts/hubspot-sync-event-options.ts`, or have the script pass `allTenants: true` instead, which keeps the list shorter but lets a manual `--apply` write another tenant's events to Stellr's portal |
+| B18 | `teacher-grant`: decide the small separate follow-up that uses the new `onCreated`. The slice report holds the detail |
+| B18 | Decide the route limit for `store/checkout` (B15) before `PLATFORM_AUDIT_ENABLED` goes on production, or record the owner's written decision to go ahead without it |
+| C10 | `OPERATIONAL_WRITERS`: its `lib/app-errors` entry now also covers `authz_mismatch` rows, which skip the scrubber because they carry a validated `members.id`. Accept this, or name a separate entry |
+| C10 | The sampling decision (`docs/AUTHZ.md`) comes before `lib/store/auth.ts` can leave `HELD_WRAPPERS`, which C23 depends on. Or split the member-reachable PATCH in `app/api/store/returns` from the catalogue check |
+| C14 | Should a member purge also protect a login holding only a `staff` membership or `staff_roles` row? It keeps today's rule, which counts `admin` and `event_manager`. Extending it changes who can be deleted |
+| C14 | Add to Owner gates: before the first non-owner tenant on production, view-as refuses a target tied to that tenant until S6 support mode exists |
+| C0b | When to apply the four migrations to production, and by what route. And `participants_membership_id_seq`: keep the shared counter, or fund per-tenant numbering, before the first non-owner tenant |
+| C0b | The composite FK: name its slice after A10 to A12, or record that the carry trigger is enough |
+| D6 | Decide on the SMMA self-assessment, held privately. Work through `docs/RUNBOOK-waf-rule.md`. Name a slice for `group-invoice-sync` |
+
+### Docs owed after wave 3
+
+- **D4:** as under wave 2.
+- **Flow checklist:** now lists 23 crons. D7's other counts are unchanged.
 
 ## PR amendments
 
@@ -380,12 +474,15 @@ These change what a PR must do, on top of its scoped summary.
 - **Member ID linking on a tenant event.** On a tenant event, either treat the slot as unusable, with the same answer, or scope both the ID lookup and the profile read to the event's tenant. The test is a cross-tenant IDOR case.
 - Every register write supplies `tenant_id` from the resolved event context, on the Stellr path too. For Stellr that is the value the trigger stamps today, so it changes nothing now, and it is what keeps an unmirrored Stellr event registering after the enforce flip.
 - Tenant confirmations are email-only, through B14's tenant share.
+- Shared bodies render Stellr's guarantee and nonprofit notes, so those slots must be Stellr-only before any tenant host goes live.
 - Audit covers the Stellr path too: all 5 register routes, through `auditMutation` and `runAfterResponse`, with `PLATFORM_AUDIT_ENABLED` off by default. A4 to A6 stay pure refactors.
 - The events-facade codemod runs on every Lane A importer, not only the 5 register routes. That includes the 9 `app/(flow)` importers and Lane A's `lib/` files.
 
 **A8.** Also audits all 5 mutating `app/api/members/teams/**` files: B16 excludes them and no other PR claims them. These writers supply `tenant_id` explicitly, as A7's do. Handle the existing-row update as well as the insert: `update(payload)` in `lib/sheet-participant-sync.ts` (lines 187 and 210, the existing-row and raced branches) ignores its error, so a 23514 from A3's `UPDATE OF date_of_birth` trigger would vanish. The 6 other files that update `participants` (`lib/agreement-correction.ts`, `team-profile/assign.ts` and `override.ts`, check-in, and the admin guardian, companies and check-in routes) must not touch `date_of_birth` or `registration_id`, or they need the same handling.
 
 **A10, A12.** Use `lib/team-profile/`, not `lib/team-profiles/`. The scoped `lib/credentials/data.ts` and `lib/check-in/data.ts` collide with the existing files, so use the non-colliding paths above.
+
+**A12.** `checkInCodeUrl` builds from `SITE_URL`, so the QR on a tenant's code page and the emailed code links open the Stellr host, where the code page has no tenant check. A12 builds them from the tenant's host, passed in by the tenant wrapper (B5b reviewed this and left it here, with the rest of the check-in data).
 
 **B1.** Decided in the B1 slice, replacing the scoped text: **`stellr.localhost` has no hard-coded exemption.** With the zone at `.localhost` it is looked up like any zone host, and the two-tenant seed maps it to Stellr through the platform-owner rule. That costs one map load per TTL and makes the platform-owner path a tested one. In any other zone it is outside and takes the Stellr path with zero fetches.
 
@@ -407,7 +504,11 @@ The lint runs over the tree's import closure, reusing B8's closure tooling, not 
 
 B7's `test/tenant-tree-no-analytics.test.ts` also walks that closure, and `register/[slug]/{individual,group,confirmation}/page.tsx` import `TrackEvent` and `lib/analytics` today. B5b moves those into the Stellr pages, through a slot or prop the Stellr page supplies, so the shared bodies are free of them. It does not exempt them from the test: `FORBIDDEN_FILES` has no allow-list, and an edit there would loosen it for everything.
 
-**B5c.** `app/layout.tsx` wraps the `/_t` tree too. A nested layout cannot remove head JSON-LD, and the un-nonced `ConsentMode` inline script would break under B6's enforcing CSP. The gate is B10a's body hash, flag off and on, over all 158 pages.
+The B5b review added two rules. A tenant's form gets no registration prefill: `getRegistrationPrefill` reads the member's latest `participants` row from any organiser, so the shared register and join bodies take it through `loadPrefill`, which only Stellr's pages supply, and `test/tenant-tree-pages.test.ts` holds `lib/registration-prefill.ts` out of the tree's closure. Anything richer waits on the owner (see [Owner decisions wave 2 raised](#owner-decisions-wave-2-raised)), and must read `participants` for this `tenant_id` only. And `loadOpenCheckIns` keeps to Stellr-or-NULL rows, so Stellr's banner and desk list can't reach a tenant's open check-in. The filter is the no-op form above, not a flag, because `e2e/tenancy/harness.test.ts` holds readers of the routing flag to the tenancy edge. Tenant pages use `loadOpenCheckInsForTenant`.
+
+**B5c.** `app/layout.tsx` wraps the `/_t` tree too. A nested layout cannot remove head JSON-LD, and the un-nonced `ConsentMode` inline script would break under B6's enforcing CSP.
+
+The gate has three parts, because B10a's flag-off and flag-on hash cannot see this move. Both its servers run one build, and the split is not tied to the flag, so dropping a tag from Stellr's pages passes every comparison (shown by mutation on 5 Nov). B5c therefore adds, before it merges: a before-and-after comparison of the fingerprints from a harness build of its merge base and of its head, on the same paths, in CI or as committed fingerprints regenerated by script; and an assertion that Stellr's layout chain still holds `ConsentMode`, `SiteTracking` and the JSON-LD. B10a's flag-off and flag-on check still has to pass as well.
 
 B7 does not stop that head script. Until B5c lands it still runs on a tenant host: it creates `window.dataLayer`, replays a stored choice and shows the banner at first paint, with no network request. B7's test walks only `app/%5Ft`, so it does not see this. B5c adds an assertion that the tenant layout's parent chain holds neither `ConsentMode` nor `SiteTracking`. No real zone gets the routing flag before B5c.
 
@@ -415,7 +516,26 @@ B7 does not stop that head script. Until B5c lands it still runs on a tenant hos
 
 **B9.** Four tables, not two. Closing the two community `TODO(S5)` snapshot entries points at the coaching request and training item-flag routes.
 
-**B10.** (b) seeds a second non-owner tenant (for example `canary-b.localhost`) and alternates between the two non-owner tenants. Alternating with `stellr.localhost` passes vacuously: Stellr is never rewritten into `/_t`, and with B6 every tenant page renders per request. If ISR stays an owner option, also run once in ISR mode. (c) also tries a denied path with a dotted suffix on a tenant host, and names host B's slug and token on host A's pages, in both directions. (d) counts third-party requests, and also asserts no hydration error, no `window.dataLayer` and no cookie banner, so it covers the head script as well as the five trackers.
+**B10.** (b) seeds a second non-owner tenant (for example `canary-b.localhost`) and alternates between the two non-owner tenants. Alternating with `stellr.localhost` passes vacuously: Stellr is never rewritten into `/_t`, and with B6 every tenant page renders per request. If ISR stays an owner option, also run once in ISR mode. (c) also tries a denied path with a dotted suffix on a tenant host, and names host B's slug and token on host A's pages, in both directions. That includes a tenant's slug on the Stellr host at `/check-in/<slug>` and `/check-in/<slug>/code`, which have no tenant check of their own until A12. (d) counts third-party requests, and also asserts no hydration error, no `window.dataLayer` and no cookie banner, so it covers the head script as well as the five trackers.
+
+**C0b.** Scoped as `tenant_id` plus a composite FK. The composite FK is **held back**:
+
+- **Why.** Beside the existing single-column key it gives PostgREST two relationships between the same tables, and PostgREST then refuses every embed with no hint (PGRST201). Rosters, check-in and join links use such embeds. `lib/tenancy/load-scoped.test.ts` fails on a second FK.
+- **What replaces its cascade.** `zzz_tenancy_carry_children` moves children when a parent goes from one tenant to another, including when the derivation trigger does it from a new `event_slug`. A parent with `esign_audit_events` or `survey_answers` cannot change tenant, because those rows are immutable. For Stellr the trigger's WHEN clause is never true.
+- **Who adds the FK.** No slice owns it yet. It needs every unhinted embed of these relations hinted first, so it is a follow-up PR after A10 to A12. The two esign logs never get one, because each must outlive its agreement.
+- **What A10 to A12 depend on.** `tenant_id` and the carry trigger, not the FK. Each also needs `tenancy_cutover_checks` sections D2 and I at 0 first.
+
+What `tenant_app` may write is narrower than the other tenant tables, and later slices must say what they need:
+
+- `agreement_recipients` is read-only, alongside the three append-only evidence tables, because it holds signature evidence and signing-link state. **A11** names the columns it needs, in a migration, with a matrix test. No grant of the signature, consent or token columns.
+- `participants.member_id` and `membership_id` are not writable, and `participants` has per-column grants, so a later column is not writable until a migration says so. **A7 and A8** write through `service_role` for those two columns, or scope the global lookups in `lib/member-onfile.ts` and `app/api/members/lookup` by tenant first and then justify the grant. These lookups are the same ones A7's Member ID rule covers.
+
+Other things this slice leaves in place:
+
+- **Refusals.** In a tenant session, a parent the session cannot see gets RLS's one refusal (42501) from the inherit and eligibility triggers, in both derivation modes. `tenancy_derive_tenant_id`, from S3, still raises 23514 or 23503 on an event key in enforce mode, which tells a tenant whether another tenant's slug exists. Slugs are public on the event pages, but it needs the same step aside before the enforce flip.
+- **Known limit: the shared counter.** `tenant_app` holds USAGE on `participants_membership_id_seq`, which also feeds `members.membership_id`, because the column default needs it. So the numbers a tenant is given suggest how many participants and members exist across all tenants, and a session running `nextval` would use up ids. A tenant does not issue SQL, so that takes a slice that returns the value or calls it. A per-tenant numbering scheme would close it. Settle it before the first non-owner tenant.
+- **Response bodies.** Three routes return whole participant rows, so they now carry `tenant_id`: `GET /api/members/teams/[id]` for an organiser, `PATCH /api/members/teams/[id]/participants/[pid]`, and the add-participant POST through `lib/group-participant-add.ts`. For Stellr that is a constant already public in `lib/tenancy/constants.ts`. A8 names the columns on these routes.
+- **Production apply.** Apply the four files outside event hours: the first takes ACCESS EXCLUSIVE on 10 tables, the third on 15, and each lock taken stays held while the next waits.
 
 **C5.** Split so the audit chain does not wait on the rate limiter for no functional reason. C6 depends on C5a only.
 
@@ -435,7 +555,7 @@ S5 finishes when all of these hold. Each names its proof.
 | Tenant-host routes isolate records | C6 for the APIs, B10(c) for the pages: 0 leak, honey_write or 4xx-oracle outcomes on every id-bearing route in `allowedTenantFiles()`, in both directions, Stellr included. An accepted outcome is listed by route with its reason (for example a capability token) and the owner's approval. |
 | 100% of mutations audited | C7's enforcing gate over every mutating handler, GET writers included, and the 22 crons (counts in `test/baselines/unaudited-mutations.json`). Every mutating route group now has a claimant: A7, A8, A10 to A14, B12, B16, B18 and C13 to C23. The rest are owner-approved, reasoned exemptions, proposed for `contact`, `subscribe`, `lp-lead`, `white-paper`, `join-network`, `host-event`, `asset-request` and `csp-report`. |
 | Host-header spoof | B10(c): forged `X-Forwarded-Host` and `x-stellr-tenant-id` change nothing; `/_t/<slug>` and `/%5Ft/<slug>` 404 on every host, for `stellr` and for another tenant's slug on a foreign tenant host and on the Stellr host, with dotted variants (`x.html`, `x.png`, `x.pngfoo`); an unknown zone host 404s. |
-| Warm-cache body hash | B10a: flag off and on, identical normalised hash across all 158 pages. B10(b): two non-owner tenants keep their own hashes. |
+| Warm-cache body hash | B10a: flag off and on, the same status, headers and normalised hash for every page under `app/` plus a sample of other routes (167 paths on 5 Nov), and no write added. Signed out and with no records: about 60 paths compare a rendered body (45 on the app host) and the rest compare a redirect or an error. So this says what switching routing on does, not what a code change does, and it says nothing about signed-in bodies or real records. Those are D7's sign-off unless a later slice takes them. B10(b): two non-owner tenants keep their own hashes. |
 | 0 trackers, 0 community routes on tenant hosts | B10(d) and B9, with the localhost control proving the test can fail. All 80 community and home entries 404. |
 | Under-14 and unknown DOB rejected | A7 by API, A3 by database (23514): a 13-year-old, NULL, future or over-120 DOB, and a registration moved onto a tenant event. In enforce, a tenant slug with no `events` row and no supplied `tenant_id` raises 23503. Stellr 12-year-olds still insert, on a mirrored and an unmirrored event. |
 | Authorisation converged | C5a's ratchet reaches 0 by C25. At least 7 clean days of `AUTHZ_SOURCE=shadow` on production before the flip. |
@@ -448,9 +568,10 @@ S5 finishes when all of these hold. Each names its proof.
 - **S4 state.** Confirm `20261104200000`, `210000`, `300000` and `400000` are on production, and that `tenancy_cutover_checks` Section D shows 0 NULL `tenant_id`, before any area reads through `tenantDb` or `loadScoped` enforce.
 - **`tenant_app_login`.** Create on dev, then production; store `TENANT_DATABASE_URL` as a server-only secret. Needed only for a deployed flip, not to build, merge or CI-test.
 - **Roles.** Run `scripts/map-tenancy-roles.ts --apply`, decide `--platform-admins`, and decide route by route which of the 9 platform-destined routes become owner-only. After C9, stop assigning `admin` or `event_manager` in the Clerk dashboard, or run `--check` after any change.
-- **Environment flips**, each with the rules above: `AUTHZ_SOURCE`, `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`, `PLATFORM_AUDIT_ENABLED`, `RATE_LIMIT_STORE`, `TENANT_ROUTING_ENABLED` and `TENANT_HOST_SUFFIX` (before the zone is attached: see Real tenant hosts). Create `RATE_LIMIT_KEY_SECRET` before any non-memory limiter mode. Extend the WAF rule to `/credentials/`, then tenant hosts.
+- **Environment flips**, each with the rules above: `AUTHZ_SOURCE`, `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`, `PLATFORM_AUDIT_ENABLED`, `RATE_LIMIT_STORE`, `TENANT_ROUTING_ENABLED` and `TENANT_HOST_SUFFIX` (before the zone is attached: see Real tenant hosts). Create `RATE_LIMIT_KEY_SECRET` before any non-memory limiter mode, and flip `RATE_LIMIT_STORE` only after A9 and B15 (`docs/S5-CRONS-LIMITS-SMMA.md`). Add the WAF rules for `/credentials/`, then tenant hosts (`docs/RUNBOOK-waf-rule.md`).
 - **Dependencies.** `postgres` (runtime, C11) and `ts-morph` (dev, C10), or the TypeScript-API fallback.
 - **CODEOWNERS reviews**, `DB_CI_ENFORCE=true` and the tenant-db job as required.
+- **`tenant-host-routing` as required.** B10a landed it report-only: a failure blocks nothing and the run can still look green. Proposed: required at the latest before B5c merges, and before `TENANT_ROUTING_ENABLED` is set on any deployment with a zone attached. Until then a B5c or A7 PR cites this job's step outcome, not the run's badge.
 - **Decisions:**
   - the tenant-tree segment (`%5Ft` for `/_t`, or `/t`), because a folder named `_t` is private and never routes;
   - the final allow-list;
@@ -469,7 +590,7 @@ S5 finishes when all of these hold. Each names its proof.
   - **Order on each Vercel project.** Set the flag and suffix, redeploy, confirm through the health check that `suffixError` is null, then attach the wildcard domain. Then check straight away that an unknown host in the zone answers 404, and detach if it does not. The review put that 404 check before the attach, but Vercel does not route the host to the deployment until the domain is attached.
   - **Why the order matters.** With the flag off, the resolver says Stellr, and `proxy.ts` compares the host only to `APP_HOST`. A tenant hostname would get the full Stellr surface: `/admin`, community and trackers. The same happens if the suffix does not cover the zone.
   - **Rollback.** Detach the zone first, then flip the flag.
-- **Witnessed.** The parity query (`events` where the local start date differs from `raw->>'date'`; expect 0), and one real Stellr registration on `dev` for each of individual, group by invoice, group by card, and group-join before promoting A4 to A6.
+- **Witnessed.** The parity query (`events` where the local start date differs from `raw->>'date'`; expect 0), and one real Stellr registration on `dev` for each of individual, group by invoice, group by card, and group-join before promoting A4 to A6. The registrations were waived by the owner on 5 Nov for #548 and none was witnessed; the parity query still needs the events mirror backfilled on production.
 - **Sign-offs.** The S3 `derivation_mode` enforce flip after A7, A8, B16 and C20 and 7 clean days, and before the first non-owner event on production, because A3 relies on it; the SMMA memo; D7.
 
 The `via_parent` follow-up is no longer an owner gate: it is code plus a migration, in C0b. The owner only approves its production apply.
@@ -481,7 +602,9 @@ The `via_parent` follow-up is no longer an owner gate: it is code plus a migrati
 - **Clerk roles span subdomains.** `/admin` is a 404 on tenant hosts until `lib/authz` membership checks and S6 MFA exist.
 - **Partial state in `register/group`.** A7 refuses in the gate, before the first write; A6 pins that every person with a row passes that point.
 - **Stellr stamps and NULL `tenant_id`** while S3 derivation is in log mode. Log mode does not leave a new derived row NULL: when it cannot derive a tenant it stamps Stellr, and only the `no_event` log entry tells that row from a real Stellr row. NULL remains on rows the backfill has not reached, and a strict filter would hide them. `loadScoped` and `stellrScope` match NULL in Stellr scope until Section D shows 0 NULL for 7 days.
-- **Stellr-only crons.** `weekly-digest`, `background-sync`, `membership-expiry`, `training-reminders` and `docusign-form-data` would leak tenant data into Stellr email once a second tenant exists. B11 lands before any tenant event.
+- **Stellr-only crons.** `weekly-digest`, `background-sync`, `training-reminders` and `docusign-form-data` would leak tenant data into Stellr email once a second tenant exists, and `hubspot-event-options` would write a tenant's events to Stellr's portal. B11 limits them; it lands before any tenant event. `membership-expiry` stays wide on purpose: its reads only hold an account back from deletion (`lib/cron-scope.ts`, `identityRead`).
+- **A tenant event's mirror row comes first.** Until S8 gives an event an owner, B11 and the derivation trigger learn the owner from `public.events`, and an event with no row counts as Stellr's. So before a tenant's Sanity document is first published, its mirror row must exist. Otherwise that first publish reaches Stellr's HubSpot portal, and its Space is stamped Stellr. Containers made by `lib/container-sync.ts` have no `sanity_event_id`, so they are stamped Stellr whatever event they serve: B11 matches them by `campaign_ref`, and any new reader must too.
+- **`public.events` now has live readers.** The migration's table comment says none depends on it. The HubSpot option sync, the weekly digest and `training-reminders` read it (B11), and each fails closed if the read fails: the sync refuses and writes nothing, the digest reports the section, and the reminder run records a failure. The next run catches up.
 - **Async limiter.** An un-awaited `rateLimit()` is a truthy Promise that blocks every request. A distributed limiter is stricter than per-instance counting, so venue Wi-Fi could hit 429 at check-in: shadow first, flip outside events. Keys hold IPs and minors' names, so they are HMAC-hashed under a dedicated secret.
 - **Audit is not atomic.** It writes through a separate service-role RPC. Live paths use `runAfterResponse`, which can be lost if the instance is reclaimed.
 - **Bypasses on tenant hosts.** Static `public/` assets, the webmanifest and `/api/img` skip the proxy and stay Stellr-branded; any other path with a static extension anywhere skips it too, allow-list included (B5, B10(c)); the 21 unscoped `next.config` redirects fire before the allow-list; every `domain=.stellreducation.org` cookie reaches a tenant host. That last one is a privacy-notice point.

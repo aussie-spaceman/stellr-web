@@ -92,7 +92,7 @@ describe('POST /api/admin/sanity/event-sync — HubSpot option sync', () => {
     hubspot.isProd = true
     const res = await publish()
     const json = await res.json()
-    expect(hubspot.sync).toHaveBeenCalledWith({ apply: true })
+    expect(hubspot.sync).toHaveBeenCalledWith({ apply: true, stellrOnlyDb: expect.anything() })
     expect(json.hubspotOptions).toMatchObject({ ok: true, updated: ['contacts.event'] })
   })
 

@@ -53,6 +53,8 @@ describe('the clerk source on another tenant\'s host fails closed', () => {
     setup(role, { event_manager_assignments: [{ clerk_user_id: USER, event_slug: 'ev-c' }] })
     expect(await authz.hasPortalAccess()).toBe(false)
     expect(await authz.assertPlatformAdmin()).toEqual({ ok: false, status: 403 })
+    expect(await authz.isStellrAdmin()).toBe(false)
+    expect(await authz.isStellrAdminOrUnknown()).toBe(false)
     expect(await authz.requireEventAccess()).toEqual({ ok: false, status: 403 })
     expect(await authz.requireEventAccess('ev-c')).toEqual({ ok: false, status: 403 })
     expect(await authz.hasScope('events')).toBe(false)
@@ -96,6 +98,17 @@ describe('postgres: tenant B\'s admin on tenant B\'s host', () => {
   })
 })
 
+describe('postgres: a Stellr tenant admin on another tenant\'s host', () => {
+  it('is no Stellr admin there', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    setup(undefined, { tenant_memberships: [mem('tenant_admin')] })
+    expect(await authz.isStellrAdmin()).toBe(false)
+    expect(await authz.isStellrAdminOrUnknown()).toBe(false)
+    vi.mocked(currentTenantId).mockReturnValue(STELLR_TENANT_ID)
+    expect(await authz.isStellrAdmin()).toBe(true)
+  })
+})
+
 describe('postgres: a platform admin on another tenant\'s host', () => {
   beforeEach(() => {
     vi.stubEnv('AUTHZ_SOURCE', 'postgres')
@@ -106,6 +119,8 @@ describe('postgres: a platform admin on another tenant\'s host', () => {
   })
   it('has no access to the tenant\'s staff surface or events without support mode', async () => {
     expect(await authz.hasPortalAccess()).toBe(false)
+    expect(await authz.isStellrAdmin()).toBe(false)
+    expect(await authz.isStellrAdminOrUnknown()).toBe(false)
     expect((await authz.requireTenantStaff(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(false)
     expect(await authz.requireEventAccess()).toEqual({ ok: false, status: 403 })
     expect(await authz.requireEventAccess('ev-c')).toEqual({ ok: false, status: 403 })

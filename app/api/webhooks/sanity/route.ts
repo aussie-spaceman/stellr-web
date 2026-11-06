@@ -3,14 +3,14 @@ import { revalidateTag } from 'next/cache'
 import { parseBody } from 'next-sanity/webhook'
 
 // POST /api/webhooks/sanity — Sanity's publish webhook. The public pages are
-// cached for up to an hour, and every Sanity read carries the 'sanity' tag
+// cached for up to 6 hours, and every Sanity read carries the 'sanity' tag
 // (PUBLISHED_CACHE in lib/sanity.ts), so a publish expires them all at once and
-// an edit shows on the next visit instead of within the hour.
+// an edit shows on the next visit instead of within the window.
 //
 // Set up in Sanity → API → Webhooks: trigger on create, update and delete,
 // POST to this path, with a secret; the same secret goes in
 // SANITY_REVALIDATE_SECRET. Without the variable the route refuses every call,
-// and the pages still refresh hourly.
+// and the pages still refresh every 6 hours.
 
 export async function POST(req: NextRequest) {
   const secret = process.env.SANITY_REVALIDATE_SECRET

@@ -100,6 +100,17 @@ describe('audit coverage', () => {
     expect(why?.[0]).toBe('lib/survey/handlers#handleOpen')
   })
 
+  it.each([
+    ['isStellrAdmin', "if (!(await isStellrAdmin())) return new Response(null, { status: 403 })"],
+    ['hasPortalAccess', "if (!(await hasPortalAccess())) return new Response(null, { status: 403 })"],
+    ['hasScope', "if (!(await hasScope('events'))) return new Response(null, { status: 403 })"],
+    ['requireEventAccess', "if (!(await requireEventAccess('x')).ok) return new Response(null, { status: 403 })"],
+    ['requireStellrAdmin', "if (!(await requireStellrAdmin()).ok) return new Response(null, { status: 403 })"],
+  ])('a GET guarded by lib/authz %s is not a GET that writes: a shadow mismatch row is the error log', (name, guard) => {
+    const src = `import { ${name} } from '@/lib/authz'\nexport async function GET() {\n  ${guard}\n  return new Response()\n}\n`
+    expect(whyGetWrites('app/api/admin/zz-synthetic/route.ts', src, sources)).toBeNull()
+  })
+
   it('the gate is not one the app can import', () => {
     for (const [file, src] of sources) {
       if (/^(app|components|lib)\//.test(file) && !file.startsWith('lib/security/')) {
@@ -348,6 +359,45 @@ export async function DELETE() {}`
       expect(auditHandlers(file, `${wrap}export const POST = withAudit(spec, impl, { afterResponse: false })`)[0].coverage).toBe('mandatory')
     })
 
+    it('is not accepted around a spec that may answer with no event', () => {
+      const cron = 'app/api/cron/x/route.ts'
+      const noEvent: [string, string][] = [
+        [file, `${wrap}export const POST = withAudit(() => null, impl)`],
+        [file, `${wrap}export const POST = withAudit(() => undefined, impl)`],
+        [file, `${wrap}export const POST = withAudit(() => (flag ? { action: 'a' } : null), impl)`],
+        [file, `${wrap}export const POST = withAudit(function () { if (flag) return { action: 'a' } }, impl)`],
+        [file, `${wrap}export const POST = withAudit(() => { if (flag) return null; return { action: 'a' } }, impl)`],
+        [file, `${wrap}const quiet = () => null\nexport const POST = withAudit(quiet, impl)`],
+        [file, `${wrap}function quiet() { return null }\nexport const POST = withAudit(quiet, impl)`],
+        [file, `${wrap}const quiet = flag ? { action: 'a' } : null\nexport const POST = withAudit(quiet, impl)`],
+        [file, `${wrap}export const POST = withAudit(flag ? spec : null, impl)`],
+        [file, `${wrap}export const POST = withAudit(null, impl)`],
+        [file, `${wrap}export const POST = withThing(withAudit(() => null, impl))`],
+        // A helper whose answer the gate cannot read, whatever it is called.
+        [cron, `${wrap}const cronRunAudit = () => () => null\nexport const GET = withAudit(cronRunAudit(), impl)`],
+        [cron, `${wrap}import { cronRunAudit } from '@/lib/cron-audit'\nexport const GET = withAudit(cronRunAudit('x'), impl)`],
+      ]
+      for (const [f, src] of noEvent) expect(auditHandlers(f, src)[0], src).toMatchObject({ audited: false, coverage: 'none' })
+    })
+
+    it('is accepted around a spec that always answers with an event', () => {
+      for (const spec of [
+        "{ action: 'a' }",
+        "{ action: 'a' } as const",
+        "() => ({ action: 'a' })",
+        "({ args }) => (args[0] ? { action: 'a' } : { action: 'b' })",
+        "function () { const id = 1; if (id) return { action: 'a', id }; return { action: 'b' } }",
+      ]) {
+        expect(auditHandlers(file, `${wrap}export const POST = withAudit(${spec}, impl)`)[0], spec).toMatchObject({ audited: true, coverage: 'mandatory' })
+      }
+      const named = [
+        `${wrap}const spec = { action: 'a' }\nexport const POST = withAudit(spec, impl)`,
+        `${wrap}const spec = () => ({ action: 'a' })\nexport const POST = withAudit(spec, impl)`,
+        `${wrap}import { SPEC } from './spec'\nexport const POST = withAudit(SPEC, impl)`,
+      ]
+      for (const src of named) expect(auditHandlers(file, src)[0], src).toMatchObject({ audited: true, coverage: 'mandatory' })
+    })
+
     it("does not hide a cron's guard: the handler's first statement is the route's", () => {
       const first = (src: string) => [...analyzeRoute('app/api/cron/x/route.ts', src).handlers[0].firstStatementCalls]
       const guard = "import { guardCron } from '@/lib/cron-auth'\n"
@@ -355,6 +405,31 @@ export async function DELETE() {}`
       expect(first(`${wrap}${guard}async function run(req) { const denied = guardCron(req); return denied }\nexport const GET = withAudit(spec, run)`)).toContain('guardCron')
       expect(first(`${wrap}${guard}export const GET = withAudit(spec, async (req) => { await work(); return guardCron(req) })`)).not.toContain('guardCron')
       expect(first(`import { withAudit } from '@/lib/not-audit'\n${guard}export const GET = withAudit(spec, async (req) => { return guardCron(req) })`)).not.toContain('guardCron')
+    })
+  })
+
+  describe('withCronAudit, for a cron route only', () => {
+    const wrap = "import { withCronAudit } from '@/lib/cron-audit'\n"
+    const cron = 'app/api/cron/x/route.ts'
+
+    it('is accepted around a cron handler, under a job named in the file', () => {
+      expect(auditHandlers(cron, `${wrap}export const GET = withCronAudit('x', async (req) => { await supabaseServer().from('a').update({}); return new Response() })`)[0]).toMatchObject({ audited: true, coverage: 'mandatory' })
+    })
+
+    it('is not accepted outside a cron route, with a job it cannot read, or by name', () => {
+      expect(auditHandlers(file, `${wrap}export const POST = withCronAudit('x', impl)`)[0].coverage).toBe('none')
+      expect(auditHandlers(cron, `${wrap}export const GET = withCronAudit(job, impl)`)[0].coverage).toBe('none')
+      expect(auditHandlers(cron, `${wrap}export const GET = withCronAudit('x', impl, opts)`)[0].coverage).toBe('none')
+      expect(auditHandlers(cron, "import { withCronAudit } from '@/lib/not-audit'\nexport const GET = withCronAudit('x', impl)")[0].coverage).toBe('none')
+      expect(auditHandlers(cron, "const withCronAudit = (j, h) => h\nexport const GET = withCronAudit('x', impl)")[0].coverage).toBe('none')
+    })
+
+    it("does not hide a cron's guard: the handler's first statement is the route's", () => {
+      const first = (src: string) => [...analyzeRoute(cron, src).handlers[0].firstStatementCalls]
+      const guard = "import { guardCron } from '@/lib/cron-auth'\n"
+      expect(first(`${wrap}${guard}export const GET = withCronAudit('x', async (req) => { const denied = guardCron(req); return denied })`)).toContain('guardCron')
+      expect(first(`${wrap}${guard}export const GET = withCronAudit('x', async (req) => { await work(); return guardCron(req) })`)).not.toContain('guardCron')
+      expect(first(`import { withCronAudit } from '@/lib/not-audit'\n${guard}export const GET = withCronAudit('x', async (req) => { return guardCron(req) })`)).not.toContain('guardCron')
     })
   })
 

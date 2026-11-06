@@ -42,9 +42,10 @@ describe('the tenant tree', () => {
     expect(importClosure(`${TREE}/[tenant]/page.tsx`, readRepoFile).has('lib/tenancy/request-tenant.ts')).toBe(true)
   })
 
+  // Walks every page's closure: about 2 s alone, past the 5 s default on a busy CI runner.
   it('imports no tracking code', () => {
     expect(violations(treeFiles(), readRepoFile)).toEqual([])
-  })
+  }, 60_000)
 })
 
 describe('the check itself', () => {

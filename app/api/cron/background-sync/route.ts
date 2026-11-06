@@ -4,6 +4,7 @@ import { getBackgroundProvider } from '@/lib/background-provider'
 import { syncStaleChecks } from '@/lib/background-sync'
 import { remindUnclearedAdults, type ReminderRunResult } from '@/lib/compliance-notify'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { notifyCommunityAdmins } from '@/lib/notify'
 
@@ -30,7 +31,7 @@ const REMINDER_BUDGET_MS = 45_000
 
 type ReminderSummary = Omit<ReminderRunResult, 'errors'> & { errors: number }
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('background-sync', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -103,4 +104,4 @@ export async function GET(req: NextRequest) {
   await run.finish({ ...sync, reminders })
   if (syncFailed) return NextResponse.json({ error: syncFailed, reminders }, { status: 500 })
   return NextResponse.json({ ...sync, reminders })
-}
+})

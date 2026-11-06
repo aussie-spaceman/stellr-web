@@ -58,6 +58,38 @@ FROM (VALUES
 ) AS t(tbl)
 ORDER BY 2 DESC, 1;
 
+-- D2. The same for the 10 child tables (S5 C0b). Every count must be 0, except that
+-- a row on a parent with no tenant stays NULL until the backfill reaches both:
+-- SELECT * FROM public.tenancy_backfill_child_tenant_ids(ARRAY['participants', …]).
+SELECT t.tbl, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM public.%I WHERE tenant_id IS NULL', t.tbl), false, true, '')))[1]::text::bigint AS null_tenant_rows
+FROM (VALUES
+  ('agreement_recipients'), ('credential_events'), ('esign_access_log'), ('esign_audit_events'), ('member_group_members'),
+  ('participants'), ('store_order_items'), ('store_returns'), ('survey_answers'), ('survey_invitations')
+) AS t(tbl)
+ORDER BY 2 DESC, 1;
+
+-- I. Child rows whose tenant_id disagrees with their parent (every count must be
+-- 0). The composite foreign key is held back, and zzz_tenancy_carry_children carries
+-- children in its place. This finds any row that missed it, for example one written
+-- with the trigger off. A10, A11 and A12 need this at 0 before they read through
+-- tenant_id.
+SELECT t.tbl, (xpath('/row/c/text()', query_to_xml(format(
+         'SELECT count(*) AS c FROM public.%I x JOIN public.%I p ON p.id = x.%I WHERE x.tenant_id IS DISTINCT FROM p.tenant_id',
+         t.tbl, t.parent, t.key_col), false, true, '')))[1]::text::bigint AS disagreeing_rows
+FROM (VALUES
+  ('agreement_recipients', 'agreements', 'envelope_row'),
+  ('credential_events', 'credentials', 'credential_id'),
+  ('esign_access_log', 'agreements', 'envelope_row'),
+  ('esign_audit_events', 'agreements', 'envelope_row'),
+  ('member_group_members', 'member_groups', 'group_id'),
+  ('participants', 'registrations', 'registration_id'),
+  ('store_order_items', 'store_orders', 'order_id'),
+  ('store_returns', 'store_orders', 'order_id'),
+  ('survey_answers', 'survey_responses', 'response_id'),
+  ('survey_invitations', 'survey_distributions', 'distribution_id')
+) AS t(tbl, parent, key_col)
+ORDER BY 2 DESC, 1;
+
 -- E. Event keys used by rows written in the last 7 days that the mirror does not know (must return no rows)
 SELECT 'registrations' AS tbl, r.event_slug AS key, count(*) AS rows
 FROM public.registrations r LEFT JOIN public.events e ON e.slug = r.event_slug

@@ -12,8 +12,8 @@
 //     counts as calling requireAdmin), and WHERE each callee comes from;
 //   - which calls its FIRST statement makes (crons must start with guardCron);
 //   - whether it compares a role read from the Clerk session claims to 'admin';
-//   - for a lib/authz call, whether its answer is awaited and used, and where its
-//     first argument comes from (CallUse).
+//   - for a lib/authz or async limiter call, whether its answer is awaited and used,
+//     and where its first argument comes from (CallUse).
 //
 // Calls are recorded by their final name (`auth()` → auth,
 // `stripe.webhooks.constructEvent()` → constructEvent), with an ORIGIN:
@@ -60,7 +60,7 @@ export interface HandlerFacts {
   comparesRoleToAdmin: boolean
   /** Every reached `x.prop === 'literal'` comparison, as `prop=literal`. */
   compares: Set<string>
-  /** How each reached lib/authz call is used, by the name it is recorded under. */
+  /** How each reached lib/authz or async limiter call is used, by the name it is recorded under. */
   uses: Map<string, CallUse[]>
   /** The handler reaches a `.from(…)` chain that ends in a write: DB_WRITE_CALLS or a storage write. */
   dbWrite: boolean
@@ -81,8 +81,10 @@ const FROM_WRITE_CALLS: ReadonlySet<string> = new Set([...DB_WRITE_CALLS, ...STO
  * those call sites are being replaced, and their guard-check results must not change.
  */
 export const CHECKED_USE_ORIGIN = 'lib/authz'
+/** The async limiter's calls carry one too: they resolve to an answer, and a Promise is always truthy. */
+export const ASYNC_LIMITER_ORIGIN = 'lib/rate-limit-async'
 
-/** How the code around one lib/authz call treats it. */
+/** How the code around one lib/authz or async limiter call treats it. */
 export interface CallUse {
   /** The promise is awaited, or returned for the caller to await. */
   awaited: boolean
@@ -387,14 +389,8 @@ function useOfNames(names: string[], at: ts.Node, awaited: boolean, depth: numbe
   return strongest(uses, awaited)
 }
 
-/**
- * A value returned from a function. From a same-file helper, it is whatever the
- * helper's callers do with it. From an export or an anonymous callback, the caller
- * is out of sight, so it counts.
- */
-function useOfReturned(from: ts.Node, depth: number): Use {
-  const counted = { awaited: true, consumed: true }
-  const fn = enclosingFunctionOrFile(from)
+/** The name a same-file function is called by, or null for an export or an anonymous callback. */
+function localHelperName(fn: ts.Node): string | null {
   let name: string | null = null
   let stmt: ts.Node = fn
   if (ts.isFunctionDeclaration(fn) && fn.name) {
@@ -407,7 +403,19 @@ function useOfReturned(from: ts.Node, depth: number): Use {
       stmt = holder.parent.parent
     }
   }
-  if (!name || hasExportModifier(stmt)) return counted
+  return name && !hasExportModifier(stmt) ? name : null
+}
+
+/**
+ * A value returned from a function. From a same-file helper, it is whatever the
+ * helper's callers do with it. From an export or an anonymous callback, the caller
+ * is out of sight, so it counts.
+ */
+function useOfReturned(from: ts.Node, depth: number): Use {
+  const counted = { awaited: true, consumed: true }
+  const fn = enclosingFunctionOrFile(from)
+  const name = localHelperName(fn)
+  if (!name) return counted
   const refs = readsOf(name, fn.getSourceFile())
   if (refs.length === 0) return counted
   return strongest(
@@ -476,6 +484,46 @@ function useOf(node: ts.Expression, awaited: boolean, depth = 0): Use {
   }
   // A condition, a throw, an argument, a property or a JSX value: the answer is used.
   return { awaited, consumed: true }
+}
+
+/** Every one of these reads of a helper's name awaits the helper and uses its answer. */
+function readsAllUseHelper(refs: ts.Identifier[], depth: number): boolean {
+  return refs.every((r) => {
+    const p = r.parent
+    if (ts.isCallExpression(p) && p.expression === r) {
+      return enforcing(useOf(p, false, depth + 1)) && everyCallerUses(p, depth + 1)
+    }
+    if (ts.isVariableDeclaration(p) && p.initializer === r && ts.isIdentifier(p.name)) {
+      if (hasExportModifier(p.parent.parent)) return true
+      const aliasReads = readsOf(p.name.text, enclosingFunctionOrFile(p))
+      return aliasReads.length > 0 && readsAllUseHelper(aliasReads, depth + 1)
+    }
+    // A callback or a wrapper's argument: the caller is out of sight.
+    return true
+  })
+}
+
+/** The same-file helper around this node, if any, has its answer used wherever it is called. */
+function everyCallerUses(from: ts.Node, depth = 0): boolean {
+  if (depth > MAX_USE_DEPTH) return false
+  const fn = enclosingFunctionOrFile(from)
+  const name = localHelperName(fn)
+  return !name || readsAllUseHelper(readsOf(name, fn.getSourceFile()), depth)
+}
+
+/**
+ * An async limiter call. On top of useOf(), every caller of a same-file helper around
+ * it must await the helper and use its answer: a helper that reads the 429 and returns
+ * it limits no one when the handler drops what it returns. Uses are per handler but
+ * callers are per file, so one careless caller costs every handler sharing the helper.
+ * A helper that throws instead of returning its answer fails this too. The await has to
+ * be on the call itself, the one form test/rate-limit-await.test.ts accepts: holding the
+ * Promise in `b` and writing `if (b) return b` reads as used, and limits no one.
+ */
+function useOfLimiterCall(call: ts.CallExpression): Use {
+  let outer: ts.Node = call.parent
+  while (ts.isParenthesizedExpression(outer)) outer = outer.parent
+  return { awaited: ts.isAwaitExpression(outer), consumed: useOf(call, false).consumed && everyCallerUses(call) }
 }
 
 /**
@@ -599,15 +647,17 @@ interface Scope {
 }
 
 /**
- * The handler inside `withAudit(spec, handler)`, imported from lib/audit/route: it calls
- * the handler first and audits after, so the handler's first statement is the route's.
- * No other wrapper is read through, because nothing says when it calls what it is given.
+ * The handler inside `withAudit(spec, handler)`, imported from lib/audit/route, or
+ * `withCronAudit(job, handler)`, imported from lib/cron-audit: each calls the handler
+ * first and audits after, so the handler's first statement is the route's. No other
+ * wrapper is read through, because nothing says when it calls what it is given.
  */
 function wrappedHandlerOf(node: ts.Node, scope: Scope): ts.Node | null {
   if (!ts.isCallExpression(node)) return null
   const callee = strip(node.expression)
   const imp = ts.isIdentifier(callee) ? scope.imports.get(callee.text) : null
-  if (imp?.imported !== 'withAudit' || imp.module !== 'lib/audit/route') return null
+  const reads = (imp?.imported === 'withAudit' && imp.module === 'lib/audit/route') || (imp?.imported === 'withCronAudit' && imp.module === 'lib/cron-audit')
+  if (!reads) return null
   const handler = node.arguments[1] && strip(node.arguments[1])
   if (!handler) return null
   return ts.isIdentifier(handler) ? (scope.locals.get(handler.text) ?? null) : handler
@@ -715,10 +765,11 @@ function walkReachable(start: ts.Node, scope: Scope, enclosing?: ts.Node) {
     let set = origins.get(name)
     if (!set) origins.set(name, (set = new Set()))
     set.add(origin)
-    if (site && origin === CHECKED_USE_ORIGIN) {
+    if (site && (origin === CHECKED_USE_ORIGIN || origin === ASYNC_LIMITER_ORIGIN)) {
       let list = uses.get(name)
       if (!list) uses.set(name, (list = []))
-      list.push({ ...useOf(site.call, false), receiver: receiverOf(site.callee), firstArg: firstArgOf(site.call) })
+      const use = origin === ASYNC_LIMITER_ORIGIN ? useOfLimiterCall(site.call) : useOf(site.call, false)
+      list.push({ ...use, receiver: receiverOf(site.callee), firstArg: firstArgOf(site.call) })
     }
   }
 

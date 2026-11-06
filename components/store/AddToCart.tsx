@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ShoppingCart, Check } from 'lucide-react'
 import { Field, Input, Select } from '@stellr/web-ui'
 import { addToCart } from '@/lib/store/cart-client'

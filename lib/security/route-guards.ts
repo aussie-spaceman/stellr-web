@@ -8,7 +8,7 @@
 // kind. Adding a new guard helper therefore means listing it here, which is a
 // visible, reviewed step, and the test checks the claim.
 import type { RouteClass } from './route-manifest'
-import { CHECKED_USE_ORIGIN, fileModule, type CallUse, type HandlerFacts } from './route-ast'
+import { ASYNC_LIMITER_ORIGIN, CHECKED_USE_ORIGIN, fileModule, type CallUse, type HandlerFacts } from './route-ast'
 
 export type GuardKind = 'session' | 'admin' | 'tenant' | 'platform' | 'webhook' | 'cron' | 'rate_limit'
 
@@ -74,6 +74,9 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[];
   // session
   getCurrentMember: { file: 'lib/community.ts', kinds: ['session'] },
   getSignedInMember: { file: 'lib/community.ts', kinds: ['session'] },
+  // Where those two do their work (B8). A route may import from either file.
+  'getCurrentMember@member-session': { file: 'lib/member-session.ts', kinds: ['session'], call: 'getCurrentMember' },
+  'getSignedInMember@member-session': { file: 'lib/member-session.ts', kinds: ['session'], call: 'getSignedInMember' },
   getOnboardedMember: { file: 'lib/onboarded-member.ts', kinds: ['session'] },
   currentStoreMember: { file: 'lib/store/auth.ts', kinds: ['session'] },
   resolveRequestMember: { file: 'lib/impersonation.ts', kinds: ['session'] },
@@ -124,6 +127,16 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[];
   // rate limit
   rateLimitGuard: { file: 'lib/rate-limit.ts', kinds: ['rate_limit'] },
   throttle: { file: 'lib/esign/native/http.ts', kinds: ['rate_limit'] },
+  // The async limiter. Every RATE_LIMIT_STORE mode counts through checkRateLimit
+  // first, which is what the test proves. `limit` is also a method on every Supabase
+  // query, and only a call traced to this file counts, so `.limit(8)` is no guard. A
+  // call counts only when its answer is awaited and used, through any same-file helper
+  // (enforcedFacts()). test/rate-limit-await.test.ts refuses the shapes that read the
+  // answer wrongly, as a truthy value or un-awaited. Neither proves that the 429 is what
+  // the caller gets (`console.log(d.ok)` is a use), so a route adopting this tests for a
+  // real 429.
+  limit: { file: 'lib/rate-limit-async.ts', kinds: ['rate_limit'] },
+  rateLimit: { file: 'lib/rate-limit-async.ts', kinds: ['rate_limit'] },
 }
 
 /**
@@ -207,9 +220,9 @@ function enforces(name: string, use: CallUse): boolean {
 }
 
 /**
- * The facts with every lib/authz call that decides nothing taken out, and the
- * per-event form of requireEventAccess told apart from the section-level one.
- * Legacy guards are left alone: they go at C25, and their results must not change.
+ * The facts with every lib/authz or async limiter call that decides nothing taken
+ * out, and the per-event form of requireEventAccess told apart from the section-level
+ * one. Legacy guards and the sync limiter are left alone: their results must not change.
  */
 export function enforcedFacts<T extends CallFacts>(f: T): T {
   const calls = new Set(f.calls)
@@ -217,11 +230,13 @@ export function enforcedFacts<T extends CallFacts>(f: T): T {
   const uses = new Map(f.uses)
   for (const name of f.calls) {
     const from = f.origins.get(name)
-    if (!from?.has(AUTHZ)) continue
-    const good = (f.uses.get(name) ?? []).filter((u) => enforces(name, u))
+    const checked = from?.has(AUTHZ) ? AUTHZ : from?.has(ASYNC_LIMITER_ORIGIN) ? ASYNC_LIMITER_ORIGIN : null
+    if (!from || !checked) continue
+    const decides = (u: CallUse) => (checked === AUTHZ ? enforces(name, u) : u.awaited && u.consumed)
+    const good = (f.uses.get(name) ?? []).filter(decides)
     if (good.length === 0) {
       const rest = new Set(from)
-      rest.delete(AUTHZ)
+      rest.delete(checked)
       if (rest.size > 0) {
         origins.set(name, rest)
       } else {

@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/events/repo'
-import { currentSeatsInvoice, invoicePaymentIntent, loadRegistration, perSeatPaidCents } from '@/lib/group-billing'
+import { currentSeatsInvoice, invoicePaymentIntent, loadRegistration, openAdditionalInvoiceFor, perSeatPaidCents } from '@/lib/group-billing'
 
 type Db = ReturnType<typeof supabaseServer>
 
@@ -51,6 +51,13 @@ export async function resolveRefundBasis(db: Db, stripe: Stripe | null, p: Parti
   let paymentIntent = p.stripe_payment_intent_id ?? reg.stripe_payment_intent_id ?? null
   const fromParticipant = !!p.stripe_payment_intent_id
   const invoicedAndPaid = !!reg.invoice_requested && !!reg.invoice_paid_at
+
+  // Added after the group paid and still on an unpaid "additional" invoice: the
+  // group's payment never covered this place, so there is nothing to refund.
+  if (reg.type === 'group' && !p.stripe_payment_intent_id && p.individual_payment_status !== 'paid'
+    && await openAdditionalInvoiceFor(db as never, stripe, reg.id, p.id)) {
+    return { paymentIntent: null, paid: false, perPlaceCents: 0, currency: 'usd', stripeInvoiceId: null, payer: 'organiser' }
+  }
 
   // An invoiced group whose payment was never stored: ask Stripe once, keep it.
   if (!paymentIntent && invoicedAndPaid && stripe) {

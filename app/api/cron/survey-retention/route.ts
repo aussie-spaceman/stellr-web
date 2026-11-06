@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { applySurveyRetention, planSurveyRetention, redactedDue } from '@/lib/survey/retention'
 
@@ -11,7 +12,7 @@ import { applySurveyRetention, planSurveyRetention, redactedDue } from '@/lib/su
 // switch is David's decision. The first deletions fall due in 2033.
 export const maxDuration = 60
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('survey-retention', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -41,4 +42,4 @@ export async function GET(req: NextRequest) {
     await run.finish({ apply })
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
-}
+})

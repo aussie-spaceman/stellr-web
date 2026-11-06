@@ -20,25 +20,25 @@
     "roleTableRead"
   ],
   "totals": {
-    "files": 222,
-    "sites": 328,
+    "files": 218,
+    "sites": 309,
     "byIdiom": {
-      "STAFF_CLERK_ROLES": 2,
+      "STAFF_CLERK_ROLES": 1,
       "adminName": 5,
       "canManageStoreCatalog": 14,
-      "clerkRoleRead": 28,
+      "clerkRoleRead": 24,
       "currentUserHasScope": 3,
       "currentUserIsAdmin": 45,
-      "hasAdminPortalAccess": 3,
-      "isAdminClaims": 101,
-      "isEventManagerClaims": 3,
-      "isStaffRole": 3,
-      "portalRoleList": 2,
-      "requireAdminPage": 34,
+      "hasAdminPortalAccess": 1,
+      "isAdminClaims": 96,
+      "isEventManagerClaims": 2,
+      "isStaffRole": 1,
+      "pageRequireAdmin": 1,
+      "requireAdminPage": 33,
       "requireEventAccess": 67,
       "requireScholarshipAdmin": 7,
       "requireSurveyAdmin": 4,
-      "roleTableRead": 7
+      "roleTableRead": 5
     }
   },
   "files": {
@@ -140,10 +140,7 @@
       "isAdminClaims": 1
     },
     "app/(admin)/admin/members/[id]/view-as/page.tsx": {
-      "clerkRoleRead": 1,
-      "isStaffRole": 1,
-      "requireAdminPage": 1,
-      "roleTableRead": 1
+      "pageRequireAdmin": 1
     },
     "app/(admin)/admin/members/access/page.tsx": {
       "requireAdminPage": 1
@@ -197,10 +194,6 @@
       "isAdminClaims": 1
     },
     "app/(admin)/admin/surveys/questions/preview/page.tsx": {
-      "isAdminClaims": 1
-    },
-    "app/(admin)/layout.tsx": {
-      "hasAdminPortalAccess": 1,
       "isAdminClaims": 1
     },
     "app/(member)/layout.tsx": {
@@ -506,12 +499,6 @@
     "app/api/admin/health/integrations/route.ts": {
       "clerkRoleRead": 1
     },
-    "app/api/admin/impersonation/route.ts": {
-      "clerkRoleRead": 1,
-      "isAdminClaims": 1,
-      "isStaffRole": 1,
-      "roleTableRead": 1
-    },
     "app/api/admin/media/do-not-use/route.ts": {
       "requireSurveyAdmin": 1
     },
@@ -678,24 +665,15 @@
       "clerkRoleRead": 1
     },
     "lib/admin-auth.ts": {
-      "STAFF_CLERK_ROLES": 2,
-      "clerkRoleRead": 1,
+      "STAFF_CLERK_ROLES": 1,
       "currentUserHasScope": 1,
       "currentUserIsAdmin": 1,
-      "hasAdminPortalAccess": 2,
-      "isAdminClaims": 4,
-      "isEventManagerClaims": 2,
+      "hasAdminPortalAccess": 1,
+      "isAdminClaims": 2,
+      "isEventManagerClaims": 1,
       "isStaffRole": 1,
-      "portalRoleList": 1,
       "requireAdminPage": 1,
       "roleTableRead": 1
-    },
-    "lib/community.ts": {
-      "isAdminClaims": 1
-    },
-    "lib/deletion/external.ts": {
-      "clerkRoleRead": 1,
-      "portalRoleList": 1
     },
     "lib/event-access.ts": {
       "isAdminClaims": 1,
@@ -706,7 +684,7 @@
     "lib/event-emails/audiences.ts": {
       "roleTableRead": 1
     },
-    "lib/impersonation.ts": {
+    "lib/member-session.ts": {
       "isAdminClaims": 1
     },
     "lib/notify.ts": {

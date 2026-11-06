@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowLeft, ClipboardList, Users, CalendarCheck } from 'lucide-react'
 import { Eyebrow } from '@stellr/web-ui'
 import { CoachingRequestForm } from '@/components/academy/CoachingRequestForm'

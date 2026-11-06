@@ -22,8 +22,8 @@ function withScope(scope: string) {
 
 describe('cron scope', () => {
   it('covers exactly the cron routes and the vercel.json schedules', () => {
-    expect(routes).toHaveLength(22)
-    expect(schedules).toHaveLength(27)
+    expect(routes).toHaveLength(23)
+    expect(schedules).toHaveLength(28)
     expect(scheduled).toEqual(routes)
     expect(Object.keys(CRON_SCOPES).sort()).toEqual(routes)
   })
@@ -32,6 +32,7 @@ describe('cron scope', () => {
     expect(withScope('per_tenant')).toEqual([
       'docusign-reminders',
       'event-emails',
+      'group-invoice-sync',
       'survey-retention',
       'surveys',
       'team-profiles',
@@ -59,6 +60,14 @@ describe('cron scope', () => {
       .sort()
     expect(named).toEqual(['alumni-upgrades', 'campaign-drip', 'campaign-events', 'campaigns'])
     for (const job of named) expect(CRON_SCOPES[job].scope, job).toBe('stellr_only')
+  })
+
+  it('names the Stellr-only crons whose other members reads stay as wide as today', () => {
+    const named = Object.entries(CRON_SCOPES)
+      .filter(([, v]) => v.identityRead)
+      .map(([job]) => job)
+      .sort()
+    expect(named).toEqual(['membership-expiry', 'weekly-digest'])
   })
 
   it('keeps retention running for tenants that are not active, and only retention', () => {

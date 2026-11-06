@@ -1,10 +1,10 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import Image from 'next/image'
 import { Linkedin, Instagram, Facebook, Twitter } from '@stellr/icons'
 import { CookieSettingsLink } from '@/components/analytics/CookieSettingsLink'
 import { STELLR_EIN } from '@/lib/org'
 
-type FooterLink = { label: string; href: string; prefetch?: false }
+type FooterLink = { label: string; href: string }
 
 const FOOTER_COLS: { heading: string; links: FooterLink[] }[] = [
   {
@@ -12,7 +12,7 @@ const FOOTER_COLS: { heading: string; links: FooterLink[] }[] = [
     links: [
       { label: 'Competitions', href: '/competitions' },
       { label: 'Curriculum', href: '/curriculum' },
-      { label: 'Teacher Grant', href: '/grant', prefetch: false }, // dynamic: a prefetch renders it on the server
+      { label: 'Teacher Grant', href: '/grant' },
       { label: 'Events & Campaigns', href: '/events' },
       { label: 'Host An Event', href: '/host-an-event' },
     ],
@@ -162,7 +162,6 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
                   <Link
                     key={link.href + link.label}
                     href={link.href}
-                    prefetch={link.prefetch}
                     className="text-[13.5px] text-[#8B98C8] no-underline leading-[1.4] transition-colors hover:text-hero-lead font-sans"
                   >
                     {link.label}

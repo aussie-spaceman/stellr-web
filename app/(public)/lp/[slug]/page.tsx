@@ -46,7 +46,7 @@ export async function generateMetadata({
 }
 
 // Static per slug, refreshed hourly (the location counts come from Sanity).
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 export default async function LandingPageRoute({
   params,

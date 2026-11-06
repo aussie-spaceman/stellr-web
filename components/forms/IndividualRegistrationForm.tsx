@@ -15,6 +15,9 @@ import { COLLEGE_GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY
 import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
 import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
+import { authPath } from '@/lib/auth-path'
+import { ageFromDob } from '@/lib/utils'
+import { OnFilePrompt, needsAnAdultToRegister } from '@/components/forms/OnFilePrompt'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 export interface ScholarshipFormOffer {
@@ -164,6 +167,8 @@ export default function IndividualRegistrationForm({
   // Submit outcome. 'info' is the "we've emailed you a link" answer to an
   // unfinished registration — not a failure, so it isn't painted red.
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  // The email is on file: they sign in, and the link brings them back here.
+  const [onFile, setOnFile] = useState<{ schoolAddressOnly: boolean; signInUrl: string; onboardingUrl: string } | null>(null)
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(
     prefill?.school ? { type: 'existing', id: prefill.school.id, name: prefill.school.name } : null
   )
@@ -291,6 +296,7 @@ export default function IndividualRegistrationForm({
     }
     setSubmitting(true)
     setNotice(null)
+    setOnFile(null)
     try {
       // Adult registrants carry no grade — any value left over from toggling
       // must not leak into the payload. Bracket comes straight from the explicit
@@ -327,6 +333,17 @@ export default function IndividualRegistrationForm({
       if (!res.ok) {
         if (payload.code === 'registration_on_file') {
           setNotice({ kind: 'info', text: payload.error })
+          setSubmitting(false)
+          return
+        }
+        if (payload.code === 'sign_in_required') {
+          // With its query, so a scholarship link survives signing in.
+          const here = `${window.location.pathname}${window.location.search}`
+          setOnFile({
+            schoolAddressOnly: payload.school_address_only === true,
+            signInUrl: authPath(here),
+            onboardingUrl: `/account/onboarding?next=${encodeURIComponent(here)}`,
+          })
           setSubmitting(false)
           return
         }
@@ -648,6 +665,16 @@ export default function IndividualRegistrationForm({
             >
               {notice.text}
             </div>
+          )}
+
+          {onFile && (
+            <OnFilePrompt
+              {...onFile}
+              signedIn={!!isSignedIn}
+              // A child with no login cannot make one until a parent has consented,
+              // so they are never pointed at sign-up.
+              needsAnAdult={needsAnAdultToRegister(ageFromDob(dob ?? ''))}
+            />
           )}
 
           <div className="flex gap-3">

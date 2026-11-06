@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Users, Heart, Globe, Award, Clock, ArrowRight } from 'lucide-react'
 import { ProofStrip } from '@/components/sections/ProofStrip'
 import { PHOTOS } from '@/lib/media-manifest'

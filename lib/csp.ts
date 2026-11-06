@@ -48,8 +48,7 @@ import { gtmInitScript } from '@/lib/gtm'
 export const CSP_HEADER = 'Content-Security-Policy-Report-Only'
 export const CSP_REPORT_PATH = '/api/csp-report'
 export const CSP_REPORT_GROUP = 'csp-endpoint'
-/** Request header carrying this request's nonce to the layouts (lib/request-nonce.ts). */
-export const NONCE_HEADER = 'x-nonce'
+export { NONCE_HEADER } from '@/lib/csp-nonce-header'
 
 // Route groups that always render per request (each reads the session, the
 // search params, or is force-dynamic). test/csp.test.ts checks this list

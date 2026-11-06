@@ -106,12 +106,16 @@ export interface StellarEvent {
 // headers, which opts every route out of static/ISR (un-picking that is a
 // route-group refactor, flagged for a design pass) — but the Next Data Cache
 // still serves these reads from the window below even while the route is
-// dynamic. So repeated views cost ~one Sanity API call per hour, not one per
+// dynamic. So repeated views cost ~one Sanity API call per window, not one per
 // view, and a brief Sanity outage is far less likely to surface as a 404
-// (PUB-9). The 'sanity' tag lets a future publish webhook revalidate on demand.
+// (PUB-9). A publish expires everything through the 'sanity' tag
+// (/api/webhooks/sanity), so this window only matters if that webhook fails. It
+// then bounds how long removed content, such as a child's photo, stays up, which
+// is why it is 6 hours and not longer. Pages and price caches share this window:
+// the shortest of them sets the page's.
 // Passed as the 3rd arg of client.fetch; no-param queries pass {} as params.
 // Not `as const`: the client's `next.tags` type is a mutable string[].
-export const PUBLISHED_CACHE = { next: { revalidate: 3600, tags: ['sanity'] } }
+export const PUBLISHED_CACHE = { next: { revalidate: 21600, tags: ['sanity'] } }
 
 export async function getFeaturedEvents() {
   if (!client) return null

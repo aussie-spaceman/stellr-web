@@ -28,6 +28,33 @@ describe('proxy matcher', () => {
     expect(matches('/events/nevada-space-design-challenge')).toBe(true)
   })
 
+  it('skips Vercel beacons by exact path', () => {
+    expect(matches('/_vercel/insights/view')).toBe(false)
+    expect(matches('/_vercel/speed-insights/vitals')).toBe(false)
+  })
+
+  it('still runs on gated and look-alike paths ending in .txt, .xml or .php', () => {
+    for (const path of [
+      '/admin/x.txt',
+      '/admin/members/x.xml',
+      '/account/x.txt',
+      '/community/x.xml',
+      '/credentials/ABC.txt',
+      '/team-profile/token.txt',
+      '/survey/token.xml',
+      '/check-in/x.txt',
+      '/register/slug/join/token.xml',
+      '/api/admin/members/x.txt',
+      '/wp-admin/install.php',
+      '/robots.txt',
+      '/sitemap.xml',
+      '/_vercel',
+      '/_vercelx',
+    ]) {
+      expect(matches(path), path).toBe(true)
+    }
+  })
+
   it('skips static files and the manifests', () => {
     expect(matches('/manifest.webmanifest')).toBe(false)
     expect(matches('/app.webmanifest')).toBe(false)
@@ -35,5 +62,57 @@ describe('proxy matcher', () => {
     // The check-in desk's service worker and scanner reader.
     expect(matches('/check-in-desk-sw.js')).toBe(false)
     expect(matches('/vendor/zxing_reader.wasm')).toBe(false)
+  })
+
+  // A skipped path never reaches the admin role gate, so a gated path must run
+  // the proxy however it ends. The first matcher entry would skip all of these.
+  it.each([
+    '/admin/members/abc.css',
+    '/admin/members/abc.png/view-as',
+    '/admin/x.js/y',
+    '/admin/members/abc.jsfoo',
+    '/account/x.jpg',
+    '/community/x.png',
+    '/community/x.png/members',
+    '/home/x.png',
+    '/campaigns/x.css/submit',
+    '/credentials/ABC.png',
+    '/credentials/ABC.png/badge',
+    '/team-profile/tok.png',
+    '/survey/tok.js',
+    '/survey/event/x.css',
+    '/register/x.css',
+    '/register/x.css/join/tok',
+    '/register/slug/pay/tok.png',
+    '/sign/x.js',
+    '/check-in/x.css',
+    '/check-in/x.css/code',
+    '/scholarship/offer/tok.css',
+  ])('runs on %s, a gated path with a file extension', (path) => {
+    expect(matches(path)).toBe(true)
+  })
+
+  // Each of these only shares its first letters with a gated prefix, or is a
+  // real file, so running the proxy here would be a metered run for nothing.
+  it.each([
+    '/check-in-desk-sw.js',
+    '/sign.js',
+    '/signature-logo.png',
+    '/email/signature-logo.png',
+    '/homepage.png',
+    '/registered.css',
+    '/accounts.css',
+    '/scholarship/x.png',
+    '/scholarship/offers.png',
+    '/team/headshot.jpg',
+    '/images/logo-icon.svg',
+    '/fonts/x.woff2',
+    '/icons/x.svg',
+    '/icon.png',
+    '/favicon.ico',
+    '/_next/static/chunks/main.js',
+    '/_next/image?url=%2Fimages%2Fx.png&w=64&q=75',
+  ])('skips %s, which is not under a gated prefix', (path) => {
+    expect(matches(path)).toBe(false)
   })
 })

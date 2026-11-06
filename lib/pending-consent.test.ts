@@ -35,7 +35,7 @@ vi.mock('@/lib/activity-log', () => ({ logActivity: async () => {} }))
 
 const {
   ageBand, isKnownUnder13, minorSelfSignupEnabled, openPendingConsent, openScreenedRequest, purgeUnconsentedAccounts,
-  purgeAfter, readPendingConsent, getPendingConsent, settlePendingConsent, guardianHasSigned, adultRouteForMinor,
+  purgeAfter, readPendingConsent, getPendingConsent, settlePendingConsent, settlePendingConsentOutcome, guardianHasSigned, adultRouteForMinor,
   childAwaitingConsent, PENDING_CONSENT_DAYS, PURGE_BATCH,
 } = await import('./pending-consent')
 const { appToday } = await import('@/lib/age')
@@ -211,6 +211,39 @@ describe('reading the pending state — never fails open', () => {
   })
 })
 
+describe('signedInMemberForConsent', () => {
+  const db = (row: unknown) => {
+    const chain: Record<string, unknown> = { select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: row }) }
+    return { from: () => chain } as never
+  }
+  const signedInAs = (userId: string | null) => vi.doMock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId }) }))
+
+  afterEach(() => {
+    vi.doUnmock('@clerk/nextjs/server')
+    vi.resetModules()
+  })
+
+  it('returns the member with the session user it was found by', async () => {
+    signedInAs('user_2kid')
+    vi.resetModules()
+    const { signedInMemberForConsent } = await import('./pending-consent')
+    expect(await signedInMemberForConsent(db({ id: 'm1', email: 'kid@example.test' }))).toEqual({
+      id: 'm1', email: 'kid@example.test', clerkUserId: 'user_2kid',
+    })
+  })
+
+  it('returns nobody with no session, or no active member for it', async () => {
+    signedInAs(null)
+    vi.resetModules()
+    const first = await import('./pending-consent')
+    expect(await first.signedInMemberForConsent(db({ id: 'm1', email: null }))).toBeNull()
+    signedInAs('user_2kid')
+    vi.resetModules()
+    const second = await import('./pending-consent')
+    expect(await second.signedInMemberForConsent(db(null))).toBeNull()
+  })
+})
+
 describe('openPendingConsent / openScreenedRequest', () => {
   it('starts a 30-day clock that a later update never restarts', async () => {
     const db = fakeDb() as never
@@ -248,6 +281,25 @@ describe('consent scope — member AND participant rows, as mayLinkLogin reads i
     expect(await settlePendingConsent(fakeDb() as never, 'm1')).toBe(true)
     expect(state.scopes.at(-1)).toEqual({ memberId: 'm1', participantIds: ['p-1'] })
     expect(state.pending[0].consented_at).toBeTruthy()
+  })
+
+  it('settlePendingConsentOutcome says whether this call is the one that cleared the request', async () => {
+    state.pending = [{ member_id: 'm1', band: 'teen', guardian_email: 'g@example.test', consented_at: null }]
+    const db = fakeDb() as never
+    expect(await settlePendingConsentOutcome(db, 'm1')).toEqual({ onFile: false, cleared: false })
+    state.consented.add('m1')
+    expect(await settlePendingConsentOutcome(db, 'm1')).toEqual({ onFile: true, cleared: true })
+    // A second call, or one that lost the race, finds it already cleared.
+    expect(await settlePendingConsentOutcome(db, 'm1')).toEqual({ onFile: true, cleared: false })
+    expect(await settlePendingConsent(db, 'm1')).toBe(true)
+  })
+
+  it('settlePendingConsentOutcome reports a clear that failed, with consent still on file', async () => {
+    state.pending = [{ member_id: 'm1', band: 'teen', guardian_email: 'g@example.test', consented_at: null }]
+    state.consented.add('m1')
+    state.failing.add('member_pending_consent')
+    expect(await settlePendingConsentOutcome(fakeDb() as never, 'm1')).toEqual({ onFile: true, cleared: false })
+    expect(state.pending[0].consented_at).toBeNull()
   })
 
   it('guardianHasSigned reads the same scope, and says yes when a read fails', async () => {

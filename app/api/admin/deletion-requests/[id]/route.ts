@@ -6,6 +6,10 @@ import { executeDeletion, DeletionBlockedError } from '@/lib/deletion/execute'
 import { memberIdForClerkUser } from '@/lib/deletion/actor'
 import { notifyMember } from '@/lib/notify'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // PATCH /api/admin/deletion-requests/[id]  { action: 'approve' | 'reject', note?, mode? }
 // Admin reviews a member-initiated deletion request from the Activity Review Log.
 // Approving runs the actual deletion; a still-blocked item returns 409 so the

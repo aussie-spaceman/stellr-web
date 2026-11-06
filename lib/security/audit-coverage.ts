@@ -14,7 +14,8 @@
 // COVERAGE is one of:
 //   - 'mandatory': the only value that counts as audited. Either the exported
 //     handler is withAudit, alone or as the only argument of another wrapper, which
-//     covers every path by construction, or all of these hold:
+//     covers every path by construction (a cron route may use withCronAudit), or all of
+//     these hold:
 //       * an audit write sits in the handler's top-level statements or in a finally
 //         block, directly or through a same-file helper;
 //       * no path answers success after something that may have written, before
@@ -23,7 +24,8 @@
 //         audit() can be lost when the instance is frozen. One kept in a variable has
 //         to be awaited or returned later in the same function.
 //     A writer or withAudit given an `enabled` option, or options the gate cannot read
-//     (a variable, a spread), does not count: those can turn the write off.
+//     (a variable, a spread), does not count: those can turn the write off. Nor does
+//     withAudit given a spec that may answer with no event (specAlwaysAnswers).
 //   - 'conditional': the handler reaches an audit write, but not on every such path.
 //   - 'exempt': listed in AUDIT_EXEMPTIONS with its reason. Leaves the baseline.
 //   - 'none'.
@@ -78,6 +80,7 @@ export const AUDIT_WRITERS: Record<string, readonly string[]> = {
 /** Wrappers that audit every path of the handler they are given. */
 export const AUDIT_WRAPPERS: Record<string, readonly string[]> = {
   withAudit: ['lib/audit/route'],
+  withCronAudit: ['lib/cron-audit'],
 }
 
 /**
@@ -636,15 +639,18 @@ function findHandlerFn(sf: ts.SourceFile, ctx: Ctx, method: string): Fn | null {
   return null
 }
 
+/** What a top-level `const` in this file is set to. */
+function topLevelValue(sf: ts.SourceFile, name: string): ts.Expression | null {
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue
+    for (const d of stmt.declarationList.declarations) if (ts.isIdentifier(d.name) && d.name.text === name) return d.initializer ?? null
+  }
+  return null
+}
+
 /** The value a method is exported as, when it is a `const`: `export const POST = …`, or `export { x as POST }`. */
 function exportedValue(sf: ts.SourceFile, method: string): ts.Expression | null {
-  const binding = (name: string) => {
-    for (const stmt of sf.statements) {
-      if (!ts.isVariableStatement(stmt)) continue
-      for (const d of stmt.declarationList.declarations) if (ts.isIdentifier(d.name) && d.name.text === name) return d.initializer ?? null
-    }
-    return null
-  }
+  const binding = (name: string) => topLevelValue(sf, name)
   for (const stmt of sf.statements) {
     if (ts.isExportDeclaration(stmt) && !stmt.moduleSpecifier && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
       for (const el of stmt.exportClause.elements) if (el.name.text === method) return binding((el.propertyName ?? el.name).text)
@@ -653,14 +659,58 @@ function exportedValue(sf: ts.SourceFile, method: string): ts.Expression | null 
   return binding(method)
 }
 
+/** An object literal, or a `?:` between two: an event whichever way it goes. */
+function isEventLiteral(e: ts.Expression | undefined): boolean {
+  const x = e && unwrap(e)
+  if (!x) return false
+  return ts.isObjectLiteralExpression(x) || (ts.isConditionalExpression(x) && isEventLiteral(x.whenTrue) && isEventLiteral(x.whenFalse))
+}
+
+/** Every way out of this function answers with an event literal. */
+function fnAlwaysAnswers(fn: Fn): boolean {
+  const body = fn.body
+  if (!body) return false
+  if (!ts.isBlock(body)) return isEventLiteral(body as ts.Expression)
+  if (!body.statements.length || !ts.isReturnStatement(body.statements[body.statements.length - 1])) return false
+  const allAnswer = (n: ts.Node): boolean => {
+    if (isFn(n) || ts.isMethodDeclaration(n)) return true
+    if (ts.isReturnStatement(n)) return isEventLiteral(n.expression)
+    return !ts.forEachChild(n, (c) => !allAnswer(c) || undefined)
+  }
+  return allAnswer(body)
+}
+
+/**
+ * withAudit's spec answers with an event every time. A spec that can answer with nothing
+ * would be a second off switch beside `enabled`, so this fails closed: a literal, a
+ * function that returns one on every path, or a name for either. A call is refused, since
+ * its answer cannot be read here. An imported name is left to withAudit's types.
+ */
+function specAlwaysAnswers(spec: ts.Expression | undefined, ctx: Ctx, depth = 0): boolean {
+  const e = spec && unwrap(spec)
+  if (!e || depth > 4) return false
+  if (ts.isObjectLiteralExpression(e)) return true
+  if (isFn(e)) return fnAlwaysAnswers(e)
+  if (!ts.isIdentifier(e) || e.text === 'undefined') return false
+  const local = ctx.locals.get(e.text)
+  if (local) return fnAlwaysAnswers(local)
+  const value = topLevelValue(ctx.sf, e.text)
+  return value ? specAlwaysAnswers(value, ctx, depth + 1) : true
+}
+
 /**
  * The exported value is one of AUDIT_WRAPPERS, or a one-argument wrapper around one. With
- * more arguments, nothing says the audited one is what the export runs.
+ * more arguments, nothing says the audited one is what the export runs. withCronAudit
+ * counts only in a cron route, with the job named in the file.
  */
 function isWrappedInAudit(value: ts.Expression, ctx: Ctx): boolean {
   const e = unwrap(value)
   if (!ts.isCallExpression(e)) return false
-  if (fromListed(AUDIT_WRAPPERS, importedCallee(e, ctx))) return !mayDisable(e.arguments[2])
+  const callee = importedCallee(e, ctx)
+  if (fromListed(AUDIT_WRAPPERS, callee)) {
+    if (callee?.name === 'withCronAudit') return isCronRoute(ctx.file) && e.arguments.length === 2 && ts.isStringLiteralLike(e.arguments[0])
+    return !mayDisable(e.arguments[2]) && specAlwaysAnswers(e.arguments[0], ctx)
+  }
   return e.arguments.length === 1 && isWrappedInAudit(e.arguments[0], ctx)
 }
 

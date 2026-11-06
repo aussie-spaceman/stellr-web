@@ -13,6 +13,7 @@ const stripe = {
   paymentIntents: { retrieve: vi.fn() },
   refunds: { create: vi.fn() },
   creditNotes: { create: vi.fn(async () => ({ id: 'cn_1' })) },
+  invoices: { retrieve: vi.fn() },
 }
 
 vi.mock('server-only', () => ({}))
@@ -231,5 +232,31 @@ describe('executeRefund — a place on a paid group invoice', () => {
     }))
     expect(notifyMember).toHaveBeenCalledWith('m-teacher', expect.objectContaining({ body: expect.stringMatching(/your group's payment for Sam S/) }))
     expect(notifyMember).not.toHaveBeenCalledWith('m-student', expect.anything())
+  })
+
+  // 5 Nov 2026: added after the group paid, invoice not yet paid. The group's
+  // payment never covered this place, so it must not be refunded from it.
+  it('refunds nothing for a place still on an unpaid additional invoice', async () => {
+    seed({
+      participants: [{
+        id: 'p3', registration_id: 'r2', email: 'late@example.com', first_name: 'Late', last_name: 'L',
+        member_id: 'm-late', individual_payment_status: null, stripe_payment_intent_id: null,
+      }],
+      registrations: [{
+        id: 'r2', type: 'group', event_slug: 'mn-edc', event_title: 'Minnesota EDC', status: 'confirmed',
+        invoice_requested: true, invoice_paid_at: '2026-10-29T00:00:00Z', member_pays_individually: false,
+        stripe_payment_intent_id: 'pi_grp', teacher_member_id: 'm-teacher', checkout_session_id: null,
+      }],
+      group_invoices: [
+        { registration_id: 'r2', stripe_invoice_id: 'in_grp', payment_intent_id: 'pi_grp', total_cents: 148_410, seats: 18, currency: 'usd', kind: 'seats', status: 'paid', participant_ids: [] },
+        { registration_id: 'r2', stripe_invoice_id: 'in_add', payment_intent_id: null, total_cents: 8245, seats: 1, currency: 'usd', kind: 'additional', status: 'open', participant_ids: ['p3'] },
+      ],
+    })
+    stripe.invoices.retrieve.mockResolvedValue({ id: 'in_add', status: 'open' })
+
+    const r = await executeRefund('p3', 'cash', 'm-teacher', 'Removed by the group organiser', { actorType: 'member' })
+
+    expect(r).toMatchObject({ type: 'none', refundCents: 0, detail: 'Unpaid — nothing to refund' })
+    expect(stripe.refunds.create).not.toHaveBeenCalled()
   })
 })

@@ -1,10 +1,10 @@
 /**
  * lib/authz.ts — one authorisation API (multi-tenancy plan S5, slice C1).
  *
- * INERT IN C1: nothing imports this module yet. Later S5 slices move the
- * twelve legacy guard idioms (isAdminClaims, currentUserIsAdmin,
- * requireAdminPage, requireEventAccess in lib/event-access.ts, the domain
- * wrappers, …) onto it, one feature area per PR.
+ * S5 slices move the twelve legacy guard idioms (isAdminClaims,
+ * currentUserIsAdmin, requireAdminPage, requireEventAccess in
+ * lib/event-access.ts, the domain wrappers, …) onto it, one feature area per
+ * PR. C14 moved the admin shell, view-as and the staff-target checks.
  *
  * Roles come from tenant_memberships and platform_admins (the S3 tables);
  * Clerk is used for identity only. Until the owner flips it, AUTHZ_SOURCE
@@ -27,11 +27,10 @@
  */
 import 'server-only'
 import { cache } from 'react'
-import { auth } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
 import { notFound, redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { errorDigest, routeLabel, takeWrite } from '@/lib/app-errors'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { currentTenantId } from '@/lib/authz/tenant'
 import {
@@ -60,11 +59,13 @@ import {
   clerkPrincipal,
   loadAssignments,
   loadEventTenantId,
+  loadHoldsStaffRow,
   loadMemberId,
   loadMemberships,
   loadPlatformAdmin,
   loadPostgresPrincipal,
   loadStaffScopes,
+  loadTargetClerkRole,
 } from '@/lib/authz/principal'
 
 export { currentTenantId } from '@/lib/authz/tenant'
@@ -125,21 +126,22 @@ export async function getPrincipal(): Promise<Principal> {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * lib/app-errors pulls in the mailer, and every admin guard loads this file, so it loads only
+ * when there is a row to write: never under a recognised AUTHZ_SOURCE=clerk.
+ * test/authz-load-closure.test.ts holds this.
+ */
+const appErrors = () => import('@/lib/app-errors')
+
 /** Write one rate-limited app_errors row. Never throws. */
 async function recordRow(route: string, message: string, digest: string): Promise<void> {
   try {
-    const count = takeWrite(digest, Date.now())
-    if (count === 0) return
-    const { error } = await supabaseServer().rpc('record_app_error', {
-      p_digest: digest,
-      p_route: route,
-      p_message: message,
-      p_count: count,
-    })
-    if (error) console.error('[authz] mismatch record failed')
+    const { recordBuiltAppError } = await appErrors()
+    if (await recordBuiltAppError(route, message, digest)) return
   } catch {
-    console.error('[authz] mismatch record failed')
+    // Reported below.
   }
+  console.error('[authz] mismatch record failed')
 }
 
 /**
@@ -163,9 +165,14 @@ async function logMismatch(decision: string, detail: string, opts: AuthzOptions,
   } catch {
     // The lookup that failed is what is being reported.
   }
-  const route = routeLabel('AUTHZ', opts.route ?? 'unknown', undefined)
-  const message = `authz_mismatch ${decision} member=${memberId} ${detail}`
-  await recordRow(route, message, errorDigest(`${route}\n${memberId}`, message))
+  try {
+    const { errorDigest, routeLabel } = await appErrors()
+    const route = routeLabel('AUTHZ', opts.route ?? 'unknown', undefined)
+    const message = `authz_mismatch ${decision} member=${memberId} ${detail}`
+    await recordRow(route, message, errorDigest(`${route}\n${memberId}`, message))
+  } catch {
+    console.error('[authz] mismatch record failed')
+  }
 }
 
 /**
@@ -175,9 +182,14 @@ async function logMismatch(decision: string, detail: string, opts: AuthzOptions,
  */
 async function reportUnrecognisedSource(): Promise<void> {
   if (!isUnrecognisedAuthzSource(process.env.AUTHZ_SOURCE)) return
-  const route = routeLabel('AUTHZ', 'config', undefined)
-  const message = 'authz_source_unrecognised using=clerk'
-  await recordRow(route, message, errorDigest(route, message))
+  try {
+    const { errorDigest, routeLabel } = await appErrors()
+    const route = routeLabel('AUTHZ', 'config', undefined)
+    const message = 'authz_source_unrecognised using=clerk'
+    await recordRow(route, message, errorDigest(route, message))
+  } catch {
+    console.error('[authz] mismatch record failed')
+  }
 }
 
 /**
@@ -248,7 +260,7 @@ export async function assertTenantRole(tenantId: string, roles: readonly TenantR
 
 /** Replaces isAdminClaims / currentUserIsAdmin and the admin-only wrappers. */
 export async function requireStellrAdmin(opts: AuthzOptions = {}): Promise<Decision> {
-  return decide('stellr_admin', opts, async (s) => decideStellrAdmin(await principalFor(s), s), sameOk, DENY_403)
+  return decide('stellr_admin', opts, async (s) => decideStellrAdmin(await principalFor(s), s, currentTenantId()), sameOk, DENY_403)
 }
 
 export async function isStellrAdmin(opts: AuthzOptions = {}): Promise<boolean> {
@@ -353,30 +365,90 @@ export async function hasScope(scope: string, opts: AuthzOptions = {}): Promise<
  * memberId when you have it: a target with no Clerk id can still hold
  * member-keyed rows.
  */
-export async function isStaffTarget(
-  target: { clerkUserId: string | null; clerkRole: unknown; memberId?: string | null },
-  opts: AuthzOptions = {},
-): Promise<boolean> {
-  const memberOfTarget = async (): Promise<string | null> =>
-    target.memberId ?? (target.clerkUserId ? loadMemberId(supabaseServer(), target.clerkUserId) : null)
-  return decide(
-    'staff_target',
-    opts,
-    async (s) => {
-      // No id of either kind means no table row can be looked up, so the role is all there is.
-      if (s === 'clerk' || (!target.clerkUserId && !target.memberId)) return decideStaffTarget({ clerkRole: target.clerkRole }, 'clerk')
-      const db = supabaseServer()
-      const memberId = await memberOfTarget()
-      const [platformAdmin, memberships] = await Promise.all([
-        target.clerkUserId ? loadPlatformAdmin(db, target.clerkUserId) : false,
-        loadMemberships(db, target.clerkUserId, memberId),
-      ])
-      return decideStaffTarget({ clerkRole: target.clerkRole, platformAdmin, memberships }, s)
-    },
-    sameBool,
-    true,
-    memberOfTarget,
-  )
+export async function isStaffTarget(target: StaffTargetRef, opts: AuthzOptions = {}): Promise<boolean> {
+  return decide('staff_target', opts, (s) => computeStaffTarget(target, s), sameBool, true, () => memberOfTarget(target))
+}
+
+/**
+ * isStaffTarget, for a caller that has to say what happened: true, false, or null when the
+ * postgres lookup failed. A refusal is still the caller's to make on null, but "is staff" and
+ * "could not tell" are different things to tell an admin. Under clerk and shadow the Clerk
+ * answer stands, so null never comes back.
+ */
+export async function isStaffTargetOrUnknown(target: StaffTargetRef, opts: AuthzOptions = {}): Promise<boolean | null> {
+  if (getAuthzSource() !== 'postgres') return isStaffTarget(target, opts)
+  try {
+    return await computeStaffTarget(target, 'postgres')
+  } catch {
+    return null
+  }
+}
+
+type StaffTargetRef = { clerkUserId: string | null; clerkRole: unknown; memberId?: string | null }
+
+async function memberOfTarget(target: StaffTargetRef): Promise<string | null> {
+  return target.memberId ?? (target.clerkUserId ? loadMemberId(supabaseServer(), target.clerkUserId) : null)
+}
+
+async function computeStaffTarget(target: StaffTargetRef, s: DecisionSource): Promise<boolean> {
+  // No id of either kind means no table row can be looked up, so the role is all there is.
+  if (s === 'clerk' || (!target.clerkUserId && !target.memberId)) return decideStaffTarget({ clerkRole: target.clerkRole }, 'clerk')
+  const db = supabaseServer()
+  const memberId = await memberOfTarget(target)
+  const [platformAdmin, memberships] = await Promise.all([
+    target.clerkUserId ? loadPlatformAdmin(db, target.clerkUserId) : false,
+    loadMemberships(db, target.clerkUserId, memberId),
+  ])
+  return decideStaffTarget({ clerkRole: target.clerkRole, platformAdmin, memberships }, s)
+}
+
+/**
+ * The target's staff_roles row, read for a screen that says up front whether view-as is
+ * available. Throws on a read error. isStaffTarget does not count this row ('staff' alone
+ * is not portal staff), and view-as refuses on it, so the rule for view-as is
+ * isViewAsTargetStaff.
+ */
+export async function targetHoldsStaffRow(memberId: string): Promise<boolean> {
+  return loadHoldsStaffRow(supabaseServer(), memberId)
+}
+
+/**
+ * Does view-as refuse this member? A staff_roles row of any kind, or isStaffTarget on the
+ * target's Clerk role. The row is read first, and a holder needs no Clerk call. Under
+ * postgres, also a 'staff' membership in any tenant: staff_roles is Stellr's, so that is the
+ * only record of another tenant's staff.
+ *
+ * THROWS when the row, the Clerk record or (postgres) a role table cannot be read, so the
+ * start route can refuse with its own message. A Clerk 404 is not a failure: no such user,
+ * so no role.
+ *
+ * Staff is all this refuses. Before the first non-owner tenant, the start route must also
+ * refuse a target tied to that tenant, until S6 support mode exists (plan decision 18).
+ */
+export async function isViewAsTargetStaff(target: { memberId: string; clerkUserId: string | null }, opts: AuthzOptions = {}): Promise<boolean> {
+  const db = supabaseServer()
+  if (await loadHoldsStaffRow(db, target.memberId)) return true
+  const clerkRole = target.clerkUserId ? (await loadTargetClerkRole(await clerkClient(), target.clerkUserId)).role : undefined
+  const staff = await isStaffTargetOrUnknown({ clerkUserId: target.clerkUserId, clerkRole, memberId: target.memberId }, opts)
+  if (staff === null) throw new AuthzLookupError('staff target')
+  if (staff || getAuthzSource() !== 'postgres') return staff
+  return (await loadMemberships(db, target.clerkUserId, target.memberId)).some((m) => m.role === 'staff')
+}
+
+/**
+ * isStellrAdmin, for a guard where "could not tell" must not read as "no": true, false, or
+ * null when the postgres lookup failed. lib/impersonation needs this. Its write guard reads
+ * "no" as "no view-as session", and the member resolver makes its own read, so a failed
+ * lookup answered as "no" could let an admin write as the member when the two reads
+ * disagree. Under clerk and shadow the Clerk answer stands, so null never comes back.
+ */
+export async function isStellrAdminOrUnknown(opts: AuthzOptions = {}): Promise<boolean | null> {
+  if (getAuthzSource() !== 'postgres') return isStellrAdmin(opts)
+  try {
+    return decideStellrAdmin(await postgresPrincipal(), 'postgres', currentTenantId()).ok
+  } catch {
+    return null
+  }
 }
 
 // ── Adapters ───────────────────────────────────────────────────────────────
@@ -461,6 +533,10 @@ export const authz = {
   accessCoversEvent,
   hasScope,
   isStaffTarget,
+  isStaffTargetOrUnknown,
+  targetHoldsStaffRow,
+  isViewAsTargetStaff,
+  isStellrAdminOrUnknown,
   page,
   api,
 }

@@ -86,5 +86,5 @@ parent's email address".
    if courses or mentoring should also wait.
 5. **Moderated spaces for under-13s.** No pre-moderation exists, so consented under-13s cannot post at all. Building a
    pre-moderated space type is a separate piece of work if you want them to post.
-6. **Australia.** Plan S1 also asks for a written Social Media Minimum Age (16+) self-assessment, with AU under-16
-   accounts on the restricted set until it is done. Not built in this change.
+6. **Australia.** Plan S1's Social Media Minimum Age (16+) self-assessment is held privately pending the owner's
+   decision. Decide how AU accounts are handled as part of it. Not part of this change.

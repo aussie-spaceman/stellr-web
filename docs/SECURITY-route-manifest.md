@@ -43,7 +43,7 @@ Community routes are `participant`. That they must never be reachable on a tenan
 3. Call the guard for that class in every exported handler (`GET`, `POST`, …), either directly or through a function in the same file. For a page, the default-exported component must call it.
    - Admin check: `requireAdminPage`, `isAdminClaims`, `currentUserIsAdmin`, `currentUserHasScope`, `requireEventAccess`, `requireScholarshipAdmin`, `requireSurveyAdmin`, `canManageStoreCatalog`, or an inline `role === 'admin'` where the role is read from `sessionClaims` and the handler calls Clerk's `auth()` or `currentUser()`. A role from the request body or a database row does not count.
    - Session check: `auth()`, `currentUser()`, `getCurrentMember`, `getSignedInMember`, `getOnboardedMember`, `currentStoreMember`, `resolveRequestMember`, and the other helpers in `DELEGATE_GUARDS`.
-   - Rate limit: `rateLimitGuard` or `checkRateLimit` (the e-sign routes use `throttle`).
+   - Rate limit: `rateLimitGuard` or `checkRateLimit` (the e-sign routes use `throttle`), or the async `limit` and `rateLimit` from `lib/rate-limit-async.ts`. An async call counts only when it is awaited and its answer is used.
    - Webhook: the provider's verifier (`constructEvent`, svix `verify`, `verifyConnectHmac`, …) or `timingSafeEqual`/`safeStrEqual` against the shared secret.
    - Cron: `const blocked = guardCron(req)` as the first line of `GET`.
 4. Run the test again.

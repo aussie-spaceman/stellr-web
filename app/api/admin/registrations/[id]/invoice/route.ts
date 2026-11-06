@@ -7,6 +7,7 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import {
   groupInvoiceSummary,
   invoiceTotals,
+  reissueGroupInvoice,
   resolveDiscountCode,
   setGroupDiscount,
   formatMoney,
@@ -17,6 +18,7 @@ import {
 //   POST { action: 'preview', code }  → what the invoice would be with that code.
 //   POST { action: 'apply', code }    → revise the open invoice with the discount.
 //   POST { action: 'remove' }         → revise it without one.
+//   POST { action: 'reissue' }        → correct the invoice to the group's current places.
 // Reading is open to the event's managers; changing money is admins only.
 // See lib/group-billing.ts.
 
@@ -24,6 +26,7 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('preview'), code: z.string().trim().min(1).max(64) }),
   z.object({ action: z.literal('apply'), code: z.string().trim().min(1).max(64) }),
   z.object({ action: z.literal('remove') }),
+  z.object({ action: z.literal('reissue') }),
 ])
 
 type Db = ReturnType<typeof supabaseServer>
@@ -61,6 +64,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!stripe) return NextResponse.json({ error: 'Stripe is not configured here' }, { status: 503 })
 
   const body = parsed.data
+
+  if (body.action === 'reissue') {
+    const actor = await actorFromAuth()
+    let result: Awaited<ReturnType<typeof reissueGroupInvoice>>
+    try {
+      result = await reissueGroupInvoice(db, stripe, id, { memberId: actor.actorMemberId ?? null, label: 'admin' })
+    } catch (e) {
+      console.error('[admin/invoice] reissue failed:', e)
+      return NextResponse.json({ error: `Stripe refused the change: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 })
+    }
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 })
+    if (g.teacherMemberId) {
+      await logActivity({
+        memberId: g.teacherMemberId,
+        category: 'billing',
+        action: 'group_invoice_reissued',
+        summary: `Group invoice corrected for ${g.slug}`,
+        metadata: { registrationId: id, eventSlug: g.slug, invoiceId: result.invoiceId },
+        ...actor,
+      }, db)
+    }
+    return NextResponse.json({ message: result.message, invoiceId: result.invoiceId })
+  }
+
   const discount = body.action === 'remove' ? null : await resolveDiscountCode(stripe, body.code)
   if (body.action !== 'remove' && !discount) {
     return NextResponse.json({ error: `"${body.code}" isn't an active discount code or coupon in Stripe.` }, { status: 404 })

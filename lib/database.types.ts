@@ -31,6 +31,10 @@ export interface RegistrationRow {
   // == total participants. NULL on registrations created before migration 037.
   adult_count: number | null
   student_count: number | null
+  // Unpaid group invoice: when the settled roster is due to update it, and the
+  // lease held while it is changed (lib/group-billing.ts).
+  invoice_sync_due_at?: string | null
+  invoice_sync_lock_until?: string | null
   // Pay-later capability (see lib/registration-checkout.ts). NULL until minted.
   pay_token: string | null
   pay_link_sent_at: string | null

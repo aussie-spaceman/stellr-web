@@ -10,7 +10,8 @@ import { ExternalLink, X } from 'lucide-react'
 // current invoice, every invoice issued for it and why, and a discount code an
 // admin can apply. Applying revises the open invoice (Stripe voids the old one
 // and emails the organiser the new one) and is kept for later revisions after
-// roster changes. Nothing is sent until "Send revised invoice".
+// roster changes. Nothing is sent until "Send revised invoice". If the invoice
+// has fallen behind the group, "Send corrected invoice" brings it back in line.
 // Server: /api/admin/registrations/[id]/invoice.
 
 interface HistoryRow {
@@ -33,6 +34,8 @@ interface Summary {
   currency: string
   discount: { code: string | null; couponId: string } | null
   current: { id: string; number: string | null; status: string; totalCents: number; hostedUrl: string | null } | null
+  invoiceSeats: number | null
+  correction: { seats: number; totalCents: number } | null
   history: HistoryRow[]
 }
 
@@ -105,7 +108,7 @@ export function GroupInvoiceButton({ registrationId, groupLabel }: { registratio
     if (data) setPreview(data as Preview)
   }
 
-  async function apply(action: 'apply' | 'remove') {
+  async function apply(action: 'apply' | 'remove' | 'reissue') {
     const data = await post(action === 'apply' ? { action, code } : { action })
     if (!data) return
     setDone(data.message as string)
@@ -162,6 +165,26 @@ export function GroupInvoiceButton({ registrationId, groupLabel }: { registratio
                 ) : (
                   <p className="text-content-secondary">No invoice has been sent yet. Use “Finish setup…” to send it.</p>
                 )}
+              </section>
+            )}
+
+            {summary?.correction && (
+              <section className="space-y-3 rounded-control bg-pathway-amber-bg p-3 text-sm">
+                <p>
+                  {summary.current?.status === 'void'
+                    ? 'This group has no invoice it can pay: the last one was cancelled.'
+                    : <>This invoice is for {summary.invoiceSeats ?? 'a different number of'} {summary.invoiceSeats === 1 ? 'place' : 'places'}, but the group now has {summary.correction.seats}.</>}
+                  {' '}A corrected invoice would be <strong>{money(summary.correction.totalCents, summary.currency)}</strong>
+                  {summary.discount ? ', with the discount kept' : ''}.
+                </p>
+                <div className="flex justify-end">
+                  <Button variant="primaryStrong" className="!px-4 !py-2" disabled={busy} onClick={() => apply('reissue')}>
+                    {busy ? 'Sending…' : 'Send corrected invoice'}
+                  </Button>
+                </div>
+                <p className="text-xs text-content-secondary">
+                  The organiser is emailed the corrected invoice and any current one is cancelled.
+                </p>
               </section>
             )}
 

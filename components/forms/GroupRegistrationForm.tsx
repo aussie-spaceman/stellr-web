@@ -19,7 +19,6 @@ import { resolveSchoolPayload } from '@/lib/school-utils'
 import { isValidEmail } from '@/lib/member-enums'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
-import Link from 'next/link'
 import { authPath } from '@/lib/auth-path'
 import { ageFromDob } from '@/lib/utils'
 import { OnFilePrompt, adoptSessionFromAnotherTab, needsAnAdultToRegister, signedInAsSomeoneElse } from '@/components/forms/OnFilePrompt'
@@ -1009,7 +1008,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         {!isSignedIn && !prefill && !rosterStarted && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
             <span className="font-medium">Registered with Stellr before?</span>{' '}
-            <Link href={authPath(`/register/${eventSlug}/group`)} className="underline hover:no-underline font-medium">Sign in first</Link>{' '}
+            <a href={authPath(`/register/${eventSlug}/group`)} className="underline hover:no-underline font-medium">Sign in first</a>{' '}
             so your details are filled in and you won&apos;t be asked to partway through.
           </div>
         )}

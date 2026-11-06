@@ -84,9 +84,9 @@ export async function confirmationBody({
                 </a>
               )}
               {id && <JoinLinkButton registrationId={id} />}
-              <Link href="/account?tab=teams" className="btn-outline inline-flex items-center justify-center gap-2 text-sm">
+              <a href="/account?tab=teams" className="btn-outline inline-flex items-center justify-center gap-2 text-sm">
                 Member Portal <ExternalLink size={14} />
-              </Link>
+              </a>
             </div>
             <p className="text-xs text-amber-700 mt-2">These links have also been emailed to you.</p>
           </div>
@@ -204,13 +204,13 @@ export async function confirmationBody({
             teacher / student manager who registered, after they sign in. */}
         {!isCampaign && isGroup && !spreadsheetUrl && id && (
           <div className="mb-4">
-            <Link
+            <a
               href="/account?tab=teams"
               className="btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2"
             >
               <ExternalLink size={16} />
               Manage Your Team →
-            </Link>
+            </a>
             <p className="text-xs text-content-faint mt-2">Open your team in the member portal to add participants, sync your Google Sheet, and track paperwork — all participant details stay private to you.</p>
           </div>
         )}

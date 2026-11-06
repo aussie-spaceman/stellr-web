@@ -625,24 +625,25 @@ describe('teacher-grant', () => {
     expect(await events()).toEqual([])
   })
 
-  it('an existing member is left alone, and the event names no one', async () => {
-    h.tables.members = [{ id: MEMBER, email: grantBody.email }]
-    expect((await grant.POST(json('/api/teacher-grant', grantBody))).status).toBe(200)
-    expect((await events())[0]).toMatchObject({ p_target_id: null, p_metadata: { member_created: false, status: 200 } })
-  })
-
-  it('member_created follows upsertMember, not its returning an id, and the event names the id', async () => {
+  it('a member this request did not create is left alone, and the event names no one', async () => {
     h.upsertMember.mockImplementation(async () => MEMBER)
     expect((await grant.POST(json('/api/teacher-grant', grantBody))).status).toBe(200)
-    expect(h.linkMembersToSchoolByName).toHaveBeenCalled()
-    expect(h.autoGrantBaseMembership).toHaveBeenCalled()
+    expect(h.linkMembersToSchoolByName).not.toHaveBeenCalled()
+    expect(h.autoGrantBaseMembership).not.toHaveBeenCalled()
     const [event] = await events()
     expect(event).toMatchObject({
       p_target_table: 'members',
-      p_target_id: MEMBER,
+      p_target_id: null,
       p_metadata: { member_created: false, status: 200 },
     })
     expect(Object.keys(event.p_metadata as object).sort()).toEqual(['actor_anonymous', 'member_created', 'status'])
+  })
+
+  it('a member this request created gets the signup steps, and the event names the id', async () => {
+    expect((await grant.POST(json('/api/teacher-grant', grantBody))).status).toBe(200)
+    expect(h.linkMembersToSchoolByName).toHaveBeenCalled()
+    expect(h.autoGrantBaseMembership).toHaveBeenCalled()
+    expect((await events())[0]).toMatchObject({ p_target_id: MEMBER, p_metadata: { member_created: true, status: 200 } })
   })
 
   it("a date of birth that is not an adult's: no record, and the event says only that no member was created", async () => {

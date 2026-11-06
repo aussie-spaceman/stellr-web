@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
+  eqFilter,
   rec, AGE_CASES, OPEN_EVENT, CLOSED_EVENT, EVENT_UNDER_WAY, EVENT_A_YEAR_OUT,
   DOB_18_TODAY, DOB_18_TOMORROW, DOB_13_TOMORROW, DOB_MISSING_SELF, DOB_INVALID_SELF,
   VIEW_AS_REFUSED, viewAsRefusal, inFilter, dobMissingFor, dobInvalidFor, jsonRequest, settle,
@@ -11,7 +12,8 @@ import {
 // `code`, body, and the order of writes and side effects. In particular every
 // person is age-checked BEFORE the first write, and the writes run
 // registration → members → participants. If one of these fails, the refactor
-// changed behaviour; fix the refactor, not this file.
+// changed behaviour; fix the refactor, not this file. Changed on purpose on 5 Nov
+// 2026, by owner decision: an organiser on file with no session signs in first.
 //
 // What is real: the route, lib/registration-eligibility, lib/registration (the
 // window), lib/clerk-provisioning (the COPPA login guard; only Clerk is faked),
@@ -234,13 +236,14 @@ describe('characterisation: POST /api/register/group — a signed-in registrant'
     expect(h.createUser).not.toHaveBeenCalled()
   })
 
-  it('a registrant already on file is linked and not rewritten, even when signed in', async () => {
-    rec.respond((c) =>
-      c.table === 'members' && c.op === 'select' && inFilter(c, 'email', SESSION_EMAIL)
-        ? { data: [{ id: 'm-prior', email: SESSION_EMAIL }], error: null }
-        : undefined,
-    )
-    await post(body())
+  it('a registrant already on file gets past the sign-in check, and is linked and not rewritten', async () => {
+    rec.respond((c) => {
+      if (c.table !== 'members' || c.op !== 'select') return undefined
+      if (inFilter(c, 'email', SESSION_EMAIL)) return { data: [{ id: 'm-prior', email: SESSION_EMAIL }], error: null }
+      if (eqFilter(c, 'email', SESSION_EMAIL)) return { data: { id: 'm-prior' }, error: null }
+      return undefined
+    })
+    expect((await post(body())).status).toBe(201)
     const [members] = rec.payloads('upsert', 'members') as Person[][]
     expect(members.map((m) => m.email)).toEqual(['s1@example.com', 's2@example.com'])
     const [rows] = rec.payloads('insert', 'participants') as Person[][]
@@ -257,29 +260,57 @@ describe('characterisation: POST /api/register/group — a member already on fil
   const NEW_STUDENTS = ['s1@example.com', 's2@example.com']
 
   it.each([
-    ['their email', 'email', TEACHER, {}, { id: 'm-prior', email: TEACHER }],
-    ['their school email', 'school_email', TEACHER, {}, { id: 'm-prior', school_email: TEACHER }],
-    ['the school address submitted beside a new email', 'email', OLD_ADDRESS, { school_email: OLD_ADDRESS }, { id: 'm-prior', email: OLD_ADDRESS }],
-  ])('the registrant found by %s: linked, no login, and their row untouched', async (_l, column, value, teacher, found) => {
+    ['their email', 'email', TEACHER, {}, false],
+    ['their school email', 'school_email', TEACHER, {}, true],
+    ['the school address submitted beside a new email', 'email', OLD_ADDRESS, { school_email: OLD_ADDRESS }, false],
+    ['a school address another member holds', 'school_email', OLD_ADDRESS, { school_email: OLD_ADDRESS }, true],
+    ['a school address in another case', 'school_email', OLD_ADDRESS, { school_email: ' Old@School.Example.com ' }, true],
+  ])('the registrant found by %s: asked to sign in, with nothing written and nothing in their name', async (_l, column, value, teacher, schoolOnly) => {
     rec.respond((c) =>
-      c.table === 'members' && c.op === 'select' && inFilter(c, column, value)
-        ? { data: [found], error: null }
+      c.table === 'members' && c.op === 'select' && eqFilter(c, column, value)
+        ? { data: { id: 'm-prior' }, error: null }
         : undefined,
     )
     expect(await settle(await post(body({}, teacher)))).toEqual({
+      status: 409,
+      body: {
+        code: 'sign_in_required',
+        school_address_only: schoolOnly,
+        error: 'This email is already on file with Stellr. Sign in with the address you first used with us, then submit again. If you can’t, or a parent or guardian is helping you, contact us and we’ll help.',
+      },
+    })
+    expect(rec.writes()).toEqual([])
+    expect(h.getUserList).not.toHaveBeenCalled()
+    expect(h.createUser).not.toHaveBeenCalled()
+    expect(h.createSignInToken).not.toHaveBeenCalled()
+  })
+
+  it('a failed on-file read is the retryable 503, with nothing written', async () => {
+    rec.respond((c) =>
+      c.table === 'members' && c.op === 'select' && eqFilter(c, 'email', TEACHER)
+        ? { data: null, error: { message: 'boom' } }
+        : undefined,
+    )
+    expect((await post(body())).status).toBe(503)
+    expect(rec.writes()).toEqual([])
+  })
+
+  it('a row that appears after the gate’s reads is linked, not rewritten, with no login', async () => {
+    rec.respond((c) =>
+      c.table === 'members' && c.op === 'select' && inFilter(c, 'email', TEACHER)
+        ? { data: [{ id: 'm-prior', email: TEACHER }], error: null }
+        : undefined,
+    )
+    expect(await settle(await post(body()))).toEqual({
       status: 201,
       body: { registrationId: 'reg-1', checkoutUrl: null, spreadsheetUrl: null, joinUrl: JOIN_URL, signInToken: null },
     })
     expect(rec.writes()).toEqual(addNowWrites(ALL, 3, false, NEW_STUDENTS))
     const [members] = rec.payloads('upsert', 'members') as Person[][]
     expect(members.map((m) => m.email)).toEqual(NEW_STUDENTS)
-    expect(rec.payloads('update', 'members')).toEqual([])
     expect(rec.payloads('update', 'registrations')).toEqual([{ teacher_member_id: 'm-prior' }])
     const [rows] = rec.payloads('insert', 'participants') as Person[][]
     expect(rows[0]).toMatchObject({ email: TEACHER, member_id: 'm-prior' })
-    expect(h.getUserList).not.toHaveBeenCalled()
-    expect(h.createUser).not.toHaveBeenCalled()
-    expect(h.createSignInToken).not.toHaveBeenCalled()
   })
 
   it('a student on file is linked and not rewritten, and the new registrant still gets a login', async () => {
@@ -307,7 +338,7 @@ describe('characterisation: POST /api/register/group — a member already on fil
 
   it('a failed member preload fails safe: no member written, no login, participants unlinked', async () => {
     rec.respond((c) =>
-      c.table === 'members' && c.op === 'select' ? { data: null, error: { message: 'boom' } } : undefined,
+      c.table === 'members' && c.op === 'select' && inFilter(c, 'email', TEACHER) ? { data: null, error: { message: 'boom' } } : undefined,
     )
     const { status, body: res } = await settle(await post(body()))
     expect(status).toBe(201)
@@ -694,6 +725,8 @@ describe('characterisation: POST /api/register/group — rows written (add_now)'
   it('reads and writes in this order', async () => {
     expect((await post(body())).status).toBe(201)
     expect(rec.log).toEqual([
+      'select members', // the gate: the organiser on file by email?
+      'select members', // the gate: the organiser on file by school_email?
       'insert registrations',
       'select members', // which of these emails already have a member
       'select members', // the unmatched ones by school_email

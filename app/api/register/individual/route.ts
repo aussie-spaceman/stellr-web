@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     // first, and that refusal must not use up the household's or school's shared
     // allowance. A wider cap per event stops new accounts multiplying that count.
     const eventKey = typeof fields.event_slug === 'string' ? fields.event_slug : undefined
-    const { userId } = await auth().catch(() => ({ userId: null }))
+    const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
     if (userId) {
       const eventCapped = rateLimitGuard(req, 'register-individual-session', { limit: 30, windowMs: HOUR_MS }, eventKey)
       if (eventCapped) return eventCapped

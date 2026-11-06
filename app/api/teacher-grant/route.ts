@@ -101,17 +101,16 @@ export async function POST(req: Request) {
 
   const { response, signedUp } = await submitApplication(parsed.data, req)
 
-  // docs/TENANCY-S5.md, B18. The member id this request resolved, if any, and nothing from
-  // the form. member_created is true when this request created the member, as upsertMember
-  // reports it, and false in every other case, so the event does not say why.
+  // docs/TENANCY-S5.md, B18. The member this request created, if any, and nothing from the
+  // form. member_created is false in every other case, so the event does not say why.
   await auditMutation(
     {
       action: 'teacher_grant.application.create',
       actor: { userId: null },
       tenant: { stellr: true },
-      target: { table: 'members', id: signedUp?.id ?? null },
+      target: { table: 'members', id: signedUp },
       metadata: {
-        member_created: signedUp?.created ?? false,
+        member_created: signedUp !== null,
         status: response.status,
       },
     },
@@ -124,8 +123,8 @@ export async function POST(req: Request) {
 async function submitApplication(
   v: z.output<typeof schema>,
   req: Request,
-): Promise<{ response: Response; signedUp: { id: string; created: boolean } | null }> {
-  let signedUp: { id: string; created: boolean } | null = null
+): Promise<{ response: Response; signedUp: string | null }> {
+  let signedUp: string | null = null
   try {
     const name = `${v.firstName} ${v.lastName}`
     const activities = GRANT_ACTIVITIES[v.plannedActivities]
@@ -266,10 +265,8 @@ async function submitApplication(
       // for the submitted email — otherwise anyone could rewrite any member's
       // DOB, age bracket, role, school link and grant by naming their address
       // (deep review C-6/PUB-1). `onExisting: 'skip'` returns the existing id
-      // without touching the row; we then run the signup side effects only when
-      // this request actually created the member.
-      const { data: priorMember } = await db
-        .from('members').select('id').eq('email', v.email).maybeSingle()
+      // without touching the row, and `onCreated` fires only when this call
+      // inserted one, so that alone decides whether the signup steps run.
       let created = false
       const memberId = await upsertMember(db, {
         email: v.email,
@@ -282,13 +279,13 @@ async function submitApplication(
         event_role: 'teacher',
       }, { onExisting: 'skip', onCreated: () => { created = true } })
 
-      if (priorMember) {
+      if (memberId && !created) {
         // Existing member — the application still reached the inbox and HubSpot
         // above; the record itself is left untouched and no grant is re-applied
         // from anonymous input.
-        console.info('[teacher-grant] existing member, record not modified', priorMember.id)
+        console.info('[teacher-grant] existing member, record not modified', memberId)
       } else if (memberId) {
-        signedUp = { id: memberId, created }
+        signedUp = memberId
         await linkMembersToSchoolByName(db, [memberId], {
           name: v.schoolName,
           address_city: v.schoolCity,

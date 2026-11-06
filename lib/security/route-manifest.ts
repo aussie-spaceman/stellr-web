@@ -255,6 +255,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/cron/docusign-reminders/route.ts': 'cron',
   'app/api/cron/entitlements/route.ts': 'cron',
   'app/api/cron/event-emails/route.ts': 'cron',
+  'app/api/cron/group-invoice-sync/route.ts': 'cron',
   'app/api/cron/hubspot-event-options/route.ts': 'cron',
   'app/api/cron/hubspot-lifecycle/route.ts': 'cron',
   'app/api/cron/lead-capture-failures/route.ts': 'cron',

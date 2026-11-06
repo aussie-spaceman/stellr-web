@@ -5,6 +5,10 @@ import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { addParticipantToGroup, GROUP_FOR_ADD_COLUMNS } from '@/lib/group-participant-add'
 
+// A roster change waits out the group invoice quiet period after responding
+// (lib/group-billing.ts), and that wait has to fit inside the function.
+export const maxDuration = 300
+
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
   req: NextRequest,

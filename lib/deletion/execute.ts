@@ -232,6 +232,7 @@ export async function executeDeletion(
       registrationId: seat.registrationId,
       change: { kind: 'removed' },
       eventRole: seat.eventRole,
+      participantIds: [id],
       actor: { memberId: opts.deletedBy ?? null, label: 'admin' },
     }).catch((err) => {
       console.error('[deletion] group billing update failed:', err)

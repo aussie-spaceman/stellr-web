@@ -22,8 +22,8 @@ function withScope(scope: string) {
 
 describe('cron scope', () => {
   it('covers exactly the cron routes and the vercel.json schedules', () => {
-    expect(routes).toHaveLength(22)
-    expect(schedules).toHaveLength(27)
+    expect(routes).toHaveLength(23)
+    expect(schedules).toHaveLength(28)
     expect(scheduled).toEqual(routes)
     expect(Object.keys(CRON_SCOPES).sort()).toEqual(routes)
   })
@@ -32,6 +32,7 @@ describe('cron scope', () => {
     expect(withScope('per_tenant')).toEqual([
       'docusign-reminders',
       'event-emails',
+      'group-invoice-sync',
       'survey-retention',
       'surveys',
       'team-profiles',

@@ -4,8 +4,8 @@
   "totals": {
     "mutatingHandlers": 269,
     "unauditedMutations": 268,
-    "cronHandlers": 22,
-    "unauditedCrons": 22,
+    "cronHandlers": 23,
+    "unauditedCrons": 23,
     "getMutations": 15,
     "unauditedGetMutations": 15
   },
@@ -291,6 +291,7 @@
     "app/api/cron/docusign-reminders/route.ts#GET",
     "app/api/cron/entitlements/route.ts#GET",
     "app/api/cron/event-emails/route.ts#GET",
+    "app/api/cron/group-invoice-sync/route.ts#GET",
     "app/api/cron/hubspot-event-options/route.ts#GET",
     "app/api/cron/hubspot-lifecycle/route.ts#GET",
     "app/api/cron/lead-capture-failures/route.ts#GET",

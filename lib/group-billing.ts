@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getEventBySlug } from '@/lib/sanity'
 import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 import { normalizeEventRole } from '@/lib/member-enums'
+import { runAfterResponse } from '@/lib/after-response'
 
 // What a group pays when its roster changes after registration (29 Oct 2026).
 //
@@ -11,15 +12,25 @@ import { normalizeEventRole } from '@/lib/member-enums'
 // place: the size drops by one. Adding someone beyond the declared size grows
 // it. What happens to the money then depends on how the group pays:
 //
-//   invoice, unpaid  → the open invoice is revised (Stripe's own revision:
-//                      the old one is voided, the new one emailed), keeping
-//                      any discount an admin applied.
+//   invoice, unpaid  → once the roster has been quiet for a couple of minutes,
+//                      the open invoice is revised (Stripe's own revision: the
+//                      old one is voided, the new one emailed), keeping any
+//                      discount an admin applied.
 //   invoice or card, → a removed place is refunded by the caller through
 //   already paid       executeRefund (the 45-day guarantee applies); an added
-//                      place gets its own "additional" invoice.
+//                      place gets its own "additional" invoice. A removed
+//                      place still on an unpaid "additional" invoice comes off
+//                      that invoice instead: there is nothing to refund.
 //   members pay      → each seat is its own payment; executeRefund refunds it.
 //   individually
 //   free / campaign  → nothing to bill.
+//
+// A group can change any number of times. Stripe caps a revision chain at 4
+// invoices including the original (5 Nov 2026: the Minnesota group hit it), so
+// when Stripe refuses a revision, reviseGroupInvoice issues a new invoice and
+// voids the old one, which starts a new chain. Seat counts follow the roster
+// even if the invoice can't: "Send corrected invoice" in the admin dialog
+// brings the invoice back in line (reissueGroupInvoice).
 //
 // Every invoice issued for a group is recorded in group_invoices
 // (supabase/migrations/20261029120000_group_invoices.sql), with the reason the
@@ -27,6 +38,12 @@ import { normalizeEventRole } from '@/lib/member-enums'
 // invoice's status: it is re-read before any action.
 
 type Db = SupabaseClient
+
+/** How long the roster must stay unchanged before an unpaid invoice is updated. */
+export const INVOICE_SYNC_QUIET_MS = 120_000
+/** How long a lock on a group's invoice lasts if its holder never releases it. */
+const INVOICE_LOCK_MS = 120_000
+const COUNT_WRITE_ATTEMPTS = 5
 
 export type GroupBillingMode = 'invoice' | 'card' | 'individual' | 'free'
 export type LedgerStatus = 'draft' | 'open' | 'paid' | 'void' | 'uncollectible'
@@ -314,6 +331,16 @@ export async function currentSeatsInvoice(
     const next = typeof invoice.latest_revision === 'string' ? invoice.latest_revision : invoice.latest_revision.id
     invoice = await stripe.invoices.retrieve(next)
   }
+  // Void with no revision: replaced by a new invoice (or by hand), which the
+  // revision chain can't lead to. The ledger normally already has the new one;
+  // this covers a ledger write that failed.
+  if (invoice.status === 'void') {
+    const found = await stripe.invoices.search({
+      query: `metadata['registrationId']:'${reg.id.replace(/'/g, '')}'`,
+      limit: 20,
+    }).catch(() => null)
+    invoice = found?.data.find((inv) => inv.metadata?.kind !== 'additional' && inv.status !== 'draft' && inv.status !== 'void') ?? invoice
+  }
   let row = ledger.find((r) => r.stripe_invoice_id === invoice!.id) ?? null
   if (!row) {
     // Pre-ledger invoice: one line for the whole group. Its seats are the
@@ -368,11 +395,19 @@ function metadataFor(spec: InvoiceSpec, extra: Record<string, string> = {}): Rec
   }
 }
 
-async function finishAndRecord(db: Db, stripe: Stripe, draftId: string, spec: InvoiceSpec, replaces: string | null) {
+/** Finalises a draft and records it. Emails it last, so a failed email leaves a true ledger. */
+async function finishAndRecord(
+  db: Db,
+  stripe: Stripe,
+  draftId: string,
+  spec: InvoiceSpec,
+  replaces: string | null,
+  afterFinalize?: (finalized: Stripe.Invoice) => Promise<void>,
+) {
   const finalized = await stripe.invoices.finalizeInvoice(draftId)
-  const sent = await stripe.invoices.sendInvoice(finalized.id as string)
+  if (afterFinalize) await afterFinalize(finalized)
   await upsertLedger(db, {
-    ...ledgerRowFromInvoice(sent, { registrationId: spec.reg.id, eventSlug: spec.reg.event_slug, kind: spec.kind, seats: spec.seats, perSeatCents: spec.perSeatCents }),
+    ...ledgerRowFromInvoice(finalized, { registrationId: spec.reg.id, eventSlug: spec.reg.event_slug, kind: spec.kind, seats: spec.seats, perSeatCents: spec.perSeatCents }),
     coupon_id: spec.couponId,
     promotion_code: spec.couponId ? spec.reg.invoice_promotion_code : null,
     replaces_stripe_invoice_id: replaces,
@@ -385,24 +420,27 @@ async function finishAndRecord(db: Db, stripe: Stripe, draftId: string, spec: In
       .update({ status: 'void', voided_at: new Date().toISOString() })
       .eq('stripe_invoice_id', replaces)
   }
-  return sent
+  try {
+    return await stripe.invoices.sendInvoice(finalized.id as string)
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    throw new Error(`Invoice ${finalized.number ?? finalized.id} was issued but could not be emailed; send it from Stripe (${detail})`)
+  }
 }
 
-/** A fresh invoice: the group's first, or one for places added after payment. */
-export async function createGroupInvoice(db: Db, stripe: Stripe, spec: InvoiceSpec): Promise<Stripe.Invoice> {
+/** A draft invoice with its one per-place line, ready to finalise. */
+async function draftWithLine(stripe: Stripe, spec: InvoiceSpec, params: Stripe.InvoiceCreateParams): Promise<Stripe.Invoice> {
   // deep review PAY-1: create the invoice FIRST, then attach the line to it
   // explicitly (`invoice: id`) — a pending item is excluded by default on the
   // pinned API version, which once finalised a $0 invoice for a paid event.
   const draft = await stripe.invoices.create({
     customer: spec.customerId,
     collection_method: 'send_invoice',
-    days_until_due: 14,
     auto_advance: false,
-    metadata: metadataFor(spec),
     // The money-back guarantee, printed on the invoice.
     footer: GUARANTEE_RECEIPT_LINE,
-    ...(spec.kind === 'additional' ? { description: spec.reason } : {}),
     ...(spec.couponId ? { discounts: [{ coupon: spec.couponId }] } : {}),
+    ...params,
   })
   await stripe.invoiceItems.create({
     customer: spec.customerId,
@@ -412,14 +450,59 @@ export async function createGroupInvoice(db: Db, stripe: Stripe, spec: InvoiceSp
     unit_amount_decimal: Stripe.Decimal.from(spec.perSeatCents),
     description: lineDescription(spec.reg.event_title, spec.kind),
   })
+  return draft
+}
+
+/** A fresh invoice: the group's first, or one for places added after payment. */
+export async function createGroupInvoice(db: Db, stripe: Stripe, spec: InvoiceSpec): Promise<Stripe.Invoice> {
+  const draft = await draftWithLine(stripe, spec, {
+    days_until_due: 14,
+    metadata: metadataFor(spec),
+    ...(spec.kind === 'additional' ? { description: spec.reason } : {}),
+  })
   return finishAndRecord(db, stripe, draft.id as string, spec, null)
 }
 
+function replacementNote(reason: string, original: Stripe.Invoice) {
+  return `${reason}. This replaces invoice ${original.number ?? original.id}, which is now cancelled.`
+}
+
 /**
- * Revises an open invoice to `spec.seats` places with Stripe's own revision:
- * finalising the revision voids the original, and the organiser is emailed
- * the new one. Reuses a draft revision someone started in the Dashboard
- * (Stripe allows only one).
+ * Replaces an open invoice with a new one when Stripe won't revise it. Stripe
+ * voids a revision's original for us; here the order is ours: the new invoice
+ * is finalised but not emailed, the old one is voided, and only then is the new
+ * one sent. If the old one can't be voided (it was just paid, or a payment is
+ * processing) the new one is voided instead, so the organiser never holds two
+ * payable invoices. The organiser keeps the original due date while it is still
+ * ahead.
+ */
+async function replaceGroupInvoice(db: Db, stripe: Stripe, original: Stripe.Invoice, spec: InvoiceSpec): Promise<Stripe.Invoice> {
+  const dueDate = original.due_date && original.due_date > Date.now() / 1000 ? original.due_date : null
+  const draft = await draftWithLine(stripe, spec, {
+    ...(dueDate ? { due_date: dueDate } : { days_until_due: 14 }),
+    metadata: metadataFor(spec, { replaces: original.id as string }),
+    description: replacementNote(spec.reason, original),
+    ...(original.custom_fields?.length ? { custom_fields: original.custom_fields } : {}),
+  })
+  return finishAndRecord(db, stripe, draft.id as string, spec, original.id as string, async (finalized) => {
+    try {
+      await stripe.invoices.voidInvoice(original.id as string)
+    } catch (e) {
+      await stripe.invoices.voidInvoice(finalized.id as string).catch((cleanup) => {
+        console.error('[group-billing] could not void the unsent replacement:', cleanup, { invoice: finalized.id })
+      })
+      throw e
+    }
+  })
+}
+
+/**
+ * Moves an open invoice to `spec.seats` places, however many times it has
+ * changed. Prefers Stripe's own revision: finalising it voids the original, and
+ * the organiser is emailed the new one. Reuses a draft revision someone started
+ * in the Dashboard (Stripe allows only one). If Stripe refuses a revision (its
+ * cap on a revision chain, or a credit note on the invoice), the invoice is
+ * replaced with a new one instead.
  */
 export async function reviseGroupInvoice(db: Db, stripe: Stripe, original: Stripe.Invoice, spec: InvoiceSpec): Promise<Stripe.Invoice> {
   let draft: Stripe.Invoice
@@ -430,8 +513,18 @@ export async function reviseGroupInvoice(db: Db, stripe: Stripe, original: Strip
     const drafts = customer ? await stripe.invoices.list({ customer, status: 'draft', limit: 50 }) : { data: [] as Stripe.Invoice[] }
     const existing = drafts.data.find((d) => d.from_invoice?.invoice === original.id
       || (typeof d.from_invoice?.invoice === 'object' && d.from_invoice?.invoice?.id === original.id))
-    if (!existing) throw e
-    draft = existing
+    if (existing) {
+      draft = existing
+    } else if ((e as { type?: unknown } | null)?.type === 'StripeInvalidRequestError') {
+      // Stripe answered "no", as opposed to not answering. By type, not message:
+      // its wording isn't a contract, and the void inside the replacement refuses
+      // an invoice that truly can't change. The field, not instanceof: the check
+      // must hold across copies of the Stripe module (a real refusal failed
+      // instanceof in the test-mode drill).
+      return replaceGroupInvoice(db, stripe, original, spec)
+    } else {
+      throw e
+    }
   }
   // Replace the copied line(s) with one per-place line at the new size.
   const lines = draft.lines?.data ?? []
@@ -450,7 +543,7 @@ export async function reviseGroupInvoice(db: Db, stripe: Stripe, original: Strip
   })
   await stripe.invoices.update(draft.id as string, {
     metadata: metadataFor(spec, { replaces: original.id as string }),
-    description: `${spec.reason}. This replaces invoice ${original.number ?? original.id}, which is now cancelled.`,
+    description: replacementNote(spec.reason, original),
     discounts: spec.couponId ? [{ coupon: spec.couponId }] : '',
     footer: GUARANTEE_RECEIPT_LINE,
   })
@@ -494,22 +587,63 @@ async function couponTerms(stripe: Stripe, couponId: string | null): Promise<Cou
   }
 }
 
+/**
+ * The unpaid "additional places" invoice a participant is on, if any. Such a
+ * place hasn't been paid for yet, even though the group's main invoice has. The
+ * ledger finds it, Stripe confirms it (a missed webhook can leave a stale row).
+ */
+export async function openAdditionalInvoiceFor(
+  db: Db,
+  stripe: Stripe | null,
+  registrationId: string,
+  participantId: string,
+): Promise<{ invoice: Stripe.Invoice | null; row: GroupInvoiceRow } | null> {
+  const ledger = await ledgerFor(db, registrationId)
+  const row = ledger.find((r) => r.kind === 'additional' && r.status === 'open' && (r.participant_ids ?? []).includes(participantId))
+  if (!row) return null
+  if (!stripe) return { invoice: null, row }
+  try {
+    const invoice = await stripe.invoices.retrieve(row.stripe_invoice_id)
+    return invoice.status === 'open' ? { invoice, row } : null
+  } catch (e) {
+    console.error('[group-billing] could not read the additional invoice:', e)
+    return { invoice: null, row }
+  }
+}
+
 // ── Roster changes ───────────────────────────────────────────────────────────
 
 export interface BillingOutcome {
   /** One sentence for the organiser (or admin) about what happened to the money. */
   message: string | null
-  action: 'revised' | 'voided' | 'additional' | 'none' | 'failed'
+  action: 'scheduled' | 'revised' | 'voided' | 'additional' | 'none' | 'failed'
   seatsAfter: number
   invoiceId?: string
 }
 
-async function writeCounts(db: Db, reg: GroupRegistration, counts: { adult: number; student: number }, perSeat: number | null) {
+/**
+ * Writes the group's new counts only if they are still the ones the change was
+ * worked out from. False means another change got in first: re-plan from fresh
+ * counts, or two simultaneous removals would free only one place.
+ */
+async function writeCounts(
+  db: Db,
+  reg: GroupRegistration,
+  before: { adult: number; student: number },
+  counts: { adult: number; student: number },
+  perSeat: number | null,
+): Promise<boolean> {
   const seats = counts.adult + counts.student
   const update: Record<string, unknown> = { adult_count: counts.adult, student_count: counts.student }
   if (perSeat != null && perSeat > 0) update.amount_due_cents = seats * perSeat
-  const { error } = await db.from('registrations').update(update).eq('id', reg.id)
-  if (error) console.error('[group-billing] seat count update failed:', error.message, { registrationId: reg.id })
+  const { data, error } = await db.from('registrations').update(update)
+    .eq('id', reg.id).eq('adult_count', before.adult).eq('student_count', before.student)
+    .select('id')
+  if (error) {
+    console.error('[group-billing] seat count update failed:', error.message, { registrationId: reg.id })
+    return true // a database error, not a lost race: retrying won't help
+  }
+  return (data ?? []).length > 0
 }
 
 async function alertStaff(body: string) {
@@ -539,17 +673,16 @@ export async function applyRosterChange(
     actor: Actor
   },
 ): Promise<BillingOutcome> {
-  const reg = await loadRegistration(db, input.registrationId)
+  let reg = await loadRegistration(db, input.registrationId)
   if (!reg || reg.type !== 'group' || reg.status === 'withdrawn') {
     return { message: null, action: 'none', seatsAfter: 0 }
   }
-  const counts = { adult: reg.adult_count ?? 0, student: reg.student_count ?? 0 }
-  const seatsBefore = counts.adult + counts.student
   // Registrations from before migration 037 have no declared size: nothing to track.
-  if (reg.adult_count == null || reg.student_count == null) return { message: null, action: 'none', seatsAfter: seatsBefore }
+  if (reg.adult_count == null || reg.student_count == null) {
+    return { message: null, action: 'none', seatsAfter: (reg.adult_count ?? 0) + (reg.student_count ?? 0) }
+  }
 
   const mode = billingMode(reg)
-  const rosterAfter = await rosterCount(db, reg.id)
 
   let current: { invoice: Stripe.Invoice; row: GroupInvoiceRow | null } | null = null
   if (mode === 'invoice' && stripe) {
@@ -559,32 +692,47 @@ export async function applyRosterChange(
       console.error('[group-billing] could not read the group invoice:', e)
     }
   }
-  const invoiceState: SeatPlanInput['invoice'] =
-    current?.invoice.status === 'open' ? 'open'
-      : current?.invoice.status === 'paid' || reg.invoice_paid_at ? 'paid'
-        : 'none'
-
-  const plan = planSeatChange({
-    mode,
-    seatsBefore,
-    rosterAfter,
-    change: input.change,
-    invoice: invoiceState,
-    cardPaid: !!reg.stripe_payment_intent_id,
-  })
-  const delta = plan.seatsAfter - seatsBefore
-  let nextCounts = adjustCounts(counts, seatBucket(input.eventRole), delta)
-  if (delta > 0 && input.addedRoles?.length) {
-    // New places go to students first, as many as were added, then adults.
-    const students = input.addedRoles.filter((r) => seatBucket(r) === 'student').length
-    const toStudents = Math.min(delta, students)
-    nextCounts = adjustCounts(adjustCounts(counts, 'student', toStudents), 'adult', delta - toStudents)
-  }
-
   const perSeat = current?.row?.per_seat_cents
     || (stripe ? (await eventSeatPrice(stripe, reg.event_slug))?.unitCents : null)
     || null
-  if (delta !== 0) await writeCounts(db, reg, nextCounts, perSeat)
+
+  // Plan and write together: if another change moved the counts first, plan again.
+  let plan: SeatPlan | null = null
+  let seatsBefore = 0
+  let delta = 0
+  for (let attempt = 0; attempt < COUNT_WRITE_ATTEMPTS; attempt++) {
+    const counts = { adult: reg.adult_count ?? 0, student: reg.student_count ?? 0 }
+    seatsBefore = counts.adult + counts.student
+    const invoiceState: SeatPlanInput['invoice'] =
+      current?.invoice.status === 'open' ? 'open'
+        : current?.invoice.status === 'paid' || reg.invoice_paid_at ? 'paid'
+          : 'none'
+    plan = planSeatChange({
+      mode,
+      seatsBefore,
+      rosterAfter: await rosterCount(db, reg.id),
+      change: input.change,
+      invoice: invoiceState,
+      cardPaid: !!reg.stripe_payment_intent_id,
+    })
+    delta = plan.seatsAfter - seatsBefore
+    if (delta === 0) break
+    let nextCounts = adjustCounts(counts, seatBucket(input.eventRole), delta)
+    if (delta > 0 && input.addedRoles?.length) {
+      // New places go to students first, as many as were added, then adults.
+      const students = input.addedRoles.filter((r) => seatBucket(r) === 'student').length
+      const toStudents = Math.min(delta, students)
+      nextCounts = adjustCounts(adjustCounts(counts, 'student', toStudents), 'adult', delta - toStudents)
+    }
+    if (await writeCounts(db, reg, counts, nextCounts, perSeat)) break
+    if (attempt === COUNT_WRITE_ATTEMPTS - 1) {
+      console.error('[group-billing] seat counts kept changing; gave up writing them', { registrationId: reg.id })
+    }
+    const fresh = await loadRegistration(db, input.registrationId)
+    if (!fresh) return { message: null, action: 'none', seatsAfter: 0 }
+    reg = fresh
+  }
+  if (!plan) return { message: null, action: 'none', seatsAfter: seatsBefore }
 
   // Reasons reach the invoice the organiser receives, so they never name a
   // student: the organiser knows who they removed.
@@ -593,35 +741,61 @@ export async function applyRosterChange(
     ? 'a participant was removed'
     : `${plural(input.change.count, 'participant')} ${input.change.count === 1 ? 'was' : 'were'} added`
 
+  // The person removed was still on an unpaid "additional" invoice: they come
+  // off that invoice. (The refund path sees the same invoice and refunds nothing.)
+  const removedId = input.change.kind === 'removed' ? input.participantIds?.[0] : undefined
+  const additional = plan.invoice === 'none' && stripe && removedId
+    ? await openAdditionalInvoiceFor(db, stripe, reg.id, removedId).catch(() => null)
+    : null
+  if (stripe && removedId && additional?.invoice) {
+    try {
+      const { invoice, row } = additional
+      const seats = row.seats - 1
+      if (seats <= 0) {
+        await voidGroupInvoice(db, stripe, invoice, `Cancelled: ${why}`)
+        return { message: 'The invoice for that additional place has been cancelled.', action: 'voided', seatsAfter: plan.seatsAfter, invoiceId: invoice.id as string }
+      }
+      const sent = await reviseGroupInvoice(db, stripe, invoice, {
+        reg, customerId: await invoiceCustomer(db, stripe, reg, invoice), seats, perSeatCents: row.per_seat_cents, currency: row.currency,
+        reason: `${plural(seats, 'additional participant')} after ${why}`,
+        actor: input.actor, couponId: row.coupon_id, kind: 'additional',
+        participantIds: (row.participant_ids ?? []).filter((id) => id !== removedId),
+      })
+      return {
+        message: `We've emailed ${reg.teacher_email ?? 'you'} an updated invoice for ${plural(seats, 'additional participant')} (${formatMoney(sent.total ?? 0, row.currency)}). The previous invoice is cancelled.`,
+        action: 'revised', seatsAfter: plan.seatsAfter, invoiceId: sent.id as string,
+      }
+    } catch (e) {
+      return billingFailed(reg, plan.seatsAfter, sizeLine, e)
+    }
+  }
+
   if (plan.invoice === 'none' || !stripe) {
     const message = delta === 0 ? null
       : `Your group is now ${plural(plan.seatsAfter, 'participant')}.`
     return { message, action: 'none', seatsAfter: plan.seatsAfter }
   }
 
-  try {
-    if (plan.invoice === 'void' && current) {
-      await voidGroupInvoice(db, stripe, current.invoice, `Cancelled: ${why} and no participants are left to pay for`)
-      return { message: 'Your invoice has been cancelled: there are no participants left to pay for.', action: 'voided', seatsAfter: 0, invoiceId: current.invoice.id as string }
+  // An unpaid invoice waits for the group to settle, so a burst of changes is
+  // one email. syncGroupInvoice does the Stripe work when the quiet period ends.
+  if ((plan.invoice === 'revise' || plan.invoice === 'void') && current) {
+    if (!(await markInvoiceSyncDue(db, reg.id))) {
+      return billingFailed(reg, plan.seatsAfter, sizeLine, new Error('Could not schedule the invoice update'))
     }
+    scheduleInvoiceSync(db, stripe, reg.id)
+    return {
+      message: plan.invoice === 'void'
+        ? 'Your invoice will be cancelled shortly: there are no participants left to pay for.'
+        : `We'll email ${reg.teacher_email ?? 'you'} an updated invoice for ${plural(plan.seatsAfter, 'participant')} in a couple of minutes. Please pay that one rather than the one you have now.`,
+      action: 'scheduled', seatsAfter: plan.seatsAfter,
+    }
+  }
 
+  try {
     const price = perSeat ?? 0
     const currency = current?.invoice.currency ?? (await eventSeatPrice(stripe, reg.event_slug))?.currency ?? 'usd'
     if (price <= 0) throw new Error('No per-place price for this event')
     const customerId = await invoiceCustomer(db, stripe, reg, current?.invoice ?? null)
-
-    if (plan.invoice === 'revise' && current) {
-      const spec: InvoiceSpec = {
-        reg, customerId, seats: plan.seatsAfter, perSeatCents: price, currency,
-        reason: `Updated to ${plural(plan.seatsAfter, 'participant')} after ${why} (was ${seatsBefore})`,
-        actor: input.actor, couponId: reg.invoice_coupon_id, kind: 'seats',
-      }
-      const sent = await reviseGroupInvoice(db, stripe, current.invoice, spec)
-      return {
-        message: `We've emailed ${reg.teacher_email ?? 'you'} an updated invoice for ${plural(plan.seatsAfter, 'participant')} (${formatMoney(sent.total ?? 0, currency)}). The previous invoice is cancelled.`,
-        action: 'revised', seatsAfter: plan.seatsAfter, invoiceId: sent.id as string,
-      }
-    }
 
     if (plan.invoice === 'additional') {
       // A percentage discount carries to extra places; a fixed amount was the group's, once.
@@ -639,17 +813,192 @@ export async function applyRosterChange(
       }
     }
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    console.error('[group-billing] invoice update failed:', detail, { registrationId: reg.id })
-    await alertStaff(
-      `The invoice for the ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organiser'} could not be updated after a roster change (${sizeLine}): ${detail}. Open the event roster → the group → "Invoice & discount…" to reissue it.`,
-    )
-    return {
-      message: `Your group is now ${plural(plan.seatsAfter, 'participant')}. We couldn't update your invoice automatically, so our team has been alerted and will send you a corrected one.`,
-      action: 'failed', seatsAfter: plan.seatsAfter,
-    }
+    return billingFailed(reg, plan.seatsAfter, sizeLine, e)
   }
   return { message: null, action: 'none', seatsAfter: plan.seatsAfter }
+}
+
+async function billingFailed(reg: GroupRegistration, seatsAfter: number, sizeLine: string, e: unknown): Promise<BillingOutcome> {
+  const detail = (e instanceof Error ? e.message : String(e)).replace(/\.+$/, '')
+  console.error('[group-billing] invoice update failed:', detail, { registrationId: reg.id })
+  await alertStaff(
+    `The invoice for the ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organiser'} could not be updated after a roster change (${sizeLine}): ${detail}. Open the event roster → the group → "Invoice & discount…" → "Send corrected invoice".`,
+  )
+  return {
+    message: `Your group is now ${plural(seatsAfter, 'participant')}. We couldn't update your invoice automatically, so our team has been alerted and will send you a corrected one.`,
+    action: 'failed', seatsAfter,
+  }
+}
+
+// ── Settling an unpaid invoice after the roster goes quiet ───────────────────
+//
+// Each change to an unpaid group pushes registrations.invoice_sync_due_at
+// forward and waits out the quiet period after its response. Only the newest
+// waiter finds the invoice due, so a burst sends one email, and a change that
+// undoes another sends none. If a function dies while waiting, the daily
+// group-invoice-sync cron picks up what is overdue.
+//
+// invoice_sync_lock_until is a lease: whoever holds it is the only code changing
+// this group's main invoice, so two updates can't race on one Stripe draft. It
+// expires by itself, so a crashed holder can't block a group for good.
+//
+// The old invoice stays payable during the quiet period. Paid in that window, it
+// can't be revised: extra places get an additional invoice, and for places that
+// came off, staff are alerted with the amount, because the removed participants'
+// rows are gone and a refund here would have nothing to attribute it to.
+
+export type InvoiceSyncResult = 'not_due' | 'busy' | 'none' | 'revised' | 'voided' | 'additional' | 'alerted' | 'failed'
+
+async function markInvoiceSyncDue(db: Db, registrationId: string): Promise<boolean> {
+  const { error } = await db.from('registrations')
+    .update({ invoice_sync_due_at: new Date(Date.now() + INVOICE_SYNC_QUIET_MS).toISOString() })
+    .eq('id', registrationId)
+  if (error) console.error('[group-billing] could not schedule the invoice update:', error.message, { registrationId })
+  return !error
+}
+
+async function readInvoiceSyncDue(db: Db, registrationId: string): Promise<string | null> {
+  const { data } = await db.from('registrations').select('invoice_sync_due_at').eq('id', registrationId).maybeSingle()
+  return (data as { invoice_sync_due_at?: string | null } | null)?.invoice_sync_due_at ?? null
+}
+
+/** Clears the due time, unless a change arrived meanwhile and pushed it: that change's update still has to run. */
+async function clearInvoiceSyncDue(db: Db, registrationId: string, due: string | null) {
+  if (!due) return
+  await db.from('registrations').update({ invoice_sync_due_at: null })
+    .eq('id', registrationId).eq('invoice_sync_due_at', due)
+}
+
+/** Runs `work` as the only code changing this group's main invoice, or returns null if another holds it. */
+async function withInvoiceLock<T>(db: Db, registrationId: string, work: () => Promise<T>): Promise<T | null> {
+  const now = new Date()
+  const { data, error } = await db.from('registrations')
+    .update({ invoice_sync_lock_until: new Date(now.getTime() + INVOICE_LOCK_MS).toISOString() })
+    .eq('id', registrationId)
+    .or(`invoice_sync_lock_until.is.null,invoice_sync_lock_until.lt.${now.toISOString()}`)
+    .select('id')
+  if (error) throw new Error(`Could not lock the invoice: ${error.message}`)
+  if ((data ?? []).length === 0) return null
+  try {
+    return await work()
+  } finally {
+    await db.from('registrations').update({ invoice_sync_lock_until: null }).eq('id', registrationId)
+  }
+}
+
+/** Waits out the quiet period after the response, then settles the invoice if this change was the last. */
+function scheduleInvoiceSync(db: Db, stripe: Stripe, registrationId: string) {
+  runAfterResponse('group-billing:invoice-sync', async () => {
+    let wait = INVOICE_SYNC_QUIET_MS + 1_000
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, wait))
+      if ((await syncGroupInvoice(db, stripe, registrationId)) !== 'busy') return
+      wait = 15_000
+    }
+  })
+}
+
+/**
+ * Brings an unpaid group's invoice in line with its current places, if an update
+ * is due. Never throws: a failure alerts staff and stays due, so the daily cron
+ * tries again.
+ */
+export async function syncGroupInvoice(db: Db, stripe: Stripe, registrationId: string): Promise<InvoiceSyncResult> {
+  const due = await readInvoiceSyncDue(db, registrationId)
+  if (!due || new Date(due).getTime() > Date.now()) return 'not_due'
+  let reg: GroupRegistration | null = null
+  let invoiceSeats: number | null = null
+  try {
+    const result = await withInvoiceLock(db, registrationId, async () => {
+      reg = await loadRegistration(db, registrationId)
+      const settled = await settleGroupInvoice(db, stripe, reg, (seats) => { invoiceSeats = seats })
+      await clearInvoiceSyncDue(db, registrationId, due)
+      return settled
+    })
+    return result ?? 'busy'
+  } catch (e) {
+    const failedReg = reg as GroupRegistration | null
+    if (!failedReg) {
+      console.error('[group-billing] invoice sync failed:', e, { registrationId })
+      return 'failed'
+    }
+    const seats = (failedReg.adult_count ?? 0) + (failedReg.student_count ?? 0)
+    await billingFailed(failedReg, seats, `${plural(invoiceSeats ?? seats, 'participant')} → ${plural(seats, 'participant')}`, e)
+    return 'failed'
+  }
+}
+
+async function settleGroupInvoice(
+  db: Db,
+  stripe: Stripe,
+  reg: GroupRegistration | null,
+  noteInvoiceSeats: (seats: number | null) => void,
+): Promise<InvoiceSyncResult> {
+  if (!reg || reg.type !== 'group' || reg.status === 'withdrawn' || !reg.invoice_requested) return 'none'
+  const current = await currentSeatsInvoice(db, stripe, reg)
+  if (!current) return 'none'
+  const { invoice, row } = current
+  const seats = (reg.adult_count ?? 0) + (reg.student_count ?? 0)
+  const invoiceSeats = row?.seats ?? null
+  noteInvoiceSeats(invoiceSeats)
+  if (invoiceSeats === seats) return 'none'
+
+  const actor: Actor = { memberId: null, label: 'roster change' }
+  const perSeat = row?.per_seat_cents || (await eventSeatPrice(stripe, reg.event_slug))?.unitCents || 0
+  const currency = invoice.currency ?? 'usd'
+
+  if (invoice.status === 'open') {
+    if (seats <= 0) {
+      await voidGroupInvoice(db, stripe, invoice, 'Cancelled: no participants are left to pay for')
+      return 'voided'
+    }
+    if (perSeat <= 0) throw new Error('No per-place price for this event')
+    await reviseGroupInvoice(db, stripe, invoice, {
+      reg, seats, perSeatCents: perSeat, currency, actor,
+      customerId: await invoiceCustomer(db, stripe, reg, invoice),
+      reason: `Updated to ${plural(seats, 'participant')}${invoiceSeats != null ? ` (was ${invoiceSeats})` : ''}`,
+      couponId: reg.invoice_coupon_id, kind: 'seats',
+    })
+    return 'revised'
+  }
+
+  if (invoice.status !== 'paid' || invoiceSeats == null) return 'none'
+
+  // The older invoice was paid while the update waited.
+  if (seats > invoiceSeats) {
+    if (perSeat <= 0) throw new Error('No per-place price for this event')
+    const extra = seats - invoiceSeats
+    const terms = await couponTerms(stripe, reg.invoice_coupon_id)
+    await createGroupInvoice(db, stripe, {
+      reg, seats: extra, perSeatCents: perSeat, currency, actor,
+      customerId: await invoiceCustomer(db, stripe, reg, invoice),
+      reason: `${plural(extra, 'additional participant')}, added before the group's invoice was paid (group is now ${seats})`,
+      couponId: terms?.percentOff ? reg.invoice_coupon_id : null, kind: 'additional',
+    })
+    return 'additional'
+  }
+  const perPlace = perSeatPaidCents(invoice.amount_paid ?? invoice.total ?? 0, invoiceSeats) ?? 0
+  const owed = (invoiceSeats - seats) * perPlace
+  await alertStaff(
+    `The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organiser'} paid invoice ${invoice.number ?? invoice.id} for ${plural(invoiceSeats, 'participant')} just after its roster dropped to ${seats}. Check the roster, and refund ${formatMoney(owed, currency)} in Stripe if the places really came off.`,
+  )
+  return 'alerted'
+}
+
+/** The daily backstop: settles every update whose waiting function never finished. */
+export async function syncDueGroupInvoices(db: Db, stripe: Stripe, limit = 50): Promise<Record<string, number>> {
+  const { data, error } = await db.from('registrations')
+    .select('id')
+    .not('invoice_sync_due_at', 'is', null)
+    .lte('invoice_sync_due_at', new Date().toISOString())
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  const tally: Record<string, number> = {}
+  for (const { id } of (data ?? []) as { id: string }[]) {
+    const result = await syncGroupInvoice(db, stripe, id)
+    tally[result] = (tally[result] ?? 0) + 1
+  }
+  return tally
 }
 
 // ── Admin: discount and reissue ──────────────────────────────────────────────
@@ -692,7 +1041,23 @@ export interface GroupInvoiceSummary {
   current: {
     id: string; number: string | null; status: string; totalCents: number; hostedUrl: string | null
   } | null
+  /** Places on the current invoice, as far as the ledger knows. */
+  invoiceSeats: number | null
+  /** Set when the unpaid invoice no longer matches the group: what a corrected one would be. */
+  correction: { seats: number; totalCents: number } | null
   history: GroupInvoiceRow[]
+}
+
+/**
+ * An unpaid group's invoice should be for its current number of places. It can
+ * fall behind when a roster change couldn't update Stripe, or when the invoice
+ * was voided by hand. A paid invoice never needs this: paid groups change by
+ * refund or additional invoice.
+ */
+export function invoiceNeedsCorrection(i: { seats: number; invoiceStatus: string | null; invoiceSeats: number | null; paid: boolean; withdrawn: boolean }): boolean {
+  if (i.paid || i.withdrawn || i.seats <= 0) return false
+  if (i.invoiceStatus === 'void') return true
+  return i.invoiceStatus === 'open' && i.invoiceSeats !== i.seats
 }
 
 export async function groupInvoiceSummary(db: Db, stripe: Stripe | null, registrationId: string): Promise<GroupInvoiceSummary | null> {
@@ -700,9 +1065,22 @@ export async function groupInvoiceSummary(db: Db, stripe: Stripe | null, registr
   if (!reg || reg.type !== 'group') return null
   const current = stripe && reg.invoice_requested ? await currentSeatsInvoice(db, stripe, reg).catch(() => null) : null
   const price = current?.row?.per_seat_cents ?? (stripe ? (await eventSeatPrice(stripe, reg.event_slug))?.unitCents ?? null : null)
+  const seats = (reg.adult_count ?? 0) + (reg.student_count ?? 0)
+  const invoiceSeats = current?.row?.seats ?? null
+  const needsCorrection = !!stripe && !!current && !!price && invoiceNeedsCorrection({
+    seats,
+    invoiceStatus: current.invoice.status ?? null,
+    invoiceSeats,
+    paid: !!reg.invoice_paid_at,
+    withdrawn: reg.status === 'withdrawn',
+  })
   return {
     mode: billingMode(reg),
-    seats: (reg.adult_count ?? 0) + (reg.student_count ?? 0),
+    seats,
+    invoiceSeats,
+    correction: needsCorrection
+      ? { seats, totalCents: invoiceTotals(seats, price as number, await couponTerms(stripe as Stripe, reg.invoice_coupon_id)).totalCents }
+      : null,
     roster: await rosterCount(db, reg.id),
     perSeatCents: price,
     currency: current?.invoice.currency ?? 'usd',
@@ -720,6 +1098,20 @@ export async function groupInvoiceSummary(db: Db, stripe: Stripe | null, registr
   }
 }
 
+type AdminInvoiceResult = { ok: true; message: string; invoiceId: string } | { ok: false; error: string }
+
+/**
+ * An admin's invoice change, taken under the group's lock. The invoice it sends
+ * is at the group's current size, so a pending update has nothing left to do.
+ */
+async function adminInvoiceChange(db: Db, registrationId: string, work: () => Promise<AdminInvoiceResult>): Promise<AdminInvoiceResult> {
+  const due = await readInvoiceSyncDue(db, registrationId)
+  const result = await withInvoiceLock(db, registrationId, work)
+  if (!result) return { ok: false, error: 'This invoice is being updated right now. Try again in a moment.' }
+  if (result.ok) await clearInvoiceSyncDue(db, registrationId, due)
+  return result
+}
+
 /**
  * Applies (or, with null, removes) a discount on a group's invoices and
  * reissues the open invoice at the group's current size. Only an unpaid
@@ -731,7 +1123,17 @@ export async function setGroupDiscount(
   registrationId: string,
   discount: ResolvedDiscount | null,
   actor: Actor,
-): Promise<{ ok: true; message: string; invoiceId: string } | { ok: false; error: string }> {
+): Promise<AdminInvoiceResult> {
+  return adminInvoiceChange(db, registrationId, () => applyGroupDiscount(db, stripe, registrationId, discount, actor))
+}
+
+async function applyGroupDiscount(
+  db: Db,
+  stripe: Stripe,
+  registrationId: string,
+  discount: ResolvedDiscount | null,
+  actor: Actor,
+): Promise<AdminInvoiceResult> {
   const reg = await loadRegistration(db, registrationId)
   if (!reg || reg.type !== 'group') return { ok: false, error: 'Group registration not found' }
   if (!reg.invoice_requested) return { ok: false, error: 'This group is not paying by invoice.' }
@@ -759,6 +1161,54 @@ export async function setGroupDiscount(
     ok: true,
     invoiceId: sent.id as string,
     message: `Sent ${reg.teacher_email ?? 'the organiser'} a revised invoice for ${plural(seats, 'participant')}: ${formatMoney(sent.total ?? 0, sent.currency ?? 'usd')}${discount ? ` after ${discount.label}` : ''}.`,
+  }
+}
+
+/**
+ * Brings an unpaid group's invoice back in line with its current places: revises
+ * the open invoice, or issues a new one if the last was voided. Keeps any
+ * discount. The way out when a roster change couldn't update Stripe.
+ */
+export async function reissueGroupInvoice(
+  db: Db,
+  stripe: Stripe,
+  registrationId: string,
+  actor: Actor,
+): Promise<AdminInvoiceResult> {
+  return adminInvoiceChange(db, registrationId, () => correctGroupInvoice(db, stripe, registrationId, actor))
+}
+
+async function correctGroupInvoice(
+  db: Db,
+  stripe: Stripe,
+  registrationId: string,
+  actor: Actor,
+): Promise<AdminInvoiceResult> {
+  const reg = await loadRegistration(db, registrationId)
+  if (!reg || reg.type !== 'group') return { ok: false, error: 'Group registration not found' }
+  if (!reg.invoice_requested) return { ok: false, error: 'This group is not paying by invoice.' }
+  if (reg.invoice_paid_at) return { ok: false, error: 'This invoice has already been paid, so it can no longer be changed.' }
+  const current = await currentSeatsInvoice(db, stripe, reg)
+  if (!current) return { ok: false, error: 'No invoice has been sent yet. Use "Finish setup…" to send it first.' }
+  const seats = (reg.adult_count ?? 0) + (reg.student_count ?? 0)
+  const perSeat = current.row?.per_seat_cents || (await eventSeatPrice(stripe, reg.event_slug))?.unitCents || 0
+  if (seats <= 0 || perSeat <= 0) return { ok: false, error: 'Could not work out the group size or price.' }
+  const status = current.invoice.status ?? null
+  if (status !== 'open' && status !== 'void') return { ok: false, error: `The invoice is ${status}, so it can't be reissued.` }
+
+  const spec: InvoiceSpec = {
+    reg, seats, perSeatCents: perSeat, currency: current.invoice.currency ?? 'usd', actor,
+    customerId: await invoiceCustomer(db, stripe, reg, current.invoice),
+    reason: `Corrected to ${plural(seats, 'participant')}`,
+    couponId: reg.invoice_coupon_id, kind: 'seats',
+  }
+  const sent = status === 'open'
+    ? await reviseGroupInvoice(db, stripe, current.invoice, spec)
+    : await createGroupInvoice(db, stripe, spec)
+  return {
+    ok: true,
+    invoiceId: sent.id as string,
+    message: `Sent ${reg.teacher_email ?? 'the organiser'} a corrected invoice for ${plural(seats, 'participant')}: ${formatMoney(sent.total ?? 0, sent.currency ?? 'usd')}.`,
   }
 }
 

@@ -392,7 +392,7 @@ D6 is now delivered: see [Wave 3 status](#wave-3-status).
 | `20261106070726_via_parent_tenant_policies.sql` | `tenant_app` grants and policies |
 | `20261106074112_via_parent_tenant_carry.sql` | Moves children when a parent changes tenant |
 
-All four are on the `dev` database, applied on 6 Nov after #564's `db` job passed, with the ledger realigned to each file's version and re-read. None is on production. Production needs the owner's yes, outside event hours: the first takes ACCESS EXCLUSIVE on 10 tables and the third on 15, and production's row counts were not read, so any timing is an estimate. Decide the route first, since `prod-migrate` is unproven (see wave 2).
+All four are on the `dev` database, applied on 6 Nov after #564's `db` job passed, with the ledger realigned to each file's version and re-read. All four went on production on 6 Nov, about 22:05 UTC, with the owner's yes, through the Supabase MCP because `prod-migrate` is unproven (see wave 2). Before them, production held 445 rows across the 10 tables and no query was running. Afterwards, `tenancy_cutover_checks` D2 and I read 0 on all 10 tables, `security_checks.sql` 0 rows, and the ledger was realigned and re-read. No write through the new trigger has been seen yet: see `promote-s5-wave3.3`.
 
 - **`20261106070724_via_parent_tenant_backfill.sql` must run in a single transaction,** by `prod-migrate` or explicit `BEGIN`/`COMMIT`. Afterwards, check `pg_trigger` to confirm `esign_audit_events_guard` and `survey_invitations_updated_at` are enabled.
 - **Apply outside event hours and outside active survey submission and signing,** because `20261106070726_via_parent_tenant_policies.sql` takes table locks that can abort a concurrent write.
@@ -437,13 +437,13 @@ On top of [Owner gates](#owner-gates) and the wave 2 list. Slice reports hold th
 | B8 | Should a tenant event write `event_participations` and the activity log? Set to no, because Stellr's account and staff pages read them with no tenant scope. Yes first needs a slice to scope those reads, ahead of A7. Withheld rows can be rebuilt from `participants` and `registrations` |
 | B10a | Whether check (a) never comparing signed-in or real-record pages with routing on is accepted, or a slice takes it. The plan points this at D7's sign-off |
 | B11 | Confirm the agent-written reason on the service-role ratchet entry for `scripts/hubspot-sync-event-options.ts`, or have the script pass `allTenants: true` instead, which keeps the list shorter but lets a manual `--apply` write another tenant's events to Stellr's portal |
-| B18 | `teacher-grant`: decide the small separate follow-up that uses the new `onCreated`. The slice report holds the detail |
+| B18 | **Settled.** `teacher-grant`: the owner chose the follow-up, shipped in #566 and promoted in #561 |
 | B18 | Decide the route limit for `store/checkout` (B15) before `PLATFORM_AUDIT_ENABLED` goes on production, or record the owner's written decision to go ahead without it |
 | C10 | `OPERATIONAL_WRITERS`: its `lib/app-errors` entry now also covers `authz_mismatch` rows, which skip the scrubber because they carry a validated `members.id`. Accept this, or name a separate entry |
 | C10 | The sampling decision (`docs/AUTHZ.md`) comes before `lib/store/auth.ts` can leave `HELD_WRAPPERS`, which C23 depends on. Or split the member-reachable PATCH in `app/api/store/returns` from the catalogue check |
 | C14 | Should a member purge also protect a login holding only a `staff` membership or `staff_roles` row? It keeps today's rule, which counts `admin` and `event_manager`. Extending it changes who can be deleted |
 | C14 | Add to Owner gates: before the first non-owner tenant on production, view-as refuses a target tied to that tenant until S6 support mode exists |
-| C0b | When to apply the four migrations to production, and by what route. And `participants_membership_id_seq`: keep the shared counter, or fund per-tenant numbering, before the first non-owner tenant |
+| C0b | **Applied on 6 Nov.** Still open: `participants_membership_id_seq`: keep the shared counter, or fund per-tenant numbering, before the first non-owner tenant |
 | C0b | The composite FK: name its slice after A10 to A12, or record that the carry trigger is enough |
 | D6 | Decide on the SMMA self-assessment, held privately. Work through `docs/RUNBOOK-waf-rule.md`. Name a slice for `group-invoice-sync` |
 

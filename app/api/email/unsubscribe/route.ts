@@ -4,6 +4,7 @@ import { upsertContact } from '@/lib/hubspot'
 import { HS, NOTIFY_STATUS } from '@/lib/hubspot-fields'
 import { verifyOptOutToken } from '@/lib/waitlist-optout'
 import { escapeHtml } from '@/lib/email-layout'
+import { auditMutation } from '@/lib/audit/route'
 
 // /api/email/unsubscribe — marketing opt-out (no auth, per CAN-SPAM/CASL).
 // Flips marketing_consent=false; transactional mail (DocuSign, registration,
@@ -23,6 +24,13 @@ import { escapeHtml } from '@/lib/email-layout'
 //   ?token=…      members (Supabase) — the original campaign flow
 //   ?wl=…&e=…     event-waitlist contacts, who exist only in HubSpot and so
 //                 have no member row to hold a stored token
+//
+// The audit event (docs/TENANCY-S5.md, B18) is written only for an opt-out that was
+// acted on. A token nobody holds and a bad signature change nothing and answer before
+// it, so a caller with no link cannot fill the log. A valid link used again writes again,
+// because it writes again: the timestamp on the member, the status in HubSpot. It goes on
+// Stellr's chain on any host, because the list being left is Stellr's own marketing, and
+// a waitlist event names no target: the address is all that identifies the contact.
 
 /** Pull the opt-out parameters from the query string, falling back to a POSTed form. */
 async function readParams(req: NextRequest): Promise<{ token?: string; wl?: string; e?: string }> {
@@ -70,10 +78,21 @@ async function unsubscribeMember(token: string): Promise<Response> {
     return htmlResponse('You have been unsubscribed from marketing emails.')
   }
 
-  await db
+  const { error } = await db
     .from('members')
     .update({ marketing_consent: false, marketing_unsubscribed_at: new Date().toISOString() })
     .eq('id', member.id)
+
+  await auditMutation(
+    {
+      action: 'email.unsubscribe.apply',
+      actor: { userId: null },
+      tenant: { stellr: true },
+      target: { table: 'members', id: member.id },
+      metadata: { audience: 'member', write_failed: !!error },
+    },
+    { afterResponse: true },
+  )
 
   // deep review INT-10 / PUB-6: escape the echoed address — it is interpolated
   // straight into the page HTML, so an attacker-chosen address on a planted row
@@ -113,6 +132,11 @@ async function unsubscribeWaitlist(email: string, token: string): Promise<Respon
       502,
     )
   }
+
+  await auditMutation(
+    { action: 'email.unsubscribe.apply', actor: { userId: null }, tenant: { stellr: true }, metadata: { audience: 'waitlist' } },
+    { afterResponse: true },
+  )
 
   return htmlResponse(confirmation)
 }

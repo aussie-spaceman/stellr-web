@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { getEventBySlug } from '@/lib/sanity'
 import { sendEventEmail, reclaimStuckSending } from '@/lib/event-emails/send'
@@ -23,7 +24,7 @@ export const maxDuration = 60
 /** Don't start another email once this much of the budget is gone. */
 const START_BUDGET_MS = 15_000
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('event-emails', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -102,4 +103,4 @@ export async function GET(req: NextRequest) {
 
   await run.finish(result)
   return NextResponse.json(result)
-}
+})

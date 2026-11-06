@@ -9,8 +9,14 @@ import {
   selectGuestEmails,
 } from '@/lib/motion-bookings'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { supabaseServer } from '@/lib/supabase'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/motion-bookings — runs daily at 12:00 UTC (see vercel.json).
 //
@@ -62,7 +68,7 @@ const DEFAULT_LOOKBACK_HOURS = 72
 /** Ceiling for a manual backfill, so `?hours=` cannot ask for the whole calendar. */
 const MAX_LOOKBACK_HOURS = 24 * 400
 
-export async function GET(req: Request) {
+export const GET = withCronAudit('motion-bookings', async (req: Request) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -203,4 +209,4 @@ export async function GET(req: Request) {
     notLandingPageLead: notLandingPageLead.length,
     warnings,
   })
-}
+})

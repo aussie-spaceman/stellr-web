@@ -1,0 +1,2957 @@
+{
+ "individual, priced": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": "← Individual Registration"
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-white border-b border-line",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto px-4 py-4",
+         "children": {
+          "type": "StepBar",
+          "props": {
+           "steps": [
+            "Registration Type",
+            "Your Details",
+            "Confirmation"
+           ],
+           "current": 2
+          }
+         }
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "IndividualRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "addons": [
+           {
+            "id": "addon-1"
+           }
+          ],
+          "gradeMin": 9,
+          "gradeMax": 12,
+          "scholarship": null
+         }
+        },
+        {
+         "type": "MoneyBackGuarantee",
+         "props": {
+          "className": "mt-8"
+         }
+        },
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Individual Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"bg-white border-b border-line\"><div class=\"max-w-2xl mx-auto px-4 py-4\"><nav aria-label=\"Registration progress\"><ol class=\"flex flex-wrap items-center gap-x-1 gap-y-2 text-xs sm:gap-x-2 sm:text-sm\"><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-enviro-green-text text-white\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check h-3 w-3\" aria-label=\"Done:\"><path d=\"M20 6 9 17l-5-5\"></path></svg></span><span class=\"text-content-muted\">Registration Type</span></li><li aria-current=\"step\" class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-primary-deep text-white\">2</span><span class=\"font-medium text-ink\">Your Details</span></li><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-line-light text-content-muted\">3</span><span class=\"text-content-muted\">Confirmation</span></li></ol></nav></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"individual\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;addons&quot;:[{&quot;id&quot;:&quot;addon-1&quot;}],&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12,&quot;scholarship&quot;:null}\"></div><div class=\"flex items-start gap-3 rounded-ds-card border px-4 py-3 border-pathway-amber/30 bg-pathway-amber-bg mt-8\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-shield-check mt-0.5 shrink-0 text-gold-ink\" aria-hidden=\"true\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"></path><path d=\"m9 12 2 2 4-4\"></path></svg><div class=\"text-sm leading-relaxed\"><p class=\"font-semibold text-ink\">100% money-back guarantee</p><p class=\"text-content-secondary\">Ask for a full refund within 45 days of payment. No questions asked. <a href=\"https://www.test/terms#guarantee\" class=\"font-semibold underline underline-offset-2 hover:no-underline text-primary-deep\">How it works</a></p></div></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "listEventAddons(\"db\", \"nv\")",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "individual, scholarship offer": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": "← Individual Registration"
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-white border-b border-line",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto px-4 py-4",
+         "children": {
+          "type": "StepBar",
+          "props": {
+           "steps": [
+            "Registration Type",
+            "Your Details",
+            "Confirmation"
+           ],
+           "current": 2
+          }
+         }
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "IndividualRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "addons": [
+           {
+            "id": "addon-1"
+           }
+          ],
+          "gradeMin": 9,
+          "gradeMax": 12,
+          "scholarship": {
+           "token": "tok",
+           "percent": 50,
+           "firstName": "Ada",
+           "lastName": "L",
+           "email": "ada@example.test",
+           "dueLabel": "$50.00"
+          }
+         }
+        },
+        {
+         "type": "MoneyBackGuarantee",
+         "props": {
+          "className": "mt-8"
+         }
+        },
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Individual Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"bg-white border-b border-line\"><div class=\"max-w-2xl mx-auto px-4 py-4\"><nav aria-label=\"Registration progress\"><ol class=\"flex flex-wrap items-center gap-x-1 gap-y-2 text-xs sm:gap-x-2 sm:text-sm\"><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-enviro-green-text text-white\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check h-3 w-3\" aria-label=\"Done:\"><path d=\"M20 6 9 17l-5-5\"></path></svg></span><span class=\"text-content-muted\">Registration Type</span></li><li aria-current=\"step\" class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-primary-deep text-white\">2</span><span class=\"font-medium text-ink\">Your Details</span></li><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-line-light text-content-muted\">3</span><span class=\"text-content-muted\">Confirmation</span></li></ol></nav></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"individual\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;addons&quot;:[{&quot;id&quot;:&quot;addon-1&quot;}],&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12,&quot;scholarship&quot;:{&quot;token&quot;:&quot;tok&quot;,&quot;percent&quot;:50,&quot;firstName&quot;:&quot;Ada&quot;,&quot;lastName&quot;:&quot;L&quot;,&quot;email&quot;:&quot;ada@example.test&quot;,&quot;dueLabel&quot;:&quot;$50.00&quot;}}\"></div><div class=\"flex items-start gap-3 rounded-ds-card border px-4 py-3 border-pathway-amber/30 bg-pathway-amber-bg mt-8\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-shield-check mt-0.5 shrink-0 text-gold-ink\" aria-hidden=\"true\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"></path><path d=\"m9 12 2 2 4-4\"></path></svg><div class=\"text-sm leading-relaxed\"><p class=\"font-semibold text-ink\">100% money-back guarantee</p><p class=\"text-content-secondary\">Ask for a full refund within 45 days of payment. No questions asked. <a href=\"https://www.test/terms#guarantee\" class=\"font-semibold underline underline-offset-2 hover:no-underline text-primary-deep\">How it works</a></p></div></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "findOfferByToken(\"db\", \"tok\")",
+   "prices.retrieve(\"price_1\")",
+   "getRegistrationPrefill()",
+   "listEventAddons(\"db\", \"nv\")",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "individual, offer for another event": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": "← Individual Registration"
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-white border-b border-line",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto px-4 py-4",
+         "children": {
+          "type": "StepBar",
+          "props": {
+           "steps": [
+            "Registration Type",
+            "Your Details",
+            "Confirmation"
+           ],
+           "current": 2
+          }
+         }
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "IndividualRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "addons": [
+           {
+            "id": "addon-1"
+           }
+          ],
+          "gradeMin": 9,
+          "gradeMax": 12,
+          "scholarship": null
+         }
+        },
+        {
+         "type": "MoneyBackGuarantee",
+         "props": {
+          "className": "mt-8"
+         }
+        },
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Individual Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"bg-white border-b border-line\"><div class=\"max-w-2xl mx-auto px-4 py-4\"><nav aria-label=\"Registration progress\"><ol class=\"flex flex-wrap items-center gap-x-1 gap-y-2 text-xs sm:gap-x-2 sm:text-sm\"><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-enviro-green-text text-white\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check h-3 w-3\" aria-label=\"Done:\"><path d=\"M20 6 9 17l-5-5\"></path></svg></span><span class=\"text-content-muted\">Registration Type</span></li><li aria-current=\"step\" class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-primary-deep text-white\">2</span><span class=\"font-medium text-ink\">Your Details</span></li><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-line-light text-content-muted\">3</span><span class=\"text-content-muted\">Confirmation</span></li></ol></nav></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"individual\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;addons&quot;:[{&quot;id&quot;:&quot;addon-1&quot;}],&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12,&quot;scholarship&quot;:null}\"></div><div class=\"flex items-start gap-3 rounded-ds-card border px-4 py-3 border-pathway-amber/30 bg-pathway-amber-bg mt-8\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-shield-check mt-0.5 shrink-0 text-gold-ink\" aria-hidden=\"true\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"></path><path d=\"m9 12 2 2 4-4\"></path></svg><div class=\"text-sm leading-relaxed\"><p class=\"font-semibold text-ink\">100% money-back guarantee</p><p class=\"text-content-secondary\">Ask for a full refund within 45 days of payment. No questions asked. <a href=\"https://www.test/terms#guarantee\" class=\"font-semibold underline underline-offset-2 hover:no-underline text-primary-deep\">How it works</a></p></div></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "findOfferByToken(\"db\", \"tok\")",
+   "getRegistrationPrefill()",
+   "listEventAddons(\"db\", \"nv\")",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "individual, free": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": "← Individual Registration"
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-white border-b border-line",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto px-4 py-4",
+         "children": {
+          "type": "StepBar",
+          "props": {
+           "steps": [
+            "Registration Type",
+            "Your Details",
+            "Confirmation"
+           ],
+           "current": 2
+          }
+         }
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "IndividualRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "addons": [
+           {
+            "id": "addon-1"
+           }
+          ],
+          "gradeMin": 9,
+          "gradeMax": 12,
+          "scholarship": null
+         }
+        },
+        false,
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Individual Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"bg-white border-b border-line\"><div class=\"max-w-2xl mx-auto px-4 py-4\"><nav aria-label=\"Registration progress\"><ol class=\"flex flex-wrap items-center gap-x-1 gap-y-2 text-xs sm:gap-x-2 sm:text-sm\"><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-enviro-green-text text-white\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check h-3 w-3\" aria-label=\"Done:\"><path d=\"M20 6 9 17l-5-5\"></path></svg></span><span class=\"text-content-muted\">Registration Type</span></li><li aria-current=\"step\" class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-primary-deep text-white\">2</span><span class=\"font-medium text-ink\">Your Details</span></li><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-line-light text-content-muted\">3</span><span class=\"text-content-muted\">Confirmation</span></li></ol></nav></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"individual\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;addons&quot;:[{&quot;id&quot;:&quot;addon-1&quot;}],&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12,&quot;scholarship&quot;:null}\"></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "listEventAddons(\"db\", \"nv\")",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "individual, campaign": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Tree Campaign",
+        "competition_id": "nv",
+        "participation_type": "campaign"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": "← Individual Registration"
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Tree Campaign"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-white border-b border-line",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-2xl mx-auto px-4 py-4",
+         "children": {
+          "type": "StepBar",
+          "props": {
+           "steps": [
+            "Registration Type",
+            "Your Details",
+            "Confirmation"
+           ],
+           "current": 2
+          }
+         }
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-2xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "IndividualRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Tree Campaign",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "addons": [
+           {
+            "id": "addon-1"
+           }
+          ],
+          "gradeMin": 9,
+          "gradeMax": 12,
+          "scholarship": null
+         }
+        },
+        {
+         "type": "MoneyBackGuarantee",
+         "props": {
+          "className": "mt-8"
+         }
+        },
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-2xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Individual Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Tree Campaign</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"bg-white border-b border-line\"><div class=\"max-w-2xl mx-auto px-4 py-4\"><nav aria-label=\"Registration progress\"><ol class=\"flex flex-wrap items-center gap-x-1 gap-y-2 text-xs sm:gap-x-2 sm:text-sm\"><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-enviro-green-text text-white\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check h-3 w-3\" aria-label=\"Done:\"><path d=\"M20 6 9 17l-5-5\"></path></svg></span><span class=\"text-content-muted\">Registration Type</span></li><li aria-current=\"step\" class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-primary-deep text-white\">2</span><span class=\"font-medium text-ink\">Your Details</span></li><li class=\"flex items-center gap-1 sm:gap-2\"><span class=\"text-content-faint\" aria-hidden=\"true\">›</span><span class=\"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-6 sm:w-6 bg-line-light text-content-muted\">3</span><span class=\"text-content-muted\">Confirmation</span></li></ol></nav></div></div><div class=\"max-w-2xl mx-auto px-4 py-10\"><div data-form=\"individual\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Tree Campaign&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;addons&quot;:[{&quot;id&quot;:&quot;addon-1&quot;}],&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12,&quot;scholarship&quot;:null}\"></div><div class=\"flex items-start gap-3 rounded-ds-card border px-4 py-3 border-pathway-amber/30 bg-pathway-amber-bg mt-8\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-shield-check mt-0.5 shrink-0 text-gold-ink\" aria-hidden=\"true\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"></path><path d=\"m9 12 2 2 4-4\"></path></svg><div class=\"text-sm leading-relaxed\"><p class=\"font-semibold text-ink\">100% money-back guarantee</p><p class=\"text-content-secondary\">Ask for a full refund within 45 days of payment. No questions asked. <a href=\"https://www.test/terms#guarantee\" class=\"font-semibold underline underline-offset-2 hover:no-underline text-primary-deep\">How it works</a></p></div></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "listEventAddons(\"db\", \"nv\")",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "individual, no event": {
+  "threw": "NEXT_NOT_FOUND",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "individual, event read fails": {
+  "threw": "NEXT_NOT_FOUND",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "group, priced": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-3xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": [
+             "← ",
+             "Group Registration"
+            ]
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-3xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "GroupRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "isCampaign": false,
+          "isFree": false,
+          "gradeMin": 9,
+          "gradeMax": 12
+         }
+        },
+        {
+         "type": "MoneyBackGuarantee",
+         "props": {
+          "className": "mt-8"
+         }
+        },
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-3xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Group Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"max-w-3xl mx-auto px-4 py-10\"><div data-form=\"group\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;isCampaign&quot;:false,&quot;isFree&quot;:false,&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12}\"></div><div class=\"flex items-start gap-3 rounded-ds-card border px-4 py-3 border-pathway-amber/30 bg-pathway-amber-bg mt-8\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-shield-check mt-0.5 shrink-0 text-gold-ink\" aria-hidden=\"true\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"></path><path d=\"m9 12 2 2 4-4\"></path></svg><div class=\"text-sm leading-relaxed\"><p class=\"font-semibold text-ink\">100% money-back guarantee</p><p class=\"text-content-secondary\">Ask for a full refund within 45 days of payment. No questions asked. <a href=\"https://www.test/terms#guarantee\" class=\"font-semibold underline underline-offset-2 hover:no-underline text-primary-deep\">How it works</a></p></div></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "group, free": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-3xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": [
+             "← ",
+             "Group Registration"
+            ]
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-3xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "GroupRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "isCampaign": false,
+          "isFree": true,
+          "gradeMin": 9,
+          "gradeMax": 12
+         }
+        },
+        false,
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-3xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Group Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"max-w-3xl mx-auto px-4 py-10\"><div data-form=\"group\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;isCampaign&quot;:false,&quot;isFree&quot;:true,&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12}\"></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "group, price to be confirmed": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-3xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": [
+             "← ",
+             "Group Registration"
+            ]
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Nevada Design Challenge"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-3xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "GroupRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Nevada Design Challenge",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "isCampaign": false,
+          "isFree": true,
+          "gradeMin": 9,
+          "gradeMax": 12
+         }
+        },
+        false,
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-3xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Group Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Nevada Design Challenge</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"max-w-3xl mx-auto px-4 py-10\"><div data-form=\"group\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Nevada Design Challenge&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;isCampaign&quot;:false,&quot;isFree&quot;:true,&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12}\"></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "group, campaign": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_started",
+        "competition_name": "Tree Campaign",
+        "competition_id": "nv",
+        "participation_type": "campaign"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "bg-brand-blue-dark text-white py-10 px-4",
+       "children": {
+        "type": "div",
+        "props": {
+         "className": "max-w-3xl mx-auto",
+         "children": [
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm mb-4",
+            "children": [
+             "← ",
+             "Campaign Registration"
+            ]
+           }
+          },
+          {
+           "type": "h1",
+           "props": {
+            "className": "text-2xl sm:text-3xl font-bold mb-2",
+            "children": "Tree Campaign"
+           }
+          },
+          {
+           "type": "p",
+           "props": {
+            "className": "text-blue-300 text-sm",
+            "children": [
+             "📅 ",
+             "November 6–7, 2026",
+             " · 📍 Reno, NV"
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-3xl mx-auto px-4 py-10",
+       "children": [
+        {
+         "type": "GroupRegistrationForm",
+         "props": {
+          "eventSlug": "nv",
+          "eventTitle": "Tree Campaign",
+          "prefill": {
+           "firstName": "Pre"
+          },
+          "isCampaign": true,
+          "isFree": false,
+          "gradeMin": 9,
+          "gradeMax": 12
+         }
+        },
+        false,
+        {
+         "type": "MissionFundingNote",
+         "props": {
+          "className": "mt-10"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface\"><div class=\"bg-brand-blue-dark text-white py-10 px-4\"><div class=\"max-w-3xl mx-auto\"><p class=\"text-blue-300 text-sm mb-4\">← Campaign Registration</p><h1 class=\"text-2xl sm:text-3xl font-bold mb-2\">Tree Campaign</h1><p class=\"text-blue-300 text-sm\">📅 November 6–7, 2026 · 📍 Reno, NV</p></div></div><div class=\"max-w-3xl mx-auto px-4 py-10\"><div data-form=\"group\" data-props=\"{&quot;eventSlug&quot;:&quot;nv&quot;,&quot;eventTitle&quot;:&quot;Tree Campaign&quot;,&quot;prefill&quot;:{&quot;firstName&quot;:&quot;Pre&quot;},&quot;isCampaign&quot;:true,&quot;isFree&quot;:false,&quot;gradeMin&quot;:9,&quot;gradeMax&quot;:12}\"></div><aside class=\"rounded-panel border border-line bg-surface p-6 sm:p-7 mt-10\" aria-label=\"Where this money goes\"><div class=\"flex items-start gap-4\"><span class=\"hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z\"></path></svg></span><div><h3 class=\"font-heading text-base font-bold text-ink\">Where this money goes</h3><p class=\"mt-2 text-sm leading-relaxed text-content-secondary\">Stellr Education is a registered 501(c)(3) nonprofit (EIN 86-2292698). Participation fees and membership subscriptions cover the direct cost of running our programs — venues, materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships that let students take part regardless of what their family can pay. No fee is ever a barrier: <a class=\"font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/scholarship\">apply for a scholarship</a>.</p><a class=\"mt-3 inline-block text-sm font-medium text-primary-deep underline underline-offset-2 hover:no-underline\" href=\"/impact#funding\">How we’re funded</a></div></div></aside></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")",
+   "getRegistrationPrefill()",
+   "getEventPrice(\"price_1\")"
+  ]
+ },
+ "group, no event": {
+  "threw": "NEXT_NOT_FOUND",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "group, event read fails": {
+  "threw": "NEXT_NOT_FOUND",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, individual": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering. A confirmation email will be sent once your payment is processed."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        false,
+        null,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    "Payment processed — covered by our 100% money-back guarantee: email ",
+                    "hello@stellreducation.org",
+                    " within",
+                    " ",
+                    45,
+                    " days for a full refund."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    {
+                     "type": "span",
+                     "props": {
+                      "className": "font-medium text-brand-blue-dark",
+                      "children": "Check your email to sign your agreement"
+                     }
+                    },
+                    " ",
+                    "— a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn't secured until it's signed."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Confirmation email with your Membership ID sent to your inbox"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Event details and schedule sent closer to the date"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering. A confirmation email will be sent once your payment is processed.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span><span>Payment processed — covered by our 100% money-back guarantee: email hello@stellreducation.org within 45 days for a full refund.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span><span><span class=\"font-medium text-brand-blue-dark\">Check your email to sign your agreement</span> — a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn&#x27;t secured until it&#x27;s signed.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Confirmation email with your Membership ID sent to your inbox</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Event details and schedule sent closer to the date</li></ul></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, no reference": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering. A confirmation email will be sent once your payment is processed."
+         }
+        },
+        "$undefined",
+        false,
+        null,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    "Payment processed — covered by our 100% money-back guarantee: email ",
+                    "hello@stellreducation.org",
+                    " within",
+                    " ",
+                    45,
+                    " days for a full refund."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    {
+                     "type": "span",
+                     "props": {
+                      "className": "font-medium text-brand-blue-dark",
+                      "children": "Check your email to sign your agreement"
+                     }
+                    },
+                    " ",
+                    "— a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn't secured until it's signed."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Confirmation email with your Membership ID sent to your inbox"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Event details and schedule sent closer to the date"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering. A confirmation email will be sent once your payment is processed.</p><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span><span>Payment processed — covered by our 100% money-back guarantee: email hello@stellreducation.org within 45 days for a full refund.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span><span><span class=\"font-medium text-brand-blue-dark\">Check your email to sign your agreement</span> — a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn&#x27;t secured until it&#x27;s signed.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Confirmation email with your Membership ID sent to your inbox</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Event details and schedule sent closer to the date</li></ul></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, group": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Group Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering your group. A confirmation email has been sent to you."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        false,
+        null,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 "Confirmation email sent to the teacher / coordinator"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Invoice issued within 1–2 business days (if paying by invoice)"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Registration confirmed upon payment receipt"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "mb-4",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/account?tab=teams",
+             "className": "btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2",
+             "children": [
+              {
+               "type": "ExternalLink",
+               "props": {
+                "size": 16
+               }
+              },
+              "Manage Your Team →"
+             ]
+            }
+           },
+           {
+            "type": "p",
+            "props": {
+             "className": "text-xs text-content-faint mt-2",
+             "children": "Open your team in the member portal to add participants, sync your Google Sheet, and track paperwork — all participant details stay private to you."
+            }
+           }
+          ]
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Group Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering your group. A confirmation email has been sent to you.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span>Confirmation email sent to the teacher / coordinator</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Invoice issued within 1–2 business days (if paying by invoice)</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Registration confirmed upon payment receipt</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record</li></ul></div><div class=\"mb-4\"><a class=\"btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2\" href=\"/account?tab=teams\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-external-link\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"></path><path d=\"M10 14 21 3\"></path><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"></path></svg>Manage Your Team →</a><p class=\"text-xs text-content-faint mt-2\">Open your team in the member portal to add participants, sync your Google Sheet, and track paperwork — all participant details stay private to you.</p></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, group with people still to add": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Group Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering your group. A confirmation email has been sent to you."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 text-left",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-amber-900 mb-1",
+             "children": [
+              3,
+              " more participant",
+              "s",
+              " still to add"
+             ]
+            }
+           },
+           {
+            "type": "p",
+            "props": {
+             "className": "text-sm text-amber-800 mb-3",
+             "children": [
+              "You added everyone you had details for. Provide the remaining ",
+              "3 people",
+              " via your completion link, pre-filled Google Sheet, or Member Portal — whichever is easier."
+             ]
+            }
+           },
+           {
+            "type": "div",
+            "props": {
+             "className": "flex flex-col sm:flex-row gap-2",
+             "children": [
+              {
+               "type": "a",
+               "props": {
+                "href": "https://docs.test/sheet",
+                "target": "_blank",
+                "rel": "noopener noreferrer",
+                "className": "btn-primary inline-flex items-center justify-center gap-2 text-sm",
+                "children": [
+                 "Open Google Sheet ",
+                 {
+                  "type": "ExternalLink",
+                  "props": {
+                   "size": 14
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "JoinLinkButton",
+               "props": {
+                "registrationId": "reg-1"
+               }
+              },
+              {
+               "type": "LinkComponent",
+               "props": {
+                "href": "/account?tab=teams",
+                "className": "btn-outline inline-flex items-center justify-center gap-2 text-sm",
+                "children": [
+                 "Member Portal ",
+                 {
+                  "type": "ExternalLink",
+                  "props": {
+                   "size": 14
+                  }
+                 }
+                ]
+               }
+              }
+             ]
+            }
+           },
+           {
+            "type": "p",
+            "props": {
+             "className": "text-xs text-amber-700 mt-2",
+             "children": "These links have also been emailed to you."
+            }
+           }
+          ]
+         }
+        },
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 "Confirmation email sent to the teacher / coordinator"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Complete the team member spreadsheet and return it to Stellr"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Registration confirmed upon payment receipt"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Group Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering your group. A confirmation email has been sent to you.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 text-left\"><p class=\"font-semibold text-amber-900 mb-1\">3 more participants still to add</p><p class=\"text-sm text-amber-800 mb-3\">You added everyone you had details for. Provide the remaining 3 people via your completion link, pre-filled Google Sheet, or Member Portal — whichever is easier.</p><div class=\"flex flex-col sm:flex-row gap-2\"><a href=\"https://docs.test/sheet\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"btn-primary inline-flex items-center justify-center gap-2 text-sm\">Open Google Sheet <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-external-link\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"></path><path d=\"M10 14 21 3\"></path><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"></path></svg></a><a class=\"btn-outline inline-flex items-center justify-center gap-2 text-sm\" href=\"/account?tab=teams\">Member Portal <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-external-link\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"></path><path d=\"M10 14 21 3\"></path><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"></path></svg></a></div><p class=\"text-xs text-amber-700 mt-2\">These links have also been emailed to you.</p></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span>Confirmation email sent to the teacher / coordinator</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Complete the team member spreadsheet and return it to Stellr</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Registration confirmed upon payment receipt</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record</li></ul></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, group with a sheet": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "event",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Group Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering your group. A confirmation email has been sent to you."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 text-left",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark mb-1",
+             "children": "Your Team Member Spreadsheet"
+            }
+           },
+           {
+            "type": "p",
+            "props": {
+             "className": "text-sm text-content-body mb-3",
+             "children": "A pre-formatted Google Sheet has been shared with your email. Fill in your team member details and return it to Stellr when complete."
+            }
+           },
+           {
+            "type": "a",
+            "props": {
+             "href": "https://docs.test/sheet",
+             "target": "_blank",
+             "rel": "noopener noreferrer",
+             "className": "btn-primary inline-flex items-center gap-2 text-sm",
+             "children": [
+              "Open Google Sheet",
+              {
+               "type": "ExternalLink",
+               "props": {
+                "size": 14
+               }
+              }
+             ]
+            }
+           },
+           {
+            "type": "p",
+            "props": {
+             "className": "text-xs text-content-faint mt-2",
+             "children": "A link to this sheet has also been sent to your email."
+            }
+           }
+          ]
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 "Confirmation email sent to the teacher / coordinator"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Complete the team member spreadsheet and return it to Stellr"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Registration confirmed upon payment receipt"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Group Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering your group. A confirmation email has been sent to you.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 text-left\"><p class=\"font-semibold text-brand-blue-dark mb-1\">Your Team Member Spreadsheet</p><p class=\"text-sm text-content-body mb-3\">A pre-formatted Google Sheet has been shared with your email. Fill in your team member details and return it to Stellr when complete.</p><a href=\"https://docs.test/sheet\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"btn-primary inline-flex items-center gap-2 text-sm\">Open Google Sheet<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-external-link\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"></path><path d=\"M10 14 21 3\"></path><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"></path></svg></a><p class=\"text-xs text-content-faint mt-2\">A link to this sheet has also been sent to your email.</p></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span>Confirmation email sent to the teacher / coordinator</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Complete the team member spreadsheet and return it to Stellr</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Registration confirmed upon payment receipt</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record</li></ul></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, campaign": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "Nevada Design Challenge",
+        "competition_id": "nv",
+        "participation_type": "campaign",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Campaign Registration Confirmed!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Your group is registered — Campaigns are free. A confirmation email has been sent to you."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        false,
+        null,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 "Your registration is confirmed — Campaigns are free"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Your Campaign material is available now at the Stellr Portal"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Agreements to sign have been emailed for every student registered in this Campaign — and your teacher agreement has just been issued"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "mb-4",
+          "children": [
+           {
+            "type": "a",
+            "props": {
+             "href": "https://app.test/events",
+             "className": "btn-primary w-full sm:w-auto inline-flex items-center justify-center gap-2",
+             "children": [
+              {
+               "type": "ExternalLink",
+               "props": {
+                "size": 16
+               }
+              },
+              "Access Campaign →"
+             ]
+            }
+           },
+           {
+            "type": "p",
+            "props": {
+             "className": "text-xs text-content-faint mt-2",
+             "children": "Open your Campaign in the Stellr Portal to access material and manage your team."
+            }
+           }
+          ]
+         }
+        },
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Campaign"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse Events & Campaigns"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Campaign Registration Confirmed!</h1><p class=\"text-content-body mb-6\">Your group is registered — Campaigns are free. A confirmation email has been sent to you.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span>Your registration is confirmed — Campaigns are free</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Your Campaign material is available now at the Stellr Portal</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Agreements to sign have been emailed for every student registered in this Campaign — and your teacher agreement has just been issued</li></ul></div><div class=\"mb-4\"><a href=\"https://app.test/events\" class=\"btn-primary w-full sm:w-auto inline-flex items-center justify-center gap-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-external-link\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"></path><path d=\"M10 14 21 3\"></path><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"></path></svg>Access Campaign →</a><p class=\"text-xs text-content-faint mt-2\">Open your Campaign in the Stellr Portal to access material and manage your team.</p></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Campaign</a><a class=\"btn-primary\" href=\"/events\">Browse Events &amp; Campaigns</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, no event": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "$undefined",
+        "competition_id": "nv",
+        "participation_type": "event",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering. A confirmation email will be sent once your payment is processed."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        false,
+        null,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    "Payment processed — covered by our 100% money-back guarantee: email ",
+                    "hello@stellreducation.org",
+                    " within",
+                    " ",
+                    45,
+                    " days for a full refund."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    {
+                     "type": "span",
+                     "props": {
+                      "className": "font-medium text-brand-blue-dark",
+                      "children": "Check your email to sign your agreement"
+                     }
+                    },
+                    " ",
+                    "— a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn't secured until it's signed."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Confirmation email with your Membership ID sent to your inbox"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Event details and schedule sent closer to the date"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering. A confirmation email will be sent once your payment is processed.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span><span>Payment processed — covered by our 100% money-back guarantee: email hello@stellreducation.org within 45 days for a full refund.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span><span><span class=\"font-medium text-brand-blue-dark\">Check your email to sign your agreement</span> — a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn&#x27;t secured until it&#x27;s signed.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Confirmation email with your Membership ID sent to your inbox</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Event details and schedule sent closer to the date</li></ul></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "confirmation, event read fails": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "bg-surface flex items-start justify-center px-4 py-10 sm:py-16",
+    "children": [
+     {
+      "type": "TrackEvent",
+      "props": {
+       "event": {
+        "event": "registration_submitted",
+        "competition_name": "$undefined",
+        "competition_id": "nv",
+        "participation_type": "event",
+        "registration_ref": "reg-1"
+       }
+      }
+     },
+     {
+      "type": "div",
+      "props": {
+       "className": "max-w-lg w-full text-center",
+       "children": [
+        {
+         "type": "div",
+         "props": {
+          "className": "flex justify-center mb-6",
+          "children": {
+           "type": "CircleCheckBig",
+           "props": {
+            "size": 64,
+            "className": "text-green-500"
+           }
+          }
+         }
+        },
+        {
+         "type": "h1",
+         "props": {
+          "className": "text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3",
+          "children": "Registration Submitted!"
+         }
+        },
+        {
+         "type": "p",
+         "props": {
+          "className": "text-content-body mb-6",
+          "children": "Thank you for registering. A confirmation email will be sent once your payment is processed."
+         }
+        },
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body",
+          "children": [
+           "Reference ID: ",
+           {
+            "type": "span",
+            "props": {
+             "className": "font-mono font-medium",
+             "children": "reg-1"
+            }
+           }
+          ]
+         }
+        },
+        false,
+        null,
+        {
+         "type": "div",
+         "props": {
+          "className": "bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8",
+          "children": [
+           {
+            "type": "p",
+            "props": {
+             "className": "font-semibold text-brand-blue-dark",
+             "children": "What happens next?"
+            }
+           },
+           {
+            "type": "ul",
+            "props": {
+             "className": "space-y-2 text-sm text-content-body",
+             "children": [
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-green-500 mt-0.5",
+                   "children": "✓"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    "Payment processed — covered by our 100% money-back guarantee: email ",
+                    "hello@stellreducation.org",
+                    " within",
+                    " ",
+                    45,
+                    " days for a full refund."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 {
+                  "type": "span",
+                  "props": {
+                   "children": [
+                    {
+                     "type": "span",
+                     "props": {
+                      "className": "font-medium text-brand-blue-dark",
+                      "children": "Check your email to sign your agreement"
+                     }
+                    },
+                    " ",
+                    "— a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn't secured until it's signed."
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Confirmation email with your Membership ID sent to your inbox"
+                ]
+               }
+              },
+              {
+               "type": "li",
+               "props": {
+                "className": "flex items-start gap-2",
+                "children": [
+                 {
+                  "type": "span",
+                  "props": {
+                   "className": "text-brand-blue mt-0.5",
+                   "children": "→"
+                  }
+                 },
+                 "Event details and schedule sent closer to the date"
+                ]
+               }
+              }
+             ]
+            }
+           }
+          ]
+         }
+        },
+        false,
+        false,
+        {
+         "type": "div",
+         "props": {
+          "className": "flex flex-col sm:flex-row gap-3 justify-center",
+          "children": [
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events/nv",
+             "className": "btn-outline",
+             "children": "Back to Event"
+            }
+           },
+           {
+            "type": "LinkComponent",
+            "props": {
+             "href": "/events",
+             "className": "btn-primary",
+             "children": "Browse All Events"
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "html": "<div class=\"bg-surface flex items-start justify-center px-4 py-10 sm:py-16\"><div class=\"max-w-lg w-full text-center\"><div class=\"flex justify-center mb-6\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check-big lucide-check-circle text-green-500\" aria-hidden=\"true\"><path d=\"M21.801 10A10 10 0 1 1 17 3.335\"></path><path d=\"m9 11 3 3L22 4\"></path></svg></div><h1 class=\"text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3\">Registration Submitted!</h1><p class=\"text-content-body mb-6\">Thank you for registering. A confirmation email will be sent once your payment is processed.</p><div class=\"bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body\">Reference ID: <span class=\"font-mono font-medium\">reg-1</span></div><div class=\"bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8\"><p class=\"font-semibold text-brand-blue-dark\">What happens next?</p><ul class=\"space-y-2 text-sm text-content-body\"><li class=\"flex items-start gap-2\"><span class=\"text-green-500 mt-0.5\">✓</span><span>Payment processed — covered by our 100% money-back guarantee: email hello@stellreducation.org within 45 days for a full refund.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span><span><span class=\"font-medium text-brand-blue-dark\">Check your email to sign your agreement</span> — a parental consent form (sent to your parent/guardian first for under-18s) or your participation agreement. It comes from Stellr Education or from DocuSign. Your place isn&#x27;t secured until it&#x27;s signed.</span></li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Confirmation email with your Membership ID sent to your inbox</li><li class=\"flex items-start gap-2\"><span class=\"text-brand-blue mt-0.5\">→</span>Event details and schedule sent closer to the date</li></ul></div><div class=\"flex flex-col sm:flex-row gap-3 justify-center\"><a class=\"btn-outline\" href=\"/events/nv\">Back to Event</a><a class=\"btn-primary\" href=\"/events\">Browse All Events</a></div></div></div>",
+  "reads": [
+   "getEventBySlug(\"nv\")"
+  ]
+ },
+ "check-in banner, nothing open": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "flex items-start justify-center bg-surface px-4 py-8",
+    "children": {
+     "type": "div",
+     "props": {
+      "className": "w-full max-w-md space-y-3 rounded-ds-card border border-line bg-white p-6 text-center shadow-xs",
+      "children": [
+       {
+        "type": "Eyebrow",
+        "props": {
+         "children": "Event check-in"
+        }
+       },
+       {
+        "type": "h1",
+        "props": {
+         "className": "font-display text-xl font-bold text-ink",
+         "children": "Check-in isn’t open yet"
+        }
+       },
+       {
+        "type": "p",
+        "props": {
+         "className": "text-content-body",
+         "children": "Head to the registration desk and we’ll check you in, or scan the code again in a few minutes."
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "html": "<div class=\"flex items-start justify-center bg-surface px-4 py-8\"><div class=\"w-full max-w-md space-y-3 rounded-ds-card border border-line bg-white p-6 text-center shadow-xs\"><p class=\"font-subheading font-semibold uppercase tracking-[0.14em] text-xs text-primary\">Event check-in</p><h1 class=\"font-display text-xl font-bold text-ink\">Check-in isn’t open yet</h1><p class=\"text-content-body\">Head to the registration desk and we’ll check you in, or scan the code again in a few minutes.</p></div></div>",
+  "reads": [
+   "loadOpenCheckIns(\"db\")"
+  ]
+ },
+ "check-in banner, one open": {
+  "threw": "NEXT_REDIRECT /check-in/nv?t=tok%20en",
+  "reads": [
+   "loadOpenCheckIns(\"db\")"
+  ]
+ },
+ "check-in banner, open with no token": {
+  "tree": {
+   "type": "div",
+   "props": {
+    "className": "flex items-start justify-center bg-surface px-4 py-8",
+    "children": {
+     "type": "div",
+     "props": {
+      "className": "w-full max-w-md space-y-3 rounded-ds-card border border-line bg-white p-6 text-center shadow-xs",
+      "children": [
+       {
+        "type": "Eyebrow",
+        "props": {
+         "children": "Event check-in"
+        }
+       },
+       {
+        "type": "h1",
+        "props": {
+         "className": "font-display text-xl font-bold text-ink",
+         "children": "Check-in isn’t open yet"
+        }
+       },
+       {
+        "type": "p",
+        "props": {
+         "className": "text-content-body",
+         "children": "Head to the registration desk and we’ll check you in, or scan the code again in a few minutes."
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "html": "<div class=\"flex items-start justify-center bg-surface px-4 py-8\"><div class=\"w-full max-w-md space-y-3 rounded-ds-card border border-line bg-white p-6 text-center shadow-xs\"><p class=\"font-subheading font-semibold uppercase tracking-[0.14em] text-xs text-primary\">Event check-in</p><h1 class=\"font-display text-xl font-bold text-ink\">Check-in isn’t open yet</h1><p class=\"text-content-body\">Head to the registration desk and we’ll check you in, or scan the code again in a few minutes.</p></div></div>",
+  "reads": [
+   "loadOpenCheckIns(\"db\")"
+  ]
+ }
+}

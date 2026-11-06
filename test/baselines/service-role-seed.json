@@ -39,8 +39,6 @@
     "app/(flow)/check-in/[slug]/code/page.tsx",
     "app/(flow)/check-in/[slug]/page.tsx",
     "app/(flow)/check-in/page.tsx",
-    "app/(flow)/register/[slug]/individual/page.tsx",
-    "app/(flow)/register/[slug]/join/[token]/page.tsx",
     "app/(flow)/register/[slug]/pay-seat/[token]/page.tsx",
     "app/(flow)/register/[slug]/pay/[token]/page.tsx",
     "app/(flow)/survey/[token]/page.tsx",

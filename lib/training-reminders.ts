@@ -4,6 +4,7 @@ import { getEventsByIds } from '@/lib/sanity'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
 import { audienceIncludes, eventVolunteers } from '@/lib/training-audience'
+import { otherTenantEvents, stellrRows } from '@/lib/tenancy/stellr-scope'
 
 // Training reminder + escalation engine (FR-COM-10), run daily by the cron.
 // Processes BOTH assignment sources:
@@ -185,9 +186,9 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
   let escalated = 0
 
   /* ── Pass 1: legacy event assignments (training_assignments) ── */
-  const { data: legacy } = await db
+  const { data: legacy } = await stellrRows(db
     .from('training_assignments')
-    .select('id, module_id, event_ref, event_role, is_mandatory, due_at')
+    .select('id, module_id, event_ref, event_role, is_mandatory, due_at'))
     .not('due_at', 'is', null)
 
   if (legacy?.length) {
@@ -207,7 +208,7 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
       const itemIds = items.get(a.module_id as string) ?? []
       if (itemIds.length === 0) continue
 
-      const { data: regs } = await db.from('registrations').select('id, teacher_email, teacher_first_name').eq('event_slug', slug)
+      const { data: regs } = await stellrRows(db.from('registrations').select('id, teacher_email, teacher_first_name')).eq('event_slug', slug)
       const regById = new Map((regs ?? []).map((r) => [r.id as string, r]))
       const regIds = [...regById.keys()]
       if (regIds.length === 0) continue
@@ -262,6 +263,14 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
     .not('due_at', 'is', null)
 
   if (rich?.length) {
+    // These assignments have no tenant of their own, so the event they point at
+    // decides. An unreadable mirror fails the run, which cron_runs records, rather
+    // than email another tenant's people: the next daily run catches up.
+    //
+    // A container is matched by its event as well as its own stamp, because
+    // container-sync creates one with no sanity_event_id and the derivation trigger
+    // then stamps it Stellr's, whichever event it serves.
+    const others = await otherTenantEvents(db)
     const settings = await settingsByModule(db, rich.map((a) => a.module_id as string))
     const items = await publishedItems(db, rich.map((a) => a.module_id as string))
 
@@ -283,9 +292,10 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
 
       if (isEvent) {
         const slug = a.object_ref as string
+        if (others.slugs.has(slug)) continue
         // Students (registrations) when the audience includes participants.
         if (audienceIncludes(a.audience, ['participant'])) {
-          const { data: regs } = await db.from('registrations').select('id, teacher_email, teacher_first_name').eq('event_slug', slug)
+          const { data: regs } = await stellrRows(db.from('registrations').select('id, teacher_email, teacher_first_name')).eq('event_slug', slug)
           const regById = new Map((regs ?? []).map((r) => [r.id as string, r]))
           const regIds = [...regById.keys()]
           const { data: parts } = regIds.length > 0
@@ -314,7 +324,7 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
         // them. No teacher or student manager to escalate to.
         if (audienceIncludes(a.audience, ['volunteer'])) {
           const have = new Set(people.map((p) => p.memberId))
-          const vols = (await eventVolunteers(db, slug)).filter((v) => !have.has(v.memberId))
+          const vols = (await eventVolunteers(db, slug, { stellrOnly: true })).filter((v) => !have.has(v.memberId))
           if (vols.length > 0) {
             const tiers = await memberTierIds(db, vols.map((v) => v.memberId))
             for (const v of vols) {
@@ -332,11 +342,14 @@ export async function runTrainingReminders(): Promise<ReminderResult> {
         // cohort / workshop / space — members + the cohort mentor as supervisor.
         const cohortId = a.object_ref as string
         const [{ data: cohort }, { data: members }] = await Promise.all([
-          db.from('mentoring_cohorts').select('mentor_member_id').eq('id', cohortId).maybeSingle(),
+          stellrRows(db.from('mentoring_cohorts').select('mentor_member_id, campaign_ref')).eq('id', cohortId).maybeSingle(),
           db.from('cohort_members').select('member_id, members(first_name, last_name)').eq('cohort_id', cohortId),
         ])
         if (!members?.length) continue
-        const mentorId = (cohort?.mentor_member_id as string | null) ?? null
+        // Every roster row has a cohort (foreign key), so no row here means the cohort
+        // is another tenant's or its read failed. Either way, nobody is contacted.
+        if (!cohort || others.slugs.has(cohort.campaign_ref as string)) continue
+        const mentorId = (cohort.mentor_member_id as string | null) ?? null
         const tiers = await memberTierIds(db, members.map((m) => m.member_id as string))
         people = members.map((cm) => {
           const m = Array.isArray(cm.members) ? cm.members[0] : cm.members

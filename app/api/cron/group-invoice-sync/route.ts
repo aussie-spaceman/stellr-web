@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { syncDueGroupInvoices } from '@/lib/group-billing'
 
@@ -14,7 +15,7 @@ import { syncDueGroupInvoices } from '@/lib/group-billing'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('group-invoice-sync', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -34,4 +35,4 @@ export async function GET(req: NextRequest) {
     await run.finish({})
     return NextResponse.json({ error: detail }, { status: 500 })
   }
-}
+})

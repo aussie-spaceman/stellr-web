@@ -27,6 +27,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import { daysUntil } from '@/lib/event-emails/schedule'
 import { CLEARANCE_PATH } from '@/lib/compliance-links'
+import { stellrRows } from '@/lib/tenancy/stellr-scope'
 import {
   BC_REQUIRED_ROLES,
   deriveCompliance,
@@ -346,13 +347,14 @@ export async function remindUnclearedAdults(
     alreadySent: 0, due: 0, sent: 0, skipped: 0, failed: 0, deferred: 0, errors: [],
   }
 
-  // 1. Live registrations, grouped by event.
+  // 1. Live registrations, grouped by event. Stellr's only: Checkr is Stellr's
+  // process, and participants below are reached through these ids.
   const since = new Date(now.getTime() - REGISTRATION_LOOKBACK_DAYS * 86_400_000).toISOString()
   const bySlug = new Map<string, { title: string | null; ids: string[] }>()
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await db
+    const { data, error } = await stellrRows(db
       .from('registrations')
-      .select('id, event_slug, event_title')
+      .select('id, event_slug, event_title'))
       .neq('status', 'withdrawn')
       .gte('created_at', since)
       .order('id', { ascending: true })

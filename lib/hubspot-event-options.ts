@@ -27,6 +27,7 @@
 // (npm run hubspot:sync-event-options). There is one HubSpot portal and no
 // sandbox, so every caller decides whether to apply; nothing here assumes it.
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { hubspotFetch } from '@/lib/hubspot'
 import {
   GRANT_DEMOGRAPHIC,
@@ -41,6 +42,7 @@ import {
   type EventLike,
 } from '@/lib/hubspot-fields'
 import { getEventsForHubspotSync } from '@/lib/events/repo'
+import { otherTenantEvents, type OtherTenantEvents } from '@/lib/tenancy/stellr-scope'
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -56,6 +58,7 @@ export type SyncObject = 'contacts' | 'deals'
 export const SYNCED_OBJECTS: readonly SyncObject[] = ['contacts', 'deals']
 
 export interface SyncEvent extends EventLike {
+  _id?: string
   slug?: { current?: string } | string | null
   status?: string | null
 }
@@ -371,9 +374,14 @@ export async function syncEventOptions(opts: {
   now?: Date
   /** Injected for tests; otherwise read live from Sanity. */
   events?: SyncEvent[]
-}): Promise<EventOptionsSyncResult> {
+} & (
+  /** The portal is Stellr's: events the mirror gives to another tenant are left out. */
+  | { stellrOnlyDb: SupabaseClient; allTenants?: never }
+  /** Every Sanity event, whoever owns it. Named so that a caller has to mean it. */
+  | { allTenants: true; stellrOnlyDb?: never }
+)): Promise<EventOptionsSyncResult> {
   const now = opts.now ?? new Date()
-  const events = opts.events ?? ((await getEventsForHubspotSync()) as SyncEvent[] | null)
+  const allEvents = opts.events ?? ((await getEventsForHubspotSync()) as SyncEvent[] | null)
 
   const empty = (refused: string): EventOptionsSyncResult => ({
     ok: false,
@@ -386,7 +394,25 @@ export async function syncEventOptions(opts: {
   })
 
   if (!process.env.HUBSPOT_ACCESS_TOKEN) return empty('HUBSPOT_ACCESS_TOKEN not set')
-  if (!events) return empty('Sanity is not configured or the read failed')
+  if (!allEvents) return empty('Sanity is not configured or the read failed')
+
+  let events = allEvents
+  if (opts.stellrOnlyDb) {
+    // A failed read is a refusal, as for Sanity above: tomorrow's run catches up,
+    // and a tenant's event never reaches Stellr's portal on a guess.
+    let others: OtherTenantEvents
+    try {
+      others = await otherTenantEvents(opts.stellrOnlyDb)
+    } catch {
+      return empty('Could not read which tenant owns each event')
+    }
+    // By document id: the publish webhook runs this before the mirror sync, so the
+    // mirror can still hold a renamed event's old slug. The slug is for an event
+    // with no id, which only an injected list has.
+    events = allEvents.filter((event) =>
+      event._id ? !others.sanityIds.has(event._id) : !others.slugs.has(slugOf(event)),
+    )
+  }
 
   const { specs, live, unmapped } = desiredOptions(events, now)
   // An outage or an emptied dataset must not read as "no events" and hide

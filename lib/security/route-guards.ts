@@ -74,6 +74,9 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[];
   // session
   getCurrentMember: { file: 'lib/community.ts', kinds: ['session'] },
   getSignedInMember: { file: 'lib/community.ts', kinds: ['session'] },
+  // Where those two do their work (B8). A route may import from either file.
+  'getCurrentMember@member-session': { file: 'lib/member-session.ts', kinds: ['session'], call: 'getCurrentMember' },
+  'getSignedInMember@member-session': { file: 'lib/member-session.ts', kinds: ['session'], call: 'getSignedInMember' },
   getOnboardedMember: { file: 'lib/onboarded-member.ts', kinds: ['session'] },
   currentStoreMember: { file: 'lib/store/auth.ts', kinds: ['session'] },
   resolveRequestMember: { file: 'lib/impersonation.ts', kinds: ['session'] },

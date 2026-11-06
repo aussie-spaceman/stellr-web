@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { recordCredentialOptOutFromForm, OPT_OUT_ENVELOPE_COLUMNS, type OptOutEnvelope } from '@/lib/docusign-optout'
 import { runEsignMaintenance } from '@/lib/esign/maintenance'
+import { stellrRows } from '@/lib/tenancy/stellr-scope'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/docusign-form-data
 // Vercel cron, daily (see vercel.json).
@@ -21,16 +28,17 @@ const BATCH = 50
 // the rest are read on the next run.
 const READ_BUDGET_MS = 120_000
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('docusign-form-data', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
   const db = supabaseServer()
   const run = await startCronRun(db, 'docusign-form-data')
 
-  const { data, error } = await db
+  // DocuSign is Stellr's account, so only Stellr's agreements (lib/cron-scope.ts).
+  const { data, error } = await stellrRows(db
     .from('agreements')
-    .select(OPT_OUT_ENVELOPE_COLUMNS)
+    .select(OPT_OUT_ENVELOPE_COLUMNS))
     // Every agreement type carries a media opt-out (the minor form three more).
     .in('envelope_type', ['minor', 'adult', 'mentor', 'volunteer'])
     .eq('status', 'completed')
@@ -66,4 +74,4 @@ export async function GET(req: NextRequest) {
   await maintenanceRun.finish(maintenance)
 
   return NextResponse.json({ processed: data?.length ?? 0, results, maintenance })
-}
+})

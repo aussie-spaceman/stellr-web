@@ -3,7 +3,13 @@ import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { grantTierAllocations } from '@/lib/entitlements'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/alumni-upgrades — runs daily (see vercel.json).
 // The Alumni tier "automatically upgrades on July 1st of the School Student's
@@ -12,7 +18,7 @@ import { startCronRun } from '@/lib/cron-runs'
 // existing FREE membership. Paid memberships are left untouched. Idempotent via
 // sent_reminders (kind='alumni').
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('alumni-upgrades', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -120,4 +126,4 @@ export async function GET(req: NextRequest) {
 
   await run.finish({ upgraded })
   return NextResponse.json({ upgraded })
-}
+})

@@ -62,6 +62,14 @@ describe('cron scope', () => {
     for (const job of named) expect(CRON_SCOPES[job].scope, job).toBe('stellr_only')
   })
 
+  it('names the Stellr-only crons whose other members reads stay as wide as today', () => {
+    const named = Object.entries(CRON_SCOPES)
+      .filter(([, v]) => v.identityRead)
+      .map(([job]) => job)
+      .sort()
+    expect(named).toEqual(['membership-expiry', 'weekly-digest'])
+  })
+
   it('keeps retention running for tenants that are not active, and only retention', () => {
     const named = Object.entries(CRON_SCOPES)
       .filter(([, v]) => v.inactiveTenants === 'run')

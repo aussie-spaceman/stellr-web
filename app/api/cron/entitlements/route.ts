@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { runEntitlementsLifecycle } from '@/lib/entitlements'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { sendDailyErrorDigest } from '@/lib/app-errors'
 import { gcRateLimitStore } from '@/lib/rate-limit-store'
+
+// Hobby's ceiling: no lower value is safe to pick without run times to prove it
+// (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
+// whatever limit this route ran under before it declared one.
+export const maxDuration = 300
 
 // GET /api/cron/entitlements — runs daily (see vercel.json).
 // Re-grants per-period tier allowances (e.g. the quarterly free mentoring
@@ -19,7 +25,7 @@ import { gcRateLimitStore } from '@/lib/rate-limit-store'
 //
 // S5 B4: it also clears expired rate limit windows, once RATE_LIMIT_STORE is not
 // memory. In memory mode that step makes no call, and the response is unchanged.
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('entitlements', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
   // deep review INT-9: record the run in cron_runs so a silently-failing
@@ -40,4 +46,4 @@ export async function GET(req: NextRequest) {
     const rateLimitGc = await gcRateLimitStore(db)
     return NextResponse.json({ error: 'lifecycle failed', errorDigest, ...(rateLimitGc ? { rateLimitGc } : {}) }, { status: 500 })
   }
-}
+})

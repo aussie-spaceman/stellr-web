@@ -6,6 +6,7 @@ import { stripeClient } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { getEventBySlug } from '@/lib/sanity'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { auditMutation } from '@/lib/audit/route'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,13 +112,29 @@ export async function POST(req: Request) {
   // abandoned. Cancel those first so a genuine retry isn't locked out — cancelled
   // rows are excluded from both the count below AND the unique index predicate.
   const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  await db
+  const { data: staleRows } = await db
     .from('store_orders')
     .update({ status: 'cancelled' })
     .eq('source_order_id', order.id)
     .eq('channel', 'reship')
     .eq('status', 'pending')
     .lt('created_at', staleBefore)
+    .select('id')
+
+  // Its own event, because the request can still end in a refusal below.
+  const staleIds = ((staleRows ?? []) as { id: string }[]).map((r) => r.id)
+  if (staleIds.length > 0) {
+    await auditMutation(
+      {
+        action: 'store.order.stale_reship_cancel',
+        actor: { session: true },
+        tenant: { stellr: true },
+        target: { table: 'store_orders', id: staleIds[0] },
+        metadata: { source_order_id: order.id, cancelled: staleIds.length },
+      },
+      { afterResponse: true },
+    )
+  }
 
   // One reship per source order. The DB unique partial index is the race-safe
   // backstop for a double-submit; this check gives a clean 409.
@@ -156,6 +173,19 @@ export async function POST(req: Request) {
     sourceOrderId: order.id,
     lines: reshipLines,
   })
+
+  // docs/TENANCY-S5.md, B18. Written as soon as the order exists, so a Stripe failure
+  // below still leaves the record. The event carries the two orders' ids and nothing else.
+  await auditMutation(
+    {
+      action: 'store.order.reship',
+      actor: { session: true },
+      tenant: { stellr: true },
+      target: { table: 'store_orders', id: reshipId },
+      metadata: { source_order_id: order.id },
+    },
+    { afterResponse: true },
+  )
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   // deep review PAY-15: refuse to take the reship fee on a production deployment

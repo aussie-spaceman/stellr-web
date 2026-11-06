@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { runSurveys } from '@/lib/survey/run'
 
@@ -16,7 +17,7 @@ export const maxDuration = 60
 // 07:00 UTC (US local midnight has passed everywhere but Alaska and Hawaii),
 // 16:00 and 22:00 UTC. A survey therefore opens within ~3 hours of its go-live
 // time; "Send live now" in the admin tab opens one immediately.
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('surveys', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -44,4 +45,4 @@ export async function GET(req: NextRequest) {
     await run.finish({})
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
-}
+})

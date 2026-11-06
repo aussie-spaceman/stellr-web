@@ -19,6 +19,8 @@ import { registrationPaid } from '@/lib/payment-status'
 import { getComplianceAudit, type ComplianceAuditRow } from '@/lib/compliance-admin'
 import { loadPaperworkGaps, type PaperworkGap } from '@/lib/esign/needs-paperwork'
 import { ISSUE_FAILED_PREFIX } from '@/lib/docusign-agreements'
+import { otherTenantEvents, stellrRows } from '@/lib/tenancy/stellr-scope'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 export const DIGEST_PERIODS = [7, 30, 90] as const
 export type DigestPeriod = (typeof DIGEST_PERIODS)[number]
@@ -305,6 +307,10 @@ async function rows(label: string, query: PromiseLike<{ data: unknown; error: { 
   return (data as Row[] | null) ?? []
 }
 
+// Event-scoped reads are limited to Stellr: this is Stellr's staff digest and
+// dashboard. Most go through stellrRows; Spaces and mentoring groups are matched in
+// code, below. members has no tenant column, so its reads are as wide as ever, and
+// reactions name no Space (lib/cron-scope.ts, identityRead).
 export async function loadMemberDigest(days: number, opts: { now?: Date; db?: SupabaseClient } = {}): Promise<MemberDigest> {
   const db = opts.db ?? supabaseServer()
   const w = digestWindow(days, opts.now)
@@ -332,8 +338,8 @@ export async function loadMemberDigest(days: number, opts: { now?: Date; db?: Su
     }, async () => {
       const [members, regs] = await Promise.all([
         rows('members', db.from('members').select('id, first_name, last_name, email, date_of_birth, event_role, created_at').gte('created_at', since).range(0, ALL)),
-        rows('registrations', db.from('registrations')
-          .select('id, event_slug, event_title, type, created_at, teacher_first_name, teacher_last_name, school_name, group_name, participants(first_name, last_name, email, date_of_birth)')
+        rows('registrations', stellrRows(db.from('registrations')
+          .select('id, event_slug, event_title, type, created_at, teacher_first_name, teacher_last_name, school_name, group_name, participants(first_name, last_name, email, date_of_birth)'))
           .gte('created_at', since).range(0, ALL)),
       ])
       const newMembers = members.filter((m) => inCurrent(m.created_at))
@@ -378,7 +384,7 @@ export async function loadMemberDigest(days: number, opts: { now?: Date; db?: Su
         rows('deactivated', db.from('members').select('id, first_name, last_name, email, date_of_birth, event_role, deleted_at').gte('deleted_at', since).range(0, ALL)),
         rows('unsubscribed', db.from('members').select('id, first_name, last_name, email, date_of_birth, event_role, marketing_unsubscribed_at').gte('marketing_unsubscribed_at', since).range(0, ALL)),
         rows('lapsed', db.from('member_memberships').select('member_id, renewal_status, updated_at, membership_tiers(name)').in('renewal_status', ['expired', 'cancelled']).gte('updated_at', since).range(0, ALL)),
-        rows('withdrawn', db.from('registrations').select('id, event_slug, event_title, type, withdrawn_at, teacher_first_name, teacher_last_name, group_name, school_name, participants(first_name, last_name, email, date_of_birth)').gte('withdrawn_at', since).range(0, ALL)),
+        rows('withdrawn', stellrRows(db.from('registrations').select('id, event_slug, event_title, type, withdrawn_at, teacher_first_name, teacher_last_name, group_name, school_name, participants(first_name, last_name, email, date_of_birth)')).gte('withdrawn_at', since).range(0, ALL)),
       ])
 
       // A membership that lapsed while another is active was renewed or
@@ -438,14 +444,23 @@ export async function loadMemberDigest(days: number, opts: { now?: Date; db?: Su
       activeMembers: zero(), posts: zero(), comments: zero(), reactions: zero(), chatMessages: zero(), spaceJoins: zero(),
       topSpaces: [] as MemberDigest['engagement']['topSpaces'],
     }, async () => {
-      const [posts, comments, reactions, chat, joins] = await Promise.all([
+      const [allPosts, allComments, reactions, allChat, allJoins, otherSpaces] = await Promise.all([
         rows('posts', db.from('community_posts').select('space_id, author_member_id, created_at').neq('status', 'deleted').gte('created_at', since).range(0, ALL)),
         rows('comments', db.from('community_comments').select('author_member_id, created_at, community_posts(space_id)').neq('status', 'deleted').gte('created_at', since).range(0, ALL)),
         rows('reactions', db.from('community_reactions').select('author_member_id, created_at').gte('created_at', since).range(0, ALL)),
         // Space chat only: direct messages and cohort chat aren't space activity.
         rows('chat', db.from('chat_messages').select('author_member_id, created_at, chat_channels!inner(space_id)').not('chat_channels.space_id', 'is', null).is('deleted_at', null).gte('created_at', since).range(0, ALL)),
-        rows('space joins', db.from('community_space_members').select('member_id, added_at').gte('added_at', since).range(0, ALL)),
+        rows('space joins', db.from('community_space_members').select('space_id, member_id, added_at').gte('added_at', since).range(0, ALL)),
+        // Activity tables have no tenant column, so another tenant's Spaces are read
+        // once and their activity left out. neq skips NULL, which counts as Stellr's.
+        rows('other tenant spaces', db.from('community_spaces').select('id').neq('tenant_id', STELLR_TENANT_ID).range(0, ALL)),
       ])
+      const otherSpaceIds = new Set(otherSpaces.map((s) => s.id as string))
+      const inStellrSpace = (spaceId: unknown) => !otherSpaceIds.has(spaceId as string)
+      const posts = allPosts.filter((p) => inStellrSpace(p.space_id))
+      const comments = allComments.filter((c) => inStellrSpace((c.community_posts as { space_id?: string } | null)?.space_id))
+      const chat = allChat.filter((m) => inStellrSpace((m.chat_channels as { space_id?: string } | null)?.space_id))
+      const joins = allJoins.filter((j) => inStellrSpace(j.space_id))
 
       const actors = { current: new Set<string>(), previous: new Set<string>() }
       for (const r of [...posts, ...comments, ...reactions, ...chat]) {
@@ -489,12 +504,22 @@ export async function loadMemberDigest(days: number, opts: { now?: Date; db?: Su
       volunteerSignups: { ...zero(), people: [] as PersonRef[] },
       newMentors: { ...zero(), people: [] as PersonRef[] },
     }, async () => {
-      const [coaching, cohorts, volunteers, mentors] = await Promise.all([
+      const [coaching, allCohorts, volunteers, mentors, otherEvents] = await Promise.all([
         rows('coaching', db.from('coaching_requests').select('member_id, topic, status, created_at').gte('created_at', since).range(0, ALL)),
-        rows('cohorts', db.from('cohort_members').select('member_id, relationship, added_at, mentoring_cohorts(name)').gte('added_at', since).range(0, ALL)),
-        rows('volunteers', db.from('volunteer_event_interest').select('member_id, event_title, event_slug, status, created_at').gte('created_at', since).range(0, ALL)),
+        rows('cohorts', db.from('cohort_members').select('member_id, relationship, added_at, mentoring_cohorts(name, campaign_ref, tenant_id)').gte('added_at', since).range(0, ALL)),
+        rows('volunteers', stellrRows(db.from('volunteer_event_interest').select('member_id, event_title, event_slug, status, created_at')).gte('created_at', since).range(0, ALL)),
         rows('mentors', db.from('members').select('id, first_name, last_name, email, date_of_birth, created_at').eq('event_role', 'mentor').gte('created_at', since).range(0, ALL)),
+        otherTenantEvents(db),
       ])
+      // Matched here rather than with an inner join, which would hide a roster row
+      // with no readable group. By its event as well as its own stamp: container-sync
+      // creates an event's group with no sanity_event_id, and the derivation trigger
+      // then stamps it Stellr's, whichever event it serves.
+      const cohorts = allCohorts.filter((r) => {
+        const c = r.mentoring_cohorts as { campaign_ref?: string | null; tenant_id?: string | null } | null
+        if (c?.tenant_id && c.tenant_id !== STELLR_TENANT_ID) return false
+        return !(c?.campaign_ref && otherEvents.slugs.has(c.campaign_ref))
+      })
       const people = await loadPeople(db, [...coaching, ...cohorts, ...volunteers].map((r) => r.member_id as string))
       const ref = (r: Row, detail: string | null, at: string): PersonRef => {
         const p = people.get(r.member_id as string)
@@ -541,7 +566,7 @@ type Section = <T>(name: string, fallback: T, load: () => Promise<T>) => Promise
 async function loadOutstanding(db: SupabaseClient, section: Section): Promise<MemberDigest['outstanding']> {
   // Event dates, once, for every "is this still upcoming?" question.
   const eventInfo = await section('Event dates', { isUpcoming: (_: string | null) => true, titleOf: (_: string, f: string | null) => f ?? 'Event' }, async () => {
-    const { data, error } = await db.from('registrations').select('event_slug').neq('status', 'withdrawn').range(0, ALL)
+    const { data, error } = await stellrRows(db.from('registrations').select('event_slug')).neq('status', 'withdrawn').range(0, ALL)
     if (error) throw new Error(error.message)
     const slugs = [...new Set(((data ?? []) as Row[]).map((r) => r.event_slug as string).filter(Boolean))]
     const meta = await getEventsBySlugs(slugs)
@@ -560,8 +585,8 @@ async function loadOutstanding(db: SupabaseClient, section: Section): Promise<Me
 
   const [awaitingSignature, paperworkGaps, verifications, payments, queues] = await Promise.all([
     section('Consent forms awaiting signature', [] as AwaitingSignature[], async () => {
-      const agreements = await rows('agreements', db.from('agreements')
-        .select('id, envelope_id, envelope_type, status, signer_name, minor_name, event_title, event_slug, sent_at, created_at, reminder_count, member_id')
+      const agreements = await rows('agreements', stellrRows(db.from('agreements')
+        .select('id, envelope_id, envelope_type, status, signer_name, minor_name, event_title, event_slug, sent_at, created_at, reminder_count, member_id'))
         .in('status', ['created', 'sent', 'delivered'])
         .order('sent_at', { ascending: true })
         .range(0, ALL))
@@ -583,7 +608,7 @@ async function loadOutstanding(db: SupabaseClient, section: Section): Promise<Me
     }),
 
     section('Consent forms needing action', [] as Array<PaperworkGap & { minor: boolean }>, async () => {
-      const gaps = await loadPaperworkGaps(db)
+      const gaps = await loadPaperworkGaps(db, undefined, { stellrOnly: true })
       const ids = gaps.map((g) => g.participantId)
       const dob = new Map<string, string | null>()
       for (let i = 0; i < ids.length; i += 150) {
@@ -604,13 +629,13 @@ async function loadOutstanding(db: SupabaseClient, section: Section): Promise<Me
 
     section('Payments', [] as PaymentItem[], async () => {
       const [regs, invoices] = await Promise.all([
-        rows('registrations', db.from('registrations')
+        rows('registrations', stellrRows(db.from('registrations')
           .select(`id, event_slug, event_title, type, status, created_at, amount_due_cents, invoice_requested, invoice_paid_at,
             member_pays_individually, teacher_first_name, teacher_last_name, school_name, group_name,
-            participants(id, first_name, last_name, date_of_birth, individual_payment_status)`)
+            participants(id, first_name, last_name, date_of_birth, individual_payment_status)`))
           .neq('status', 'withdrawn')
           .range(0, ALL)),
-        rows('group invoices', db.from('group_invoices').select('registration_id, total_cents, stripe_invoice_number, created_at').eq('status', 'open').range(0, ALL)),
+        rows('group invoices', stellrRows(db.from('group_invoices').select('registration_id, total_cents, stripe_invoice_number, created_at')).eq('status', 'open').range(0, ALL)),
       ])
       return buildPaymentItems(
         regs as unknown as RegForPayment[],
@@ -623,7 +648,7 @@ async function loadOutstanding(db: SupabaseClient, section: Section): Promise<Me
     section('Admin queues', { coaching: [] as QueueItem[], scholarships: [] as QueueItem[], privacy: [] as QueueItem[], deletions: [] as QueueItem[] }, async () => {
       const [coaching, scholarships, privacy, deletions] = await Promise.all([
         rows('coaching', db.from('coaching_requests').select('id, member_id, topic, created_at').eq('status', 'pending').order('created_at').range(0, ALL)),
-        rows('scholarships', db.from('scholarship_applications').select('id, first_name, last_name, event_title, created_at').eq('status', 'submitted').order('created_at').range(0, ALL)),
+        rows('scholarships', stellrRows(db.from('scholarship_applications').select('id, first_name, last_name, event_title, created_at')).eq('status', 'submitted').order('created_at').range(0, ALL)),
         // 'unverified' waits on the requester confirming their email, not on staff.
         rows('privacy', db.from('privacy_requests').select('id, kind, status, created_at').in('status', ['verified', 'in_progress']).order('created_at').range(0, ALL)),
         rows('deletions', db.from('deletion_requests').select('id, entity_type, reason, created_at').eq('status', 'pending').order('created_at').range(0, ALL)),

@@ -26,6 +26,7 @@
 /test/ci-supabase-keys.test.ts      @aussie-spaceman
 /test/critical-email-senders.test.ts @aussie-spaceman
 /test/cron-scope.test.ts            @aussie-spaceman
+/test/cron-audit.test.ts            @aussie-spaceman
 /test/csp.test.ts                   @aussie-spaceman
 /test/csp-script-nonces.test.tsx    @aussie-spaceman
 /test/email-html-escaping.test.ts   @aussie-spaceman
@@ -49,6 +50,7 @@
 /scripts/s5-inventory.mjs           @aussie-spaceman
 /lib/security/audit-coverage.ts     @aussie-spaceman
 /lib/audit/**                       @aussie-spaceman
+/lib/cron-audit.ts                  @aussie-spaceman
 /scripts/audit-cap.mjs              @aussie-spaceman
 /lib/security/route-ast.ts          @aussie-spaceman
 /vitest.config.mts                  @aussie-spaceman
@@ -72,6 +74,9 @@
 /components/analytics/NoAdsStudentMarker.tsx @aussie-spaceman
 /lib/analytics.ts                   @aussie-spaceman
 /e2e/core/tenant-tree-direct-404.spec.ts @aussie-spaceman
+/e2e/tenancy/**                     @aussie-spaceman
+/e2e/fixtures/tenant-hosts.ts       @aussie-spaceman
+/playwright.tenant-hosts.config.ts  @aussie-spaceman
 /test/idor/**                       @aussie-spaceman
 /lib/security/route-guards.ts       @aussie-spaceman
 /lib/security/route-manifest.ts     @aussie-spaceman
@@ -117,9 +122,22 @@
 # Community access (memberCommunityTier lives in lib/community.ts)
 /lib/community.ts                   @aussie-spaceman
 /lib/community-tier*.ts             @aussie-spaceman
+/lib/community/event-hooks.ts       @aussie-spaceman
+/lib/member-session.ts              @aussie-spaceman
+/test/tenant-surface.test.ts        @aussie-spaceman
+/test/tenant-surface-measure.ts     @aussie-spaceman
+/test/tenant-surface-baseline.json  @aussie-spaceman
+/scripts/tenant-surface-baseline.mjs @aussie-spaceman
+/test/tenant-tree-pages.test.ts     @aussie-spaceman
+/test/tenant-tree-lint.ts           @aussie-spaceman
+/test/tenant-tree-page-records.test.ts @aussie-spaceman
+/test/flow-pages-golden.test.tsx    @aussie-spaceman
+/test/fixtures/flow-pages-golden.json @aussie-spaceman
+/lib/tenancy/tenant-records.ts      @aussie-spaceman
 
 # Content Security Policy
 /lib/csp.ts                         @aussie-spaceman
+/lib/csp-nonce-header.ts            @aussie-spaceman
 /lib/request-nonce.ts               @aussie-spaceman
 /app/api/csp-report/**              @aussie-spaceman
 

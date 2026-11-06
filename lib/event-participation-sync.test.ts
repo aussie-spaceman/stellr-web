@@ -8,7 +8,11 @@ vi.mock('@/lib/membership-grants', () => ({ applyGrantTrigger: vi.fn() }))
 vi.mock('@/lib/container-sync', () => ({ ensureRosterMembership: vi.fn() }))
 vi.mock('@/lib/space-inheritance', () => ({ syncObjectSpaceRoster: vi.fn() }))
 
-const { removeEventParticipation } = await import('./event-participation-sync')
+const { removeEventParticipation, recordEventParticipation } = await import('./event-participation-sync')
+const { logActivity } = await import('@/lib/activity-log')
+const { applyGrantTrigger } = await import('@/lib/membership-grants')
+const { ensureRosterMembership } = await import('@/lib/container-sync')
+const { syncObjectSpaceRoster } = await import('@/lib/space-inheritance')
 
 // Count the fake Supabase returns for the "does this member still have another
 // active participant on the event?" guard.
@@ -123,5 +127,121 @@ describe('removeEventParticipation — fails closed on a read error (deep review
     await expect(
       removeEventParticipation(db, { memberId: 'mem1', eventSlug: 'evt' }),
     ).resolves.toBeUndefined()
+  })
+})
+
+// S5 B8 golden. Passed on the unsplit function first, so the split is held to the
+// same calls in the same order, with the same arguments.
+describe('recordEventParticipation: what it does, in order', () => {
+  let log: unknown[][]
+  let existing: { id: string } | null
+  let insertError: unknown
+
+  function recordingDb() {
+    return {
+      from(table: string) {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => {
+            log.push(['read', table])
+            return { data: existing, error: null }
+          },
+          insert: async (row: unknown) => {
+            log.push(['insert', table, row])
+            return { error: insertError }
+          },
+        }
+        return chain
+      },
+    } as unknown as Parameters<typeof recordEventParticipation>[0]
+  }
+
+  beforeEach(() => {
+    log = []
+    existing = null
+    insertError = null
+    vi.mocked(ensureRosterMembership).mockReset().mockImplementation(async (_db, regId, memberId) => {
+      log.push(['ensureRosterMembership', regId, memberId])
+    })
+    vi.mocked(syncObjectSpaceRoster).mockReset().mockImplementation(async (_db, type, ref, memberId) => {
+      log.push(['syncObjectSpaceRoster', type, ref, memberId])
+    })
+    vi.mocked(logActivity).mockReset().mockImplementation((async (entry: { action: string; summary: string; metadata: unknown }) => {
+      log.push(['logActivity', entry])
+    }) as never)
+    vi.mocked(applyGrantTrigger).mockReset().mockImplementation((async (memberId: string, trigger: string, opts: unknown) => {
+      log.push(['applyGrantTrigger', memberId, trigger, opts])
+    }) as never)
+  })
+
+  const ROW = { member_id: 'mem1', event_slug: 'evt', event_title: 'The Event', event_year: 2027, status: 'approved' }
+  const ACTIVITY = {
+    memberId: 'mem1',
+    category: 'event',
+    action: 'event_registered',
+    summary: 'Registered for The Event',
+    metadata: { eventSlug: 'evt', eventTitle: 'The Event' },
+    actorType: 'system',
+  }
+
+  it('rosters, then writes the row, then logs, then grants', async () => {
+    await recordEventParticipation(recordingDb(), {
+      memberId: 'mem1', eventSlug: 'evt', eventTitle: 'The Event', eventYear: 2027, registrationId: 'reg1',
+    })
+    expect(log).toEqual([
+      ['ensureRosterMembership', 'reg1', 'mem1'],
+      ['syncObjectSpaceRoster', 'event', 'evt', 'mem1'],
+      ['read', 'event_participations'],
+      ['insert', 'event_participations', ROW],
+      ['logActivity', ACTIVITY],
+      ['applyGrantTrigger', 'mem1', 'competition_registration', { grantKeySeed: 'evt' }],
+    ])
+  })
+
+  it('without a registration it skips only the competition roster', async () => {
+    await recordEventParticipation(recordingDb(), { memberId: 'mem1', eventSlug: 'evt', eventTitle: 'The Event', eventYear: 2027 })
+    expect(log.map((l) => l[0])).toEqual([
+      'syncObjectSpaceRoster', 'read', 'insert', 'logActivity', 'applyGrantTrigger',
+    ])
+  })
+
+  it('an existing row still rosters, and writes, logs and grants nothing', async () => {
+    existing = { id: 'ep1' }
+    await recordEventParticipation(recordingDb(), { memberId: 'mem1', eventSlug: 'evt', registrationId: 'reg1' })
+    expect(log.map((l) => l[0])).toEqual(['ensureRosterMembership', 'syncObjectSpaceRoster', 'read'])
+  })
+
+  it('a failed insert logs and grants nothing, and does not throw', async () => {
+    insertError = { message: 'nope' }
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await recordEventParticipation(recordingDb(), { memberId: 'mem1', eventSlug: 'evt' })
+    expect(log.map((l) => l[0])).toEqual(['syncObjectSpaceRoster', 'read', 'insert'])
+    expect(spy).toHaveBeenCalledWith('[event-participation] insert error (non-fatal):', insertError)
+    spy.mockRestore()
+  })
+
+  it('a throw from a roster write stops the rest and does not escape', async () => {
+    vi.mocked(syncObjectSpaceRoster).mockRejectedValue(new Error('boom'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(recordEventParticipation(recordingDb(), { memberId: 'mem1', eventSlug: 'evt' })).resolves.toBeUndefined()
+    expect(log).toEqual([])
+    expect(spy.mock.calls[0][0]).toBe('[event-participation] recordEventParticipation failed (non-fatal):')
+    spy.mockRestore()
+  })
+
+  it('a throw from the activity log keeps the row, grants nothing and does not escape', async () => {
+    vi.mocked(logActivity).mockRejectedValue(new Error('boom'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(recordEventParticipation(recordingDb(), { memberId: 'mem1', eventSlug: 'evt' })).resolves.toBeUndefined()
+    expect(log.map((l) => l[0])).toEqual(['syncObjectSpaceRoster', 'read', 'insert'])
+    expect(spy.mock.calls[0][0]).toBe('[event-participation] recordEventParticipation failed (non-fatal):')
+    spy.mockRestore()
+  })
+
+  it('does nothing without a member or an event slug', async () => {
+    await recordEventParticipation(recordingDb(), { memberId: null, eventSlug: 'evt' })
+    await recordEventParticipation(recordingDb(), { memberId: 'mem1', eventSlug: null })
+    expect(log).toEqual([])
   })
 })

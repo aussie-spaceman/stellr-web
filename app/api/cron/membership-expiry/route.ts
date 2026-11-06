@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { expireLapsedGrants } from '@/lib/membership-grants'
 import { purgeUnconsentedAccounts, type PurgeResult } from '@/lib/pending-consent'
 import { guardCron } from '@/lib/cron'
+import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/membership-expiry — runs daily (see vercel.json). Two steps:
@@ -18,7 +19,7 @@ import { startCronRun } from '@/lib/cron-runs'
 
 export const maxDuration = 60
 
-export async function GET(req: NextRequest) {
+export const GET = withCronAudit('membership-expiry', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
@@ -48,4 +49,4 @@ export async function GET(req: NextRequest) {
   await run.finish({ expired, pendingConsentPurge: purge })
   if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge }, { status: 500 })
   return NextResponse.json({ expired, pendingConsentPurge: purge })
-}
+})

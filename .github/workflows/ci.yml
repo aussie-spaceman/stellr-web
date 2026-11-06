@@ -963,3 +963,33 @@ jobs:
             docker logs --tail 80 "supabase_${c}_stellr-web" 2>&1 || true
             echo "::endgroup::"
           done
+
+  # S5 B10a: one build served twice, tenant routing off and on, must answer the
+  # same on every Stellr host for every page (e2e/tenancy/flag-parity.spec.ts).
+  # Report-only and not a required check, until the owner says otherwise. No
+  # secrets and no database: its Supabase is a stub on the runner, so it takes no
+  # lock and cannot write to the shared dev project. A build of its own, because
+  # the stub's URL is inlined at build.
+  tenant-host-routing:
+    name: tenant-host-routing
+    runs-on: ubuntu-latest
+    needs: [verify, changes]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
+    continue-on-error: true
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build against the stub
+        run: node e2e/tenancy/build-harness.mjs
+
+      # Raw HTTP only, so no browser to install.
+      - name: Flag off and on, compared
+        run: npx playwright test -c playwright.tenant-hosts.config.ts

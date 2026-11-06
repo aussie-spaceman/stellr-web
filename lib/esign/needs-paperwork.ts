@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { classifyAgreement } from '@/lib/docusign'
 import { ISSUE_FAILED_PREFIX } from '@/lib/docusign-agreements'
 import { getEventsBySlugs } from '@/lib/sanity'
+import { stellrRows } from '@/lib/tenancy/stellr-scope'
 
 // "Needs paperwork": participants of upcoming events who need an agreement and
 // have nothing in flight. Awaiting a signature is not on the list: that has a
@@ -83,10 +84,15 @@ export function findGaps(participants: GapParticipant[], envelopes: GapEnvelope[
   return gaps.sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.name.localeCompare(b.name))
 }
 
-export async function loadPaperworkGaps(db: SupabaseClient, now = new Date()): Promise<PaperworkGap[]> {
+export async function loadPaperworkGaps(
+  db: SupabaseClient,
+  now = new Date(),
+  opts: { stellrOnly?: boolean } = {},
+): Promise<PaperworkGap[]> {
+  const scoped = <Q extends { or(filters: string): Q }>(query: Q): Q => (opts.stellrOnly ? stellrRows(query) : query)
   // Event dates are Mountain-time calendar dates.
   const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Denver' })
-  const { data: slugRows, error: slugError } = await db.from('registrations').select('event_slug').neq('status', 'withdrawn')
+  const { data: slugRows, error: slugError } = await scoped(db.from('registrations').select('event_slug')).neq('status', 'withdrawn')
   if (slugError) throw new Error(`Registration lookup failed: ${slugError.message}`)
   const slugs = [...new Set((slugRows ?? []).map((r) => r.event_slug as string).filter(Boolean))]
   const upcoming = new Map(
@@ -96,9 +102,9 @@ export async function loadPaperworkGaps(db: SupabaseClient, now = new Date()): P
   )
   if (!upcoming.size) return []
 
-  const { data: regs, error } = await db
+  const { data: regs, error } = await scoped(db
     .from('registrations')
-    .select('event_slug, event_title, participants(id, first_name, last_name, date_of_birth, event_role)')
+    .select('event_slug, event_title, participants(id, first_name, last_name, date_of_birth, event_role)'))
     .neq('status', 'withdrawn')
     .in('event_slug', [...upcoming.keys()])
   if (error) throw new Error(`Participant lookup failed: ${error.message}`)

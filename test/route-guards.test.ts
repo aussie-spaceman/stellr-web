@@ -73,7 +73,8 @@ describe('route guards (static inventory)', () => {
     const files = routeFiles('app/api/cron').filter((f) => /app\/api\/cron\/[^/]+\/route\.ts$/.test(f))
     expect(files.length).toBeGreaterThan(10)
     for (const f of files) {
-      const body = readFileSync(f, 'utf8').split(/export async function GET[^{]*\{/)[1] ?? ''
+      // A plain handler, or the one given to withCronAudit (S5 B12). Any other shape reads as empty and fails.
+      const body = readFileSync(f, 'utf8').split(/export async function GET[^{]*\{|export const GET = withCronAudit\('[a-z0-9-]+', async \([^)]*\) => \{/)[1] ?? ''
       expect(body.trimStart().startsWith('const blocked = guardCron(req)'), f).toBe(true)
     }
   })

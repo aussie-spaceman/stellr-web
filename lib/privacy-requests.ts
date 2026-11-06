@@ -65,17 +65,34 @@ function confirmationEmail(r: { requesterName: string; kind: RequestKind; subjec
   return { subject, html, text }
 }
 
-/** Records a request and emails its confirmation link. Same outcome for every caller. */
-export async function submitRequest(db: SupabaseClient, input: RequestInput, now = new Date()): Promise<void> {
-  if (input.website) return // a bot; say nothing different
+/**
+ * True when this request is accepted on screen and then dropped: a bot, or an address over
+ * its daily limit. It only reads, so the route can answer before anything is written.
+ */
+export async function requestHeldBack(db: SupabaseClient, input: RequestInput, now = new Date()): Promise<boolean> {
+  if (input.website) return true // a bot; say nothing different
   const since = new Date(now.getTime() - 86_400_000).toISOString()
   const { count } = await db
     .from('privacy_requests')
     .select('id', { count: 'exact', head: true })
     .eq('requester_email', input.requesterEmail)
     .gte('created_at', since)
-  if ((count ?? 0) >= DAILY_LIMIT_PER_EMAIL) return
+  return (count ?? 0) >= DAILY_LIMIT_PER_EMAIL
+}
 
+/** The row was saved, and its confirmation email could not be sent. */
+export class RequestEmailFailed extends Error {
+  constructor(readonly requestId: string, cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'RequestEmailFailed'
+  }
+}
+
+/**
+ * Records a request and emails its confirmation link. Same outcome for every caller, so
+ * the id it returns is for the audit event, never the answer. Call requestHeldBack first.
+ */
+export async function submitRequest(db: SupabaseClient, input: RequestInput, now = new Date()): Promise<string> {
   const { data, error } = await db.from('privacy_requests').insert({
     kind: input.kind,
     relationship: input.relationship,
@@ -92,40 +109,71 @@ export async function submitRequest(db: SupabaseClient, input: RequestInput, now
   const { token } = mintToken(data.id as string, 'request', data.token_version as number, LINK_TTL_SECONDS, now.getTime())
   // Critical mail (lib/email/suppressions.ts): the request only counts once this
   // link is followed, so the suppression list never holds it back.
-  await sendEmail({
-    to: input.requesterEmail,
-    ...confirmationEmail({ requesterName: input.requesterName, kind: input.kind, subjectName: input.subjectName, url: confirmUrl(token) }),
-    critical: true,
-  })
+  try {
+    await sendEmail({
+      to: input.requesterEmail,
+      ...confirmationEmail({ requesterName: input.requesterName, kind: input.kind, subjectName: input.subjectName, url: confirmUrl(token) }),
+      critical: true,
+    })
+  } catch (err) {
+    throw new RequestEmailFailed(data.id as string, err)
+  }
+  return data.id as string
 }
 
-export type ConfirmOutcome = 'confirmed' | 'already_confirmed' | 'invalid'
+interface OpenRequest {
+  id: string
+  kind: RequestKind
+  relationship: string
+  subject_name: string | null
+}
 
-/** The requester followed their link: the request now counts, and admins are told. */
-export async function confirmRequest(db: SupabaseClient, token: string, meta: { ip: string | null }, now = new Date()): Promise<ConfirmOutcome> {
+export type RequestLink =
+  | { state: 'invalid' }
+  | { state: 'already_confirmed' }
+  | { state: 'open'; row: OpenRequest; version: number }
+
+/** What an emailed link points at. It only reads, so the route can answer before anything is written. */
+export async function readRequestLink(db: SupabaseClient, token: string, now = new Date()): Promise<RequestLink> {
   const v = verifyToken(token, 'request', now.getTime())
-  if (!v) return 'invalid'
+  if (!v) return { state: 'invalid' }
   const { data: row } = await db.from('privacy_requests').select('id, kind, relationship, subject_name, status, token_version').eq('id', v.recipientId).maybeSingle()
-  if (!row) return 'invalid'
-  if (row.status !== 'unverified') return 'already_confirmed'
-  if (row.token_version !== v.version) return 'invalid'
+  if (!row) return { state: 'invalid' }
+  if (row.status !== 'unverified') return { state: 'already_confirmed' }
+  if (row.token_version !== v.version) return { state: 'invalid' }
+  return { state: 'open', row: row as OpenRequest, version: v.version }
+}
 
+export type ConfirmOutcome = 'confirmed' | 'already_confirmed'
+
+/**
+ * The requester followed their link: the request now counts, and admins are told. Two
+ * requests can both find the link open, and the second gets already_confirmed. The id is
+ * for the audit event, never the answer.
+ */
+export async function confirmRequest(
+  db: SupabaseClient,
+  link: Extract<RequestLink, { state: 'open' }>,
+  meta: { ip: string | null },
+  now = new Date(),
+): Promise<{ state: ConfirmOutcome; requestId: string }> {
+  const { row, version } = link
   const { data: updated } = await db
     .from('privacy_requests')
-    .update({ status: 'verified', verified_at: now.toISOString(), verified_ip: meta.ip, token_version: v.version + 1, updated_at: now.toISOString() })
+    .update({ status: 'verified', verified_at: now.toISOString(), verified_ip: meta.ip, token_version: version + 1, updated_at: now.toISOString() })
     .eq('id', row.id)
     .eq('status', 'unverified')
     .select('id')
-  if (!updated?.length) return 'already_confirmed'
+  if (!updated?.length) return { state: 'already_confirmed', requestId: row.id }
 
   const who = row.relationship === 'parent_guardian' ? `a parent or guardian${row.subject_name ? ` of ${row.subject_name}` : ''}` : 'a member'
-  const body = `A confirmed privacy request from ${who}: ${KIND_LABEL[row.kind as RequestKind].toLowerCase()}. It must be answered within 30 days. See Admin → Privacy requests.`
+  const body = `A confirmed privacy request from ${who}: ${KIND_LABEL[row.kind].toLowerCase()}. It must be answered within 30 days. See Admin → Privacy requests.`
   await notifyCommunityAdmins({
     type: 'action',
     body,
     email: { subject: 'Privacy request to answer', html: `<p>${esc(body)}</p>`, text: body },
   }).catch(() => {})
-  return 'confirmed'
+  return { state: 'confirmed', requestId: row.id }
 }
 
 export interface MatchedRecord {

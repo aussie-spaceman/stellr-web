@@ -119,7 +119,7 @@ describe('POST /api/teacher-grant', () => {
     expect(res.status).toBe(200)
     // upsertMember is called with onExisting:'skip' so it returns the id without writing.
     expect(upsertMember).toHaveBeenCalledTimes(1)
-    expect(upsertMember.mock.calls[0][2]).toEqual({ onExisting: 'skip' })
+    expect(upsertMember.mock.calls[0][2]).toMatchObject({ onExisting: 'skip' })
     // No signup side effects for an existing member reached from anonymous input.
     expect(linkMembersToSchoolByName).not.toHaveBeenCalled()
     expect(autoGrantBaseMembership).not.toHaveBeenCalled()

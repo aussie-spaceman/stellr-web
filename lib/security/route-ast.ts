@@ -599,15 +599,17 @@ interface Scope {
 }
 
 /**
- * The handler inside `withAudit(spec, handler)`, imported from lib/audit/route: it calls
- * the handler first and audits after, so the handler's first statement is the route's.
- * No other wrapper is read through, because nothing says when it calls what it is given.
+ * The handler inside `withAudit(spec, handler)`, imported from lib/audit/route, or
+ * `withCronAudit(job, handler)`, imported from lib/cron-audit: each calls the handler
+ * first and audits after, so the handler's first statement is the route's. No other
+ * wrapper is read through, because nothing says when it calls what it is given.
  */
 function wrappedHandlerOf(node: ts.Node, scope: Scope): ts.Node | null {
   if (!ts.isCallExpression(node)) return null
   const callee = strip(node.expression)
   const imp = ts.isIdentifier(callee) ? scope.imports.get(callee.text) : null
-  if (imp?.imported !== 'withAudit' || imp.module !== 'lib/audit/route') return null
+  const reads = (imp?.imported === 'withAudit' && imp.module === 'lib/audit/route') || (imp?.imported === 'withCronAudit' && imp.module === 'lib/cron-audit')
+  if (!reads) return null
   const handler = node.arguments[1] && strip(node.arguments[1])
   if (!handler) return null
   return ts.isIdentifier(handler) ? (scope.locals.get(handler.text) ?? null) : handler

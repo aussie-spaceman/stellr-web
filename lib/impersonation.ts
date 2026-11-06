@@ -2,7 +2,6 @@ import { auth } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { supabaseServer } from '@/lib/supabase'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 
@@ -18,7 +17,7 @@ import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 // Four things keep this safe:
 //   1. The cookie is HMAC-signed with a key used for nothing else, so it cannot
 //      be forged or retargeted.
-//   2. isAdminClaims() is re-checked on EVERY request, not just when the cookie
+//   2. The admin check is re-run on EVERY request, not just when the cookie
 //      is issued — a cookie surviving a sign-out or a role removal grants nothing.
 //   3. Every ticket names the admin who issued it, and only that admin can use
 //      it (getImpersonation).
@@ -163,13 +162,21 @@ async function viewAsState(): Promise<ViewAsState> {
   const raw = jar.get(COOKIE)?.value
   if (!raw) return { kind: 'none' }
 
-  const { userId, sessionClaims } = await auth()
-  if (!userId || !isAdminClaims(sessionClaims)) return { kind: 'none' }
+  const { userId } = await auth()
+  if (!userId) return { kind: 'none' }
+  // Not a top-level import: lib/authz is `server-only`, and this file reaches operator scripts
+  // run under plain tsx. test/authz-load-closure.test.ts holds this.
+  const { isStellrAdminOrUnknown } = await import('@/lib/authz')
+  const admin = await isStellrAdminOrUnknown({ route: 'view-as' })
+  if (admin === false) return { kind: 'none' }
 
   const ticket = decodeTicket(raw)
   if (!ticket) return { kind: 'none' }
+  // Only under AUTHZ_SOURCE=postgres, when the role lookup failed: a real ticket
+  // that could not be checked, not "no session".
+  if (admin === null) return { kind: 'unverified' }
 
-  // deep review AUTH-9: bind the ticket to the admin who issued it. isAdminClaims
+  // deep review AUTH-9: bind the ticket to the admin who issued it. The admin check
   // alone would let ANY admin — or a leaked cookie replayed in another admin's
   // browser — drive a view-as ticket minted for someone else. Require the caller
   // to BE the issuer: resolve the caller's member id and fail closed on any

@@ -81,11 +81,15 @@ describe('defaults and stubs', () => {
         'hasPortalAccess',
         'hasScope',
         'isStaffTarget',
+        'isStaffTargetOrUnknown',
         'isStellrAdmin',
+        'isStellrAdminOrUnknown',
+        'isViewAsTargetStaff',
         'page',
         'requireEventAccess',
         'requireStellrAdmin',
         'requireTenantStaff',
+        'targetHoldsStaffRow',
       ].sort(),
     )
   })
@@ -628,6 +632,60 @@ describe('hasScope', () => {
     setup('admin')
     expect(await authz.hasScope('events')).toBe(true)
     expect(db.reads).toEqual([])
+  })
+})
+
+describe('isStellrAdminOrUnknown', () => {
+  it('under clerk and shadow is the Clerk answer, and never null', async () => {
+    db = fakeDb({})
+    for (const source of ['', 'clerk', 'shadow']) {
+      vi.stubEnv('AUTHZ_SOURCE', source)
+      db.fail.add('members')
+      vi.mocked(auth).mockResolvedValue({ userId: USER, sessionClaims: { metadata: { role: 'admin' } } } as never)
+      expect(await authz.isStellrAdminOrUnknown(), source).toBe(true)
+      vi.mocked(auth).mockResolvedValue({ userId: USER, sessionClaims: { metadata: { role: 'event_manager' } } } as never)
+      expect(await authz.isStellrAdminOrUnknown(), source).toBe(false)
+    }
+  })
+
+  it('under postgres answers from the tables, and is null only when they cannot be read', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    vi.mocked(auth).mockResolvedValue({ userId: USER, sessionClaims: { metadata: { role: 'admin' } } } as never)
+    db = fakeDb({ members: [{ id: MEMBER, clerk_user_id: USER }], tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'tenant_admin', clerk_user_id: USER }] })
+    vi.mocked(supabaseServer).mockReturnValue(db.client)
+    expect(await authz.isStellrAdminOrUnknown()).toBe(true)
+    db.tables.tenant_memberships = []
+    expect(await authz.isStellrAdminOrUnknown()).toBe(false)
+    db.fail.add('tenant_memberships')
+    expect(await authz.isStellrAdminOrUnknown()).toBeNull()
+    expect(await authz.isStellrAdmin()).toBe(false)
+  })
+})
+
+describe('isStaffTargetOrUnknown', () => {
+  const target = { clerkUserId: USER, clerkRole: 'student', memberId: MEMBER }
+
+  it('under postgres tells a failed read from a staff answer, where isStaffTarget cannot', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    db = fakeDb({ tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'event_manager', member_id: MEMBER }] })
+    vi.mocked(supabaseServer).mockReturnValue(db.client)
+    expect(await authz.isStaffTargetOrUnknown(target)).toBe(true)
+    db.tables.tenant_memberships = []
+    expect(await authz.isStaffTargetOrUnknown(target)).toBe(false)
+    db.fail.add('tenant_memberships')
+    expect(await authz.isStaffTargetOrUnknown(target)).toBeNull()
+    expect(await authz.isStaffTarget(target)).toBe(true)
+  })
+
+  it('under clerk and shadow is the Clerk answer, and never null', async () => {
+    db = fakeDb({})
+    vi.mocked(supabaseServer).mockReturnValue(db.client)
+    db.fail.add('tenant_memberships')
+    for (const source of ['', 'clerk', 'shadow']) {
+      vi.stubEnv('AUTHZ_SOURCE', source)
+      expect(await authz.isStaffTargetOrUnknown(target), source).toBe(false)
+      expect(await authz.isStaffTargetOrUnknown({ ...target, clerkRole: 'admin' }), source).toBe(true)
+    }
   })
 })
 

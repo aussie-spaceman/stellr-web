@@ -83,7 +83,7 @@
     },
     "app/(admin)/admin/members/[id]/view-as/page.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreements, allergy_options, ethnicity_options, member_directory_prefs, members, participants (+1)"
+      "reason": "auto: touches tenant or event-scoped tables; tables: agreements, allergy_options, ethnicity_options, member_directory_prefs, members, participants"
     },
     "app/(admin)/admin/members/access/page.tsx": {
       "class": "stellr_only",
@@ -638,8 +638,8 @@
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/impersonation/route.ts": {
-      "class": "stellr_only",
-      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: members, staff_roles"
+      "class": "identity",
+      "reason": "auto: no tenant or event-scoped table, classed by its identity tables; tables: members"
     },
     "app/api/admin/media/do-not-use/route.ts": {
       "class": "convert",

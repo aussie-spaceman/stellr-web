@@ -21,8 +21,17 @@ function resolveLocal(fromFile: string, spec: string, exists: (rel: string) => b
   return null
 }
 
+export interface ClosureOptions {
+  /** Walks only what loads with the file: no import() or require() inside it. */
+  staticOnly?: boolean
+  /** A file this is true for is in the closure, but its own imports are not followed. */
+  stopAt?: (file: string) => boolean
+  /** Filled with the file that first led to each one, so a failure can show the way there. */
+  parents?: Map<string, string>
+}
+
 /** The module specifiers a file really loads at runtime. */
-export function runtimeImports(fileName: string, src: string): string[] {
+export function runtimeImports(fileName: string, src: string, opts: ClosureOptions = {}): string[] {
   const sf = ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true)
   const out: string[] = []
   const visit = (node: ts.Node) => {
@@ -31,6 +40,7 @@ export function runtimeImports(fileName: string, src: string): string[] {
     } else if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
       out.push(node.moduleSpecifier.text)
     } else if (
+      !opts.staticOnly &&
       ts.isCallExpression(node) &&
       (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require')) &&
       node.arguments[0] &&
@@ -45,20 +55,13 @@ export function runtimeImports(fileName: string, src: string): string[] {
 }
 
 /** The repo files a file really loads at runtime. */
-export function localImportsOf(file: string, src: string, read: (rel: string) => string | null): string[] {
+export function localImportsOf(file: string, src: string, read: (rel: string) => string | null, opts: ClosureOptions = {}): string[] {
   const out: string[] = []
-  for (const spec of runtimeImports(file, src)) {
+  for (const spec of runtimeImports(file, src, opts)) {
     const next = resolveLocal(file, spec, (rel) => read(rel) !== null)
     if (next) out.push(next)
   }
   return out
-}
-
-export interface ClosureOptions {
-  /** A file this is true for is in the closure, but its own imports are not followed. */
-  stopAt?: (file: string) => boolean
-  /** Filled with the file that first led to each one, so a failure can show the way there. */
-  parents?: Map<string, string>
 }
 
 /** Every repo file reachable from any entry, the entries included. */
@@ -72,7 +75,7 @@ export function importClosureOf(entries: readonly string[], read: (rel: string) 
     if (src === null) continue
     seen.add(file)
     if (opts.stopAt?.(file)) continue
-    for (const next of localImportsOf(file, src, read)) {
+    for (const next of localImportsOf(file, src, read, opts)) {
       queue.push(next)
       if (opts.parents && !seen.has(next) && !opts.parents.has(next)) opts.parents.set(next, file)
     }
@@ -81,8 +84,8 @@ export function importClosureOf(entries: readonly string[], read: (rel: string) 
 }
 
 /** Every repo file reachable from the entry, the entry included. */
-export function importClosure(entry: string, read: (rel: string) => string | null): Set<string> {
-  return importClosureOf([entry], read)
+export function importClosure(entry: string, read: (rel: string) => string | null, opts: ClosureOptions = {}): Set<string> {
+  return importClosureOf([entry], read, opts)
 }
 
 export const readRepoFile = (rel: string): string | null => {

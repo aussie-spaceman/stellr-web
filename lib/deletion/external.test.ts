@@ -13,14 +13,14 @@ vi.mock('@clerk/nextjs/server', () => ({
 
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
-    from: () => {
+    from: (table: string) => {
       const q = {
         select: (_cols: string, opts?: { head?: boolean }) => {
           const counting = !!opts?.head
           const chain = {
             eq: () => chain,
             neq: () => chain,
-            maybeSingle: async () => ({ data: memberRow }),
+            maybeSingle: async () => (table === 'platform_admins' ? { data: null, error: { message: 'role table down' } } : { data: memberRow }),
             then: (resolve: (v: { count: number }) => unknown) =>
               resolve({ count: counting ? otherLinked : 0 }),
           }
@@ -71,6 +71,32 @@ describe('cleanupClerkForMember', () => {
     const r = await cleanupClerkForMember('m1')
     expect(deleteUser).not.toHaveBeenCalled()
     expect(r.ok).toBe(false)
+    expect(r.detail).toBe(`Clerk login user_abc is a staff account (${role}); left in place`)
+  })
+
+  it.each(['student', 'staff', 'Admin', 7, undefined])('deletes a login whose role is %s', async (role) => {
+    getUser.mockResolvedValue({ publicMetadata: { role } })
+    const r = await cleanupClerkForMember('m1')
+    expect(deleteUser).toHaveBeenCalledWith('user_abc')
+    expect(r.ok).toBe(true)
+  })
+
+  it('reports a failed role read and deletes nothing', async () => {
+    getUser.mockRejectedValue(Object.assign(new Error('Clerk unavailable'), { status: 503 }))
+    const r = await cleanupClerkForMember('m1')
+    expect(deleteUser).not.toHaveBeenCalled()
+    expect(r).toMatchObject({ kind: 'clerk', ok: false, detail: 'Clerk unavailable' })
+  })
+
+  it('under postgres, a failed role read keeps the login and says it could not confirm, not that it is staff', async () => {
+    vi.stubEnv('AUTHZ_SOURCE', 'postgres')
+    try {
+      const r = await cleanupClerkForMember('m1')
+      expect(deleteUser).not.toHaveBeenCalled()
+      expect(r).toMatchObject({ kind: 'clerk', ok: false, detail: 'Could not confirm Clerk login user_abc is not a staff account; left in place' })
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('treats a login already removed from Clerk as done', async () => {

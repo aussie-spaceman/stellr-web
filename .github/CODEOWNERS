@@ -83,11 +83,15 @@
 /lib/security/route-ast.ts          @aussie-spaceman
 /test/route-manifest.test.ts        @aussie-spaceman
 /test/authz-ratchet.test.ts         @aussie-spaceman
+/test/authz-load-closure.test.ts    @aussie-spaceman
+/test/fixtures/authz-legacy.ts      @aussie-spaceman
 /scripts/authz-idioms.mjs           @aussie-spaceman
 /scripts/idor-canary.mjs            @aussie-spaceman
 /scripts/tenant-host-cap.mjs        @aussie-spaceman
 /lib/security/stellr-only-dispositions.ts @aussie-spaceman
 /test/registration/participants-eligibility-sql.test.ts @aussie-spaceman
+/scripts/codemods/authz*.ts         @aussie-spaceman
+/scripts/codemods/fixtures/authz/** @aussie-spaceman
 
 # Build config: security headers, CSP and redirects
 /next.config.mjs                    @aussie-spaceman

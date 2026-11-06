@@ -8,7 +8,7 @@
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-tenant-isolation-pgtap.mjs --check  # exit 1 if stale
  *
  * For every table the registry classifies tenant- or event-scoped with its
- * own tenant_id ('own' or 'derived'), the test:
+ * own tenant_id ('own', 'derived' or 'inherited'), the test:
  *   1. checks the tenant policies exist (a PERMISSIVE and a RESTRICTIVE one,
  *      TO tenant_app only) and that tenant_app has no BYPASSRLS;
  *   2. seeds two tenants — Stellr and a canary tenant — with rows in every
@@ -25,15 +25,21 @@
  *      (seed + its own inserts): nothing moved, nothing was deleted.
  * Beyond its own rows (lib/tenancy/tenant-role.ts):
  *   * routing, ownership and role tables (events, tenant_domains,
- *     tenant_memberships) are read-only to tenant_app: INSERT, UPDATE and
- *     DELETE are refused even on its own rows;
+ *     tenant_memberships) and the append-only evidence tables (esign_access_log,
+ *     esign_audit_events, survey_answers) are read-only to tenant_app: INSERT,
+ *     UPDATE and DELETE are refused even on its own rows;
  *   * platform-level tables that carry a tenant_id (platform_audit_events,
  *     tenant_data_keys: TENANT_APP_NO_ACCESS_TABLES) grant tenant_app nothing;
  *   * a row it writes may not point at the other tenant's parent row, nor at
  *     an id that does not exist (the same refusal, so no existence oracle),
  *     nor at an event its tenant does not have; the same row pointing at its
  *     own parent works. The set of foreign keys between tenant tables is
- *     checked against TENANT_PARENT_REFS, so a new one cannot go unguarded.
+ *     checked against TENANT_PARENT_REFS, so a new one cannot go unguarded;
+ *   * identity columns it may not write (TENANT_APP_UNWRITABLE_COLUMNS) are
+ *     refused on INSERT and UPDATE, while the rest of the row stays writable;
+ *   * section 7: in 'log' and 'enforce' mode, on INSERT and UPDATE, a child row
+ *     naming another tenant's parent and one naming no parent get the same
+ *     refusal, and an age check on another tenant's event says nothing.
  * tenant_app cannot call pgTAP itself (pgTAP keeps its state in tables only
  * the owner can write), so each observation is recorded into a temp table as
  * tenant_app and asserted after RESET ROLE.
@@ -46,7 +52,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { TABLE_REGISTRY } from '../lib/tenancy/registry.ts'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants.ts'
-import { TENANT_APP_NO_ACCESS_TABLES, TENANT_APP_READ_ONLY_TABLES, TENANT_PARENT_REFS } from '../lib/tenancy/tenant-role.ts'
+import { TENANT_APP_NO_ACCESS_TABLES, TENANT_APP_READ_ONLY_TABLES, TENANT_APP_UNWRITABLE_COLUMNS, TENANT_PARENT_REFS } from '../lib/tenancy/tenant-role.ts'
 
 export const OUTPUT = 'supabase/tests/database/tenant_isolation.test.sql'
 
@@ -72,6 +78,12 @@ export const TENANTS = {
     secondary: { slug: 'iso-a-event-2', sanity: 'iso-a-sanity-2' },
     registration: 'a0000000-0000-4000-8000-000000000001',
     module: 'a0000000-0000-4000-8000-000000000002',
+    agreement: 'a0000000-0000-4000-8000-000000000003',
+    credential: 'a0000000-0000-4000-8000-000000000004',
+    group: 'a0000000-0000-4000-8000-000000000005',
+    order: 'a0000000-0000-4000-8000-000000000006',
+    distribution: 'a0000000-0000-4000-8000-000000000007',
+    response: 'a0000000-0000-4000-8000-000000000008',
   },
   b: {
     id: CANARY_TENANT_ID,
@@ -80,12 +92,24 @@ export const TENANTS = {
     secondary: { slug: 'iso-b-event-2', sanity: 'iso-b-sanity-2' },
     registration: 'b0000000-0000-4000-8000-000000000001',
     module: 'b0000000-0000-4000-8000-000000000002',
+    agreement: 'b0000000-0000-4000-8000-000000000003',
+    credential: 'b0000000-0000-4000-8000-000000000004',
+    group: 'b0000000-0000-4000-8000-000000000005',
+    order: 'b0000000-0000-4000-8000-000000000006',
+    distribution: 'b0000000-0000-4000-8000-000000000007',
+    response: 'b0000000-0000-4000-8000-000000000008',
   },
 }
 const MEMBER = 'c0000000-0000-4000-8000-000000000001'
 const PRODUCT = 'c0000000-0000-4000-8000-000000000002'
 const VARIANT = 'c0000000-0000-4000-8000-000000000003'
 const DEFINITION = 'c0000000-0000-4000-8000-000000000004'
+/** member_group_members' key is (group, member), so each row that lands needs its own member. */
+const MEMBER_OWN = 'c0000000-0000-4000-8000-000000000005'
+const MEMBER_REF_OWN = 'c0000000-0000-4000-8000-000000000006'
+/** Far enough ahead that A3's eligibility check passes an adult on a tenant's event. */
+const EVENT_STARTS_AT = '2040-06-01T00:00:00Z'
+const ADULT_DOB = '2000-01-01'
 /** An id no row has: referencing it must be refused exactly like another tenant's id. */
 const MISSING = 'd0000000-0000-4000-8000-00000000dead'
 
@@ -103,7 +127,7 @@ const extraFor = (r) => REF_EXTRA[`${r.table}.${r.column}`] ?? {}
  * One row per tenant table. `f(c)` returns column -> SQL expression, where
  * c = { tag, t (TENANTS entry), ev (the event to use), s (a suffix unique to
  * this row), seed (true for the seeded row) }. Parents first: rows whose
- * fixtures name the seeded registration or module come after them.
+ * fixtures name a seeded parent come after it (SEED_FIRST).
  */
 export const FIXTURES = {
   'public.registrations': (c) => ({
@@ -115,12 +139,38 @@ export const FIXTURES = {
     title: lit(`Iso module ${c.s}`), event_ref: lit(c.ev.sanity),
   }),
   'public.agreements': (c) => ({
+    ...(c.seed ? { id: lit(c.t.agreement) } : {}),
     event_slug: lit(c.ev.slug), event_title: lit('Iso'), envelope_id: lit(`iso-env-${c.s}`),
     signer_name: lit('Iso Signer'), signer_email: lit('signer@example.test'), minor_name: lit('Iso Minor'),
+  }),
+  'public.agreement_recipients': (c) => ({
+    envelope_row: lit(c.t.agreement), recipient_id: lit(c.s), name: lit('Iso Signer'), email: lit('signer@example.test'), status: lit('created'),
+  }),
+  'public.credential_events': (c) => ({ credential_id: lit(c.t.credential), kind: lit('view') }),
+  'public.esign_access_log': (c) => ({ envelope_row: lit(c.t.agreement), action: lit('view'), actor_type: lit('system') }),
+  'public.esign_audit_events': (c) => ({ envelope_row: lit(c.t.agreement), event: lit('issued'), hash: lit(`iso-hash-${c.s}`) }),
+  'public.member_group_members': (c) => ({
+    group_id: lit(c.t.group),
+    // A refused row never reaches the unique check, so only the rows that land need their own member.
+    member_id: lit(c.s.endsWith('-own') ? MEMBER_OWN : c.s.includes('-ref-own-') ? MEMBER_REF_OWN : MEMBER),
+  }),
+  'public.participants': (c) => ({
+    // One row per (registration_id, email), so each row that lands needs its own address.
+    registration_id: lit(c.t.registration), first_name: lit('Iso'), last_name: lit('Participant'), email: lit(`participant-${c.s}@example.test`),
+    phone: lit('0'), date_of_birth: `${lit(ADULT_DOB)}::date`, gender: lit(''), t_shirt_size: lit('M'), school_name: lit(''),
+    age_bracket: lit('high_school'), event_role: lit('participant'),
+  }),
+  'public.store_order_items': (c) => ({ order_id: lit(c.t.order), name: lit('Iso item') }),
+  'public.store_returns': (c) => ({ order_id: lit(c.t.order), reason: lit('Iso') }),
+  'public.survey_answers': (c) => ({ response_id: lit(c.t.response), question_key: lit(`iso_${c.s}`) }),
+  'public.survey_invitations': (c) => ({
+    distribution_id: lit(c.t.distribution), recipient_key: lit(`email:${c.s}@example.test`), respondent_role: lit('student'),
+    email: lit('invitee@example.test'), token_hash: lit(`iso-invite-${c.s}`),
   }),
   'public.community_resources': (c) => ({ title: lit(`Iso resource ${c.s}`), event_ref: lit(c.ev.sanity) }),
   'public.community_spaces': (c) => ({ slug: lit(`iso-space-${c.s}`), name: lit('Iso'), sanity_event_id: lit(c.ev.sanity) }),
   'public.credentials': (c) => ({
+    ...(c.seed ? { id: lit(c.t.credential) } : {}),
     number: lit(`ISO-${c.s}`), source: lit('manual'), recipient_name: lit('Iso'), title: lit('Iso'), event_slug: lit(c.ev.slug),
   }),
   'public.event_award_assignments': (c) => ({ event_slug: lit(c.ev.slug), award_type: lit('overall_champion') }),
@@ -146,7 +196,7 @@ export const FIXTURES = {
   'public.group_join_tokens': (c) => ({
     token: lit(`iso-token-${c.s}`), registration_id: lit(c.t.registration), event_slug: lit(c.ev.slug), event_title: lit('Iso'),
   }),
-  'public.member_groups': (c) => ({ owner_id: lit(MEMBER), name: lit('Iso'), event_slug: lit(c.ev.slug) }),
+  'public.member_groups': (c) => ({ ...(c.seed ? { id: lit(c.t.group) } : {}), owner_id: lit(MEMBER), name: lit('Iso'), event_slug: lit(c.ev.slug) }),
   'public.mentoring_cohorts': (c) => ({ name: lit(`Iso ${c.s}`), sanity_event_id: lit(c.ev.sanity) }),
   'public.merch_batches': (c) => ({ batch_type: lit('event_venue'), event_slug: lit(c.ev.slug) }),
   'public.refund_policies': (c) => ({ scope: lit('event'), tiers: `'[]'::jsonb`, event_slug: lit(c.ev.slug) }),
@@ -154,13 +204,15 @@ export const FIXTURES = {
     first_name: lit('Iso'), last_name: lit('Applicant'), email: lit('applicant@example.test'), brief: lit('Iso'), event_slug: lit(c.ev.slug),
   }),
   'public.store_event_discounts': (c) => ({ percent_off: '10', event_slug: lit(c.ev.slug) }),
-  'public.store_orders': (c) => ({ email: lit('buyer@example.test'), event_slug: lit(c.ev.slug) }),
+  'public.store_orders': (c) => ({ ...(c.seed ? { id: lit(c.t.order) } : {}), email: lit('buyer@example.test'), event_slug: lit(c.ev.slug) }),
   'public.survey_access_log': (c) => ({ actor: lit('staff'), action: lit('view'), event_slug: lit(c.ev.slug) }),
   'public.survey_distributions': (c) => ({
+    ...(c.seed ? { id: lit(c.t.distribution) } : {}),
     definition_id: lit(DEFINITION), event_slug: lit(c.ev.slug), event_date: `'2026-11-06'::date`, event_time_zone: lit('UTC'),
     opens_at: `'2026-11-07T00:00:00Z'::timestamptz`, closes_at: `'2026-11-21T00:00:00Z'::timestamptz`,
   }),
   'public.survey_responses': (c) => ({
+    ...(c.seed ? { id: lit(c.t.response) } : {}),
     definition_id: lit(DEFINITION), event_slug: lit(c.ev.slug), source: lit('legacy_import'), legacy_ref: lit(`iso-${c.s}`),
   }),
   'public.team_profiles': (c) => ({ event_slug: lit(c.ev.slug), token_hash: lit(`iso-hash-${c.s}`) }),
@@ -170,14 +222,14 @@ export const FIXTURES = {
   'public.volunteer_event_interest': (c) => ({ member_id: lit(MEMBER), event_slug: lit(c.ev.slug), event_title: lit('Iso') }),
 }
 
-/** The tables the matrix covers: registry 'own' and 'derived' entries, sorted. */
+/** The tables the matrix covers: registry 'own', 'derived' and 'inherited' entries, sorted. */
 export function tenantTables(registry = TABLE_REGISTRY) {
   return Object.keys(registry)
-    .filter((n) => ['own', 'derived'].includes(registry[n].tenantColumn))
+    .filter((n) => ['own', 'derived', 'inherited'].includes(registry[n].tenantColumn))
     .sort()
 }
 
-/** Tables the registry scopes to a tenant only through a parent (no tenant_id yet). */
+/** Tables the registry scopes to a tenant only through a parent (no tenant_id). None since S5 C0b. */
 export function viaParentTables(registry = TABLE_REGISTRY) {
   return Object.keys(registry)
     .filter((n) => registry[n].tenantColumn === 'via_parent')
@@ -189,14 +241,19 @@ export function fixtureProblems(registry = TABLE_REGISTRY, fixtures = FIXTURES) 
   const want = new Set(tenantTables(registry))
   const out = []
   for (const t of want) if (!fixtures[t]) out.push(`${t}: tenant table with no fixture in scripts/gen-tenant-isolation-pgtap.mjs`)
-  for (const t of Object.keys(fixtures)) if (!want.has(t)) out.push(`${t}: fixture for a table that is not an own/derived tenant table`)
+  for (const t of Object.keys(fixtures)) if (!want.has(t)) out.push(`${t}: fixture for a table that is not an own/derived/inherited tenant table`)
   return out
 }
 
-/** Parents first (FIXTURES order), then the rest alphabetically. */
-function seedOrder(tables, fixtures) {
-  const parents = Object.keys(fixtures).filter((t) => ['public.registrations', 'public.training_modules'].includes(t))
-  return [...parents, ...tables.filter((t) => !parents.includes(t))]
+/** The tables other fixtures name a seeded row of, in the order they must be written. */
+const SEED_FIRST = [
+  'public.registrations', 'public.training_modules', 'public.agreements', 'public.credentials', 'public.member_groups',
+  'public.store_orders', 'public.survey_distributions', 'public.survey_responses',
+]
+
+/** Parents first, then the rest alphabetically. */
+function seedOrder(tables) {
+  return [...SEED_FIRST, ...tables.filter((t) => !SEED_FIRST.includes(t))]
 }
 
 /** Foreign keys from a tenant table to a tenant table that tenant_app can see (not via_parent). */
@@ -217,7 +274,8 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
   const own = new Set(tables.filter((n) => registry[n].tenantColumn === 'own'))
   const readOnly = new Set(TENANT_APP_READ_ONLY_TABLES)
   const via = new Set(viaParentTables(registry))
-  const refs = TENANT_PARENT_REFS.map((r, k) => ({ ...r, k, checked: !via.has(r.parent) }))
+  // A key on a read-only table is never written by the tenant, so its row checks stop at the refusal.
+  const refs = TENANT_PARENT_REFS.map((r, k) => ({ ...r, k, checked: !via.has(r.parent) && !readOnly.has(r.table) }))
   const row = (table, tag, ev, s, seed, extra = {}) =>
     insertSql(table, {
       ...fixtures[table]({ tag, t: TENANTS[tag], ev: typeof ev === 'string' ? TENANTS[tag][ev] : ev, s: `${tag}-${s}`, seed }),
@@ -275,6 +333,20 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
   AND NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'INSERT, UPDATE, DELETE, TRUNCATE')
   AND (SELECT relrowsecurity FROM pg_class WHERE oid = ${lit(n)}::regclass), ${lit(`${n}: RLS on, and ${ROLE} may read it but never write it (platform-written)`)});`,
       )
+    } else if (TENANT_APP_UNWRITABLE_COLUMNS[n]) {
+      t(
+        `SELECT ok(has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'SELECT') AND has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'DELETE')
+  AND has_any_column_privilege(${lit(ROLE)}, ${lit(n)}, 'INSERT') AND has_any_column_privilege(${lit(ROLE)}, ${lit(n)}, 'UPDATE')
+  AND NOT has_table_privilege(${lit(ROLE)}, ${lit(n)}, 'INSERT, UPDATE, TRUNCATE')
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid = ${lit(n)}::regclass), ${lit(`${n}: RLS on, and ${ROLE} writes it column by column, not as a whole table`)});`,
+      )
+      for (const col of TENANT_APP_UNWRITABLE_COLUMNS[n]) {
+        t(
+          `SELECT ok(has_column_privilege(${lit(ROLE)}, ${lit(n)}, ${lit(col)}, 'SELECT')
+  AND NOT has_column_privilege(${lit(ROLE)}, ${lit(n)}, ${lit(col)}, 'INSERT') AND NOT has_column_privilege(${lit(ROLE)}, ${lit(n)}, ${lit(col)}, 'UPDATE'),
+  ${lit(`${n}.${col}: ${ROLE} may read it but not write it`)});`,
+        )
+      }
     } else {
       t(
         `SELECT ok(${['SELECT', 'INSERT', 'UPDATE', 'DELETE'].map((p) => `has_table_privilege(${lit(ROLE)}, ${lit(n)}, '${p}')`).join(' AND ')}
@@ -283,6 +355,7 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
       )
     }
     const entry = registry[n]
+    // Not derived-only: an inherited table's parent key is named through its ref below.
     const mustMention = [
       ...(entry.tenantColumn === 'derived' && entry.eventKey ? [entry.eventKey.column] : []),
       ...refs.filter((r) => r.table === n).map((r) => r.column),
@@ -343,19 +416,21 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
     const tn = TENANTS[tag]
     for (const ev of [tn.primary, tn.secondary, ...refs.filter((r) => r.checked).map((r) => refEvent(tag, r.k))]) {
       lines.push(
-        `INSERT INTO public.events (tenant_id, slug, sanity_id, title, time_zone, country, currency, grade_system)
-  VALUES (${lit(tn.id)}, ${lit(ev.slug)}, ${lit(ev.sanity)}, 'Iso event', 'UTC', 'US', 'usd', 'us_grades');`,
+        `INSERT INTO public.events (tenant_id, slug, sanity_id, title, starts_at, time_zone, country, currency, grade_system)
+  VALUES (${lit(tn.id)}, ${lit(ev.slug)}, ${lit(ev.sanity)}, 'Iso event', ${lit(EVENT_STARTS_AT)}::timestamptz, 'UTC', 'US', 'usd', 'us_grades');`,
       )
     }
   }
   lines.push(
     `INSERT INTO public.members (id, first_name, last_name, email, event_role) VALUES (${lit(MEMBER)}, 'Iso', 'Member', 'iso-member@example.test', 'participant');
+INSERT INTO public.members (id, first_name, last_name, email, event_role) VALUES (${lit(MEMBER_OWN)}, 'Iso', 'Own', 'iso-member-own@example.test', 'participant');
+INSERT INTO public.members (id, first_name, last_name, email, event_role) VALUES (${lit(MEMBER_REF_OWN)}, 'Iso', 'Ref', 'iso-member-ref@example.test', 'participant');
 INSERT INTO public.store_products (id, slug, name) VALUES (${lit(PRODUCT)}, 'iso-product', 'Iso product');
 INSERT INTO public.store_variants (id, product_id, sku) VALUES (${lit(VARIANT)}, ${lit(PRODUCT)}, 'ISO-SKU');
 INSERT INTO public.survey_definitions (id, key, version, title, definition, definition_sha256)
   VALUES (${lit(DEFINITION)}, 'iso_survey', 1, 'Iso survey', '{}'::jsonb, repeat('0', 64));`,
   )
-  for (const n of seedOrder(tables, fixtures)) {
+  for (const n of seedOrder(tables)) {
     for (const tag of ['a', 'b']) lines.push(`${row(n, tag, 'primary', 'seed', true)};`)
   }
 
@@ -440,6 +515,15 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
       if (registry[n].tenantColumn === 'derived') {
         lines.push(obs(ctx, n, 'event_unknown', row(n, ctx, UNKNOWN_EVENT, 'unknown-event', false, { tenant_id: lit(me.id) })))
       }
+      for (const col of TENANT_APP_UNWRITABLE_COLUMNS[n] ?? []) {
+        lines.push(
+          obs(ctx, n, `insert_col:${col}`, row(n, ctx, 'secondary', `col-${col}`, false, { [col]: col === 'member_id' ? lit(MEMBER) : lit('9999999') })),
+          obs(ctx, n, `update_col:${col}`, `UPDATE ${n} SET ${col} = ${col === 'member_id' ? lit(MEMBER) : lit('9999999')} WHERE tenant_id = '${me.id}'`),
+        )
+      }
+      if (TENANT_APP_UNWRITABLE_COLUMNS[n]) {
+        lines.push(obs(ctx, n, 'update_col_other', `UPDATE ${n} SET first_name = first_name WHERE tenant_id = '${me.id}'`))
+      }
       for (const r of refs.filter((x) => x.table === n)) {
         const ev = r.checked ? refEvent(ctx, r.k) : 'secondary'
         const parentOf = (tag) => `(SELECT id FROM iso_parent WHERE tbl = '${r.parent}' AND tenant = '${TENANTS[tag].id}')`
@@ -477,6 +561,13 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
       }
       if (registry[n].tenantColumn === 'derived') {
         t(`SELECT is(${got(ctx, n, 'event_unknown')}, 'ERR:42501', ${lit(`${me.label} context: a ${n} row under an event its tenant does not have is refused, even with its own tenant_id`)});`)
+      }
+      for (const col of TENANT_APP_UNWRITABLE_COLUMNS[n] ?? []) {
+        t(`SELECT is(${got(ctx, n, `insert_col:${col}`)}, 'ERR:42501', ${lit(`${me.label} context: INSERT into ${n} naming ${col} is refused`)});`)
+        t(`SELECT is(${got(ctx, n, `update_col:${col}`)}, 'ERR:42501', ${lit(`${me.label} context: UPDATE of ${n}.${col} is refused`)});`)
+      }
+      if (TENANT_APP_UNWRITABLE_COLUMNS[n]) {
+        t(`SELECT ok(${got(ctx, n, 'update_col_other')}::int >= 1, ${lit(`${me.label} context: its other columns of ${n} stay writable`)});`)
       }
       for (const r of refs.filter((x) => x.table === n)) {
         t(`SELECT is(${got(ctx, n, `ref_missing:${r.column}`)}, 'ERR:42501', ${lit(`${me.label} context: ${n}.${r.column} naming an id that does not exist is refused by RLS (no FK error to probe with)`)});`)
@@ -540,6 +631,73 @@ GRANT EXECUTE ON FUNCTION pg_temp.iso_run(text) TO ${ROLE};`,
     `SELECT is(${got('a', 'storage', 'other_prefix')}, ${lit(B)},
   'storage: in Stellr''s context the canary prefix still reads as the canary''s (the definer sees every tenant), so a policy never hands it to Stellr');`,
   )
+
+  // ── 7. A refused write says nothing about the parent it named ────────────
+  const childRefs = refs.filter((r) => r.checked && registry[r.table].tenantColumn === 'inherited' && registry[r.table].parentKey === r.column)
+  const UNDER_AGE = `(current_date - interval '5 years')::date`
+  const ORACLE_REG = 'a1000000-0000-4000-8000-000000000001'
+  // Stellr admits this child; the row exists so a move onto a tenant event is judged.
+  lines.push(
+    '',
+    '-- 7. A refused write says nothing about the parent it named: the same error for another tenant\'s id as for one that',
+    '--    does not exist, in both derivation modes. BEFORE triggers run ahead of RLS and read as the owner, so this is not',
+    '--    implied by the checks above, whose fixtures pass every trigger.',
+    `INSERT INTO public.registrations (id, event_slug, event_title, type) VALUES (${lit(ORACLE_REG)}, ${lit(TENANTS.a.primary.slug)}, 'Iso', 'individual');`,
+    `${row('public.participants', 'a', 'primary', 'oracle-child', false, { registration_id: lit(ORACLE_REG), date_of_birth: UNDER_AGE })};`,
+  )
+  for (const mode of ['log', 'enforce']) {
+    lines.push(`UPDATE public.tenancy_settings SET derivation_mode = ${lit(mode)};`)
+    for (const [ctx, other] of [['a', 'b'], ['b', 'a']]) {
+      const me = TENANTS[ctx]
+      const label = `oracle-${mode}-${ctx}`
+      lines.push(`SET LOCAL ROLE ${ROLE};`, `SELECT set_config(${lit(TENANT_SETTING)}, ${lit(me.id)}, true);`)
+      for (const r of childRefs) {
+        const foreign = `(SELECT id FROM iso_parent WHERE tbl = '${r.parent}' AND tenant = '${TENANTS[other].id}')`
+        const s = `oracle-${mode}-${r.k}`
+        lines.push(
+          obs(label, r.table, 'insert_foreign_omitted', row(r.table, ctx, 'secondary', `${s}-1`, false, { [r.column]: foreign })),
+          obs(label, r.table, 'insert_missing_omitted', row(r.table, ctx, 'secondary', `${s}-2`, false, { [r.column]: lit(MISSING) })),
+          obs(label, r.table, 'insert_foreign_supplied', row(r.table, ctx, 'secondary', `${s}-3`, false, { [r.column]: foreign, tenant_id: lit(me.id) })),
+          obs(label, r.table, 'insert_missing_supplied', row(r.table, ctx, 'secondary', `${s}-4`, false, { [r.column]: lit(MISSING), tenant_id: lit(me.id) })),
+          obs(label, r.table, 'update_foreign', `UPDATE ${r.table} SET ${r.column} = ${foreign} WHERE tenant_id = '${me.id}'`),
+          obs(label, r.table, 'update_missing', `UPDATE ${r.table} SET ${r.column} = ${lit(MISSING)} WHERE tenant_id = '${me.id}'`),
+        )
+      }
+      const foreignReg = lit(TENANTS[other].registration)
+      lines.push(
+        obs(label, 'public.participants', 'under_age_foreign', row('public.participants', ctx, 'secondary', `${label}-5`, false, { registration_id: foreignReg, date_of_birth: UNDER_AGE })),
+        obs(label, 'public.participants', 'null_dob_foreign', row('public.participants', ctx, 'secondary', `${label}-6`, false, { registration_id: foreignReg, date_of_birth: 'NULL' })),
+        obs(label, 'public.participants', 'under_age_update_foreign', `UPDATE public.participants SET registration_id = ${foreignReg}, date_of_birth = ${UNDER_AGE} WHERE tenant_id = '${me.id}'`),
+      )
+      if (ctx === 'b') {
+        // The control: on its own event the tenant is judged in full, so stepping aside did not switch the rule off.
+        lines.push(obs(label, 'public.participants', 'under_age_own', row('public.participants', ctx, 'secondary', `${label}-7`, false, { date_of_birth: UNDER_AGE })))
+      }
+      if (ctx === 'a' && mode === 'log') {
+        lines.push(
+          obs(label, 'public.registrations', 'move_foreign_event', `UPDATE public.registrations SET event_slug = ${lit(TENANTS.b.primary.slug)} WHERE id = ${lit(ORACLE_REG)}`),
+          obs(label, 'public.registrations', 'move_unknown_event', `UPDATE public.registrations SET event_slug = ${lit(UNKNOWN_EVENT.slug)} WHERE id = ${lit(ORACLE_REG)}`),
+        )
+      }
+      lines.push('RESET ROLE;', `SELECT set_config(${lit(TENANT_SETTING)}, '', true);`)
+      for (const r of childRefs) {
+        for (const chk of ['insert_foreign_omitted', 'insert_missing_omitted', 'insert_foreign_supplied', 'insert_missing_supplied', 'update_foreign', 'update_missing']) {
+          t(`SELECT is(${got(label, r.table, chk)}, 'ERR:42501', ${lit(`${mode} mode, ${me.label} context: ${r.table} ${chk} gets RLS's one refusal`)});`)
+        }
+      }
+      for (const chk of ['under_age_foreign', 'null_dob_foreign', 'under_age_update_foreign']) {
+        t(`SELECT is(${got(label, 'public.participants', chk)}, 'ERR:42501', ${lit(`${mode} mode, ${me.label} context: participants ${chk} gets RLS's refusal, not an eligibility reason`)});`)
+      }
+      if (ctx === 'b') {
+        t(`SELECT is(${got(label, 'public.participants', 'under_age_own')}, 'ERR:23514', ${lit(`${mode} mode, ${me.label} context: an under-age participant on its own event is still refused by eligibility`)});`)
+      }
+      if (ctx === 'a' && mode === 'log') {
+        t(`SELECT is(${got(label, 'public.registrations', 'move_foreign_event')}, 'ERR:42501', ${lit(`${mode} mode, ${me.label} context: moving a registration onto another tenant's event gets RLS's refusal`)});`)
+        t(`SELECT is(${got(label, 'public.registrations', 'move_unknown_event')}, 'ERR:42501', ${lit(`${mode} mode, ${me.label} context: moving it onto an event nobody has gets the same refusal`)});`)
+      }
+    }
+  }
+  lines.push(`UPDATE public.tenancy_settings SET derivation_mode = 'log';`)
 
   const header = `-- GENERATED by scripts/gen-tenant-isolation-pgtap.mjs from lib/tenancy/registry.ts.
 -- Do not edit by hand: change the registry (or the generator's FIXTURES) and regenerate

@@ -4,18 +4,18 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { AdminUserButton } from '@/components/admin/AdminUserButton'
 import { clerkAppearance } from '@/lib/clerk-appearance'
 import { requestNonce } from '@/lib/request-nonce'
-import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
+import { hasPortalAccess, isStellrAdmin } from '@/lib/authz'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { userId, sessionClaims } = await auth()
+  const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
   // Admins see the full portal; Event Managers only the Events section
   // (middleware redirects them away from other /admin routes).
-  if (!hasAdminPortalAccess(sessionClaims)) redirect('/account')
-  const isAdmin = isAdminClaims(sessionClaims)
+  if (!(await hasPortalAccess({ route: '/admin' }))) redirect('/account')
+  const isAdmin = await isStellrAdmin({ route: '/admin' })
 
   // The nonce puts clerk-js under the CSP (lib/csp.ts).
   return (

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
-import { TABLE_REGISTRY, derivedTables, entryProblems, type TableEntry } from './registry'
+import { TABLE_REGISTRY, derivedTables, entryProblems, inheritedTables, type TableEntry } from './registry'
 import { STELLR_TENANT_ID, S3_FIRST_MIGRATION } from './constants'
 import { readSchemaTables, readSchemaInventory, applySql } from '../../scripts/lib/schema-tables.mjs'
 import { checkTenancy, UNPARSED_ALLOWLIST } from '../../scripts/check-migration-tenancy.mjs'
@@ -77,6 +77,37 @@ describe('table registry (S3)', () => {
     expect(backfill).toMatch(/SELECT tbl, rows_updated FROM public\.tenancy_backfill_tenant_ids\(\);/)
     // The expand migration stamps its real apply time for the 7-day gate.
     expect(expand).toMatch(/SET expand_applied_at = COALESCE\(expand_applied_at, now\(\)\)/)
+  })
+
+  it('S5 C0b: expands, backfills and stamps exactly the inherited tables', () => {
+    const dir = 'supabase/migrations'
+    const expand = readFileSync(`${dir}/20261106070722_via_parent_tenant_expand.sql`, 'utf8')
+    const backfill = readFileSync(`${dir}/20261106070724_via_parent_tenant_backfill.sql`, 'utf8')
+    const code = (sql: string) => sql.replace(/--[^\n]*/g, '')
+    const children = inheritedTables()
+    expect(children).toHaveLength(10)
+    expect(Object.values(TABLE_REGISTRY).filter((e) => e.tenantColumn === 'via_parent')).toEqual([])
+    for (const c of children) {
+      const name = c.table.split('.')[1]
+      const parent = c.parent.split('.')[1]
+      expect(code(expand), c.table).toContain(`ALTER TABLE ${c.table}\n  ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES public.tenants (id) ON DELETE RESTRICT;`)
+      expect(code(expand), c.table).toContain(`CREATE INDEX IF NOT EXISTS ${name}_tenant_id_idx ON ${c.table} (tenant_id);`)
+      expect(code(expand), c.table).toContain(
+        `BEFORE INSERT OR UPDATE OF ${c.column}, tenant_id ON ${c.table}\n  FOR EACH ROW EXECUTE FUNCTION public.tenancy_inherit_tenant_id('${c.column}', '${parent}');`,
+      )
+      expect(code(backfill), c.table).toContain(`'${name}'`)
+    }
+    // Stays expand-only: no NOT NULL, no default, nothing dropped but the trigger it replaces.
+    expect(code(expand)).not.toMatch(/\bSET NOT NULL\b|\bDEFAULT\b|\bDROP COLUMN\b|\bDROP CONSTRAINT\b/i)
+    expect(code(expand)).toMatch(/SET LOCAL lock_timeout/)
+    expect(code(backfill)).toMatch(/SET LOCAL lock_timeout/)
+    // The backfill leaves every trigger it switches off on again, in the same file.
+    for (const trg of ['esign_audit_events_guard', 'survey_invitations_updated_at']) {
+      expect(code(backfill)).toContain(`DISABLE TRIGGER ${trg};`)
+      expect(code(backfill)).toContain(`ENABLE TRIGGER ${trg};`)
+    }
+    // The file holds no second foreign key to a parent, which PostgREST would refuse to embed through.
+    expect(code(expand)).not.toMatch(/REFERENCES\s+public\.(?!tenants\b)/i)
   })
 
   it('hard-codes the same Stellr tenant id in every S3 migration as lib/tenancy/constants.ts', () => {
@@ -165,6 +196,44 @@ describe('checkTenancy — each rule can fail', () => {
     ).join('\n')
     expect(problems).toMatch(/kid_t: created since S3/)
     expect(problems).not.toMatch(/old_kid/)
+  })
+
+  describe('an inherited table', () => {
+    const entry: TableEntry = { class: 'event_scoped', tenantColumn: 'inherited', parent: 'public.parent_t', parentKey: 'parent_id' }
+    const withKid = (ddl: string) => {
+      const t = base()
+      applySql(t, `CREATE TABLE public.kid_i (id uuid, parent_id uuid, tenant_id uuid); ALTER TABLE public.kid_i ENABLE ROW LEVEL SECURITY; ${ddl}`, '20261001000000_x.sql')
+      return checkTenancy(t, reg({ 'public.kid_i': entry })).join('\n')
+    }
+    const index = 'CREATE INDEX kid_i_tenant_id_idx ON public.kid_i (tenant_id);'
+    const trigger = (args: string) =>
+      `CREATE TRIGGER zz_tenancy_derive_tenant_id BEFORE INSERT OR UPDATE OF parent_id, tenant_id ON public.kid_i FOR EACH ROW EXECUTE FUNCTION public.tenancy_inherit_tenant_id(${args});`
+
+    it('passes with its column, index and matching trigger', () => {
+      expect(withKid(`${index} ${trigger("'parent_id', 'parent_t'")}`)).toBe('')
+    })
+    it('fails with no index', () => {
+      expect(withKid(trigger("'parent_id', 'parent_t'"))).toMatch(/kid_i: tenant_id has no index/)
+    })
+    it('fails with no trigger, or the event-key trigger instead', () => {
+      expect(withKid(index)).toMatch(/kid_i: inherited but has no zz_tenancy_derive_tenant_id trigger/)
+      expect(withKid(`${index} CREATE TRIGGER zz_tenancy_derive_tenant_id BEFORE INSERT ON public.kid_i FOR EACH ROW EXECUTE FUNCTION public.tenancy_derive_tenant_id('parent_id', 'slug');`)).toMatch(
+        /kid_i: inherited but has no zz_tenancy_derive_tenant_id trigger/,
+      )
+    })
+    it('fails when the trigger names another parent', () => {
+      expect(withKid(`${index} ${trigger("'parent_id', 'other_t'")}`)).toMatch(/arguments \(parent_id, other_t\) do not match parent \(parent_id, parent_t\)/)
+    })
+    it('fails when the trigger is disabled', () => {
+      expect(withKid(`${index} ${trigger("'parent_id', 'parent_t'")} ALTER TABLE public.kid_i DISABLE TRIGGER zz_tenancy_derive_tenant_id;`)).toMatch(/kid_i: zz_tenancy_derive_tenant_id is disabled/)
+    })
+    it('entryProblems wants a parent and a parentKey, and keeps them to inherited tables', () => {
+      const p = (e: TableEntry) => entryProblems('public.x', e, reg())
+      expect(p(entry)).toEqual([])
+      expect(p({ ...entry, parentKey: undefined })).toEqual(['public.x: inherited needs a parentKey'])
+      expect(p({ ...entry, parent: undefined })).toEqual(['public.x: inherited needs a parent'])
+      expect(p({ class: 'system', tenantColumn: 'none', parentKey: 'k' })).toEqual(['public.x: parentKey and noForeignKey are only for inherited tables'])
+    })
   })
 
   it('flags a derivation trigger that is disabled, in any migration', () => {

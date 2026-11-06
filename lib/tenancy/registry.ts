@@ -17,9 +17,12 @@
 //   derived     nullable tenant_id set by the zz_tenancy_derive_tenant_id
 //               trigger from the row's event key (S3 expand,
 //               20261104130000); NOT NULL after the enforce cut-over
-//   via_parent  reaches its tenant through `parent` today; gets its own
-//               column with a composite FK in S4. Only tables that pre-date S3
-//               may use this
+//   inherited   nullable tenant_id copied from its `parent` row (through
+//               `parentKey`) by the zz_tenancy_derive_tenant_id trigger calling
+//               tenancy_inherit_tenant_id (S5 C0b). The composite FK is held
+//               back: see the note on the child() block below
+//   via_parent  reaches its tenant only through `parent`, with no column. Only
+//               tables that pre-date S3 may use this. None does since S5 C0b
 //   none        platform / stellr_only / identity / system tables
 //
 // Enforced by lib/tenancy/registry.test.ts (against the CREATE TABLEs in
@@ -30,7 +33,7 @@
 // Dependency-free on purpose: Node imports this file directly from the lint.
 
 export type TableClass = 'tenant_scoped' | 'event_scoped' | 'platform' | 'stellr_only' | 'identity' | 'system'
-export type TenantColumn = 'own' | 'derived' | 'via_parent' | 'none'
+export type TenantColumn = 'own' | 'derived' | 'inherited' | 'via_parent' | 'none'
 export type EventKeyKind = 'slug' | 'sanity_id'
 
 export interface TableEntry {
@@ -38,8 +41,12 @@ export interface TableEntry {
   tenantColumn: TenantColumn
   /** For `derived`: the column holding the event key and what it holds. */
   eventKey?: { column: string; kind: EventKeyKind }
-  /** For `via_parent`: the table (schema-qualified) the row belongs to. */
+  /** For `inherited` and `via_parent`: the table (schema-qualified) the row belongs to. */
   parent?: string
+  /** For `inherited`: the column on this table holding the parent's id. */
+  parentKey?: string
+  /** For `inherited`: parentKey is deliberately not a foreign key, so the row can outlive its parent. */
+  noForeignKey?: boolean
   note?: string
 }
 
@@ -62,11 +69,12 @@ const sanity = (column: 'event_ref' | 'sanity_event_id', note?: string): TableEn
   eventKey: { column, kind: 'sanity_id' },
   ...(note ? { note } : {}),
 })
-const child = (parent: string, note?: string): TableEntry => ({
+const child = (parent: string, parentKey: string, opts: { noForeignKey?: boolean; note?: string } = {}): TableEntry => ({
   class: 'event_scoped',
-  tenantColumn: 'via_parent',
+  tenantColumn: 'inherited',
   parent,
-  ...(note ? { note } : {}),
+  parentKey,
+  ...opts,
 })
 const own = (note?: string): TableEntry => ({ class: 'tenant_scoped', tenantColumn: 'own', ...(note ? { note } : {}) })
 const plain = (cls: 'platform' | 'stellr_only' | 'identity' | 'system', note?: string): TableEntry => ({
@@ -143,17 +151,29 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.training_assignments': sanity('event_ref'),
   'public.training_modules': sanity('event_ref', 'optional: academy modules log no_key'),
 
-  // ── Event-scoped through a parent row (own column + composite FK in S4) ──
-  'public.participants': child('public.registrations'),
-  'public.agreement_recipients': child('public.agreements'),
-  'public.esign_access_log': child('public.agreements'),
-  'public.esign_audit_events': child('public.agreements'),
-  'public.credential_events': child('public.credentials'),
-  'public.member_group_members': child('public.member_groups'),
-  'public.store_order_items': child('public.store_orders'),
-  'public.store_returns': child('public.store_orders'),
-  'public.survey_invitations': child('public.survey_distributions'),
-  'public.survey_answers': child('public.survey_responses'),
+  // ── Event-scoped through a parent row (S5 C0b) ───────────────────────────
+  // Each has tenant_id, copied from the parent by a trigger. A composite FK
+  // beside the existing single-column one would give PostgREST two relationships
+  // between the same two tables, and it refuses an unhinted embed in that case
+  // (PGRST201). Live code embeds these relations without hints, so the composite
+  // FK waits until they carry them. lib/tenancy/load-scoped.test.ts fails on a
+  // second foreign key.
+  'public.participants': child('public.registrations', 'registration_id'),
+  'public.agreement_recipients': child('public.agreements', 'envelope_row'),
+  'public.esign_access_log': child('public.agreements', 'envelope_row', {
+    noForeignKey: true,
+    note: 'the log must outlive the record it describes',
+  }),
+  'public.esign_audit_events': child('public.agreements', 'envelope_row', {
+    noForeignKey: true,
+    note: 'the trail must not vanish by cascade; removed only with the record, at the end of retention',
+  }),
+  'public.credential_events': child('public.credentials', 'credential_id'),
+  'public.member_group_members': child('public.member_groups', 'group_id'),
+  'public.store_order_items': child('public.store_orders', 'order_id'),
+  'public.store_returns': child('public.store_orders', 'order_id'),
+  'public.survey_invitations': child('public.survey_distributions', 'distribution_id'),
+  'public.survey_answers': child('public.survey_responses', 'response_id'),
 
   // ── Identity: a person's own record ──────────────────────────────────────
   'public.members': identity(),
@@ -271,6 +291,14 @@ export function derivedTables(): { table: string; column: string; kind: EventKey
     .sort((a, b) => a.table.localeCompare(b.table))
 }
 
+/** Tables whose tenant_id the S5 C0b trigger copies from a parent row. */
+export function inheritedTables(): { table: string; column: string; parent: string; noForeignKey: boolean }[] {
+  return Object.entries(TABLE_REGISTRY)
+    .filter(([, e]) => e.tenantColumn === 'inherited' && e.parent && e.parentKey)
+    .map(([table, e]) => ({ table, column: e.parentKey!, parent: e.parent!, noForeignKey: e.noForeignKey === true }))
+    .sort((a, b) => a.table.localeCompare(b.table))
+}
+
 /** A registry entry's internal consistency problems (none = valid). */
 export function entryProblems(table: string, e: TableEntry, registry: Record<string, TableEntry> = TABLE_REGISTRY): string[] {
   const out: string[] = []
@@ -279,12 +307,16 @@ export function entryProblems(table: string, e: TableEntry, registry: Record<str
   if (!scoped && e.tenantColumn !== 'none') out.push(`${table}: ${e.class} tables must use tenantColumn none`)
   if (e.tenantColumn === 'derived' && !e.eventKey) out.push(`${table}: derived needs an eventKey`)
   if (e.tenantColumn !== 'derived' && e.eventKey) out.push(`${table}: eventKey is only for derived tables`)
-  if (e.tenantColumn === 'via_parent') {
-    if (!e.parent) out.push(`${table}: via_parent needs a parent`)
+  if (e.tenantColumn === 'via_parent' || e.tenantColumn === 'inherited') {
+    if (!e.parent) out.push(`${table}: ${e.tenantColumn} needs a parent`)
     else if (!registry[e.parent]) out.push(`${table}: parent ${e.parent} is not in the registry`)
     else if (registry[e.parent].class !== 'event_scoped' && registry[e.parent].class !== 'tenant_scoped') {
       out.push(`${table}: parent ${e.parent} is not tenant- or event-scoped`)
     }
-  } else if (e.parent) out.push(`${table}: parent is only for via_parent tables`)
+  } else if (e.parent) out.push(`${table}: parent is only for inherited and via_parent tables`)
+  if (e.tenantColumn === 'inherited' && !e.parentKey) out.push(`${table}: inherited needs a parentKey`)
+  if (e.tenantColumn !== 'inherited' && (e.parentKey || e.noForeignKey)) {
+    out.push(`${table}: parentKey and noForeignKey are only for inherited tables`)
+  }
   return out
 }

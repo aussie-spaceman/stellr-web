@@ -35,6 +35,7 @@ export function generate(registry = TABLE_REGISTRY) {
   const withColumn = names.filter((n) => ['own', 'derived'].includes(registry[n].tenantColumn))
   const derived = names.filter((n) => registry[n].tenantColumn === 'derived')
   const own = names.filter((n) => registry[n].tenantColumn === 'own')
+  const inherited = names.filter((n) => registry[n].tenantColumn === 'inherited')
 
   const lines = []
   let tests = 0
@@ -59,7 +60,7 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
   // (NOT NULL-readiness is asserted in section 6, after the backfill has run
   // on real rows — the CI database is empty when the migrations apply.)
   lines.push('', '-- 2. Tenant/event tables: tenant_id, an index led by it, RLS.')
-  for (const n of withColumn) {
+  for (const n of [...withColumn, ...inherited]) {
     const [schema, table] = n.split('.')
     t(`SELECT has_column(${lit(schema)}, ${lit(table)}, 'tenant_id', ${lit(`${n} has tenant_id`)});`)
     t(
@@ -86,6 +87,26 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
 ), ${lit(`${n}: derivation trigger on (${column}, ${kind}), enabled`)});`,
     )
   }
+  for (const n of inherited) {
+    const [schema, table] = n.split('.')
+    const { parent, parentKey, noForeignKey } = registry[n]
+    const parentName = parent.split('.')[1]
+    t(`SELECT col_is_null(${lit(schema)}, ${lit(table)}, 'tenant_id', ${lit(`${n}.tenant_id is nullable: expand only`)});`)
+    t(
+      `SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = ${lit(n)}::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = ${lit(`${parentKey}\\000${parentName}\\000`)}
+), ${lit(`${n}: inherit trigger on (${parentKey}, ${parentName}), enabled`)});`,
+    )
+    // PostgREST refuses an unhinted embed once two foreign keys join the same tables.
+    t(
+      `SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = ${lit(n)}::regclass AND c.confrelid = ${lit(parent)}::regclass),
+  ${noForeignKey ? 0 : 1}, ${lit(noForeignKey ? `${n}: no foreign key to ${parent}, so it can outlive its parent` : `${n}: exactly one foreign key to ${parent}, so live embeds stay unambiguous`)});`,
+    )
+  }
 
   // ── 3. API roles cannot read the S3 tables ───────────────────────────────
   lines.push('', '-- 3. anon and authenticated cannot read the S3 tables; service_role can.')
@@ -98,9 +119,21 @@ ${names.map((n) => `    ${lit(n)}`).join(',\n')}
     'public.tenancy_derive_tenant_id()',
     'public.tenancy_log_derivation(text, text, text, text)',
     'public.tenancy_backfill_tenant_ids()',
+    'public.tenancy_inherit_tenant_id()',
+    'public.tenancy_backfill_child_tenant_ids(text[])',
   ]) {
     t(`SELECT ok(NOT has_function_privilege('anon', ${lit(fn)}, 'EXECUTE'), ${lit(`anon cannot execute ${fn}`)});`)
     t(`SELECT ok(NOT has_function_privilege('authenticated', ${lit(fn)}, 'EXECUTE'), ${lit(`authenticated cannot execute ${fn}`)});`)
+  }
+  // Only the owner runs these: triggers fire without EXECUTE, and the backfill is a migration and a runbook step.
+  for (const fn of [
+    'public.tenancy_backfill_child_tenant_ids(text[])',
+    'public.tenancy_carry_children()',
+    'public.tenancy_hidden_from_tenant_session(uuid, text)',
+  ]) {
+    for (const role of ['anon', 'authenticated', 'service_role', 'tenant_app']) {
+      t(`SELECT ok(NOT has_function_privilege(${lit(role)}, ${lit(fn)}, 'EXECUTE'), ${lit(`${role} cannot execute ${fn}`)});`)
+    }
   }
 
   // ── 4. Seed and constraints ──────────────────────────────────────────────
@@ -305,6 +338,189 @@ ${derived.map((n) => `    ${lit(n.split('.')[1])}`).join(',\n')}
   )
   t(`SELECT is((SELECT COALESCE(sum(rows_updated), 0)::int FROM public.tenancy_backfill_tenant_ids()), 0, 'backfill: re-running it changes nothing');`)
   for (const n of withColumn) {
+    t(`SELECT is((SELECT count(*)::int FROM ${n} WHERE tenant_id IS NULL), 0, ${lit(`${n}: no NULL tenant_id after the backfill (NOT NULL-ready)`)});`)
+  }
+
+  // ── 7. Child tables: the tenant comes from the parent (S5 C0b) ───────────────
+  const STELLR_LIT = lit(STELLR_TENANT_ID)
+  const AU_LIT = "'11111111-1111-4111-8111-111111111111'"
+  const REG = (k) => `'22222222-2222-4222-8222-00000000000${k}'`
+  const P = (k) => `'33333333-3333-4333-8333-00000000000${k}'`
+  const AGR = (k) => `'44444444-4444-4444-8444-00000000000${k}'`
+  const CRED = "'55555555-5555-4555-8555-000000000001'"
+  const RESP = "'66666666-6666-4666-8666-000000000001'"
+  const DIST = "'77777777-7777-4777-8777-000000000001'"
+  const DEF = "'88888888-8888-4888-8888-000000000001'"
+  const participant = (id, reg, extra = {}) => {
+    const cols = {
+      // One row per (registration_id, email), so each person needs their own address.
+      id, registration_id: reg, first_name: "'Pg'", last_name: "'Tap'", email: `'kid-${id.slice(-3, -1)}@example.test'`, phone: "'0'",
+      date_of_birth: "'2000-01-01'::date", gender: "''", t_shirt_size: "'M'", school_name: "''", age_bracket: "'high_school'", event_role: "'participant'",
+      ...extra,
+    }
+    return `INSERT INTO public.participants (${Object.keys(cols).join(', ')}) VALUES (${Object.values(cols).join(', ')})`
+  }
+  const pTenant = (id) => `(SELECT tenant_id FROM public.participants WHERE id = ${id})`
+  const agreement = (id, slug) =>
+    `INSERT INTO public.agreements (id, event_slug, event_title, envelope_id, signer_name, signer_email, minor_name)
+  VALUES (${id}, ${lit(slug)}, 'Kids', ${lit(`env-${id.slice(1, 9)}${id.slice(-3, -1)}`)}, 'Pg', 'signer@example.test', 'Tap');`
+  lines.push(
+    '',
+    '-- 7. Child tables take their tenant from the parent row, and a write that omits it keeps working.',
+    `INSERT INTO public.events (tenant_id, slug, sanity_id, title, starts_at, time_zone, country, currency, grade_system) VALUES
+  (${AU_LIT}, 'pgtap-kids', 'pgtap-kids-sanity', 'Kids', '2040-06-01T00:00:00Z', 'Australia/Sydney', 'AU', 'aud', 'au_years'),
+  (${STELLR_LIT}, 'pgtap-kids-stellr', 'pgtap-kids-stellr-sanity', 'Kids', '2040-06-01T00:00:00Z', 'UTC', 'US', 'usd', 'us_grades'),
+  (${STELLR_LIT}, 'pgtap-kids-stellr-b', 'pgtap-kids-stellr-b-sanity', 'Kids', '2040-06-01T00:00:00Z', 'UTC', 'US', 'usd', 'us_grades');
+INSERT INTO public.registrations (id, event_slug, event_title, type) VALUES
+  (${REG(1)}, 'pgtap-kids', 'Kids', 'individual'),
+  (${REG(2)}, 'pgtap-kids-stellr', 'Kids', 'individual'),
+  (${REG(3)}, 'pgtap-kids-no-mirror', 'Kids', 'individual'),
+  (${REG(4)}, 'pgtap-kids', 'Kids', 'individual');
+DELETE FROM public.tenancy_derivation_log;`,
+  )
+  writeThenIs(`${participant(P(1), REG(1))};`, pTenant(P(1)), AU, 'child: a write that omits tenant_id takes the tenant of its parent');
+  writeThenIs(`${participant(P(2), REG(2))};`, pTenant(P(2)), STELLR, 'child: a Stellr write that omits tenant_id is stamped Stellr');
+  writeThenIs(`${participant(P(3), REG(3))};`, pTenant(P(3)), STELLR, 'child: an unmirrored Stellr event still registers, through its stamped parent')
+  t(`SELECT is(${orphans()}, 0, 'child: none of those writes counts as an orphan');`)
+  writeThenIs(
+    `${participant(P(4), REG(1), { tenant_id: STELLR_LIT })};`,
+    pTenant(P(4)), AU, 'log mode: a supplied tenant_id that disagrees with the parent is replaced',
+  )
+  t(`SELECT is(${logCount('public.participants', 'mismatch')}, 1, 'log mode: the disagreement is counted as mismatch');`)
+  writeThenIs(`UPDATE public.participants SET nickname = 'x' WHERE id = ${P(1)};`, pTenant(P(1)), AU, 'child: an update that names neither column leaves the tenant alone')
+  writeThenIs(
+    `UPDATE public.participants SET registration_id = ${REG(2)} WHERE id = ${P(4)};`,
+    pTenant(P(4)), STELLR, 'child: moving to another parent takes that parent\'s tenant',
+  )
+  t(`SELECT is(${logCount('public.participants', 'mismatch')}, 1, 'child: and that move names no tenant_id, so it is not a mismatch');`)
+  t(
+    `SELECT throws_ok($q$${participant(P(9), "'22222222-2222-4222-8222-0000000000ff'")}$q$,
+  '23503', NULL, 'child: a parent that does not exist is still refused by its foreign key');`,
+  )
+  lines.push(`DELETE FROM public.tenancy_derivation_log;
+ALTER TABLE public.registrations DISABLE TRIGGER zz_tenancy_derive_tenant_id;
+INSERT INTO public.registrations (id, event_slug, event_title, type) VALUES (${REG(5)}, 'pgtap-kids-stellr', 'Kids', 'individual');
+ALTER TABLE public.registrations ENABLE TRIGGER zz_tenancy_derive_tenant_id;`)
+  t(`SELECT lives_ok($q$${participant(P(5), REG(5))}$q$, 'log mode: a parent the backfill has not reached does not block the write');`)
+  t(`SELECT is(${pTenant(P(5))}, NULL::uuid, 'log mode: the child stays NULL with its parent');`)
+  t(`SELECT is(${logCount('public.participants', 'no_event')}, 1, 'log mode: that write is counted, because enforce would refuse it');`)
+  lines.push(`DELETE FROM public.registrations WHERE id = ${REG(5)};`)
+  t(`SELECT is((SELECT count(*)::int FROM public.participants WHERE id = ${P(5)}), 0, 'child: deleting the parent still cascades');`)
+  t(
+    `SELECT lives_ok($q$SELECT * FROM public.rename_event_slug('pgtap-kids-stellr', 'pgtap-kids-stellr-2')$q$,
+  'child: a Stellr slug rename goes through with participants on the event');`,
+  )
+  t(`SELECT is(${pTenant(P(2))}, ${STELLR}, 'child: and they keep their tenant');`)
+  lines.push(`-- A parent moved to another tenant takes its children: what the held-back foreign key's ON UPDATE CASCADE would do.
+UPDATE public.registrations SET event_slug = 'pgtap-kids' WHERE id = ${REG(3)};`)
+  t(`SELECT is((SELECT tenant_id FROM public.registrations WHERE id = ${REG(3)}), ${AU}, 'carry: the parent moved to the event''s tenant');`)
+  t(`SELECT is(${pTenant(P(3))}, ${AU}, 'carry: and its child went with it, on a move a BEFORE trigger made');`)
+  t(`SELECT is(${logCount('public.participants', 'mismatch')}, 0, 'carry: following the parent is not counted as a mismatch');`)
+  lines.push(agreement(AGR(3), 'pgtap-kids'))
+  lines.push(`INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES (${AGR(3)}, 'view', 'system');
+INSERT INTO public.agreement_recipients (envelope_row, recipient_id, name, email, status) VALUES (${AGR(3)}, 'r1', 'Pg', 'signer@example.test', 'created');
+UPDATE public.agreements SET event_slug = 'pgtap-kids-stellr-b' WHERE id = ${AGR(3)};`)
+  t(`SELECT is((SELECT tenant_id FROM public.agreement_recipients WHERE envelope_row = ${AGR(3)}), ${STELLR}, 'carry: agreement_recipients follows its agreement');`)
+  t(`SELECT is((SELECT tenant_id FROM public.esign_access_log WHERE envelope_row = ${AGR(3)}), ${STELLR}, 'carry: so does the access log');`)
+  lines.push(`SELECT public.esign_append_audit(${AGR(3)}, NULL, 'issued', NULL, NULL, '{}'::jsonb);`)
+  t(
+    `SELECT throws_ok($q$UPDATE public.agreements SET event_slug = 'pgtap-kids' WHERE id = ${AGR(3)}$q$,
+  NULL, NULL, 'carry: an agreement with an audit trail cannot change tenant, because the trail is append-only');`,
+  )
+  t(`SELECT is((SELECT tenant_id FROM public.agreements WHERE id = ${AGR(3)}), ${STELLR}, 'carry: and the refused move left the agreement where it was');`)
+  t(
+    `SELECT lives_ok($q$UPDATE public.agreements SET event_title = 'Kids 2' WHERE id = ${AGR(3)}$q$,
+  'carry: an update that keeps the tenant is untouched, audit trail or not');`,
+  )
+  t(
+    `SELECT ok((SELECT count(*) = 7 AND bool_and(NOT tgisinternal AND tgenabled = 'O') FROM pg_trigger
+  WHERE tgname = 'zzz_tenancy_carry_children' AND tgfoid = 'public.tenancy_carry_children()'::regprocedure),
+  'carry: the seven parents each have the trigger');`,
+  )
+
+  // The two esign logs: no foreign key, so a row outlives its agreement.
+  lines.push(agreement(AGR(1), 'pgtap-kids'))
+  lines.push(`INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES (${AGR(1)}, 'view', 'system');
+SELECT public.esign_append_audit(${AGR(1)}, NULL, 'issued', NULL, NULL, '{}'::jsonb);`)
+  t(`SELECT is((SELECT tenant_id FROM public.esign_access_log WHERE envelope_row = ${AGR(1)}), ${AU}, 'esign: the access log takes the tenant of its agreement');`)
+  t(`SELECT is((SELECT tenant_id FROM public.esign_audit_events WHERE envelope_row = ${AGR(1)}), ${AU}, 'esign: the audit trail takes the tenant of its agreement');`)
+  t(`SELECT is(public.esign_verify_audit(${AGR(1)}), NULL::bigint, 'esign: the chain verifies with tenant_id on the row, which the hash does not cover');`)
+  lines.push(`DELETE FROM public.agreements WHERE id = ${AGR(1)};`)
+  t(`SELECT is((SELECT count(*)::int FROM public.esign_access_log WHERE envelope_row = ${AGR(1)} AND tenant_id = ${AU}), 1, 'esign: the access log outlives the agreement and keeps its tenant');`)
+  t(`SELECT is((SELECT count(*)::int FROM public.esign_audit_events WHERE envelope_row = ${AGR(1)} AND tenant_id = ${AU}), 1, 'esign: so does the audit trail');`)
+  lines.push(`DELETE FROM public.tenancy_derivation_log;
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-0000000000ff', 'view', 'system');`)
+  t(`SELECT is(${logCount('public.esign_access_log', 'no_event')}, 1, 'log mode: an access-log row with no agreement is written and counted');`)
+
+  lines.push('', "UPDATE public.tenancy_settings SET derivation_mode = 'enforce';")
+  writeThenIs(`${participant(P(6), REG(4))};`, pTenant(P(6)), AU, 'enforce mode: a write that omits tenant_id still derives')
+  t(
+    `SELECT throws_ok($q$${participant(P(7), REG(4), { tenant_id: STELLR_LIT })}$q$,
+  '23514', NULL, 'enforce mode: a tenant_id that disagrees with the parent is refused');`,
+  )
+  t(
+    `SELECT throws_ok($q$INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-0000000000fe', 'view', 'system')$q$,
+  '23503', NULL, 'enforce mode: no parent and no tenant_id is refused');`,
+  )
+  lines.push("UPDATE public.tenancy_settings SET derivation_mode = 'log';")
+
+  // The backfill, on rows written with the trigger off, the way they predate step 1.
+  const backfilled = ['participants', 'credential_events', 'survey_invitations', 'survey_answers', 'esign_audit_events', 'esign_access_log']
+  lines.push(
+    agreement(AGR(2), 'pgtap-kids'),
+    `INSERT INTO public.credentials (id, number, source, recipient_name, title, event_slug) VALUES (${CRED}, 'PGTAP-1', 'manual', 'Pg', 'Tap', 'pgtap-kids');
+INSERT INTO public.survey_definitions (id, key, version, title, definition, definition_sha256) VALUES (${DEF}, 'pgtap_child', 1, 'Pg', '{}'::jsonb, repeat('0', 64));
+INSERT INTO public.survey_distributions (id, definition_id, event_slug, event_date, event_time_zone, opens_at, closes_at)
+  VALUES (${DIST}, ${DEF}, 'pgtap-kids', '2040-06-01'::date, 'UTC', '2040-06-02T00:00:00Z', '2040-06-20T00:00:00Z');
+INSERT INTO public.survey_responses (id, definition_id, event_slug, source, legacy_ref) VALUES (${RESP}, ${DEF}, 'pgtap-kids', 'legacy_import', 'pgtap-child');`,
+    ...backfilled.map((f) => `ALTER TABLE public.${f} DISABLE TRIGGER zz_tenancy_derive_tenant_id;`),
+    `${participant(P(8), REG(1))};
+INSERT INTO public.credential_events (credential_id, kind) VALUES (${CRED}, 'view');
+INSERT INTO public.survey_invitations (distribution_id, recipient_key, respondent_role, email, token_hash, updated_at)
+  VALUES (${DIST}, 'email:pgtap@example.test', 'student', 'pgtap@example.test', 'pgtap-child-hash', '2026-01-01T00:00:00Z');
+INSERT INTO public.survey_answers (response_id, question_key, value_text) VALUES (${RESP}, 'q1', 'kept');
+INSERT INTO public.esign_audit_events (envelope_row, event, hash) VALUES (${AGR(2)}, 'issued', 'pgtap-hash');
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES (${AGR(2)}, 'view', 'system');
+INSERT INTO public.esign_access_log (envelope_row, action, actor_type) VALUES ('44444444-4444-4444-8444-0000000000fd', 'view', 'system');`,
+    ...backfilled.map((f) => `ALTER TABLE public.${f} ENABLE TRIGGER zz_tenancy_derive_tenant_id;`),
+    'DELETE FROM public.tenancy_derivation_log;',
+  )
+  const nullCount = backfilled.map((f) => `(SELECT count(*)::int FROM public.${f} WHERE tenant_id IS NULL)`).join(' + ')
+  t(`SELECT is(${nullCount}, 7, 'fixture: the rows that predate the column start with a NULL tenant_id');`)
+  lines.push(
+    'ALTER TABLE public.survey_invitations DISABLE TRIGGER survey_invitations_updated_at;',
+    'ALTER TABLE public.esign_audit_events DISABLE TRIGGER esign_audit_events_guard;',
+    `CREATE TEMP TABLE pgtap_child_backfill ON COMMIT DROP AS SELECT * FROM public.tenancy_backfill_child_tenant_ids(ARRAY[
+${inherited.map((n) => `  ${lit(n.split('.')[1])}`).join(',\n')}
+]);`,
+    'ALTER TABLE public.esign_audit_events ENABLE TRIGGER esign_audit_events_guard;',
+    'ALTER TABLE public.survey_invitations ENABLE TRIGGER survey_invitations_updated_at;',
+  )
+  t(
+    `SELECT set_eq('SELECT tbl FROM pgtap_child_backfill', ARRAY[
+${inherited.map((n) => `    ${lit(n.split('.')[1])}`).join(',\n')}
+  ]::text[], 'the child backfill finds every inherited table from its trigger, and no derived one');`,
+  )
+  t(`SELECT is(${nullCount}, 0, 'child backfill: the NULL rows now carry a tenant');`)
+  t(`SELECT is(${pTenant(P(8))}, ${AU}, 'child backfill: a row takes the tenant of its parent');`)
+  t(`SELECT is((SELECT tenant_id FROM public.credential_events WHERE credential_id = ${CRED}), ${AU}, 'child backfill: credential_events');`)
+  t(`SELECT is((SELECT tenant_id FROM public.survey_answers WHERE response_id = ${RESP}), ${AU}, 'child backfill: survey_answers, through its own redaction flag');`)
+  t(`SELECT is((SELECT value_text FROM public.survey_answers WHERE response_id = ${RESP}), 'kept', 'child backfill: the answer itself is untouched');`)
+  t(`SELECT is((SELECT updated_at FROM public.survey_invitations WHERE distribution_id = ${DIST}), '2026-01-01T00:00:00Z'::timestamptz, 'child backfill: survey_invitations.updated_at is untouched');`)
+  t(`SELECT is((SELECT tenant_id FROM public.esign_audit_events WHERE envelope_row = ${AGR(2)}), ${AU}, 'child backfill: the append-only audit trail');`)
+  t(`SELECT is((SELECT tenant_id FROM public.esign_access_log WHERE envelope_row = '44444444-4444-4444-8444-0000000000fd'), ${STELLR}, 'child backfill: a log row whose agreement is gone gets Stellr');`)
+  t(`SELECT is((SELECT count(*)::int FROM public.tenancy_derivation_log), 0, 'child backfill: nothing is logged');`)
+  t(
+    `SELECT is((SELECT string_agg(tgenabled::text, '' ORDER BY tgname) FROM pg_trigger
+  WHERE (tgrelid = 'public.esign_audit_events'::regclass AND tgname = 'esign_audit_events_guard')
+     OR (tgrelid = 'public.survey_invitations'::regclass AND tgname = 'survey_invitations_updated_at')), 'OO',
+  'child backfill: the two triggers switched off for it are on again');`,
+  )
+  t(`SELECT ok(COALESCE(current_setting('stellr.survey_redaction', true), '') <> 'on', 'child backfill: the redaction flag is off again');`)
+  t(`SELECT throws_ok($q$UPDATE public.survey_answers SET value_text = 'x' WHERE response_id = ${RESP}$q$, NULL, NULL, 'child backfill: survey_answers still refuses updates afterwards');`)
+  t(`SELECT throws_ok($q$UPDATE public.esign_audit_events SET hash = 'x' WHERE envelope_row = ${AGR(2)}$q$, NULL, NULL, 'child backfill: esign_audit_events still refuses updates afterwards');`)
+  t(`SELECT is((SELECT COALESCE(sum(rows_updated), 0)::int FROM public.tenancy_backfill_child_tenant_ids(ARRAY['participants', 'credential_events', 'survey_answers'])), 0, 'child backfill: re-running it changes nothing');`)
+  for (const n of inherited) {
     t(`SELECT is((SELECT count(*)::int FROM ${n} WHERE tenant_id IS NULL), 0, ${lit(`${n}: no NULL tenant_id after the backfill (NOT NULL-ready)`)});`)
   }
 

@@ -100,6 +100,17 @@ describe('audit coverage', () => {
     expect(why?.[0]).toBe('lib/survey/handlers#handleOpen')
   })
 
+  it.each([
+    ['isStellrAdmin', "if (!(await isStellrAdmin())) return new Response(null, { status: 403 })"],
+    ['hasPortalAccess', "if (!(await hasPortalAccess())) return new Response(null, { status: 403 })"],
+    ['hasScope', "if (!(await hasScope('events'))) return new Response(null, { status: 403 })"],
+    ['requireEventAccess', "if (!(await requireEventAccess('x')).ok) return new Response(null, { status: 403 })"],
+    ['requireStellrAdmin', "if (!(await requireStellrAdmin()).ok) return new Response(null, { status: 403 })"],
+  ])('a GET guarded by lib/authz %s is not a GET that writes: a shadow mismatch row is the error log', (name, guard) => {
+    const src = `import { ${name} } from '@/lib/authz'\nexport async function GET() {\n  ${guard}\n  return new Response()\n}\n`
+    expect(whyGetWrites('app/api/admin/zz-synthetic/route.ts', src, sources)).toBeNull()
+  })
+
   it('the gate is not one the app can import', () => {
     for (const [file, src] of sources) {
       if (/^(app|components|lib)\//.test(file) && !file.startsWith('lib/security/')) {

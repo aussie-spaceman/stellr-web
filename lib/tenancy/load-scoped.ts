@@ -13,7 +13,7 @@
 //                          Stellr never loses a row it sees today. Plus the
 //                          event key IN scope.eventSlugs for an event-scoped
 //                          caller
-//   via_parent tables      an inner embed of the parent, carrying the same
+//   inherited tables       an inner embed of the parent, carrying the same
 //                          tenant and event filters on the parent's columns.
 //                          The embed is removed from the row before it is
 //                          returned, so the body is the legacy body
@@ -129,10 +129,11 @@ const NEVER_LOADED = new Set(['public.tenant_data_keys'])
 const PLATFORM_ACTORS_ONLY = new Set(['public.platform_admins', 'public.platform_audit_events'])
 
 /**
- * via_parent tables whose parent key is deliberately not a foreign key, so
- * PostgREST has no relationship to embed. They cannot be scoped until S4 gives
- * them their own tenant column. load-scoped.test.ts checks this list and the
- * single foreign key of every other via_parent table against the schema.
+ * Child tables whose parent key is deliberately not a foreign key, so PostgREST
+ * has no relationship to embed. S5 C0b gave them their own tenant_id; scoping on
+ * it directly is for the slice that first reads them this way. load-scoped.test.ts
+ * checks this list and the single foreign key of every other child table against
+ * the schema.
  */
 export const VIA_PARENT_WITHOUT_FK: ReadonlySet<string> = new Set(['public.esign_access_log', 'public.esign_audit_events'])
 
@@ -208,7 +209,9 @@ export function planScope(
     return { ...base, target: 'row', tenant: null, event: null, embed: null, reachesNothing: false }
   }
 
-  if (entry.tenantColumn === 'via_parent') {
+  // Still filtered on the parent: this also works before the C0b migration
+  // reaches a database, and it is the event filter's only route to the slug.
+  if (entry.tenantColumn === 'via_parent' || entry.tenantColumn === 'inherited') {
     if (VIA_PARENT_WITHOUT_FK.has(key)) {
       throw new TenantContextError(`loadScoped: ${key} has no foreign key to embed its parent through`)
     }

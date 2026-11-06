@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight } from 'lucide-react'
 import { getAllNewsPosts } from '@/lib/sanity'
 import { sanityImage } from '@/lib/sanity-image'
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 // Static, refreshed hourly. The category chips filter in the browser
 // (NewsBoard), so nothing here reads the request.
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 interface NewsPost {
   _id: string

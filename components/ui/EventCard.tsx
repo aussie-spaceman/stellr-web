@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight, Rocket } from 'lucide-react'
 import type { StellarEvent } from '@/lib/sanity'
 import { sanityImage } from '@/lib/sanity-image'

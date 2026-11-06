@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Heart, Users, Rocket, ArrowRight } from 'lucide-react'
 import { getFeaturedTestimonials } from '@/lib/sanity'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: 'Support the next generation of STEM leaders. Your contribution funds scholarships, resources, and access for students who would otherwise miss out.',
 }
 
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 const DONATION_URL = process.env.NEXT_PUBLIC_DONATION_URL ?? null
 

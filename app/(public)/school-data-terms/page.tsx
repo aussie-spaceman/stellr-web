@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { SCHOOL_DATA_TERMS, SCHOOL_DATA_TERMS_EFFECTIVE, SCHOOL_DATA_TERMS_VERSION } from '@/lib/school-data-terms'
 
 export const metadata: Metadata = {

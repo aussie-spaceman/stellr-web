@@ -28,6 +28,33 @@ describe('proxy matcher', () => {
     expect(matches('/events/nevada-space-design-challenge')).toBe(true)
   })
 
+  it('skips Vercel beacons by exact path', () => {
+    expect(matches('/_vercel/insights/view')).toBe(false)
+    expect(matches('/_vercel/speed-insights/vitals')).toBe(false)
+  })
+
+  it('still runs on gated and look-alike paths ending in .txt, .xml or .php', () => {
+    for (const path of [
+      '/admin/x.txt',
+      '/admin/members/x.xml',
+      '/account/x.txt',
+      '/community/x.xml',
+      '/credentials/ABC.txt',
+      '/team-profile/token.txt',
+      '/survey/token.xml',
+      '/check-in/x.txt',
+      '/register/slug/join/token.xml',
+      '/api/admin/members/x.txt',
+      '/wp-admin/install.php',
+      '/robots.txt',
+      '/sitemap.xml',
+      '/_vercel',
+      '/_vercelx',
+    ]) {
+      expect(matches(path), path).toBe(true)
+    }
+  })
+
   it('skips static files and the manifests', () => {
     expect(matches('/manifest.webmanifest')).toBe(false)
     expect(matches('/app.webmanifest')).toBe(false)

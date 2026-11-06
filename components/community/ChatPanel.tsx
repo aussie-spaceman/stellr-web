@@ -53,10 +53,20 @@ export function ChatPanel({
     }
   }, [channelId])
 
+  // Keep this at 8 s while the tab is in view: realtime only announces new
+  // messages, so a moderator's delete reaches everyone else through this poll. A
+  // hidden tab doesn't poll, and reloads as soon as it comes back.
   useEffect(() => {
     load()
-    const t = setInterval(load, 8000)
-    return () => clearInterval(t)
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    const t = setInterval(refreshIfVisible, 8000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [load])
 
   // Realtime push: fetch immediately on insert instead of waiting for the poll.

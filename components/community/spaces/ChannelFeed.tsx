@@ -78,10 +78,18 @@ export function ChannelFeed({
     }
   }, [channelId])
 
-  // Poll fallback.
+  // Poll fallback. A hidden tab doesn't poll, and reloads as soon as it comes
+  // back, so removed content is gone before the reader sees the feed again.
   useEffect(() => {
-    const t = setInterval(load, 8000)
-    return () => clearInterval(t)
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    const t = setInterval(refreshIfVisible, 8000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [load])
 
   // Realtime push on new/changed posts in THIS channel only.

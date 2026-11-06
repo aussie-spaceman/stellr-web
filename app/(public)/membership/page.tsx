@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 // Static, refreshed hourly. Tier prices come from a cache that a Stripe price
 // edit can bust (lib/tier-pricing.ts), which refreshes this page with it.
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 export default async function MembershipPage() {
   // Prices come from membership_tiers (single source of truth) — never hard-coded.

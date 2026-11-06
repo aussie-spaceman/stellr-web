@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowLeft } from 'lucide-react'
 import { Hero, Eyebrow, Button, CtaBand } from '@stellr/web-ui'
 import { OBJECTIVES, NGSS, TUTORIAL_META } from '@/components/interactive/atmospheric-requirements/tutorial-data'

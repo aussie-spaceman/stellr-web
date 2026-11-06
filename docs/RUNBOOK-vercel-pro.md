@@ -1,6 +1,6 @@
 # Runbook: moving to Vercel Pro (G1)
 
-Status: written 3 Nov 2026 (multi-tenancy plan S1). **Trigger: the first partner contract is signed.** Owner decision: stay on Hobby until then, and onboard no tenants and take no tenant fees on Hobby. Hobby is for non-commercial use, and tenant fees would make Stellr's use commercial.
+Status: written 3 Nov 2026 (multi-tenancy plan S1). **Trigger: the first partner contract is signed, or Active CPU holds at 85% of the allowance, whichever comes first.** §2 needs a quiet weekday with no event within 3 days, so don't wait for 100%. Owner decision: stay on Hobby until then, and onboard no tenants and take no tenant fees on Hobby. Hobby is for non-commercial use, and tenant fees would make Stellr's use commercial.
 
 The move should take **under a day**: §1 is done ahead of time, §2 on the day.
 
@@ -10,7 +10,7 @@ The move should take **under a day**: §1 is done ahead of time, §2 on the day.
 |---|---|---|
 | No tenant onboarding, no tenant fees | Owner decision; the S3+ tenant features stay behind flags | Hobby terms |
 | Stay under 100 deployments a day | `vercel.json` `git.deploymentEnabled` builds only `main` and `dev`; `scripts/vercel-ignore-build.sh` skips docs-only commits; batch merges into `dev` rather than landing PRs one by one on busy days (`docs/REC-vercel-deployment-volume-2026-09-28.md`). A cancelled build still counts | Hobby deployment cap |
-| Watch Active CPU and act at 70% | Hobby has no usage alert or API. Check Usage → Fluid Active CPU every Monday and before each event; at 70% of the rolling 30-day allowance, hold non-urgent deploys and keep dev crons off | At 100% Vercel **pauses every project** on the account, production included |
+| Watch Active CPU and act at 70% | Hobby has no usage alert or API. Check Usage → Fluid Active CPU every Monday and before each event; at 70% of the rolling 30-day allowance, hold non-urgent deploys and keep dev crons off. Batch promotions, and don't rebuild a commit without a reason. **Security fixes, child-safety fixes and secret rotation never wait** | At 100% Vercel **pauses every project** on the account, production included |
 | Image transformations, Blob, bandwidth | As above, on the same Monday check | Same pause rule |
 
 ## 1. Before the day (prepare once, refresh the week before)

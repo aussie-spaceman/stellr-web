@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ShoppingBag } from 'lucide-react'
 import type { StoreProductWithVariants } from '@/lib/store/types'
 

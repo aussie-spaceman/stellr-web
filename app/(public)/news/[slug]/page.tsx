@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { PortableText } from 'next-sanity'
@@ -12,7 +12,7 @@ import { buildArticleJsonLd } from '@/lib/structured-data'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
-export const revalidate = 3600
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 
 // No paths are built ahead (no build-time Sanity or Stripe calls): each page is
 // rendered on its first visit and then served from the cache, refreshed on the

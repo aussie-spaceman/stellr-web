@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { Button, Hero } from '@stellr/web-ui'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS } from '@/lib/media-manifest'

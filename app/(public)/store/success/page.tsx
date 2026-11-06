@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { CheckCircle } from 'lucide-react'
 import { ClearCartOnLoad } from '@/components/store/ClearCartOnLoad'
 

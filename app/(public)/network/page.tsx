@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Fragment } from 'react'
-import Link from 'next/link'
+import Link from '@/components/ui/SiteLink'
 import { ArrowRight, Check } from 'lucide-react'
 import { Event, Certificate, Team } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'

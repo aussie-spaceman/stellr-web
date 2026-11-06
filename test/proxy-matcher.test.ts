@@ -36,4 +36,56 @@ describe('proxy matcher', () => {
     expect(matches('/check-in-desk-sw.js')).toBe(false)
     expect(matches('/vendor/zxing_reader.wasm')).toBe(false)
   })
+
+  // A skipped path never reaches the admin role gate, so a gated path must run
+  // the proxy however it ends. The first matcher entry would skip all of these.
+  it.each([
+    '/admin/members/abc.css',
+    '/admin/members/abc.png/view-as',
+    '/admin/x.js/y',
+    '/admin/members/abc.jsfoo',
+    '/account/x.jpg',
+    '/community/x.png',
+    '/community/x.png/members',
+    '/home/x.png',
+    '/campaigns/x.css/submit',
+    '/credentials/ABC.png',
+    '/credentials/ABC.png/badge',
+    '/team-profile/tok.png',
+    '/survey/tok.js',
+    '/survey/event/x.css',
+    '/register/x.css',
+    '/register/x.css/join/tok',
+    '/register/slug/pay/tok.png',
+    '/sign/x.js',
+    '/check-in/x.css',
+    '/check-in/x.css/code',
+    '/scholarship/offer/tok.css',
+  ])('runs on %s, a gated path with a file extension', (path) => {
+    expect(matches(path)).toBe(true)
+  })
+
+  // Each of these only shares its first letters with a gated prefix, or is a
+  // real file, so running the proxy here would be a metered run for nothing.
+  it.each([
+    '/check-in-desk-sw.js',
+    '/sign.js',
+    '/signature-logo.png',
+    '/email/signature-logo.png',
+    '/homepage.png',
+    '/registered.css',
+    '/accounts.css',
+    '/scholarship/x.png',
+    '/scholarship/offers.png',
+    '/team/headshot.jpg',
+    '/images/logo-icon.svg',
+    '/fonts/x.woff2',
+    '/icons/x.svg',
+    '/icon.png',
+    '/favicon.ico',
+    '/_next/static/chunks/main.js',
+    '/_next/image?url=%2Fimages%2Fx.png&w=64&q=75',
+  ])('skips %s, which is not under a gated prefix', (path) => {
+    expect(matches(path)).toBe(false)
+  })
 })

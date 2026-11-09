@@ -108,6 +108,13 @@ describe('S5 A7: register/pay', () => {
     expect(h.createCheckout).not.toHaveBeenCalled()
   })
 
+  it('a tenant’s registration with no mirror row, on its own host: refused by its stamp alone', async () => {
+    onHost(CANARY)
+    db({ reg: { ...PENDING, tenant_id: CANARY }, eventTenant: null })
+    expect(await settle(await postPay())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    expect(h.createCheckout).not.toHaveBeenCalled()
+  })
+
   it('Stellr’s own registration still opens its Checkout', async () => {
     db({ reg: { ...PENDING, tenant_id: STELLR_TENANT_ID }, eventTenant: STELLR_TENANT_ID })
     expect(await settle(await postPay())).toEqual({ status: 200, body: { url: 'https://checkout.test/cs_1' } })
@@ -128,6 +135,37 @@ describe('S5 A7: the pay routes’ audit events', () => {
     await postPay()
     await postSeat()
     expect(h.audit).not.toHaveBeenCalled()
+  })
+
+  it('a refusal before any Checkout records none, a 503 included: a tenant’s own registration and seat, a tenant’s event', async () => {
+    onHost(CANARY)
+    db({ reg: { ...PENDING, tenant_id: CANARY }, seat: SEAT, eventTenant: CANARY })
+    expect(await settle(await postPay())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    expect(await settle(await postSeat())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    onHost(STELLR_TENANT_ID)
+    db({ reg: { ...PENDING, tenant_id: null }, seat: SEAT, eventTenant: CANARY })
+    expect(await settle(await postPay())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    expect(await settle(await postSeat())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    expect(h.audit).not.toHaveBeenCalled()
+  })
+
+  it('a Checkout that was tried and failed is still recorded', async () => {
+    db({ reg: { ...PENDING, tenant_id: null }, seat: SEAT, eventTenant: null })
+    h.createSeatCheckout.mockRejectedValueOnce(new Error('stripe down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await settle(await postSeat())).toMatchObject({ status: 502 })
+    err.mockRestore()
+    expect(h.audit.mock.calls.map(([m]) => [m.action, (m.metadata as { status: number }).status])).toEqual([
+      ['registration.seat_payment.start', 502],
+    ])
+  })
+
+  it('a handler that throws is still recorded, as a 500', async () => {
+    h.requestTenant.mockRejectedValueOnce(new Error('boom'))
+    await expect(postPay()).rejects.toThrow('boom')
+    expect(h.audit.mock.calls.map(([m]) => [m.action, (m.metadata as { status: number }).status])).toEqual([
+      ['registration.payment.start', 500],
+    ])
   })
 })
 
@@ -151,6 +189,16 @@ describe('S5 A7: register/pay-seat', () => {
     db({ reg: { ...PENDING, tenant_id: null }, seat: SEAT, eventTenant: CANARY })
     expect(await settle(await postSeat())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
     expect(h.createSeatCheckout).not.toHaveBeenCalled()
+  })
+
+  it('a tenant’s seat with no mirror row, on its own host: refused by its stamp alone', async () => {
+    onHost(CANARY)
+    db({ reg: { ...PENDING, tenant_id: CANARY }, seat: SEAT, eventTenant: null })
+    expect(await settle(await postSeat())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    db({ reg: { ...PENDING, share_estimate: 12, tenant_id: CANARY }, seat: SEAT, eventTenant: null })
+    expect(await settle(await postSeat())).toMatchObject({ status: 503, body: { code: 'tenant_payments_unavailable' } })
+    expect(h.createSeatCheckout).not.toHaveBeenCalled()
+    expect(h.createSharedSeatCheckout).not.toHaveBeenCalled()
   })
 
   it('Stellr’s own seat still opens its Checkout', async () => {
@@ -197,6 +245,16 @@ describe('S5 A7 with #584: split groups and the shared teacher’s cost', () => 
     expect(await settle(await postSeatWithCode('NOPE'))).toEqual({ status: 400, body: { error: 'That code isn’t valid.', code: 'bad_code' } })
     h.createSharedSeatCheckout.mockResolvedValueOnce({ waived: true, charge: {} })
     expect(await settle(await postSeatWithCode('FREE'))).toEqual({ status: 200, body: { waived: true, message: 'Nothing to pay: your place is confirmed.' } })
+    h.createSharedSeatCheckout.mockResolvedValueOnce({ error: 'no_price', message: 'No price.' })
+    expect(await settle(await postSeat())).toEqual({ status: 503, body: { error: 'No price.', code: 'no_price' } })
+    h.createSharedSeatCheckout.mockResolvedValueOnce({ error: 'closed', message: 'Closed.' })
+    expect(await settle(await postSeat())).toEqual({ status: 409, body: { error: 'Closed.', code: 'closed' } })
+  })
+
+  it('the shared Checkout carries the group’s coupon and caps the code at 64 characters', async () => {
+    db({ reg: { ...SHARED, invoice_coupon_id: 'coupon_grp', tenant_id: null }, seat: SEAT, eventTenant: null })
+    await postSeatWithCode('X'.repeat(80))
+    expect(h.createSharedSeatCheckout.mock.calls[0][2]).toMatchObject({ groupCouponId: 'coupon_grp', discountCode: 'X'.repeat(64) })
   })
 
   it('a shared seat never reaches the shared Checkout for a tenant, by its stamp or by the event’s owner', async () => {

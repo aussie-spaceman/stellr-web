@@ -29,15 +29,21 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducatio
 interface AuditNote {
   status: number
   participantId: string | null
+  /** A Checkout was asked for: every tenant, owner and configuration check passed. */
+  started: boolean
+  /** The handler answered (false only when it threw). */
+  answered: boolean
 }
 
 /**
  * S5 A7: one platform audit event per seat checkout started, after the response, off
  * unless PLATFORM_AUDIT_ENABLED=true. A 4xx is a refusal and is not recorded, the
- * rule withAudit applies (lib/audit/route).
+ * rule withAudit applies (lib/audit/route). Nor is an answer given before any
+ * Checkout was tried, such as a tenant's 503: no payment started.
  */
 async function recordSeatPaymentStart(note: AuditNote): Promise<void> {
   if (note.status >= 400 && note.status < 500) return
+  if (note.answered && !note.started) return
   await auditMutation(
     {
       action: 'registration.seat_payment.start',
@@ -51,9 +57,10 @@ async function recordSeatPaymentStart(note: AuditNote): Promise<void> {
 }
 
 export async function POST(req: NextRequest) {
-  const note: AuditNote = { status: 500, participantId: null }
+  const note: AuditNote = { status: 500, participantId: null, started: false, answered: false }
   const answer = (res: Response): Response => {
     note.status = res.status
+    note.answered = true
     return res
   }
   try {
@@ -61,6 +68,7 @@ export async function POST(req: NextRequest) {
     const limited = await rateLimit(req, 'register/pay-seat', { limit: 20, windowMs: 10 * 60_000, tenantId: requestTenantId })
     if (limited) {
       note.status = limited.status
+      note.answered = true
       return limited
     }
 
@@ -128,6 +136,7 @@ export async function POST(req: NextRequest) {
     if (!stripe) return answer(NextResponse.json({ error: 'Payments are not configured.' }, { status: 503 }))
 
     const successUrl = `${SITE_URL}/register/${reg.event_slug}/confirmation?id=${participant.registration_id}&type=group&payment=success`
+    note.started = true
 
     // A group sharing the teacher's cost (lib/teacher-share.ts): the place plus the
     // student's share, with a code typed on the pay page.

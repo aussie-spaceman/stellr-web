@@ -30,15 +30,21 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducatio
 interface AuditNote {
   status: number
   registrationId: string | null
+  /** A Checkout was asked for: every tenant, owner and configuration check passed. */
+  started: boolean
+  /** The handler answered (false only when it threw). */
+  answered: boolean
 }
 
 /**
  * S5 A7: one platform audit event per checkout started, after the response, off
  * unless PLATFORM_AUDIT_ENABLED=true. A 4xx is a refusal and is not recorded, the
- * rule withAudit applies (lib/audit/route).
+ * rule withAudit applies (lib/audit/route). Nor is an answer given before any
+ * Checkout was tried, such as a tenant's 503: no payment started.
  */
 async function recordPaymentStart(note: AuditNote): Promise<void> {
   if (note.status >= 400 && note.status < 500) return
+  if (note.answered && !note.started) return
   await auditMutation(
     {
       action: 'registration.payment.start',
@@ -52,9 +58,10 @@ async function recordPaymentStart(note: AuditNote): Promise<void> {
 }
 
 export async function POST(req: NextRequest) {
-  const note: AuditNote = { status: 500, registrationId: null }
+  const note: AuditNote = { status: 500, registrationId: null, started: false, answered: false }
   const answer = (res: Response): Response => {
     note.status = res.status
+    note.answered = true
     return res
   }
   try {
@@ -62,6 +69,7 @@ export async function POST(req: NextRequest) {
     const limited = await rateLimit(req, 'register/pay', { limit: 20, windowMs: 10 * 60_000, tenantId: requestTenantId })
     if (limited) {
       note.status = limited.status
+      note.answered = true
       return limited
     }
 
@@ -125,6 +133,7 @@ export async function POST(req: NextRequest) {
         ? `${SITE_URL}/register/${reg.event_slug}/confirmation?id=${reg.id}&type=individual&payment=success`
         : `${SITE_URL}/register/${reg.event_slug}/confirmation?id=${reg.id}&type=group&payment=success`
 
+    note.started = true
     try {
       const { url } = await createRegistrationCheckout(db, stripe, reg.id, {
         event: event as { stripePriceId?: string },

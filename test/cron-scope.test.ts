@@ -22,8 +22,8 @@ function withScope(scope: string) {
 
 describe('cron scope', () => {
   it('covers exactly the cron routes and the vercel.json schedules', () => {
-    expect(routes).toHaveLength(23)
-    expect(schedules).toHaveLength(28)
+    expect(routes).toHaveLength(24)
+    expect(schedules).toHaveLength(32)
     expect(scheduled).toEqual(routes)
     expect(Object.keys(CRON_SCOPES).sort()).toEqual(routes)
   })

@@ -198,7 +198,12 @@ export async function sendInvites(
       // guardian consents, so the suppression list never holds it back. An
       // address Resend itself blocks still bounces, and the bounce webhook puts
       // it on the roster as Email Bounced (lib/esign/bounces.ts).
-      const sent = await sendEmail({ to: first.r.email, ...content, critical: true })
+      //
+      // deferOnFailure: false — this outbox is already durable (a signer whose
+      // email did not go keeps invite_sent_at null and is retried by
+      // drainOutbox), and invite_email_id must be Resend's real id because the
+      // bounce webhook finds the signer by it (lib/esign/bounces.ts).
+      const sent = await sendEmail({ to: first.r.email, ...content, critical: true, deferOnFailure: false })
       if (sent.suppressed) {
         // Not reachable while the send is critical; kept so a future change
         // cannot turn a skipped invitation back into a silent "Sent".

@@ -69,6 +69,10 @@ export const CRON_SCOPES: Readonly<Record<string, CronScopeEntry>> = {
   'group-invoice-sync': { scope: 'per_tenant', why: "a group's own unpaid invoice, for any tenant" },
   'hubspot-event-options': { scope: 'stellr_only', why: "Stellr's HubSpot; syncs only Stellr events (B11)" },
   'hubspot-lifecycle': { scope: 'stellr_only', why: "Stellr's HubSpot" },
+  'email-outbox': {
+    scope: 'platform',
+    why: 'resends mail Resend refused for its quota or an outage; every message was already addressed by the sender that queued it',
+  },
   'lead-capture-failures': { scope: 'stellr_only', why: "Stellr's lead capture" },
   'membership-expiry': {
     scope: 'stellr_only',

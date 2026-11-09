@@ -129,6 +129,7 @@ describe('GET /api/admin/agreements/[id]/correct-recipient', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       status: 'completed',
+      pending: [],
       recipients: [{ recipientId: '1', roleName: 'Guardian', name: 'A', email: 'a@example.com', status: 'signed', routingOrder: 1 }],
     })
   })

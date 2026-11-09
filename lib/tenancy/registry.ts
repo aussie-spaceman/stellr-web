@@ -160,6 +160,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   // second foreign key.
   'public.participants': child('public.registrations', 'registration_id'),
   'public.agreement_recipients': child('public.agreements', 'envelope_row'),
+  'public.agreement_email_changes': child('public.agreements', 'agreement_id'),
   'public.esign_access_log': child('public.agreements', 'envelope_row', {
     noForeignKey: true,
     note: 'the log must outlive the record it describes',

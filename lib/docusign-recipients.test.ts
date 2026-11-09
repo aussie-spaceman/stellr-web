@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { notifyCommunityAdmins } = vi.hoisted(() => ({
-  notifyCommunityAdmins: vi.fn(async (_input: unknown) => {}),
+const { announceBounces, fetchEnvelopeRecipients } = vi.hoisted(() => ({
+  announceBounces: vi.fn(async () => 1),
+  fetchEnvelopeRecipients: vi.fn(),
 }))
-vi.mock('./notify', () => ({ notifyCommunityAdmins }))
+// Who is told is lib/esign/bounce-notices.ts (its own tests, incl. DS-5 escaping).
+vi.mock('./esign/bounce-notices', () => ({ announceBounces }))
+vi.mock('./esign/operations', () => ({ fetchEnvelopeRecipients }))
 
-import { alertOnNewBounces, loadRecipientsByEnvelopeRows } from './docusign-recipients'
+import { loadRecipientsByEnvelopeRows, syncEnvelopeRecipients } from './docusign-recipients'
 import type { EnvelopeRecipient } from './docusign'
+import { fakeSupabase } from '@/test/fake-supabase'
 
 const recipient = (over: Partial<EnvelopeRecipient>): EnvelopeRecipient => ({
   recipientId: '1', roleName: 'Guardian', name: 'Pat Rivera', email: 'pat@home.test',
@@ -16,42 +20,35 @@ const recipient = (over: Partial<EnvelopeRecipient>): EnvelopeRecipient => ({
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('alertOnNewBounces', () => {
-  it('escapes registrant-controlled name/email/role in the admin HTML alert (DS-5)', async () => {
-    // deep review DS-5: a bounced "signer" whose name/email/role is attacker
-    // chosen (public registration feeds these) must not be able to inject markup
-    // into the admin HTML email. notify.ts trusts the caller's email.html, so
-    // the escaping has to happen here.
-    await alertOnNewBounces(
-      [],
-      [recipient({
-        name: '<b>x</b>',
-        email: 'a@b.c"><script>alert(1)</script>',
-        roleName: '<i>role</i>',
-      })],
-      { minorName: '<img src=x onerror=alert(1)>', eventTitle: '<u>Event</u>', participantId: 'p-1' },
-    )
+describe('syncEnvelopeRecipients announces bounces wherever it runs', () => {
+  const db = () =>
+    fakeSupabase({
+      agreements: [{ id: 'env-1', signers_total: 0, signers_completed: 0, updated_at: null }],
+      agreement_recipients: [],
+    })
 
-    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
-    const html = (notifyCommunityAdmins.mock.calls[0][0] as { email: { html: string } }).email.html
-    // The attacker markup is escaped, never emitted as live tags.
-    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;')
-    expect(html).toContain('&lt;script&gt;')
-    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')
-    expect(html).not.toContain('<b>x</b>')
-    expect(html).not.toContain('<script>')
-    expect(html).not.toContain('<img src=x')
+  // Before 9 Nov 2026 only the Connect webhook alerted, so a bounce first seen
+  // by the reminder cron or the roster refresh was recorded and never told.
+  it('announces a DocuSign bounce from any sync (cron, roster refresh, Connect)', async () => {
+    const fake = db()
+    fetchEnvelopeRecipients.mockResolvedValue([recipient({})])
+    await syncEnvelopeRecipients(fake.client, 'env-1', 'ds-env', 'docusign')
+    expect(fake.table('agreement_recipients')).toHaveLength(1)
+    expect(announceBounces).toHaveBeenCalledWith(fake.client, 'env-1', { kind: 'bounced' })
   })
 
-  it('does nothing when no address newly bounced', async () => {
-    await alertOnNewBounces([], [recipient({ status: 'sent' })], { minorName: 'A', eventTitle: 'E', participantId: null })
-    expect(notifyCommunityAdmins).not.toHaveBeenCalled()
+  it('announces from a Stellr signing sync too', async () => {
+    const fake = db()
+    fetchEnvelopeRecipients.mockResolvedValue([recipient({})])
+    await syncEnvelopeRecipients(fake.client, 'env-1', 'native-env', 'native')
+    expect(announceBounces).toHaveBeenCalledWith(fake.client, 'env-1', { kind: 'bounced' })
   })
 
-  it('does not re-alert an address already bounced', async () => {
-    const already = [{ email: 'pat@home.test', status: 'autoresponded' } as never]
-    await alertOnNewBounces(already, [recipient({})], { minorName: 'A', eventTitle: 'E', participantId: null })
-    expect(notifyCommunityAdmins).not.toHaveBeenCalled()
+  it('says nothing when nobody bounced', async () => {
+    const fake = db()
+    fetchEnvelopeRecipients.mockResolvedValue([recipient({ status: 'sent' })])
+    await syncEnvelopeRecipients(fake.client, 'env-1', 'ds-env', 'docusign')
+    expect(announceBounces).not.toHaveBeenCalled()
   })
 })
 

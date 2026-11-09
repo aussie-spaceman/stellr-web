@@ -8,6 +8,8 @@ import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
 import { withAudit } from '@/lib/audit/route'
 import { loadEventRecord, loadScopedRows } from '@/lib/tenancy/load-scoped'
 import { isStellrScope } from '@/lib/tenancy/scope-context'
+import { pendingSuggestions, supersedeOpenLinks } from '@/lib/esign/email-changes'
+import { lookupSuppressions } from '@/lib/email/suppressions'
 
 // "Correct email" on a live agreement (admins, and event managers for their
 // own events). Changes the signer's address on the same agreement: signatures
@@ -89,6 +91,8 @@ async function listRecipients(req: Request, { params }: { params: Promise<{ id: 
   })
   return NextResponse.json({
     status: env.status ?? null,
+    // Student suggestions for a bounced parent/guardian address, waiting for an adult.
+    pending: await pendingSuggestions(db, id),
     recipients: (recipients ?? []).map((r) => ({
       recipientId: r.recipient_id,
       roleName: r.role_name,
@@ -128,6 +132,13 @@ async function correctRecipient(req: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: result.message, code: result.code }, { status: result.code === 'INVALID_EMAIL' ? 400 : 409 })
   }
 
+  // Staff fixed it: any one-time link or student suggestion for this signer is moot.
+  await supersedeOpenLinks(db, id, recipientId).catch(() => {})
+  // Staff may still use an address that bounced before, but are told.
+  const previouslyBounced = await lookupSuppressions(db, [result.recipient.email])
+    .then((m) => ['bounce', 'complaint'].includes(m.get(result.recipient.email.toLowerCase()) ?? ''))
+    .catch(() => false)
+
   const actor = await actorFromAuth()
   const memberId = result.memberId ?? actor.actorMemberId ?? null
   // The member's activity log is global, and a tenant's records stay off it (owner decision B8).
@@ -161,5 +172,6 @@ async function correctRecipient(req: Request, { params }: { params: Promise<{ id
     recipient: result.recipient,
     participantField: result.participantField,
     participantSkipped: result.participantSkipped,
+    previouslyBounced,
   })
 }

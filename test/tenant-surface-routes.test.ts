@@ -42,25 +42,27 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
   platform_destined: 9,
-  tenant_staff: 31,
-  participant: 128,
-  public: 129,
+  tenant_staff: 32,
+  participant: 130,
+  public: 131,
   webhook: 12,
   cron: 23,
   stellr_only: 166,
 }
 // +3 on 9 Nov 2026: members/compliance/external-check (participant) and the
 // admin members/[id]/event-manager and members/[id]/external-check (stellr_only).
-const MANIFEST_TOTAL = 498
+// +5 on 9 Nov 2026: bounced-email fixes: admin agreements/[id]/email-changes/[changeId] (tenant_staff), members/teams/... correct-email and email-changes (participant), sign/email page and API (public).
+const MANIFEST_TOTAL = 503
 
 // The decisions. Moving a route between them is a deliberate diff here.
 const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
   allow: 49,
-  // members 34, schools 2, privacy request pages 2 and APIs 2, and the 4 held
+  // members 36, schools 2, privacy request pages 2 and APIs 2, the bounce-notice
+  // link page and API 2, and the 4 held
   // files pinned under 'routes held back' below
-  pending: 44,
+  pending: 48,
   bypass: 4,
-  deny: 401,
+  deny: 402,
 }
 
 /** A concrete URL a manifest file serves, with sample values for its params. */
@@ -86,7 +88,7 @@ function sampleUrl(file: string): string {
 }
 
 describe('the manifest this classifies', () => {
-  it('has the measured class counts, 498 in total', () => {
+  it('has the measured class counts, 503 in total', () => {
     expect(FILES).toHaveLength(MANIFEST_TOTAL)
     const counts = Object.fromEntries(Object.keys(MANIFEST_CLASS_COUNTS).map((c) => [c, 0])) as Record<
       RouteClass,

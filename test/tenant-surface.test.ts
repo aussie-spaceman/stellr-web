@@ -27,7 +27,7 @@ const HOW = 'Go through lib/community/event-hooks, or stop importing it. A remov
 // The size of the baseline. Lower these as it falls. Raising one takes a visible edit
 // to this file, which .github/CODEOWNERS sends for review.
 const MAX_MODULES = 10
-const MAX_EDGES = 38
+const MAX_EDGES = 37
 const MAX_TABLE_FILES = 17
 const MAX_CHANNEL_FILES = 0
 

@@ -29,12 +29,17 @@ import {
 const MIGRATION = 'supabase/migrations/20261104200000_tenant_isolation_policies.sql'
 /** S5 C0b: the 10 child tables, and the guards that used to hold a key to them to NULL. */
 const CHILD_MIGRATION = 'supabase/migrations/20261106070726_via_parent_tenant_policies.sql'
+/** Child tables created after C0b, each writing its own policies (and carry) in its CREATE TABLE migration. */
+const LATER_CHILD_MIGRATIONS: Record<string, string> = {
+  'public.agreement_email_changes': 'supabase/migrations/20261109200000_agreement_email_changes.sql',
+}
 const inheritedTenantTables = () => tenantTables().filter((t) => TABLE_REGISTRY[t].tenantColumn === 'inherited')
-/** The S4 file for a table it wrote, the C0b file for a child table. */
-const policyFileFor = (t: string) => readFileSync(TABLE_REGISTRY[t].tenantColumn === 'inherited' ? CHILD_MIGRATION : MIGRATION, 'utf8')
+/** The S4 file for a table it wrote, the C0b file for a child table, or the later child's own. */
+const policyFileFor = (t: string) =>
+  readFileSync(LATER_CHILD_MIGRATIONS[t] ?? (TABLE_REGISTRY[t].tenantColumn === 'inherited' ? CHILD_MIGRATION : MIGRATION), 'utf8')
 /** A table's guard as the migrations leave it: the last one written wins. */
 function lastGuard(t: string): string {
-  const all = readFileSync(MIGRATION, 'utf8') + readFileSync(CHILD_MIGRATION, 'utf8')
+  const all = [MIGRATION, CHILD_MIGRATION, ...Object.values(LATER_CHILD_MIGRATIONS)].map((f) => readFileSync(f, 'utf8')).join('\n')
   const from = all.lastIndexOf(`CREATE POLICY tenant_isolation_guard ON ${t} AS RESTRICTIVE`)
   return all.slice(from, all.indexOf(';', from) + 1)
 }
@@ -47,8 +52,8 @@ describe('cross-tenant pgTAP matrix (S4)', () => {
 
   it('has a fixture for every own/derived/inherited tenant table, and none for anything else', () => {
     expect(fixtureProblems()).toEqual([])
-    expect(tenantTables().length).toBe(45)
-    expect(inheritedTenantTables().length).toBe(10)
+    expect(tenantTables().length).toBe(46)
+    expect(inheritedTenantTables().length).toBe(11)
     expect(Object.keys(FIXTURES).sort()).toEqual(tenantTables())
   })
 
@@ -173,7 +178,15 @@ describe('the triggers that read a parent, in a tenant session', () => {
 
 describe('a parent that changes tenant', () => {
   const CARRY = readFileSync('supabase/migrations/20261106074112_via_parent_tenant_carry.sql', 'utf8')
-  const triggers = [...CARRY.matchAll(/AFTER UPDATE ON public\.(\w+)\s+FOR EACH ROW\s+WHEN \(([^\n]*)\)\s+EXECUTE FUNCTION public\.tenancy_carry_children\(([^)]*)\)/g)]
+  const CARRY_PATTERN = /AFTER UPDATE ON public\.(\w+)\s+FOR EACH ROW\s+WHEN \(([^\n]*)\)\s+EXECUTE FUNCTION public\.tenancy_carry_children\(([^)]*)\)/g
+  // A later child's migration re-creates its parent's trigger with the child added: the last one per parent wins.
+  const triggers = [
+    ...new Map(
+      [CARRY, ...Object.values(LATER_CHILD_MIGRATIONS).map((f) => readFileSync(f, 'utf8'))]
+        .flatMap((sql) => [...sql.matchAll(CARRY_PATTERN)])
+        .map((m) => [m[1], m] as const),
+    ).values(),
+  ]
 
   it('carries every child table, by the key the registry names', () => {
     const carried = triggers.flatMap(([, parent, , args]) => {

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { isMinorOn } from '@/lib/age'
 import { ParticipantForm } from './ParticipantForm'
 import { EnvelopeStatusBadge } from './DocusignsSection'
+import { FixSignerEmailButton } from './FixSignerEmailButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { formatDateShort } from '@/lib/utils'
 import { registrationPaid } from '@/lib/payment-status'
@@ -62,6 +63,9 @@ interface DocuSignEnvelope {
   sent_at: string
   completed_at: string | null
   reminder_sent_at: string | null
+  /** Signers whose email bounced, and student suggestions waiting (Fix email). */
+  bounced?: number
+  pending_suggestions?: number
 }
 
 interface TeamRegistration {
@@ -724,7 +728,25 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                                           {resendingConsent === p.id ? 'Sending…' : 'Remind'}
                                         </button>
                                       )}
+                                      {!readOnly && ((envelope.bounced ?? 0) > 0 || (envelope.pending_suggestions ?? 0) > 0) && (
+                                        <FixSignerEmailButton
+                                          registrationId={team.id}
+                                          participantId={p.id}
+                                          participantName={`${p.first_name} ${p.last_name}`.trim()}
+                                          label={(envelope.bounced ?? 0) > 0 && !(envelope.pending_suggestions ?? 0) ? 'Fix email' : 'Review suggested email'}
+                                          onChanged={(message) => {
+                                            setConsentMsg(message)
+                                            // Refresh in place (loadTeam would collapse the open team).
+                                            fetch(`/api/members/teams/${team.id}`)
+                                              .then(r => r.json())
+                                              .then(d => { if (!d.error) setFullTeam(d) })
+                                          }}
+                                        />
+                                      )}
                                     </div>
+                                    {(envelope.bounced ?? 0) > 0 && (
+                                      <p className="text-xs text-danger leading-tight">An email on this form bounced.</p>
+                                    )}
                                     <p className="text-xs text-brand-muted-soft leading-tight">
                                       {CONSENT_TYPE_LABEL[envelope.envelope_type] ?? 'Agreement'}
                                     </p>

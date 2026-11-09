@@ -2,7 +2,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { verifyConnectHmac } from '@/lib/docusign'
-import { syncEnvelopeRecipients, loadRecipientsByEnvelopeRows, alertOnNewBounces } from '@/lib/docusign-recipients'
+import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
 import {
   COMPLETED_ENVELOPE_COLUMNS,
   mayTransition,
@@ -121,31 +121,19 @@ export async function POST(req: Request) {
   return NextResponse.json({ received: true })
 }
 
-// Mirrors DocuSign's signer list into agreement_recipients and raises an
-// admin alert the first time an address is reported bounced. Non-fatal
-// throughout: a DocuSign hiccup here must not stop the envelope's status change
-// from being recorded, and must not make us return non-2xx (Connect would retry
-// the whole event, re-running the side effects below it).
+// Mirrors DocuSign's signer list into agreement_recipients. A newly bounced
+// address is announced by the sync itself (lib/esign/bounce-notices.ts), as it
+// is from the reminder cron and the roster refresh. Non-fatal throughout: a
+// DocuSign hiccup here must not stop the envelope's status change from being
+// recorded, and must not make us return non-2xx (Connect would retry the whole
+// event, re-running the side effects below it).
 async function syncRecipients(
   db: ReturnType<typeof supabaseServer>,
   envelopeRowId: string,
   envelopeId: string,
 ): Promise<void> {
   try {
-    const { data: row } = await db
-      .from('agreements')
-      .select('id, minor_name, event_title, participant_id')
-      .eq('id', envelopeRowId)
-      .maybeSingle()
-    if (!row) return
-
-    const before = (await loadRecipientsByEnvelopeRows(db, [row.id as string])).get(row.id as string) ?? []
-    const after = await syncEnvelopeRecipients(db, row.id as string, envelopeId, 'docusign')
-    await alertOnNewBounces(before, after, {
-      minorName:     (row.minor_name as string) ?? 'a participant',
-      eventTitle:    (row.event_title as string) ?? '',
-      participantId: (row.participant_id as string | null) ?? null,
-    })
+    await syncEnvelopeRecipients(db, envelopeRowId, envelopeId, 'docusign')
   } catch (err) {
     console.error('[docusign-webhook] recipient sync failed (non-fatal):', err)
   }

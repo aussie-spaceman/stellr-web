@@ -119,6 +119,15 @@ export const TENANT_SURFACE_ALLOW: readonly TenantSurfaceRule[] = [
 
 export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
   {
+    match: 'app/(stellr)/(flow)/sign/email/page.tsx',
+    reason:
+      "the one-time link a bounce notice sends the other signer (lib/esign/email-changes.ts). Links are built on Stellr's host today; allow once the notice builds a tenant-host link and the API confirms the agreement's tenant matches the host",
+  },
+  {
+    match: 'app/api/sign/email/route.ts',
+    reason: 'the API behind the bounce notice link above; same condition',
+  },
+  {
     match: 'app/api/registrations/[id]/spreadsheet/route.ts',
     reason:
       "copies minors' health and emergency-contact data into a sheet in Stellr's Drive on an anyone-can-edit link; allow only once the export is tenant-scoped and has no public link",

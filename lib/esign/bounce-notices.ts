@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notifyCommunityAdmins, notifyMember, type NotifyInput } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
-import { emailLayout, escapeHtml as esc } from '@/lib/email-layout'
+import { BRAND_NAVY, emailLayout, escapeHtml as esc } from '@/lib/email-layout'
 import { maskEmail } from '@/lib/utils'
 import { AUTH_APP_URL } from '@/lib/env'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
@@ -263,8 +263,9 @@ function rosterUrl(eventSlug: string | null): string {
 
 const YOUR_GROUP_URL = () => `${AUTH_APP_URL}/account?tab=teams`
 
+/** The same button the signing emails use (lib/esign/emails.ts). */
 function button(href: string, label: string): string {
-  return `<p style="margin:24px 0"><a href="${esc(href)}" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#1f4fd8;color:#ffffff;font-weight:bold;text-decoration:none">${esc(label)}</a></p>`
+  return `<p style="margin:24px 0"><a href="${esc(href)}" style="background:${BRAND_NAVY};color:#ffffff;padding:12px 22px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">${esc(label)}</a></p>`
 }
 
 function formatDate(d: Date): string {

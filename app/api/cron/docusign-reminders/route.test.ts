@@ -64,6 +64,8 @@ const ENVELOPE = {
   id: 'row-1', envelope_id: 'env-1', envelope_type: 'minor', minor_name: 'Lily', signer_name: 'Parent',
   signer_email: 'p@example.com', event_title: 'CO SDC', member_id: null, status: 'sent',
   signers_total: 2, signers_completed: 1, reused_from: null, reminder_count: 0,
+  // S5 B14: the cron selects tenant_id to run per tenant. NULL is Stellr's.
+  tenant_id: null,
 }
 
 beforeEach(() => {

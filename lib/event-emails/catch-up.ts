@@ -17,7 +17,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveAudience, type ResolvedRecipient } from './audiences'
 import { daysUntil } from './schedule'
 import { todayInMountain } from './render'
-import { deliver, loadAttachments, loadEventForEmail, type SendOutcome } from './send'
+import { deliver, loadAttachments, loadEventForEmail, rowInTenant, TENANT_SENDER_REQUIRED, type SendOutcome } from './send'
+import { isTenantRow, type EventSender } from './tenant-mail'
 // alreadyTriedAddresses / missedRecipients live in ./history so send.ts can read
 // the history without importing this module (which imports send.ts). Re-export
 // them here to keep existing importers working.
@@ -79,11 +80,20 @@ export type CatchUpOutcome = SendOutcome | { ok: true; sendId: null; recipients:
 export async function sendCatchUp(
   db: SupabaseClient,
   emailId: string,
-  opts: { triggeredBy?: string | null; spacingMs?: number; today?: string } = {},
+  opts: {
+    triggeredBy?: string | null
+    spacingMs?: number
+    today?: string
+    /** S5 B14: the tenant's sender, for a tenant's email. Leave out for Stellr's. */
+    sender?: EventSender
+    /** S5 B14: a tenant cron's slice signal; the catch-up stops between recipients once it fires. */
+    signal?: AbortSignal
+  } = {},
 ): Promise<CatchUpOutcome> {
   const { data: row } = await db.from('event_emails').select('*').eq('id', emailId).maybeSingle()
   const email = row as EventEmailRow | null
   if (!email) return { ok: false, status: 404, error: 'Email not found' }
+  if (isTenantRow(email.tenant_id) && !opts.sender) return { ok: false, status: 503, error: TENANT_SENDER_REQUIRED }
   if (email.status !== 'sent') return { ok: false, status: 400, error: 'Only a sent email can be caught up' }
   const audiences = catchUpAudiences(email.audiences)
   if (!audiences.length) return { ok: false, status: 400, error: 'Only emails sent to All participants are caught up' }
@@ -119,6 +129,8 @@ export async function sendCatchUp(
       audiences,
       attachments,
       spacingMs: opts.spacingMs,
+      sender: opts.sender,
+      signal: opts.signal,
     })
     return { ok: true, sendId, recipients: owed.length, sent, failed, docusignResent: 0 }
   } catch (err) {
@@ -139,11 +151,17 @@ export async function runCatchUps(
   eventDate: (slug: string) => Promise<string | null>,
   budgetLeft: () => boolean,
   today = todayInMountain(),
+  /**
+   * S5 B14: the cron's tenant. With it, only that tenant's emails are caught up
+   * (NULL tenant_id counts as Stellr's), with its sender. Without it, every
+   * email, as before.
+   */
+  scope: { tenantId?: string; sender?: EventSender; signal?: AbortSignal } = {},
 ): Promise<{ checked: number; emailed: number; deferred: number; errors: { id: string; error: string }[] }> {
   const out = { checked: 0, emailed: 0, deferred: 0, errors: [] as { id: string; error: string }[] }
   const { data: rows, error } = await db
     .from('event_emails')
-    .select('id, event_slug')
+    .select(scope.tenantId ? 'id, event_slug, tenant_id' : 'id, event_slug')
     .eq('status', 'sent')
     .contains('audiences', ['participants'])
     .order('sent_at', { ascending: true })
@@ -152,14 +170,22 @@ export async function runCatchUps(
     return out
   }
 
-  for (const row of rows ?? []) {
+  const tenantId = scope.tenantId
+  const mine = ((rows ?? []) as unknown as { id: string; event_slug: string; tenant_id?: string | null }[])
+    .filter((row) => !tenantId || rowInTenant(row.tenant_id, tenantId))
+  for (const row of mine) {
     if (!catchUpOpen(await eventDate(row.event_slug as string), today)) continue
     if (!budgetLeft()) {
       out.deferred++
       continue
     }
     out.checked++
-    const r = await sendCatchUp(db, row.id as string, { triggeredBy: 'schedule', today })
+    const r = await sendCatchUp(db, row.id as string, {
+      triggeredBy: 'schedule',
+      today,
+      ...(scope.sender ? { sender: scope.sender } : {}),
+      ...(scope.signal ? { signal: scope.signal } : {}),
+    })
     if (!r.ok) {
       if (r.status !== 409) out.errors.push({ id: row.id as string, error: r.error })
     } else {

@@ -23,6 +23,21 @@ import {
   type EventForEmail,
 } from './render'
 import { MAX_RECIPIENTS_PER_SEND, type EventEmailRow, type EventEmailStatus } from './types'
+import { isTenantRow, type EventSender } from './tenant-mail'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+
+/**
+ * S5 B14: an email belonging to another tenant goes out only with that tenant's
+ * sender (lib/event-emails/tenant-mail.ts), never as Stellr. Stellr's rows (NULL
+ * or Stellr tenant_id) never meet this. Admin-facing; the wording is a proposal.
+ */
+export const TENANT_SENDER_REQUIRED =
+  'This event belongs to another organiser. Its emails go out from their own sender, which isn’t set up yet, so nothing was sent.'
+
+/** Does a row's tenant_id file it under this tenant? NULL counts as Stellr's, as derivation stamps. */
+export function rowInTenant(rowTenantId: string | null | undefined, tenantId: string): boolean {
+  return (rowTenantId ?? STELLR_TENANT_ID) === tenantId
+}
 
 /** Resend's default limit is 2 requests/second per team. */
 const SEND_SPACING_MS = 550
@@ -93,11 +108,20 @@ export async function sendEventEmail(
     // draft/scheduled one) and the send resumes, skipping addresses already
     // emailed by the killed run.
     resume?: boolean
+    /** S5 B14: the tenant's sender, for a tenant's email. Leave out for Stellr's. */
+    sender?: EventSender
+    /**
+     * S5 B14: a tenant cron's slice signal. Once it fires the send stops between
+     * recipients and is put back for the next run, as when the daily budget runs
+     * out. Stellr's sends leave it out.
+     */
+    signal?: AbortSignal
   },
 ): Promise<SendOutcome> {
   const { data: row } = await db.from('event_emails').select('*').eq('id', emailId).maybeSingle()
   const email = row as EventEmailRow | null
   if (!email) return { ok: false, status: 404, error: 'Email not found' }
+  if (isTenantRow(email.tenant_id) && !opts.sender) return { ok: false, status: 503, error: TENANT_SENDER_REQUIRED }
 
   const bad = unknownTokens(email.subject, email.body_json)
   if (bad.length) return { ok: false, status: 400, error: `Unknown merge field${bad.length > 1 ? 's' : ''}: ${bad.map((t) => `{{${t}}}`).join(', ')}` }
@@ -196,13 +220,15 @@ export async function sendEventEmail(
       }
     }
 
-    const { sendId, sent, failed, stoppedForQuota } = await deliver(db, email, event, recipients, {
+    const { sendId, sent, failed, stoppedForQuota, stoppedForTime } = await deliver(db, email, event, recipients, {
       trigger: opts.trigger,
       triggeredBy: opts.triggeredBy,
       audiences: email.audiences,
       attachments,
       docusignResent,
       spacingMs: opts.spacingMs,
+      sender: opts.sender,
+      signal: opts.signal,
     })
 
     // deep review INT-2 / PUB-4: if the shared daily email budget ran out
@@ -210,7 +236,8 @@ export async function sendEventEmail(
     // next scheduled cron slot (or an admin re-send) resumes it. The recipients
     // already emailed are on the send row, so alreadyTriedAddresses skips them
     // and only the unreached ones go out next time. Nobody is emailed twice.
-    if (stoppedForQuota) {
+    // A tenant send stopped by its cron slice (S5 B14) is put back the same way.
+    if (stoppedForQuota || stoppedForTime) {
       await release(priorStatus)
       return { ok: true, sendId, recipients: recipients.length, sent, failed, docusignResent, incomplete: true }
     }
@@ -244,8 +271,12 @@ export async function deliver(
     attachments: Awaited<ReturnType<typeof loadAttachments>>
     docusignResent?: number
     spacingMs?: number
+    /** S5 B14: a tenant's sender. Stellr's mail leaves it out and keeps EVENT_EMAIL_FROM. */
+    sender?: EventSender
+    /** S5 B14: stop between recipients once this fires (a tenant cron's slice). Nobody unreached is recorded. */
+    signal?: AbortSignal
   },
-): Promise<{ sendId: string; sent: number; failed: number; stoppedForQuota: boolean }> {
+): Promise<{ sendId: string; sent: number; failed: number; stoppedForQuota: boolean; stoppedForTime: boolean }> {
   const isTest = opts.trigger === 'test'
   const eventVars = eventMergeVars(event)
   // History shows the subject as it went out (first recipient's rendering),
@@ -291,14 +322,22 @@ export async function deliver(
   // goes to the sender only and is always allowed through.
   const kind = isTest ? 'transactional' : 'marketing'
   let stoppedForQuota = false
+  let stoppedForTime = false
   for (const [i, r] of recipients.entries()) {
     if (i > 0) await sleep(opts.spacingMs ?? SEND_SPACING_MS)
+    // The cron runner has moved on to the next tenant: stop rather than share the
+    // account's send rate with it. Like a quota stop, the unreached recipients are
+    // not recorded, so the next run sends them.
+    if (opts.signal?.aborted) {
+      stoppedForTime = true
+      break
+    }
     try {
       const content = renderEventEmail(email, { ...eventVars, ...recipientMergeVars(r) })
       await sendEmail({
         to: r.email,
-        from: EVENT_EMAIL_FROM,
-        replyTo: EVENT_EMAIL_REPLY_TO,
+        from: opts.sender?.from ?? EVENT_EMAIL_FROM,
+        replyTo: opts.sender?.replyTo ?? EVENT_EMAIL_REPLY_TO,
         subject: isTest ? `[TEST] ${content.subject}` : content.subject,
         html: content.html,
         text: content.text,
@@ -330,7 +369,7 @@ export async function deliver(
       .update({ sent_count: sent, failed_count: failed, recipients: results, finished_at: new Date().toISOString() })
       .eq('id', sendRow.id)
   }
-  return { sendId: (sendRow?.id as string) ?? '', sent, failed, stoppedForQuota }
+  return { sendId: (sendRow?.id as string) ?? '', sent, failed, stoppedForQuota, stoppedForTime }
 }
 
 /**
@@ -345,12 +384,18 @@ export async function deliver(
 export async function reclaimStuckSending(
   db: SupabaseClient,
   budgetLeft: () => boolean,
+  /**
+   * S5 B14: the cron's tenant. With it, only that tenant's rows are re-driven
+   * (NULL tenant_id counts as Stellr's), with its sender. Without it, every row,
+   * as before.
+   */
+  scope: { tenantId?: string; sender?: EventSender; signal?: AbortSignal } = {},
 ): Promise<{ reclaimed: number; errors: { id: string; error: string }[] }> {
   const out = { reclaimed: 0, errors: [] as { id: string; error: string }[] }
   const stale = new Date(Date.now() - SENDING_STALE_MS).toISOString()
   const { data: rows, error } = await db
     .from('event_emails')
-    .select('id')
+    .select(scope.tenantId ? 'id, tenant_id' : 'id')
     .eq('status', 'sending')
     .lt('updated_at', stale)
     .order('updated_at', { ascending: true })
@@ -358,9 +403,18 @@ export async function reclaimStuckSending(
     out.errors.push({ id: 'query', error: error.message })
     return out
   }
-  for (const row of rows ?? []) {
+  const tenantId = scope.tenantId
+  const mine = ((rows ?? []) as unknown as { id: string; tenant_id?: string | null }[])
+    .filter((row) => !tenantId || rowInTenant(row.tenant_id, tenantId))
+  for (const row of mine) {
     if (!budgetLeft()) break
-    const r = await sendEventEmail(db, row.id as string, { trigger: 'schedule', triggeredBy: 'resume', resume: true })
+    const r = await sendEventEmail(db, row.id as string, {
+      trigger: 'schedule',
+      triggeredBy: 'resume',
+      resume: true,
+      ...(scope.sender ? { sender: scope.sender } : {}),
+      ...(scope.signal ? { signal: scope.signal } : {}),
+    })
     // 409 just means another run took it first — not an error.
     if (r.ok) out.reclaimed++
     else if (r.status !== 409) out.errors.push({ id: row.id as string, error: r.error })

@@ -12,9 +12,11 @@ const VIEWED = { id: 'viewed-kid' }
 const h = vi.hoisted(() => ({
   revokeCredential: vi.fn(),
   logActivity: vi.fn(async () => {}),
-  access: { ok: true, userId: 'clerk-admin', isAdmin: true, assignedSlugs: null } as Record<string, unknown>,
 }))
 
+vi.mock('@clerk/nextjs/server', () => ({
+  auth: async () => ({ userId: 'user_clerkadmin', sessionClaims: { metadata: { role: 'admin' } } }),
+}))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: () => ({
@@ -29,7 +31,6 @@ vi.mock('@/lib/supabase', () => ({
     }),
   }),
 }))
-vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => h.access }))
 // A view-as ticket is live: the view-as-aware resolver returns the viewed member.
 vi.mock('@/lib/community', () => ({
   getCurrentMember: async () => VIEWED,

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { getSignedInMember } from '@/lib/community'
 import { adminSurveyView } from '@/lib/survey/admin'
 import { logSurveyAccess, writeAudit } from '@/lib/survey/audit'
@@ -21,6 +23,7 @@ import {
 import { loadSurveyEvent } from '@/lib/survey/events'
 import { runOne } from '@/lib/survey/run'
 import { resendInvitation, type InvitationRow } from '@/lib/survey/send'
+import { loadRecord, refuseOutsideStellr, scopedRowWrite } from '@/lib/tenancy/load-scoped'
 
 // /api/admin/events/[slug]/survey — the event's "Survey" tab (admins and the
 // event's assigned managers; handover A1/A2).
@@ -31,20 +34,35 @@ import { resendInvitation, type InvitationRow } from '@/lib/survey/send'
 //        Admins only: open_after_event {acceptOlderMinorAgreements} (an event
 //        that ended without a survey) | minor_agreement_override {on}
 // Every change is written to audit_log; viewing the table to survey_access_log.
+//
+// Both refuse a tenant's staff. Opening this tab makes the event's distribution, and the
+// survey cron then sends it through Stellr's sender on Stellr's definition: A10 and B13 are
+// what make that a tenant's own.
+
+const ROUTE = '/api/admin/events/[slug]/survey'
 
 type Ctx = { params: Promise<{ slug: string }> }
 export const maxDuration = 60
 
-export async function GET(_req: Request, { params }: Ctx) {
+export const GET = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'survey.distribution.read', ...auditSubject(req, 'survey_distributions') }),
+  readSurvey,
+)
+
+async function readSurvey(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
   const db = supabaseServer()
   const view = await adminSurveyView(db, slug)
   if (view.rows.length) {
-    await logSurveyAccess(db, { actor: access.userId, action: 'view', eventSlug: slug, distributionId: view.distribution?.id, rowCount: view.rows.length, detail: { what: 'completion_table' } })
+    await logSurveyAccess(db, { actor: staff.userId, action: 'view', eventSlug: slug, distributionId: view.distribution?.id, rowCount: view.rows.length, detail: { what: 'completion_table' } })
   }
-  return NextResponse.json({ ...view, isAdmin: access.isAdmin })
+  noteAuditSubject(req, { id: view.distribution?.id ?? null })
+  return NextResponse.json({ ...view, isAdmin: staff.isAdmin })
 }
 
 const Body = z.discriminatedUnion('action', [
@@ -61,24 +79,34 @@ const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('minor_agreement_override'), on: z.boolean() }),
 ])
 
-export async function POST(req: Request, { params }: Ctx) {
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'survey.distribution.change', ...auditSubject(req, 'survey_distributions') }),
+  changeSurvey,
+)
+
+async function changeSurvey(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   const body = parsed.data
+  noteAuditSubject(req, { detail: { survey_action: body.action } })
 
   const db = supabaseServer()
   const me = await getSignedInMember().catch(() => null)
-  const actor: Actor = { memberId: me?.id ?? null, label: access.userId }
+  const actor: Actor = { memberId: me?.id ?? null, label: staff.userId }
 
   if (body.action === 'open_after_event') {
-    if (!access.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+    if (!staff.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
     const event = await loadSurveyEvent(slug)
     if (!event) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
     const r = await openAfterEvent(db, event, { acceptOlderMinorAgreements: body.acceptOlderMinorAgreements }, actor)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+    noteAuditSubject(req, { id: r.distribution.id })
     try {
       const run = await runOne(db, r.distribution.id)
       return NextResponse.json({ ok: true, run })
@@ -90,6 +118,7 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const d = await distributionForEvent(db, slug)
   if (!d) return NextResponse.json({ error: 'This event has no survey yet.' }, { status: 404 })
+  noteAuditSubject(req, { id: d.id })
 
   switch (body.action) {
     case 'send_now': {
@@ -128,22 +157,25 @@ export async function POST(req: Request, { params }: Ctx) {
       return r.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: r.error }, { status: r.status })
     }
     case 'gate_certificate': {
-      if (!access.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
-      await db.from('survey_distributions').update({ gate_certificate: body.on }).eq('id', d.id)
+      if (!staff.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+      await scopedRowWrite(staff.scope, 'survey_distributions', d.id, { db }).update({ gate_certificate: body.on })
       await writeAudit(db, { table: 'survey_distributions', recordId: d.id, action: 'UPDATE', actor: actor.label, data: { event: 'gate_certificate', on: body.on } })
       return NextResponse.json({ ok: true })
     }
     case 'minor_agreement_override': {
-      if (!access.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+      if (!staff.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
       const r = await setMinorAgreementOverride(db, d, body.on, actor)
       return r.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: r.error }, { status: r.status })
     }
     case 'resend': {
-      const { data: inv } = await db.from('survey_invitations').select('*').eq('id', body.invitationId).eq('distribution_id', d.id).maybeSingle()
-      if (!inv) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      // An invitation of this event's distribution, and no other: any other id answers as a missing one.
+      const notFound = () => NextResponse.json({ error: 'Not found' }, { status: 404 })
+      const inv = await loadRecord<InvitationRow>(staff.scope, 'survey_invitations', body.invitationId, { db, notFound, label: ROUTE })
+      if (!inv.ok) return inv.response
+      if (inv.row.distribution_id !== d.id) return notFound()
       if (d.status !== 'open') return NextResponse.json({ error: 'The survey isn’t open.' }, { status: 409 })
       const { def } = await loadDefinition(db, d.definition_id)
-      const r = await resendInvitation(db, inv as InvitationRow, d, def)
+      const r = await resendInvitation(db, inv.row, d, def)
       if (r.ok) await writeAudit(db, { table: 'survey_invitations', recordId: body.invitationId, action: 'UPDATE', actor: actor.label, data: { event: 'resend' } })
       return r.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: r.error }, { status: 400 })
     }

@@ -1,14 +1,28 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { claimUpload } from '@/lib/uploads'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Upload (or clear) a per-course certificate template PDF. When set, the member's
 // certificate download overlays their details onto this PDF (see the certificate
 // pdf route); otherwise a default Stellr certificate is generated.
 
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.cert_template.set',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_modules', id: auditedId.get(req) ?? null },
+  }),
+  setCertTemplate,
+)
+
+async function setCertTemplate(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/cert-template' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   // The PDF went browser → storage via /api/uploads/sign; only the path lands
   // here, and claimUpload verifies the object that actually arrived.
   const b = await req.json().catch(() => ({}))
@@ -21,6 +35,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  auditedId.set(req, moduleId)
   const db = supabaseServer()
   // This PDF is overlaid onto every certificate for the course; the purpose
   // accepts only bytes that really are a PDF, whatever type was declared.
@@ -32,11 +47,22 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, path })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.cert_template.clear',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_modules', id: auditedId.get(req) ?? null },
+  }),
+  clearCertTemplate,
+)
+
 // DELETE ?moduleId= — clear the template (revert to the generated certificate).
-export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function clearCertTemplate(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/cert-template' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const moduleId = new URL(req.url).searchParams.get('moduleId')
   if (!moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
+  auditedId.set(req, moduleId)
   const db = supabaseServer()
   const { error } = await db.from('training_modules').update({ cert_template_path: null }).eq('id', moduleId)
   if (error) return NextResponse.json({ error: 'Could not clear template' }, { status: 500 })

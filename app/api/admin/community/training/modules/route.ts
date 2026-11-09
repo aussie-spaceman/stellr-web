@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { ensureTrainingContainer } from '@/lib/container-sync'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Admin: create / list / update training modules (FR-COM-10).
 
 // GET — modules with item counts for the admin manager.
 export async function GET() {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/modules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   const { data } = await db
     .from('training_modules')
@@ -17,10 +21,20 @@ export async function GET() {
   return NextResponse.json({ modules: data ?? [] })
 }
 
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.module.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_modules', id: auditedId.get(req) ?? null },
+  }),
+  createModule,
+)
+
 // POST — create a module.
 // Body: { title, description?, materialKind?, courseType?, startDate?, eventRef?, minTierRank?, displayOrder? }
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function createModule(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/modules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const title = (body.title as string | undefined)?.trim()
   if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 })
@@ -48,16 +62,28 @@ export async function POST(req: Request) {
     console.error('[training] module create error:', error)
     return NextResponse.json({ error: 'Could not create module' }, { status: 500 })
   }
+  auditedId.set(req, data.id)
   await ensureTrainingContainer(db, data.id, title)
   return NextResponse.json({ id: data.id })
 }
 
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.module.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_modules', id: auditedId.get(req) ?? null },
+  }),
+  updateModule,
+)
+
 // PATCH — update a module (e.g. publish toggle). Body: { id, ...fields }
-export async function PATCH(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function updateModule(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/modules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const { id } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (typeof body.isPublished === 'boolean') patch.is_published = body.isPublished

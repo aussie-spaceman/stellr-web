@@ -8,12 +8,12 @@ import { getWorkshopFull } from '@/lib/coaching'
 import { listCohortFileResources } from '@/lib/mentoring'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { AdminManageWorkshop } from '@/components/admin/coaching/AdminManageWorkshop'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · Manage workshop' }
 
 export default async function AdminManageWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/coaching/[id]' })
   const member = await getSignedInMember()
   if (!member) redirect('/sign-in')
   if (!member.isAdmin) redirect('/community/coaching')

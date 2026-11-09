@@ -1,9 +1,14 @@
 import { NextResponse, after } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 import { RESOURCES_BUCKET, signedDownloadUrl, VIDEO_SIGNED_URL_TTL_SECONDS } from '@/lib/community'
 import { markPhase, recordingFileLimitBytes, runOffload } from '@/lib/recording-offload'
 import { recordingView, type OffloadRow } from '@/lib/recording-view'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
+const auditedOp = new WeakMap<Request, string>()
 
 // A lesson's recording, as the Course builder sees it.
 //   GET    ?itemId=   status, reason for any failure, and a playable URL
@@ -26,7 +31,7 @@ async function load(itemId: string) {
 }
 
 export async function GET(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/recording' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
 
@@ -41,10 +46,23 @@ export async function GET(req: Request) {
   return NextResponse.json({ ...view, url, fileLimitBytes })
 }
 
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.recording.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_items', id: auditedId.get(req) ?? null },
+    metadata: { op: auditedOp.get(req) ?? null },
+  }),
+  updateRecording,
+)
+
+async function updateRecording(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/recording' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { itemId, action } = (await req.json().catch(() => ({}))) as { itemId?: string; action?: string }
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
+  auditedId.set(req, itemId)
+  if (action) auditedOp.set(req, action)
 
   const found = await load(itemId)
   if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -65,10 +83,21 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.recording.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_items', id: auditedId.get(req) ?? null },
+  }),
+  deleteRecording,
+)
+
+async function deleteRecording(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/recording' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
+  auditedId.set(req, itemId)
 
   const found = await load(itemId)
   if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 })

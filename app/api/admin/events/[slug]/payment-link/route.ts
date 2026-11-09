@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
+import { firstLinkedMemberId, stellrOnlyDb } from '@/lib/events/admin-records'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { isEmailLike, maskEmail } from '@/lib/utils'
+import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/payment-link — email the durable pay link for
 // a pending card registration (admins + assigned event managers). Goes to the
@@ -11,28 +15,53 @@ import { isEmailLike, maskEmail } from '@/lib/utils'
 // teacher POC (group), plus any addresses the admin adds — a parent writing in
 // from an address that isn't on the registration, for instance.
 //   body: { registrationId: string, extraRecipients?: string[] }
-export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+//
+// The pay page takes payment on Stellr's Stripe account: priced tenant events wait on S9.
+
+const ROUTE = '/api/admin/events/[slug]/payment-link'
+
+type Ctx = { params: Promise<{ slug: string }> }
+
+type Registration = {
+  id: string
+  event_slug: string
+  status: string
+  invoice_requested: boolean | null
+  member_pays_individually: boolean | null
+  teacher_member_id: string | null
+}
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'registration.pay_link.send', ...auditSubject(req, 'registrations') }),
+  sendPayLink,
+)
+
+async function sendPayLink(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const body = await req.json().catch(() => null)
   const registrationId = typeof body?.registrationId === 'string' ? body.registrationId : null
   if (!registrationId) return NextResponse.json({ error: 'registrationId required' }, { status: 400 })
+  noteAuditSubject(req, { id: registrationId })
   const extraRaw: unknown[] = Array.isArray(body?.extraRecipients) ? body.extraRecipients : []
   const extraRecipients = extraRaw.filter((e): e is string => typeof e === 'string').map((e) => e.trim())
   const bad = extraRecipients.find((e) => !isEmailLike(e))
   if (bad) return NextResponse.json({ error: `Not an email address: ${bad}` }, { status: 400 })
 
   const db = supabaseServer()
-  const { data: reg } = await db
-    .from('registrations')
-    .select('id, event_slug, status, invoice_requested, member_pays_individually, teacher_member_id')
-    .eq('id', registrationId)
-    .maybeSingle()
-  if (!reg || reg.event_slug !== slug) {
-    return NextResponse.json({ error: 'Registration not found for this event' }, { status: 404 })
-  }
+  const loaded = await loadEventRecord<Registration>(staff, 'registrations', registrationId, {
+    db,
+    select: 'id, event_slug, status, invoice_requested, member_pays_individually, teacher_member_id',
+    notFound: () => NextResponse.json({ error: 'Registration not found for this event' }, { status: 404 }),
+    label: ROUTE,
+  })
+  if (!loaded.ok) return loaded.response
+  const reg = loaded.row
   if (reg.status !== 'pending') {
     return NextResponse.json({ error: 'This registration has no payment outstanding' }, { status: 400 })
   }
@@ -52,15 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   const actor = await actorFromAuth()
-  const { data: firstPart } = await db
-    .from('participants')
-    .select('member_id')
-    .eq('registration_id', registrationId)
-    .not('member_id', 'is', null)
-    .limit(1)
-    .maybeSingle()
-  const subjectMemberId =
-    (reg.teacher_member_id as string | null) ?? (firstPart as { member_id?: string } | null)?.member_id ?? actor.actorMemberId ?? null
+  const subjectMemberId = reg.teacher_member_id ?? (await firstLinkedMemberId(stellrOnlyDb(staff.scope, db), registrationId)) ?? actor.actorMemberId ?? null
   if (subjectMemberId) {
     await logActivity(
       {

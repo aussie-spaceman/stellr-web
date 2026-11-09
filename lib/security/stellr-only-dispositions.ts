@@ -9,16 +9,23 @@
 //   - whether training/assignments and training/tracking are release-1 tenant features.
 //     They are listed permanent;
 //   - for each platform_destined route, whether it becomes owner-only or stays usable
-//     by Stellr staff. Moving the class does not move the guard (C15).
+//     by Stellr staff. C15 moved the class and not the guard, so that choice is still open.
+//     So is the audit chain that goes with it: these routes write to Stellr's chain until
+//     the owner has answered, and a row on the wrong chain cannot be corrected, so the
+//     answer comes before PLATFORM_AUDIT_ENABLED is on with a second tenant.
 //
 //   tenant_destined    moves to tenant_staff on loadScoped; MAX_TENANT_DESTINED_STELLR_ONLY
 //                      in test/idor/stellr-only-dispositions.test.ts falls with each one
-//   platform_destined  a platform function by nature: reclassified, guard unchanged
+//   platform_destined  a platform function by nature: classed platform_destined in the
+//                      manifest (C15), guard unchanged. Once the owner has chosen, a route
+//                      goes to platform_admin or back to stellr_only, and leaves this list
 //   permanent          a Stellr product; tenants never hold it
 //   until_s7_identity  identity tables: stays until tenant profiles exist (S7)
 //
-// The suite fails on a stellr_only id-bearing route not listed here, and on an entry
-// that is no longer one, so a new route must be placed and a converted one must leave.
+// The suite fails on a stellr_only or platform_destined id-bearing route not listed here,
+// and on an entry that is no longer one, so a new route must be placed and a converted one
+// must leave. The manifest's platform_destined class and this file's must also be the same
+// routes.
 
 export type StellrOnlyDisposition = 'tenant_destined' | 'platform_destined' | 'permanent' | 'until_s7_identity'
 
@@ -40,30 +47,27 @@ interface DispositionGroup {
 const GROUPS: readonly DispositionGroup[] = [
   {
     disposition: 'tenant_destined',
-    convertedBy: 'C17 to C19',
+    convertedBy: 'C18 to C19',
     reason: 'event operations by slug: a tenant runs its own events',
     routes: [
-      'events/[slug]/awards', 'events/[slug]/awards/issue', 'events/[slug]/background-reports',
+      'events/[slug]/awards', 'events/[slug]/awards/issue',
       'events/[slug]/badge-templates', 'events/[slug]/badge-templates/preview', 'events/[slug]/badges',
       'events/[slug]/certificate-templates', 'events/[slug]/certificate-templates/preview', 'events/[slug]/certificates',
-      'events/[slug]/check-in', 'events/[slug]/companies', 'events/[slug]/credentials', 'events/[slug]/docusign-reissue',
-      'events/[slug]/emails', 'events/[slug]/emails/[id]', 'events/[slug]/emails/[id]/attachments',
-      'events/[slug]/emails/[id]/catch-up', 'events/[slug]/emails/[id]/preview', 'events/[slug]/emails/[id]/send',
-      'events/[slug]/export', 'events/[slug]/invoice-paid', 'events/[slug]/merch/commit', 'events/[slug]/offerings',
-      'events/[slug]/participants/[pid]/guardian', 'events/[slug]/payment-link', 'events/[slug]/pd-credentials',
-      'events/[slug]/remind', 'events/[slug]/survey', 'events/[slug]/team-profiles', 'events/[slug]/volunteers',
+      'events/[slug]/check-in', 'events/[slug]/companies', 'events/[slug]/credentials',
+      'events/[slug]/merch/commit', 'events/[slug]/offerings',
     ],
   },
   {
     disposition: 'tenant_destined',
-    convertedBy: 'C16',
-    reason: 'a record loaded by id inside an event',
-    routes: [
-      'agreements/[id]/correct-recipient', 'campaigns/[slug]/email', 'credentials/[id]/resend', 'credentials/[id]/revoke',
-      'docusigns/[id]/credential-sharing', 'docusigns/[id]/download', 'docusigns/[id]/resend', 'event-managers',
-      'event-participations/[id]', 'media/do-not-use', 'refunds/preview', 'registrations/[id]/finish-setup',
-      'registrations/[id]/invoice', 'registrations/[id]/participants', 'registrations/[id]/payment-method', 'surveys/responses/[id]/withdraw-quote',
-    ],
+    convertedBy: 'C21',
+    reason: 'assigning event managers: C16 moved its check to lib/authz and left it on the Stellr admin guard until roles are settled',
+    routes: ['event-managers'],
+  },
+  {
+    disposition: 'tenant_destined',
+    convertedBy: 'C16 follow-up',
+    reason: 'a record loaded by id inside an event, added (#573) after C16 converted its siblings in registrations/[id]',
+    routes: ['registrations/[id]/payment-method'],
   },
   {
     disposition: 'tenant_destined',
@@ -76,7 +80,6 @@ const GROUPS: readonly DispositionGroup[] = [
   },
   {
     disposition: 'platform_destined',
-    convertedBy: 'C15',
     reason: 'acts across tenants by nature: the owner decides, route by route, owner-only or Stellr staff',
     routes: [
       'deletion', 'deletion-requests/[id]', 'deletion/preflight', 'events/slug-guard', 'impersonation', 'members/merge',

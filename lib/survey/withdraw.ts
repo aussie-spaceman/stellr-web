@@ -14,6 +14,8 @@ export async function withdrawQuote(
   actor: string,
   by: 'admin' | 'member',
   activityActor?: Actor,
+  /** A tenant's records stay off the global activity log (owner decision B8). */
+  opts: { skipMemberActivity?: boolean } = {},
 ): Promise<boolean> {
   const { data, error } = await db
     .from('survey_responses')
@@ -27,7 +29,7 @@ export async function withdrawQuote(
   await writeAudit(db, { table: 'survey_quote_withdrawal', recordId: responseId, action: 'UPDATE', actor, data: { by } })
 
   const r = data[0] as { member_id: string | null; distribution_id: string | null; event_slug: string | null }
-  if (r.member_id) {
+  if (r.member_id && !opts.skipMemberActivity) {
     const { data: dist } = r.distribution_id
       ? await db.from('survey_distributions').select('event_title').eq('id', r.distribution_id).maybeSingle()
       : { data: null }

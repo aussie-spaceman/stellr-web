@@ -1,9 +1,12 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureCoachingContainer } from '@/lib/container-sync'
 import { getCoachingChannel } from '@/lib/sessions'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Admin direct-grant for coaching (convergence P3). Create a coaching workshop —
 // a coach + coachee pairing — as a container + roster, and provision its chat so
@@ -12,8 +15,7 @@ import { isAdminClaims } from '@/lib/admin-auth'
 
 // GET — existing coaching workshops (coach + coachee), for the admin list.
 export async function GET() {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/coaching' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data } = await db
@@ -39,10 +41,19 @@ export async function GET() {
   return NextResponse.json({ workshops })
 }
 
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'coaching.workshop.ensure',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'mentoring_cohorts', id: auditedId.get(req) ?? null },
+  }),
+  ensureCoachingWorkshop,
+)
+
 // POST { coachId, coacheeId } — create / ensure a coaching workshop for the pair.
-export async function POST(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function ensureCoachingWorkshop(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/coaching' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { coachId, coacheeId } = await req.json().catch(() => ({}))
   if (!coachId || !coacheeId) {
@@ -55,6 +66,7 @@ export async function POST(req: Request) {
   const db = supabaseServer()
   const containerId = await ensureCoachingContainer(db, coacheeId, coachId)
   if (!containerId) return NextResponse.json({ error: 'Could not create workshop' }, { status: 500 })
+  auditedId.set(req, containerId)
 
   // Provision the pair's chat channel so the coachee has access immediately.
   await getCoachingChannel(coacheeId, coachId).catch(() => null)

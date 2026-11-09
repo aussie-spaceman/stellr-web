@@ -10,7 +10,7 @@ import GatesManager, { type ModuleRef, type Prereq } from '@/components/admin/tr
 import { CourseBuilder } from '@/components/admin/training/CourseBuilder'
 import type { AdminModule } from '@/components/admin/community/TrainingManager'
 import type { AdminTier } from '@/components/admin/training/ObjectAssignments'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 import { recordingView, type OffloadRow, type RecordingPhase } from '@/lib/recording-view'
 
 export const metadata = { title: 'Admin — Training' }
@@ -129,7 +129,7 @@ export default async function AdminTrainingPage({
 }: {
   searchParams: Promise<{ tab?: string; obj?: string; filter?: string; course?: string }>
 }) {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/training' })
   const sp = await searchParams
   const tab = (['overview', 'builder', 'tracking', 'reminders'].includes(sp.tab ?? '')
     ? sp.tab

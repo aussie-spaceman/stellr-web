@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { FlagQueue } from '@/components/admin/community/FlagQueue'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin — Community Moderation' }
 
@@ -9,7 +9,7 @@ export default async function AdminModerationPage({
 }: {
   searchParams: Promise<{ status?: string }>
 }) {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/community/moderation' })
   const { status = 'pending' } = await searchParams
   const db = supabaseServer()
 

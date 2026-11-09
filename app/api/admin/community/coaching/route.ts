@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 import {
   createWorkshop,
   updateWorkshop,
@@ -12,13 +12,48 @@ import {
   updateTierCoaching,
 } from '@/lib/coaching'
 import { CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
+import { bodyIds, withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedTarget = new WeakMap<Request, { table: string; id: string | null }>()
+const auditedOp = new WeakMap<Request, string>()
+const auditedDetail = new WeakMap<Request, Record<string, unknown>>()
+
+// The audit log keeps a lower-case code and redacts a camelCase word, so each operation
+// has its stored name here. A Map, because the key comes from the request body.
+const OP_CODES = new Map<unknown, string>([
+  ['create', 'create'],
+  ['updateWorkshop', 'update_workshop'],
+  ['reassignCoach', 'reassign_coach'],
+  ['setMember', 'set_member'],
+  ['inviteMember', 'invite_member'],
+  ['removeMember', 'remove_member'],
+  ['archive', 'archive'],
+  ['delete', 'delete'],
+  ['updateTier', 'update_tier'],
+])
+
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.workshop.manage',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: auditedTarget.get(req) ?? { table: 'mentoring_cohorts', id: null },
+    metadata: { op: auditedOp.get(req) ?? null, ...auditedDetail.get(req) },
+  }),
+  manageCoachingWorkshop,
+)
 
 // Admin actions for Coaching workshops (1-on-1): create + invite, settings,
 // coach reassignment, member invite/replace/remove, archive/delete, and the
 // Membership & access coaching allowance config.
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function manageCoachingWorkshop(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/coaching' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
+  const op = OP_CODES.get(b.action)
+  if (op) auditedOp.set(req, op)
+  auditedTarget.set(req, b.action === 'updateTier' ? { table: 'membership_tiers', id: b.tierId ?? null } : { table: 'mentoring_cohorts', id: b.workshopId ?? null })
+  auditedDetail.set(req, bodyIds(b, ['memberId', 'coachMemberId', 'newCoachId']))
 
   switch (b.action) {
     case 'create': {
@@ -34,6 +69,7 @@ export async function POST(req: Request) {
         oneOffPriceCents: b.oneOffPriceCents ?? null,
         resources: Array.isArray(b.resources) ? b.resources : [],
       })
+      auditedTarget.set(req, { table: 'mentoring_cohorts', id: workshopId })
       return NextResponse.json({ ok: true, workshopId })
     }
     case 'updateWorkshop': {

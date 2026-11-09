@@ -8,12 +8,12 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCohortFull, listCohortRoster, listMentoringTiers } from '@/lib/mentoring'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
 import { AdminManageCohort } from '@/components/admin/mentoring/AdminManageCohort'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · Manage cohort' }
 
 export default async function AdminManageCohortPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring/[id]' })
   const member = await getSignedInMember()
   if (!member) notFound()
   const { id } = await params

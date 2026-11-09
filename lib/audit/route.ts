@@ -92,6 +92,25 @@ export function isStorableTargetId(id: string): boolean {
   return UUID.test(id) || PROVIDER_ID.test(id)
 }
 
+/**
+ * The value if it may be stored as an id, otherwise null. An id often comes straight from
+ * a request body, so it can be anything, and RegExp.test coerces its argument: without
+ * the typeof, a one-element array holding a uuid would pass as one.
+ */
+export function storableId(value: unknown): string | null {
+  return typeof value === 'string' && isStorableTargetId(value) ? value : null
+}
+
+/** The named fields of a request body that hold a storable id, for an event's metadata. */
+export function bodyIds(body: unknown, keys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of keys) {
+    const id = storableId((body as Record<string, unknown> | null | undefined)?.[key])
+    if (id) out[key] = id
+  }
+  return out
+}
+
 interface Resolved {
   actor: string
   metadata: Record<string, unknown>
@@ -164,13 +183,14 @@ async function write(m: AuditMutation, opts: AuditMutationOptions): Promise<Audi
       within(resolveActor(m.actor), budget / 2, SYSTEM_UNRESOLVED),
       within(resolveTenant(m.tenant, { db: opts.db }), budget / 2, TENANT_UNRESOLVED),
     ])
-    const badId = !!m.target?.id && !isStorableTargetId(m.target.id)
+    const targetId = storableId(m.target?.id)
+    const badId = !!m.target?.id && !targetId
     return await audit(
       {
         tenantId: tenant.tenantId,
         actor: actor.actor,
         action: m.action,
-        target: m.target ? { table: m.target.table, id: badId ? null : m.target.id } : null,
+        target: m.target ? { table: m.target.table, id: targetId } : null,
         reason: m.reason,
         metadata: { ...m.metadata, ...actor.metadata, ...tenant.metadata, ...(badId ? { target_id_dropped: true } : {}) },
       },

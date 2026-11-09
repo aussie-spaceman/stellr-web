@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 import { inviteMembersToCohort, resendCohortInvites } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
 import {
@@ -12,13 +12,57 @@ import {
 } from '@/lib/mentoring'
 import type { CohortTheme } from '@/lib/mentoring-format'
 import { CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
+import { bodyIds, withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedTarget = new WeakMap<Request, { table: string; id: string | null }>()
+const auditedOp = new WeakMap<Request, string>()
+const auditedDetail = new WeakMap<Request, Record<string, unknown>>()
+
+// The audit log keeps a lower-case code and redacts a camelCase word, so each operation
+// has its stored name here. A Map, because the key comes from the request body.
+const OP_CODES = new Map<unknown, string>([
+  ['makeMentor', 'make_mentor'],
+  ['reassignMentor', 'reassign_mentor'],
+  ['removeMember', 'remove_member'],
+  ['invite', 'invite'],
+  ['resendInvites', 'resend_invites'],
+  ['updateCohort', 'update_cohort'],
+  ['archive', 'archive'],
+  ['delete', 'delete'],
+  ['updateTier', 'update_tier'],
+])
+
+function cohortTarget(b: { action?: unknown; memberId?: string; tierId?: string; cohortId?: string }) {
+  if (b.action === 'makeMentor') return { table: 'members', id: b.memberId ?? null }
+  if (b.action === 'updateTier') return { table: 'membership_tiers', id: b.tierId ?? null }
+  return { table: 'mentoring_cohorts', id: b.cohortId ?? null }
+}
+
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.cohort.manage',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: auditedTarget.get(req) ?? { table: 'mentoring_cohorts', id: null },
+    metadata: { op: auditedOp.get(req) ?? null, ...auditedDetail.get(req) },
+  }),
+  manageCohort,
+)
 
 // Admin actions for the Mentoring redesign that the legacy /api/admin/community/
 // cohorts route doesn't cover: make-mentor (global), reassign mentor, cohort
 // settings + access, and the Membership & access tier config.
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function manageCohort(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/mentoring' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
+  const op = OP_CODES.get(b.action)
+  if (op) auditedOp.set(req, op)
+  auditedTarget.set(req, cohortTarget(b))
+  auditedDetail.set(req, {
+    ...bodyIds(b, ['memberId', 'newMentorId', 'mentorMemberId']),
+    ...(Array.isArray(b.memberIds) ? { recipients: b.memberIds.length } : {}),
+  })
 
   switch (b.action) {
     case 'makeMentor': {

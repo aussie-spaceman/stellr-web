@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getAllEvents, getEventsBySlugs, getAllCampaigns } from '@/lib/events/repo'
 import type { ObjectType } from '@/lib/training-portal'
 import { audienceIncludes, eventVolunteers, normalizeAudience, type Audience, type RosterKind } from '@/lib/training-audience'
+import { stellrRows } from '@/lib/tenancy/stellr-scope'
 export type { ObjectType }
 
 // Admin-side Training data: the trainable-Object catalogue, completion tracking
@@ -144,7 +145,9 @@ async function mandatoryCoursesForCohort(cohortId: string): Promise<TrackCourse[
 /** Participants of an event/campaign Object (group = school registered under). */
 async function eventParticipants(slug: string): Promise<Participant[]> {
   const db = supabaseServer()
-  const { data: regs } = await db.from('registrations').select('id, school_name').eq('event_slug', slug)
+  // Stellr's admin answers for Stellr's rows. This matches every row while Stellr is the
+  // only tenant; a caller's slug can't reach another tenant's roster once it isn't.
+  const { data: regs } = await stellrRows(db.from('registrations').select('id, school_name').eq('event_slug', slug))
   const regIds = (regs ?? []).map((r) => r.id as string)
   if (regIds.length === 0) return []
   const groupByReg = new Map((regs ?? []).map((r) => [r.id as string, (r.school_name as string) ?? 'Group']))
@@ -167,7 +170,7 @@ async function eventParticipants(slug: string): Promise<Participant[]> {
 
 /** Volunteers on an event Object (its Volunteers panel), grouped together. */
 async function eventVolunteerParticipants(slug: string): Promise<Participant[]> {
-  const vols = await eventVolunteers(supabaseServer(), slug)
+  const vols = await eventVolunteers(supabaseServer(), slug, { stellrOnly: true })
   return vols.map((v) => ({
     memberId: v.memberId,
     name: [v.firstName, v.lastName].filter(Boolean).join(' ') || 'Volunteer',

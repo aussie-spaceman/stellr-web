@@ -11,7 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const removeEventParticipation = vi.fn(async () => {})
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => ({ ok: true }) }))
+vi.mock('@/lib/authz', async () => {
+  const { eventRouteFor } = await import('@/test/fixtures/event-route')
+  return { requireEventRoute: async (slug: string) => eventRouteFor(slug) }
+})
 vi.mock('@/lib/event-participation-sync', () => ({ removeEventParticipation }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async () => ({ title: 'Colorado SDC' }) }))
 vi.mock('@/lib/container-sync', () => ({ ensureEventContainer: async () => 'container-1' }))

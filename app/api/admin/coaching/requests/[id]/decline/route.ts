@@ -1,14 +1,27 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { declineRequest } from '@/lib/coaching-requests'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
+
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'coaching.request.decline',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'coaching_requests', id: auditedId.get(req) ?? null },
+  }),
+  declineCoachingRequest,
+)
 
 // Admin: decline a coaching request with a reason (surfaced to the member).
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function declineCoachingRequest(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await isStellrAdmin({ route: '/api/admin/coaching/requests/[id]/decline' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
+  auditedId.set(req, id)
   const body = await req.json().catch(() => ({}))
   const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
 

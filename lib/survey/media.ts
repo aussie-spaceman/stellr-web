@@ -390,16 +390,38 @@ export async function mediaForParticipants(db: SupabaseClient, participantIds: s
  */
 export async function mediaDoNotUseList(
   db: SupabaseClient,
-  f: { eventSlug?: string | null; includeOk?: boolean } = {},
+  f: {
+    eventSlug?: string | null
+    includeOk?: boolean
+    /** Only this tenant's registrations (loadScoped's filter). Absent: every row, as today. */
+    tenant?: { value: string; includeNull: boolean } | null
+    /** Leave out people known only from their privacy settings, which no tenant owns. */
+    skipMemberOnly?: boolean
+  } = {},
 ): Promise<{ rows: MediaPerson[]; considered: number }> {
   const parts: ParticipantRow[] = []
+  const inner = PARTICIPANT_COLS.replace('registrations(', 'registrations!inner(')
+  const tenant = f.tenant
+  type Read = PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+  type Query = Read & {
+    eq(column: string, value: string): Query
+    or(filters: string, options: { referencedTable: string }): Query
+    order(column: string): { range(from: number, to: number): Read }
+  }
+  const participants = (columns: string): Query => {
+    const q = db.from('participants').select(columns) as unknown as Query
+    if (!tenant) return q
+    return tenant.includeNull
+      ? q.or(`tenant_id.eq.${tenant.value},tenant_id.is.null`, { referencedTable: 'registrations' })
+      : q.eq('registrations.tenant_id', tenant.value)
+  }
   if (f.eventSlug) {
-    const { data, error } = await db.from('participants').select(`${PARTICIPANT_COLS.replace('registrations(', 'registrations!inner(')}`).eq('registrations.event_slug', f.eventSlug)
+    const { data, error } = await participants(inner).eq('registrations.event_slug', f.eventSlug)
     if (error) throw new Error(`Reading participants failed: ${error.message}`)
     parts.push(...((data ?? []) as unknown as ParticipantRow[]))
   } else {
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await db.from('participants').select(PARTICIPANT_COLS).order('id').range(from, from + 999)
+      const { data, error } = await participants(tenant ? inner : PARTICIPANT_COLS).order('id').range(from, from + 999)
       if (error) throw new Error(`Reading participants failed: ${error.message}`)
       parts.push(...((data ?? []) as unknown as ParticipantRow[]))
       if (!data || data.length < 1000) break
@@ -407,7 +429,7 @@ export async function mediaDoNotUseList(
   }
 
   let memberOnly: string[] = []
-  if (!f.eventSlug) {
+  if (!f.eventSlug && !f.skipMemberOnly) {
     const { data, error } = await db.from('member_privacy_prefs').select('member_id').eq('allow_media', false)
     if (error) throw new Error(`Reading privacy settings failed: ${error.message}`)
     const withParticipant = new Set(parts.map((p) => p.member_id).filter(Boolean))

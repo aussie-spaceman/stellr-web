@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
+import { refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 import { getEventBySlug } from '@/lib/events/repo'
 import { getBackgroundProvider } from '@/lib/background-provider'
 import { actorFromAuth } from '@/lib/activity-log'
@@ -26,16 +27,19 @@ export const maxDuration = 60
 // the summary (see lib/background-report-export.ts for why). `participant` (a
 // roster row) or `member` (an assigned volunteer) narrows it to one mentor;
 // for an admin in checkr mode that is Checkr's PDF on its own.
+// Stellr's Checkr account and shared member records: refused to a tenant's staff.
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/background-reports' })
+  if (!staff.ok) return staff.response
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const search = new URL(req.url).searchParams
   const participantId = search.get('participant')
   const memberId = search.get('member')
   const single = !!(participantId || memberId)
-  const mode: ExportMode = exportModeFor(access.isAdmin, search.get('mode'))
+  const mode: ExportMode = exportModeFor(staff.isAdmin, search.get('mode'))
 
   const db = supabaseServer()
   const [event, allMentors] = await Promise.all([getEventBySlug(slug), loadEventMentors(db, slug)])

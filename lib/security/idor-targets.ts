@@ -63,10 +63,13 @@ export function idorTargetFor(file: string, cls: RouteClass, src: string): IdorT
   return { file, cls, urlPattern: urlPatternOf(file), segments, query, body, fill, methods: [...new Set(methods)].sort() }
 }
 
+/** The classes the staff personas run against. */
+const STAFF_PERSONA_CLASSES: readonly RouteClass[] = ['tenant_staff', 'platform_admin', 'platform_destined']
+
 /**
- * Every route handler classed tenant_staff or platform_admin, id-bearing or not: a list or
- * export names no id, and has to stay inside one tenant all the same. Pages are not here;
- * B10(c) covers what a page renders.
+ * Every route handler classed tenant_staff, platform_admin or platform_destined, id-bearing
+ * or not: a list or export names no id, and has to stay inside one tenant all the same.
+ * Pages are not here; B10(c) covers what a page renders.
  */
 export function staffTargets(
   read: (file: string) => string = (f) => readFileSync(f, 'utf8'),
@@ -74,7 +77,7 @@ export function staffTargets(
 ): IdorTarget[] {
   const out: IdorTarget[] = []
   for (const [file, cls] of Object.entries(manifest)) {
-    if (!ROUTE_FILE.test(file) || (cls !== 'tenant_staff' && cls !== 'platform_admin')) continue
+    if (!ROUTE_FILE.test(file) || !STAFF_PERSONA_CLASSES.includes(cls)) continue
     const src = read(file)
     const methods = analyzeRoute(file, src)
       .handlers.map((h) => h.name)

@@ -172,11 +172,15 @@ describe('route manifest: 100% classification', () => {
       if (f.startsWith('app/api/cron/')) expect(cls, f).toBe('cron')
       if (f.startsWith('app/api/webhooks/') || /\/webhook\/route\.ts$/.test(f)) expect(cls, f).toBe('webhook')
       if (f.startsWith('app/(stellr)/(admin)/')) expect(cls, f).toBe('stellr_only')
-      // Every admin API is stellr_only until S5 converts it, except the one
-      // Sanity calls with a shared secret.
+      // Every admin API is stellr_only until S5 converts it, except the one Sanity
+      // calls with a shared secret and the platform-destined ones (C15), which keep
+      // stellr_only's guard, and those a slice has converted to tenant_staff (C16 on),
+      // which the tenant_staff table rule below and the staff personas then hold.
+      // test/idor/stellr-only-dispositions.test.ts pins the first list.
       if (f.startsWith('app/api/admin/') && f !== 'app/api/admin/sanity/event-sync/route.ts') {
-        expect(cls, f).toBe('stellr_only')
+        expect(['stellr_only', 'platform_destined', 'tenant_staff'], f).toContain(cls)
       }
+      if (cls === 'platform_destined') expect(f.startsWith('app/api/admin/'), f).toBe(true)
       if (cls === 'cron') expect(f.startsWith('app/api/cron/'), f).toBe(true)
       // Crawlers and unfurlers fetch metadata routes with no session.
       if (isMetadataFile(f)) expect(cls, f).toBe('public')
@@ -220,7 +224,9 @@ describe('route manifest: 100% classification', () => {
 
   it('every class in use has members (counts)', () => {
     const count = (c: RouteClass) => Object.values(ROUTE_MANIFEST).filter((v) => v === c).length
-    expect(count('stellr_only')).toBeGreaterThan(180)
+    // A floor against an emptied manifest. stellr_only falls as S5 converts routes, and
+    // what it loses is counted here instead.
+    expect(count('stellr_only') + count('tenant_staff') + count('platform_destined')).toBeGreaterThan(180)
     expect(count('participant')).toBeGreaterThan(100)
     expect(count('public')).toBeGreaterThan(80)
     expect(count('webhook')).toBeGreaterThanOrEqual(12)

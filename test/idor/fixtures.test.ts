@@ -14,7 +14,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { TENANT_ID_HEADER } from '@/lib/tenancy/host'
 import { CANARY_TENANT, HONEYTOKENS, scanForHoneytokens } from '@/lib/testing/honeytokens'
-import { harness, installNetworkGuard, runIdorCase, runStaffPersonaCases, STELLR_HOST, staffCaseProblem, type CaseResult, type Direction, type Persona, type StaffPersona } from './harness'
+import { harness, installNetworkGuard, runIdorCase, runStaffPersonaCases, STAFF_PERSONAS_FOR, STELLR_HOST, staffCaseProblem, type CaseResult, type Direction, type Persona, type StaffPersona } from './harness'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.idor.invalid'
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_idorharness'
@@ -111,6 +111,24 @@ describe('a staff case has to prove something', () => {
     expect(on({ status: 200, outcome: 'ok' }, 'canary_admin', 'platform_admin')).toContain('200')
     expect(on({ status: 400, outcome: 'unexercised', touched: false }, 'canary_admin', 'platform_admin')).toContain('400')
     expect(on({ status: 403, outcome: 'refused', touched: false }, 'canary_admin', 'platform_admin')).toBeNull()
+  })
+
+  it('a platform_destined route is held to the same refusal as a platform route', () => {
+    const destined = (over: Partial<CaseResult>, guardExempt?: boolean) =>
+      staffCaseProblem({ cls: 'platform_destined', persona: 'canary_admin', result: result(over), idBearing: true, guardExempt })
+    expect(destined({ status: 200, outcome: 'ok' })).toContain('200')
+    expect(destined({ status: 400, outcome: 'unexercised', touched: false })).toContain('400')
+    expect(destined({ status: 403, outcome: 'refused', touched: false })).toBeNull()
+    expect(STAFF_PERSONAS_FOR.platform_destined).toEqual(['canary_admin'])
+  })
+
+  it('a guard exception excuses the status and nothing else', () => {
+    const exempt = (over: Partial<CaseResult>) =>
+      staffCaseProblem({ cls: 'platform_destined', persona: 'canary_admin', result: result(over), idBearing: true, guardExempt: true })
+    expect(exempt({ status: 200, outcome: 'ok' })).toBeNull()
+    for (const outcome of ['leak', 'honey_write', 'oracle', 'oracle_4xx'] as const) expect(exempt({ outcome })).toContain(outcome)
+    // It has no bearing on a tenant_staff route, which has to prove its scope.
+    expect(staffCaseProblem({ cls: 'tenant_staff', persona: 'stellr_staff', result: result({ status: 403, outcome: 'refused', touched: false }), idBearing: true, guardExempt: true })).toContain('never reached')
   })
 })
 

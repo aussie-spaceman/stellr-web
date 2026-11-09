@@ -1,12 +1,12 @@
 import { listRequests, listCoachOptions, countPendingRequests, suggestEligibilities } from '@/lib/coaching-requests'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CoachingRequestQueue } from '@/components/admin/coaching/CoachingRequestQueue'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · Coaching requests' }
 
 export default async function AdminCoachingRequestsPage() {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/coaching/requests' })
   const [requests, coaches, pending] = await Promise.all([
     listRequests(),
     listCoachOptions(),

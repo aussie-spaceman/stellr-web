@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { getEventBySlug } from '@/lib/events/repo'
+import { assignEventVolunteer, eventContainerId, loadEventVolunteers, removeEventVolunteer, stellrOnlyDb } from '@/lib/events/admin-records'
 import { ensureEventContainer } from '@/lib/container-sync'
 import { getVolunteerStatuses, grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { removeEventParticipation } from '@/lib/event-participation-sync'
+import { refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // Event volunteer management (PRD §15). Volunteers raise interest from the
 // member catalog (volunteer_event_interest); admins assign them here. An
@@ -17,46 +20,25 @@ import { removeEventParticipation } from '@/lib/event-participation-sync'
 // assignment is warn-don't-block by design. Assignment does issue the Volunteer
 // Agreement (the mentor document) when none is signed or in flight, so nobody
 // reaches event day unpapered because an admin forgot to send it.
+//
+// All of this is Stellr's: shared members, its community Spaces and mentoring containers,
+// its signing accounts. A tenant's staff are refused.
+
+const ROUTE = '/api/admin/events/[slug]/volunteers'
 
 type Ctx = { params: Promise<{ slug: string }> }
-
-async function eventContainerId(db: SupabaseClient, slug: string): Promise<string | null> {
-  const { data } = await db
-    .from('mentoring_cohorts')
-    .select('id')
-    .eq('container_type', 'event_participation')
-    .is('parent_container_id', null)
-    .eq('campaign_ref', slug)
-    .maybeSingle()
-  return (data?.id as string) ?? null
-}
 
 // GET — interested + assigned volunteers for this event, with advisory pills.
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
-  const db = supabaseServer()
+  const db = stellrOnlyDb(staff.scope, supabaseServer())
   const containerId = await eventContainerId(db, slug)
-
-  const [{ data: interestRows }, { data: assignedRows }] = await Promise.all([
-    db
-      .from('volunteer_event_interest')
-      .select('member_id, created_at, members(id, first_name, last_name, email, date_of_birth)')
-      .eq('event_slug', slug)
-      .eq('status', 'interested')
-      .order('created_at', { ascending: true }),
-    containerId
-      ? db
-          .from('cohort_members')
-          .select('member_id, added_at, members(id, first_name, last_name, email, date_of_birth)')
-          .eq('cohort_id', containerId)
-          .eq('relationship', 'volunteer')
-          .eq('status', 'active')
-          .order('added_at', { ascending: true })
-      : Promise.resolve({ data: [] as never[] }),
-  ])
+  const { interestRows, assignedRows } = await loadEventVolunteers(db, slug, containerId)
 
   type MemberJoin = { id: string; first_name: string | null; last_name: string | null; email: string | null; date_of_birth: string | null }
   const unwrap = (m: unknown): MemberJoin | null => (Array.isArray(m) ? (m[0] as MemberJoin) : (m as MemberJoin)) ?? null
@@ -87,49 +69,35 @@ export async function GET(_req: Request, { params }: Ctx) {
   })
 }
 
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'event_volunteer.assignment.create', ...auditSubject(req, 'members') }),
+  assignVolunteer,
+)
+
 // POST { memberId } — assign a volunteer to this event.
-export async function POST(req: Request, { params }: Ctx) {
+async function assignVolunteer(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const { memberId } = await req.json().catch(() => ({}))
   if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+  noteAuditSubject(req, { id: typeof memberId === 'string' ? memberId : null })
 
-  const db = supabaseServer()
+  const db = stellrOnlyDb(staff.scope, supabaseServer())
   const event = await getEventBySlug(slug).catch(() => null)
   const title = (event as { title?: string } | null)?.title ?? null
 
   const containerId = await ensureEventContainer(db, slug, title)
   if (!containerId) return NextResponse.json({ error: 'Could not resolve event container' }, { status: 500 })
 
-  const { error } = await db.from('cohort_members').upsert(
-    { cohort_id: containerId, member_id: memberId, relationship: 'volunteer', status: 'active' },
-    { onConflict: 'cohort_id,member_id', ignoreDuplicates: true },
-  )
+  const { error } = await assignEventVolunteer(db, { containerId, memberId, slug, title })
   if (error) {
     console.error('[admin/events/volunteers] assign error:', error)
     return NextResponse.json({ error: 'Could not assign volunteer' }, { status: 500 })
-  }
-
-  // History row (member's Volunteering list). If the member already has a
-  // participation row for this event (e.g. they attended as a competitor), we
-  // leave it untouched — the roster row above still carries the assignment.
-  const { data: existing } = await db
-    .from('event_participations')
-    .select('id')
-    .eq('member_id', memberId)
-    .eq('event_slug', slug)
-    .maybeSingle()
-  if (!existing) {
-    await db.from('event_participations').insert({
-      member_id: memberId,
-      event_slug: slug,
-      event_title: title,
-      event_year: new Date().getFullYear(),
-      status: 'approved',
-      role: 'volunteer',
-    })
   }
 
   const actor = await actorFromAuth()
@@ -171,32 +139,27 @@ export async function POST(req: Request, { params }: Ctx) {
   return NextResponse.json({ ok: true, agreement })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'event_volunteer.assignment.delete', ...auditSubject(req, 'members') }),
+  unassignVolunteer,
+)
+
 // DELETE { memberId } — remove a volunteer assignment.
-export async function DELETE(req: Request, { params }: Ctx) {
+async function unassignVolunteer(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const { memberId } = await req.json().catch(() => ({}))
   if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+  noteAuditSubject(req, { id: typeof memberId === 'string' ? memberId : null })
 
-  const db = supabaseServer()
+  const db = stellrOnlyDb(staff.scope, supabaseServer())
   const containerId = await eventContainerId(db, slug)
-  if (containerId) {
-    await db
-      .from('cohort_members')
-      .delete()
-      .eq('cohort_id', containerId)
-      .eq('member_id', memberId)
-      .eq('relationship', 'volunteer')
-  }
-  // Only remove the history row this assignment created — never a competitor row.
-  await db
-    .from('event_participations')
-    .delete()
-    .eq('member_id', memberId)
-    .eq('event_slug', slug)
-    .eq('role', 'volunteer')
+  await removeEventVolunteer(db, { containerId, memberId, slug })
 
   // deep review BG-5: the volunteer-assignment POST above also inherited every
   // Space linked to this event (syncObjectSpaceRoster) and granted the Volunteer

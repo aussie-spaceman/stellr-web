@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { Button } from '@stellr/web-ui'
+import { Button, Input } from '@stellr/web-ui'
 import { X } from 'lucide-react'
 
 // How a group pays, and the way to change it. Shared by the event roster (a link
@@ -298,7 +298,7 @@ export function GroupPaymentMethod({
             {share && (
               <div className="space-y-2">
                 <label className="block font-semibold" htmlFor="share-estimate">How many students do you expect to bring?</label>
-                <input
+                <Input
                   id="share-estimate"
                   type="number"
                   min={share.current?.firstPaid ? share.current.estimate : 1}
@@ -307,7 +307,7 @@ export function GroupPaymentMethod({
                   value={estimate}
                   disabled={busy}
                   onChange={(e) => setEstimate(e.target.value)}
-                  className="w-28 rounded-control border border-line px-3 py-2"
+                  className="max-w-[8rem]"
                 />
                 <p className="text-xs text-content-secondary">
                   {share.current?.firstPaid

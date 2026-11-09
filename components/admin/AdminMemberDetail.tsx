@@ -20,6 +20,7 @@ import { MemberAccessPanel } from '@/components/admin/MemberAccessPanel'
 import { MemberSpacesPanel } from '@/components/admin/MemberSpacesPanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
 import { MemberMergeDialog } from '@/components/admin/MemberMergeDialog'
+import { MemberEventManagerRole } from '@/components/admin/MemberEventManagerRole'
 import { PERSONAL_EMAIL_LABEL, SCHOOL_EMAIL_LABEL, showsSchoolEmail } from '@/lib/member-email'
 
 interface Member {
@@ -107,6 +108,8 @@ interface Props {
   scholarships: ScholarshipHistoryItem[]
   /** Post-event survey invitations; null when the viewer isn't an admin. */
   surveys: MemberSurveyItem[] | null
+  /** The viewer is an admin, so may grant or remove Event Manager access. */
+  canManageEventManager?: boolean
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -143,7 +146,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships, surveys }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships, surveys, canManageEventManager = false }: Props) {
   const router = useRouter()
   const [enteringPortal, setEnteringPortal] = useState(false)
   const [inviteSentAt, setInviteSentAt] = useState(member.account_invite_sent_at)
@@ -448,6 +451,15 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 label="Auto-promote grade annually"
               />
             </div>
+
+            {/* Event Manager: an event-specific role. Admins only; saved on its
+                own (not by the page's Save), because each change is a grant or
+                revoke of access to students' data and is logged and emailed. */}
+            {canManageEventManager && (
+              <div className="pt-2 border-t border-line-light">
+                <MemberEventManagerRole memberId={member.id} />
+              </div>
+            )}
 
             {/* Eligible membership tiers for this bracket/role */}
             {eligibleTierNames.length > 0 && (

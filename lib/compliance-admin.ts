@@ -10,6 +10,9 @@ import {
   type ComplianceState,
   type TeacherLicense,
   type BackgroundCheck,
+  type ExternalBackgroundCheck,
+  EXTERNAL_BC_COLUMNS,
+  firstExternalCheck,
 } from '@/lib/compliance'
 
 export interface ComplianceAuditRow {
@@ -40,6 +43,7 @@ interface MemberRow {
   is_active: boolean | null
   member_teacher_licenses: TeacherLicense[] | null
   member_background_checks: BackgroundCheck[] | null
+  member_external_background_checks: ExternalBackgroundCheck[] | ExternalBackgroundCheck | null
 }
 
 // Sort: things needing attention first, then cleared. A flagged check outranks
@@ -67,7 +71,8 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
     .select(`
       id, first_name, last_name, email, event_role, date_of_birth, is_active,
       member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path, updated_at),
-      member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudicated_label, adjudication_outcome)
+      member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudicated_label, adjudication_outcome),
+      member_external_background_checks!member_id(${EXTERNAL_BC_COLUMNS})
     `)
     .in('event_role', [...BC_REQUIRED_ROLES])
     .or('is_active.is.null,is_active.eq.true')
@@ -80,6 +85,8 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
       m.member_background_checks ?? [],
       m.event_role,
       m.date_of_birth,
+      undefined,
+      firstExternalCheck(m.member_external_background_checks),
     )
     rows.push({
       memberId: m.id,

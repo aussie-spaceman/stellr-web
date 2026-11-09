@@ -19,6 +19,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   deriveCompliance,
+  externalCheckValidUntil,
   loadComplianceRecordsForMembers,
   type ComplianceState,
   type MemberComplianceRecords,
@@ -149,7 +150,18 @@ export function classifyMentor(
   if (!records) {
     return { ...base, state: null, outcome: 'no_account', note: 'No Stellr account for this email' }
   }
-  const c = deriveCompliance(records.license, records.checks, 'mentor', records.dateOfBirth, eventDate)
+  const c = deriveCompliance(records.license, records.checks, 'mentor', records.dateOfBirth, eventDate, records.external)
+  // Cleared by a verified upload from another organisation: there is no Checkr
+  // report to bundle, and the document stays on the member page.
+  if (c.state === 'valid_bc' && c.clearedBy === 'external_background_check' && c.external) {
+    return {
+      ...base,
+      state: c.state,
+      validUntil: externalCheckValidUntil(c.external),
+      outcome: 'unavailable',
+      note: `${c.detail}. The document is on the member page, not in this export.`,
+    }
+  }
   if (c.state === 'valid_bc') {
     const reportRef = c.check?.provider_report_ref ?? null
     return {

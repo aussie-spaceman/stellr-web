@@ -24,7 +24,7 @@ import {
 
 // S5 (multi-tenant plan), slice B2: the tenant-host route allow-list as data.
 // proxy.ts consults it from slice B5 (test/proxy-tenant-routing.test.ts). This test pins
-//   1. the manifest it classifies (495 entries, by class, as measured);
+//   1. the manifest it classifies (498 entries, by class, as measured);
 //   2. that every manifest entry has exactly one decision, and no rule is stale;
 //   3. the SMMA rule: no community, home, store or academy route is allowed on
 //      a tenant host, and neither is admin, cron or a webhook;
@@ -43,22 +43,24 @@ const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
   platform_destined: 9,
   tenant_staff: 31,
-  participant: 127,
+  participant: 128,
   public: 129,
   webhook: 12,
   cron: 23,
-  stellr_only: 164,
+  stellr_only: 166,
 }
-const MANIFEST_TOTAL = 495
+// +3 on 9 Nov 2026: members/compliance/external-check (participant) and the
+// admin members/[id]/event-manager and members/[id]/external-check (stellr_only).
+const MANIFEST_TOTAL = 498
 
 // The decisions. Moving a route between them is a deliberate diff here.
 const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
   allow: 49,
-  // members 33, schools 2, privacy request pages 2 and APIs 2, and the 4 held
+  // members 34, schools 2, privacy request pages 2 and APIs 2, and the 4 held
   // files pinned under 'routes held back' below
-  pending: 43,
+  pending: 44,
   bypass: 4,
-  deny: 399,
+  deny: 401,
 }
 
 /** A concrete URL a manifest file serves, with sample values for its params. */
@@ -84,7 +86,7 @@ function sampleUrl(file: string): string {
 }
 
 describe('the manifest this classifies', () => {
-  it('has the measured class counts, 495 in total', () => {
+  it('has the measured class counts, 498 in total', () => {
     expect(FILES).toHaveLength(MANIFEST_TOTAL)
     const counts = Object.fromEntries(Object.keys(MANIFEST_CLASS_COUNTS).map((c) => [c, 0])) as Record<
       RouteClass,

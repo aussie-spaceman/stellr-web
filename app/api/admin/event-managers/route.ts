@@ -3,18 +3,19 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isStellrAdmin } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
-import { actorFromAuth, logActivity } from '@/lib/activity-log'
-import { memberIdForClerkUser } from '@/lib/deletion/actor'
-import { loadAssignmentTenantId, syncEventManagerAssigned, syncEventManagerUnassigned } from '@/lib/authz/role-sync'
-import { reportRoleSyncFailure, roleSyncMetadata } from '@/lib/authz/role-sync-report'
-import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { actorFromAuth } from '@/lib/activity-log'
+import { assignEventManager, removeEventManager, expiryTimestampToDate, isAssignmentActive } from '@/lib/event-manager'
 
 const ROUTE = '/api/admin/event-managers'
 
-// Admin-only management of Event Manager → event assignments.
-// Event Managers cannot manage assignments, only admins. Who holds an event is a Stellr
-// admin's call until C21 settles who may grant it in a tenant, so this keeps the admin
-// guard and stays stellr_only.
+// Admin-only management of Event Manager → event assignments, from an event's
+// Overview panel. Event Managers cannot manage assignments, only admins. Who holds an
+// event is a Stellr admin's call until C21 settles who may grant it in a tenant, so this
+// keeps the admin guard and stays stellr_only.
+//
+// POST and DELETE go through lib/event-manager, the same as the member page
+// (Classification → Event Manager), so the clearance gate, expiry, Clerk role,
+// activity log and email are identical whichever screen an admin uses.
 
 // What this request acted on, which withAudit's spec cannot read for itself. The target is
 // their Clerk id: an email typed into the request stays out of the event.
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
   const db = supabaseServer()
   let query = db
     .from('event_manager_assignments')
-    .select('id, clerk_user_id, event_slug, created_at')
+    .select('id, clerk_user_id, event_slug, expires_at, created_at')
     .order('created_at', { ascending: true })
   if (eventSlug) query = query.eq('event_slug', eventSlug)
 
@@ -47,11 +48,18 @@ export async function GET(req: Request) {
     console.error('Event manager assignments fetch error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
-  return NextResponse.json({ assignments: data ?? [] })
+  const now = new Date()
+  return NextResponse.json({
+    assignments: (data ?? []).map((r) => ({
+      ...r,
+      expires_on: r.expires_at ? expiryTimestampToDate(r.expires_at) : null,
+      active: isAssignmentActive(r, now),
+    })),
+  })
 }
 
 // POST /api/admin/event-managers — assign a manager
-// Body: { event_slug } plus either { clerk_user_id } or { email } (resolved via Clerk).
+// Body: { event_slug, expires_on? } plus either { clerk_user_id } or { email } (resolved via Clerk).
 export const POST = withAudit(({ args: [req] }: { args: [Request] }) => ({ action: 'event_manager.assignment.create', ...eventFor(req) }), assignManager)
 
 async function assignManager(req: Request) {
@@ -62,6 +70,7 @@ async function assignManager(req: Request) {
   let clerkUserId = typeof body?.clerk_user_id === 'string' ? body.clerk_user_id.trim() : ''
   const email = typeof body?.email === 'string' ? body.email.trim() : ''
   const eventSlug = typeof body?.event_slug === 'string' ? body.event_slug.trim() : ''
+  const expiresOn = typeof body?.expires_on === 'string' && body.expires_on ? body.expires_on : null
   if ((!clerkUserId && !email) || !eventSlug) {
     return NextResponse.json({ error: 'event_slug and clerk_user_id or email are required' }, { status: 400 })
   }
@@ -76,42 +85,18 @@ async function assignManager(req: Request) {
   }
   audited.set(req, { userId, eventSlug, clerkUserId })
 
-  const db = supabaseServer()
-  const { data, error } = await db
-    .from('event_manager_assignments')
-    .upsert(
-      { clerk_user_id: clerkUserId, event_slug: eventSlug },
-      { onConflict: 'clerk_user_id,event_slug', ignoreDuplicates: true }
-    )
-    .select('id, clerk_user_id, event_slug')
-    .maybeSingle()
-
-  if (error) {
-    console.error('Event manager assignment insert error:', error)
-    return NextResponse.json({ error: 'Database error' }, { status: 500 })
-  }
-
-  // S5 C9 dual-write. A failure here is reported, and never fails the assignment.
-  // This route's guard is the Clerk admin claim, which is Stellr's. C21 passes the
-  // caller's authorised tenant when it converts the guard.
-  const sync = await syncEventManagerAssigned(db, clerkUserId, eventSlug, STELLR_TENANT_ID)
-  await reportRoleSyncFailure('event_manager_assign', sync, { method: 'POST', routePath: ROUTE })
-
-  // deep review AUTH-6: an event-manager assignment grants access to that
-  // event's roster — minors' details, medical notes, background summaries — so
-  // who granted it must be recoverable. The target is keyed by clerk_user_id;
-  // resolve their member row to attribute the entry (best-effort: logActivity
-  // no-ops if there is no linked member row).
-  await logActivity({
-    ...(await actorFromAuth()),
-    memberId: (await memberIdForClerkUser(clerkUserId)) ?? '',
-    category: 'account',
-    action: 'event_manager_assigned',
-    summary: `Assigned as event manager for ${eventSlug}`,
-    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId, ...roleSyncMetadata(sync) },
+  const result = await assignEventManager(supabaseServer(), {
+    member: { clerkUserId },
+    eventSlug,
+    expiresOn,
+    actor: await actorFromAuth(),
+    routePath: ROUTE,
   })
-
-  return NextResponse.json({ assignment: data }, { status: 201 })
+  if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
+  return NextResponse.json(
+    { assignment: { clerk_user_id: clerkUserId, event_slug: result.eventSlug, expires_on: result.expiresOn }, warnings: result.warnings },
+    { status: result.created ? 201 : 200 },
+  )
 }
 
 // DELETE /api/admin/event-managers — remove an assignment { clerk_user_id, event_slug }
@@ -129,32 +114,7 @@ async function removeManager(req: Request) {
   }
   audited.set(req, { userId, eventSlug, clerkUserId })
 
-  const db = supabaseServer()
-  const assignmentTenantId = await loadAssignmentTenantId(db, clerkUserId, eventSlug)
-  const { error } = await db
-    .from('event_manager_assignments')
-    .delete()
-    .eq('clerk_user_id', clerkUserId)
-    .eq('event_slug', eventSlug)
-
-  if (error) {
-    console.error('Event manager assignment delete error:', error)
-    return NextResponse.json({ error: 'Database error' }, { status: 500 })
-  }
-
-  // S5 C9 dual-write. A failure here is reported, and never fails the removal.
-  const sync = await syncEventManagerUnassigned(db, clerkUserId, eventSlug, STELLR_TENANT_ID, assignmentTenantId)
-  await reportRoleSyncFailure('event_manager_unassign', sync, { method: 'DELETE', routePath: ROUTE })
-
-  // deep review AUTH-6: a revoke is as audit-worthy as a grant.
-  await logActivity({
-    ...(await actorFromAuth()),
-    memberId: (await memberIdForClerkUser(clerkUserId)) ?? '',
-    category: 'account',
-    action: 'event_manager_unassigned',
-    summary: `Removed as event manager for ${eventSlug}`,
-    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId, ...roleSyncMetadata(sync) },
-  })
-
+  const result = await removeEventManager(supabaseServer(), { clerkUserId, eventSlug, reason: 'admin', actor: await actorFromAuth(), routePath: ROUTE })
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
   return NextResponse.json({ ok: true })
 }

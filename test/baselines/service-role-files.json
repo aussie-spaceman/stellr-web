@@ -661,9 +661,17 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: member_background_checks, members"
     },
+    "app/api/admin/members/[id]/event-manager/route.ts": {
+      "class": "convert",
+      "reason": "admin-only Stellr screen: lib/event-manager reads the member's clearance (members + licence/check tables) and writes event_manager_assignments and tenant_memberships, which are platform role tables read with the service role (lib/authz/principal.ts)"
+    },
     "app/api/admin/members/[id]/event-participations/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: event_participations"
+    },
+    "app/api/admin/members/[id]/external-check/route.ts": {
+      "class": "convert",
+      "reason": "admin-only Stellr screen, same as license/route.ts: writes member_external_background_checks (identity table, no tenant) and signs URLs for its private storage bucket, which needs the service role"
     },
     "app/api/admin/members/[id]/invite/route.ts": {
       "class": "convert",
@@ -1064,6 +1072,10 @@
     "app/api/members/compliance/document/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: member_teacher_licenses"
+    },
+    "app/api/members/compliance/external-check/route.ts": {
+      "class": "convert",
+      "reason": "the signed-in member's own row in member_external_background_checks (identity table, member id from the session) and its private storage object; RLS grants nothing to authenticated, as for compliance/route.ts"
     },
     "app/api/members/compliance/route.ts": {
       "class": "convert",
@@ -1599,7 +1611,7 @@
     },
     "lib/uploads.ts": {
       "class": "identity",
-      "reason": "auto: no tenant or event-scoped table, classed by its identity tables; tables: member_teacher_licenses"
+      "reason": "auto: no tenant or event-scoped table, classed by its identity tables; tables: member_teacher_licenses, members"
     },
     "scripts/aeo-crawler-report.ts": {
       "class": "script",

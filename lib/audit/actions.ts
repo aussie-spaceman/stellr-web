@@ -45,6 +45,15 @@ export const AUDIT_ACTIONS = [
   'privacy.request.confirm',
   'teacher_grant.application.create',
 
+  // Event Manager role (app/api/admin/members/[id]/event-manager)
+  'role.event_manager.assign',
+  'role.event_manager.update',
+  'role.event_manager.remove',
+
+  // Background checks a member already holds (…/external-check)
+  'compliance.external_check.submit',
+  'compliance.external_check.verify',
+  'compliance.external_check.remove',
   // A member's own account (B16): app/api/members, except teams (A8)
   'member.address.create',
   'member.address.update',

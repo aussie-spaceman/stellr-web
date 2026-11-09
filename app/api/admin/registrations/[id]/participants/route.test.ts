@@ -25,6 +25,7 @@ vi.mock('@/lib/supabase', () => ({
       const chain = {
         select: () => chain,
         eq: () => chain,
+        or: () => chain,
         maybeSingle: async () => ({ data: h.reg, error: null }),
         then: (resolve: (v: unknown) => unknown) => resolve({ data: table === 'event_manager_assignments' ? rows() : [], error: null }),
       }

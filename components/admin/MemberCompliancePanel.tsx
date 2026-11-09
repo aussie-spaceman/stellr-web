@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Field, Input } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
+import { ExternalCheckForm } from '@/components/compliance/ExternalCheckForm'
 
 // State → pill. Two shades of green (BC vs license), orange in-process, red
 // invalid — shared shape with the event roster and member portal.
@@ -25,6 +26,18 @@ export interface MemberCompliance {
   state: ComplianceState
   detail: string | null
   license: TeacherLicense | null
+  /** A background check the member already holds from another organisation. */
+  external?: {
+    issuer: string
+    completed_on: string
+    document_expires_on: string | null
+    verified_at: string | null
+    verified_label: string | null
+    submitted_by: 'member' | 'admin'
+    /** Version stamp the verify binds to (BG-9). */
+    updated_at: string | null
+    valid_until: string
+  } | null
   check: {
     id: string
     status: string
@@ -68,10 +81,13 @@ export function MemberCompliancePanel({
   const [form, setForm] = useState({ license_number: '', licensing_state: '', expiry_date: '' })
   const [file, setFile] = useState<File | null>(null)
 
-  if (!compliance || compliance.state === 'not_required') return null
+  const [editingExternal, setEditingExternal] = useState(false)
+
+  if (!compliance) return null
 
   const pill = COMPLIANCE_PILL[compliance.state]
   const { license, check } = compliance
+  const external = compliance.external ?? null
   const verified = !!license?.verified_at
   const checkInProgress = check?.status === 'invited' || check?.status === 'in_progress'
 
@@ -164,6 +180,135 @@ export function MemberCompliancePanel({
       </div>
 
       {compliance.detail && <p className="text-xs text-brand-muted-soft mb-3">{compliance.detail}.</p>}
+      {compliance.state === 'not_required' && (
+        <p className="text-xs text-content-muted mb-3">
+          Not required for their current role. You can still record clearance here; it is needed before they can be made
+          an Event Manager.
+        </p>
+      )}
+
+      {/* Background check from another organisation: mandatory document,
+          verified here against the version shown (BG-9). */}
+      <div className="text-sm space-y-1 border-b border-line-light pb-3 mb-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-content-muted uppercase tracking-wide">Uploaded check</p>
+          {!editingExternal && (
+            <button
+              onClick={() => {
+                setError('')
+                setEditingExternal(true)
+              }}
+              disabled={busy}
+              className="text-xs font-medium text-primary hover:text-ink disabled:opacity-50"
+            >
+              {external ? 'Replace' : 'Add'}
+            </button>
+          )}
+        </div>
+        {editingExternal ? (
+          <ExternalCheckForm
+            mode="admin"
+            memberId={memberId}
+            initial={external}
+            onSaved={() => {
+              setEditingExternal(false)
+              router.refresh()
+            }}
+            onCancel={() => setEditingExternal(false)}
+          />
+        ) : external ? (
+          <>
+            <div className="flex justify-between gap-3">
+              <span className="text-content-muted">Issued by</span>
+              <span className="text-ink font-medium text-right">{external.issuer}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-content-muted">Completed</span>
+              <span className="text-ink">{fmt(external.completed_on)}</span>
+            </div>
+            {external.document_expires_on && (
+              <div className="flex justify-between">
+                <span className="text-content-muted">Document expiry</span>
+                <span className="text-ink">{fmt(external.document_expires_on)}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-content-muted">Counts until</span>
+              <span className="text-ink">{fmt(external.valid_until)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-content-muted">Document</span>
+              <a
+                href={`/api/admin/members/${memberId}/external-check`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-primary hover:text-ink"
+              >
+                View document ↗
+              </a>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+              <span className="text-content-muted">Status</span>
+              {external.verified_at ? (
+                <span className="text-green-600 font-medium text-xs">
+                  Verified{external.verified_label ? ` · ${external.verified_label}` : ''}
+                </span>
+              ) : (
+                <span className="text-amber-600 font-medium text-xs">
+                  Awaiting review{external.submitted_by === 'admin' ? ' · entered by admin' : ''}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 pt-2">
+              {external.verified_at ? (
+                <button
+                  onClick={() => post(`/api/admin/members/${memberId}/external-check`, { action: 'unverify' })}
+                  disabled={busy}
+                  className="text-xs font-medium text-content-muted hover:text-content-body disabled:opacity-50"
+                >
+                  Remove verification
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        'Mark this background check verified?\n\nOnly do this if you have opened the document and it shows a cleared result for this person, from the issuer and on the date shown.',
+                      )
+                    )
+                      post(`/api/admin/members/${memberId}/external-check`, { action: 'verify', updatedAt: external.updated_at })
+                  }}
+                  disabled={busy || !external.updated_at}
+                  className="text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg px-3 py-1.5"
+                >
+                  {busy ? 'Saving…' : 'Mark verified'}
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  if (!confirm('Delete this uploaded background check and its document? This cannot be undone.')) return
+                  setBusy(true)
+                  setError('')
+                  const res = await fetch(`/api/admin/members/${memberId}/external-check`, { method: 'DELETE' })
+                  setBusy(false)
+                  if (!res.ok) {
+                    const d = await res.json().catch(() => null)
+                    setError(d?.error ?? 'Failed to delete.')
+                    return
+                  }
+                  router.refresh()
+                }}
+                disabled={busy}
+                className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-content-muted">None uploaded.</p>
+        )}
+      </div>
 
       {/* Teacher license review */}
       {editingLicense ? (

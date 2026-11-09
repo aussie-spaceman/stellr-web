@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { BC_VALIDITY_YEARS } from '@/lib/compliance'
+import { recheckEventManagerClearance } from '@/lib/event-manager'
 
 // POST /api/admin/members/[id]/background-check/adjudicate
 // Record the decision on a flagged ("Consider") report.
@@ -106,6 +107,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     },
     db,
   )
+  // Not cleared dominates every other clearance: Event Manager access ends now.
+  if (outcome === 'not_cleared') await recheckEventManagerClearance(db, id, actor)
 
   return NextResponse.json({ ok: true, outcome, adjudicated_at: now })
 }

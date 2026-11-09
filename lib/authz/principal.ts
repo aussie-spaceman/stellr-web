@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { TenantRole } from '@/lib/tenancy/role-mapping'
 import { roleFromClerkUser, type Assignment, type Membership, type Principal } from './decide'
+import { activeAssignmentFilter } from '@/lib/event-manager-active'
 
 /** A role lookup failed. Callers deny (postgres) or keep the clerk answer (shadow). */
 export class AuthzLookupError extends Error {
@@ -113,6 +114,8 @@ export async function loadAssignments(db: SupabaseClient, clerkUserId: string, w
     .from('event_manager_assignments')
     .select(withTenant ? 'event_slug, tenant_id' : 'event_slug')
     .eq('clerk_user_id', clerkUserId)
+    // Expired grants give no access, even before the daily sweep deletes them.
+    .or(activeAssignmentFilter())
   if (error) throw new AuthzLookupError('event_manager_assignments')
   return ((data as unknown as { event_slug: string; tenant_id?: string | null }[] | null) ?? []).map((r) => ({
     eventSlug: r.event_slug,

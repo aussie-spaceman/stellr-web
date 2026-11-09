@@ -24,6 +24,7 @@ import EventEducatorPd from '@/components/admin/EventEducatorPd'
 import { artworkTheme as artworkThemeOf } from '@/lib/artwork-theme'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
+import { isAssignmentActive } from '@/lib/event-manager-active'
 import { ContainerTraining, type ContentRow, type ModuleOption } from '@/components/admin/containers/ContainerTraining'
 
 export const metadata = { title: 'Admin — Event' }
@@ -108,14 +109,20 @@ export default async function AdminEventDetailPage({
   }
 
   // ── Admin assignments (overview, admins only) ─────────────────────────────
-  let assignments: { id: string; clerk_user_id: string; email: string | null }[] = []
+  let assignments: { id: string; clerk_user_id: string; email: string | null; expires_on: string | null; active: boolean }[] = []
   if (tab === 'overview' && access.isAdmin) {
-    const { data } = await db
+    const { data: raw } = await db
       .from('event_manager_assignments')
-      .select('id, clerk_user_id')
+      .select('id, clerk_user_id, expires_at')
       .eq('event_slug', slug)
       .order('created_at', { ascending: true })
-    const rows = data ?? []
+    const now = new Date()
+    const rows = (raw ?? []).map((r) => ({
+      id: r.id as string,
+      clerk_user_id: r.clerk_user_id as string,
+      expires_on: r.expires_at ? new Date(r.expires_at as string).toISOString().slice(0, 10) : null,
+      active: isAssignmentActive(r as { expires_at: string | null }, now),
+    }))
     if (rows.length > 0) {
       const client = await clerkClient()
       const { data: users } = await client.users.getUserList({

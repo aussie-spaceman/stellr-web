@@ -21,6 +21,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { AuthzLookupError } from './principal'
+import { activeAssignmentFilter } from '@/lib/event-manager-active'
 
 /** Member ids of a tenant's staff. For Stellr, holders of any of `scopes`; another tenant's admins carry no scopes. */
 export async function staffAudienceMemberIds(db: SupabaseClient, tenantId: string, scopes: readonly string[]): Promise<string[]> {
@@ -59,7 +60,11 @@ export async function staffAudienceEmails(db: SupabaseClient, tenantId: string, 
  * own tenant.
  */
 export async function eventManagerAudienceClerkIds(db: SupabaseClient, tenantId: string, eventSlug: string): Promise<string[]> {
-  const { data, error } = await db.from('event_manager_assignments').select('clerk_user_id, tenant_id').eq('event_slug', eventSlug)
+  const { data, error } = await db
+    .from('event_manager_assignments')
+    .select('clerk_user_id, tenant_id')
+    .eq('event_slug', eventSlug)
+    .or(activeAssignmentFilter())
   if (error) throw new AuthzLookupError('event_manager_assignments')
   const assigned = unique(
     ((data ?? []) as { clerk_user_id: string | null; tenant_id: string | null }[])

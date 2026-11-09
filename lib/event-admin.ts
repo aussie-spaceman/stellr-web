@@ -348,6 +348,7 @@ export async function getEventRoster(
         p.event_role as string | null,
         p.date_of_birth as string | null,
         eventDate,
+        records?.external ?? null,
       ).state
 
       const ecName =

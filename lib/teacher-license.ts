@@ -10,6 +10,15 @@ export const TEACHER_LICENSE_BUCKET = 'teacher-licenses'
 /** Signed-URL lifetime for viewing an uploaded license (10 minutes). */
 export const LICENSE_DOCUMENT_URL_TTL_SECONDS = 60 * 10
 
+/**
+ * The folder, inside this bucket, for a background check the member already
+ * holds (lib/external-background-check.ts). Here rather than there so the upload
+ * grants (lib/uploads.ts) can use it without an import cycle.
+ */
+export function externalBcPrefix(memberId: string): string {
+  return `${memberId}/bc/`
+}
+
 export const LICENSE_DOCUMENT_TYPES = [
   'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/heic', 'application/pdf',
 ] as const

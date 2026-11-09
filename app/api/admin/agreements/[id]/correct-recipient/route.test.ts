@@ -33,6 +33,7 @@ vi.mock('@/lib/supabase', () => ({
       const chain = {
         select: () => chain,
         eq: () => chain,
+        or: () => chain,
         order: () => chain,
         maybeSingle: async () => ({ data: agreementRow.current }),
         then: (resolve: (v: unknown) => unknown) => resolve({ data: list(), error: null }),

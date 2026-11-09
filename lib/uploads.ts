@@ -11,7 +11,7 @@ import { requireEventAccess } from '@/lib/event-access'
 import { AWARD_TYPES } from '@/lib/event-awards'
 import { BADGE_FORMATS } from '@/lib/badge-layout'
 import { isArtworkTheme } from '@/lib/artwork-theme'
-import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET } from '@/lib/teacher-license'
+import { LICENSE_DOCUMENT_TYPES, TEACHER_LICENSE_BUCKET, externalBcPrefix } from '@/lib/teacher-license'
 import { isLiteralStoragePath } from '@/lib/storage-path'
 import {
   MAX_MEMBER_PDF_PAGES,
@@ -83,6 +83,8 @@ export type UploadPurpose =
   | 'container-contribution'
   | 'compliance-document'
   | 'compliance-document-admin'
+  | 'external-bc-document'
+  | 'external-bc-document-admin'
 
 export type UploadContext = Record<string, string | undefined>
 
@@ -414,6 +416,27 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     },
   },
 
+  // A background check the member already holds, uploaded by an admin on their
+  // behalf. The document is mandatory and comes FIRST (the details are saved with
+  // it in one request), so unlike the license there is no row to require here.
+  // Lands in the member's bc/ folder; the claim (lib/external-background-check)
+  // pins to exactly that prefix.
+  'external-bc-document-admin': {
+    bucket: LICENSES_BUCKET,
+    maxBytes: 10 * MB,
+    allowedTypes: LICENSE_TYPES,
+    formats: LICENSE_FORMATS,
+    formatError: LICENSE_ERROR,
+    async grant({ ctx, safeName }) {
+      const denied = await requireAdmin()
+      if (denied) return denied
+      if (!ctx.memberId || !UUID_RE.test(ctx.memberId)) return deny('memberId required', 400)
+      const { data: member } = await supabaseServer().from('members').select('id').eq('id', ctx.memberId).maybeSingle()
+      if (!member) return deny('Member not found', 404)
+      return { path: `${externalBcPrefix(ctx.memberId)}${Date.now()}-${safeName}` }
+    },
+  },
+
   // ── Member ───────────────────────────────────────────────────────────────
   // The form offers PDF, Word, PowerPoint, Keynote and OpenDocument; judges
   // open these, so the bytes must be one of them — not a zip, not an installer,
@@ -521,6 +544,24 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       }
       void ctx
       return { path: `${member.id}/${Date.now()}-${safeName}` }
+    },
+  },
+
+  // A background check the member already holds from another organisation.
+  // Onboarded members only, like compliance-document; its form is the same
+  // /account section. Upload first, then the details are saved with the path.
+  'external-bc-document': {
+    bucket: LICENSES_BUCKET,
+    maxBytes: 10 * MB,
+    allowedTypes: LICENSE_TYPES,
+    formats: LICENSE_FORMATS,
+    maxPdfPages: MAX_MEMBER_PDF_PAGES,
+    formatError: LICENSE_ERROR,
+    async grant({ ctx, safeName }) {
+      const member = await requireMember({ onboarded: true })
+      if ('error' in member) return member
+      void ctx
+      return { path: `${externalBcPrefix(member.id)}${Date.now()}-${safeName}` }
     },
   },
 }

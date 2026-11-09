@@ -76,8 +76,63 @@ describe('MemberCompliancePanel — teacher license', () => {
     expect(posts.some((p) => p.body.action === 'verify')).toBe(false)
   })
 
-  it('stays hidden when clearance is not required', () => {
-    const { container } = render(<MemberCompliancePanel memberId="m1" compliance={compliance({ state: 'not_required' })} />)
+  // 9 Nov 2026: an adult whose role needs no clearance can still need it
+  // recorded (Event Manager), so the panel shows with a note. The page passes
+  // null for a known minor, which hides it.
+  it('shows for an adult whose role needs no clearance, and says so', () => {
+    render(<MemberCompliancePanel memberId="m1" compliance={compliance({ state: 'not_required' })} />)
+    expect(screen.getByText(/not required for their current role/i)).toBeInTheDocument()
+  })
+
+  it('stays hidden when there is nothing to show (a known minor)', () => {
+    const { container } = render(<MemberCompliancePanel memberId="m1" compliance={null} />)
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('MemberCompliancePanel — uploaded background check', () => {
+  const external = {
+    issuer: 'ISD 196', completed_on: '2025-08-01', document_expires_on: null, verified_at: null, verified_label: null,
+    submitted_by: 'member' as const, updated_at: '2026-11-01T00:00:00Z', valid_until: '2028-08-01',
+  }
+
+  it('links to the document and verifies against the version shown (BG-9)', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<MemberCompliancePanel memberId="m1" compliance={compliance({ state: 'awaiting_verification', external })} />)
+    const links = screen.getAllByRole('link', { name: /view document/i })
+    expect(links.map((l) => l.getAttribute('href'))).toContain('/api/admin/members/m1/external-check')
+    await user.click(screen.getByRole('button', { name: 'Mark verified' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    expect(posts).toEqual([{ url: '/api/admin/members/m1/external-check', body: { action: 'verify', updatedAt: '2026-11-01T00:00:00Z' } }])
+  })
+
+  it('will not submit without the document', async () => {
+    const user = userEvent.setup()
+    render(<MemberCompliancePanel memberId="m1" compliance={compliance()} />)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByLabelText(/issued by/i), 'ISD 196')
+    await user.type(screen.getByLabelText(/date completed/i), '2025-08-01')
+    await user.click(screen.getByRole('button', { name: 'Submit background check' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/upload the background check document/i)
+    expect(uploadDirectToStorage).not.toHaveBeenCalled()
+    expect(postUpload).not.toHaveBeenCalled()
+  })
+
+  it('uploads first, then saves the details with the path, without verifying', async () => {
+    const user = userEvent.setup()
+    render(<MemberCompliancePanel memberId="m1" compliance={compliance()} />)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByLabelText(/issued by/i), 'ISD 196')
+    await user.type(screen.getByLabelText(/date completed/i), '2025-08-01')
+    await user.upload(screen.getByLabelText(/document \(required\)/i), new File(['%PDF'], 'check.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: 'Submit background check' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    expect(uploadDirectToStorage).toHaveBeenCalledWith(expect.any(File), 'external-bc-document-admin', { memberId: 'm1' })
+    expect(postUpload.mock.calls[0][0]).toBe('/api/admin/members/m1/external-check')
+    expect(JSON.parse(postUpload.mock.calls[0][1])).toEqual({
+      action: 'save', issuer: 'ISD 196', completed_on: '2025-08-01', document_expires_on: null,
+      storagePath: 'm1/1-scan.pdf', fileType: 'application/pdf',
+    })
   })
 })

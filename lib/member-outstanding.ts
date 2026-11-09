@@ -170,7 +170,7 @@ export async function getOutstandingItems(
 
     // Clearance (teachers and other adults working with students).
     if (requiresBackgroundCheck(p.event_role, p.date_of_birth, dateOf(reg))) {
-      const state = deriveCompliance(records?.license ?? null, records?.checks ?? [], p.event_role, p.date_of_birth, dateOf(reg)).state
+      const state = deriveCompliance(records?.license ?? null, records?.checks ?? [], p.event_role, p.date_of_birth, dateOf(reg), records?.external ?? null).state
       if (state !== 'valid_bc' && state !== 'valid_license') {
         const waiting = state === 'in_process' || state === 'awaiting_verification' || state === 'flagged'
         push({ kind: 'clearance', eventSlug: reg.event_slug, eventTitle: title,

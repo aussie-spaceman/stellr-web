@@ -3,7 +3,11 @@ import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { claimUpload } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -13,7 +17,7 @@ export const maxDuration = 60
 
 // GET ?itemId= — list a lesson's resources.
 export async function GET(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
   const db = supabaseServer()
@@ -25,13 +29,23 @@ export async function GET(req: Request) {
   return NextResponse.json({ resources: data ?? [] })
 }
 
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.item_resource.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_item_resources', id: auditedId.get(req) ?? null },
+  }),
+  createItemResource,
+)
+
 // POST — add a resource. Multipart (kind=file) or JSON (kind=link | existing).
 //   file:     { itemId, kind:'file', title, file }
 //   link:     { itemId, kind:'link', title, externalUrl }
 //   existing: { itemId, kind:'existing', resourceId, title? }  ← reference a
 //             Global Resources Catalogue binary without re-uploading it.
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function createItemResource(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   // JSON only. An uploaded file arrives as a storagePath from /api/uploads/sign;
   // the bytes never pass through here, because the platform caps a request body
@@ -76,6 +90,7 @@ export async function POST(req: Request) {
       console.error('[training] existing-resource attach error:', error)
       return NextResponse.json({ error: 'Could not attach resource' }, { status: 500 })
     }
+    auditedId.set(req, data.id)
     return NextResponse.json({ id: data.id })
   }
 
@@ -105,14 +120,26 @@ export async function POST(req: Request) {
     console.error('[training] resource insert error:', error)
     return NextResponse.json({ error: 'Could not add resource' }, { status: 500 })
   }
+  auditedId.set(req, data.id)
   return NextResponse.json({ id: data.id })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.item_resource.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_item_resources', id: auditedId.get(req) ?? null },
+  }),
+  deleteItemResource,
+)
+
 // DELETE ?id=
-export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function deleteItemResource(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
   const db = supabaseServer()
   const { error } = await db.from('training_item_resources').delete().eq('id', id)
   if (error) return NextResponse.json({ error: 'Could not remove resource' }, { status: 500 })

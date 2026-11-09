@@ -1,18 +1,18 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Admin CRUD for tier_grant_rules (migration 025) — the grant-rules engine that
 // powers the Membership Studio "Grant rules" tab. Every rule is "when <trigger>
 // [matching <conditions>] grant <tier> for <duration>". The rule evaluator in
 // lib/membership-grants.ts reads these at trigger time.
-
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
 
 const TRIGGERS = ['signup', 'event_attendance', 'event_award', 'mentor_at_event', 'subscribe_website', 'graduation', 'manual', 'competition_registration', 'volunteer_registration', 'tier_purchased', 'object_created']
 const DURATIONS = ['months', 'until_grad_july1', 'lifetime', 'match_source', 'until_date']
@@ -55,8 +55,7 @@ async function validateObjectRule(b: Record<string, unknown>): Promise<string | 
 }
 
 export async function GET() {
-  const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/membership/rules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data } = await db
@@ -67,9 +66,18 @@ export async function GET() {
   return NextResponse.json({ rules: data ?? [] })
 }
 
-export async function POST(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'membership.rule.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'tier_grant_rules', id: auditedId.get(req) ?? null },
+  }),
+  createRule,
+)
+
+async function createRule(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/membership/rules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   const grantKind = b.grant_kind ?? 'tier'
@@ -131,15 +139,26 @@ export async function POST(req: Request) {
     console.error('[membership/rules] insert error:', error)
     return NextResponse.json({ error: 'Could not create rule' }, { status: 500 })
   }
+  auditedId.set(req, data.id)
   return NextResponse.json({ id: data.id })
 }
 
-export async function PATCH(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'membership.rule.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'tier_grant_rules', id: auditedId.get(req) ?? null },
+  }),
+  updateRule,
+)
+
+async function updateRule(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/membership/rules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, b.id)
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of ['name', 'trigger_type', 'conditions', 'grant_kind', 'grant_tier_id', 'grant_credit_type', 'grant_quantity', 'duration_kind', 'duration_months', 'duration_until', 'grant_target', 'replaces_free', 'priority', 'is_active', 'object_type', 'object_anchor_ref', 'tier_min', 'grant_object_type', 'grant_object_ref', 'grant_role', 'is_dynamic']) {
@@ -169,12 +188,22 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'membership.rule.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'tier_grant_rules', id: auditedId.get(req) ?? null },
+  }),
+  deleteRule,
+)
+
+async function deleteRule(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/membership/rules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await req.json().catch(() => ({}))
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const db = supabaseServer()
   const { error } = await db.from('tier_grant_rules').delete().eq('id', id)

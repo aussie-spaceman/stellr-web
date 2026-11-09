@@ -141,19 +141,19 @@ beforeEach(() => {
 })
 
 async function individual(query: { scholarship?: string } = {}) {
-  const { default: Page } = await import('@/app/(flow)/register/[slug]/individual/page')
+  const { default: Page } = await import('@/app/(stellr)/(flow)/register/[slug]/individual/page')
   return capture(() => Page({ params: params({ slug: 'nv' }), searchParams: params(query) }))
 }
 async function group() {
-  const { default: Page } = await import('@/app/(flow)/register/[slug]/group/page')
+  const { default: Page } = await import('@/app/(stellr)/(flow)/register/[slug]/group/page')
   return capture(() => Page({ params: params({ slug: 'nv' }) }))
 }
 async function confirmation(query: Record<string, string> = {}) {
-  const { default: Page } = await import('@/app/(flow)/register/[slug]/confirmation/page')
+  const { default: Page } = await import('@/app/(stellr)/(flow)/register/[slug]/confirmation/page')
   return capture(() => Page({ params: params({ slug: 'nv' }), searchParams: params(query) }))
 }
 async function banner() {
-  const { default: Page } = await import('@/app/(flow)/check-in/page')
+  const { default: Page } = await import('@/app/(stellr)/(flow)/check-in/page')
   return capture(() => Page())
 }
 
@@ -254,8 +254,8 @@ describe('the sheet link on the confirmation page', () => {
 
 describe('the shared bodies, as a tenant page calls them', () => {
   it('read no prefill and hand the form none', async () => {
-    const { individualRegistrationBody } = await import('@/app/(flow)/register/[slug]/individual/individual-body')
-    const { groupRegistrationBody } = await import('@/app/(flow)/register/[slug]/group/group-body')
+    const { individualRegistrationBody } = await import('@/app/(stellr)/(flow)/register/[slug]/individual/individual-body')
+    const { groupRegistrationBody } = await import('@/app/(stellr)/(flow)/register/[slug]/group/group-body')
     for (const body of [() => individualRegistrationBody({ slug: 'nv', scholarshipToken: undefined }), () => groupRegistrationBody({ slug: 'nv' })]) {
       const { html, reads: seen } = (await capture(body)) as { html: string; reads: string[] }
       expect(seen).not.toContain('getRegistrationPrefill()')

@@ -11,9 +11,11 @@ import { clerkClient } from '@clerk/nextjs/server'
 import { getEventRoster, type EventRosterData, type RosterGroup } from '@/lib/event-admin'
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
+import { eventManagerAudienceClerkIds } from '@/lib/authz/audiences'
+import { loadEventTenantId } from '@/lib/authz/principal'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { AudienceKey, RecipientRole } from './types'
 import type { PaymentLine, RecipientForRender } from './render'
-import { activeAssignmentFilter } from '@/lib/event-manager-active'
 
 export interface ResolvedRecipient extends RecipientForRender {
   /** Display name for previews and history. */
@@ -272,6 +274,35 @@ export function attachTeamProfileLines(
   }
 }
 
+/**
+ * Clerk ids of this event's managers, through the event-manager audience in
+ * lib/authz/audiences (S5 B17), for the tenant that owns the event. A Stellr
+ * event gets every assignment for its slug, as before. Another tenant's event
+ * gets only managers assigned to it who also hold that tenant's event_manager
+ * membership, so it never emails Stellr's managers.
+ *
+ * If the events mirror cannot be read, the event is treated as Stellr's: the
+ * audience then keeps only assignments stamped for Stellr (or not stamped yet),
+ * so a Stellr event still reaches its managers and another tenant's stamped
+ * assignments are left out. If the assignments cannot be read, this send leaves
+ * event managers out and logs that it did, as a failed read did before (then
+ * without a log line).
+ */
+async function eventManagerIds(db: SupabaseClient, slug: string): Promise<string[]> {
+  let tenantId = STELLR_TENANT_ID
+  try {
+    tenantId = await loadEventTenantId(db, slug)
+  } catch (err) {
+    console.error('[event-emails] event tenant lookup failed; using Stellr assignments only:', err)
+  }
+  try {
+    return await eventManagerAudienceClerkIds(db, tenantId, slug)
+  } catch (err) {
+    console.error('[event-emails] event manager lookup failed; this audience leaves event managers out:', err)
+    return []
+  }
+}
+
 /** Assigned volunteers (event container) plus this event's event managers. */
 export async function loadMentorContacts(db: SupabaseClient, slug: string): Promise<MentorContact[]> {
   const out: MentorContact[] = []
@@ -297,16 +328,12 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
     }
   }
 
-  const { data: managers } = await db
-    .from('event_manager_assignments')
-    .select('clerk_user_id')
-    .eq('event_slug', slug)
-    .or(activeAssignmentFilter())
-  if (managers?.length) {
+  const managers = await eventManagerIds(db, slug)
+  if (managers.length) {
     try {
       const client = await clerkClient()
       const { data: users } = await client.users.getUserList({
-        userId: managers.map((m) => m.clerk_user_id as string),
+        userId: managers,
         limit: managers.length,
       })
       for (const u of users) {

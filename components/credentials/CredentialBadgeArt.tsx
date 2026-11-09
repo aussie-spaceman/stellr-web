@@ -3,7 +3,7 @@ import type { CredentialTheme } from '@/lib/credentials-core'
 
 // The badge as it appears on the credential page: a ring in the theme colour
 // around the brand Certificate glyph, wordmark below. The feed-post PNG
-// (app/(public)/credentials/[number]/badge/route.tsx) redraws the same shape
+// (app/(stellr)/(public)/credentials/[number]/badge/route.tsx) redraws the same shape
 // for the edge renderer, which cannot import this component.
 //
 // One glyph for every credential, on purpose: the badge says "Stellr verified",

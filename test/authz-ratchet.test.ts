@@ -235,7 +235,7 @@ describe('found by shape', () => {
 })
 
 describe('the page.requireAdmin swap (codemod T4)', () => {
-  const page = 'app/(admin)/admin/x/page.tsx'
+  const page = 'app/(stellr)/(admin)/admin/x/page.tsx'
   const baseline = { files: { [page]: { requireAdminPage: 1 }, 'lib/a.ts': { isStaffRole: 1 } } }
   const swapped = { [page]: { pageRequireAdmin: 1 }, 'lib/a.ts': { isStaffRole: 1 } }
 
@@ -249,8 +249,8 @@ describe('the page.requireAdmin swap (codemod T4)', () => {
     const more = { ...swapped, [page]: { pageRequireAdmin: 2 } }
     expect(idiomDiff(baseline, more).added).toEqual([`${page}: requireAdminPage 1 -> 2`])
     expect(nextIdiomFiles(baseline, more)[page]).toEqual({ pageRequireAdmin: 1 })
-    const other = { ...swapped, 'app/(admin)/admin/y/page.tsx': { pageRequireAdmin: 1 } }
-    expect(idiomDiff(baseline, other).added).toEqual(['app/(admin)/admin/y/page.tsx: requireAdminPage 0 -> 1'])
+    const other = { ...swapped, 'app/(stellr)/(admin)/admin/y/page.tsx': { pageRequireAdmin: 1 } }
+    expect(idiomDiff(baseline, other).added).toEqual(['app/(stellr)/(admin)/admin/y/page.tsx: requireAdminPage 0 -> 1'])
   })
 
   it('counts as progress only when the page moves on to a confining adapter', () => {

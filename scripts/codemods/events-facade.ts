@@ -33,8 +33,8 @@ export type Lane = 'A' | 'B' | 'C'
 
 const LANE_A: RegExp[] = [
   /^app\/api\/register\//,
-  /^app\/\(flow\)\//,
-  /^app\/\(public\)\/credentials\//,
+  /^app\/\(stellr\)\/\(flow\)\//,
+  /^app\/\(stellr\)\/\(public\)\/credentials\//,
   /^app\/api\/members\/teams\//,
   /^app\/api\/(check-in|check-in-desk|sign|survey|credentials|team-profile|volunteer|consent|uploads)\//,
   /^app\/api\/(stripe|webhooks)\//,
@@ -63,8 +63,8 @@ const LANE_B_LIB: RegExp[] = [
 
 /** The lane that owns this file, or null for one no lane claims (an operator script, say). */
 export function laneOf(file: string): Lane | null {
-  if (/^app\/api\/admin\//.test(file) || /^app\/\(admin\)\//.test(file)) return 'C'
-  if (file === 'app/(member)/layout.tsx' || file === 'app/api/store/returns/route.ts') return 'C'
+  if (/^app\/api\/admin\//.test(file) || /^app\/\(stellr\)\/\(admin\)\//.test(file)) return 'C'
+  if (file === 'app/(stellr)/(member)/layout.tsx' || file === 'app/api/store/returns/route.ts') return 'C'
   if (file === 'lib/survey/admin-auth.ts') return 'C'
   if (LANE_A.some((r) => r.test(file))) return 'A'
   if (LANE_B_LIB.some((r) => r.test(file))) return 'B'

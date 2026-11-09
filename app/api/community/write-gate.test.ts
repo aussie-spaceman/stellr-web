@@ -44,14 +44,38 @@ function walk(dir: string, out: string[] = []): string[] {
 /** Source with comments blanked, so a comment naming the helper does not count. */
 const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1')
 
+/** From `start` to the closing brace at column 0. */
+const bodyFrom = (src: string, start: number) => {
+  const end = src.indexOf('\n}', start)
+  return src.slice(start, end === -1 ? undefined : end)
+}
+
+/**
+ * An audited handler (docs/TENANCY-S5.md, B16) is exported as a one-line call of the
+ * file's own audited() helper, handing it the function that does the work:
+ * `return audited(req, spec, () => doThing(req))`. The body that counts is doThing's,
+ * a top-level function of the same file. One that cannot be found reads as empty, so
+ * the check below fails rather than passing on the wrapper.
+ */
+const DELEGATE = /^\s*return audited\(req, \{[^}]*\}, \(\) => ([A-Za-z_$][\w$]*)\([^)]*\)\)\s*$/
+
+function delegateBody(src: string, wrapper: string): string | null {
+  const lines = wrapper.split('\n').slice(1).filter((l) => l.trim())
+  if (lines.length !== 1) return null
+  const m = lines[0].match(DELEGATE)
+  if (!m) return null
+  const at = src.search(new RegExp(`^async function ${m[1]}\\(`, 'm'))
+  return at === -1 ? '' : bodyFrom(src, at)
+}
+
 /** Each exported write handler's body: from its `export` to the closing brace at column 0. */
-function writeHandlers(src: string): Array<{ method: string; body: string }> {
-  const found: Array<{ method: string; body: string }> = []
+function writeHandlers(src: string): Array<{ method: string; body: string; delegated: boolean }> {
+  const found: Array<{ method: string; body: string; delegated: boolean }> = []
   const re = new RegExp(`^export\\s+(?:async\\s+function|const)\\s+(${WRITE_METHODS.join('|')})\\b`, 'gm')
   for (const m of src.matchAll(re)) {
-    const start = m.index ?? 0
-    const end = src.indexOf('\n}', start)
-    found.push({ method: m[1], body: src.slice(start, end === -1 ? undefined : end) })
+    const body = bodyFrom(src, m.index ?? 0)
+    const delegated = delegateBody(src, body)
+    found.push({ method: m[1], body: delegated ?? body, delegated: delegated !== null })
   }
   return found
 }
@@ -65,6 +89,28 @@ const handlers = files.flatMap((f) => {
 describe('every community write handler applies the age and consent restrictions', () => {
   it('finds the write handlers (the scan is reading the tree)', () => {
     expect(handlers.length).toBeGreaterThan(25)
+  })
+
+  it('reads an audited handler through to the function doing the work', () => {
+    expect(handlers.filter((h) => h.delegated).length).toBeGreaterThan(25)
+    const src = [
+      'export async function POST(req: Request) {',
+      "  return audited(req, { action: 'x.y.z' }, () => doThing(req))",
+      '}',
+      '',
+      'async function doThing(req: Request) {',
+      "  const blocked = await communityWriteBlock(m, 'post')",
+      '}',
+    ].join('\n')
+    const [h] = writeHandlers(src)
+    expect(h.delegated).toBe(true)
+    expect(h.body).toContain('communityWriteBlock(')
+    // A delegate that is not in the file reads as empty: no check found.
+    const [missing] = writeHandlers(src.replace('async function doThing', 'async function other'))
+    expect(missing.body).toBe('')
+    // Anything more than the one-line wrapper is read as it stands.
+    const [extra] = writeHandlers(src.replace('  return audited', '  await supabaseServer()\n  return audited'))
+    expect(extra.delegated).toBe(false)
   })
 
   it('is spelled in no other way: `export { x as POST }` would hide a handler from this scan', () => {

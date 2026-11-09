@@ -42,58 +42,29 @@
 // and logging it would be the leak itself.
 //
 // An unrecognised value is treated as off, so a typo can never change live
-// behaviour, and is reported once per instance to app_errors. Nothing exposes
-// the resolved mode yet: the slice that wires this in adds it to the admin
-// health route, and the flip runbook reads it there.
+// behaviour, and is reported once per instance to app_errors. The admin health
+// route reports the resolved mode, and the flip runbook reads it there.
 //
 // Event-narrowed scopes throw on tables with no slug event key (identity and
 // Sanity-keyed tables). A route that loads such a row for an event manager
 // makes its own event check, then passes the unnarrowed Stellr scope.
 //
-// Nothing in the app calls this yet (S5 wave 1). Converted routes keep their
-// own 404 body via notFound and pass their legacy query for off and shadow.
+// Converted routes keep their own 404 body via notFound, and go through
+// loadRecord or loadEventRecord below, which hold today's query for off and shadow.
 // The backend is a filtered service-role read through supabase-js; a tenantDb
 // backend (lib/tenancy/db.ts) slots in behind TENANT_DB_ENABLED when its
 // driver lands, and is added to lib/tenancy/db-callers.ts then — this module
 // does not import db.ts.
 
 import type { DerivationMode } from './constants'
+import { loadScopedMode, reportUnrecognisedMode, type LoadScopedMode } from './load-scoped-mode'
 import { TABLE_REGISTRY, type TableEntry } from './registry'
 import { assertMadeScope, isStellrScope, type ScopeContext } from './scope-context'
 import { TenantContextError } from './tenant-id'
 
 export { TenantContextError }
 
-// ── Mode ─────────────────────────────────────────────────────────────────────
-
-export const LOADSCOPED_MODES = ['off', 'shadow', 'enforce'] as const
-export type LoadScopedMode = (typeof LOADSCOPED_MODES)[number]
-
-/** The environment variable that selects the mode. */
-export const LOADSCOPED_MODE_ENV = 'LOADSCOPED_MODE'
-
-/** The configured mode. Unset, empty or unrecognised means off. */
-export function loadScopedMode(env: Record<string, string | undefined> = process.env): LoadScopedMode {
-  const raw = (env[LOADSCOPED_MODE_ENV] ?? '').trim().toLowerCase()
-  return (LOADSCOPED_MODES as readonly string[]).includes(raw) ? (raw as LoadScopedMode) : 'off'
-}
-
-const warnedModes = new Set<string>()
-
-/** A set-but-unrecognised LOADSCOPED_MODE means off: say so once per instance. */
-async function reportUnrecognisedMode(): Promise<void> {
-  const raw = (process.env[LOADSCOPED_MODE_ENV] ?? '').trim().toLowerCase()
-  if (raw === '' || (LOADSCOPED_MODES as readonly string[]).includes(raw) || warnedModes.has(raw)) return
-  warnedModes.add(raw)
-  const message = `${LOADSCOPED_MODE_ENV} is set to an unrecognised value and was treated as off`
-  console.error(`[load-scoped] ${message}`)
-  try {
-    const { captureRequestError } = await import('@/lib/app-errors')
-    await captureRequestError(new Error(message), { method: 'LOADSCOPED', path: LOADSCOPED_MODE_ENV }, { routePath: LOADSCOPED_MODE_ENV })
-  } catch (e) {
-    console.error('[load-scoped] mode report failed:', e instanceof Error ? e.message : e)
-  }
-}
+export { LOADSCOPED_MODES, LOADSCOPED_MODE_ENV, loadScopedMode, type LoadScopedMode } from './load-scoped-mode'
 
 // ── Ids ──────────────────────────────────────────────────────────────────────
 
@@ -494,4 +465,190 @@ export async function loadScoped<T = Record<string, unknown>>(
   const { data, error } = await runScoped(scope, table, id as string, opts, plan)
   if (error) return { ok: false, error }
   return data == null ? { ok: false, response: opts.notFound() } : { ok: true, row: data }
+}
+
+// ── For route files (S5 C16) ─────────────────────────────────────────────────
+//
+// A file classed tenant_staff may not call .from() on a table holding tenant rows
+// (test/route-manifest.test.ts), and that covers the legacy query loadScoped needs in
+// off and shadow modes, and the write after a load. So today's queries live here.
+
+/** The mode that applies to this scope: anything but Stellr's tenant-wide scope is enforced. */
+function modeFor(scope: ScopeContext, requested: LoadScopedMode | undefined): LoadScopedMode {
+  const mode = requested ?? loadScopedMode()
+  return isStellrScope(scope) && scope.eventSlugs === null ? mode : 'enforce'
+}
+
+/**
+ * The answer to a tenant's staff on an action that still runs on Stellr's own accounts and
+ * global records: Stripe, and the roster add's member lookups and activity writes. Null in
+ * Stellr's scope, which goes on as ever. A route that names a record by global id asks this
+ * after loading it, so another tenant's id still answers as a missing one. A route under
+ * events/[slug] has already placed the event in the caller's tenant, so it asks first, and
+ * every id then gets the same answer.
+ */
+export function refuseOutsideStellr(scope: ScopeContext): Response | null {
+  if (isStellrScope(scope)) return null
+  return Response.json({ error: "This isn't available for your organisation yet." }, { status: 503 })
+}
+
+export type LoadedRecord<T> = { ok: true; row: T } | { ok: false; response: Response }
+
+/**
+ * loadScoped, with today's query as its legacy read. A failed read answers as the route's
+ * notFound, which is what these routes did when they ignored the read's error: a row that
+ * cannot be read is not acted on, in any mode.
+ */
+export async function loadRecord<T = Record<string, unknown>>(
+  scope: ScopeContext,
+  table: string,
+  id: unknown,
+  opts: Omit<LoadScopedOptions<T>, 'legacy'>,
+): Promise<LoadedRecord<T>> {
+  const { schema, name } = split(registryKey(table))
+  const legacy = () =>
+    source(opts.db, schema)
+      .from(name)
+      .select(opts.select ?? '*')
+      .eq(opts.idColumn ?? 'id', id)
+      .maybeSingle() as PromiseLike<{ data: T | null; error: unknown }>
+  const loaded = await loadScoped<T>(scope, table, id, { ...opts, legacy })
+  if (loaded.ok) return loaded
+  if (loaded.response) return { ok: false, response: loaded.response }
+  // 22P02 is an id the column cannot hold: that is a miss, and the database is fine.
+  if (!isMalformedIdError(loaded.error)) console.error(`[load-scoped] ${registryKey(table)} read failed`)
+  return { ok: false, response: opts.notFound() }
+}
+
+/**
+ * loadRecord for a caller who may reach only some events. The row's event must be one
+ * they cover, and any other row answers as a missing one, so a refusal does not say the
+ * record exists. A row with no event is covered only by someone who reaches every event.
+ *
+ * The scope stays tenant-wide, as the header above allows for an event check made here:
+ * an event-narrowed scope always runs as enforce, and LOADSCOPED_MODE=off has to keep
+ * today's read for event managers as well.
+ */
+export async function loadEventRecord<T extends { event_slug?: string | null }>(
+  staff: { scope: ScopeContext; covers: (eventSlug: string | null | undefined) => boolean },
+  table: string,
+  id: unknown,
+  opts: Omit<LoadScopedOptions<T>, 'legacy'>,
+): Promise<LoadedRecord<T>> {
+  const loaded = await loadRecord<T>(staff.scope, table, id, opts)
+  if (loaded.ok && !staff.covers(loaded.row.event_slug)) return { ok: false, response: opts.notFound() }
+  return loaded
+}
+
+export interface LoadRowsOptions {
+  db: AnyDb
+  /** Columns to select (default '*'). */
+  select?: string
+  /** Column = value filters, on the table itself. */
+  match: Record<string, unknown>
+  order?: { column: string; ascending?: boolean }
+  /** At most this many rows. Needs `order`, so which rows is settled. */
+  limit?: number
+  mode?: LoadScopedMode
+  derivationMode?: DerivationMode
+  /** A label for the shadow log. */
+  label?: string
+  onMismatch?: (m: ShadowMismatch) => void | Promise<void>
+}
+
+/** The slice of a builder a list read needs beyond ScopedFilterBuilder. */
+type Orderable = { order(column: string, opts?: { ascending?: boolean }): PromiseLike<QueryResult> & { limit(count: number): PromiseLike<QueryResult> } }
+
+/**
+ * The rows of `table` matching `match`, inside `scope`, under the same modes as
+ * loadScoped: off runs today's query, shadow returns it and logs a different row count,
+ * enforce runs the scoped query alone. Any scope but Stellr's tenant-wide one is enforced.
+ * Shadow compares counts only: not every table has an `id`, and a list that differs by
+ * count is what a missing filter looks like.
+ */
+export async function loadScopedRows<T = Record<string, unknown>>(
+  scope: ScopeContext,
+  table: string,
+  opts: LoadRowsOptions,
+): Promise<{ data: T[] | null; error: unknown }> {
+  assertMadeScope(scope)
+  if (opts.mode === undefined) await reportUnrecognisedMode()
+  const mode = modeFor(scope, opts.mode)
+  const narrowed = (q: ScopedFilterBuilder) => {
+    let out = q
+    for (const [column, value] of Object.entries(opts.match)) out = out.eq(column, value)
+    if (!opts.order) return out as PromiseLike<QueryResult>
+    const ordered = (out as unknown as Orderable).order(opts.order.column, { ascending: opts.order.ascending ?? true })
+    return opts.limit === undefined ? ordered : ordered.limit(opts.limit)
+  }
+  const legacy = async () => {
+    const { schema, name } = split(registryKey(table))
+    const { data, error } = await narrowed(source(opts.db, schema).from(name).select(opts.select ?? '*'))
+    return { data: (data as T[] | null) ?? null, error }
+  }
+  const scoped = async () => {
+    const plan = planScope(scope, table, { derivationMode: opts.derivationMode })
+    if (plan.reachesNothing) return { data: [] as T[], error: null }
+    const { data, error } = await narrowed(scopedQuery(scope, table, opts))
+    return { data: error ? null : ((data as T[] | null) ?? []).map((r) => stripScopeEmbed(r)), error }
+  }
+  if (mode === 'off') return legacy()
+  if (mode === 'enforce') return scoped()
+  const [today, withScope] = await Promise.all([legacy(), scoped().catch((e: unknown) => ({ data: null, error: e }))])
+  const legacyCount = today.data?.length ?? 0
+  const scopedCount = withScope.data?.length ?? 0
+  const reason = withScope.error ? 'scoped_error' : !today.error && legacyCount !== scopedCount ? 'row' : null
+  if (reason) {
+    await report(opts as unknown as LoadScopedOptions<unknown>, {
+      table: registryKey(table),
+      label: opts.label ?? registryKey(table),
+      actorKind: scope.actor.kind,
+      reason,
+      legacyFound: legacyCount > 0,
+      scopedFound: scopedCount > 0,
+    })
+  }
+  return today
+}
+
+/** The builder a by-id write hands back: awaited as it is, or asked for the row. */
+export interface ScopedWriteBuilder extends PromiseLike<QueryResult> {
+  in(column: string, values: readonly unknown[]): ScopedWriteBuilder
+  select(columns?: string): { single(): PromiseLike<QueryResult>; maybeSingle(): PromiseLike<QueryResult> }
+}
+
+/**
+ * Update or delete one row a caller has just loaded. Off and shadow modes write as today,
+ * by id alone. Enforced, the write carries the scope's tenant filter too, so it cannot land
+ * outside the scope whatever happened since the load. Own and derived tables only: a child
+ * table's row has no tenant filter to carry on a write.
+ */
+export function scopedRowWrite(
+  scope: ScopeContext,
+  table: string,
+  id: string,
+  opts: { db: AnyDb; mode?: LoadScopedMode; derivationMode?: DerivationMode },
+): { update(values: Record<string, unknown>): ScopedWriteBuilder; delete(): ScopedWriteBuilder } {
+  const plan = planScope(scope, table, { derivationMode: opts.derivationMode })
+  if (plan.target !== 'row') throw new TenantContextError(`scopedRowWrite: ${plan.table} is a child table`)
+  const enforced = modeFor(scope, opts.mode) === 'enforce'
+  const table_ = () => source(opts.db, plan.schema).from(plan.name) as unknown as {
+    update(values: Record<string, unknown>): ScopedFilterBuilder
+    delete(): ScopedFilterBuilder
+  }
+  const finish = (q: ScopedFilterBuilder) => (enforced ? applyPlan(q.eq('id', id), plan) : q.eq('id', id)) as unknown as ScopedWriteBuilder
+  return {
+    update: (values) => finish(table_().update(values)),
+    delete: () => finish(table_().delete()),
+  }
+}
+
+/**
+ * The tenant filter a list spanning several rows must carry for this scope, or null when
+ * the mode leaves today's query alone (off and shadow, in Stellr's tenant-wide scope). For
+ * a lib helper that builds its own query and cannot take a scope.
+ */
+export function enforcedTenantFilter(scope: ScopeContext, table: string, opts: { mode?: LoadScopedMode; derivationMode?: DerivationMode } = {}): TenantFilter | null {
+  if (modeFor(scope, opts.mode) !== 'enforce') return null
+  return planScope(scope, table, { derivationMode: opts.derivationMode }).tenant
 }

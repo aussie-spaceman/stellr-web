@@ -1,13 +1,15 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { createRegistrationCheckout, RegistrationCheckoutError } from '@/lib/registration-checkout'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 import { seatDiscount } from '@/lib/individual-payment'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -17,6 +19,10 @@ const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreduca
 // registration where the member pays their own share. Group payments owned by
 // an organiser are NOT payable here (the organiser settles their invoice).
 export async function POST(req: NextRequest) {
+  return audited(req, { action: 'member.payment_link.create', table: 'registrations' }, () => createPaymentLink(req))
+}
+
+async function createPaymentLink(req: NextRequest) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — see lib/impersonation.
   const impersonationBlock = await assertNotImpersonating()
@@ -52,6 +58,9 @@ export async function POST(req: NextRequest) {
     .eq('member_id', member.id)
     .maybeSingle()
   if (!participant) return NextResponse.json({ error: 'You are not part of this registration' }, { status: 403 })
+  // On Stellr's chain, as every member route's row is (docs/TENANCY-S5.md, B16). The
+  // registration id leads to the event and its tenant.
+  noteAudit(req, { targetId: registrationId })
 
   // Only the member's OWN outstanding payment is payable here.
   const isIndividual = registration.type === 'individual'
@@ -122,4 +131,22 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ url: session.url })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

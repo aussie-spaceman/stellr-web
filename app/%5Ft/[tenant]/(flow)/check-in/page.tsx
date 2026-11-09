@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { checkInNotOpen } from '@/app/(flow)/check-in/not-open'
+import { checkInNotOpen } from '@/app/(stellr)/(flow)/check-in/not-open'
 import { pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { tenantOpenCheckIns } from '@/lib/tenancy/tenant-records'

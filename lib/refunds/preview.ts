@@ -3,6 +3,8 @@ import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_DAYS, daysSincePayment, guaranteeRefundOptions, type RefundOptions } from './policy'
 import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
 import { resolveRefundBasis } from './payment-basis'
+import { loadRecord } from '@/lib/tenancy/load-scoped'
+import { isStellrScope, type ScopeContext } from '@/lib/tenancy/scope-context'
 
 export interface RefundPreview {
   paid: boolean
@@ -23,18 +25,35 @@ export interface RefundPreview {
   externalRefund: { refundedCents: number; currency: string; full: boolean } | null
 }
 
-// Read-only computation of what a participant deletion would refund, for the
-// admin delete dialog. Mirrors executeRefund's resolution without mutating.
-export async function previewRefund(participantId: string): Promise<RefundPreview> {
-  const db = supabaseServer()
-  const empty: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysSincePayment: null, guaranteeDays: GUARANTEE_DAYS, options: {}, hasPaymentRef: false, alreadyRefunded: false, externalRefund: null }
+/** The preview for a participant with nothing to refund, who does not exist, or who is out of reach. */
+export const EMPTY_REFUND_PREVIEW: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysSincePayment: null, guaranteeDays: GUARANTEE_DAYS, options: {}, hasPaymentRef: false, alreadyRefunded: false, externalRefund: null }
 
-  const { data: p } = await db
-    .from('participants')
-    .select('id, registration_id, individual_payment_status, stripe_payment_intent_id')
-    .eq('id', participantId)
-    .maybeSingle()
+type PreviewParticipant = Parameters<typeof resolveRefundBasis>[2] & { id: string }
+const PREVIEW_COLUMNS = 'id, registration_id, individual_payment_status, stripe_payment_intent_id'
+
+// Read-only computation of what a participant deletion would refund, for the
+// admin delete dialog. Mirrors executeRefund's resolution without mutating. With a
+// scope, a participant outside it answers as one that does not exist.
+export async function previewRefund(participantId: string, scope?: ScopeContext): Promise<RefundPreview> {
+  const db = supabaseServer()
+  const empty = EMPTY_REFUND_PREVIEW
+
+  let p: PreviewParticipant | null
+  if (scope) {
+    const loaded = await loadRecord<PreviewParticipant>(scope, 'participants', participantId, {
+      db,
+      select: PREVIEW_COLUMNS,
+      notFound: () => new Response(null, { status: 404 }),
+      label: 'previewRefund',
+    })
+    p = loaded.ok ? loaded.row : null
+  } else {
+    const { data } = await db.from('participants').select(PREVIEW_COLUMNS).eq('id', participantId).maybeSingle()
+    p = data as PreviewParticipant | null
+  }
   if (!p) return empty
+  // A tenant's event takes no payment yet, and Stripe here is Stellr's account.
+  if (scope && !isStellrScope(scope)) return empty
 
   const { data: prior } = await db
     .from('event_refunds')

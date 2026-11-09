@@ -49,15 +49,15 @@ describe('isPrivatePath', () => {
 
 // PUB-13: a page whose `[token]` is its only key is a bearer link — the token
 // names a person and leads to a working action. Every such page under
-// app/(public) must be registered as private so the root layout loads no
+// app/(stellr)/(public) must be registered as private so the root layout loads no
 // analytics on it and the token URL never reaches a third party. This guard
 // fails if a new `[token]` page is added without adding it here (and the
 // matching next.config.mjs privateLink header). Single-task pages live in
-// app/(flow), which shares the public URL space, so both groups are walked.
+// app/(stellr)/(flow), which shares the public URL space, so both groups are walked.
 describe('every public [token] bearer-link page is private (PUB-13)', () => {
-  const PUBLIC_DIRS = [join(process.cwd(), 'app', '(public)'), join(process.cwd(), 'app', '(flow)')]
+  const PUBLIC_DIRS = [join(process.cwd(), 'app', '(stellr)', '(public)'), join(process.cwd(), 'app', '(stellr)', '(flow)')]
 
-  // Walk app/(public) for page.tsx files whose route contains a `[token]`
+  // Walk app/(stellr)/(public) for page.tsx files whose route contains a `[token]`
   // segment, returning a concrete sample path for each (placeholders for the
   // dynamic segments). Route groups `(…)` don't appear in the URL.
   function tokenRoutes(dir: string, prefix = ''): string[] {

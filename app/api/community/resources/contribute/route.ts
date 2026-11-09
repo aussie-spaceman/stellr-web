@@ -14,6 +14,8 @@ import {
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload, contributionPrefix, discardUpload } from '@/lib/uploads'
 import { finaliseStoredUpload } from '@/lib/resource-finalise'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, knownOperation, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -37,6 +39,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.resource.contribute', table: 'container_contents' }, () => contribute(req))
+}
+
+async function contribute(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -113,6 +119,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: created.error }, { status: created.status })
     }
     await attachBinary(containerId, created.id, null)
+    noteAudit(req, { targetId: created.id, metadata: { operation: 'upload', container_id: containerId } })
     return NextResponse.json({ ok: true, binaryId: created.id })
   }
 
@@ -123,6 +130,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'You do not manage this object.' }, { status: 403 })
   }
   const displayName = (b.displayName ?? '').trim()
+  noteAudit(req, {
+    targetId: typeof b.binaryId === 'string' ? b.binaryId : null,
+    metadata: { operation: knownOperation(b.action, ['addLink', 'attachExisting', 'detach', 'setAccess']), container_id: containerId },
+  })
 
   switch (b.action) {
     case 'addLink': {
@@ -141,6 +152,7 @@ export async function POST(req: Request) {
       })
       if ('error' in created) return NextResponse.json({ error: created.error }, { status: 500 })
       await attachBinary(containerId, created.binaryId, null)
+      noteAudit(req, { targetId: created.binaryId })
       return NextResponse.json({ ok: true, binaryId: created.binaryId })
     }
 
@@ -181,4 +193,22 @@ export async function POST(req: Request) {
     default:
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   }
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

@@ -27,7 +27,7 @@ function routeFiles(dir: string): string[] {
 // requireAdmin/isAdmin functions, the store/survey/scholarship gates, and the
 // inline role check. A file matching ANY of these is considered guarded.
 const ADMIN_GUARD =
-  /isAdminClaims|currentUserIsAdmin|currentUserHasScope|requireEventAccess|requireScholarshipAdmin|requireSurveyAdmin|canManageStoreCatalog|requireAdmin|isAdmin|adminName|role\s*(!==|===)\s*['"]admin['"]|assertTenantRole|assertPlatformAdmin|requireStellrAdmin|isStellrAdmin|requireTenantStaff|requireTenantAdmin|requireEventSection|hasPortalAccess|hasScope/
+  /isAdminClaims|currentUserIsAdmin|currentUserHasScope|requireEventAccess|requireScholarshipAdmin|requireSurveyAdmin|canManageStoreCatalog|requireAdmin|isAdmin|adminName|role\s*(!==|===)\s*['"]admin['"]|assertTenantRole|assertPlatformAdmin|requireStellrAdmin|isStellrAdmin|requireTenantStaff|requireTenantAdmin|requireEventSection|requireEventStaff|requireEventRoute|hasPortalAccess|hasScope/
 
 // Admin routes that are deliberately NOT gated by an admin session. Each entry
 // needs a WHY: a stale entry here is the one way this test can hide a regression.
@@ -37,6 +37,40 @@ const ALLOW_UNGUARDED: Record<string, string> = {
   'app/api/admin/sanity/event-sync/route.ts':
     'shared-secret constant-time compare; no admin session (Sanity webhook)',
 }
+
+// requireEventStaff's scope is tenant-wide, so a scoped read made with it reaches the whole
+// tenant. This is what an event manager's confinement rests on.
+const EVENT_CHECK = /\bloadEventRecord\s*[<(]|\.covers\s*\(/
+const SCOPED_READ = /\b(?:loadScopedRows|loadScoped|scopedQuery|scopedRowWrite|enforcedTenantFilter)\s*[<(]/
+const WHOLE_TENANT_LOAD = /\bloadRecord\s*(?:<[^(]*>)?\s*\(/
+
+/** What is wrong with how a route using requireEventStaff confines an event manager, if anything. */
+function eventStaffProblem(src: string): string | null {
+  if (WHOLE_TENANT_LOAD.test(src)) return 'loadRecord reaches the whole tenant: use loadEventRecord'
+  const check = src.search(EVENT_CHECK)
+  if (check < 0) return 'no event check'
+  const read = src.search(SCOPED_READ)
+  return read >= 0 && read < check ? 'a scoped read comes before the event check' : null
+}
+
+describe('event staff are confined to their events', () => {
+  it('the check can fail', () => {
+    expect(eventStaffProblem('await loadRecord<Row>(staff.scope, "x", id, opts)')).toMatch(/whole tenant/)
+    expect(eventStaffProblem('await loadScopedRows(staff.scope, "x", opts)\nstaff.covers(slug)')).toMatch(/before the event check/)
+    expect(eventStaffProblem('const staff = await requireEventStaff()')).toBe('no event check')
+    expect(eventStaffProblem('await loadEventRecord<Row>(staff, "x", id, opts)\nawait loadScopedRows(staff.scope, "y", opts)')).toBeNull()
+  })
+
+  it('every route using requireEventStaff makes its event check first', () => {
+    const files = routeFiles('app/api').filter((f) => /\brequireEventStaff\s*\(/.test(readFileSync(f, 'utf8')))
+    expect(files.length).toBeGreaterThan(0)
+    const problems = files.flatMap((f) => {
+      const problem = eventStaffProblem(readFileSync(f, 'utf8'))
+      return problem ? [`${f}: ${problem}`] : []
+    })
+    expect(problems).toEqual([])
+  })
+})
 
 describe('route guards (static inventory)', () => {
   it('the regex net knows every lib/authz guard the AST check accepts', () => {

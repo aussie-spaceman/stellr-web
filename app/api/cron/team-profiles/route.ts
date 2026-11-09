@@ -19,7 +19,9 @@ export const GET = withCronAudit('team-profiles', async (req: NextRequest) => {
   const db = supabaseServer()
   const run = await startCronRun(db, 'team-profiles')
   try {
-    const result = await dispatchTeamProfiles(db, { budgetMs: 45_000 })
+    // Per tenant (S5 B13). When only Stellr has work the result carries no
+    // per-tenant ledger, so the run's result is the same as before.
+    const result = await dispatchTeamProfiles(db, { budgetMs: 45_000, run })
     await run.finish({ ...result })
     return NextResponse.json(result)
   } catch (err) {

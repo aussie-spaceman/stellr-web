@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import SurveyPage from '@/app/(flow)/survey/[token]/page'
+import SurveyPage from '@/app/(stellr)/(flow)/survey/[token]/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantSurveyInvitation } from '@/lib/tenancy/tenant-records'
 

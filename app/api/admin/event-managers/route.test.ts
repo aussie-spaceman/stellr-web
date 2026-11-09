@@ -23,7 +23,7 @@ const updateUserMetadata = vi.fn(async (_id: string, p: { publicMetadata: { role
 })
 const sendEmail = vi.fn(async () => ({ id: 'email_1' }))
 vi.mock('@clerk/nextjs/server', () => ({
-  auth: async () => ({ sessionClaims: { metadata: { role: 'admin' } } }),
+  auth: async () => ({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } }),
   clerkClient: async () => ({
     users: {
       getUserList: async () => ({ data: [] }),
@@ -36,7 +36,6 @@ vi.mock('@/lib/events/repo', () => ({
   getEventBySlug: async (slug: string) => ({ title: `Event ${slug}`, date: '2026-12-05', endDate: '2026-12-06' }),
 }))
 vi.mock('@/lib/email', () => ({ sendEmail: (...a: unknown[]) => sendEmail(...(a as [])) }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))
 vi.mock('@/lib/activity-log', () => ({
   logActivity: (...a: unknown[]) => logActivity(...a),
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'admin1' }),

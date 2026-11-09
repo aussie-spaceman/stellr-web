@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { getEventRoster } from '@/lib/event-admin'
 import { getEventBySlug } from '@/lib/events/repo'
 import { type StellarEvent } from '@/lib/sanity'
 import { sendEmail, outstandingItemsReminderEmail } from '@/lib/email'
 import { supabaseServer } from '@/lib/supabase'
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
+import { enforcedTenantFilter, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/remind — one-click reminder emails for the
 // participants matching the roster filters (admins + assigned event managers).
@@ -14,11 +17,25 @@ import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
 // participants failing BOTH checks are emailed, and the email covers both.
 // Recipients: the participant; CC the emergency contact for minors and the
 // teacher / student manager for group registrations.
+//
+// Stellr's sender and its pay pages: B14 opens this to a tenant.
 
-export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+const ROUTE = '/api/admin/events/[slug]/remind'
+
+type Ctx = { params: Promise<{ slug: string }> }
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'event.reminder.send', ...auditSubject(req, 'registrations') }),
+  sendReminders,
+)
+
+async function sendReminders(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const body = await req.json().catch(() => null)
   const payment = body?.payment === true
@@ -30,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const event = (await getEventBySlug(slug)) as StellarEvent | null
   if (!event) return NextResponse.json({ error: 'Unknown event' }, { status: 404 })
 
-  const roster = await getEventRoster(slug, event.date)
+  const roster = await getEventRoster(slug, event.date, { tenant: enforcedTenantFilter(staff.scope, 'registrations') })
 
   const db = supabaseServer()
   let sent = 0
@@ -70,5 +87,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     }
   }
 
+  noteAuditSubject(req, { detail: { sent, failed } })
   return NextResponse.json({ sent, failed })
 }

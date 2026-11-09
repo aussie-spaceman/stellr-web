@@ -118,6 +118,13 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[];
   // moving to tenant_staff passes a slug, or also calls requireTenantStaff.
   'requireEventAccess@authz': { file: 'lib/authz.ts', kinds: ['admin'], call: 'requireEventAccess' },
   'requireEventAccess@authz#slug': { file: 'lib/authz.ts', kinds: ['tenant'], call: EVENT_NAMED, export: 'requireEventAccess' },
+  // For a route that names a record, not an event: its answer carries the event check for
+  // that record (`covers`). This list cannot see the check being made, as it cannot for
+  // requireTenantStaff, so the stellr_event_manager persona is what proves each route.
+  requireEventStaff: { file: 'lib/authz.ts', kinds: ['tenant'] },
+  // For a route under events/[slug]: requireEventStaff, the event check for that slug, and
+  // the event's own tenant. test/events-admin-paperwork-c17.test.ts holds its answers.
+  requireEventRoute: { file: 'lib/authz.ts', kinds: ['tenant'] },
   // lib/authz page adapters. page.requireStellrAdmin and the api.* adapters are
   // recorded under the composite's own name, listed above. requireAdmin stays while
   // codemod T4 needs it; scripts/authz-idioms.mjs keeps it out of "converged".
@@ -163,6 +170,9 @@ export const AUTHZ_DECISIONS: Partial<Record<GuardKind, Record<string, readonly 
 /** Which guard kinds a class's handlers must reach. */
 export const CLASS_REQUIREMENTS: Record<RouteClass, { kinds: GuardKind[]; firstStatement?: GuardKind }> = {
   platform_admin: { kinds: ['platform'] },
+  // The stellr_only requirement, deliberately: the class moved and the guard did not
+  // (C15). platform_admin above stays as strict as it was.
+  platform_destined: { kinds: ['admin'] },
   tenant_staff: { kinds: ['tenant'] },
   stellr_only: { kinds: ['admin'] },
   participant: { kinds: ['session'] },
@@ -317,7 +327,7 @@ export const PUBLIC_DATA_GATES: Record<
   string,
   { calls: Record<string, readonly string[]>; compares: readonly string[]; why: string }
 > = {
-  'app/(public)/credentials/[number]/opengraph-image.tsx#default': {
+  'app/(stellr)/(public)/credentials/[number]/opengraph-image.tsx#default': {
     calls: { ageBlock: ['lib/credentials-core'], credentialState: ['lib/credentials-core'] },
     compares: ['visibility=public'],
     why:
@@ -342,20 +352,20 @@ export const GUARD_EXCEPTIONS: Record<string, string> = {
   'app/api/webhooks/google-sheets/route.ts#POST':
     'Google push channels carry no signature; acts only on a channel id it registered (sheet_watch_channels), unexpired',
 
-  // ── stellr_only (API) ───────────────────────────────────────────────────
+  // ── platform_destined ───────────────────────────────────────────────────
   'app/api/admin/impersonation/route.ts#DELETE':
     'ends view-as: clearing the cookie can only reduce access; the end is logged against the signed ticket',
 
   // ── participant ─────────────────────────────────────────────────────────
-  'app/(member)/community/training/[moduleId]/[itemId]/page.tsx#default':
+  'app/(stellr)/(member)/community/training/[moduleId]/[itemId]/page.tsx#default':
     'legacy link stub: redirects to the course page, which reads the session itself; renders no data',
 
   // ── stellr_only ─────────────────────────────────────────────────────────
-  'app/studio/[[...tool]]/page.tsx#default':
+  'app/(stellr)/studio/[[...tool]]/page.tsx#default':
     'embedded Sanity Studio; the editor authenticates against Sanity, not Clerk, and the page holds no Stellr data',
 
   // ── public, not rate-limited (each reviewed in S2) ──────────────────────
-  'app/(public)/credentials/[number]/badge/route.tsx#GET':
+  'app/(stellr)/(public)/credentials/[number]/badge/route.tsx#GET':
     'renders a badge image for a credential number; proxy.ts rate-limits /credentials/*',
   'app/api/check-in-desk/manifest/route.ts#GET':
     'static web-app manifest built from a slug matched against a strict pattern; reads nothing',

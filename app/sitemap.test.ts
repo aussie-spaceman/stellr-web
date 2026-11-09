@@ -19,9 +19,9 @@ vi.mock('@/lib/sanity', () => ({
  */
 
 // Vitest runs from the repo root (jsdom rewrites import.meta.url off file:).
-const PUBLIC_DIR = join(process.cwd(), 'app', '(public)')
+const PUBLIC_DIR = join(process.cwd(), 'app', '(stellr)', '(public)')
 
-/** Every static (non-parameterised) route served from app/(public). */
+/** Every static (non-parameterised) route served from app/(stellr)/(public). */
 function staticPublicRoutes(dir: string, prefix = ''): string[] {
   const routes: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

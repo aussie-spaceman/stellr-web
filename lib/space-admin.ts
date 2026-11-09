@@ -1,7 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { listSpaceResources, type SpaceResource } from '@/lib/space-resources'
 import { resolveTierMap } from '@/lib/tiers-server'
-import { getEventsBySlugs } from '@/lib/sanity'
+import { getEventsBySlugs } from '@/lib/events/repo'
 import { resolveSpaceAudience, type SpaceAudienceMember } from '@/lib/spaces'
 import { ROLE_LABELS, type MemberRole } from '@/lib/member-roles'
 import type { SpaceAccessType, SpaceTheme } from '@/lib/spaces'

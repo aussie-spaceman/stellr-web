@@ -36,8 +36,8 @@
 //
 // Every refusal is run three ways: honey row present, absent, and the id malformed
 // (with the database failing a non-uuid on a uuid column, as Postgres does). A
-// difference is `oracle_4xx` in a strict case (tenant_staff and platform_admin routes,
-// and the tenant-host suite) and otherwise is only reported, in CaseResult.reportedOracle.
+// difference is `oracle_4xx` in a strict case (tenant_staff, platform_admin and
+// platform_destined routes, and the tenant-host suite) and otherwise is only reported, in CaseResult.reportedOracle.
 // A strict case also counts an outbound request nobody answered: the send was made, and
 // a uniform response must not hide one that carries tenant B's data.
 //
@@ -58,6 +58,7 @@ import net from 'node:net'
 import { vi } from 'vitest'
 import { isCataloguedAction } from '@/lib/audit/actions'
 import { auditHandlers } from '@/lib/security/audit-coverage'
+import { GUARD_EXCEPTIONS } from '@/lib/security/route-guards'
 import { CANARY_TENANT, HONEYTOKENS, honeytokenFor, isCanaryId, scanForHoneytokens, type HoneytokenHit } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { TENANT_ID_HEADER } from '@/lib/tenancy/host'
@@ -107,10 +108,13 @@ const STAFF: Record<StaffPersona, { role: string; membership: string; context: C
 
 const isStaffPersona = (p: Persona): p is StaffPersona => p in STAFF
 
+export type StaffRouteClass = 'tenant_staff' | 'platform_admin' | 'platform_destined'
+
 /** What each staff-facing route class runs. A platform route must refuse the tenant admin. */
-export const STAFF_PERSONAS_FOR: Record<'tenant_staff' | 'platform_admin', readonly StaffPersona[]> = {
+export const STAFF_PERSONAS_FOR: Record<StaffRouteClass, readonly StaffPersona[]> = {
   tenant_staff: ['stellr_staff', 'canary_admin', 'stellr_event_manager'],
   platform_admin: ['canary_admin'],
+  platform_destined: ['canary_admin'],
 }
 
 /** Tenant A's participant: a signed-in, onboarded adult Stellr member. */
@@ -809,7 +813,7 @@ export async function runStaffPersonaCases(
   mod: Record<string, unknown>,
   input: CaseInput,
   method: string,
-  cls: 'tenant_staff' | 'platform_admin',
+  cls: StaffRouteClass,
   label = input.urlPattern,
 ): Promise<{ persona: StaffPersona; result: CaseResult }[]> {
   const out: { persona: StaffPersona; result: CaseResult }[] = []
@@ -829,16 +833,22 @@ const TENANT_WIDE: readonly StaffPersona[] = ['stellr_staff', 'canary_admin']
  * that really cannot get further names why in the route's fixture (`staffUnproven`).
  */
 export function staffCaseProblem(c: {
-  cls: 'tenant_staff' | 'platform_admin'
+  cls: StaffRouteClass
   persona: StaffPersona
   result: CaseResult
   /** The route names a record. One with no id is judged on what it returns. */
   idBearing: boolean
   exception?: string
+  /**
+   * The handler is in GUARD_EXCEPTIONS: it has no guard to refuse with, by a reviewed and
+   * counted decision. What it returns or writes is still judged.
+   */
+  guardExempt?: boolean
 }): string | null {
-  const { cls, persona, result, idBearing, exception } = c
+  const { cls, persona, result, idBearing, exception, guardExempt } = c
   if (FAILING_OUTCOMES.includes(result.outcome)) return `${persona}: ${result.outcome}`
-  if (cls === 'platform_admin') {
+  if (cls !== 'tenant_staff') {
+    if (guardExempt) return null
     return [401, 403, 404].includes(result.status) ? null : `${persona}: a platform route answered a tenant admin with ${result.status}`
   }
   if (exception) return null
@@ -853,7 +863,7 @@ export function staffCaseProblem(c: {
  * mutating outcome owes an event on these routes as on any other.
  */
 export async function runStaffTarget(
-  t: { file: string; cls: 'tenant_staff' | 'platform_admin'; methods: readonly string[]; source: string },
+  t: { file: string; cls: StaffRouteClass; methods: readonly string[]; source: string },
   mod: Record<string, unknown>,
   input: CaseInput,
   staffUnproven?: Partial<Record<StaffPersona, string>>,
@@ -863,7 +873,7 @@ export async function runStaffTarget(
   for (const method of t.methods) {
     for (const { persona, result } of await runStaffPersonaCases(mod, input, method, t.cls, t.file)) {
       const problem =
-        staffCaseProblem({ cls: t.cls, persona, result, idBearing, exception: staffUnproven?.[persona] }) ??
+        staffCaseProblem({ cls: t.cls, persona, result, idBearing, exception: staffUnproven?.[persona], guardExempt: `${t.file}#${method}` in GUARD_EXCEPTIONS }) ??
         routeAuditProblems(t.file, t.source, [result])[0] ??
         null
       out.push({ method, persona, result, problem })

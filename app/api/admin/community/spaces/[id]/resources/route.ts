@@ -5,7 +5,11 @@ import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { attachAllowed } from '@/lib/access-objects'
 import { finaliseStoredUpload } from '@/lib/resource-finalise'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // The watermark pass re-reads and rewrites the stored object, so give it more
 // room than the default for a 25MB PDF.
@@ -29,10 +33,21 @@ function fileLabel(name: string, mime: string): string {
 // ({ url, title? }) or an already-uploaded file ({ storagePath, fileName,
 // fileType }) whose bytes went straight to storage via /api/uploads/sign.
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { userId, sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.space_resource.add',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_spaces', id: auditedId.get(req) ?? null },
+  }),
+  addSpaceResource,
+)
+
+async function addSpaceResource(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth()
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces/[id]/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id: spaceId } = await params
+  auditedId.set(req, spaceId)
 
   // Relationship-matrix gate (object_type_relations) — closed by default.
   if (!(await attachAllowed('space', 'resource'))) {

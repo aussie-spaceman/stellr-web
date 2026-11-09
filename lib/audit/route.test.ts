@@ -159,6 +159,14 @@ describe('auditMutation', () => {
     }
   })
 
+  it('drops a target id that came out of a body as something other than a string, even one that coerces to a uuid', async () => {
+    for (const id of [[RECORD_ID], { toString: () => RECORD_ID }, 42]) {
+      const { db, rpc } = fakeDb()
+      await auditMutation({ ...SPEC, target: { table: 'members', id: id as unknown as string } }, { db, enabled: true })
+      expect(rpc).toHaveBeenCalledWith('platform_audit_append', expect.objectContaining({ p_target_id: null, p_metadata: { target_id_dropped: true } }))
+    }
+  })
+
   it('files an event the mirror cannot place on the platform chain, marked, not on Stellr', async () => {
     const { db, rpc } = fakeDb()
     await auditMutation({ ...SPEC, tenant: { eventSlug: 'unmirrored' } }, { db, enabled: true })

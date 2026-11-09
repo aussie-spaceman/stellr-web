@@ -5,7 +5,7 @@ import '../styles/tokens.css'
 import '../styles/globals.css'
 
 // deep review PUB-9: last-resort boundary for an error thrown by the ROOT layout
-// itself (which app/(public)/error.tsx cannot catch). It replaces the root
+// itself (which app/(stellr)/(public)/error.tsx cannot catch). It replaces the root
 // layout, so it must render its own <html>/<body>; the global stylesheet is
 // imported above so the brand tokens still apply. Kept deliberately minimal and
 // self-contained — it must render even when something above it is broken.

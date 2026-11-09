@@ -5,10 +5,16 @@ import { respondToInvite } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // POST /api/community/cohorts/respond — a member accepts or declines a pending
 // cohort invite (PRD §11). Body: { cohortId, action: 'accept' | 'decline' }.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.cohort_invite.respond', table: 'cohort_members' }, () => respondToCohortInvite(req))
+}
+
+async function respondToCohortInvite(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -44,5 +50,24 @@ export async function POST(req: Request) {
 
   const ok = await respondToInvite(cohortId, member.id, action === 'accept')
   if (!ok) return NextResponse.json({ error: 'No pending invite found' }, { status: 400 })
+  noteAudit(req, { table: 'mentoring_cohorts', targetId: cohortId, metadata: { accepted: action === 'accept' } })
   return NextResponse.json({ ok: true })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

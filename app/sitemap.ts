@@ -1,11 +1,12 @@
 import type { MetadataRoute } from 'next'
-import { getAllEvents, getAllCampaigns, getAllNewsPosts } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
+import { getAllNewsPosts } from '@/lib/sanity'
 import { LANDING_PAGE_SLUGS } from '@/content/lp'
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 /**
- * Every indexable static route under app/(public).
+ * Every indexable static route under app/(stellr)/(public).
  *
  * `test/sitemap.test.ts` walks the filesystem and fails if a public page.tsx
  * appears here in neither this list nor STATIC_ROUTE_EXCLUSIONS below — the
@@ -80,7 +81,7 @@ export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)
  * a parameterised route with no page.tsx of their own for the static-route
  * guard to find, and adding an audience page is meant to be a config file plus
  * a registry line — a third place to remember would be the thing that goes
- * stale. Indexed deliberately; see app/(public)/lp/[slug]/page.tsx.
+ * stale. Indexed deliberately; see app/(stellr)/(public)/lp/[slug]/page.tsx.
  */
 export const LANDING_PAGE_SITEMAP_PATHS = LANDING_PAGE_SLUGS.map((slug) => `/lp/${slug}`)
 

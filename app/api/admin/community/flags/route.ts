@@ -1,15 +1,18 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
+const auditedOp = new WeakMap<Request, string>()
 
 // GET /api/admin/community/flags — list flags (default: pending only)
 export async function GET(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/flags' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status') ?? 'pending'
@@ -35,14 +38,26 @@ const resolveSchema = z.object({
   hideContent: z.boolean().optional(),
 })
 
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.flag.resolve',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_flags', id: auditedId.get(req) ?? null },
+    metadata: { op: auditedOp.get(req) ?? null },
+  }),
+  resolveFlag,
+)
+
 // PATCH /api/admin/community/flags — resolve or dismiss a flag (FR-COM-07)
-export async function PATCH(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function resolveFlag(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/flags' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const parsed = resolveSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   const { flagId, action, hideContent } = parsed.data
+  auditedId.set(req, flagId)
+  auditedOp.set(req, action)
 
   const admin = await getSignedInMember()
   const db = supabaseServer()

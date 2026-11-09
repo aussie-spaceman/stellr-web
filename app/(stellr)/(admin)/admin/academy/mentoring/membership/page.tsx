@@ -1,0 +1,35 @@
+import { listMentoringTiers, listCohortAccessRows } from '@/lib/mentoring'
+import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
+import { MembershipAccess } from '@/components/admin/mentoring/MembershipAccess'
+import { authz } from '@/lib/authz'
+
+export const metadata = { title: 'Admin · Membership & access' }
+
+export default async function MembershipAccessPage() {
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring/membership' })
+  const [tiers, cohorts] = await Promise.all([listMentoringTiers(), listCohortAccessRows()])
+
+  return (
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
+      <AdminMentoringNav />
+      <div className="min-w-0 flex-1 space-y-2">
+        <h1 className="font-display text-[28px] font-bold text-ink">Membership &amp; access</h1>
+        <p className="max-w-[620px] text-[14.5px] text-content-secondary">
+          Set which membership tiers include free mentoring and how many mentoring credits they grant each year, and
+          review per-cohort access. Prices are in USD, read live from Stripe — edit them in Stripe.
+        </p>
+        <MembershipAccess
+          tiers={tiers.map((t) => ({
+            id: t.id,
+            name: t.name,
+            monthlyPriceCents: t.monthlyPriceCents,
+            includesFreeMentoring: t.includesFreeMentoring,
+            creditsGrant: t.creditsGrant,
+            workshopCreditsGrant: t.workshopCreditsGrant,
+          }))}
+          cohorts={cohorts}
+        />
+      </div>
+    </div>
+  )
+}

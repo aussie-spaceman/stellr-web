@@ -3,7 +3,7 @@ import { Lock, ArrowLeft } from 'lucide-react'
 import { Button } from '@stellr/web-ui'
 import { ThemeDot, AccessBadge } from './badges'
 import { describeAssignedTiers } from '@/lib/tiers'
-import { membershipUpgradeHref } from '@/app/(public)/membership/tier-data'
+import { membershipUpgradeHref } from '@/app/(stellr)/(public)/membership/tier-data'
 import type { SpaceTheme } from '@/lib/spaces'
 
 interface Props {

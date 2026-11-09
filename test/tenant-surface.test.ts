@@ -87,7 +87,7 @@ describe('the tenant surface', () => {
   })
 
   it('starts from what wraps the tree too, which nothing imports', () => {
-    expect(entries).toEqual(expect.arrayContaining(['app/layout.tsx', 'app/not-found.tsx', 'app/global-error.tsx']))
+    expect(entries).toEqual(expect.arrayContaining(['app/%5Ft/[tenant]/layout.tsx', 'app/global-error.tsx', 'app/global-not-found.tsx']))
   })
 
   it('reaches no new social module, table name or Realtime channel', () => {
@@ -157,7 +157,7 @@ describe('the tenant surface', () => {
 })
 
 describe('the check itself', () => {
-  const PAGE = 'app/(flow)/register/page.tsx'
+  const PAGE = 'app/(stellr)/(flow)/register/page.tsx'
 
   it('fires on the chat panel imported by a flow page, and says how it got there', () => {
     const read = fixture({
@@ -222,7 +222,7 @@ describe('the check itself', () => {
   })
 
   it('fires on a new direct import of a module the baseline already lists', () => {
-    const page = 'app/(flow)/register/[slug]/page.tsx'
+    const page = 'app/(stellr)/(flow)/register/[slug]/page.tsx'
     for (const [spec, file] of [
       ['@/lib/space-inheritance', 'lib/space-inheritance.ts'],
       ['@/lib/membership-grants', 'lib/membership-grants.ts'],

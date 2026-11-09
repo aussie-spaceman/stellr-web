@@ -3,7 +3,7 @@ import { TeamProfileForm } from './TeamProfileForm'
 import { EMPTY_ANSWERS, normaliseAnswers } from '@/lib/team-profile/questions'
 
 // The pre-event team profile a student opens from their email
-// (app/(public)/team-profile/[token]). Submitting is a network call, so in
+// (app/(stellr)/(public)/team-profile/[token]). Submitting is a network call, so in
 // Storybook the submit shows the error state.
 const meta: Meta<typeof TeamProfileForm> = {
   title: 'Team profile/Form',

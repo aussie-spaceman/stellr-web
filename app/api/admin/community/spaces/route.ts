@@ -2,9 +2,13 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureSpaceContainer } from '@/lib/container-sync'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 import { slugify } from '@/lib/utils'
 import { assertSpaceDeletable, CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Admin CRUD for community Spaces (Spaces design — list / create / delete).
 // Per-space config (channels, tiers, members, resources, training, announcements,
@@ -14,8 +18,7 @@ const ACCESS = new Set(['open', 'private', 'secret'])
 const THEME = new Set(['space', 'enviro', 'campaign', 'college'])
 
 export async function GET() {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   const { data } = await db
     .from('community_spaces')
@@ -24,9 +27,19 @@ export async function GET() {
   return NextResponse.json({ spaces: data ?? [] })
 }
 
-export async function POST(req: Request) {
-  const { userId, sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.space.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_spaces', id: auditedId.get(req) ?? null },
+  }),
+  createSpace,
+)
+
+async function createSpace(req: Request) {
+  const { userId } = await auth()
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (!b.name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
@@ -56,6 +69,7 @@ export async function POST(req: Request) {
     )
   }
 
+  auditedId.set(req, data.id)
   // Every space starts with a default "general" channel + a sync container.
   await db.from('community_channels').insert({ space_id: data.id, slug: 'general', name: 'General', display_order: 0 })
   await ensureSpaceContainer(db, slug, b.name.trim())
@@ -78,12 +92,22 @@ export async function POST(req: Request) {
   return NextResponse.json({ id: data.id })
 }
 
-export async function PATCH(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.space.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_spaces', id: auditedId.get(req) ?? null },
+  }),
+  updateSpace,
+)
+
+async function updateSpace(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, b.id)
 
   const patch: Record<string, unknown> = {}
   if (b.name !== undefined) patch.name = String(b.name).trim()
@@ -104,11 +128,21 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.space.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_spaces', id: auditedId.get(req) ?? null },
+  }),
+  deleteSpace,
+)
+
+async function deleteSpace(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, b.id)
   const db = supabaseServer()
   // deep review DB-4: refuse the hard delete when it would cascade away posts,
   // chat messages or suspension records (safeguarding communication/moderation

@@ -73,7 +73,7 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 
-vi.mock('@/app/(flow)/register/[slug]/join/[token]/GroupJoinClient', () => ({
+vi.mock('@/app/(stellr)/(flow)/register/[slug]/join/[token]/GroupJoinClient', () => ({
   default: function GroupJoinClient(props: object) {
     return <div data-form="join" data-props={JSON.stringify(props)} />
   },
@@ -116,7 +116,7 @@ beforeEach(() => {
 
 async function page() {
   reads.length = 0
-  const { default: Page } = await import('@/app/(flow)/register/[slug]/join/[token]/page')
+  const { default: Page } = await import('@/app/(stellr)/(flow)/register/[slug]/join/[token]/page')
   const out: ReactNode = await Page({ params: Promise.resolve({ slug: 'nv', token: 'tok' }) })
   return { tree: tree(out), html: renderToStaticMarkup(<>{out}</>), reads: [...reads] }
 }
@@ -180,7 +180,7 @@ describe("Stellr's group join page", () => {
 describe('the shared body, as a tenant page calls it', () => {
   it('reads no prefill for a signed-in member and hands the form none', async () => {
     signedIn()
-    const { groupJoinBody } = await import('@/app/(flow)/register/[slug]/join/[token]/join-body')
+    const { groupJoinBody } = await import('@/app/(stellr)/(flow)/register/[slug]/join/[token]/join-body')
     const html = renderToStaticMarkup(<>{await groupJoinBody({ slug: 'nv', token: 'tok' })}</>)
     expect(reads).not.toContain('getRegistrationPrefill()')
     expect(html).toContain('&quot;prefill&quot;:null')

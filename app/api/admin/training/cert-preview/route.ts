@@ -3,13 +3,13 @@ import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember, signedDownloadUrl } from '@/lib/community'
 import { courseIssuer, type MaterialKind, type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 
 // GET /api/admin/training/cert-preview?moduleId=
 // Admin-only sample certificate for a course, so the admin can verify how the
 // member/course fields land on an uploaded template before going live.
 export async function GET(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/training/cert-preview' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const moduleId = new URL(req.url).searchParams.get('moduleId')
   if (!moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
 

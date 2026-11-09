@@ -1,4 +1,4 @@
-import { individualRegistrationBody } from '@/app/(flow)/register/[slug]/individual/individual-body'
+import { individualRegistrationBody } from '@/app/(stellr)/(flow)/register/[slug]/individual/individual-body'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantEvent } from '@/lib/tenancy/tenant-records'
 

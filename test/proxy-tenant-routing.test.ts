@@ -49,6 +49,7 @@ vi.mock('@/lib/crawlers', () => ({
 }))
 
 import proxy, { config } from '@/proxy'
+import { stellrHostsPattern } from '../next.config.mjs'
 
 const CANARY = '11111111-1111-4111-8111-111111111111'
 const HOST_ROWS = [
@@ -313,6 +314,34 @@ describe('the matcher stays as it was on Stellr hosts', () => {
     }
   })
 
+  // next.config.mjs's fallback rewrite starts from the same list. A Stellr host missing
+  // from it would answer a mistyped URL with the tenant tree's 404 instead of Stellr's.
+  describe('the hosts that keep Stellr’s own 404', () => {
+    const matches = (pattern: string, host: string) => new RegExp(`^${pattern}$`).test(host)
+
+    it('names the same hosts as the matcher', () => {
+      const entry = config.matcher.find((m) => typeof m !== 'string') as { missing: { value: string }[] }
+      expect(stellrHostsPattern({})).toBe(entry.missing[0].value)
+    })
+
+    it('adds the hosts this deployment is built for, exactly', () => {
+      const pattern = stellrHostsPattern({
+        NEXT_PUBLIC_SITE_URL: 'https://www.example-site.test',
+        NEXT_PUBLIC_AUTH_APP_URL: 'http://app.example-site.test:3000/x',
+      })
+      expect(matches(pattern, 'www.stellreducation.org')).toBe(true)
+      expect(matches(pattern, 'www.example-site.test')).toBe(true)
+      expect(matches(pattern, 'app.example-site.test')).toBe(true)
+      for (const host of ['appxexample-site.test', 'a.app.example-site.test', 'canary-academy.localhost', 'evil.org']) {
+        expect(matches(pattern, host), host).toBe(false)
+      }
+    })
+
+    it('ignores a URL it cannot read', () => {
+      expect(stellrHostsPattern({ NEXT_PUBLIC_SITE_URL: 'not a url', NEXT_PUBLIC_AUTH_APP_URL: '' })).toBe(stellrHostsPattern({}))
+    })
+  })
+
   it('runs on a dotted path on a tenant host, except _next and the two bypass routes', () => {
     for (const url of ['/community/x.png', '/community/x.png/members', '/admin/competitions/x.png/check-in', '/register/x.html', '/studio/a.js', '/credentials/a.png']) {
       expect(matchesOn(TENANT, url), url).toBe(true)
@@ -456,7 +485,7 @@ describe('on a tenant host (flag on)', () => {
   it('sends the nonce to a page that renders per request', async () => {
     const res = await hit(TENANT, '/register/x')
     expect(forwarded(res, 'x-nonce')).toBeTruthy()
-    expect(res.headers.get('content-security-policy-report-only')).toContain("'nonce-")
+    expect(res.headers.get('content-security-policy')).toContain(`'nonce-${forwarded(res, 'x-nonce')}'`)
   })
 
   it('never rewrites the platform owner host into the tree', async () => {
@@ -477,6 +506,45 @@ describe('on a tenant host (flag on)', () => {
     const req = new NextRequest('https://www.stellreducation.org/', { headers: { host: 'bad_host!' } })
     expect((await proxy(req, event)).status).toBe(404)
     expect(state.clerkRuns).toBe(0)
+  })
+})
+
+// The S5 gate "0 community routes on tenant hosts" (B9), through the proxy itself. The
+// control is the same URLs on Stellr's app host, where this session reaches each one.
+describe('community and home are unreachable on tenant hosts (flag on)', () => {
+  beforeEach(flagOn)
+
+  const COMMUNITY_AND_HOME = Object.keys(ROUTE_MANIFEST).filter((f) =>
+    /^app\/(?:\(stellr\)\/\(member\)\/community\/|api\/community\/|\(stellr\)\/\(member\)\/home\/)/.test(f),
+  )
+
+  it('covers all 80 entries, as pages and as APIs', () => {
+    expect(COMMUNITY_AND_HOME).toHaveLength(80)
+    expect(COMMUNITY_AND_HOME.filter((f) => f.endsWith('/page.tsx'))).toHaveLength(40)
+    expect(COMMUNITY_AND_HOME.filter((f) => /\/route\.tsx?$/.test(f))).toHaveLength(40)
+  })
+
+  it.each(COMMUNITY_AND_HOME)('%s', async (file) => {
+    const url = sampleUrl(file)
+    const denied = await hit(TENANT, url)
+    expect(denied.status, `tenant host ${url}`).toBe(404)
+    expect(rewritten(denied)).toBeNull()
+    expect(state.clerkRuns).toBe(0)
+
+    // An unknown host in the zone fails closed, and naming a real host does not help.
+    const unknown = await hit('nobody.localhost', url, {
+      'x-forwarded-host': TENANT,
+      forwarded: `host=${TENANT}`,
+      [TENANT_ID_HEADER]: CANARY,
+      [TENANT_SLUG_HEADER]: 'canary-academy',
+    })
+    expect(unknown.status, `unknown host ${url}`).toBe(404)
+    expect(rewritten(unknown)).toBeNull()
+
+    // The control: if this were also a 404, the assertions above would prove nothing.
+    const stellr = await hit('app.stellreducation.org', url)
+    expect(stellr.status, `Stellr host ${url}`).toBe(200)
+    expect(stellr.headers.get('x-middleware-next'), `Stellr host ${url}`).toBe('1')
   })
 })
 
@@ -633,7 +701,7 @@ describe('requestTenant() runs only on routes the proxy matches', () => {
       .map((f) => `app/${f.split(path.sep).join('/')}`)
       .filter((f) => /\.(tsx?|mts|m?js)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith('app/api/'))
     // Layouts, not-found files and the tenant tree count too, not only manifest routes.
-    expect(entries).toContain('app/layout.tsx')
+    expect(entries).toContain('app/(stellr)/layout.tsx')
     expect(entries).toContain('app/%5Ft/[tenant]/layout.tsx')
     expect(entries.length).toBeGreaterThan(150)
 

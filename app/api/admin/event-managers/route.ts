@@ -1,23 +1,39 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
 import { actorFromAuth } from '@/lib/activity-log'
 import { assignEventManager, removeEventManager, expiryTimestampToDate, isAssignmentActive } from '@/lib/event-manager'
 
 const ROUTE = '/api/admin/event-managers'
 
 // Admin-only management of Event Manager → event assignments, from an event's
-// Overview panel. Event Managers cannot manage assignments, only admins.
+// Overview panel. Event Managers cannot manage assignments, only admins. Who holds an
+// event is a Stellr admin's call until C21 settles who may grant it in a tenant, so this
+// keeps the admin guard and stays stellr_only.
 //
 // POST and DELETE go through lib/event-manager, the same as the member page
 // (Classification → Event Manager), so the clearance gate, expiry, Clerk role,
-// audit entry and email are identical whichever screen an admin uses.
+// activity log and email are identical whichever screen an admin uses.
+
+// What this request acted on, which withAudit's spec cannot read for itself. The target is
+// their Clerk id: an email typed into the request stays out of the event.
+const audited = new WeakMap<Request, { userId: string | null; eventSlug: string; clerkUserId: string }>()
+
+function eventFor(req: Request) {
+  const a = audited.get(req)
+  return {
+    actor: a ? { userId: a.userId } : { session: true as const },
+    tenant: { stellr: true as const },
+    target: { table: 'event_manager_assignments', id: a?.clerkUserId ?? null },
+    metadata: { eventSlug: a?.eventSlug ?? null },
+  }
+}
 
 // GET /api/admin/event-managers?event_slug=... — list assignments (optionally per event)
 export async function GET(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const eventSlug = new URL(req.url).searchParams.get('event_slug')
   const db = supabaseServer()
@@ -44,9 +60,11 @@ export async function GET(req: Request) {
 
 // POST /api/admin/event-managers — assign a manager
 // Body: { event_slug, expires_on? } plus either { clerk_user_id } or { email } (resolved via Clerk).
-export async function POST(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(({ args: [req] }: { args: [Request] }) => ({ action: 'event_manager.assignment.create', ...eventFor(req) }), assignManager)
+
+async function assignManager(req: Request) {
+  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { userId } = await auth()
 
   const body = await req.json().catch(() => null)
   let clerkUserId = typeof body?.clerk_user_id === 'string' ? body.clerk_user_id.trim() : ''
@@ -65,6 +83,7 @@ export async function POST(req: Request) {
     }
     clerkUserId = users[0].id
   }
+  audited.set(req, { userId, eventSlug, clerkUserId })
 
   const result = await assignEventManager(supabaseServer(), {
     member: { clerkUserId },
@@ -81,9 +100,11 @@ export async function POST(req: Request) {
 }
 
 // DELETE /api/admin/event-managers — remove an assignment { clerk_user_id, event_slug }
-export async function DELETE(req: Request) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const DELETE = withAudit(({ args: [req] }: { args: [Request] }) => ({ action: 'event_manager.assignment.delete', ...eventFor(req) }), removeManager)
+
+async function removeManager(req: Request) {
+  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { userId } = await auth()
 
   const body = await req.json().catch(() => null)
   const clerkUserId = typeof body?.clerk_user_id === 'string' ? body.clerk_user_id.trim() : ''
@@ -91,6 +112,7 @@ export async function DELETE(req: Request) {
   if (!clerkUserId || !eventSlug) {
     return NextResponse.json({ error: 'clerk_user_id and event_slug are required' }, { status: 400 })
   }
+  audited.set(req, { userId, eventSlug, clerkUserId })
 
   const result = await removeEventManager(supabaseServer(), { clerkUserId, eventSlug, reason: 'admin', actor: await actorFromAuth(), routePath: ROUTE })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })

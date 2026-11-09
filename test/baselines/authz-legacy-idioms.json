@@ -20,183 +20,135 @@
     "roleTableRead"
   ],
   "totals": {
-    "files": 218,
-    "sites": 309,
+    "files": 138,
+    "sites": 198,
     "byIdiom": {
       "STAFF_CLERK_ROLES": 1,
       "adminName": 5,
       "canManageStoreCatalog": 14,
-      "clerkRoleRead": 24,
+      "clerkRoleRead": 12,
       "currentUserHasScope": 3,
-      "currentUserIsAdmin": 45,
+      "currentUserIsAdmin": 17,
       "hasAdminPortalAccess": 1,
-      "isAdminClaims": 96,
+      "isAdminClaims": 77,
       "isEventManagerClaims": 2,
       "isStaffRole": 1,
       "pageRequireAdmin": 1,
-      "requireAdminPage": 33,
-      "requireEventAccess": 67,
+      "requireAdminPage": 17,
+      "requireEventAccess": 36,
       "requireScholarshipAdmin": 7,
-      "requireSurveyAdmin": 4,
-      "roleTableRead": 5
+      "requireSurveyAdmin": 2,
+      "roleTableRead": 2
     }
   },
   "files": {
-    "app/(admin)/admin/academy/coaching/[id]/page.tsx": {
+    "app/(stellr)/(admin)/admin/activity-log/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/academy/coaching/access/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/coaching/calendar/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/coaching/new/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/coaching/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/coaching/requests/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/mentoring/[id]/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/mentoring/calendar/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/mentoring/membership/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/mentoring/new/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/mentoring/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/academy/training/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/activity-log/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/campaigns/[slug]/page.tsx": {
+    "app/(stellr)/(admin)/admin/campaigns/[slug]/page.tsx": {
       "requireEventAccess": 1
     },
-    "app/(admin)/admin/community/moderation/page.tsx": {
+    "app/(stellr)/(admin)/admin/competitions/[slug]/check-in/page.tsx": {
+      "requireEventAccess": 1
+    },
+    "app/(stellr)/(admin)/admin/competitions/[slug]/check-in/poster/page.tsx": {
+      "requireEventAccess": 1
+    },
+    "app/(stellr)/(admin)/admin/competitions/[slug]/page.tsx": {
+      "requireEventAccess": 1
+    },
+    "app/(stellr)/(admin)/admin/competitions/artwork/page.tsx": {
+      "requireEventAccess": 1
+    },
+    "app/(stellr)/(admin)/admin/competitions/check-in-banner/page.tsx": {
+      "requireEventAccess": 1
+    },
+    "app/(stellr)/(admin)/admin/competitions/page.tsx": {
+      "requireEventAccess": 1
+    },
+    "app/(stellr)/(admin)/admin/compliance/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/community/resources/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/community/spaces/[id]/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/community/spaces/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/competitions/[slug]/check-in/page.tsx": {
-      "requireEventAccess": 1
-    },
-    "app/(admin)/admin/competitions/[slug]/check-in/poster/page.tsx": {
-      "requireEventAccess": 1
-    },
-    "app/(admin)/admin/competitions/[slug]/page.tsx": {
-      "requireEventAccess": 1
-    },
-    "app/(admin)/admin/competitions/artwork/page.tsx": {
-      "requireEventAccess": 1
-    },
-    "app/(admin)/admin/competitions/check-in-banner/page.tsx": {
-      "requireEventAccess": 1
-    },
-    "app/(admin)/admin/competitions/page.tsx": {
-      "requireEventAccess": 1
-    },
-    "app/(admin)/admin/compliance/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(admin)/admin/docusigns/page.tsx": {
+    "app/(stellr)/(admin)/admin/docusigns/page.tsx": {
       "clerkRoleRead": 1
     },
-    "app/(admin)/admin/docusigns/templates/edit/page.tsx": {
+    "app/(stellr)/(admin)/admin/docusigns/templates/edit/page.tsx": {
       "clerkRoleRead": 1
     },
-    "app/(admin)/admin/docusigns/templates/page.tsx": {
+    "app/(stellr)/(admin)/admin/docusigns/templates/page.tsx": {
       "clerkRoleRead": 1
     },
-    "app/(admin)/admin/email/page.tsx": {
+    "app/(stellr)/(admin)/admin/email/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/media/page.tsx": {
+    "app/(stellr)/(admin)/admin/media/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(admin)/admin/members/[id]/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/[id]/page.tsx": {
       "isAdminClaims": 1,
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/members/[id]/surveys/[responseId]/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/[id]/surveys/[responseId]/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(admin)/admin/members/[id]/view-as/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/[id]/view-as/page.tsx": {
       "pageRequireAdmin": 1
     },
-    "app/(admin)/admin/members/access/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/access/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/members/new/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/new/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/members/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/members/volunteers/page.tsx": {
+    "app/(stellr)/(admin)/admin/members/volunteers/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/page.tsx": {
+    "app/(stellr)/(admin)/admin/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/privacy-requests/page.tsx": {
+    "app/(stellr)/(admin)/admin/privacy-requests/page.tsx": {
       "clerkRoleRead": 1
     },
-    "app/(admin)/admin/scholarships/[id]/page.tsx": {
+    "app/(stellr)/(admin)/admin/scholarships/[id]/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(admin)/admin/scholarships/page.tsx": {
+    "app/(stellr)/(admin)/admin/scholarships/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(admin)/admin/schools/[id]/page.tsx": {
+    "app/(stellr)/(admin)/admin/schools/[id]/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/schools/page.tsx": {
+    "app/(stellr)/(admin)/admin/schools/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/staff/page.tsx": {
+    "app/(stellr)/(admin)/admin/staff/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/store/[id]/page.tsx": {
+    "app/(stellr)/(admin)/admin/store/[id]/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/store/discounts/page.tsx": {
+    "app/(stellr)/(admin)/admin/store/discounts/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/store/new/page.tsx": {
+    "app/(stellr)/(admin)/admin/store/new/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/store/page.tsx": {
+    "app/(stellr)/(admin)/admin/store/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(admin)/admin/surveys/page.tsx": {
+    "app/(stellr)/(admin)/admin/surveys/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(admin)/admin/surveys/questions/page.tsx": {
+    "app/(stellr)/(admin)/admin/surveys/questions/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(admin)/admin/surveys/questions/preview/page.tsx": {
+    "app/(stellr)/(admin)/admin/surveys/questions/preview/page.tsx": {
       "isAdminClaims": 1
     },
-    "app/(member)/layout.tsx": {
+    "app/(stellr)/(member)/layout.tsx": {
       "isAdminClaims": 1
     },
     "app/api/admin/access/conflicts/route.ts": {
@@ -226,9 +178,6 @@
     "app/api/admin/access/relations/route.ts": {
       "isAdminClaims": 2
     },
-    "app/api/admin/agreements/[id]/correct-recipient/route.ts": {
-      "requireEventAccess": 1
-    },
     "app/api/admin/artwork-defaults/[theme]/badge-templates/preview/route.ts": {
       "currentUserIsAdmin": 1
     },
@@ -241,80 +190,8 @@
     "app/api/admin/artwork-defaults/[theme]/certificate-templates/route.ts": {
       "currentUserIsAdmin": 3
     },
-    "app/api/admin/campaigns/[slug]/email/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/coaching/requests/[id]/decline/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/coaching/requests/[id]/match/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/coaching/route.ts": {
-      "isAdminClaims": 2
-    },
-    "app/api/admin/community/coaching/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/community/flags/route.ts": {
-      "isAdminClaims": 2
-    },
-    "app/api/admin/community/gates/route.ts": {
-      "currentUserIsAdmin": 2
-    },
-    "app/api/admin/community/mentoring/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/community/resources/route.ts": {
-      "clerkRoleRead": 4
-    },
-    "app/api/admin/community/resources/search/route.ts": {
-      "clerkRoleRead": 1
-    },
-    "app/api/admin/community/spaces/[id]/members/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/community/spaces/[id]/resources/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/community/spaces/[id]/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/community/spaces/route.ts": {
-      "isAdminClaims": 4
-    },
-    "app/api/admin/community/spaces/sources/search/route.ts": {
-      "clerkRoleRead": 1
-    },
-    "app/api/admin/community/training/cert-template/route.ts": {
-      "currentUserIsAdmin": 2
-    },
-    "app/api/admin/community/training/items/route.ts": {
-      "currentUserIsAdmin": 3
-    },
-    "app/api/admin/community/training/modules/route.ts": {
-      "currentUserIsAdmin": 3
-    },
-    "app/api/admin/community/training/recording/route.ts": {
-      "currentUserIsAdmin": 3
-    },
-    "app/api/admin/community/training/resources/route.ts": {
-      "currentUserIsAdmin": 3
-    },
-    "app/api/admin/community/training/sections/route.ts": {
-      "currentUserIsAdmin": 3
-    },
     "app/api/admin/compliance/sync/route.ts": {
       "isAdminClaims": 1
-    },
-    "app/api/admin/containers/[id]/contents/route.ts": {
-      "clerkRoleRead": 1
-    },
-    "app/api/admin/credentials/[id]/resend/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/credentials/[id]/revoke/route.ts": {
-      "requireEventAccess": 1
     },
     "app/api/admin/deletion-requests/[id]/route.ts": {
       "isAdminClaims": 1
@@ -330,15 +207,6 @@
     },
     "app/api/admin/digest/send/route.ts": {
       "currentUserIsAdmin": 1
-    },
-    "app/api/admin/docusigns/[id]/credential-sharing/route.ts": {
-      "clerkRoleRead": 1
-    },
-    "app/api/admin/docusigns/[id]/download/route.ts": {
-      "clerkRoleRead": 1
-    },
-    "app/api/admin/docusigns/[id]/resend/route.ts": {
-      "clerkRoleRead": 1
     },
     "app/api/admin/docusigns/route.ts": {
       "clerkRoleRead": 1
@@ -360,12 +228,6 @@
     },
     "app/api/admin/email/templates/route.ts": {
       "isAdminClaims": 2
-    },
-    "app/api/admin/entitlements/allocations/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/entitlements/discounts/route.ts": {
-      "isAdminClaims": 1
     },
     "app/api/admin/esign/maintenance/route.ts": {
       "isAdminClaims": 1
@@ -397,20 +259,11 @@
     "app/api/admin/esign/templates/upload/route.ts": {
       "adminName": 1
     },
-    "app/api/admin/event-managers/route.ts": {
-      "isAdminClaims": 3
-    },
-    "app/api/admin/event-participations/[id]/route.ts": {
-      "clerkRoleRead": 1
-    },
     "app/api/admin/events/[slug]/awards/issue/route.ts": {
       "requireEventAccess": 1
     },
     "app/api/admin/events/[slug]/awards/route.ts": {
       "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/background-reports/route.ts": {
-      "requireEventAccess": 1
     },
     "app/api/admin/events/[slug]/badge-templates/preview/route.ts": {
       "requireEventAccess": 1
@@ -439,58 +292,10 @@
     "app/api/admin/events/[slug]/credentials/route.ts": {
       "requireEventAccess": 3
     },
-    "app/api/admin/events/[slug]/docusign-reissue/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/emails/[id]/attachments/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/emails/[id]/catch-up/route.ts": {
-      "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/emails/[id]/preview/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/emails/[id]/route.ts": {
-      "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/emails/[id]/send/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/emails/route.ts": {
-      "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/export/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/invoice-paid/route.ts": {
-      "requireEventAccess": 1
-    },
     "app/api/admin/events/[slug]/merch/commit/route.ts": {
       "requireEventAccess": 2
     },
     "app/api/admin/events/[slug]/offerings/route.ts": {
-      "requireEventAccess": 3
-    },
-    "app/api/admin/events/[slug]/participants/[pid]/guardian/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/payment-link/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/pd-credentials/route.ts": {
-      "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/remind/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/survey/route.ts": {
-      "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/team-profiles/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/events/[slug]/volunteers/route.ts": {
       "requireEventAccess": 3
     },
     "app/api/admin/events/slug-guard/route.ts": {
@@ -498,9 +303,6 @@
     },
     "app/api/admin/health/integrations/route.ts": {
       "clerkRoleRead": 1
-    },
-    "app/api/admin/media/do-not-use/route.ts": {
-      "requireSurveyAdmin": 1
     },
     "app/api/admin/members/[id]/access/route.ts": {
       "isAdminClaims": 1
@@ -559,9 +361,6 @@
     "app/api/admin/members/search/route.ts": {
       "currentUserIsAdmin": 1
     },
-    "app/api/admin/membership/rules/route.ts": {
-      "clerkRoleRead": 1
-    },
     "app/api/admin/pd-certificate/preview/route.ts": {
       "currentUserIsAdmin": 1
     },
@@ -570,18 +369,6 @@
     },
     "app/api/admin/privacy-requests/[id]/route.ts": {
       "isAdminClaims": 1
-    },
-    "app/api/admin/refunds/preview/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/registrations/[id]/finish-setup/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/registrations/[id]/invoice/route.ts": {
-      "requireEventAccess": 1
-    },
-    "app/api/admin/registrations/[id]/participants/route.ts": {
-      "requireEventAccess": 1
     },
     "app/api/admin/scholarships/[id]/cancel/route.ts": {
       "requireScholarshipAdmin": 1
@@ -631,29 +418,8 @@
     "app/api/admin/surveys/export/route.ts": {
       "requireSurveyAdmin": 1
     },
-    "app/api/admin/surveys/responses/[id]/withdraw-quote/route.ts": {
-      "requireSurveyAdmin": 1
-    },
     "app/api/admin/surveys/testimonials/route.ts": {
       "requireSurveyAdmin": 1
-    },
-    "app/api/admin/training/assignments/route.ts": {
-      "currentUserIsAdmin": 3
-    },
-    "app/api/admin/training/bulk-notify/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/training/cert-preview/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/training/live-room/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/training/tracking/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/cron/weekly-digest/route.ts": {
-      "roleTableRead": 1
     },
     "app/api/store/returns/route.ts": {
       "canManageStoreCatalog": 1
@@ -681,14 +447,8 @@
       "requireEventAccess": 1,
       "roleTableRead": 1
     },
-    "lib/event-emails/audiences.ts": {
-      "roleTableRead": 1
-    },
     "lib/member-session.ts": {
       "isAdminClaims": 1
-    },
-    "lib/notify.ts": {
-      "roleTableRead": 1
     },
     "lib/scholarship-admin.ts": {
       "isAdminClaims": 1

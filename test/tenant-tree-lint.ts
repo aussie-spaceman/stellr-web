@@ -114,7 +114,7 @@ export function pageProblems(file: string, src: string, opts: { recordless?: boo
       if (from === TENANT_RECORDS && !recordCall) recordCall = node
     }
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) firstRender = Math.min(firstRender, node.getStart())
-    if (ts.isIdentifier(node) && imports.get(node.text)?.startsWith('@/app/(flow)/')) firstRender = Math.min(firstRender, node.getStart())
+    if (ts.isIdentifier(node) && imports.get(node.text)?.startsWith('@/app/(stellr)/(flow)/')) firstRender = Math.min(firstRender, node.getStart())
   })
 
   if (!tenantCall) return [...out, 'never calls tenantFromParams(params)']

@@ -3,8 +3,9 @@ import { startTenantRun, type CronRun } from './cron-runs'
 import { STELLR_TENANT_ID } from './tenancy/constants'
 import { makeScope, type ScopeContext } from './tenancy/scope-context'
 
-// The per-tenant cron runner (S5 B3). No cron calls it yet; B13 and B14 move the
-// per-tenant crons (lib/cron-scope.ts) onto it.
+// The per-tenant cron runner (S5 B3). B13 moved surveys, team-profiles and
+// survey-retention onto it; B14 moves the rest of the per-tenant crons
+// (lib/cron-scope.ts).
 //
 // A cron partitions the work list it already fetched and hands the runner the
 // tenant ids that have work. It is not a loop over the tenants table, so cost

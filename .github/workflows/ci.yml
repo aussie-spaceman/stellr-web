@@ -976,7 +976,8 @@ jobs:
     needs: [verify, changes]
     if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
     continue-on-error: true
-    timeout-minutes: 15
+    # Holds room for a browser install from a slow mirror: see the action.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -987,9 +988,12 @@ jobs:
 
       - run: npm ci
 
+      - uses: ./.github/actions/playwright-browsers
+        with:
+          browsers: chromium
+
       - name: Build against the stub
         run: node e2e/tenancy/build-harness.mjs
 
-      # Raw HTTP only, so no browser to install.
       - name: Flag off and on, compared
         run: npx playwright test -c playwright.tenant-hosts.config.ts

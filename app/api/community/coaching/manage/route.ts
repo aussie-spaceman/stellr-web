@@ -11,6 +11,10 @@ import {
 } from '@/lib/sessions'
 import { assignCohortAction, attachCohortResource, detachCohortResource, searchAttachableResources } from '@/lib/mentoring'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, knownOperation, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
+
+const WORKSHOP_OPERATIONS = ['linkTraining', 'unlinkTraining', 'scheduleSeries', 'rescheduleSession', 'cancelSession', 'assignAction', 'attachResource', 'detachResource'] as const
 
 // GET — resource-library search for the coach's "Assign material" picker.
 export async function GET(req: Request) {
@@ -29,6 +33,10 @@ export async function GET(req: Request) {
 // schedule sessions, assign training material, assign actions to the member.
 // Body: { workshopId, action, ...payload }. Coach-gated by isCohortMentor.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.coaching.manage', table: 'mentoring_cohorts' }, () => manageWorkshop(req))
+}
+
+async function manageWorkshop(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -47,6 +55,7 @@ export async function POST(req: Request) {
   if (!member.isAdmin && !(await isCohortMentor(workshopId, member.id))) {
     return NextResponse.json({ error: 'Only the workshop coach can manage it.' }, { status: 403 })
   }
+  noteAudit(req, { targetId: workshopId, metadata: { operation: knownOperation(b.action, WORKSHOP_OPERATIONS) } })
 
   switch (b.action) {
     case 'linkTraining': {
@@ -125,4 +134,22 @@ async function coachOf(workshopId: string): Promise<string | null> {
   const db = supabaseServer()
   const { data } = await db.from('mentoring_cohorts').select('mentor_member_id').eq('id', workshopId).maybeSingle()
   return (data?.mentor_member_id as string | null) ?? null
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

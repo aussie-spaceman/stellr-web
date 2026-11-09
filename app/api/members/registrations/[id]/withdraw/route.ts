@@ -8,6 +8,8 @@ import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { logActivity } from '@/lib/activity-log'
 import { formatMoney } from '@/lib/group-billing'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // A member withdraws their own individual registration (29 Oct 2026).
 //   GET  → what withdrawing would refund, for the confirm dialog.
@@ -61,11 +63,16 @@ async function ownRegistration(db: Db, registrationId: string): Promise<Owned | 
   }
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return audited(req, { action: 'member.registration.withdraw_preview', table: 'registrations' }, () => previewWithdrawal(req, ctx))
+}
+
+async function previewWithdrawal(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
   const owned = await ownRegistration(db, id)
   if (owned instanceof NextResponse) return owned
+  noteAudit(req, { targetId: id })
 
   const p = await previewRefund(owned.participantId)
   const refundCents = p.options.cash?.cents ?? 0
@@ -79,7 +86,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({ eventTitle: owned.eventTitle, refundCents, currency: p.currency, refund })
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return audited(req, { action: 'member.registration.withdraw', table: 'registrations' }, () => withdraw(req, ctx))
+}
+
+async function withdraw(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — see lib/impersonation.
   const impersonationBlock = await assertNotImpersonating()
@@ -89,6 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const db = supabaseServer()
   const owned = await ownRegistration(db, id)
   if (owned instanceof NextResponse) return owned
+  noteAudit(req, { targetId: id })
   const body = await req.json().catch(() => null)
   const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
 
@@ -141,4 +153,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({
     message: ['You’ve withdrawn from this event. Your Stellr account stays, so we can let you know about future events.', refundLine].filter(Boolean).join(' '),
   })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

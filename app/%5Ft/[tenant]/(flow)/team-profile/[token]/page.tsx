@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import TeamProfilePage from '@/app/(flow)/team-profile/[token]/page'
+import TeamProfilePage from '@/app/(stellr)/(flow)/team-profile/[token]/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantTeamProfile } from '@/lib/tenancy/tenant-records'
 

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { requireSurveyAdmin } from '@/lib/survey/admin-auth'
+import { currentTenantId, requireTenantStaff } from '@/lib/authz'
 import { toCsv } from '@/lib/csv'
 import { mediaDoNotUseList, mediaListRows } from '@/lib/survey/media'
+import { enforcedTenantFilter } from '@/lib/tenancy/load-scoped'
+import { isStellrScope, tenantWideScope } from '@/lib/tenancy/scope-context'
+
+const ROUTE = '/api/admin/media/do-not-use'
 
 // GET /api/admin/media/do-not-use?event=<slug>&show=all
 // The media do-not-use list as CSV (privacy runbook Part C): everyone whose
@@ -11,12 +15,18 @@ import { mediaDoNotUseList, mediaListRows } from '@/lib/survey/media'
 export const maxDuration = 60
 
 export async function GET(req: Request) {
-  const gate = await requireSurveyAdmin()
-  if (!gate.ok) return gate.response
+  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  if (!admin.ok) return NextResponse.json({ error: admin.status === 401 ? 'Unauthorised' : 'Admins only' }, { status: admin.status })
   const params = new URL(req.url).searchParams
   const eventSlug = params.get('event') || null
   const includeOk = params.get('show') === 'all'
-  const { rows } = await mediaDoNotUseList(supabaseServer(), { eventSlug, includeOk })
+  const scope = tenantWideScope(admin.tenantId, 'tenant_admin')
+  const { rows } = await mediaDoNotUseList(supabaseServer(), {
+    eventSlug,
+    includeOk,
+    tenant: enforcedTenantFilter(scope, 'registrations'),
+    skipMemberOnly: !isStellrScope(scope),
+  })
   const name = `media-do-not-use${eventSlug ? `-${eventSlug}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`
   return new NextResponse(toCsv(mediaListRows(rows)), {
     headers: {

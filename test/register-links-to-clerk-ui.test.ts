@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 // in a browser on 6 Nov 2026 on the sign-in links and the links to /account. Those
 // links must be plain <a>, which loads the page afresh.
 
-const ROOTS = ['app/(flow)/register', 'app/%5Ft/[tenant]/(flow)/register', 'components/forms', 'components/registration']
+const ROOTS = ['app/(stellr)/(flow)/register', 'app/%5Ft/[tenant]/(flow)/register', 'components/forms', 'components/registration']
 
 /** Where Clerk's UI renders: its sign-in and sign-up cards, and the member and admin avatars. */
 const NEEDS_CLERK_UI =

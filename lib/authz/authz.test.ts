@@ -87,6 +87,8 @@ describe('defaults and stubs', () => {
         'isViewAsTargetStaff',
         'page',
         'requireEventAccess',
+        'requireEventStaff',
+        'requireEventRoute',
         'requireStellrAdmin',
         'requireTenantStaff',
         'targetHoldsStaffRow',

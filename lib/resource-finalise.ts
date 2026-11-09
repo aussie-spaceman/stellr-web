@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { isPdf } from '@/lib/watermark/pdf'
 import { stampPdfSandboxed } from '@/lib/pdf-sandbox'
 import { PDF_BUSY, PDF_UNPROCESSABLE } from '@/lib/pdf-page-count'
@@ -68,6 +69,7 @@ export async function finaliseStoredUpload(args: {
       uploaded_by: args.uploadedBy,
       ...(args.contentHash ? { content_hash: args.contentHash } : {}),
       ...(args.fromChat === undefined ? {} : { from_chat: args.fromChat }),
+      tenant_id: STELLR_TENANT_ID,
     })
     .select('id')
     .single()

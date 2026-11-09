@@ -1,14 +1,28 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Admin: manage the sections (lesson groups) of a training module (FR-COM-10).
 //   POST   (JSON) create a section:  { moduleId, title, displayOrder?, dripDays? }
 //   PATCH  (JSON) rename/reorder:    { id, title?, displayOrder?, dripDays? }
 //   DELETE (?id=) remove a section — its lessons fall back to ungrouped (section_id NULL).
 
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.section.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_sections', id: auditedId.get(req) ?? null },
+  }),
+  createSection,
+)
+
+async function createSection(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/sections' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const moduleId = (body.moduleId as string | undefined)?.trim()
   const title = (body.title as string | undefined)?.trim()
@@ -32,14 +46,26 @@ export async function POST(req: Request) {
     console.error('[training] section create error:', error)
     return NextResponse.json({ error: 'Could not create section' }, { status: 500 })
   }
+  auditedId.set(req, data.id)
   return NextResponse.json({ id: data.id })
 }
 
-export async function PATCH(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.section.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_sections', id: auditedId.get(req) ?? null },
+  }),
+  updateSection,
+)
+
+async function updateSection(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/sections' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const { id } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const patch: Record<string, unknown> = {}
   if (typeof body.title === 'string') patch.title = body.title.trim()
@@ -56,10 +82,21 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.section.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_sections', id: auditedId.get(req) ?? null },
+  }),
+  deleteSection,
+)
+
+async function deleteSection(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/sections' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const db = supabaseServer()
   const { error } = await db.from('training_sections').delete().eq('id', id)

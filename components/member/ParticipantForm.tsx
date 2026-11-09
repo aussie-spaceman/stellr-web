@@ -168,7 +168,9 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel, cr
     }
 
     const data = await res.json().catch(() => ({}))
-    onSaved((data as { billing?: { message?: string | null } }).billing?.message ?? null)
+    const saved = data as { billing?: { message?: string | null }; consent?: { message?: string | null } }
+    const messages = [saved.billing?.message, saved.consent?.message].filter(Boolean)
+    onSaved(messages.length ? messages.join(' ') : null)
   }
 
   return (

@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Webhook } from 'svix'
 import { fakeSupabase } from '@/test/fake-supabase'
 
-const { notify, db } = vi.hoisted(() => ({ notify: vi.fn(async () => {}), db: { current: null as unknown } }))
-vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: notify }))
+const { announce, db } = vi.hoisted(() => ({ announce: vi.fn(async () => 1), db: { current: null as unknown } }))
+// Who is told, and what they see, is lib/esign/bounce-notices.ts (its own tests).
+vi.mock('@/lib/esign/bounce-notices', () => ({ announceBounces: announce }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => db.current }))
 
 import { handleResendEvent } from './bounces'
@@ -26,17 +27,16 @@ function setup() {
 beforeEach(() => vi.clearAllMocks())
 
 describe('handleResendEvent', () => {
-  it('marks every form the bounced email carried, and tells the admins once', async () => {
+  it('marks every form the bounced email carried, and announces each form once', async () => {
     const fake = setup()
     const out = await handleResendEvent(fake.client, { type: 'email.bounced', data: { email_id: 're_bundle', bounce: { message: 'Mailbox does not exist' } } })
     expect(out).toEqual({ bounced: 2 })
     const rows = fake.table('agreement_recipients')
     expect(rows.filter((r) => r.status === 'autoresponded').map((r) => r.id)).toEqual(['r1', 'r2'])
     expect(rows[0].invite_error).toBe('Bounced: Mailbox does not exist')
-    expect(notify).toHaveBeenCalledTimes(1)
-    const body = (notify.mock.calls[0] as unknown as [{ body: string }])[0].body
-    expect(body).toContain('2 forms for Luke Lee, CO SDC')
-    expect(body).not.toContain('pat@example.test') // masked
+    // One notice per form: each sibling's form has its own group and other signer.
+    expect(announce.mock.calls.map((c) => (c as unknown[])[1])).toEqual(['env-1', 'env-2'])
+    expect(announce).toHaveBeenCalledWith(fake.client, 'env-1', { kind: 'bounced' })
   })
 
   it('ignores other events, other emails, and signers who already signed', async () => {
@@ -44,7 +44,7 @@ describe('handleResendEvent', () => {
     expect(await handleResendEvent(fake.client, { type: 'email.delivered', data: { email_id: 're_bundle' } })).toEqual({ bounced: 0 })
     expect(await handleResendEvent(fake.client, { type: 'email.bounced', data: { email_id: 're_paylink' } })).toEqual({ bounced: 0 })
     expect(await handleResendEvent(fake.client, { type: 'email.bounced', data: { email_id: 're_done' } })).toEqual({ bounced: 0 })
-    expect(notify).not.toHaveBeenCalled()
+    expect(announce).not.toHaveBeenCalled()
   })
 })
 

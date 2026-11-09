@@ -2,9 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
-const { sendEmail, notifyCommunityAdmins } = vi.hoisted(() => ({ sendEmail: vi.fn(), notifyCommunityAdmins: vi.fn(async () => {}) }))
+const { sendEmail, announceBounces } = vi.hoisted(() => ({ sendEmail: vi.fn(), announceBounces: vi.fn(async () => 1) }))
 vi.mock('@/lib/email', async (orig) => ({ ...(await orig<typeof import('@/lib/email')>()), sendEmail }))
-vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins }))
+vi.mock('@/lib/esign/bounce-notices', () => ({ announceBounces }))
 
 import { EmailSendError } from '@/lib/email'
 import { batchInvites, sendInvites } from './outbox'
@@ -31,7 +31,7 @@ beforeEach(() => {
   vi.stubEnv('ESIGN_TOKEN_SECRET', 'k'.repeat(48))
   sendEmail.mockReset()
   sendEmail.mockResolvedValue({ id: 're_1' })
-  notifyCommunityAdmins.mockClear()
+  announceBounces.mockClear()
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -67,7 +67,7 @@ describe('sendInvites', () => {
 
   // Review finding: a suppressed send came back { id: null, suppressed: true }
   // and the outbox recorded it as sent, so the roster said Sent for good.
-  it('treats a suppressed send as not sent: Email Bounced on the roster, staff told', async () => {
+  it('treats a suppressed send as not sent: Email Bounced on the roster, announced like a bounce', async () => {
     const db = setup(5)
     sendEmail.mockResolvedValueOnce({ id: null, suppressed: true })
     const rows = db.table('agreement_recipients')
@@ -75,7 +75,8 @@ describe('sendInvites', () => {
     expect(result).toEqual({ sent: 0, deferred: 0, failed: 1 })
     expect(rows[0]).toMatchObject({ status: 'autoresponded', invite_email_id: null })
     expect(rows[0].invite_error).toMatch(/suppression list/i)
-    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    expect(announceBounces).toHaveBeenCalledTimes(1)
+    expect(announceBounces).toHaveBeenCalledWith(db.client, 'env-1', { kind: 'suppressed' })
   })
 
   it('stops the batch on Resend’s rate limit or quota, and records the failure', async () => {

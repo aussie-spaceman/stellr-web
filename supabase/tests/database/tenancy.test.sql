@@ -9,7 +9,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(381);
+SELECT plan(388);
 
 -- 1. Every table in public and entitlements is classified, and nothing else is.
 SELECT set_eq(
@@ -27,6 +27,7 @@ SELECT set_eq(
     'entitlements.tier_benefits',
     'entitlements.tiers',
     'public.account_credits',
+    'public.agreement_email_changes',
     'public.agreement_recipients',
     'public.agreements',
     'public.allergy_options',
@@ -387,6 +388,12 @@ SELECT ok(EXISTS (
   WHERE i.indrelid = 'public.volunteer_event_interest'::regclass AND a.attname = 'tenant_id'
 ), 'public.volunteer_event_interest has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.volunteer_event_interest'::regclass), 'public.volunteer_event_interest has RLS enabled');
+SELECT has_column('public', 'agreement_email_changes', 'tenant_id', 'public.agreement_email_changes has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.agreement_email_changes'::regclass AND a.attname = 'tenant_id'
+), 'public.agreement_email_changes has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.agreement_email_changes'::regclass), 'public.agreement_email_changes has RLS enabled');
 SELECT has_column('public', 'agreement_recipients', 'tenant_id', 'public.agreement_recipients has tenant_id');
 SELECT ok(EXISTS (
   SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
@@ -674,6 +681,16 @@ SELECT ok(EXISTS (
     AND tg.tgenabled = 'O'
     AND encode(tg.tgargs, 'escape') = 'event_slug\000slug\000'
 ), 'public.volunteer_event_interest: derivation trigger on (event_slug, slug), enabled');
+SELECT col_is_null('public', 'agreement_email_changes', 'tenant_id', 'public.agreement_email_changes.tenant_id is nullable: expand only');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.agreement_email_changes'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_inherit_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'agreement_id\000agreements\000'
+), 'public.agreement_email_changes: inherit trigger on (agreement_id, agreements), enabled');
+SELECT is((SELECT count(*)::int FROM pg_constraint c WHERE c.contype = 'f' AND c.conrelid = 'public.agreement_email_changes'::regclass AND c.confrelid = 'public.agreements'::regclass),
+  1, 'public.agreement_email_changes: exactly one foreign key to public.agreements, so live embeds stay unambiguous');
 SELECT col_is_null('public', 'agreement_recipients', 'tenant_id', 'public.agreement_recipients.tenant_id is nullable: expand only');
 SELECT ok(EXISTS (
   SELECT 1 FROM pg_trigger tg
@@ -1131,6 +1148,7 @@ SELECT is((SELECT count(*)::int FROM public.participants WHERE tenant_id IS NULL
 ALTER TABLE public.survey_invitations DISABLE TRIGGER survey_invitations_updated_at;
 ALTER TABLE public.esign_audit_events DISABLE TRIGGER esign_audit_events_guard;
 CREATE TEMP TABLE pgtap_child_backfill ON COMMIT DROP AS SELECT * FROM public.tenancy_backfill_child_tenant_ids(ARRAY[
+  'agreement_email_changes',
   'agreement_recipients',
   'credential_events',
   'esign_access_log',
@@ -1145,6 +1163,7 @@ CREATE TEMP TABLE pgtap_child_backfill ON COMMIT DROP AS SELECT * FROM public.te
 ALTER TABLE public.esign_audit_events ENABLE TRIGGER esign_audit_events_guard;
 ALTER TABLE public.survey_invitations ENABLE TRIGGER survey_invitations_updated_at;
 SELECT set_eq('SELECT tbl FROM pgtap_child_backfill', ARRAY[
+    'agreement_email_changes',
     'agreement_recipients',
     'credential_events',
     'esign_access_log',
@@ -1173,6 +1192,7 @@ SELECT ok(COALESCE(current_setting('stellr.survey_redaction', true), '') <> 'on'
 SELECT throws_ok($q$UPDATE public.survey_answers SET value_text = 'x' WHERE response_id = '66666666-6666-4666-8666-000000000001'$q$, NULL, NULL, 'child backfill: survey_answers still refuses updates afterwards');
 SELECT throws_ok($q$UPDATE public.esign_audit_events SET hash = 'x' WHERE envelope_row = '44444444-4444-4444-8444-000000000002'$q$, NULL, NULL, 'child backfill: esign_audit_events still refuses updates afterwards');
 SELECT is((SELECT COALESCE(sum(rows_updated), 0)::int FROM public.tenancy_backfill_child_tenant_ids(ARRAY['participants', 'credential_events', 'survey_answers'])), 0, 'child backfill: re-running it changes nothing');
+SELECT is((SELECT count(*)::int FROM public.agreement_email_changes WHERE tenant_id IS NULL), 0, 'public.agreement_email_changes: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.agreement_recipients WHERE tenant_id IS NULL), 0, 'public.agreement_recipients: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.credential_events WHERE tenant_id IS NULL), 0, 'public.credential_events: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.esign_access_log WHERE tenant_id IS NULL), 0, 'public.esign_access_log: no NULL tenant_id after the backfill (NOT NULL-ready)');

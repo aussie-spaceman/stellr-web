@@ -349,7 +349,7 @@ describe('which files still use the sync limiter', () => {
 
   it('every signing route awaits the throttle', () => {
     const routes = walk('app/api/sign').filter((f) => f.endsWith('route.ts'))
-    expect(routes).toHaveLength(8)
+    expect(routes).toHaveLength(9)
     for (const file of routes) {
       const src = read(file)
       expect(src, file).toMatch(/await throttle\(/)

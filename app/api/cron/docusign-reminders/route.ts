@@ -127,8 +127,9 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
       if (description.pill === 'complete' || description.pill === 'on_file') continue
 
       // A bounced address will never receive a resend. Chasing it burns a slot
-      // and tells the family to watch an inbox that cannot receive the mail;
-      // alertOnNewBounces has already put this in front of an admin.
+      // and tells the family to watch an inbox that cannot receive the mail.
+      // The sync above has already announced it (lib/esign/bounce-notices.ts),
+      // even if DocuSign Connect never told us.
       if (description.pill === 'bounced') {
         skippedBounced++
         continue

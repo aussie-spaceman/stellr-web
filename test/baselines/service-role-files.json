@@ -325,6 +325,10 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
+    "app/api/admin/agreements/[id]/email-changes/[changeId]/route.ts": {
+      "class": "convert",
+      "reason": "staff decide a student suggestion: requireEventStaff + loadEventRecord scope the agreement first; the decision writes agreement_email_changes and corrects the signer through the engine (lib/esign/email-changes.ts)"
+    },
     "app/api/admin/artwork-defaults/[theme]/badge-templates/preview/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
@@ -1141,6 +1145,14 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
+    "app/api/members/teams/[id]/email-changes/[changeId]/route.ts": {
+      "class": "convert",
+      "reason": "group organiser decides a suggestion: ownsTeam on the registration and the suggestion's participant on it, checked in lib/esign/email-changes.ts before any write"
+    },
+    "app/api/members/teams/[id]/participants/[pid]/correct-email/route.ts": {
+      "class": "convert",
+      "reason": "group organiser fixes a bounced signer: ownsTeam + participant on the registration + signer bounced, checked in lib/esign/email-changes.ts; correction goes through the engine"
+    },
     "app/api/members/teams/[id]/participants/[pid]/docusign-resend/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: agreements, members, participants, registrations"
@@ -1163,7 +1175,7 @@
     },
     "app/api/members/teams/[id]/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreements, group_join_tokens, registrations, sheet_watch_channels"
+      "reason": "auto: touches tenant or event-scoped tables; tables: agreement_email_changes, agreement_recipients, agreements, group_join_tokens, registrations, sheet_watch_channels"
     },
     "app/api/members/teams/[id]/sheet-sync/route.ts": {
       "class": "convert",
@@ -1236,6 +1248,10 @@
     "app/api/sign/document/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
+    },
+    "app/api/sign/email/route.ts": {
+      "class": "convert",
+      "reason": "signed-out one-time link (token hash lookup, single use, expiry) for the other signer on a two-person form; no session to scope by, as with the other /api/sign routes"
     },
     "app/api/sign/session/route.ts": {
       "class": "convert",

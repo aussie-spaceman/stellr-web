@@ -13,6 +13,7 @@ import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
 import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
 import { checkRegistrationAge, isRegistrationMinor } from '@/lib/registration-eligibility'
 import { DETAILS_MEMBER_MANAGED, isDetailsHiddenFrom } from '@/lib/team-linked-details'
+import { correctFromRosterEdit } from '@/lib/esign/email-changes'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
@@ -58,7 +59,7 @@ export async function PATCH(
 
   const { data: target } = await db
     .from('participants')
-    .select('member_id, details_from_member')
+    .select('member_id, details_from_member, email, emergency_contact_email')
     .eq('id', pid)
     .eq('registration_id', registrationId)
     .maybeSingle()
@@ -138,7 +139,24 @@ export async function PATCH(
   // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
   shadowSyncFields('participants', [pid])
 
-  return NextResponse.json({ participant })
+  // A bounced signer's address edited here also fixes the live consent form.
+  let consentMessage: string | null = null
+  if (target && ('email' in updates || 'emergency_contact_email' in updates)) {
+    const before = target as { email: string | null; emergency_contact_email: string | null }
+    const after = participant as { email: string | null; emergency_contact_email: string | null }
+    consentMessage = await correctFromRosterEdit(db, {
+      member,
+      registrationId,
+      participantId: pid,
+      before: { email: before.email, emergency_contact_email: before.emergency_contact_email },
+      after: { email: after.email, emergency_contact_email: after.emergency_contact_email },
+    }).catch((err) => {
+      console.error('[teams/participants/pid] consent form correction failed:', err)
+      return null
+    })
+  }
+
+  return NextResponse.json({ participant, consent: consentMessage ? { message: consentMessage } : undefined })
 }
 
 // DELETE /api/members/teams/[id]/participants/[pid]

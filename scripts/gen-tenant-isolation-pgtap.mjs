@@ -143,6 +143,9 @@ export const FIXTURES = {
     event_slug: lit(c.ev.slug), event_title: lit('Iso'), envelope_id: lit(`iso-env-${c.s}`),
     signer_name: lit('Iso Signer'), signer_email: lit('signer@example.test'), minor_name: lit('Iso Minor'),
   }),
+  'public.agreement_email_changes': (c) => ({
+    agreement_id: lit(c.t.agreement), recipient_id: lit(c.s), kind: lit('suggestion'), old_email: lit('bounced@example.test'),
+  }),
   'public.agreement_recipients': (c) => ({
     envelope_row: lit(c.t.agreement), recipient_id: lit(c.s), name: lit('Iso Signer'), email: lit('signer@example.test'), status: lit('created'),
   }),

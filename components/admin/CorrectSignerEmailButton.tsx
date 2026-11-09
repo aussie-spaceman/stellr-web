@@ -40,6 +40,16 @@ const STATUS_LABEL: Record<string, string> = {
 // Signers whose address can still change.
 const OPEN = new Set(['created', 'sent', 'delivered', 'autoresponded'])
 
+/** A student's suggested parent/guardian address for a bounced one (lib/esign/email-changes.ts). */
+interface Suggestion {
+  id: string
+  roleLabel: string
+  oldEmail: string
+  newEmail: string
+  suggestedBy: string
+  sameAsSuggester: boolean
+}
+
 export function CorrectSignerEmailButton({
   agreementId,
   emphasise = false,
@@ -53,6 +63,7 @@ export function CorrectSignerEmailButton({
   const router = useRouter()
   const dialog = useRef<HTMLDialogElement>(null)
   const [signers, setSigners] = useState<Signer[] | null>(null)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +77,10 @@ export function CorrectSignerEmailButton({
     setError(null)
     setDone(null)
     dialog.current?.showModal()
+    await load()
+  }
+
+  async function load() {
     const res = await fetch(`/api/admin/agreements/${agreementId}/correct-recipient`)
     const data = await res.json().catch(() => null)
     if (!res.ok) {
@@ -73,7 +88,28 @@ export function CorrectSignerEmailButton({
       return
     }
     setSigners(data.recipients as Signer[])
+    setSuggestions((data.pending ?? []) as Suggestion[])
     setDrafts(Object.fromEntries((data.recipients as Signer[]).map((s) => [s.recipientId, s.email])))
+  }
+
+  async function decide(s: Suggestion, decision: 'approve' | 'reject') {
+    setBusy(s.id)
+    setError(null)
+    setDone(null)
+    const res = await fetch(`/api/admin/agreements/${agreementId}/email-changes/${s.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision }),
+    })
+    const data = await res.json().catch(() => null)
+    setBusy(null)
+    if (!res.ok) {
+      setError(data?.error ?? 'That did not go through.')
+      return
+    }
+    setDone(decision === 'approve' ? `Approved: the form was sent to ${s.newEmail}.` : 'Suggestion rejected.')
+    await load()
+    router.refresh()
   }
 
   async function save(s: Signer) {
@@ -97,7 +133,8 @@ export function CorrectSignerEmailButton({
     setDone(
       `${ROLE_LABEL[s.roleName ?? ''] ?? 'Signer'} now ${updated.email}.` +
         (updated.status === 'created' ? ' It is sent when their turn comes.' : ' The signing email has been sent.') +
-        (data.participantSkipped ? ` Note: ${data.participantSkipped}.` : ''),
+        (data.participantSkipped ? ` Note: ${data.participantSkipped}.` : '') +
+        (data.previouslyBounced ? ' Warning: this address has bounced before, so the form may not arrive.' : ''),
     )
     router.refresh()
   }
@@ -135,6 +172,27 @@ export function CorrectSignerEmailButton({
 
           <div className="space-y-4 px-5 py-4">
             {!signers && !error && <p className="text-sm text-content-secondary">Loading signers…</p>}
+            {suggestions.map((s) => (
+              <div key={s.id} className="rounded-control border border-line bg-surface p-3">
+                <p className="text-sm font-semibold">Suggested {s.roleLabel} email</p>
+                <p className="mt-1 text-sm text-content-body">
+                  The {s.suggestedBy} suggested <strong>{s.newEmail}</strong> in place of {s.oldEmail}, which bounced.
+                </p>
+                {s.sameAsSuggester && (
+                  <p className="mt-2 text-xs text-gold-ink">
+                    This is the {s.suggestedBy}&apos;s own address. Approve only if you have confirmed the family shares one inbox.
+                  </p>
+                )}
+                <div className="mt-3 flex justify-end gap-2">
+                  <Button variant="secondaryStrong" className="!px-4 !py-2" disabled={busy !== null} onClick={() => decide(s, 'reject')}>
+                    Reject
+                  </Button>
+                  <Button variant="primaryStrong" className="!px-4 !py-2" disabled={busy !== null} onClick={() => decide(s, 'approve')}>
+                    {busy === s.id ? 'Saving…' : 'Approve and send'}
+                  </Button>
+                </div>
+              </div>
+            ))}
             {signers && editable.length === 0 && (
               <p className="text-sm text-content-secondary">Nobody on this agreement is left to sign, so there is nothing to correct.</p>
             )}

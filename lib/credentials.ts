@@ -391,24 +391,30 @@ export async function setVisibility(
  * goes private — including revoked ones, whose page would otherwise still show
  * the name. Unlike revocation, the verifier's answer changing to "private" is
  * the intended outcome here: the family has asked for the name to come down.
- * Returns the rows that changed so the caller can tell the family.
+ * Returns the rows that changed so the caller can tell the family. With a tenant,
+ * only that tenant's credentials change or count; with none, every one the person holds.
  */
 export async function unpublishCredentialsFor(
   db: SupabaseClient,
-  who: { memberId: string | null; participantId: string | null },
+  who: { memberId: string | null; participantId: string | null; tenant?: { value: string; includeNull: boolean } | null },
 ): Promise<CredentialRow[]> {
   const filters = [
     who.memberId ? `member_id.eq.${who.memberId}` : null,
     who.participantId ? `participant_id.eq.${who.participantId}` : null,
   ].filter(Boolean).join(',')
   if (!filters) return []
-  const { data, error } = await db
+  const scoped = db
     .from('credentials')
     .update({ visibility: 'private', updated_at: new Date().toISOString() })
     .or(filters)
     .eq('visibility', 'public')
     .is('tombstoned_at', null)
-    .select(CREDENTIAL_COLUMNS)
+  const inTenant = !who.tenant
+    ? scoped
+    : who.tenant.includeNull
+      ? scoped.or(`tenant_id.eq.${who.tenant.value},tenant_id.is.null`)
+      : scoped.eq('tenant_id', who.tenant.value)
+  const { data, error } = await inTenant.select(CREDENTIAL_COLUMNS)
   if (error) console.error('[credentials] unpublish failed:', error.message)
   return (data ?? []) as CredentialRow[]
 }

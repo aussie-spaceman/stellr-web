@@ -63,7 +63,7 @@ vi.mock('@clerk/nextjs/server', () => ({
   }),
 }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: () => null }))
 vi.mock('@/lib/scholarships', () => ({ findOfferByToken: async () => null, attachOfferToRegistration: async () => {} }))
 vi.mock('@/lib/stripe', () => ({
   stripeClient: () => (h.stripeOn ? { prices: { retrieve: h.priceRetrieve } } : null),

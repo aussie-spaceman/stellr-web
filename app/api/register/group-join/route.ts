@@ -3,7 +3,9 @@ import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { HOUR_MS } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { gateGroupJoinLink } from '@/lib/registration/group-join/gate'
 import { identifyNewParticipant, identifySignedInMember } from '@/lib/registration/group-join/identify'
 import { persistGroupJoin } from '@/lib/registration/group-join/persist'
@@ -42,14 +44,15 @@ export async function POST(req: NextRequest) {
   // A signed-in confirm has its own count: a member on file is asked to sign in
   // first, and that refusal must not use up the classroom's shared allowance. A
   // wider cap per link stops new accounts multiplying that count.
+  const { tenantId } = await requestTenant()
   if (userId) {
-    const linkCapped = rateLimitGuard(req, 'register-group-join-session', { limit: 30, windowMs: HOUR_MS }, token)
+    const linkCapped = await rateLimit(req, 'register-group-join-session', { limit: 30, windowMs: HOUR_MS, tenantId }, token)
     if (linkCapped) return linkCapped
   }
-  const rateLimited = rateLimitGuard(
+  const rateLimited = await rateLimit(
     req,
     'register-group-join',
-    { limit: 3, windowMs: HOUR_MS },
+    { limit: 3, windowMs: HOUR_MS, tenantId },
     userId ? `${token}:${userId}` : token,
   )
   if (rateLimited) return rateLimited

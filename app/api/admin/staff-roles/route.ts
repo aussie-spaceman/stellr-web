@@ -6,6 +6,7 @@ import { STAFF_SCOPES } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { syncStaffGranted, syncStaffRevoked } from '@/lib/authz/role-sync'
 import { reportRoleSyncFailure, roleSyncMetadata } from '@/lib/authz/role-sync-report'
+import { withAudit } from '@/lib/audit/route'
 
 // Admin CRUD for the staff-roles function-scope seam (migration 044).
 
@@ -16,9 +17,27 @@ async function requireAdmin() {
   return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
 }
 
+// What this request acted on, which withAudit's spec cannot read for itself: the body has
+// gone. The member id, never the email a grant may have been keyed on.
+const audited = new WeakMap<Request, { memberId: string; scopes?: string[]; userId: string | null }>()
+
+export const POST = withAudit(
+  ({ args: [req] }) => {
+    const a = audited.get(req)
+    return {
+      action: 'staff.role.grant',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { stellr: true },
+      target: { table: 'staff_roles', id: a?.memberId ?? null },
+      metadata: { scopes: a?.scopes ?? null },
+    }
+  },
+  grantStaffRole,
+)
+
 // POST — grant/replace a member's function scopes.
 // Body: { memberId?, email?, scopes: string[] } — member from the picker (id) or email.
-export async function POST(req: Request) {
+async function grantStaffRole(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { memberId, email, scopes } = await req.json().catch(() => ({}))
@@ -35,6 +54,7 @@ export async function POST(req: Request) {
     : lookup.ilike('email', String(email).trim())
   ).maybeSingle()
   if (!member) return NextResponse.json({ error: 'Member not found.' }, { status: 404 })
+  audited.set(req, { memberId: member.id, scopes: clean, userId: (await auth()).userId })
 
   const admin = await getSignedInMember()
   const { error } = await db.from('staff_roles').upsert(
@@ -65,11 +85,25 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, member })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => {
+    const a = audited.get(req)
+    return {
+      action: 'staff.role.revoke',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { stellr: true },
+      target: { table: 'staff_roles', id: a?.memberId ?? null },
+    }
+  },
+  revokeStaffRole,
+)
+
 // DELETE — remove a member's staff role. Body: { memberId }
-export async function DELETE(req: Request) {
+async function revokeStaffRole(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { memberId } = await req.json().catch(() => ({}))
   if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+  audited.set(req, { memberId, userId: (await auth()).userId })
 
   const db = supabaseServer()
   const { error } = await db.from('staff_roles').delete().eq('member_id', memberId)

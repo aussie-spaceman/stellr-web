@@ -24,7 +24,7 @@ import {
 
 // S5 (multi-tenant plan), slice B2: the tenant-host route allow-list as data.
 // proxy.ts consults it from slice B5 (test/proxy-tenant-routing.test.ts). This test pins
-//   1. the manifest it classifies (495 entries, by class, as measured);
+//   1. the manifest it classifies (498 entries, by class, as measured);
 //   2. that every manifest entry has exactly one decision, and no rule is stale;
 //   3. the SMMA rule: no community, home, store or academy route is allowed on
 //      a tenant host, and neither is admin, cron or a webhook;
@@ -41,23 +41,28 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 // change must come with its tenant-host decision.
 const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
-  tenant_staff: 0,
-  participant: 127,
-  public: 129,
+  platform_destined: 9,
+  tenant_staff: 32,
+  participant: 130,
+  public: 131,
   webhook: 12,
   cron: 23,
-  stellr_only: 204,
+  stellr_only: 166,
 }
-const MANIFEST_TOTAL = 495
+// +3 on 9 Nov 2026: members/compliance/external-check (participant) and the
+// admin members/[id]/event-manager and members/[id]/external-check (stellr_only).
+// +5 on 9 Nov 2026: bounced-email fixes: admin agreements/[id]/email-changes/[changeId] (tenant_staff), members/teams/... correct-email and email-changes (participant), sign/email page and API (public).
+const MANIFEST_TOTAL = 503
 
 // The decisions. Moving a route between them is a deliberate diff here.
 const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
   allow: 49,
-  // members 33, schools 2, privacy request pages 2 and APIs 2, and the 4 held
+  // members 36, schools 2, privacy request pages 2 and APIs 2, the bounce-notice
+  // link page and API 2, and the 4 held
   // files pinned under 'routes held back' below
-  pending: 43,
+  pending: 48,
   bypass: 4,
-  deny: 399,
+  deny: 402,
 }
 
 /** A concrete URL a manifest file serves, with sample values for its params. */
@@ -83,7 +88,7 @@ function sampleUrl(file: string): string {
 }
 
 describe('the manifest this classifies', () => {
-  it('has the measured class counts, 495 in total', () => {
+  it('has the measured class counts, 503 in total', () => {
     expect(FILES).toHaveLength(MANIFEST_TOTAL)
     const counts = Object.fromEntries(Object.keys(MANIFEST_CLASS_COUNTS).map((c) => [c, 0])) as Record<
       RouteClass,
@@ -149,7 +154,7 @@ describe('SMMA and the Stellr-only surface', () => {
 
   it('allows no community, home, store or academy route on a tenant host', () => {
     const smma = FILES.filter((f) =>
-      /^app\/(?:\(member\)\/community\/|api\/community\/|\(member\)\/home\/|\(public\)\/store\/|api\/store\/|\(public\)\/academy\/)/.test(
+      /^app\/(?:\(stellr\)\/\(member\)\/community\/|api\/community\/|\(stellr\)\/\(member\)\/home\/|\(stellr\)\/\(public\)\/store\/|api\/store\/|\(stellr\)\/\(public\)\/academy\/)/.test(
         f,
       ),
     )
@@ -161,7 +166,7 @@ describe('SMMA and the Stellr-only surface', () => {
 
   it('denies all 80 community and home entries', () => {
     const community = FILES.filter((f) =>
-      /^app\/(?:\(member\)\/community\/|api\/community\/|\(member\)\/home\/)/.test(f),
+      /^app\/(?:\(stellr\)\/\(member\)\/community\/|api\/community\/|\(stellr\)\/\(member\)\/home\/)/.test(f),
     )
     expect(community).toHaveLength(80)
     for (const f of community) expect(tenantSurfaceDecision(f), f).toBe('deny')
@@ -170,7 +175,7 @@ describe('SMMA and the Stellr-only surface', () => {
   it('denies every admin page, admin API, cron and webhook', () => {
     const mustDeny = FILES.filter(
       (f) =>
-        f.startsWith('app/(admin)/') ||
+        f.startsWith('app/(stellr)/(admin)/') ||
         f.startsWith('app/api/admin/') ||
         ROUTE_MANIFEST[f] === 'cron' ||
         ROUTE_MANIFEST[f] === 'webhook' ||
@@ -197,7 +202,7 @@ describe('routes held back from allow', () => {
   it.each([
     ['app/api/registrations/[id]/spreadsheet/route.ts', /anyone-can-edit/],
     ['app/api/uploads/sign/route.ts', /per-purpose/],
-    ['app/(member)/account/page.tsx', /community directory/],
+    ['app/(stellr)/(member)/account/page.tsx', /community directory/],
     ['app/api/consent/request/route.ts', /membership consent/],
   ])('keeps %s pending, with the reason', (file, reason) => {
     const match = classifyTenantSurface(file)
@@ -208,7 +213,7 @@ describe('routes held back from allow', () => {
   it('finds no direct community import or public Drive link in an allowed file', () => {
     // Direct imports only: B8 walks the full import closure.
     const offenders = allowedTenantFiles().filter((f) =>
-      /@\/components\/community|@\/app\/\(member\)\/community|type:\s*'anyone'/.test(
+      /@\/components\/community|@\/app\/\(stellr\)\/\(member\)\/community|type:\s*'anyone'/.test(
         readFileSync(`${REPO_ROOT}${f}`, 'utf8'),
       ),
     )
@@ -366,12 +371,12 @@ describe('isAllowedOnTenantHost', () => {
   })
 
   it('builds URL patterns for route groups and catch-alls', () => {
-    expect(urlPatternForFile('app/(auth)/sign-in/[[...sign-in]]/page.tsx')).toBe('^/sign-in(?:/[^/]+)*$')
-    expect(urlPatternForFile('app/(flow)/register/[slug]/page.tsx')).toBe('^/register/[^/]+$')
+    expect(urlPatternForFile('app/(stellr)/(auth)/sign-in/[[...sign-in]]/page.tsx')).toBe('^/sign-in(?:/[^/]+)*$')
+    expect(urlPatternForFile('app/(stellr)/(flow)/register/[slug]/page.tsx')).toBe('^/register/[^/]+$')
     expect(urlPatternForFile('app/api/community/media/[...path]/route.ts')).toBe(
       '^/api/community/media(?:/[^/]+)+$',
     )
-    expect(urlPatternForFile('app/(public)/page.tsx')).toBe('^/$')
+    expect(urlPatternForFile('app/(stellr)/(public)/page.tsx')).toBe('^/$')
     expect(() => urlPatternForFile('app/robots.ts')).toThrow()
   })
 })

@@ -10,7 +10,7 @@ import { createRegistrationCheckout, ensurePayToken, payPageUrl } from '@/lib/re
 import { createAndSendGroupInvoice } from '@/lib/group-invoice'
 import { checkInCodeLink } from '@/lib/check-in-codes'
 import type { GatedGroup } from './gate'
-import { SITE_URL, type GroupBody, type ParticipantPayload } from './parse'
+import { SITE_URL, invoiceSeatsFor, type GroupBody, type ParticipantPayload } from './parse'
 import type { SavedMembers, SavedParticipants, SavedRegistration } from './persist'
 
 type EventGetter = (slug: string) => Promise<{ stripePriceId?: string } | null>
@@ -160,7 +160,9 @@ async function collectPayment(
 
   let checkoutUrl: string | null = null
 
-  if (payment_method === 'invoice' && stripePriceId && stripe) {
+  const invoiceBranch = (payment_method === 'invoice' || payment_method === 'invoice_some') && !!stripePriceId && !!stripe
+  const cardBranch = payment_method === 'card' && !!stripePriceId && !!stripe
+  if (invoiceBranch && stripePriceId && stripe) {
     try {
       const priceObj = await stripe.prices.retrieve(stripePriceId)
       // Single source of truth for the amount: reuse amountDueCents, resolved once
@@ -189,7 +191,9 @@ async function collectPayment(
           amountCents: invoiceAmountCents,
           perSeatCents,
           currency: priceObj.currency,
-          totalParticipants: total_participants,
+          // "Invoice for some": only the ticked places (and unfilled ones, if later
+          // joiners go on the invoice). amountDueCents was priced the same way.
+          totalParticipants: payment_method === 'invoice_some' ? invoiceSeatsFor(body) : total_participants,
         })
       }
     } catch (invoiceErr) {
@@ -231,7 +235,10 @@ async function collectPayment(
         { status: 502 },
       )
     }
-  } else if (member_pays_individually) {
+  }
+  // "Invoice for some" also sends links to the people not on the invoice
+  // (ensureIndividualPayments only bills payer 'self').
+  if (payment_method === 'invoice_some' || (!invoiceBranch && !cardBranch && member_pays_individually)) {
     // Everyone entered now, including the registrant — their own seat is billed
     // too when members pay individually. Anyone still to come (sheet rows, join
     // link, organiser manual add) is handled by those paths, which call the same
@@ -335,6 +342,7 @@ export async function respondToGroupRegistration(
       participantCount: total_participants,
       registrationId: regId,
       paymentMethod: payment_method as ConfirmationEmail['paymentMethod'],
+      invoiceSeats: payment_method === 'invoice_some' ? invoiceSeatsFor(body) : undefined,
       detailsMethod: details_method as ConfirmationEmail['detailsMethod'],
       // Both links go in every group email — including a complete add_now, where
       // they're framed as "keep these for later" rather than an action item.

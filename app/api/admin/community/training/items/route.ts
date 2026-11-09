@@ -5,7 +5,12 @@ import { claimUpload } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
 import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
 import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
+const auditedOp = new WeakMap<Request, string>()
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -28,8 +33,18 @@ export const maxDuration = 60
 // PATCH (JSON) updates an existing lesson: { id, title?, body?, status?, sectionId?, displayOrder? }
 // DELETE (?id=) removes a lesson.
 
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.item.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_items', id: auditedId.get(req) ?? null },
+  }),
+  createItem,
+)
+
+async function createItem(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/items' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // JSON only. Lesson media (a document, or a VIDEO) is uploaded straight to
   // storage via /api/uploads/sign and arrives here as a path: the platform caps
@@ -113,8 +128,20 @@ export async function POST(req: Request) {
     console.error('[training] item insert error:', error)
     return NextResponse.json({ error: 'Could not add item' }, { status: 500 })
   }
+  auditedId.set(req, data.id)
   return NextResponse.json({ id: data.id })
 }
+
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.item.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_items', id: auditedId.get(req) ?? null },
+    metadata: { op: auditedOp.get(req) ?? null },
+  }),
+  updateItem,
+)
 
 // PATCH — update a lesson. Accepts JSON (rename, publish, move, reorder, change
 // content type/URL) OR multipart/form-data (when replacing the file for a
@@ -122,17 +149,19 @@ export async function POST(req: Request) {
 // switching to a file kind requires a file; to a URL kind requires externalUrl;
 // to 'interactive' requires a registered interactiveKey; to 'live' clears both
 // (the room is derived from the item id).
-export async function PATCH(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function updateItem(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/items' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
 
   const fields = (await req.json().catch(() => ({}))) as Record<string, unknown>
 
   // Drag-and-drop: { moduleId, reorder: [{ id, sectionId, displayOrder }] }.
+  if (Array.isArray(fields.reorder)) auditedOp.set(req, 'reorder')
   if (Array.isArray(fields.reorder)) return applyReorder(db, fields.moduleId, fields.reorder)
 
   const id = fields.id as string | undefined
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const patch: Record<string, unknown> = {}
   if (typeof fields.title === 'string') patch.title = fields.title.trim()
@@ -249,11 +278,22 @@ async function applyReorder(db: ReturnType<typeof supabaseServer>, moduleId: unk
   return NextResponse.json({ ok: true })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.item.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'training_items', id: auditedId.get(req) ?? null },
+  }),
+  deleteItem,
+)
+
 // DELETE — remove a lesson. Query: ?id=
-export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function deleteItem(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/training/items' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const db = supabaseServer()
   const { error } = await db.from('training_items').delete().eq('id', id)

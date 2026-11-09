@@ -6,24 +6,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // browser posts as contentType is ignored. claimUpload itself (the byte checks)
 // is covered in lib/uploads.test.ts; here it reports a format.
 
-const { claimUpload, discardUpload, getEventEmail, update, held } = vi.hoisted(() => ({
+const { claimUpload, discardUpload, emailRow, update, held } = vi.hoisted(() => ({
   claimUpload: vi.fn(),
   discardUpload: vi.fn(),
-  getEventEmail: vi.fn(),
+  emailRow: { current: null as Record<string, unknown> | null },
   update: vi.fn(),
   // The event's emails and their attachments, as the holder check reads them.
   held: { rows: [] as { id: string; attachments: { path: string }[] }[], error: null as { message: string } | null },
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => ({ ok: true }) }))
+vi.mock('@/lib/authz', async () => {
+  const { eventRouteFor } = await import('@/test/fixtures/event-route')
+  return { requireEventRoute: async (slug: string) => eventRouteFor(slug) }
+})
 vi.mock('@/lib/uploads', () => ({ claimUpload, discardUpload }))
-vi.mock('@/lib/event-emails/store', () => ({ EDITABLE: ['draft', 'scheduled'], getEventEmail }))
+vi.mock('@/lib/event-emails/store', () => ({ EDITABLE: ['draft', 'scheduled'] }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: () => ({
       select: () => ({
-        eq: async (column: string, slug: string) =>
-          column === 'event_slug' && slug === 'nevada' ? { data: held.rows, error: held.error } : { data: [], error: null },
+        // By id, the email itself. By event, every email of the event, for the holder check.
+        eq: (column: string, value: string) =>
+          column === 'id'
+            ? { maybeSingle: async () => ({ data: emailRow.current, error: null }) }
+            : Promise.resolve(column === 'event_slug' && value === 'nevada' ? { data: held.rows, error: held.error } : { data: [], error: null }),
       }),
       update: (row: Record<string, unknown>) => {
         update(row)
@@ -50,7 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   held.rows = [{ id: 'e1', attachments: [] }]
   held.error = null
-  getEventEmail.mockResolvedValue({ id: 'e1', status: 'draft', attachments: [] })
+  emailRow.current = { id: 'e1', event_slug: 'nevada', status: 'draft', attachments: [] }
 })
 
 // A refusal deletes the object it was given. Event-email paths are not tied to

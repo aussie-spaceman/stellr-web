@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { HOUR_MS } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { gateIndividualRegistration } from '@/lib/registration/individual/gate'
 import type { IndividualBody } from '@/lib/registration/individual/parse'
 import { persistIndividualRegistration } from '@/lib/registration/individual/persist'
@@ -53,14 +55,15 @@ export async function POST(req: NextRequest) {
     // allowance. A wider cap per event stops new accounts multiplying that count.
     const eventKey = typeof fields.event_slug === 'string' ? fields.event_slug : undefined
     const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
+    const { tenantId } = await requestTenant()
     if (userId) {
-      const eventCapped = rateLimitGuard(req, 'register-individual-session', { limit: 30, windowMs: HOUR_MS }, eventKey)
+      const eventCapped = await rateLimit(req, 'register-individual-session', { limit: 30, windowMs: HOUR_MS, tenantId }, eventKey)
       if (eventCapped) return eventCapped
     }
-    const rateLimited = rateLimitGuard(
+    const rateLimited = await rateLimit(
       req,
       'register-individual',
-      { limit: 3, windowMs: HOUR_MS },
+      { limit: 3, windowMs: HOUR_MS, tenantId },
       userId ? `${eventKey}:${userId}` : eventKey,
     )
     if (rateLimited) return rateLimited

@@ -84,6 +84,38 @@ export interface BackgroundCheck {
   report_pdf_url: string | null
 }
 
+/**
+ * A background check the member already holds from another organisation
+ * (member_external_background_checks). Clears nobody until an admin verifies it.
+ * Valid for BC_VALIDITY_YEARS from completed_on, or until document_expires_on
+ * when that is earlier.
+ */
+export interface ExternalBackgroundCheck {
+  id: string
+  issuer: string
+  completed_on: string // ISO date
+  document_expires_on: string | null // ISO date
+  document_path: string
+  verified_at: string | null
+  verified_label: string | null
+  submitted_by?: 'member' | 'admin'
+  /** Version stamp a verify binds to (BG-9), as for licenses. */
+  updated_at?: string | null
+}
+
+/** The last day (ISO date) an external check counts: the earlier of completed_on + 3 years and the document's own expiry. */
+export function externalCheckValidUntil(c: Pick<ExternalBackgroundCheck, 'completed_on' | 'document_expires_on'>): string {
+  const d = new Date(`${c.completed_on}T00:00:00Z`)
+  d.setUTCFullYear(d.getUTCFullYear() + BC_VALIDITY_YEARS)
+  const derived = d.toISOString().slice(0, 10)
+  return c.document_expires_on && c.document_expires_on < derived ? c.document_expires_on : derived
+}
+
+function externalExpired(c: ExternalBackgroundCheck, ref: Date): boolean {
+  // Valid through the whole of its last day.
+  return new Date(`${externalCheckValidUntil(c)}T23:59:59.999Z`) < ref
+}
+
 export interface ComplianceSummary {
   state: ComplianceState
   /** Short human label, e.g. "Verified license expires 12 May 2027". */
@@ -91,6 +123,15 @@ export interface ComplianceSummary {
   license: TeacherLicense | null
   /** The member's current (newest) background check, if any. */
   check: BackgroundCheck | null
+  /** A background check from another organisation, if one is on file. */
+  external?: ExternalBackgroundCheck | null
+  /**
+   * What clears the person, when the state is valid_bc / valid_license:
+   * a Stellr-run check, a verified uploaded check, or a verified license.
+   * A verified uploaded check reads as 'valid_bc' everywhere (owner, 9 Nov 2026:
+   * it clears for everything a background check clears for).
+   */
+  clearedBy?: 'background_check' | 'external_background_check' | 'teacher_license' | null
 }
 
 // Unknown DOB → treated as an adult (safer: requires the check). Being a minor
@@ -137,6 +178,7 @@ export function deriveCompliance(
   eventRole: string | null | undefined,
   dateOfBirth: string | null | undefined,
   eventDate?: string,
+  external: ExternalBackgroundCheck | null = null,
 ): ComplianceSummary {
   const ref = eventDate ? new Date(eventDate) : new Date()
   // Current check = newest by ordered_at.
@@ -145,7 +187,7 @@ export function deriveCompliance(
     null
 
   if (!requiresBackgroundCheck(eventRole, dateOfBirth, eventDate)) {
-    return { state: 'not_required', detail: null, license, check }
+    return { state: 'not_required', detail: null, license, check, external }
   }
 
   // An explicit adverse decision DOMINATES everything else (deep review BG-2).
@@ -161,11 +203,14 @@ export function deriveCompliance(
       }`,
       license,
       check,
+      external,
     }
   }
 
   const licenseValid = !!license && !!license.verified_at && !licenseExpired(license, ref)
   const licensePending = !!license && !license.verified_at && !licenseExpired(license, ref)
+  const externalValid = !!external && !!external.verified_at && !externalExpired(external, ref)
+  const externalPending = !!external && !external.verified_at && !externalExpired(external, ref)
 
   // A Consider that a human has adjudicated as 'cleared' clears the person just
   // as a clear report does. The check's own `status` stays 'referred' — it
@@ -187,20 +232,34 @@ export function deriveCompliance(
     const withCanceled = check!.includes_canceled ? `${base} (completed with canceled screenings)` : base
     return {
       state: 'valid_bc',
+      clearedBy: 'background_check',
       detail:
         check!.status === 'referred'
           ? `${withCanceled} — cleared on review${check!.adjudicated_label ? ` by ${check!.adjudicated_label}` : ''}`
           : withCanceled,
       license,
       check,
+      external,
+    }
+  }
+  if (externalValid) {
+    return {
+      state: 'valid_bc',
+      clearedBy: 'external_background_check',
+      detail: `Background check from ${external!.issuer} valid until ${formatDateShort(externalCheckValidUntil(external!))} (verified upload)`,
+      license,
+      check,
+      external,
     }
   }
   if (licenseValid) {
     return {
       state: 'valid_license',
+      clearedBy: 'teacher_license',
       detail: `Verified license expires ${formatDateShort(license!.expiry_date)}`,
       license,
       check,
+      external,
     }
   }
   if (licensePending) {
@@ -209,6 +268,16 @@ export function deriveCompliance(
       detail: license!.document_path ? 'License awaiting verification' : 'License awaiting verification — no photo uploaded yet',
       license,
       check,
+      external,
+    }
+  }
+  if (externalPending) {
+    return {
+      state: 'awaiting_verification',
+      detail: 'Uploaded background check awaiting verification',
+      license,
+      check,
+      external,
     }
   }
   if (bcInProcess) {
@@ -217,6 +286,7 @@ export function deriveCompliance(
       detail: check!.status === 'invited' ? 'Background check invitation sent' : 'Background check in progress',
       license,
       check,
+      external,
     }
   }
   if (bcFlagged) {
@@ -225,6 +295,7 @@ export function deriveCompliance(
       detail: 'Background check flagged — awaiting review by the adjudicator',
       license,
       check,
+      external,
     }
   }
 
@@ -232,10 +303,10 @@ export function deriveCompliance(
   // (the attempt ended; just re-order) — surface it distinctly rather than as a
   // red "Invalid". The person is still not cleared, so it never reads as compliant.
   if (check?.status === 'cancelled') {
-    return { state: 'cancelled', detail: 'Background check was canceled — re-order required', license, check }
+    return { state: 'cancelled', detail: 'Background check was canceled — re-order required', license, check, external }
   }
   if (check?.status === 'expired') {
-    return { state: 'expired', detail: 'Background check invitation expired — re-order required', license, check }
+    return { state: 'expired', detail: 'Background check invitation expired — re-order required', license, check, external }
   }
 
   // Otherwise genuinely invalid: missing, expired clearance, or flagged for review.
@@ -245,9 +316,10 @@ export function deriveCompliance(
       check.adjudicated_at ? ` (${formatDateShort(check.adjudicated_at)})` : ''
     }`
   } else if (license && licenseExpired(license, ref)) detail = `License expired ${formatDateShort(license.expiry_date)}`
+  else if (external && externalExpired(external, ref)) detail = `Uploaded background check expired ${formatDateShort(externalCheckValidUntil(external))}`
   else if (check?.status === 'referred') detail = 'Background check flagged for review'
   else if (bcCleared && check?.expires_at) detail = `Background check expired ${formatDateShort(check.expires_at)}`
-  return { state: 'invalid', detail, license, check }
+  return { state: 'invalid', detail, license, check, external }
 }
 
 // Row shapes as returned by the nested Supabase select below.
@@ -260,17 +332,32 @@ interface MemberComplianceRow {
   date_of_birth: string | null
   member_teacher_licenses: LicenseRow[] | null
   member_background_checks: CheckRow[] | null
+  member_external_background_checks?: ExternalBackgroundCheck[] | ExternalBackgroundCheck | null
 }
+
+// member_external_background_checks.member_id is UNIQUE, so PostgREST may embed
+// it as one object rather than an array. Accept either.
+export function firstExternalCheck(v: ExternalBackgroundCheck[] | ExternalBackgroundCheck | null | undefined): ExternalBackgroundCheck | null {
+  if (!v) return null
+  return Array.isArray(v) ? v[0] ?? null : v
+}
+
+/** Columns of an uploaded check, for nested selects elsewhere (audit page). */
+export const EXTERNAL_BC_COLUMNS =
+  'id, issuer, completed_on, document_expires_on, document_path, verified_at, verified_label, submitted_by, updated_at'
 
 const COMPLIANCE_SELECT = `
   id, email, event_role, date_of_birth,
   member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path, updated_at),
-  member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudication_outcome, adjudicated_label, adjudication_notes, provider_adjudication)
+  member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudication_outcome, adjudicated_label, adjudication_notes, provider_adjudication),
+  member_external_background_checks!member_id(${EXTERNAL_BC_COLUMNS})
 `
 
 export interface ComplianceRecords {
   license: TeacherLicense | null
   checks: BackgroundCheck[]
+  /** An uploaded check from another organisation; pass to deriveCompliance as `external`. */
+  external?: ExternalBackgroundCheck | null
 }
 
 /**
@@ -295,6 +382,7 @@ export async function loadComplianceRecordsByEmails(
     out.set(row.email.toLowerCase(), {
       license: row.member_teacher_licenses?.[0] ?? null,
       checks: row.member_background_checks ?? [],
+      external: firstExternalCheck(row.member_external_background_checks),
     })
   }
   return out
@@ -318,6 +406,7 @@ export async function loadComplianceRecordsByMemberIds(
     out.set(row.id, {
       license: row.member_teacher_licenses?.[0] ?? null,
       checks: row.member_background_checks ?? [],
+      external: firstExternalCheck(row.member_external_background_checks),
     })
   }
   return out
@@ -356,6 +445,7 @@ export async function loadComplianceRecordsForMembers(
       dateOfBirth: row.date_of_birth,
       license: row.member_teacher_licenses?.[0] ?? null,
       checks: row.member_background_checks ?? [],
+      external: firstExternalCheck(row.member_external_background_checks),
     }
     byId.set(row.id, rec)
     if (row.email) byEmail.set(row.email.toLowerCase(), rec)
@@ -376,6 +466,8 @@ export async function loadComplianceForMember(
     row.member_background_checks ?? [],
     row.event_role,
     row.date_of_birth,
+    undefined,
+    firstExternalCheck(row.member_external_background_checks),
   )
 }
 
@@ -411,6 +503,8 @@ export async function isClearedForMinorContact(
     // BC_REQUIRED_ROLES, so it must not be used as the derivation role here.
     'mentor',
     row.date_of_birth,
+    undefined,
+    firstExternalCheck(row.member_external_background_checks),
   )
   return (
     summary.state === 'valid_bc' ||

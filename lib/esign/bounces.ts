@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { maskEmail } from '@/lib/utils'
-import { notifyCommunityAdmins } from '@/lib/notify'
+import { announceBounces } from '@/lib/esign/bounce-notices'
 
 // Resend tells us when a Stellr signing email bounced. DocuSign shows that as
 // "Email Bounced" (its 'autoresponded' recipient status); Stellr signing now
@@ -8,6 +7,9 @@ import { notifyCommunityAdmins } from '@/lib/notify'
 // engines. Only signing invitations are acted on: they are the emails whose
 // Resend id is stored on a signer (invite_email_id). Everything else Resend
 // reports (pay links, receipts) is ignored here.
+//
+// Who is told, and what they see, is lib/esign/bounce-notices.ts: one notice
+// per form, so each form's own group and other signer hear about it.
 
 export interface ResendEvent {
   type: string
@@ -27,21 +29,12 @@ export async function handleResendEvent(db: SupabaseClient, event: ResendEvent):
     })
     .eq('invite_email_id', event.data.email_id)
     .in('status', ['sent', 'delivered'])
-    .select('id, email, envelope_row')
+    .select('id, envelope_row')
   if (error) throw new Error(`Recording the bounce failed: ${error.message}`)
   if (!rows?.length) return { bounced: 0 }
 
-  const { data: env } = await db
-    .from('agreements')
-    .select('event_title, minor_name, signer_name')
-    .eq('id', rows[0].envelope_row as string)
-    .maybeSingle()
-  const about = env?.minor_name || env?.signer_name || 'a participant'
-  const body = `A Stellr signing email to ${maskEmail(rows[0].email as string)} bounced (${rows.length > 1 ? `${rows.length} forms` : 'the form'} for ${about}${env?.event_title ? `, ${env.event_title}` : ''}). Use Correct email on the event roster to fix the address; the form is sent again to the new one.`
-  await notifyCommunityAdmins({
-    type: 'action',
-    body,
-    email: { subject: 'A signing email bounced', html: `<p>${body.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>`, text: body },
-  }).catch(() => {})
+  for (const envelopeRow of new Set(rows.map((r) => r.envelope_row as string))) {
+    await announceBounces(db, envelopeRow, { kind: 'bounced' })
+  }
   return { bounced: rows.length }
 }

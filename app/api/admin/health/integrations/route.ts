@@ -4,6 +4,7 @@ import { vercelTarget } from '@/lib/env'
 import { integrationEnvironments, isRealProductionApp } from '@/lib/env-guards'
 import { supabaseKeySlots } from '@/lib/supabase-keys'
 import { tenantRoutingConfig } from '@/lib/tenancy/host'
+import { loadScopedMode } from '@/lib/tenancy/load-scoped'
 
 // GET /api/admin/health/integrations
 //
@@ -26,6 +27,9 @@ import { tenantRoutingConfig } from '@/lib/tenancy/host'
 // setting is unusable, if it is. Read it before attaching a tenant zone: with a bad
 // zone setting, hosts in that zone cannot be told from Stellr's. Never the zone
 // itself. Informational too: it does not feed `ok`.
+//
+// `loadScopedMode` (S5, C16) is the mode converted routes are in: an unrecognised value
+// reads as off, so this is how to see what a flip really did. Informational.
 export async function GET() {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -54,6 +58,7 @@ export async function GET() {
     environments,
     supabaseKeys: supabaseKeySlots(),
     tenantRouting: { enabled: routing.enabled, suffixError: routing.suffixError },
+    loadScopedMode: loadScopedMode(),
     problems,
     ok: problems.length === 0,
   })

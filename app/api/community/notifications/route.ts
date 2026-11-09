@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { auditMutation } from '@/lib/audit/route'
+import { selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // GET /api/community/notifications — last 20 notifications for the current member.
 // ?unread=1 returns only the unread count (used by the polling bell).
@@ -35,7 +37,11 @@ export async function GET(req: Request) {
 }
 
 // POST /api/community/notifications/read-all — mark all as read
-export async function POST() {
+export async function POST(req: Request) {
+  return audited(req, { action: 'community.notifications.mark_read', table: 'community_notifications' }, () => markAllRead())
+}
+
+async function markAllRead() {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -52,4 +58,22 @@ export async function POST() {
     .eq('is_read', false)
 
   return NextResponse.json({ ok: true })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

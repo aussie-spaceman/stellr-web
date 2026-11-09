@@ -59,7 +59,7 @@ vi.mock('@clerk/nextjs/server', () => ({
   }),
 }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: () => null }))
 vi.mock('@/lib/after-response', async () => {
   const { rec } = await import('@/test/registration/fixtures')
   return {
@@ -771,6 +771,7 @@ describe('characterisation: POST /api/register/group — rows written (add_now)'
       school_address_state: undefined,
       school_address_zip: undefined,
       invoice_requested: false,
+      late_joiner_payer: null,
       pay_token: null,
       registrant_role: 'teacher',
       teacher_poc_first_name: null,

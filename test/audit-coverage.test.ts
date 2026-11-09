@@ -136,10 +136,13 @@ describe('audit coverage', () => {
     for (const [file, method] of [
       ['app/api/registrations/[id]/spreadsheet/route.ts', 'update'],
       ['app/api/members/teams/[id]/route.ts', 'insert'],
-      ['app/api/community/resources/attachment/[id]/download/route.ts', 'rpc'],
     ]) {
       expect(baseline.getMutations, method).toContain(`${file}#GET`)
     }
+    // Writes only through an rpc. B16 audits it, so it has left the baseline, and the
+    // measurement still counts it as a GET that writes.
+    const rpc = live.mutations.find((m: { key: string }) => m.key === 'app/api/community/resources/attachment/[id]/download/route.ts#GET')
+    expect(rpc, 'rpc').toMatchObject({ kind: 'get_mutation', audited: true })
     expect(baseline.getMutations).not.toContain('app/api/admin/events/slug-guard/route.ts#GET')
   })
 
@@ -669,7 +672,7 @@ export async function DELETE() {}`
     expect(isRouteFile('app/api/a/b/route.ts')).toBe(true)
     expect(isRouteFile('app/api/a/route.jsx')).toBe(true)
     expect(isRouteFile('app/api/a/route.mts')).toBe(false)
-    expect(isRouteFile('app/(public)/x/page.tsx')).toBe(false)
+    expect(isRouteFile('app/(stellr)/(public)/x/page.tsx')).toBe(false)
     expect(isRouteFile('lib/route.ts')).toBe(false)
     expect(auditHandlers('lib/route.ts', UNAUDITED_POST)).toEqual([])
   })

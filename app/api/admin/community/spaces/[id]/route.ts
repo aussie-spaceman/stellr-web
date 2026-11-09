@@ -8,22 +8,48 @@ import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { attachSpaceResource, ensureSpaceContainer } from '@/lib/container-sync'
 import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-training'
 import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 import { slugify } from '@/lib/utils'
 import { escapeHtml } from '@/lib/email-layout'
 import { runAfterResponse } from '@/lib/after-response'
+import { bodyIds, storableId, withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
+const auditedOp = new WeakMap<Request, string>()
+const auditedDetail = new WeakMap<Request, Record<string, unknown>>()
+
+// The record each operation acted on inside the space. The space in the path is not
+// always its parent (a flag is read by its own id), so the row has to name the record.
+const DETAIL_IDS = ['memberId', 'flagId', 'channelId', 'moduleId', 'resourceId', 'attachmentId', 'announcementId', 'sourceId'] as const
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
 // uploads (multipart) live in ./resources.
 
 const RESERVED = new Set(['general', 'resources', 'training', 'announcements', 'members'])
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { userId, sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.space.configure',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_spaces', id: auditedId.get(req) ?? null },
+    metadata: { op: auditedOp.get(req) ?? null, ...auditedDetail.get(req) },
+  }),
+  configureSpace,
+)
+
+async function configureSpace(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth()
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces/[id]' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id: spaceId } = await params
   const b = await req.json().catch(() => ({}))
   const action = b.action as string
+  auditedId.set(req, spaceId)
+  auditedOp.set(req, action)
+  auditedDetail.set(req, bodyIds(b, DETAIL_IDS))
+  // A member the handler worked out for itself, rather than one the body named.
+  const noteMember = (memberId: unknown) => auditedDetail.set(req, { ...auditedDetail.get(req), memberId: storableId(memberId) })
   const db = supabaseServer()
 
   // Resolve the acting admin's member id (for invited_by / resolved_by).
@@ -186,6 +212,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }).catch((e) => console.error('[spaces] invite-by-email send error:', e))
         return NextResponse.json({ ok: true, invitedByEmail: true })
       }
+      noteMember(memberId)
 
       const { error } = await db.from('community_space_members').upsert(
         {
@@ -234,6 +261,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     case 'update-member-role': {
       const role = ['admin', 'moderator', 'member'].includes(b.role) ? b.role : 'member'
+      auditedDetail.set(req, { ...auditedDetail.get(req), role })
       const memberId = b.memberId as string | undefined
       if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
 
@@ -529,6 +557,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
       }
       if (!memberId) return NextResponse.json({ error: 'Could not resolve member to mute' }, { status: 404 })
+      noteMember(memberId)
 
       // Writes a 'posting' suspension rather than the roster mute flag. The flag
       // needed a roster row to live on, so muting a tier- or role-granted member

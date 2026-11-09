@@ -1,8 +1,10 @@
+import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { actorFromAuth } from '@/lib/activity-log'
 import { deleteUnsharedClerkLogin } from '@/lib/deletion/external'
+import { withAudit } from '@/lib/audit/route'
 import {
   MERGE_COLUMNS,
   defaultSurvivor,
@@ -88,7 +90,24 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const audited = new WeakMap<NextRequest, { keepId: string; dropId: string; userId: string | null }>()
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [NextRequest] }) => {
+    const a = audited.get(req)
+    return {
+      action: 'member.record.merge',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { stellr: true },
+      target: { table: 'members', id: a?.keepId ?? null },
+      metadata: { dropId: a?.dropId ?? null },
+    }
+  },
+  mergeMembers,
+)
+
+async function mergeMembers(req: NextRequest) {
   if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json().catch(() => null) as
@@ -98,6 +117,7 @@ export async function POST(req: NextRequest) {
   if (!UUID.test(keepId) || !UUID.test(dropId) || keepId === dropId) {
     return NextResponse.json({ error: 'Choose two different members.' }, { status: 400 })
   }
+  audited.set(req, { keepId, dropId, userId: (await auth()).userId })
 
   const db = supabaseServer()
   try {

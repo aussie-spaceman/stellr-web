@@ -2,6 +2,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, staffAlertEmail } from '@/lib/email'
 import { escapeHtml } from '@/lib/email-layout'
 import { sendSms, SMS_ENABLED } from '@/lib/sms'
+import { staffAudienceMemberIds } from '@/lib/authz/audiences'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Multi-channel notification dispatch (FR-COM-06 + session reminders).
 // Respects member_notification_prefs (migration 017): in-app always recorded
@@ -32,6 +34,15 @@ export interface NotifyInput {
 }
 
 export async function notifyMember(memberId: string, input: NotifyInput): Promise<void> {
+  await deliver(memberId, input, true)
+}
+
+/**
+ * One member's notification. `allowInApp` false skips the in-app row:
+ * community_notifications is Stellr's community table, so another tenant's
+ * alert goes by email (and SMS) only.
+ */
+async function deliver(memberId: string, input: NotifyInput, allowInApp: boolean): Promise<void> {
   const db = supabaseServer()
 
   const [{ data: member }, { data: prefs }] = await Promise.all([
@@ -40,7 +51,7 @@ export async function notifyMember(memberId: string, input: NotifyInput): Promis
   ])
 
   // Default to in-app + email on when no prefs row exists.
-  const inapp = prefs?.inapp_enabled ?? true
+  const inapp = allowInApp && (prefs?.inapp_enabled ?? true)
   const email = prefs?.email_enabled ?? true
   const sms = prefs?.sms_enabled ?? false
 
@@ -83,36 +94,82 @@ export async function notifyMembers(memberIds: string[], input: NotifyInput): Pr
 }
 
 /**
- * Member ids of community staff — anyone whose staff_roles.scopes grants 'all' or
- * 'community'. Used to route member-raised issues (e.g. a flagged unavailable
- * training resource) to the people who can fix them. Platform admins are Clerk
- * role claims, not rows here, so an admin is only reached if also granted a scope
- * on /admin/staff. Throws on a query error so the caller can fall back.
+ * Staff scopes that receive an admin alert in Stellr: anyone whose staff_roles
+ * row grants 'all' or 'community', so member-raised issues (e.g. a flagged
+ * unavailable training resource) reach the people who can fix them. Platform
+ * admins are Clerk role claims, not rows there, so an admin is only reached if
+ * also granted a scope on /admin/staff.
  */
-async function communityAdminMemberIds(): Promise<string[]> {
-  const db = supabaseServer()
-  const { data, error } = await db
-    .from('staff_roles')
-    .select('member_id')
-    .overlaps('scopes', ['all', 'community'])
-  if (error) throw new Error(error.message)
-  return [...new Set((data ?? []).map((r) => (r as { member_id: string }).member_id).filter(Boolean))]
+const ALERT_SCOPES = ['all', 'community'] as const
+
+export interface StaffAlertOptions {
+  /**
+   * The tenant whose staff the alert is for. Stellr when omitted, as for every
+   * caller today. Take it from the tenant_id of the database row the alert is
+   * about (the event, registration or envelope), never from the host, a header
+   * or the request body: the alert body goes to this tenant's admins.
+   */
+  tenantId?: string
 }
 
 /**
- * Notify every community admin. Best-effort. When no staff are configured (or the
- * lookup fails) the alert goes to the staff inbox instead — on 28 Sept 2026 prod
- * had zero staff_roles rows and every admin alert silently reached nobody.
+ * The ids in `ids` whose member row is active. Another tenant's admin audience
+ * comes from tenant_memberships, which a deactivated member can still hold, so
+ * its alert keeps to active members, as the weekly digest does. Throws so the
+ * caller treats it as a failed lookup.
  */
-export async function notifyCommunityAdmins(input: NotifyInput): Promise<void> {
+async function activeMemberIds(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabaseServer().from('members').select('id').in('id', ids).eq('is_active', true)
+  if (error) throw new Error(`members: ${error.message}`)
+  return [...new Set(((data ?? []) as { id: string }[]).map((m) => m.id))].sort()
+}
+
+/**
+ * Notify a tenant's staff. Best-effort. Recipients come from lib/authz/audiences
+ * (S5 B17): for Stellr, the same staff_roles query as before, whatever
+ * AUTHZ_SOURCE says; for another tenant, its tenant_admin memberships.
+ *
+ * When a Stellr lookup fails or finds nobody, the alert goes to the staff inbox
+ * instead: on 28 Sept 2026 prod had zero staff_roles rows and every admin alert
+ * silently reached nobody.
+ *
+ * Another tenant's alert never goes to Stellr's inbox, because its body can hold
+ * that tenant's personal data. Tenants have no alert contact of their own yet, so
+ * on a failed lookup or with no tenant admin the alert is dropped and logged with
+ * the tenant id and the reason (never the body). Its admins get it by email only,
+ * and only while their member row is active: the in-app bell is Stellr's
+ * community table. tenants.status is not read yet. Whether a suspended tenant's
+ * admins keep getting alerts is an open owner decision.
+ */
+export async function notifyCommunityAdmins(input: NotifyInput, opts: StaffAlertOptions = {}): Promise<void> {
+  const tenantId = opts.tenantId ?? STELLR_TENANT_ID
+  const stellr = tenantId === STELLR_TENANT_ID
   let ids: string[] = []
+  let lookupFailed = false
   try {
-    ids = await communityAdminMemberIds()
+    const audience = await staffAudienceMemberIds(supabaseServer(), tenantId, ALERT_SCOPES)
+    ids = stellr ? audience : await activeMemberIds(audience)
   } catch (e) {
-    console.error('[notify] staff_roles lookup failed; falling back to the staff inbox:', e)
+    lookupFailed = true
+    console.error(
+      stellr
+        ? '[notify] staff_roles lookup failed; falling back to the staff inbox:'
+        : `[notify] staff lookup failed for tenant ${tenantId}:`,
+      e,
+    )
   }
   if (ids.length > 0) {
-    await notifyMembers(ids, input)
+    for (const id of ids) await deliver(id, input, stellr)
+    return
+  }
+
+  if (!stellr) {
+    console.error(
+      `[notify] admin alert for tenant ${tenantId} dropped: ` +
+        (lookupFailed ? 'its staff lookup failed' : 'it has no tenant admin') +
+        '. It is not sent to the Stellr staff inbox.',
+    )
     return
   }
 

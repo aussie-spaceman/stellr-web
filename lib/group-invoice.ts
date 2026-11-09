@@ -62,7 +62,7 @@ export async function createAndSendGroupInvoice(
     stripe_payment_intent_id: null, amount_due_cents: input.amountCents, adult_count: null, student_count: null,
     teacher_first_name: input.teacher.firstName, teacher_last_name: input.teacher.lastName,
     teacher_email: input.teacher.email, teacher_member_id: input.registrantMemberId,
-    invoice_coupon_id: null, invoice_promotion_code: null,
+    invoice_coupon_id: null, invoice_promotion_code: null, late_joiner_payer: null, share_estimate: null, share_first_paid_at: null,
   }
   const sent = await createGroupInvoice(db, stripe, {
     reg,

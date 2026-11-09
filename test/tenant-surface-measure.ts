@@ -26,8 +26,13 @@ export const BASELINE_FILE = 'test/tenant-surface-baseline.json'
 
 const TREE = 'app/%5Ft'
 
-/** Wrap the tree without being imported by it, so the walk starts from them too. */
-const ROOT_BOUNDARY = /^(layout|template|not-found|error|global-error|loading)\.tsx?$/
+/**
+ * Beside the tree without being imported by it, so the walk starts from them too.
+ * global-not-found stays in the walk though a tenant host's misses go to the tree's own
+ * catch-all (the fallback rewrite in next.config.mjs): only a build can prove that, and
+ * this walk has to hold without one.
+ */
+const ROOT_BOUNDARY = /^(layout|template|not-found|error|global-error|global-not-found|loading)\.tsx?$/
 
 /** The one allowed way in. It does nothing for another tenant's event, so the walk stops there. */
 export const SOCIAL_ENTRY = 'lib/community/event-hooks.ts'
@@ -52,7 +57,7 @@ export const SOCIAL_MODULES: readonly RegExp[] = [
   /^lib\/member-profile-options\.ts$/,
   /^lib\/resource-(upload|finalise|admin)\.ts$/,
   /^components\/community\//,
-  /^app\/\(member\)\/community\//,
+  /^app\/\(stellr\)\/\(member\)\/community\//,
   /^app\/api\/community\//,
 ]
 

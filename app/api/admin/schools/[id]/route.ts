@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { withAudit } from '@/lib/audit/route'
 
 // Editable school fields — name plus the address block surfaced in the admin
 // portal. Any field present in the body is updated; the rest are left as-is.
@@ -9,16 +10,33 @@ const ALLOWED = [
   'name', 'address_line1', 'address_line2', 'city', 'state', 'postcode', 'is_active',
 ] as const
 
-export async function PATCH(
+// What this request acted on, which withAudit's spec cannot read for itself.
+const audited = new WeakMap<Request, { id: string; userId: string | null }>()
+
+export const PATCH = withAudit(
+  ({ args: [req] }: { args: [Request, { params: Promise<{ id: string }> }] }) => {
+    const a = audited.get(req)
+    return {
+      action: 'school.record.update',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { stellr: true },
+      target: { table: 'schools', id: a?.id ?? null },
+    }
+  },
+  updateSchool,
+)
+
+async function updateSchool(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { sessionClaims } = await auth()
+  const { userId, sessionClaims } = await auth()
   if (!isAdminClaims(sessionClaims)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { id } = await params
+  audited.set(req, { id, userId })
   const body = await req.json().catch(() => ({}))
 
   const updates: Record<string, unknown> = {}

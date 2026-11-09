@@ -75,11 +75,15 @@ export async function POST(req: Request) {
   const sync = await syncEventSpace(db, { sanityId: body._id, slug, title })
 
   // Fire object_created rules (auto-attach configured spaces/courses/resources).
-  const rules = await fireObjectCreatedRules({
-    objectType,
-    ref: slug,
-    containerId: sync.containerId ?? undefined,
-  })
+  // Not for another tenant's event: a Space rule needs no container, so it would link a
+  // Stellr Space to that event, and community is Stellr-only.
+  const rules = sync.skippedOtherTenant
+    ? { applied: [], skipped: [] }
+    : await fireObjectCreatedRules({
+        objectType,
+        ref: slug,
+        containerId: sync.containerId ?? undefined,
+      })
 
   // Post-event survey: schedule it for a new event, or follow a date change /
   // cancellation (lib/survey/distributions.ts). The cron sweep does the same,

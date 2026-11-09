@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { eventRouteFor, eventRouteRefused } from '@/test/fixtures/event-route'
 
-const { requireEventAccess, reissue, logActivity } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(async (_slug: string): Promise<{ ok: boolean; status: number }> => ({ ok: true, status: 200 })),
+const { requireEventRoute, reissue, logActivity } = vi.hoisted(() => ({
+  requireEventRoute: vi.fn(),
   reissue: vi.fn(async (_db: unknown, _id: string, _opts: unknown): Promise<unknown> => ({ kind: 'resent', envelopeRowId: 'r', recipients: 1 })),
   logActivity: vi.fn(async (_entry: unknown, _db: unknown) => {}),
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess }))
+vi.mock('@/lib/authz', () => ({ requireEventRoute }))
 vi.mock('@/lib/docusign-reissue', () => ({ reissueParticipantAgreement: reissue }))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'admin-1' }), logActivity }))
 vi.mock('@/lib/supabase', () => ({
@@ -33,12 +34,12 @@ function post(body: unknown, slug = 'colorado') {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  requireEventAccess.mockResolvedValue({ ok: true, status: 200 })
+  requireEventRoute.mockImplementation(async (slug: string) => eventRouteFor(slug))
 })
 
 describe('POST /api/admin/events/[slug]/docusign-reissue', () => {
   it('403s an event manager on an unassigned event', async () => {
-    requireEventAccess.mockResolvedValue({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValue(eventRouteRefused(403))
     expect((await post({ participantId: 'p-1' })).status).toBe(403)
     expect(reissue).not.toHaveBeenCalled()
   })

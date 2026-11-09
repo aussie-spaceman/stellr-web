@@ -8,7 +8,7 @@ import { mintToken, signingUrl } from '@/lib/esign/native/tokens'
 import { signatureBundleEmail, signatureRequestEmail } from '@/lib/esign/emails'
 import type { NativeRecipient } from '@/lib/esign/native/flow'
 import { escapeHtml } from '@/lib/email-layout'
-import { notifyCommunityAdmins } from '@/lib/notify'
+import { announceBounces } from '@/lib/esign/bounce-notices'
 import { maskEmail } from '@/lib/utils'
 
 // Signing emails go through a daily budget. Resend's free plan allows 100
@@ -202,7 +202,7 @@ export async function sendInvites(
       if (sent.suppressed) {
         // Not reachable while the send is critical; kept so a future change
         // cannot turn a skipped invitation back into a silent "Sent".
-        await markSuppressed(db, live.map(({ r }) => r), live[0].env)
+        await markSuppressed(db, live.map(({ r }) => r))
         result.failed += live.length
         continue
       }
@@ -241,10 +241,11 @@ export async function sendInvites(
 /**
  * A signing email the suppression list stopped: nothing reached Resend, so no
  * bounce will ever arrive. Show it the way a bounce shows (status
- * 'autoresponded', the roster's Email Bounced pill, with the reason) and tell
- * staff, so Correct email can fix the address.
+ * 'autoresponded', the roster's Email Bounced pill, with the reason) and
+ * announce it like a bounce (lib/esign/bounce-notices.ts), so the address can
+ * be fixed.
  */
-async function markSuppressed(db: SupabaseClient, rows: NativeRecipient[], env: EnvelopeForEmail): Promise<void> {
+async function markSuppressed(db: SupabaseClient, rows: NativeRecipient[]): Promise<void> {
   await db
     .from('agreement_recipients')
     .update({
@@ -255,13 +256,9 @@ async function markSuppressed(db: SupabaseClient, rows: NativeRecipient[], env: 
       last_synced_at: new Date().toISOString(),
     })
     .in('id', rows.map((r) => r.id))
-  const about = env.minor_name || 'a participant'
-  const body = `A Stellr signing email to ${maskEmail(rows[0].email)} was not sent: the address is on the email suppression list (${rows.length > 1 ? `${rows.length} forms` : 'the form'} for ${about}${env.event_title ? `, ${env.event_title}` : ''}). Use Correct email on the event roster to fix the address; the form is sent again to the new one.`
-  await notifyCommunityAdmins({
-    type: 'action',
-    body,
-    email: { subject: 'A signing email was not sent', html: `<p>${escapeHtml(body)}</p>`, text: body },
-  }).catch(() => {})
+  for (const envelopeRow of new Set(rows.map((r) => r.envelope_row))) {
+    await announceBounces(db, envelopeRow, { kind: 'suppressed' })
+  }
 }
 
 /** Sends what is waiting in the outbox, oldest and guardians first. */

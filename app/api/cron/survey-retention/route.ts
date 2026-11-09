@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
-import { applySurveyRetention, planSurveyRetention, redactedDue } from '@/lib/survey/retention'
+import { applySurveyRetentionPerTenant, planSurveyRetention, redactedDue } from '@/lib/survey/retention'
 
 // GET /api/cron/survey-retention
 // Vercel cron, monthly (see vercel.json). The 7-year survey retention rule
@@ -12,9 +12,13 @@ import { applySurveyRetention, planSurveyRetention, redactedDue } from '@/lib/su
 // switch is David's decision. The first deletions fall due in 2033.
 export const maxDuration = 60
 
+/** Deletions stop starting this long after the run began, clear of maxDuration. */
+const APPLY_BUDGET_MS = 45_000
+
 export const GET = withCronAudit('survey-retention', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
+  const started = Date.now()
 
   const db = supabaseServer()
   const run = await startCronRun(db, 'survey-retention')
@@ -33,9 +37,20 @@ export const GET = withCronAudit('survey-retention', async (req: NextRequest) =>
       await run.finish(report)
       return NextResponse.json(report)
     }
-    const result = await applySurveyRetention(db, plan, 'system:survey-retention')
-    for (const f of result.failures) run.fail(`${f.kind}:${f.kind === 'email' ? 'email' : f.id}`, f.error)
-    await run.finish({ ...report, deleted: { people: result.purged, responses: result.responses, invitations: result.invitations } })
+    // Per tenant, inactive tenants included (S5 B13). Failures are recorded on
+    // `run` as they happen. When only Stellr has subjects due, ledger is empty
+    // and the result is the same as before; notApplied appears only when the
+    // time ran out, where a run used to be cut off with no result at all, and
+    // then the run also records 'not_applied' so it does not finish ok.
+    const { result, notApplied, ledger } = await applySurveyRetentionPerTenant(db, run, plan, 'system:survey-retention', {
+      deadline: started + APPLY_BUDGET_MS,
+    })
+    await run.finish({
+      ...report,
+      deleted: { people: result.purged, responses: result.responses, invitations: result.invitations },
+      ...(notApplied ? { notApplied } : {}),
+      ...ledger,
+    })
     return NextResponse.json({ ...report, deleted: result.purged, failures: result.failures.length })
   } catch (err) {
     run.fail('plan', err)

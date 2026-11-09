@@ -17,11 +17,25 @@ const logActivity = vi.fn()
 const memberIdForClerkUser = vi.fn()
 const captureRequestError = vi.fn()
 
+const clerkRole = { value: undefined as string | undefined }
+const updateUserMetadata = vi.fn(async (_id: string, p: { publicMetadata: { role?: string | null } }) => {
+  clerkRole.value = p.publicMetadata.role ?? undefined
+})
+const sendEmail = vi.fn(async () => ({ id: 'email_1' }))
 vi.mock('@clerk/nextjs/server', () => ({
-  auth: async () => ({ sessionClaims: { metadata: { role: 'admin' } } }),
-  clerkClient: async () => ({ users: { getUserList: async () => ({ data: [] }) } }),
+  auth: async () => ({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } }),
+  clerkClient: async () => ({
+    users: {
+      getUserList: async () => ({ data: [] }),
+      getUser: async () => ({ publicMetadata: clerkRole.value ? { role: clerkRole.value } : {} }),
+      updateUserMetadata,
+    },
+  }),
 }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))
+vi.mock('@/lib/events/repo', () => ({
+  getEventBySlug: async (slug: string) => ({ title: `Event ${slug}`, date: '2026-12-05', endDate: '2026-12-06' }),
+}))
+vi.mock('@/lib/email', () => ({ sendEmail: (...a: unknown[]) => sendEmail(...(a as [])) }))
 vi.mock('@/lib/activity-log', () => ({
   logActivity: (...a: unknown[]) => logActivity(...a),
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'admin1' }),
@@ -38,8 +52,26 @@ vi.mock('@/lib/supabase', () => ({
 
 const { POST, DELETE } = await import('./route')
 
+// A cleared adult with a login: the gate (lib/event-manager) lets them through.
+// fake-supabase ignores the select list, so the clearance rows ride on the member.
+const CLEARED_MEMBER = {
+  id: 'target-member-1',
+  clerk_user_id: 'user_em',
+  first_name: 'Em',
+  email: 'em@example.test',
+  is_active: true,
+  date_of_birth: '1980-04-01',
+  member_teacher_licenses: [],
+  member_external_background_checks: [],
+  member_background_checks: [
+    { id: 'bc1', status: 'passed', ordered_at: '2026-01-10T00:00:00Z', completed_at: '2026-01-20T00:00:00Z', expires_at: '2029-01-20T00:00:00Z', adjudication_outcome: null, adjudicated_at: null },
+  ],
+}
+
+const withMember = (tables: Record<string, unknown[]> = {}) => ({ members: [CLEARED_MEMBER], ...tables })
+
 function seed(failOn?: (table: string, action: string) => string | null) {
-  h.db = fakeSupabase({}, { failOn })
+  h.db = fakeSupabase(withMember(), { failOn })
 }
 
 const assign = (slug = 'co-sdc') =>
@@ -59,6 +91,11 @@ const failMemberships = (table: string) => (table === 'tenant_memberships' ? 'bo
 const OTHER_TENANT = '11111111-1111-4111-8111-111111111111'
 
 beforeEach(() => {
+  // Expiry rules compare with today: pin it so the fixed dates below never rot.
+  vi.useFakeTimers({ now: new Date('2026-11-09T12:00:00Z'), toFake: ['Date'] })
+  clerkRole.value = undefined
+  updateUserMetadata.mockClear()
+  sendEmail.mockClear()
   logActivity.mockReset()
   captureRequestError.mockReset()
   memberIdForClerkUser.mockReset()
@@ -114,7 +151,7 @@ describe('POST /api/admin/event-managers', () => {
   })
 
   it("writes no membership for another tenant's event, and makes the refusal visible (C9)", async () => {
-    h.db = fakeSupabase({ events: [{ slug: 'canary', tenant_id: OTHER_TENANT }] })
+    h.db = fakeSupabase(withMember({ events: [{ slug: "canary", tenant_id: OTHER_TENANT }] }))
     const res = await assign('canary')
     expect(res.status).toBe(201)
     expect(h.db.table('tenant_memberships')).toHaveLength(0)
@@ -123,14 +160,135 @@ describe('POST /api/admin/event-managers', () => {
   })
 })
 
+// 9 Nov 2026: the safeguarding gate, expiry, Clerk role and email, which this
+// route now shares with the member page through lib/event-manager.
+describe('POST /api/admin/event-managers — who may hold it', () => {
+  const memberWith = (over: Record<string, unknown>) => fakeSupabase({ members: [{ ...CLEARED_MEMBER, ...over }] })
+
+  it('refuses a member with no clearance on file', async () => {
+    h.db = memberWith({ member_background_checks: [] })
+    const res = await assign()
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('not_cleared')
+    expect(h.db.table('event_manager_assignments')).toHaveLength(0)
+    expect(updateUserMetadata).not.toHaveBeenCalled()
+  })
+
+  it('refuses a minor, even with a passed check', async () => {
+    h.db = memberWith({ date_of_birth: '2012-05-01' })
+    const res = await assign()
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('minor')
+  })
+
+  it('refuses an unknown date of birth', async () => {
+    h.db = memberWith({ date_of_birth: null })
+    expect((await (await assign()).json()).code).toBe('no_dob')
+  })
+
+  it('refuses a deactivated member', async () => {
+    h.db = memberWith({ is_active: false })
+    expect((await (await assign()).json()).code).toBe('inactive')
+  })
+
+  it('refuses when the check was adjudicated not cleared', async () => {
+    h.db = memberWith({
+      member_background_checks: [{ ...CLEARED_MEMBER.member_background_checks[0], status: 'referred', adjudication_outcome: 'not_cleared', adjudicated_at: '2026-02-01T00:00:00Z' }],
+      member_teacher_licenses: [{ id: 'l1', license_number: 'X', licensing_state: 'MN', expiry_date: '2030-01-01', verified_at: '2026-01-01T00:00:00Z', verified_label: 'Admin', document_path: null }],
+    })
+    expect((await (await assign()).json()).code).toBe('not_cleared')
+  })
+
+  it('accepts a verified uploaded check from another organisation', async () => {
+    h.db = memberWith({
+      member_background_checks: [],
+      member_external_background_checks: [{ id: 'x1', issuer: 'ISD 196', completed_on: '2025-08-01', document_expires_on: null, document_path: 'm/bc/1.pdf', verified_at: '2026-01-01T00:00:00Z', verified_label: 'Admin' }],
+    })
+    const res = await assign()
+    expect(res.status).toBe(201)
+    expect(h.db.table('event_manager_assignments')[0]).toMatchObject({ clearance_basis: 'external_background_check' })
+  })
+
+  it('refuses an uploaded check still waiting verification', async () => {
+    h.db = memberWith({
+      member_background_checks: [],
+      member_external_background_checks: [{ id: 'x1', issuer: 'ISD 196', completed_on: '2025-08-01', document_expires_on: null, document_path: 'm/bc/1.pdf', verified_at: null, verified_label: null }],
+    })
+    expect((await (await assign()).json()).code).toBe('awaiting_verification')
+  })
+})
+
+describe('POST /api/admin/event-managers — expiry, Clerk role, email', () => {
+  it('defaults the expiry to the event end + 30 days, and records the clearance', async () => {
+    const res = await assign()
+    expect(await res.json()).toMatchObject({ assignment: { expires_on: '2027-01-05' } })
+    expect(h.db.table('event_manager_assignments')[0]).toMatchObject({
+      member_id: 'target-member-1',
+      expires_at: '2027-01-05T23:59:59.999Z',
+      clearance_basis: 'background_check',
+    })
+  })
+
+  it('refuses an expiry past the clearance', async () => {
+    h.db = fakeSupabase({
+      members: [{ ...CLEARED_MEMBER, member_background_checks: [{ ...CLEARED_MEMBER.member_background_checks[0], expires_at: '2027-03-01T00:00:00Z' }] }],
+    })
+    const res = await POST(new Request('https://app.test/api/admin/event-managers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clerk_user_id: 'user_em', event_slug: 'co-sdc', expires_on: '2027-06-01' }),
+    }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('bad_expiry')
+  })
+
+  it('sets the Clerk role on the first assignment and clears it with the last', async () => {
+    await assign('co-sdc')
+    expect(updateUserMetadata).toHaveBeenCalledWith('user_em', { publicMetadata: { role: 'event_manager' } })
+    await assign('nv-sdc')
+    expect(updateUserMetadata).toHaveBeenCalledTimes(1)
+    await unassign('co-sdc')
+    expect(clerkRole.value).toBe('event_manager')
+    await unassign('nv-sdc')
+    expect(updateUserMetadata).toHaveBeenLastCalledWith('user_em', { publicMetadata: { role: null } })
+    expect(clerkRole.value).toBeUndefined()
+  })
+
+  it("never touches an admin's Clerk role", async () => {
+    clerkRole.value = 'admin'
+    await assign()
+    await unassign()
+    expect(updateUserMetadata).not.toHaveBeenCalled()
+    expect(clerkRole.value).toBe('admin')
+  })
+
+  it('emails the person on a new grant and on removal, not on a re-confirm', async () => {
+    await assign()
+    await assign()
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    await unassign()
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('DELETE /api/admin/event-managers', () => {
   it('logs event_manager_unassigned (AUTH-6)', async () => {
+    await assign()
+    logActivity.mockClear()
     const res = await unassign()
     expect(res.status).toBe(200)
     expect(logActivity.mock.calls[0][0]).toMatchObject({
+      memberId: 'target-member-1',
       action: 'event_manager_unassigned',
-      metadata: { event_slug: 'co-sdc', clerk_user_id: 'user_em' },
+      metadata: { event_slug: 'co-sdc', clerk_user_id: 'user_em', reason: 'admin' },
     })
+  })
+
+  it('removing nothing is a no-op: no log, no email', async () => {
+    const res = await unassign()
+    expect(res.status).toBe(200)
+    expect(logActivity).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
   })
 
   it('keeps the membership until the last assignment goes (C9)', async () => {

@@ -7,7 +7,7 @@ import { actingSession, json, requestMeta, sameOrigin, throttle } from '@/lib/es
 // security scanners fetch links automatically, and a scanner is not a parent.
 
 export async function POST(req: Request) {
-  const limited = throttle(req, 'viewed', 20)
+  const limited = await throttle(req, 'viewed', 20)
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()

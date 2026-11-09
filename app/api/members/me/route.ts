@@ -5,6 +5,8 @@ import { logActivity } from '@/lib/activity-log'
 import { childAwaitingConsentBlock } from '@/lib/pending-consent'
 import { assertNotImpersonating, impersonatedMemberId } from '@/lib/impersonation'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // Treat null/undefined/'' as equivalent so an untouched empty field (the form
 // submits null DB values as '') is not flagged as a change.
@@ -103,6 +105,10 @@ export async function GET() {
 
 // PATCH /api/members/me — update the current member's profile
 export async function PATCH(req: Request) {
+  return audited(req, { action: 'member.profile.update', table: 'members' }, () => updateProfile(req))
+}
+
+async function updateProfile(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — see lib/impersonation.
   const impersonationBlock = await assertNotImpersonating()
@@ -141,6 +147,7 @@ export async function PATCH(req: Request) {
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   const memberRow = member as unknown as Record<string, unknown>
+  noteAudit(req, { targetId: typeof memberRow.id === 'string' ? memberRow.id : null })
   const memberId = memberRow.id as string
 
   const updates: Record<string, unknown> = {}
@@ -236,4 +243,22 @@ export async function PATCH(req: Request) {
   }
 
   return NextResponse.json({ success: true })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

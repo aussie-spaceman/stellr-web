@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { eventRouteFor, eventRouteRefused } from '@/test/fixtures/event-route'
 
-const { requireEventAccess, row, updates } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(async (_s: string): Promise<{ ok: boolean; status: number }> => ({ ok: true, status: 200 })),
+const { requireEventRoute, row, updates } = vi.hoisted(() => ({
+  requireEventRoute: vi.fn(),
   row: { current: null as Record<string, unknown> | null },
   updates: [] as Record<string, unknown>[],
 }))
 
 vi.mock('@/lib/community', () => ({ tiptapToPlainText: () => '', RESOURCES_BUCKET: 'community-resources' }))
-vi.mock('@/lib/event-access', () => ({ requireEventAccess }))
+vi.mock('@/lib/authz', () => ({ requireEventRoute }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     storage: { from: () => ({ remove: async () => ({}) }) },
@@ -49,12 +50,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   updates.length = 0
   row.current = { ...DRAFT }
-  requireEventAccess.mockResolvedValue({ ok: true, status: 200 })
+  requireEventRoute.mockImplementation(async (slug: string) => eventRouteFor(slug))
 })
 
 describe('PATCH /api/admin/events/[slug]/emails/[id]', () => {
   it('403s an event manager on another event', async () => {
-    requireEventAccess.mockResolvedValue({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValue(eventRouteRefused(403))
     expect((await patch({ name: 'x' })).status).toBe(403)
   })
 

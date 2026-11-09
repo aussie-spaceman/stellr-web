@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { communityWriteBlock } from '@/lib/community'
 import { getOnboardedMember } from '@/lib/onboarded-member'
 import { getSpaceForMember } from '@/lib/spaces'
@@ -7,6 +8,8 @@ import { attachSpaceResource } from '@/lib/container-sync'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload, discardUpload, spaceAttachmentPrefix } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -29,6 +32,10 @@ function fileLabel(name: string, mime: string): string {
 // Body: { spaceSlug, postId, storagePath, fileName, fileType } — the bytes were
 // already sent straight to storage via /api/uploads/sign.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.resource.attach', table: 'community_resources' }, () => attachResource(req))
+}
+
+async function attachResource(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -108,6 +115,7 @@ export async function POST(req: Request) {
   const { data, error } = await db
     .from('community_resources')
     .insert({
+      tenant_id: STELLR_TENANT_ID,
       space_id: space.id,
       title: fileName,
       storage_path: storagePath,
@@ -126,7 +134,26 @@ export async function POST(req: Request) {
   }
 
   // Surface it in the global catalogue (container_contents on the space container).
+  noteAudit(req, { targetId: data.id })
   await attachSpaceResource(db, space.id, data.id)
 
   return NextResponse.json({ id: data.id })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

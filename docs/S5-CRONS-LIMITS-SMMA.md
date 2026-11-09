@@ -1,12 +1,12 @@
 # S5: crons, rate limiter and SMMA guardrail
 
-What is built, what it does for Stellr today, and what has to happen before it does more. Plan of record: `docs/TENANCY-S5.md`. Checked against the code on 6 Nov 2026, with wave 3's Lanes A, B and C merged to `dev` (#562, #563, #564). None of wave 3 is on production.
+What is built, what it does for Stellr today, and what has to happen before it does more. Plan of record: `docs/TENANCY-S5.md`. Checked against the code on 6 Nov 2026, with wave 3's Lanes A, B and C merged to `dev` (#562, #563, #564), and updated on 8 Nov 2026 for wave 4's A9, B9, B10 and B13, read on their lane branches before merge. Neither wave is on production.
 
 **In one line each:**
 
-- **Crons:** Stellr-only crons are limited to Stellr's rows, every cron declares `maxDuration` and audits each finished run. **No cron runs per tenant yet.** B13 and B14 are not built.
-- **Limiter:** the Postgres store is built and its migration is on production, but **no route calls it**, so changing `RATE_LIMIT_STORE` today protects nothing.
-- **SMMA:** the allow-list and the lint are built. The gate, the database CHECK and the browser test are not. The self-assessment is held privately pending the owner's decision.
+- **Crons:** Stellr-only crons are limited to Stellr's rows, every cron declares `maxDuration` and audits each finished run. **Three crons run per tenant (B13):** `surveys`, `team-profiles` and `survey-retention`. B14 is not built.
+- **Limiter:** the Postgres store is built and its migration is on production. **Lane A's participant routes call it (A9)**, so a shadow flip now has real traffic to compare. B15 is not built, so flip only after it.
+- **SMMA:** the allow-list and the lint are built. The 4-table CHECK (B9) is built and applied nowhere. The browser test (B10(d)) is built and runs report-only. The self-assessment is held privately pending the owner's decision.
 
 ## Crons
 
@@ -24,11 +24,11 @@ From `lib/cron-scope.ts`. Nothing reads this at runtime.
 
 **`maxDuration` (B11).** The 12 crons with none now declare 300, the highest value already used on this Hobby project. Existing values did not change: 13 crons at 300 and 10 at 60. It cannot shorten a run. Where the platform default was lower, a run that hangs may now run longer, so watch Active CPU.
 
-### The per-tenant runner: built, unused
+### The per-tenant runner
 
-`lib/cron-tenants.ts` (B3). Only `lib/cron-tenants.ts` and `lib/cron-runs.ts` touch it, so **per-tenant crons still run one global work list under one deadline.** A second tenant's backlog could starve or fail Stellr's run until B13 and B14 land, so those must land before a tenant has work in these crons.
+`lib/cron-tenants.ts` (B3). **B13 moved `surveys`, `team-profiles` and `survey-retention` onto it.** `docusign-reminders`, `event-emails` and `group-invoice-sync` still run one global work list under one deadline, so a second tenant's backlog could starve or fail Stellr's run in those until B14 (and a slice for `group-invoice-sync`) lands. Those must land before a tenant has work in them.
 
-How it will behave once used:
+How it behaves:
 
 - It partitions the work list a cron has already fetched. It does not loop over `tenants`, and `vercel.json` keeps its schedules.
 - A NULL `tenant_id` goes in Stellr's slot. A row read without the column throws.
@@ -37,6 +37,25 @@ How it will behave once used:
 - Each tenant has its own try/catch and a child `cron_runs` row (`parent_id`, `tenant_id`). `lastCronResult` ignores child rows, so the `apollo-reconcile` cursor is safe.
 - Inactive tenants are skipped, except where the cron passes `includeInactive`. `survey-retention` is marked for it, because offboarding does not stop a retention clock.
 - **Fairness defaults to `stellr_first`** until the owner decides. `rotate` is available, with a stored cursor. A tenant that was mid-run when the platform killed the last run goes last next time.
+
+### The three per-tenant crons (B13)
+
+No flag: with only Stellr's work, each is the runner's plain call, so the order, budget, mail and failure labels are as before, and `cron_runs` results gain no keys. Each function checks the abort signal before every distribution, student or subject.
+
+| Cron | How it splits | What else changed |
+|---|---|---|
+| `surveys` (`lib/survey/run.ts`) | Open distributions by `survey_distributions.tenant_id` (from S4, so already on production) | The sweep and the clock still run once over every event, before the runner. They schedule, open and close surveys and send no mail. Failures are recorded on the run in the order they happen; sweep errors only after the open-surveys read succeeds |
+| `team-profiles` (`lib/team-profile/store.ts`) | The daily sweep reads each student's tenant from their registration (`registrations!inner(… tenant_id)`), because `participants.tenant_id` comes with C0b, which is not on production | Calls for some participants or one event (agreement completion, registration) keep the plain path. The 550 ms gap and the 45 s budget are unchanged, and the gap is shared across tenants, since Resend's rate is one account's. If only Stellr has work and a write fails, the error is thrown again after the runner, so the route still answers 500 as today |
+| `survey-retention` (`lib/survey/retention.ts`) | Planning stays one read and now also selects `tenant_id` on `survey_distributions` and `survey_responses`. Deletions run per tenant with `includeInactive` | Still report-only unless `SURVEY_RETENTION_APPLY` is true. A person whose rows span tenants is one purge, in Stellr's slot. With apply on, deletions stop starting 45 s after the route starts (the plan read counts); anyone left is recorded as a `not_applied` failure and `notApplied` in the result. Before, such a run was cut off at `maxDuration` and recorded nothing |
+
+**What changes for Stellr:** when `surveys` or `team-profiles` has work, it reads `tenants` once. If that read fails, the run records a `tenants` failure and finishes not ok, while Stellr's work still runs. Read a `tenants` error in `cron_runs` as a ledger signal, not a send failure.
+
+**Preconditions it leaves:**
+
+- The per-tenant `surveys` and `team-profiles` functions read with the service-role client by `event_slug`, so their isolation rests on slugs being unique across tenants. Before S8 makes slugs unique per tenant, those reads go through the job's scope, or check each row's `tenant_id`.
+- `dispatchTeamProfiles`' path for named participants does not read the registration's tenant. That is correct while only CMS events take team profiles. The slice that lets tenant events take them adds the tenant there and drops inactive tenants' candidates.
+
+**Proof still owed:** after promotion, confirm in `cron_runs` that `surveys` still opens and invites.
 
 **`group-invoice-sync` has no slice.** It is classed `per_tenant`, but B13 and B14 do not list it. A7's refusal of priced tenant events means no tenant has a group invoice until S9, so it can wait, but name a slice before then.
 
@@ -98,9 +117,9 @@ ORDER BY r.job;
 | Piece | File | State |
 |---|---|---|
 | In-memory limiter, per warm instance | `lib/rate-limit.ts` | Live. It is what every route uses, and `proxy.ts` for `/credentials/` |
-| Async API: `limit()`, `rateLimit()` | `lib/rate-limit-async.ts` | **No route imports it** (A9, B15 not built) |
+| Async API: `limit()`, `rateLimit()` | `lib/rate-limit-async.ts` | **Lane A's participant routes (A9):** the 5 register routes, check-in and its name count, the 8 signing routes, the 3 survey API routes, survey stop-reminders, survey link, team profile and credential events. B15 (Lane B's routes) is not built |
 | Store client | `lib/rate-limit-store.ts` | Reached only by that API and the `entitlements` gc call |
-| `rate_limit_hits`, `rate_limit_take()`, `rate_limit_gc()` | `supabase/migrations/20261105042629_rate_limit.sql` | On `dev` and production. Empty until a route adopts |
+| `rate_limit_hits`, `rate_limit_take()`, `rate_limit_gc()` | `supabase/migrations/20261105042629_rate_limit.sql` | On `dev` and production. Empty while `RATE_LIMIT_STORE` is `memory` |
 | Guard list | `lib/security/route-guards.ts` | Knows both async names (C5b). A call counts only when awaited with its answer used |
 
 ### Modes
@@ -117,12 +136,14 @@ Every mode counts in memory first. **A request memory has already denied stops t
 
 **Failure is never allow-all.** The store gets 300 ms, enforced by the app and by `lock_timeout` in the function. A timeout, an error, an odd answer or a missing secret means the caller keeps its in-memory decision. Problems go to `console.error` at most once a minute per instance, not to `app_errors` as scoping proposed, so they vanish with Hobby's short log retention.
 
+**Store budget (A9).** Every new key is a new row, and a `rateLimit()` key suffix holds what the client sent (a slug, a token). So in `shadow` and `postgres` each route gives an IP 2,000 store calls an hour for suffixed keys, per instance, kept in a bounded map of its own so a spray of keys cannot evict it. Past that the IP keeps its in-memory decision on that route, as in `memory` mode. It slows the rows one client can write and adds no limit, and it is not a firm bound: a client rotating addresses, IPv6 within a prefix included, is not held by it. `limit()` has no budget, because its keys need not hold the IP: check-in's by-name count therefore always reaches the store, and an IP spraying names and slugs before the token check writes about one row per request. Watch `rate_limit_hits` during shadow. Whether that path gets an unsuffixed per-IP cap first is an owner decision (wave 4), since a venue's shared IP would feel it.
+
 ### Key hashing
 
 Limiter keys hold IP addresses, and `check-in-name` keys hold minors' names. Only an HMAC-SHA256 under `RATE_LIMIT_KEY_SECRET` leaves the process, and the table's CHECK takes 32 bytes only. Without a secret of at least 32 characters nothing is sent at all.
 
 - **Secret:** different per Vercel project. Changing it restarts every open window, which is harmless.
-- **Tenant:** `tenantId` is required by the types, and only another tenant's id changes the key. So Stellr's keys stay as they are, and a tenant's traffic counts separately from Stellr's.
+- **Tenant:** `tenantId` is required by the types, and only another tenant's id changes the key. So Stellr's keys stay as they are, and a tenant's traffic counts separately from Stellr's. A9's routes take it from `requestTenant()`, which answers Stellr without reading the request while routing is off. Because the count is per tenant, check-in and the register routes must refuse another tenant's event before tenant hosts go live (A7, A12), or the by-name tries and the hourly allowances would multiply with each host.
 - **Logs:** shadow lines carry the route label and the two answers, no key. The 429 line keeps the IP, as the sync limiter's does.
 - **Backups: open.** The table is UNLOGGED, but a logical `pg_dump` still includes its rows, and `ops/backups/backup.sh` does not exclude it. Owner decision from wave 2.
 
@@ -132,9 +153,9 @@ One row per active key, one RPC per limited request, no WAL. One take in 100 als
 
 ### Flip procedure
 
-**Not yet: A9 and B15 come first.** Without them, shadow on production only runs a gc over an empty table and proves nothing.
+**Not yet: B15 comes first.** A9 is built; without B15, shadow covers Lane A's routes only.
 
-1. **Adopt.** A9 and B15 move routes to the async API with the same limits, keys and 429 body. Every call is awaited (`test/rate-limit-await.test.ts`), because a Promise is truthy and an un-awaited guard blocks every request.
+1. **Adopt.** A9 (built) and B15 move routes to the async API with the same limits, keys and 429 body. Every call is awaited (`test/rate-limit-await.test.ts`), because a Promise is truthy and an un-awaited guard blocks every request. A9's store and budget paths have run only against a mocked store, so the first shadow flip on `dev` is their first real run. `RATE_LIMIT_STORE`'s value on `dev` was not read for this record.
 2. **Secret.** The owner creates `RATE_LIMIT_KEY_SECRET` per project. It is never pasted in chat or the repo.
 3. **`dev` first**, then a redeploy of the newest READY deployment. Read a fresh list: a stored deployment id goes stale.
 4. **Production `shadow`**, outside event hours, for at least 7 days, with a real event in the window if one is coming. Hobby's logs are short, so read them during the event.
@@ -145,6 +166,10 @@ One row per active key, one RPC per limited request, no WAL. One take in 100 als
 ### What stays in memory
 
 **`proxy.ts`'s `/credentials/` limit stays sync, on purpose:** 60 a minute per IP, per instance. A database call there would raise latency and the middleware share of Active CPU. Its cross-instance cover is the WAF rule (`docs/RUNBOOK-waf-rule.md`).
+
+**`app/api/uploads/sign/audit-coalescing.ts` stays sync too.** It caps that route's audit rows per instance and does not limit the route, and a test pins it as Lane A's only remaining sync limiter use.
+
+**Audit list.** A9 adds two GET handlers, `sign/context` and `sign/document`, to the unaudited GET writers, because their only write is the store counter. Lane A's PR needs the `audit-cap-grow` label unless the owner gives the store write an `OPERATIONAL_WRITERS` entry (wave 4). B15 meets the same question on any limited GET.
 
 **Plan items:** B15 sets the route limits for `schools/search` and `store/checkout`. Decide the `store/checkout` limit before `PLATFORM_AUDIT_ENABLED` goes on (owner decision, wave 3).
 
@@ -194,13 +219,29 @@ The baseline is `test/tenant-surface-baseline.json`, generated by `scripts/tenan
 - **A tenant event writes no `event_participations` row or activity entry**, until the owner decides otherwise (wave 3 decisions).
 - **Nothing imports the hooks yet, so they hold nothing back on their own.** The register routes still call these modules directly, until A7. Team and sheet paths move in A8.
 
+### The database CHECK (B9)
+
+Migration `20261106234759_community_stellr_only_check.sql`, built in wave 4 and **applied to no database**. It adds CHECK (`tenant_id IS NULL OR` Stellr) to `community_spaces`, `community_resources`, `mentoring_cohorts` and `training_modules`, so a write that would stamp another tenant's event on them is refused with 23514. `STELLR_ONLY_CHECKS` in `lib/tenancy/registry.ts` lists the four. Every row today is Stellr's or NULL. Its production apply needs the owner's approval of the rule and runs outside event hours, because the file holds ACCESS EXCLUSIVE on all four tables through the validation scans (`lock_timeout` 5 s, then it rolls back).
+
+- `syncEventSpace` writes nothing for an event the mirror gives another tenant, and fails the sync if the mirror read fails: the Sanity webhook answers 500, and Sanity's retry and `sync:event-spaces` catch up.
+- Lane B's 11 inserts into three of the tables name `tenant_id: STELLR_TENANT_ID` (B16), the value log mode already stamped.
+- **What it does not cover:** a tenant event published before its mirror row exists is stamped Stellr, so the check passes it. That first publish also takes an unadopted Stellr Space with the same slug, strips its grants, links it and copies the roster in. The mirror row coming first is the only protection there (`docs/TENANCY-S5.md`, Risks).
+
+### The browser gate (B10(d), B9)
+
+Built in wave 4, on a harness production build with Chromium, and run by `tenant-host-routing`, which stays report-only:
+
+- `e2e/tenancy/no-trackers.spec.ts`: for both canary tenants, no third-party or `/_vercel` request, no CSP violation, no `window.dataLayer` or `gtag`, no banner, no tracker cookie and no hydration error. Every third-party request is aborted in the browser. The localhost control on the same build shows GTM, HubSpot, Vercel Analytics, Speed Insights, `dataLayer` and the banner loading.
+- `e2e/tenancy/community-unreachable.spec.ts`: all 80 community and home entries answer 404 on a tenant host and on an unknown zone host, with a Stellr-host control.
+
+The harness has no CMS, so the register form and check-in page have not been opened this way. D7's sign-off names who does so once a CMS fixture exists.
+
 ### What is not built
 
 | Control | Slice |
 |---|---|
-| The 4-table CHECK: `community_spaces`, `community_resources`, `mentoring_cohorts`, `training_modules` | B9 |
-| The two community `TODO(S5)` IDOR snapshot entries | B9 |
-| The browser gate: 0 community routes, 0 trackers | B9, B10(d) |
+| The two community `TODO(S5)` IDOR snapshot entries: the check now holds those tables to Stellr or NULL, and Lane C changes the text | Lane C, after B9 |
 | Register routes through the hooks, tenant confirmations email-only | A7 |
+| `tenant-host-routing` as a required check | Owner decision |
 
 Until then, keep `TENANT_ROUTING_ENABLED` off on any deployment with a zone attached (see `docs/TENANCY-S5.md`, Real tenant hosts).

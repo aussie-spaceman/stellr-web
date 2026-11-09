@@ -18,7 +18,7 @@ function segmentToPath(segment: string): string | null {
   return decodeURIComponent(segment)
 }
 
-/** `app/(flow)/survey/[token]/page.tsx` to `/survey/harness-token`. */
+/** `app/(stellr)/(flow)/survey/[token]/page.tsx` to `/survey/harness-token`. */
 export function pagePathForFile(file: string): string {
   const parts = file.split(/[/\\]/).slice(1, -1)
   const path = parts.map(segmentToPath).filter((part) => part !== null)

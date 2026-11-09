@@ -116,7 +116,8 @@ export async function GET() {
         })
         if (reg.type === 'individual') {
           if (!paid) pay_kind = 'self'
-        } else if (reg.member_pays_individually) {
+        } else if (reg.member_pays_individually || p.individual_payment_status === 'pending') {
+          // Their own link, also in a split group where the rest are invoiced.
           if (p.individual_payment_status === 'pending') pay_kind = 'self'
         } else if (!paid) {
           pay_kind = 'organiser'

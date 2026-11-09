@@ -160,6 +160,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   // second foreign key.
   'public.participants': child('public.registrations', 'registration_id'),
   'public.agreement_recipients': child('public.agreements', 'envelope_row'),
+  'public.agreement_email_changes': child('public.agreements', 'agreement_id'),
   'public.esign_access_log': child('public.agreements', 'envelope_row', {
     noForeignKey: true,
     note: 'the log must outlive the record it describes',
@@ -181,6 +182,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.member_addresses': identity(),
   'public.member_allergies': identity(),
   'public.member_background_checks': identity('safeguarding checks; per-jurisdiction records in S11'),
+  'public.member_external_background_checks': identity('background checks the member already holds from another organisation; admin-verified'),
   'public.member_directory_prefs': identity(),
   'public.member_ethnicities': identity(),
   'public.member_notification_prefs': identity(),
@@ -282,6 +284,19 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.survey_email_budget': system(),
   'public.video_watermark_jobs': system(),
 }
+
+/**
+ * Derived tables that hold only Stellr's rows (S5 B9): community and training, plan
+ * decision 12. Each has this CHECK (tenant_id IS NULL OR Stellr), so a write that would
+ * stamp another tenant is refused with 23514. Migration
+ * 20261106234759_community_stellr_only_check.sql; test/community-stellr-only.test.ts.
+ */
+export const STELLR_ONLY_CHECKS: readonly { table: string; constraint: string }[] = [
+  { table: 'public.community_resources', constraint: 'community_resources_stellr_only' },
+  { table: 'public.community_spaces', constraint: 'community_spaces_stellr_only' },
+  { table: 'public.mentoring_cohorts', constraint: 'mentoring_cohorts_stellr_only' },
+  { table: 'public.training_modules', constraint: 'training_modules_stellr_only' },
+]
 
 /** Tables whose tenant_id the S3 trigger derives, with their event key. */
 export function derivedTables(): { table: string; column: string; kind: EventKeyKind }[] {

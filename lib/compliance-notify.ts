@@ -23,7 +23,7 @@ import { sendEmail } from '@/lib/email'
 import { emailLayout, escapeHtml as esc } from '@/lib/email-layout'
 import { logActivity } from '@/lib/activity-log'
 import { AUTH_APP_URL } from '@/lib/env'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { formatDate } from '@/lib/utils'
 import { daysUntil } from '@/lib/event-emails/schedule'
 import { CLEARANCE_PATH } from '@/lib/compliance-links'
@@ -233,6 +233,7 @@ export async function notifyClearanceRequired(
       clearanceRole(member.event_role as string | null),
       member.date_of_birth as string | null,
       eventDate ?? undefined,
+      records.external,
     )
     if (isCleared(summary)) return { sent: false, reason: 'cleared' }
     if (summary.state === 'not_required') return { sent: false, reason: 'not_required' }
@@ -425,7 +426,7 @@ export async function remindUnclearedAdults(
     for (const p of participantsByEvent.get(ev.slug) ?? []) {
       const rec = byId.get(p.member_id)
       if (!rec) continue
-      const summary = deriveCompliance(rec.license, rec.checks, p.event_role, p.date_of_birth ?? rec.dateOfBirth, ev.date)
+      const summary = deriveCompliance(rec.license, rec.checks, p.event_role, p.date_of_birth ?? rec.dateOfBirth, ev.date, rec.external)
       if (isCleared(summary) || summary.state === 'not_required') continue
       result.uncleared++
       if (nextStepIsStellrs(summary, new Date(ev.date))) {

@@ -1,29 +1,50 @@
 import { NextResponse } from 'next/server'
 import { currentUser } from '@clerk/nextjs/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth } from '@/lib/activity-log'
-import { getEventEmail } from '@/lib/event-emails/store'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { sendEventEmail } from '@/lib/event-emails/send'
+import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 export const maxDuration = 60
 
 // POST /api/admin/events/[slug]/emails/[id]/send — "Send now", or with
 // { test: true } a single copy to the person pressing the button.
+//
+// Stellr's sender, and its daily budget: B14 opens this to a tenant.
+
+const ROUTE = '/api/admin/events/[slug]/emails/[id]/send'
 
 type Ctx = { params: Promise<{ slug: string; id: string }> }
 
-export async function POST(req: Request, { params }: Ctx) {
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'event_email.message.send', ...auditSubject(req, 'event_emails') }),
+  sendEmail,
+)
+
+async function sendEmail(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const db = supabaseServer()
   // Scope check before handing the id to the engine, which does not know the URL.
-  if (!(await getEventEmail(db, slug, id))) return NextResponse.json({ error: 'Email not found' }, { status: 404 })
+  const email = await loadEventRecord<{ id: string; event_slug: string }>(staff, 'event_emails', id, {
+    db,
+    select: 'id, event_slug',
+    notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
+    label: ROUTE,
+  })
+  if (!email.ok) return email.response
 
   const b = await req.json().catch(() => ({}))
   const test = b?.test === true
+  noteAuditSubject(req, { detail: { test } })
   const actor = await actorFromAuth()
   let testTo: string | undefined
   if (test) {
@@ -33,7 +54,7 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const out = await sendEventEmail(db, id, {
     trigger: test ? 'test' : 'manual',
-    triggeredBy: actor.actorLabel ?? access.userId,
+    triggeredBy: actor.actorLabel ?? staff.userId,
     testTo,
   })
   if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })

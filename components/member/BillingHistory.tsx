@@ -89,11 +89,14 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
   }
   // A place paid individually stays paid if the group later changes how it pays.
   if (p.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
+  // Their own link, also in a split group where the rest are invoiced ("Invoice for some").
+  if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
   if (reg.member_pays_individually) {
     // Free event — nothing was ever charged, so no receipt is offered either
     // (see receiptAvailable below).
     if (p.individual_payment_status === 'waived') return { label: 'No payment required', style: 'bg-green-100 text-green-700' }
-    if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
+    // A teacher whose place the students' shares pay for.
+    if (p.individual_payment_status === 'covered') return { label: 'Covered by students’ shares', style: 'bg-green-100 text-green-700' }
   }
   if (reg.invoice_requested) {
     // An invoiced registration is "paid" only once an admin records the invoice as

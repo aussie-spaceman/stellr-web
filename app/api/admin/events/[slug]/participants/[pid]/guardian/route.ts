@@ -1,14 +1,18 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { isValidEmail, normalizeEmail } from '@/lib/member-enums'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
 import { adoptOpenEnvelope } from '@/lib/docusign-agreements'
 import { classifyAgreement } from '@/lib/docusign'
+import { liveAgreementForParticipant, stellrOnlyDb } from '@/lib/events/admin-records'
+import { saveGuardianEmail } from '@/lib/events/guardian-email'
 import { maskEmail } from '@/lib/utils'
-import { shadowSyncFields } from '@/lib/field-crypto-shadow'
+import { loadRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/participants/[pid]/guardian — fix a student's
 // parent/guardian email when their consent form could not be sent (a refused
@@ -20,15 +24,41 @@ import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 //
 // A form that is already out for signing is not touched here — "Correct email"
 // fixes the address on that same envelope and keeps any signature.
+//
+// This writes shared `members` and issues through Stellr's signing accounts: A11 opens it
+// to a tenant.
+
+const ROUTE = '/api/admin/events/[slug]/participants/[pid]/guardian'
 
 const bodySchema = z.object({ email: z.string().trim().min(1, 'Enter an email address').max(320) })
 
-const LIVE = new Set(['created', 'sent', 'delivered'])
+const LIVE = ['created', 'sent', 'delivered']
 
-export async function POST(req: Request, { params }: { params: Promise<{ slug: string; pid: string }> }) {
+type Ctx = { params: Promise<{ slug: string; pid: string }> }
+
+type Participant = {
+  id: string
+  member_id: string | null
+  first_name: string | null
+  last_name: string | null
+  emergency_contact_email: string | null
+  event_role: string | null
+  date_of_birth: string | null
+  registrations: { event_slug: string; school_address_state: string | null } | { event_slug: string; school_address_state: string | null }[]
+}
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'participant.guardian_email.correct', ...auditSubject(req, 'participants') }),
+  correctGuardian,
+)
+
+async function correctGuardian(req: Request, { params }: Ctx) {
   const { slug, pid } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id: pid })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
@@ -40,31 +70,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   const db = supabaseServer()
-  const { data: p } = await db
-    .from('participants')
-    .select('id, member_id, first_name, last_name, emergency_contact_email, event_role, date_of_birth, registrations!inner(event_slug, school_address_state)')
-    .eq('id', pid)
-    .maybeSingle()
-  const reg = p ? (Array.isArray(p.registrations) ? p.registrations[0] : p.registrations) as { event_slug: string; school_address_state: string | null } : null
-  if (!p || reg?.event_slug !== slug) {
-    return NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
-  }
+  const notFound = () => NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
+  const loaded = await loadRecord<Participant>(staff.scope, 'participants', pid, {
+    db,
+    select: 'id, member_id, first_name, last_name, emergency_contact_email, event_role, date_of_birth, registrations!inner(event_slug, school_address_state)',
+    notFound,
+    label: ROUTE,
+  })
+  if (!loaded.ok) return loaded.response
+  const p = loaded.row
+  const reg = Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
+  if (reg?.event_slug !== slug) return notFound()
 
   // A live form left unlinked by a removal is this person's live form: link it, so
   // the check below sees it and no second envelope goes out.
   if (p.member_id && reg) {
-    const type = classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null, reg.school_address_state)
-    if (type) await adoptOpenEnvelope(db, { participantId: pid, memberId: p.member_id as string, eventSlug: slug, type })
+    const type = classifyAgreement(p.event_role, p.date_of_birth, reg.school_address_state)
+    if (type) await adoptOpenEnvelope(db, { participantId: pid, memberId: p.member_id, eventSlug: slug, type })
   }
 
-  const { data: live } = await db
-    .from('agreements')
-    .select('id, status')
-    .eq('participant_id', pid)
-    .in('status', [...LIVE])
-    .not('envelope_id', 'like', 'failed:%')
-    .limit(1)
-    .maybeSingle()
+  const live = await liveAgreementForParticipant(stellrOnlyDb(staff.scope, db), pid, LIVE)
   if (live) {
     return NextResponse.json(
       { error: 'Their consent form is already out for signing. Use Correct email on it instead, which keeps any signature.' },
@@ -72,32 +97,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     )
   }
 
-  const previous = (p.emergency_contact_email as string | null) ?? null
+  const previous = p.emergency_contact_email ?? null
   // The address on file may already be right, and the form just never went out:
   // then there is nothing to correct, only a form to send.
   const changed = normalizeEmail(previous) !== email
   if (changed) {
-    const { error: updateError } = await db.from('participants').update({ emergency_contact_email: email }).eq('id', pid)
+    const { error: updateError } = await saveGuardianEmail(db, { participantId: pid, memberId: p.member_id, previous, email })
     if (updateError) {
       console.error('[admin/guardian] participant update failed:', updateError)
       return NextResponse.json({ error: 'Could not save the email' }, { status: 500 })
     }
-    // The member record carries the same contact for future events; fix it only
-    // while it still holds the old (bad) value, never over a newer one.
-    if (p.member_id) {
-      const memberUpdate = db.from('members').update({ ec_email: email }).eq('id', p.member_id as string)
-      await (previous ? memberUpdate.eq('ec_email', previous) : memberUpdate.is('ec_email', null))
-    }
-    // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
-    shadowSyncFields('participants', [pid])
-    shadowSyncFields('members', [p.member_id as string | null])
   }
 
   const actor = await actorFromAuth()
   if (changed && p.member_id) {
     await logActivity(
       {
-        memberId: p.member_id as string,
+        memberId: p.member_id,
         category: 'docusign',
         action: 'guardian_email_corrected',
         summary: `Parent/guardian email corrected for ${slug}: ${previous ? maskEmail(previous) : '(none)'} → ${maskEmail(email)}`,

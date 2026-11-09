@@ -57,32 +57,32 @@ const ACCOUNT = "a participant's own onboarding and volunteer interest (decision
 
 export const TENANT_SURFACE_ALLOW: readonly TenantSurfaceRule[] = [
   // (flow) pages, 16
-  { match: 'app/(flow)/check-in/[slug]/code/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/check-in/[slug]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/check-in/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/confirmation/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/group/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/individual/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/join/[token]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/pay-seat/[token]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/register/[slug]/pay/[token]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/sign/copy/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/sign/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/survey/[token]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/survey/[token]/stop-reminders/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/survey/event/[slug]/page.tsx', reason: FLOW },
-  { match: 'app/(flow)/team-profile/[token]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/check-in/[slug]/code/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/check-in/[slug]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/check-in/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/confirmation/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/group/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/individual/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/join/[token]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/register/[slug]/pay/[token]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/sign/copy/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/sign/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/survey/[token]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/survey/[token]/stop-reminders/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/survey/event/[slug]/page.tsx', reason: FLOW },
+  { match: 'app/(stellr)/(flow)/team-profile/[token]/page.tsx', reason: FLOW },
   // (auth) pages, 2
-  { match: 'app/(auth)/sign-in/[[...sign-in]]/page.tsx', reason: AUTH },
-  { match: 'app/(auth)/sign-up/[[...sign-up]]/page.tsx', reason: AUTH },
+  { match: 'app/(stellr)/(auth)/sign-in/[[...sign-in]]/page.tsx', reason: AUTH },
+  { match: 'app/(stellr)/(auth)/sign-up/[[...sign-up]]/page.tsx', reason: AUTH },
   // credentials, privacy, terms, account
-  { match: 'app/(public)/credentials/[number]/page.tsx', reason: CREDENTIAL },
-  { match: 'app/(public)/credentials/[number]/badge/route.tsx', reason: CREDENTIAL },
-  { match: 'app/(public)/credentials/[number]/opengraph-image.tsx', reason: CREDENTIAL },
-  { match: 'app/(public)/privacy/page.tsx', reason: LEGAL },
-  { match: 'app/(public)/terms/page.tsx', reason: LEGAL },
-  { match: 'app/(member)/account/onboarding/page.tsx', reason: ACCOUNT },
+  { match: 'app/(stellr)/(public)/credentials/[number]/page.tsx', reason: CREDENTIAL },
+  { match: 'app/(stellr)/(public)/credentials/[number]/badge/route.tsx', reason: CREDENTIAL },
+  { match: 'app/(stellr)/(public)/credentials/[number]/opengraph-image.tsx', reason: CREDENTIAL },
+  { match: 'app/(stellr)/(public)/privacy/page.tsx', reason: LEGAL },
+  { match: 'app/(stellr)/(public)/terms/page.tsx', reason: LEGAL },
+  { match: 'app/(stellr)/(member)/account/onboarding/page.tsx', reason: ACCOUNT },
   // APIs behind the flow. Register paths appear here as data only: the
   // register lane owns their tenant handling.
   { match: 'app/api/register/group-join/route.ts', reason: FLOW },
@@ -119,6 +119,15 @@ export const TENANT_SURFACE_ALLOW: readonly TenantSurfaceRule[] = [
 
 export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
   {
+    match: 'app/(stellr)/(flow)/sign/email/page.tsx',
+    reason:
+      "the one-time link a bounce notice sends the other signer (lib/esign/email-changes.ts). Links are built on Stellr's host today; allow once the notice builds a tenant-host link and the API confirms the agreement's tenant matches the host",
+  },
+  {
+    match: 'app/api/sign/email/route.ts',
+    reason: 'the API behind the bounce notice link above; same condition',
+  },
+  {
     match: 'app/api/registrations/[id]/spreadsheet/route.ts',
     reason:
       "copies minors' health and emergency-contact data into a sheet in Stellr's Drive on an anyone-can-edit link; allow only once the export is tenant-scoped and has no public link",
@@ -129,7 +138,7 @@ export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
       "the upload purpose comes from the request body, so this path admits admin and community purposes; needs a per-purpose tenant-host gate and tenant-prefixed storage paths first. Its audit row takes the chain from the host, so the allow review also decides it: an event purpose should use the event's own tenant, refusing or using the platform chain when host and event disagree",
   },
   {
-    match: 'app/(member)/account/page.tsx',
+    match: 'app/(stellr)/(member)/account/page.tsx',
     reason:
       'renders the community directory opt-in, Stellr store orders and the Stellr membership prompt; allow only with a tenant-host variant that removes them',
   },
@@ -148,7 +157,7 @@ export const TENANT_SURFACE_PENDING: readonly TenantSurfaceRule[] = [
     reason: 'the register form school search (SchoolSearchInput) reads the Stellr school index',
   },
   {
-    match: 'app/(public)/privacy/request/',
+    match: 'app/(stellr)/(public)/privacy/request/',
     reason: "a privacy request on a tenant host goes to the organiser's controller process, not yet designed",
   },
   {
@@ -192,24 +201,24 @@ export const TENANT_SURFACE_DENY: readonly TenantSurfaceRule[] = [
     match: 'app/%5Ft/',
     reason: 'the internal tenant tree: reached only through the proxy rewrite, never by its own URL',
   },
-  { match: 'app/(member)/community/', reason: SMMA },
+  { match: 'app/(stellr)/(member)/community/', reason: SMMA },
   { match: 'app/api/community/', reason: SMMA },
-  { match: 'app/(member)/home/', reason: `${SMMA} (home is the community landing)` },
-  { match: 'app/(admin)/', reason: ADMIN },
+  { match: 'app/(stellr)/(member)/home/', reason: `${SMMA} (home is the community landing)` },
+  { match: 'app/(stellr)/(admin)/', reason: ADMIN },
   { match: 'app/api/admin/', reason: ADMIN },
   { match: 'app/api/cron/', reason: 'Vercel Cron calls the platform host only' },
   { match: 'app/api/webhooks/', reason: 'third parties call the platform host only' },
   { match: 'app/api/stripe/webhook/route.ts', reason: 'Stripe calls the platform host only' },
   { match: 'app/api/printful/webhook/route.ts', reason: 'Printful calls the platform host only' },
-  { match: 'app/(public)/store/', reason: "Stellr's own store" },
+  { match: 'app/(stellr)/(public)/store/', reason: "Stellr's own store" },
   { match: 'app/api/store/', reason: "Stellr's own store" },
-  { match: 'app/(public)/academy/', reason: "Stellr's own academy" },
-  { match: 'app/(member)/campaigns/', reason: "Stellr's own campaigns" },
+  { match: 'app/(stellr)/(public)/academy/', reason: "Stellr's own academy" },
+  { match: 'app/(stellr)/(member)/campaigns/', reason: "Stellr's own campaigns" },
   { match: 'app/api/campaigns/', reason: "Stellr's own campaigns" },
-  { match: 'app/(member)/join/', reason: 'Stellr membership' },
+  { match: 'app/(stellr)/(member)/join/', reason: 'Stellr membership' },
   { match: 'app/api/stripe/membership-checkout/route.ts', reason: 'Stellr membership billing' },
   { match: 'app/api/stripe/membership-invoice/route.ts', reason: 'Stellr membership billing' },
-  { match: 'app/studio/', reason: "Stellr's Sanity Studio" },
+  { match: 'app/(stellr)/studio/', reason: "Stellr's Sanity Studio" },
   { match: 'app/sitemap.ts', reason: "Stellr's sitemap lists Stellr pages only" },
   { match: 'app/llms.txt/', reason: "Stellr's answer-engine summary" },
   { match: 'app/indexnow-key.txt/', reason: "Stellr's IndexNow key" },
@@ -235,7 +244,7 @@ export const TENANT_SURFACE_DENY: readonly TenantSurfaceRule[] = [
  * matches; explicit rules may not overlap each other.
  */
 export const TENANT_SURFACE_DENY_FALLBACK: TenantSurfaceRule = {
-  match: 'app/(public)/',
+  match: 'app/(stellr)/(public)/',
   reason: "Stellr's marketing site",
 }
 
@@ -410,8 +419,6 @@ export type TenantHostRoute =
  * no tenant data, so a visitor who trims a link to the bare host gets a real answer
  * and a pointer back to their link, and an active host is told apart from an
  * unknown one (404). A later slice may replace that page with a tenant's event list.
- * The root layout still wraps the tree, with Stellr's metadata and trackers, until
- * B5c gives the tree its own.
  */
 export function tenantHostRoute(pathname: string): TenantHostRoute {
   if (pathname === '/') return 'home'

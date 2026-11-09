@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { saveAnswers, sessionByToken } from '@/lib/team-profile/store'
 
 // POST /api/team-profile/[token] — submit (or update) a team profile.
 // Works signed out: the emailed link is the key. Answers are validated and
 // normalised server-side (lib/team-profile/questions.ts).
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
-  const limited = rateLimitGuard(req, 'team-profile', { limit: 30, windowMs: 60_000 })
+  const limited = await rateLimit(req, 'team-profile', { limit: 30, windowMs: 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
 
   const { token } = await params

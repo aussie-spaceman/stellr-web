@@ -241,6 +241,8 @@ export async function getVolunteerStatuses(
       records?.checks ?? [],
       'volunteer',
       m.date_of_birth,
+      undefined,
+      records?.external ?? null,
     )
     out[m.id] = {
       agreement: complete ? 'complete' : inFlight ? 'in_flight' : 'missing',

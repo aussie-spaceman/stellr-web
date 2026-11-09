@@ -1,0 +1,211 @@
+import { auth } from '@clerk/nextjs/server'
+import { supabaseServer } from '@/lib/supabase'
+import { notFound } from 'next/navigation'
+import { isAdminClaims, requireAdminPage } from '@/lib/admin-auth'
+import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
+import { externalCheckValidUntil, loadComplianceForMember } from '@/lib/compliance'
+import { isKnownMinorOn } from '@/lib/age'
+import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
+import type { MemberAgreement } from '@/components/admin/MemberAgreementPanel'
+import { loadVolunteerAgreement } from '@/lib/volunteer'
+import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
+import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
+import { memberSurveyRows } from '@/lib/survey/member'
+import { toMemberSurveyItems, type MemberSurveyItem } from '@/lib/survey/history'
+
+export const metadata = { title: 'Admin — Member Detail' }
+
+export default async function AdminMemberPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  await requireAdminPage()
+  const { id } = await params
+  const db = supabaseServer()
+
+  const [
+    { data: member },
+    { data: tiers },
+    { data: schools },
+    { data: ethnicityOptions },
+    { data: allergyOptions },
+    { data: registrations },
+    { data: sessions },
+    { data: activity },
+  ] = await Promise.all([
+    db
+      .from('members')
+      .select(`
+        *,
+        member_memberships(*, membership_tiers(*)),
+        member_schools(*, schools(*)),
+        member_ethnicities(ethnicity_option_id),
+        member_allergies(allergy_option_id),
+        event_participations(*)
+      `)
+      .eq('id', id)
+      .maybeSingle(),
+    db.from('membership_tiers').select('id, name').order('sort_order'),
+    db.from('schools').select('id, name').or('is_active.is.null,is_active.eq.true').order('name'),
+    db.from('ethnicity_options').select('id, name').order('name'),
+    db.from('allergy_options').select('id, name').order('name'),
+    db
+      .from('registrations')
+      .select('id, event_title, event_slug, school_name, status, created_at, registrant_role, type')
+      .eq('teacher_member_id', id)
+      .order('created_at', { ascending: false }),
+    // Sessions this member hosts. These block a member delete while still live,
+    // and the mentoring calendar only lists sessions that still have a cohort
+    // (mentoring_cohorts!inner) — so this is the one place an orphaned session
+    // is visible and removable.
+    db
+      .from('sessions')
+      .select('id, title, session_type, status, scheduled_start, cohort_id, mentoring_cohorts(name)')
+      .eq('host_member_id', id)
+      .order('scheduled_start', { ascending: false }),
+    db
+      .from('member_activity_log')
+      .select('id, actor_type, actor_label, category, action, summary, metadata, created_at')
+      .eq('member_id', id)
+      .order('created_at', { ascending: false })
+      .limit(30),
+  ])
+
+  if (!member) notFound()
+
+  // Flatten the cohort embed (PostgREST returns it as an object or a one-element
+  // array depending on the relationship it infers). A mentoring session with no
+  // cohort was orphaned when its cohort was purged (FK is ON DELETE SET NULL);
+  // coaching sessions are 1:1 and never have one.
+  type SessionRow = {
+    id: string; title: string | null; session_type: string | null; status: string | null
+    scheduled_start: string | null; cohort_id: string | null
+    mentoring_cohorts: { name: string } | { name: string }[] | null
+  }
+  const hostedSessions = ((sessions ?? []) as unknown as SessionRow[]).map((s) => {
+    const c = Array.isArray(s.mentoring_cohorts) ? s.mentoring_cohorts[0] : s.mentoring_cohorts
+    return {
+      id: s.id,
+      title: s.title,
+      session_type: s.session_type,
+      status: s.status,
+      scheduled_start: s.scheduled_start,
+      cohort_name: s.cohort_id ? c?.name ?? null : null,
+      orphaned: s.session_type === 'mentoring' && !s.cohort_id,
+    }
+  })
+
+  // Background-check / license compliance (PRD §13). Shown for every member who
+  // isn't a known minor: an adult whose current role needs no clearance can
+  // still need it recorded (Event Manager access requires it), so the panel is
+  // there with a "not required for their role" pill. Null for a known minor.
+  const summary = await loadComplianceForMember(db, id)
+  const memberDob = (member as { date_of_birth?: string | null }).date_of_birth ?? null
+  const compliance: MemberCompliance | null =
+    summary && (summary.state !== 'not_required' || !isKnownMinorOn(memberDob))
+      ? {
+          state: summary.state,
+          detail: summary.detail,
+          license: summary.license,
+          external: summary.external
+            ? {
+                issuer: summary.external.issuer,
+                completed_on: summary.external.completed_on,
+                document_expires_on: summary.external.document_expires_on,
+                verified_at: summary.external.verified_at,
+                verified_label: summary.external.verified_label,
+                submitted_by: summary.external.submitted_by ?? 'member',
+                updated_at: summary.external.updated_at ?? null,
+                valid_until: externalCheckValidUntil(summary.external),
+              }
+            : null,
+          check: summary.check
+            ? {
+                id: summary.check.id,
+                status: summary.check.status,
+                ordered_at: summary.check.ordered_at,
+                adjudicated_at: summary.check.adjudicated_at,
+                adjudication_outcome: summary.check.adjudication_outcome,
+                adjudicated_label: summary.check.adjudicated_label,
+                adjudication_notes: summary.check.adjudication_notes,
+                expires_at: summary.check.expires_at,
+                provider_report_ref: summary.check.provider_report_ref,
+                includes_canceled: summary.check.includes_canceled,
+              }
+            : null,
+        }
+      : null
+
+  // Volunteer Agreement (mentor document) — shown for mentors and volunteers,
+  // whether that comes from their account type or an additive role.
+  const { data: roleRows } = await db
+    .from('member_roles')
+    .select('role')
+    .eq('member_id', id)
+    .in('role', ['mentor', 'volunteer'])
+  const eventRole = (member as { event_role?: string | null }).event_role
+  const needsAgreement =
+    (roleRows ?? []).length > 0 || eventRole === 'mentor' || eventRole === 'volunteer'
+  let agreement: MemberAgreement | null = null
+  if (needsAgreement) {
+    const envelope = await loadVolunteerAgreement(db, id)
+    const recipients = envelope
+      ? (await loadRecipientsByEnvelopeRows(db, [envelope.id])).get(envelope.id) ?? []
+      : []
+    agreement = { envelope, recipients }
+  }
+
+  // Canonical Membership ID now lives on the members row (migration 036). Fall
+  // back to the member's earliest participant id if not yet backfilled.
+  const canonicalId = (member as { membership_id?: string | null }).membership_id ?? null
+  const { data: firstParticipant } = canonicalId
+    ? { data: null }
+    : await db
+        .from('participants')
+        .select('membership_id')
+        .or(`member_id.eq.${member.id},email.eq.${member.email}`)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+  // Scholarships: offered (and at what %), and whether they took it up.
+  const scholarships = toHistoryItems(
+    await listMemberScholarships(db, { id, email: (member as { email?: string | null }).email ?? null }),
+  )
+
+  // Post-event surveys: survey data is admin-only, so not for event managers
+  // even if they reach this page. Statuses only here; answers are a click away
+  // (and that view is logged).
+  const { sessionClaims } = await auth()
+  // Also gates Classification → Event Manager: only an admin grants access.
+  const viewerIsAdmin = isAdminClaims(sessionClaims)
+  let surveys: MemberSurveyItem[] | null = null
+  if (viewerIsAdmin) {
+    surveys = await memberSurveyRows(db, id)
+      .then((rows) => toMemberSurveyItems(rows))
+      .catch((err) => {
+        console.error('[admin member] surveys failed:', err)
+        return []
+      })
+  }
+
+  return (
+    <AdminMemberDetail
+      member={member}
+      tiers={tiers ?? []}
+      schools={schools ?? []}
+      ethnicityOptions={ethnicityOptions ?? []}
+      allergyOptions={allergyOptions ?? []}
+      registrations={registrations ?? []}
+      sessions={hostedSessions}
+      membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
+      activity={activity ?? []}
+      compliance={compliance}
+      agreement={agreement}
+      scholarships={scholarships}
+      surveys={surveys}
+      canManageEventManager={viewerIsAdmin}
+    />
+  )
+}

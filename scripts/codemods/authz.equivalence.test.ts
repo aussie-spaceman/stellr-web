@@ -102,7 +102,7 @@ const NAV = "import { notFound, redirect } from 'next/navigation'"
 const ADMIN = "import { isAdminClaims } from '@/lib/admin-auth'"
 const ROLE = 'const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role'
 const ROUTE = 'app/api/admin/x/route.ts'
-const PAGE = 'app/(admin)/admin/x/page.tsx'
+const PAGE = 'app/(stellr)/(admin)/admin/x/page.tsx'
 
 interface Fixture {
   name: string

@@ -14,7 +14,8 @@ import {
   ledgerFor,
   loadRegistration,
   markInvoiceSyncDue,
-  paidSeatCount,
+  queueInvoiceSync,
+  seatBucket,
   voidGroupInvoice,
   withInvoiceLock,
   type CouponTerms,
@@ -25,6 +26,17 @@ import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/in
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { groupPaymentMethodChangedEmail, groupSeatPaymentNoLongerDueEmail, sendEmail } from '@/lib/email'
+import { refreshShare, shareFor, summarise, loadShareGroup, unwindShares, type ShareSummary } from '@/lib/teacher-share'
+import {
+  isAdultRole,
+  isLateJoinerPayer,
+  isSharedGroup,
+  isSplitGroup,
+  payerOf,
+  seatsOnInvoice,
+  type LateJoinerPayer,
+  type Payer,
+} from '@/lib/group-payer'
 
 // Changing how a group pays after it has registered (6 Nov 2026). A teacher who
 // chose an invoice asked for each person to pay instead, and nothing could do it.
@@ -41,17 +53,46 @@ import { groupPaymentMethodChangedEmail, groupSeatPaymentNoLongerDueEmail, sendE
 // the same lock that guards the group's invoice, and only then does the new
 // method start. A failure at that last step leaves the new method in place and
 // alerts staff, who can finish it from the roster.
+//
+// "Invoice for some" (9 Nov 2026): a teacher asked for an invoice for herself only,
+// her students paying by their own links. The organizer's invoice then covers the
+// people ticked (participants.payer = 'group'); everyone else pays by link
+// ('self'), and late_joiner_payer says how people who join later pay
+// (lib/group-payer.ts). Moving people on or off an open invoice revises it after
+// the usual quiet period instead of cancelling it, so the organizer gets one
+// updated invoice, not a cancellation and a new one.
 
 type Db = SupabaseClient
 
-export type GroupPaymentMethod = Exclude<GroupBillingMode, 'free'>
+export type GroupPaymentMethod = Exclude<GroupBillingMode, 'free'> | 'invoice_some' | 'teacher_share'
+export type GroupPaymentPlan = GroupPaymentMethod | 'free'
 
-export const PAYMENT_METHODS: GroupPaymentMethod[] = ['invoice', 'card', 'individual']
+export const PAYMENT_METHODS: GroupPaymentMethod[] = ['invoice', 'invoice_some', 'card', 'individual', 'teacher_share']
 
 export const PAYMENT_METHOD_LABEL: Record<GroupPaymentMethod, string> = {
   invoice: 'Invoice emailed to the organizer',
+  invoice_some: 'Invoice for some, the rest pay individually',
   card: 'Credit card, paid by the organizer',
   individual: 'Group members pay individually',
+  teacher_share: 'Students pay individually and share the teacher’s cost',
+}
+
+/** How the group pays now, including a split ("Invoice for some") group. */
+export function paymentPlan(reg: Parameters<typeof billingMode>[0] & { late_joiner_payer?: string | null; share_estimate?: number | null }): GroupPaymentPlan {
+  if (reg.type !== 'campaign' && isSharedGroup(reg)) return 'teacher_share'
+  if (reg.type !== 'campaign' && isSplitGroup(reg as { member_pays_individually: boolean | null; late_joiner_payer?: string | null }) && reg.invoice_requested) return 'invoice_some'
+  return billingMode(reg)
+}
+
+/** What a change asks for. The two extra fields only apply to "Invoice for some". */
+export interface PaymentChangeRequest {
+  method: GroupPaymentMethod
+  /** The people whose places go on the organizer's invoice. */
+  invoiceParticipantIds?: string[]
+  /** How people who join later pay. */
+  lateJoinerPayer?: LateJoinerPayer
+  /** "Students share the teacher's cost": how many students the teacher expects. */
+  shareEstimate?: number
 }
 
 /** How far back to look for a Checkout session still open or still settling. Stripe's own limit on an open one is 24 hours. */
@@ -66,6 +107,8 @@ export interface PaymentChangeFacts {
   type: string
   status: string
   mode: GroupBillingMode
+  /** How the group pays now: mode, or 'invoice_some' for a split group. */
+  plan?: GroupPaymentPlan
   invoicePaid: boolean
   /** The group's own card payment has been taken. */
   cardPaid: boolean
@@ -79,6 +122,10 @@ export interface PaymentChangeFacts {
   rosterNoEmail: number
   /** The open invoice the change would cancel, if any. */
   openInvoiceNumber: string | null
+  /** Adults (teachers) who haven't paid: whose cost the students would share. */
+  unpaidAdults?: number
+  /** Students declared, or on the roster if more. */
+  students?: number
 }
 
 /** Why this group's payment method can't be changed, or null when it can. */
@@ -111,7 +158,18 @@ export function describeChange(f: PaymentChangeFacts, to: GroupPaymentMethod): P
   const money = (cents: number) => formatMoney(cents, f.currency)
   const effects: string[] = []
 
-  if (f.mode === 'invoice') {
+  // An open invoice that stays an invoice is updated rather than cancelled.
+  const revises = f.mode === 'invoice' && !!f.openInvoiceNumber && (to === 'invoice' || to === 'invoice_some')
+  if (f.plan === 'teacher_share') {
+    if (to === 'teacher_share') {
+      effects.push('Only the estimate changes. Once a student has paid, it can go up but not down, so the share never rises.')
+    } else {
+      effects.push('Every share of the teacher’s cost already paid is refunded to whoever paid it.')
+      if (to === 'invoice' || to === 'card') effects.push('Students’ payment links stop working, and anyone who received one is told nothing is due.')
+    }
+  } else if (revises) {
+    effects.push(`Invoice ${f.openInvoiceNumber} is replaced by an updated one a couple of minutes after you confirm.`)
+  } else if (f.mode === 'invoice') {
     effects.push(f.openInvoiceNumber ? `Invoice ${f.openInvoiceNumber} is cancelled.` : 'Any unpaid invoice is cancelled.')
   } else if (f.mode === 'individual') {
     effects.push('Payment links already sent stop working, and anyone who received one is told nothing is due.')
@@ -120,8 +178,26 @@ export function describeChange(f: PaymentChangeFacts, to: GroupPaymentMethod): P
   }
 
   let unavailable: string | null = null
-  if (to === 'invoice') {
-    effects.push(`The organizer is emailed a new invoice for ${plural(owed, 'place')}: ${money(totalCents)}, due in 14 days.`)
+  if (to === 'teacher_share') {
+    const pool = (f.unpaidAdults ?? 0) * perSeat
+    const students = Math.max(1, f.students ?? 0)
+    effects.push(`Teachers pay nothing directly. Each student’s link includes an equal share of the teachers’ full price (${money(pool)} in all), split across the larger of your estimate and the students who join: about ${money(shareFor({ poolCents: pool, estimate: students, students }))} each for ${plural(students, 'student')}.`)
+    effects.push('Discount codes apply to a student’s own place, never to the share.')
+    effects.push('The share can only go down. If more students join after some have paid, the difference goes back to them the day after the event. Anything the shares don’t cover, Stellr covers.')
+    if (f.plan !== 'teacher_share') effects.push('Students are emailed a payment link if they don’t have one already.')
+    if ((f.unpaidAdults ?? 0) <= 0) unavailable = 'Every adult in this group has already paid, so there is no teacher’s cost to share.'
+    else if ((f.students ?? 0) <= 0) unavailable = 'This group has no students to share the cost.'
+  } else if (to === 'invoice_some') {
+    const perPerson = f.coupon?.percentOff ? invoiceTotals(1, perSeat, f.coupon).totalCents : perSeat
+    effects.push(revises
+      ? 'The updated invoice covers only the places you tick.'
+      : 'The organizer is emailed an invoice for the places you tick, due in 14 days.')
+    effects.push(`Everyone else is emailed a link to pay ${money(perPerson)} for their own place. Links already sent keep working.`)
+    if (f.rosterNoEmail > 0) effects.push(`${plural(f.rosterNoEmail, 'person').replace('persons', 'people')} on the roster ${f.rosterNoEmail === 1 ? 'has' : 'have'} no email address and won’t get a link until one is added.`)
+  } else if (to === 'invoice') {
+    effects.push(revises
+      ? `The updated invoice covers ${plural(owed, 'place')}: ${money(totalCents)}.`
+      : `The organizer is emailed a new invoice for ${plural(owed, 'place')}: ${money(totalCents)}, due in 14 days.`)
     if (totalCents <= 0) unavailable = 'The total for this group is $0.00, so no invoice can be sent.'
   } else if (to === 'card') {
     effects.push(`The organizer is emailed a link to pay ${money(totalCents)} by card for ${plural(owed, 'place')}.`)
@@ -145,12 +221,16 @@ export function classifyCheckouts(
   sessions: Pick<Stripe.Checkout.Session, 'id' | 'status' | 'payment_status' | 'metadata'>[],
   seatStatus: Map<string, string | null>,
   groupPaymentRecorded: boolean,
+  /** People who keep paying by their own link: their open checkout is left alone. */
+  keepSeat: (participantId: string) => boolean = () => false,
 ): { toExpire: string[]; paymentInFlight: boolean } {
   const toExpire: string[] = []
   let paymentInFlight = false
   for (const session of sessions) {
     if (session.status === 'open') {
-      toExpire.push(session.id)
+      const participantId = session.metadata?.participantId
+      const isSeat = session.metadata?.isIndividualGroupPayment === 'true'
+      if (!(isSeat && participantId && keepSeat(participantId))) toExpire.push(session.id)
     } else if (session.status === 'complete') {
       const participantId = session.metadata?.participantId
       if (session.metadata?.isIndividualGroupPayment === 'true') {
@@ -164,6 +244,40 @@ export function classifyCheckouts(
   return { toExpire, paymentInFlight }
 }
 
+// ── "Invoice for some": who goes where ───────────────────────────────────────
+
+export interface SplitPlan {
+  /** Each person's payer after the change. */
+  payers: Map<string, Payer>
+  /** Places on the organizer's invoice after the change. */
+  invoiceSeats: number
+}
+
+/**
+ * Who pays for what once the ticked people go on the invoice. Anyone who has
+ * already paid their own place stays paid (and off the invoice), and so does a
+ * place with nothing to pay.
+ */
+export function splitPlan(input: {
+  declaredSeats: number
+  roster: Pick<RosterRow, 'id' | 'individual_payment_status'>[]
+  invoiceIds: Set<string>
+  lateJoinerPayer: LateJoinerPayer
+}): SplitPlan {
+  const payers = new Map<string, Payer>()
+  for (const p of input.roster) {
+    const settled = p.individual_payment_status === 'paid' || p.individual_payment_status === 'waived'
+    payers.set(p.id, !settled && input.invoiceIds.has(p.id) ? 'group' : 'self')
+  }
+  const after = input.roster.map((p) => ({
+    payer: payers.get(p.id),
+    // A link moving onto the invoice is stood down, so it no longer reads as owed.
+    individual_payment_status: payers.get(p.id) === 'group' ? null : p.individual_payment_status,
+  }))
+  const invoiceSeats = seatsOnInvoice(input.declaredSeats, after, { member_pays_individually: false, late_joiner_payer: input.lateJoinerPayer })
+  return { payers, invoiceSeats }
+}
+
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 interface RosterRow {
@@ -171,6 +285,8 @@ interface RosterRow {
   email: string | null
   first_name: string
   last_name: string
+  event_role: string | null
+  payer: string | null
   individual_payment_status: string | null
   individual_payment_link_sent_at: string | null
 }
@@ -178,13 +294,13 @@ interface RosterRow {
 async function loadRoster(db: Db, registrationId: string): Promise<RosterRow[]> {
   const { data, error } = await db
     .from('participants')
-    .select('id, email, first_name, last_name, individual_payment_status, individual_payment_link_sent_at')
+    .select('id, email, first_name, last_name, event_role, payer, individual_payment_status, individual_payment_link_sent_at')
     .eq('registration_id', registrationId)
   if (error) throw new Error(`Could not read the roster: ${error.message}`)
   return (data ?? []) as RosterRow[]
 }
 
-const owesSeat = (p: RosterRow) => p.individual_payment_status !== 'paid' && p.individual_payment_status !== 'waived'
+const owesSeat = (p: Pick<RosterRow, 'individual_payment_status'>) => p.individual_payment_status !== 'paid' && p.individual_payment_status !== 'waived'
 
 async function loadFacts(db: Db, stripe: Stripe, reg: GroupRegistration, roster: RosterRow[]): Promise<PaymentChangeFacts> {
   const mode = billingMode(reg)
@@ -195,6 +311,7 @@ async function loadFacts(db: Db, stripe: Stripe, reg: GroupRegistration, roster:
     type: reg.type,
     status: reg.status,
     mode,
+    plan: paymentPlan(reg),
     // Stripe is the source of truth for an invoice: a missed webhook mustn't let a
     // paid invoice be treated as a balance to move.
     invoicePaid: !!reg.invoice_paid_at || current?.invoice.status === 'paid',
@@ -207,31 +324,111 @@ async function loadFacts(db: Db, stripe: Stripe, reg: GroupRegistration, roster:
     rosterUnpaid: unpaid.filter((p) => p.email?.trim()).length,
     rosterNoEmail: unpaid.filter((p) => !p.email?.trim()).length,
     openInvoiceNumber: current?.invoice.status === 'open' ? current.invoice.number ?? null : null,
+    unpaidAdults: roster.filter((p) => isAdultRole(p.event_role) && owesSeat(p)).length,
+    students: Math.max(reg.student_count ?? 0, roster.filter((p) => !isAdultRole(p.event_role)).length),
   }
 }
 
+export interface SplitPersonView {
+  id: string
+  name: string
+  bucket: 'adult' | 'student'
+  /** On the organizer's invoice now (or, for a group not yet split, ticked by default: the adults). */
+  onInvoice: boolean
+  /** Why this person can't move, e.g. their place is already paid. */
+  locked: string | null
+}
+
+/** What the "Invoice for some" choice needs to show and price the ticks. */
+export interface SplitView {
+  people: SplitPersonView[]
+  lateJoinerPayer: LateJoinerPayer
+  /** Declared places nobody has filled yet: they follow lateJoinerPayer. */
+  unfilledSeats: number
+  perSeatCents: number
+  currency: string
+  coupon: CouponTerms | null
+}
+
+/** What the "share the teacher's cost" choice needs to show, and how it stands now. */
+export interface ShareView {
+  /** A teacher's full price. */
+  unitCents: number
+  currency: string
+  /** Adults whose cost would be shared. */
+  unpaidAdults: number
+  /** Students declared or on the roster: the starting estimate. */
+  students: number
+  /** The group already shares the teacher's cost: where it stands. */
+  current: ShareSummary | null
+}
+
 export interface PaymentChangeView {
-  current: GroupBillingMode
+  current: GroupPaymentPlan
   currentLabel: string
   blockedReason: string | null
   options: PaymentChangeOption[]
+  split: SplitView | null
+  share: ShareView | null
 }
 
-const currentLabel = (mode: GroupBillingMode) => (mode === 'free' ? 'No payment needed' : PAYMENT_METHOD_LABEL[mode])
+const currentLabel = (plan: GroupPaymentPlan) => (plan === 'free' ? 'No payment needed' : PAYMENT_METHOD_LABEL[plan])
+
+function splitView(reg: GroupRegistration, roster: RosterRow[], facts: PaymentChangeFacts): SplitView {
+  const split = isSplitGroup(reg)
+  const people = roster
+    .map((p): SplitPersonView => {
+      const bucket = seatBucket(p.event_role)
+      const locked = p.individual_payment_status === 'paid' ? 'Paid'
+        : p.individual_payment_status === 'waived' ? 'Nothing to pay'
+          : null
+      const onInvoice = locked ? false : split ? payerOf(p, reg) === 'group' : bucket === 'adult'
+      return { id: p.id, name: `${p.first_name} ${p.last_name}`.trim(), bucket, onInvoice, locked }
+    })
+    .sort((a, b) => (a.bucket === b.bucket ? a.name.localeCompare(b.name) : a.bucket === 'adult' ? -1 : 1))
+  return {
+    people,
+    lateJoinerPayer: isLateJoinerPayer(reg.late_joiner_payer) ? reg.late_joiner_payer : 'self',
+    unfilledSeats: Math.max(0, facts.declaredSeats - roster.length),
+    perSeatCents: facts.perSeatCents ?? 0,
+    currency: facts.currency,
+    coupon: facts.coupon,
+  }
+}
+
+async function shareView(db: Db, reg: GroupRegistration, facts: PaymentChangeFacts): Promise<ShareView> {
+  let current: ShareSummary | null = null
+  if (isSharedGroup(reg)) {
+    const loaded = await loadShareGroup(db, reg.id)
+    if (loaded) current = summarise(loaded.reg, loaded.people)
+  }
+  return {
+    unitCents: facts.perSeatCents ?? 0,
+    currency: facts.currency,
+    unpaidAdults: facts.unpaidAdults ?? 0,
+    students: facts.students ?? 0,
+    current,
+  }
+}
 
 /** The dialog's data: how the group pays now, and what each alternative would do. */
 export async function paymentChangeView(db: Db, stripe: Stripe | null, registrationId: string): Promise<PaymentChangeView | null> {
   const reg = await loadRegistration(db, registrationId)
   if (!reg || reg.type !== 'group') return null
-  const mode = billingMode(reg)
-  if (!stripe) return { current: mode, currentLabel: currentLabel(mode), blockedReason: 'Payments are not configured here.', options: [] }
-  const facts = await loadFacts(db, stripe, reg, await loadRoster(db, registrationId))
+  const plan = paymentPlan(reg)
+  if (!stripe) return { current: plan, currentLabel: currentLabel(plan), blockedReason: 'Payments are not configured here.', options: [], split: null, share: null }
+  const roster = await loadRoster(db, registrationId)
+  const facts = await loadFacts(db, stripe, reg, roster)
   const blockedReason = changeBlockReason(facts)
   return {
-    current: mode,
-    currentLabel: currentLabel(mode),
+    current: plan,
+    currentLabel: currentLabel(plan),
     blockedReason,
-    options: blockedReason ? [] : PAYMENT_METHODS.filter((m) => m !== mode).map((m) => describeChange(facts, m)),
+    // A split group can change who is on its invoice, and a sharing group its
+    // estimate, so each is offered again.
+    options: blockedReason ? [] : PAYMENT_METHODS.filter((m) => m !== plan || m === 'invoice_some' || m === 'teacher_share').map((m) => describeChange(facts, m)),
+    split: blockedReason ? null : splitView(reg, roster, facts),
+    share: await shareView(db, reg, facts),
   }
 }
 
@@ -301,145 +498,257 @@ export async function changeGroupPaymentMethod(
   db: Db,
   stripe: Stripe,
   registrationId: string,
-  to: GroupPaymentMethod,
+  to: GroupPaymentMethod | PaymentChangeRequest,
   actor: PaymentChangeActor,
 ): Promise<PaymentChangeResult> {
+  const request: PaymentChangeRequest = typeof to === 'string' ? { method: to } : to
   try {
-    const result = await withInvoiceLock(db, registrationId, () => applyChange(db, stripe, registrationId, to, actor))
+    const result = await withInvoiceLock(db, registrationId, () => applyChange(db, stripe, registrationId, request, actor))
     return result ?? refuse(409, 'This group’s billing is being updated right now. Try again in a moment.')
   } catch (e) {
-    console.error('[group-payment-change] failed:', e, { registrationId, to })
+    console.error('[group-payment-change] failed:', e, { registrationId, to: request.method })
     return refuse(502, `The payment method wasn’t changed: ${stripeDetail(e)}.`)
   }
 }
+
+const names = (people: Pick<RosterRow, 'first_name' | 'last_name'>[]) =>
+  people.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ')
 
 async function applyChange(
   db: Db,
   stripe: Stripe,
   registrationId: string,
-  to: GroupPaymentMethod,
+  request: PaymentChangeRequest,
   actor: PaymentChangeActor,
 ): Promise<PaymentChangeResult> {
+  const to = request.method
   const reg = await loadRegistration(db, registrationId)
   if (!reg || reg.type !== 'group') return refuse(404, 'Group registration not found')
   const roster = await loadRoster(db, registrationId)
   const facts = await loadFacts(db, stripe, reg, roster)
   const blocked = changeBlockReason(facts)
   if (blocked) return refuse(409, blocked)
-  if (facts.mode === to) return refuse(409, 'This group already pays that way.')
+  const from = facts.plan as GroupPaymentMethod
+  if (from === to && to !== 'invoice_some' && to !== 'teacher_share') return refuse(409, 'This group already pays that way.')
+
+  // ── Sharing the teacher's cost: settled, or only the estimate moving ───────
+  const sharing = from === 'teacher_share' ? await loadShareGroup(db, registrationId) : null
+  if (sharing?.reg.share_settled_at) {
+    return refuse(409, 'The teacher’s cost for this group was settled after the event, so how it pays can’t change now. Contact Stellr if something needs correcting.')
+  }
+  if (to === 'teacher_share' && from === 'teacher_share' && sharing) {
+    return changeShareEstimate(db, registrationId, sharing.reg, request.shareEstimate)
+  }
+
   const option = describeChange(facts, to)
   if (option.unavailable) return refuse(409, option.unavailable)
-  const from = facts.mode as GroupPaymentMethod
+
+  // ── Who pays for what afterwards ───────────────────────────────────────────
+  let split: SplitPlan | null = null
+  let lateJoinerPayer: LateJoinerPayer | null = null
+  if (to === 'invoice_some') {
+    lateJoinerPayer = request.lateJoinerPayer ?? 'self'
+    const ids = new Set(request.invoiceParticipantIds ?? [])
+    const onRoster = new Set(roster.map((p) => p.id))
+    if ([...ids].some((id) => !onRoster.has(id))) return refuse(400, 'Someone on that list isn’t in this group any more. Reload and try again.')
+    const settled = roster.filter((p) => ids.has(p.id) && !owesSeat(p))
+    if (settled.length > 0) return refuse(409, `${names(settled)} ${settled.length === 1 ? 'has' : 'have'} already paid, so ${settled.length === 1 ? 'that place' : 'those places'} can’t go on the invoice.`)
+    split = splitPlan({ declaredSeats: facts.declaredSeats, roster, invoiceIds: ids, lateJoinerPayer })
+    if (split.invoiceSeats <= 0) return refuse(409, 'Nobody would be on the invoice. To have everyone pay their own way, choose “Group members pay individually”.')
+    if (from === 'invoice_some' && reg.late_joiner_payer === lateJoinerPayer
+      && roster.every((p) => payerOf(p, reg) === split!.payers.get(p.id) || !owesSeat(p))) {
+      return refuse(409, 'Nothing would change: those are the people on the invoice now.')
+    }
+  }
+  // Sharing the teacher's cost: unpaid adults are covered by the students' shares.
+  const shareEstimate = to === 'teacher_share' ? request.shareEstimate ?? facts.students ?? 1 : null
+  const sharedAdult = (p: RosterRow) => to === 'teacher_share' && isAdultRole(p.event_role) && owesSeat(p)
+  const paysOwnWay = (p: RosterRow) => to === 'individual' || (split?.payers.get(p.id) === 'self') || (to === 'teacher_share' && !sharedAdult(p))
+
+  const perSeat = facts.perSeatCents as number
+  const owed = split ? split.invoiceSeats : billableSeats(facts.declaredSeats, facts.paidSeats)
+  const { totalCents } = invoiceTotals(owed, perSeat, facts.coupon)
+  if (split && totalCents <= 0) return refuse(409, 'The total for those places is $0.00, so no invoice can be sent.')
+  // An open invoice that stays an invoice is revised, not cancelled and reissued.
+  const revise = facts.mode === 'invoice' && !!facts.openInvoiceNumber && (to === 'invoice' || to === 'invoice_some')
+  const label = PAYMENT_METHOD_LABEL[to]
 
   // ── Close what's payable under the old method ──────────────────────────────
   const seatStatus = new Map(roster.map((p) => [p.id, p.individual_payment_status]))
+  const byId = new Map(roster.map((p) => [p.id, p]))
   const { toExpire, paymentInFlight } = classifyCheckouts(
     await recentCheckouts(stripe, registrationId),
     seatStatus,
     !!reg.stripe_payment_intent_id,
+    // Someone who keeps paying by link may be mid-payment: leave them be.
+    (id) => byId.has(id) && paysOwnWay(byId.get(id) as RosterRow) && byId.get(id)?.individual_payment_status === 'pending',
   )
   const settling = 'A payment for this group is going through. Wait a minute for it to record, then try again.'
   if (paymentInFlight) return refuse(409, settling)
   if (!(await expireCheckouts(stripe, toExpire))) return refuse(409, settling)
 
-  let voided: string[]
-  try {
-    voided = await voidOpenInvoices(db, stripe, reg, `Cancelled: the group changed to "${PAYMENT_METHOD_LABEL[to]}"`)
-  } catch (e) {
-    // Stripe refuses to void an invoice that was just paid or has a payment
-    // processing. Nothing has moved, so the group still pays the way it did.
-    console.error('[group-payment-change] void failed:', e, { registrationId })
-    return refuse(409, `The current invoice couldn’t be cancelled, so nothing was changed. A payment may be processing: ${stripeDetail(e)}.`)
+  let voided: string[] = []
+  if (!revise) {
+    try {
+      voided = await voidOpenInvoices(db, stripe, reg, `Cancelled: the group changed to "${label}"`)
+    } catch (e) {
+      // Stripe refuses to void an invoice that was just paid or has a payment
+      // processing. Nothing has moved, so the group still pays the way it did.
+      console.error('[group-payment-change] void failed:', e, { registrationId })
+      return refuse(409, `The current invoice couldn’t be cancelled, so nothing was changed. A payment may be processing: ${stripeDetail(e)}.`)
+    }
   }
 
   // ── Move the group ─────────────────────────────────────────────────────────
-  const owed = billableSeats(facts.declaredSeats, facts.paidSeats)
-  const perSeat = facts.perSeatCents as number
-  const { totalCents } = invoiceTotals(owed, perSeat, facts.coupon)
-  const { data: moved, error: moveError } = await db.from('registrations')
+  let move = db.from('registrations')
     .update({
-      invoice_requested: to === 'invoice',
-      member_pays_individually: to === 'individual',
+      invoice_requested: to === 'invoice' || to === 'invoice_some',
+      member_pays_individually: to === 'individual' || to === 'teacher_share',
+      late_joiner_payer: lateJoinerPayer,
+      // Sharing the teacher's cost starts afresh; leaving it clears these (unwindShares).
+      ...(to === 'teacher_share'
+        ? { share_estimate: shareEstimate, share_unit_cents: perSeat, share_cents: null, share_first_paid_at: null, share_settled_at: null }
+        : {}),
       // Pending whatever it was: with no invoice to consult, 'confirmed' reads as paid
       // (lib/payment-status), and an unpaid group must not.
       status: 'pending',
-      amount_due_cents: to === 'individual' ? facts.declaredSeats * perSeat : totalCents,
+      amount_due_cents: to === 'individual' || to === 'teacher_share' ? facts.declaredSeats * perSeat : totalCents,
       checkout_session_id: null,
       pay_link_sent_at: null,
-      invoice_sync_due_at: null,
+      // A revised invoice is queued below; anything else starts afresh.
+      ...(revise ? {} : { invoice_sync_due_at: null }),
     })
     .eq('id', reg.id)
     .eq('invoice_requested', !!reg.invoice_requested)
     .eq('member_pays_individually', !!reg.member_pays_individually)
-    .select('id')
+  move = reg.late_joiner_payer == null ? move.is('late_joiner_payer', null) : move.eq('late_joiner_payer', reg.late_joiner_payer)
+  const { data: moved, error: moveError } = await move.select('id')
   if (moveError || (moved ?? []).length === 0) {
     const detail = moveError?.message ?? 'another change got there first'
-    await alertStaff(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} was moving to "${PAYMENT_METHOD_LABEL[to]}", but saving it failed (${detail}). ${voided.length ? `Invoice ${voided.join(', ')} was already cancelled. ` : ''}Check the group on the event roster.`)
+    await alertStaff(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} was moving to "${label}", but saving it failed (${detail}). ${voided.length ? `Invoice ${voided.join(', ')} was already cancelled. ` : ''}Check the group on the event roster.`)
     return refuse(502, `The payment method wasn’t saved: ${detail}. Our team has been alerted.`)
   }
 
-  // ── Tidy up per-person state, and tell whoever the old links went to ───────
-  if (from === 'individual') {
-    const pending = roster.filter((p) => p.individual_payment_status === 'pending')
-    if (pending.length > 0) {
-      const { error } = await db.from('participants')
-        .update({ individual_payment_status: null, individual_payment_link_sent_at: null })
-        .in('id', pending.map((p) => p.id))
-      if (error) console.error('[group-payment-change] seat reset failed:', error.message, { registrationId })
-    }
-    await Promise.allSettled(
-      pending.filter((p) => p.individual_payment_link_sent_at && p.email?.trim()).map((p) => sendEmail({
-        to: p.email as string,
-        ...groupSeatPaymentNoLongerDueEmail({ firstName: p.first_name, eventTitle: reg.event_title, registrationId: reg.id }),
-      })),
-    )
+  // ── Leaving the shared cost: every share paid goes back ────────────────────
+  let shareRefunds: { refunded: number; failed: number } | null = null
+  if (from === 'teacher_share') shareRefunds = await unwindShares(db, stripe, reg.id)
+
+  // ── Who pays for each person ───────────────────────────────────────────────
+  // A split group names everyone's payer; any other way to pay goes back to the
+  // group's flags deciding (a NULL payer).
+  const payerWrites: Array<{ payer: Payer | null; ids: string[] }> = split
+    ? (['group', 'self'] as const).map((payer) => ({ payer, ids: roster.filter((p) => split!.payers.get(p.id) === payer).map((p) => p.id) }))
+    : to === 'teacher_share'
+      ? [
+          { payer: 'shared', ids: roster.filter(sharedAdult).map((p) => p.id) },
+          { payer: 'self', ids: roster.filter((p) => !sharedAdult(p)).map((p) => p.id) },
+        ]
+      : [{ payer: null, ids: roster.filter((p) => p.payer != null).map((p) => p.id) }]
+  for (const { payer, ids } of payerWrites) {
+    if (ids.length === 0) continue
+    const { error } = await db.from('participants').update({ payer }).in('id', ids)
+    if (error) console.error('[group-payment-change] payer write failed:', error.message, { registrationId, payer })
   }
+
+  // ── Stand down links that are no longer owed, and tell whoever had one ─────
+  const stoodDown = roster.filter((p) => p.individual_payment_status === 'pending' && !paysOwnWay(p))
+  if (stoodDown.length > 0) {
+    const { error } = await db.from('participants')
+      .update({ individual_payment_status: null, individual_payment_link_sent_at: null })
+      .in('id', stoodDown.map((p) => p.id))
+    if (error) console.error('[group-payment-change] seat reset failed:', error.message, { registrationId })
+  }
+  // Covered teachers owe nothing directly.
+  const covered = roster.filter(sharedAdult).map((p) => p.id)
+  if (covered.length > 0) {
+    const { error } = await db.from('participants').update({ individual_payment_status: 'covered' }).in('id', covered)
+    if (error) console.error('[group-payment-change] covering teachers failed:', error.message, { registrationId })
+  }
+  await Promise.allSettled(
+    stoodDown.filter((p) => p.individual_payment_link_sent_at && p.email?.trim()).map((p) => sendEmail({
+      to: p.email as string,
+      ...groupSeatPaymentNoLongerDueEmail({ firstName: p.first_name, eventTitle: reg.event_title, registrationId: reg.id }),
+    })),
+  )
 
   // ── Start the new method ───────────────────────────────────────────────────
   const fresh = (await loadRegistration(db, reg.id)) ?? reg
   let failure: string | null = null
   let payUrl: string | null = null
-  let detail = ''
+  const details: string[] = []
   try {
-    if (to === 'invoice') {
-      const sent = await createGroupInvoice(db, stripe, {
-        reg: fresh,
-        customerId: await invoiceCustomer(db, stripe, fresh, null),
-        seats: owed,
-        perSeatCents: perSeat,
-        currency: facts.currency,
-        reason: `Group changed to pay by invoice${facts.paidSeats > 0 ? ` (${plural(facts.paidSeats, 'place')} already paid individually)` : ''}`,
-        actor: { memberId: actor.memberId, label: actor.label },
-        couponId: fresh.invoice_coupon_id,
-        kind: 'seats',
-      })
-      detail = `A new invoice for ${plural(owed, 'place')} (${formatMoney(sent.total ?? 0, facts.currency)}) has been emailed to ${fresh.teacher_email ?? 'the organizer'}.`
+    if (to === 'invoice' || to === 'invoice_some') {
+      if (revise) {
+        if (!(await queueInvoiceSync(db, stripe, fresh.id))) throw new Error('the invoice update could not be scheduled')
+        details.push(`An updated invoice for ${plural(owed, 'place')} (${formatMoney(totalCents, facts.currency)}) goes to ${fresh.teacher_email ?? 'the organizer'} in a couple of minutes.`)
+      } else {
+        const sent = await createGroupInvoice(db, stripe, {
+          reg: fresh,
+          customerId: await invoiceCustomer(db, stripe, fresh, null),
+          seats: owed,
+          perSeatCents: perSeat,
+          currency: facts.currency,
+          reason: to === 'invoice_some'
+            ? `Invoice for ${plural(owed, 'place')}; the rest of the group pays individually`
+            : `Group changed to pay by invoice${facts.paidSeats > 0 ? ` (${plural(facts.paidSeats, 'place')} already paid individually)` : ''}`,
+          actor: { memberId: actor.memberId, label: actor.label },
+          couponId: fresh.invoice_coupon_id,
+          kind: 'seats',
+        })
+        details.push(`A new invoice for ${plural(owed, 'place')} (${formatMoney(sent.total ?? 0, facts.currency)}) has been emailed to ${fresh.teacher_email ?? 'the organizer'}.`)
+      }
     } else if (to === 'card') {
       payUrl = payPageUrl(fresh.event_slug, await ensurePayToken(db, fresh.id))
       const sent = await sendPayLinkEmail(db, fresh.id, { force: true })
-      detail = sent.sent
+      details.push(sent.sent
         ? `A link to pay ${formatMoney(totalCents, facts.currency)} by card has been emailed to ${fresh.teacher_email ?? 'the organizer'}.`
-        : `The organizer can pay ${formatMoney(totalCents, facts.currency)} from the link here.`
-    } else {
-      const people: IndividualPaymentPerson[] = roster.filter(owesSeat).filter((p) => p.email?.trim()).map((p) => ({
-        participantId: p.id, email: p.email as string, firstName: p.first_name, lastName: p.last_name,
-      }))
-      const outcome = await ensureIndividualPayments(db, fresh.id, people)
-      const missed = people.length - outcome.charged - outcome.waived - outcome.skipped
-      if (missed > 0) failure = `${plural(missed, 'payment link')} could not be sent`
-      detail = people.length > 0
-        ? `Payment links have gone to ${outcome.charged} of ${plural(people.length, 'person').replace('persons', 'people')} on the roster. Anyone added later gets one when they join.`
-        : 'Each person gets a payment link when they join the group.'
+        : `The organizer can pay ${formatMoney(totalCents, facts.currency)} from the link here.`)
     }
   } catch (e) {
     failure = stripeDetail(e)
   }
 
+  if (to === 'individual' || to === 'invoice_some' || to === 'teacher_share') {
+    try {
+      const ownWay = roster.filter(owesSeat).filter(paysOwnWay)
+      const people: IndividualPaymentPerson[] = ownWay.filter((p) => p.email?.trim()).map((p) => ({
+        participantId: p.id, email: p.email as string, firstName: p.first_name, lastName: p.last_name,
+      }))
+      const outcome = await ensureIndividualPayments(db, fresh.id, people)
+      const missed = people.length - outcome.charged - outcome.waived - outcome.skipped
+      if (missed > 0) failure = [failure, `${plural(missed, 'payment link')} could not be sent`].filter(Boolean).join('; ')
+      const later = to === 'individual' || lateJoinerPayer === 'self'
+        ? 'Anyone added later gets one when they join.'
+        : 'Anyone added later goes on the invoice.'
+      if (to === 'teacher_share') {
+        const summary = await refreshShare(db, fresh.id)
+        details.push(`Teachers pay nothing directly. Each student’s link now includes ${formatMoney(summary?.shareCents ?? 0, facts.currency)} toward the teacher’s cost, and that can only go down.${outcome.charged > 0 ? ` ${plural(outcome.charged, 'student')} ${outcome.charged === 1 ? 'has' : 'have'} been emailed a payment link.` : ''}`)
+      } else if (to === 'individual') {
+        details.push(people.length > 0
+          ? `Payment links have gone to ${outcome.charged} of ${plural(people.length, 'person').replace('persons', 'people')} on the roster. ${later}`
+          : 'Each person gets a payment link when they join the group.')
+      } else {
+        details.push(outcome.charged > 0
+          ? `${plural(outcome.charged, 'person').replace('persons', 'people')} ${outcome.charged === 1 ? 'has' : 'have'} been emailed a link to pay for their own place. ${later}`
+          : `Everyone else keeps the payment link they already have. ${later}`)
+      }
+    } catch (e) {
+      failure = [failure, stripeDetail(e)].filter(Boolean).join('; ')
+    }
+  }
+  if (shareRefunds && shareRefunds.refunded > 0) {
+    details.push(`${plural(shareRefunds.refunded, 'share')} of the teacher’s cost ${shareRefunds.refunded === 1 ? 'has' : 'have'} been refunded.`)
+  }
+  if (shareRefunds && shareRefunds.failed > 0) {
+    failure = [failure, `${plural(shareRefunds.failed, 'share refund')} couldn’t be made`].filter(Boolean).join('; ')
+  }
+  const detail = details.join(' ')
+
   if (failure) {
     console.error('[group-payment-change] new method did not fully start:', failure, { registrationId, to })
-    await alertStaff(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} moved to "${PAYMENT_METHOD_LABEL[to]}", but ${failure}. Open the event roster and finish it from the group's header.`)
+    await alertStaff(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} moved to "${label}", but ${failure}. Open the event roster and finish it from the group's header.`)
   } else if (actor.by === 'organizer') {
-    await alertStaff(`${reg.teacher_email ?? 'The organizer'} changed how their ${reg.event_title} group pays: "${PAYMENT_METHOD_LABEL[from]}" → "${PAYMENT_METHOD_LABEL[to]}".${voided.length ? ` Invoice ${voided.join(', ')} was cancelled.` : ''}`)
+    await alertStaff(`${reg.teacher_email ?? 'The organizer'} changed how their ${reg.event_title} group pays: "${PAYMENT_METHOD_LABEL[from]}" → "${label}".${voided.length ? ` Invoice ${voided.join(', ')} was cancelled.` : ''}`)
   }
 
   // The organizer always hears, whoever made the change.
@@ -453,7 +762,7 @@ async function applyChange(
         firstName: fresh.teacher_first_name ?? 'there',
         eventTitle: fresh.event_title,
         registrationId: fresh.id,
-        methodLabel: PAYMENT_METHOD_LABEL[to],
+        methodLabel: label,
         cancelledInvoices: voided,
         nextStep: failure ? 'Our team is finishing this change and will be in touch.' : detail,
         paidPlaces: facts.paidSeats,
@@ -467,8 +776,37 @@ async function applyChange(
     method: to,
     payUrl,
     message: failure
-      ? `The group now pays by "${PAYMENT_METHOD_LABEL[to]}", but ${failure}. Our team has been alerted.`
-      : `The group now pays by "${PAYMENT_METHOD_LABEL[to]}". ${detail}`,
+      ? `The group now pays by "${label}", but ${failure}. Our team has been alerted.`
+      : `The group now pays by "${label}". ${detail}`,
+  }
+}
+
+/**
+ * A sharing group's estimate changes. Raising it lowers the share and is always
+ * allowed; lowering it would raise the share, so only before anyone has paid.
+ */
+async function changeShareEstimate(
+  db: Db,
+  registrationId: string,
+  reg: { share_estimate: number | null; share_first_paid_at: string | null },
+  estimate: number | undefined,
+): Promise<PaymentChangeResult> {
+  if (!estimate || estimate < 1) return refuse(400, 'Say how many students you expect to bring.')
+  if (estimate === reg.share_estimate) return refuse(409, 'Nothing would change: that is the estimate now.')
+  if (reg.share_first_paid_at && estimate < (reg.share_estimate ?? 0)) {
+    return refuse(409, `A student has already paid a share, so the estimate can only go up (it is ${reg.share_estimate} now). The share never rises.`)
+  }
+  let write = db.from('registrations').update({ share_estimate: estimate }).eq('id', registrationId)
+  write = reg.share_estimate == null ? write.is('share_estimate', null) : write.eq('share_estimate', reg.share_estimate)
+  const { data, error } = await write.select('id')
+  if (error || (data ?? []).length === 0) return refuse(409, 'The estimate changed while you were editing. Reload and try again.')
+  const summary = await refreshShare(db, registrationId)
+  const money = formatMoney(summary?.shareCents ?? 0, 'usd')
+  return {
+    ok: true,
+    method: 'teacher_share',
+    payUrl: null,
+    message: `The estimate is now ${plural(estimate, 'student')}. Each student’s share of the teacher’s cost is ${money}.`,
   }
 }
 
@@ -490,6 +828,12 @@ export async function notePaymentAfterMethodChange(
     if (!reg) return
     if (paidThrough === 'seat') {
       if (reg.member_pays_individually) return
+      // A split group expects seat payments. If the place was on the invoice (paid
+      // through a link stood down a moment ago), the next sync takes it off.
+      if (isSplitGroup(reg)) {
+        await markInvoiceSyncDue(db, registrationId)
+        return
+      }
       if (reg.invoice_requested) await markInvoiceSyncDue(db, registrationId)
       await alertStaff(`A place on the ${reg.event_title} group (${reg.teacher_email ?? 'organizer unknown'}) was paid through an old individual link after the group changed how it pays. The place is recorded as paid. Check the group's balance on the event roster.`)
     } else if (reg.invoice_requested || reg.member_pays_individually) {

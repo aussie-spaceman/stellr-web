@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { claimUpload, discardUpload } from '@/lib/uploads'
 import { isLiteralStoragePath } from '@/lib/storage-path'
 import { contentTypeFor, fileExtension, nameMatchesFormat, shortenFileName } from '@/lib/file-sniff'
-import { EDITABLE, getEventEmail } from '@/lib/event-emails/store'
+import { EDITABLE } from '@/lib/event-emails/store'
+import type { EventEmailRow } from '@/lib/event-emails/types'
+import { loadEventRecord, loadScopedRows, refuseOutsideStellr, scopedRowWrite } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/emails/[id]/attachments — attach a file the
 // browser has already uploaded straight to storage (purpose
@@ -16,6 +20,11 @@ import { EDITABLE, getEventEmail } from '@/lib/event-emails/store'
 // that matches them — a CSV can't go out as `schedule.html` / text/html. The
 // posted contentType is ignored. A path some email already holds is refused
 // untouched: a refusal deletes the object, and it may be another email's file.
+//
+// A tenant's objects go under its own folder (lib/tenancy/storage.ts) and upload signing
+// still writes Stellr's legacy paths, so attaching waits on that. Refused until then.
+
+const ROUTE = '/api/admin/events/[slug]/emails/[id]/attachments'
 
 type Ctx = { params: Promise<{ slug: string; id: string }> }
 
@@ -25,10 +34,18 @@ const MAX_TOTAL_BYTES = 25 * 1024 * 1024
 /** The longest name an attachment is stored and sent under. */
 const MAX_FILENAME = 200
 
-export async function POST(req: Request, { params }: Ctx) {
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'event_email.attachment.add', ...auditSubject(req, 'event_emails') }),
+  attachFile,
+)
+
+async function attachFile(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const b = await req.json().catch(() => ({}))
   const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
@@ -45,8 +62,13 @@ export async function POST(req: Request, { params }: Ctx) {
   }
 
   const db = supabaseServer()
-  const email = await getEventEmail(db, slug, id)
-  if (!email) return NextResponse.json({ error: 'Email not found' }, { status: 404 })
+  const loaded = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, {
+    db,
+    notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
+    label: ROUTE,
+  })
+  if (!loaded.ok) return loaded.response
+  const email = loaded.row
   if (!EDITABLE.includes(email.status)) return NextResponse.json({ error: 'This email has already been sent' }, { status: 409 })
 
   // Only an object no email holds yet. Every refusal from here on deletes the
@@ -54,12 +76,14 @@ export async function POST(req: Request, { params }: Ctx) {
   // sent ones included — is turned away before anything touches it. Attaching it
   // twice would also share one file between emails: deleting either email, or
   // removing the attachment from it, would take it from the other.
-  const { data: held, error: heldError } = await db
-    .from('event_emails')
-    .select('id, attachments')
-    .eq('event_slug', slug)
+  const { data: held, error: heldError } = await loadScopedRows(staff.scope, 'event_emails', {
+    db,
+    select: 'id, attachments',
+    match: { event_slug: slug },
+    label: ROUTE,
+  })
   if (heldError) return NextResponse.json({ error: 'Could not check that upload. Please try again.' }, { status: 500 })
-  const attached = ((held ?? []) as { attachments: { path: string }[] | null }[]).some((row) =>
+  const attached = ((held ?? []) as unknown as { attachments: { path: string }[] | null }[]).some((row) =>
     (row.attachments ?? []).some((a) => a?.path === storagePath),
   )
   if (attached) {
@@ -93,10 +117,8 @@ export async function POST(req: Request, { params }: Ctx) {
     size: claimed.bytes.byteLength,
     contentType: contentTypeFor(claimed.format, sentAs),
   }
-  const { data, error } = await db
-    .from('event_emails')
+  const { data, error } = await scopedRowWrite(staff.scope, 'event_emails', id, { db })
     .update({ attachments: [...email.attachments, attachment] })
-    .eq('id', id)
     .in('status', EDITABLE)
     .select('*')
     .maybeSingle()

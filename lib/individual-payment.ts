@@ -11,6 +11,7 @@ import { notifyCommunityAdmins } from '@/lib/notify'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { isSplitGroup, payerOf } from '@/lib/group-payer'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -64,7 +65,7 @@ export async function ensureIndividualPayments(
 
   const { data: registration, error: regErr } = await db
     .from('registrations')
-    .select('id, event_slug, event_title, member_pays_individually')
+    .select('id, event_slug, event_title, member_pays_individually, late_joiner_payer, share_estimate, share_first_paid_at')
     .eq('id', registrationId)
     .maybeSingle()
 
@@ -73,8 +74,16 @@ export async function ensureIndividualPayments(
     return empty
   }
   // Not an individually-paid group — individual_payment_status stays NULL, which
-  // is its existing "doesn't apply" meaning.
-  if (!registration?.member_pays_individually) return empty
+  // is its existing "doesn't apply" meaning. A split group ("Invoice for some")
+  // bills only the people who pay their own way (lib/group-payer.ts).
+  if (!registration) return empty
+  const group = {
+    member_pays_individually: registration.member_pays_individually as boolean | null,
+    late_joiner_payer: registration.late_joiner_payer as string | null,
+    share_estimate: registration.share_estimate as number | null,
+    share_first_paid_at: registration.share_first_paid_at as string | null,
+  }
+  if (!group.member_pays_individually && !isSplitGroup(group)) return empty
 
   const eventSlug = registration.event_slug as string
   const eventTitle = registration.event_title as string
@@ -83,7 +92,7 @@ export async function ensureIndividualPayments(
   // on a previous run.
   const { data: rows, error: rowsErr } = await db
     .from('participants')
-    .select('id, individual_payment_link_sent_at')
+    .select('id, individual_payment_link_sent_at, payer, individual_payment_status, event_role')
     .in('id', people.map((p) => p.participantId))
 
   if (rowsErr) {
@@ -91,9 +100,18 @@ export async function ensureIndividualPayments(
     return empty
   }
 
+  // A group sharing the teacher's cost: a new student lowers the share, a new
+  // adult may fold into it (lib/teacher-share.ts). Non-fatal.
+  if (group.share_estimate != null) {
+    const { refreshShare } = await import('@/lib/teacher-share')
+    await refreshShare(db, registrationId).catch((e) => console.error('[individual-payment] share refresh failed (non-fatal):', e))
+  }
+
   const unsent = new Set(
     (rows ?? [])
       .filter((r) => r.individual_payment_link_sent_at == null)
+      // On the organizer's invoice: nothing for them to pay themselves.
+      .filter((r) => payerOf(r as { payer?: string | null; individual_payment_status?: string | null; event_role?: string | null }, group) === 'self')
       .map((r) => r.id as string),
   )
   const todo = people.filter((p) => unsent.has(p.participantId))

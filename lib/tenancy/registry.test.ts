@@ -84,7 +84,11 @@ describe('table registry (S3)', () => {
     const expand = readFileSync(`${dir}/20261106070722_via_parent_tenant_expand.sql`, 'utf8')
     const backfill = readFileSync(`${dir}/20261106070724_via_parent_tenant_backfill.sql`, 'utf8')
     const code = (sql: string) => sql.replace(/--[^\n]*/g, '')
-    const children = inheritedTables()
+    // Inherited tables created after C0b carry tenant_id, its index and the
+    // trigger in their own CREATE TABLE migration (checked by lint:tenancy),
+    // not in the C0b expand.
+    const POST_C0B = new Set(['public.agreement_email_changes'])
+    const children = inheritedTables().filter((c) => !POST_C0B.has(c.table))
     expect(children).toHaveLength(10)
     expect(Object.values(TABLE_REGISTRY).filter((e) => e.tenantColumn === 'via_parent')).toEqual([])
     for (const c of children) {

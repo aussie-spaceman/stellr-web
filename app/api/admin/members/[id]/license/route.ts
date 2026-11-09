@@ -7,6 +7,7 @@ import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { teacherLicenseSchema, type TeacherLicenseInput } from '@/lib/teacher-license'
 import { notifyLicenseVerified } from '@/lib/license-review'
+import { recheckEventManagerClearance } from '@/lib/event-manager'
 
 // POST /api/admin/members/[id]/license
 // Admin manually verifies (or un-verifies) the teacher license on file. This is
@@ -104,6 +105,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   )
   // Tell the teacher they're cleared (never throws).
   if (verifying) await notifyLicenseVerified(db, id, license.expiry_date as string)
+  // Withdrawn clearance: Event Manager access it supported ends now (never throws).
+  else await recheckEventManagerClearance(db, id, actor)
 
   return NextResponse.json({ ok: true })
 }
@@ -144,6 +147,8 @@ async function saveLicense(db: SupabaseClient, memberId: string, input: TeacherL
     },
     db,
   )
+  // A re-entered license is unverified: Event Manager access it supported ends now.
+  await recheckEventManagerClearance(db, memberId, await actorFromAuth())
 
   return NextResponse.json({ ok: true, licenseUpdatedAt: now })
 }

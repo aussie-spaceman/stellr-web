@@ -5,6 +5,7 @@ import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
 import { formatDateShort } from '@/lib/utils'
 import { Field, Input } from '@stellr/web-ui'
+import { ExternalCheckForm } from '@/components/compliance/ExternalCheckForm'
 
 interface ComplianceData {
   required: boolean
@@ -13,6 +14,14 @@ interface ComplianceData {
   license: TeacherLicense | null
   documentUrl: string | null
   check: { status: string; ordered_at: string; expires_at: string | null } | null
+  external: {
+    issuer: string
+    completed_on: string
+    document_expires_on: string | null
+    verified: boolean
+    valid_until: string
+  } | null
+  externalDocumentUrl: string | null
 }
 
 const STATE_PILL: Record<ComplianceState, { label: string; cls: string }> = {
@@ -49,6 +58,9 @@ export function ComplianceSection({
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [docError, setDocError] = useState('')
+  const [editingExternal, setEditingExternal] = useState(false)
+  const [withdrawing, setWithdrawing] = useState(false)
+  const [externalError, setExternalError] = useState('')
 
   void dateOfBirth // requirement is computed server-side; props kept for parity with DocusignsSection
   void eventRole
@@ -124,6 +136,20 @@ export function ComplianceSection({
     }
   }
 
+  async function withdrawExternal() {
+    if (!window.confirm('Remove your uploaded background check and its document? You will no longer be cleared by it.')) return
+    setWithdrawing(true)
+    setExternalError('')
+    const res = await fetch('/api/members/compliance/external-check', { method: 'DELETE' })
+    setWithdrawing(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => null)
+      setExternalError(d?.error ?? 'Failed to remove the background check.')
+      return
+    }
+    await load()
+  }
+
   async function deleteDocument() {
     setUploading(true)
     setDocError('')
@@ -151,8 +177,8 @@ export function ComplianceSection({
         <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
       </div>
       <p className="text-xs text-brand-muted-soft mb-4">
-        As an adult taking part with Stellr, you must be cleared by either a verified teaching license or a
-        background check. {data.detail ? <span className="text-brand-muted">{data.detail}.</span> : null}
+        As an adult taking part with Stellr, you must be cleared by a verified teaching license or a background check
+        (one Stellr orders, or one you already hold that Stellr has verified). {data.detail ? <span className="text-content-body">{data.detail}.</span> : null}
       </p>
       {readOnly && (
         <p role="status" className="mb-4 rounded-lg border border-brand-hairline bg-brand-canvas px-4 py-3 text-xs text-brand-muted">
@@ -177,6 +203,79 @@ export function ComplianceSection({
                     : 'In progress'}
         </div>
       )}
+
+      {/* A background check the member already holds from elsewhere. Document
+          mandatory; clears only once Stellr verifies it. */}
+      <div className="mb-4 rounded-lg border border-line-light px-4 py-3">
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm font-medium text-ink">Background check from another organisation</p>
+          {data.external && !readOnly && !editingExternal && (
+            <div className="flex shrink-0 gap-3">
+              <button onClick={() => setEditingExternal(true)} className="text-xs font-medium text-primary">
+                Replace
+              </button>
+              <button onClick={withdrawExternal} disabled={withdrawing} className="text-xs font-medium text-red-600 disabled:opacity-50">
+                {withdrawing ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          )}
+        </div>
+        {editingExternal ? (
+          <div className="mt-3">
+            <ExternalCheckForm
+              mode="member"
+              initial={data.external}
+              onSaved={async () => {
+                setEditingExternal(false)
+                await load()
+              }}
+              onCancel={() => setEditingExternal(false)}
+            />
+          </div>
+        ) : data.external ? (
+          <dl className="mt-2 space-y-1 text-sm">
+            <div className="flex gap-2">
+              <dt className="w-24 text-content-muted">Issued by</dt>
+              <dd className="font-medium text-ink">{data.external.issuer}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-24 text-content-muted">Completed</dt>
+              <dd className="text-ink">{fmt(data.external.completed_on)}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-24 text-content-muted">Counts until</dt>
+              <dd className="text-ink">{fmt(data.external.valid_until)}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-24 text-content-muted">Verification</dt>
+              <dd className={data.external.verified ? 'font-medium text-green-600' : 'font-medium text-gold-ink'}>
+                {data.external.verified ? 'Verified by Stellr' : 'Awaiting verification'}
+              </dd>
+            </div>
+            {data.externalDocumentUrl && (
+              <a href={data.externalDocumentUrl} target="_blank" rel="noopener noreferrer" className="inline-block pt-1 text-xs font-medium text-primary underline">
+                View uploaded document
+              </a>
+            )}
+          </dl>
+        ) : readOnly ? (
+          <p className="mt-1 text-xs text-content-muted">None uploaded.</p>
+        ) : (
+          <>
+            <p className="mt-1 text-xs text-content-muted">
+              Already cleared by a school district, state agency or screening company? Upload the result instead of waiting for a
+              new check.
+            </p>
+            <button
+              onClick={() => setEditingExternal(true)}
+              className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-ink"
+            >
+              Upload a background check
+            </button>
+          </>
+        )}
+        {externalError && <p role="alert" className="mt-1 text-xs text-red-600">{externalError}</p>}
+      </div>
 
       {/* Teacher license — self-service. Providing a verified license avoids the
           background-check requirement. */}

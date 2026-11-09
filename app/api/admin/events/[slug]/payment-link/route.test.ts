@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { eventRouteFor, eventRouteRefused } from '@/test/fixtures/event-route'
 
-const { requireEventAccess, regLookup, sendPayLinkEmail, logActivity } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(async (_slug: string): Promise<{ ok: boolean; status: number }> => ({ ok: true, status: 200 })),
+const { requireEventRoute, regLookup, sendPayLinkEmail, logActivity } = vi.hoisted(() => ({
+  requireEventRoute: vi.fn(),
   regLookup: vi.fn(async (): Promise<{ data: unknown; error: null }> => ({ data: null, error: null })),
   sendPayLinkEmail: vi.fn(async (_db: unknown, _id: string, _opts: unknown) => ({
     sent: true,
@@ -10,7 +11,7 @@ const { requireEventAccess, regLookup, sendPayLinkEmail, logActivity } = vi.hois
   logActivity: vi.fn(async (_entry: unknown, _db: unknown) => {}),
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess }))
+vi.mock('@/lib/authz', () => ({ requireEventRoute }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: (table: string) => {
@@ -45,13 +46,13 @@ function post(body: unknown, slug = 'colorado') {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  requireEventAccess.mockResolvedValue({ ok: true, status: 200 })
+  requireEventRoute.mockImplementation(async (slug: string) => eventRouteFor(slug))
   regLookup.mockResolvedValue({ data: PENDING, error: null })
 })
 
 describe('POST /api/admin/events/[slug]/payment-link', () => {
   it('403s without event access', async () => {
-    requireEventAccess.mockResolvedValue({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValue(eventRouteRefused(403))
     expect((await post({ registrationId: 'reg-1' })).status).toBe(403)
     expect(sendPayLinkEmail).not.toHaveBeenCalled()
   })

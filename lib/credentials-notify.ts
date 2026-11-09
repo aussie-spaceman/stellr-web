@@ -65,7 +65,7 @@ export async function sendCredentialIssuedEmail(
  */
 export async function applyGuardianOptOut(
   db: SupabaseClient,
-  who: { memberId: string | null; participantId: string | null },
+  who: { memberId: string | null; participantId: string | null; tenant?: { value: string; includeNull: boolean } | null },
 ): Promise<number> {
   const rows = await unpublishCredentialsFor(db, who)
   if (rows.length === 0) return 0

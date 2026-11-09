@@ -25,9 +25,10 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => h.db.client }))
-vi.mock('@/lib/event-access', () => ({
-  requireEventAccess: async () => ({ ok: true, userId: 'clerk-admin', isAdmin: true, assignedSlugs: null }),
-}))
+vi.mock('@/lib/authz', async () => {
+  const { eventRouteFor } = await import('@/test/fixtures/event-route')
+  return { requireEventRoute: async (slug: string) => eventRouteFor(slug) }
+})
 vi.mock('@/lib/sanity', () => ({
   getEventBySlug: async () => ({ title: 'Nevada SDC', type: 'space', date: '2026-11-06', city: 'Reno', state: 'NV' }),
 }))

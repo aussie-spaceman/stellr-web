@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { isMinorOn } from '@/lib/age'
 import { ParticipantForm } from './ParticipantForm'
 import { EnvelopeStatusBadge } from './DocusignsSection'
+import { FixSignerEmailButton } from './FixSignerEmailButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { formatDateShort } from '@/lib/utils'
 import { registrationPaid } from '@/lib/payment-status'
@@ -62,6 +63,9 @@ interface DocuSignEnvelope {
   sent_at: string
   completed_at: string | null
   reminder_sent_at: string | null
+  /** Signers whose email bounced, and student suggestions waiting (Fix email). */
+  bounced?: number
+  pending_suggestions?: number
 }
 
 interface TeamRegistration {
@@ -80,6 +84,8 @@ interface TeamRegistration {
   teacher_poc_last_name: string | null
   teacher_poc_email: string | null
   member_pays_individually: boolean
+  /** Set on an "Invoice for some" group (lib/group-payer.ts). */
+  late_joiner_payer?: string | null
   invoice_requested: boolean
   invoice_paid_at: string | null
   // Declared group size (migration 037). Null on older registrations.
@@ -169,11 +175,13 @@ function JoinedTeamsView({
   function paymentInfo(entry: StudentTeam, reg: StudentTeam['registrations']): { label: string; style: string } {
     // A place paid individually stays paid if the group later changes how it pays.
     if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
+    // Their own link, also in a group where the rest are invoiced ("Invoice for some").
+    if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-brand-orange/10 text-brand-gold-ink' }
     if (reg.member_pays_individually) {
       // Free event — nothing was ever owed. Kept distinct from 'Paid' so the
       // member isn't told they paid for something that had no fee.
       if (entry.individual_payment_status === 'waived') return { label: 'No payment required', style: 'bg-green-100 text-green-700' }
-      if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-brand-orange/10 text-brand-gold-ink' }
+      if (entry.individual_payment_status === 'covered') return { label: 'Covered by students’ shares', style: 'bg-green-100 text-green-700' }
     }
     if (reg.invoice_requested) {
       // Paid only once an admin records the invoice settled (invoice_paid_at).
@@ -196,7 +204,7 @@ function JoinedTeamsView({
         const reg = Array.isArray(entry.registrations) ? entry.registrations[0] : entry.registrations
         if (!reg) return null
         const { label, style } = paymentInfo(entry, reg)
-        const paymentPending = reg.member_pays_individually && entry.individual_payment_status === 'pending'
+        const paymentPending = entry.individual_payment_status === 'pending'
 
         return (
           <div key={entry.id} className="bg-white rounded-xl border border-brand-border p-5">
@@ -664,7 +672,7 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                           <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Company</th>
                           <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Status</th>
                           <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Consent / Agreement</th>
-                          {fullTeam.registration.member_pays_individually && (
+                          {(fullTeam.registration.member_pays_individually || !!fullTeam.registration.late_joiner_payer) && (
                             <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Payment</th>
                           )}
                           <th className="pb-2"></th>
@@ -720,7 +728,25 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                                           {resendingConsent === p.id ? 'Sending…' : 'Remind'}
                                         </button>
                                       )}
+                                      {!readOnly && ((envelope.bounced ?? 0) > 0 || (envelope.pending_suggestions ?? 0) > 0) && (
+                                        <FixSignerEmailButton
+                                          registrationId={team.id}
+                                          participantId={p.id}
+                                          participantName={`${p.first_name} ${p.last_name}`.trim()}
+                                          label={(envelope.bounced ?? 0) > 0 && !(envelope.pending_suggestions ?? 0) ? 'Fix email' : 'Review suggested email'}
+                                          onChanged={(message) => {
+                                            setConsentMsg(message)
+                                            // Refresh in place (loadTeam would collapse the open team).
+                                            fetch(`/api/members/teams/${team.id}`)
+                                              .then(r => r.json())
+                                              .then(d => { if (!d.error) setFullTeam(d) })
+                                          }}
+                                        />
+                                      )}
                                     </div>
+                                    {(envelope.bounced ?? 0) > 0 && (
+                                      <p className="text-xs text-danger leading-tight">An email on this form bounced.</p>
+                                    )}
                                     <p className="text-xs text-brand-muted-soft leading-tight">
                                       {CONSENT_TYPE_LABEL[envelope.envelope_type] ?? 'Agreement'}
                                     </p>
@@ -742,17 +768,22 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                                   <span className="text-xs text-brand-muted-soft">N/A</span>
                                 )}
                               </td>
-                              {fullTeam.registration.member_pays_individually && (
+                              {(fullTeam.registration.member_pays_individually || !!fullTeam.registration.late_joiner_payer) && (
                                 <td className="py-2.5 pr-4">
                                   <span
                                     className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                      p.individual_payment_status === 'paid' || p.individual_payment_status === 'waived'
+                                      p.individual_payment_status === 'paid' || p.individual_payment_status === 'waived' || p.individual_payment_status === 'covered'
                                         ? 'bg-green-100 text-green-700'
-                                        : 'bg-brand-orange/10 text-brand-gold-ink'
+                                        : !fullTeam.registration.member_pays_individually && p.individual_payment_status !== 'pending'
+                                          ? 'bg-brand-blue/10 text-brand-blue'
+                                          : 'bg-brand-orange/10 text-brand-gold-ink'
                                     }`}
                                   >
                                     {p.individual_payment_status === 'paid' ? 'Paid'
                                       : p.individual_payment_status === 'waived' ? 'No payment required'
+                                      : p.individual_payment_status === 'covered' ? 'Shared by students'
+                                      // A split group: no link of their own means the invoice covers them.
+                                      : !fullTeam.registration.member_pays_individually && p.individual_payment_status !== 'pending' ? 'On the invoice'
                                       : 'Not Yet Paid'}
                                   </span>
                                 </td>

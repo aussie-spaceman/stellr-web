@@ -32,7 +32,7 @@ export async function GET(
       teacher_first_name, teacher_last_name, teacher_email, teacher_member_id,
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
-      member_pays_individually, details_method,
+      member_pays_individually, late_joiner_payer, details_method,
       participants(*, event_companies(number, name))
     `)
     .eq('id', id)
@@ -150,15 +150,31 @@ export async function GET(
   const docusignEnvelopes: Record<string, {
     id: string; status: string; envelope_type: string; signer_name: string; signer_email: string
     sent_at: string; completed_at: string | null; reminder_sent_at: string | null
+    /** Signers on the live form whose email bounced, and student suggestions waiting (Fix email). */
+    bounced: number; pending_suggestions: number
   }> = {}
   const roster = registration.participants as Record<string, unknown>[]
   const hiddenIds = new Set(roster.filter((p) => isDetailsHiddenFrom(p, member.id)).map((p) => p.id))
+  const liveIds = (envelopes ?? []).filter((e) => e.status === 'sent' || e.status === 'delivered').map((e) => e.id as string)
+  const bouncedBy = new Map<string, number>()
+  const pendingBy = new Map<string, number>()
+  if (liveIds.length) {
+    const [{ data: bouncedRows }, { data: pendingRows }] = await Promise.all([
+      db.from('agreement_recipients').select('envelope_row').in('envelope_row', liveIds).eq('status', 'autoresponded'),
+      db.from('agreement_email_changes').select('agreement_id').in('agreement_id', liveIds).eq('status', 'pending'),
+    ])
+    for (const r of (bouncedRows ?? []) as { envelope_row: string }[]) bouncedBy.set(r.envelope_row, (bouncedBy.get(r.envelope_row) ?? 0) + 1)
+    for (const r of (pendingRows ?? []) as { agreement_id: string }[]) pendingBy.set(r.agreement_id, (pendingBy.get(r.agreement_id) ?? 0) + 1)
+  }
   for (const e of envelopes ?? []) {
     const hidden = hiddenIds.has(e.participant_id)
     docusignEnvelopes[e.participant_id] = {
       id: e.id, status: e.status, envelope_type: e.envelope_type ?? 'minor',
       signer_name: hidden ? '' : e.signer_name, signer_email: hidden ? '' : e.signer_email,
       sent_at: e.sent_at, completed_at: e.completed_at, reminder_sent_at: e.reminder_sent_at,
+      // A row kept private shows no contact details, so nothing to fix here.
+      bounced: hidden ? 0 : bouncedBy.get(e.id) ?? 0,
+      pending_suggestions: hidden ? 0 : pendingBy.get(e.id) ?? 0,
     }
   }
 

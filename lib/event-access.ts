@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims, isEventManagerClaims } from '@/lib/admin-auth'
+import { activeAssignmentFilter } from '@/lib/event-manager-active'
 
 // Per-event access control for the Events section of the admin portal.
 // Admins manage all events; Event Managers only events they're assigned to
@@ -12,6 +13,8 @@ async function getAssignedEventSlugs(clerkUserId: string): Promise<string[]> {
     .from('event_manager_assignments')
     .select('event_slug')
     .eq('clerk_user_id', clerkUserId)
+    // Expired grants give no access, even before the daily sweep deletes them.
+    .or(activeAssignmentFilter())
   if (error) throw new Error(`Failed to load event assignments: ${error.message}`)
   return (data ?? []).map((row) => row.event_slug)
 }

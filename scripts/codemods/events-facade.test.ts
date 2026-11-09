@@ -108,7 +108,7 @@ describe('laneOf', () => {
   it('claims the files docs/TENANCY-S5.md gives Lane C', () => {
     for (const f of [
       'app/api/admin/events/[slug]/badges/route.ts',
-      'app/(admin)/admin/competitions/page.tsx',
+      'app/(stellr)/(admin)/admin/competitions/page.tsx',
       'lib/refunds/payment-basis.ts',
       'lib/scholarship-offer.ts',
       'lib/survey/admin-auth.ts',
@@ -119,7 +119,7 @@ describe('laneOf', () => {
   it('leaves Lane A and Lane B importers to those lanes', () => {
     for (const f of [
       'app/api/register/group/route.ts',
-      'app/(flow)/check-in/[slug]/page.tsx',
+      'app/(stellr)/(flow)/check-in/[slug]/page.tsx',
       'app/api/volunteer/interest/route.ts',
       'lib/esign/needs-paperwork.ts',
       'lib/check-in-banner.ts',
@@ -127,8 +127,8 @@ describe('laneOf', () => {
       'lib/survey/events.ts',
     ]) expect(laneOf(f), f).toBe('A')
     for (const f of [
-      'app/(public)/page.tsx',
-      'app/(member)/campaigns/[slug]/page.tsx',
+      'app/(stellr)/(public)/page.tsx',
+      'app/(stellr)/(member)/campaigns/[slug]/page.tsx',
       'app/sitemap.ts',
       'app/api/cron/event-emails/route.ts',
       'app/api/store/reship/route.ts',

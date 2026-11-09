@@ -30,10 +30,9 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async () => ({ setting: 'in_person' }) }))
-vi.mock('@/lib/rate-limit', () => ({
-  rateLimitGuard: () => null,
-  checkRateLimit: () => ({ ok: true, retryAfterSeconds: 0 }),
-  HOUR_MS: 3_600_000,
+vi.mock('@/lib/rate-limit-async', () => ({
+  rateLimit: async () => null,
+  limit: async () => ({ ok: true, retryAfterSeconds: 0 }),
 }))
 vi.mock('@/lib/check-in-view', () => ({ loadCheckInView: async () => ({ firstName: 'x', lastName: 'y' }) }))
 

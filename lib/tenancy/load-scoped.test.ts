@@ -360,7 +360,9 @@ describe('child tables and the real schema', () => {
   const qualified = (t: string) => `("?public"?\\.)?"?${t}"?`
   function foreignKeys(child: string, parent: string): number {
     const c = qualified(OLD_NAME[child] ?? child)
-    const ref = `REFERENCES\\s+${qualified(OLD_NAME[parent] ?? parent)}\\b`
+    // A table created after the rename references the parent by its new name.
+    const parentNames = [...new Set([OLD_NAME[parent] ?? parent, parent])].map(qualified).join('|')
+    const ref = `REFERENCES\\s+(?:${parentNames})\\b`
     const created = new RegExp(`CREATE TABLE (IF NOT EXISTS )?${c}\\s*\\(([\\s\\S]*?)\\n\\);`, 'i').exec(sql)
     const inline = (created?.at(-1)?.match(new RegExp(ref, 'gi')) ?? []).length
     const altered = (sql.match(new RegExp(`ALTER TABLE (ONLY )?${c}\\s+ADD CONSTRAINT[^;]*?${ref}`, 'gi')) ?? []).length
@@ -372,8 +374,8 @@ describe('child tables and the real schema', () => {
   // Exactly one matters beyond this file: a second foreign key between the same two
   // tables makes PostgREST refuse every live embed of them that names no hint
   // (PGRST201), so the composite foreign key cannot simply be added beside this one.
-  it('all 10 either embed through exactly one foreign key or are listed as having none', () => {
-    expect(children).toHaveLength(10)
+  it('all 11 either embed through exactly one foreign key or are listed as having none', () => {
+    expect(children).toHaveLength(11)
     expect(new Set(children.filter(([, e]) => e.noForeignKey).map(([k]) => k))).toEqual(VIA_PARENT_WITHOUT_FK)
     for (const [key, entry] of children) {
       const fks = foreignKeys(short(key), short(entry.parent!))

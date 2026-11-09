@@ -137,7 +137,8 @@ export async function getOutstandingItems(
       individualPaymentStatus: p.individual_payment_status,
     })
     if (owes && !paid) {
-      if (reg.member_pays_individually) {
+      // Their own link: an individually paid group, or a split one ("Invoice for some").
+      if (reg.member_pays_individually || p.individual_payment_status === 'pending') {
         push({ kind: 'payment', eventSlug: reg.event_slug, eventTitle: title,
           text: `Your registration fee for ${title} hasn't been paid yet.`, cta: 'Pay now', href: '/account?tab=billing' })
       } else if (isOrganiser) {
@@ -170,7 +171,7 @@ export async function getOutstandingItems(
 
     // Clearance (teachers and other adults working with students).
     if (requiresBackgroundCheck(p.event_role, p.date_of_birth, dateOf(reg))) {
-      const state = deriveCompliance(records?.license ?? null, records?.checks ?? [], p.event_role, p.date_of_birth, dateOf(reg)).state
+      const state = deriveCompliance(records?.license ?? null, records?.checks ?? [], p.event_role, p.date_of_birth, dateOf(reg), records?.external ?? null).state
       if (state !== 'valid_bc' && state !== 'valid_license') {
         const waiting = state === 'in_process' || state === 'awaiting_verification' || state === 'flagged'
         push({ kind: 'clearance', eventSlug: reg.event_slug, eventTitle: title,

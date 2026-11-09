@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ensureEventContainer } from '@/lib/container-sync'
 import { reconcileEventSpaceRoster } from '@/lib/space-inheritance'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Sanity event → its Space, kept in step automatically.
 //
@@ -40,7 +41,17 @@ export interface EventSpaceSyncResult {
   slugCollision: boolean
   /** Tier/role grants stripped because this Space now belongs to an event. */
   grantsCleared: number
+  /**
+   * The event is another tenant's, so it has no Space here. Nothing else may attach it
+   * to a Stellr Space either: the webhook's object_created rules check this.
+   */
+  skippedOtherTenant: boolean
   notes: string[]
+}
+
+/** The failure a sync run reports: no Space, for an event that should have one. */
+export function eventSpaceSyncFailed(result: EventSpaceSyncResult): boolean {
+  return !result.spaceId && !result.skippedOtherTenant
 }
 
 interface SpaceRow {
@@ -102,6 +113,39 @@ async function currentLinkedSlug(db: SupabaseClient, spaceId: string): Promise<s
 }
 
 /**
+ * Community is Stellr-only (S5 B9). Another tenant's event gets no Space: the database
+ * refuses that row, and without this check the steps after it would still run, so an
+ * unadopted Stellr Space with the same slug would be linked to the event and lose its
+ * tier and role grants.
+ *
+ * No mirror row leaves the sync as it was: the mirror syncs after this runs, and an event
+ * with no row counts as Stellr's. A failed read throws, like findSpace, because it must
+ * not read as "not another tenant's": the webhook answers 500 and the script reports it.
+ */
+async function belongsToAnotherTenant(db: SupabaseClient, sanityId: string): Promise<boolean> {
+  const { data, error } = await db.from('events').select('tenant_id').eq('sanity_id', sanityId).maybeSingle()
+  if (error) throw new Error(`event-space-sync: events lookup failed — ${error.message}`)
+  if (!data) return false
+  return (data as { tenant_id: string }).tenant_id !== STELLR_TENANT_ID
+}
+
+/** Every event the mirror says is another tenant's, for a dry run to report. */
+export async function otherTenantEventIds(db: SupabaseClient): Promise<Set<string>> {
+  const { data, error } = await db.from('events').select('sanity_id').neq('tenant_id', STELLR_TENANT_ID)
+  if (error) throw new Error(`event-space-sync: events lookup failed — ${error.message}`)
+  return new Set(((data ?? []) as Array<{ sanity_id: string }>).map((r) => r.sanity_id))
+}
+
+/**
+ * A Space write can only break a CHECK by being stamped for another tenant, because the
+ * sync never sets the columns the table's other checks cover. The mirror row appeared
+ * after belongsToAnotherTenant read it, so stop as the skip above does.
+ */
+function refusedForAnotherTenant(error: { code?: string } | null): boolean {
+  return error?.code === '23514'
+}
+
+/**
  * Bring one Sanity event's Space into line: create it if missing, rename it to
  * the event's current title, repair the slug everywhere if it has moved, keep
  * the event link and the container pointed at it, and re-backfill the roster.
@@ -115,8 +159,17 @@ export async function syncEventSpace(
   const notes: string[] = []
   const result: EventSpaceSyncResult = {
     spaceId: null, containerId: null, created: false,
-    renamedFrom: null, slugCollision: false, grantsCleared: 0, notes,
+    renamedFrom: null, slugCollision: false, grantsCleared: 0, skippedOtherTenant: false, notes,
   }
+
+  const skip = () => {
+    result.containerId = null
+    result.skippedOtherTenant = true
+    notes.push('skipped: the event belongs to another tenant, and community is Stellr-only')
+    return result
+  }
+
+  if (await belongsToAnotherTenant(db, ev.sanityId)) return skip()
 
   const existing = await findSpace(db, ev)
 
@@ -166,6 +219,7 @@ export async function syncEventSpace(
     const { data: created, error } = await db
       .from('community_spaces')
       .insert({
+        tenant_id: STELLR_TENANT_ID,
         slug,
         name: ev.title,
         description: `Space for everyone taking part in ${ev.title}.`,
@@ -176,6 +230,7 @@ export async function syncEventSpace(
       })
       .select('id')
       .maybeSingle()
+    if (refusedForAnotherTenant(error)) return skip()
     if (error || !created) {
       notes.push(`space create failed: ${error?.message ?? 'no row returned'}`)
       return result
@@ -203,6 +258,7 @@ export async function syncEventSpace(
       }
     }
     const { error } = await db.from('community_spaces').update(patch).eq('id', existing.id)
+    if (refusedForAnotherTenant(error)) return skip()
     if (error) notes.push(`space update failed: ${error.message}`)
   }
 

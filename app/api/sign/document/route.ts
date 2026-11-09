@@ -10,7 +10,7 @@ import { actingSession, invalidLink, NO_STORE, throttle } from '@/lib/esign/nati
 export const maxDuration = 30
 
 export async function GET(req: Request) {
-  const limited = throttle(req, 'document', 20)
+  const limited = await throttle(req, 'document', 20)
   if (limited) return limited
   const db = supabaseServer()
   const ctx = await actingSession(db, req, 'act')

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { stripeClient } from '@/lib/stripe'
 import { createSeatCheckout, seatPayPageUrl } from '@/lib/individual-payment'
+import { createSharedSeatCheckout } from '@/lib/teacher-share'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
-// POST /api/register/pay-seat  { token }
+// POST /api/register/pay-seat  { token, code? }  (code: groups sharing the teacher's cost)
 // Mints a Stripe Checkout for one "members pay individually" seat behind a
 // per-participant pay token (deep review PAY-8). Unauthenticated by design — the
 // token is the capability, and all it can do is open a checkout whose amount is
@@ -15,7 +17,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducatio
 // Works whether or not the event's registration is still open: closing it stops
 // new sign-ups, not payment for a place someone already holds.
 export async function POST(req: NextRequest) {
-  const limited = rateLimitGuard(req, 'register/pay-seat', { limit: 20, windowMs: 10 * 60_000 })
+  const limited = await rateLimit(req, 'register/pay-seat', { limit: 20, windowMs: 10 * 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
 
   const body = await req.json().catch(() => null)
@@ -47,17 +49,45 @@ export async function POST(req: NextRequest) {
 
   const { data: regRow } = await db
     .from('registrations')
-    .select('event_slug, event_title, member_pays_individually, invoice_coupon_id')
+    .select('event_slug, event_title, member_pays_individually, invoice_coupon_id, share_estimate')
     .eq('id', participant.registration_id)
     .maybeSingle()
-  const reg = regRow as { event_slug: string; event_title: string; member_pays_individually: boolean; invoice_coupon_id: string | null } | null
+  const reg = regRow as { event_slug: string; event_title: string; member_pays_individually: boolean; invoice_coupon_id: string | null; share_estimate: number | null } | null
   if (!reg) return NextResponse.json({ error: 'This link isn’t valid.' }, { status: 404 })
-  if (!reg.member_pays_individually) {
+  // A pending seat is owed by its own link, in an individually paid group or in a
+  // split one ("Invoice for some"); anything else now pays together.
+  if (!reg.member_pays_individually && participant.individual_payment_status !== 'pending') {
     return NextResponse.json({ error: 'This group now pays together, so nothing is due from you here.', code: 'not_individual' }, { status: 409 })
   }
 
   const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments are not configured.' }, { status: 503 })
+
+  const successUrl = `${SITE_URL}/register/${reg.event_slug}/confirmation?id=${participant.registration_id}&type=group&payment=success`
+  if (reg.share_estimate != null) {
+    try {
+      const shared = await createSharedSeatCheckout(db, stripe, {
+        participantId: participant.id,
+        participantEmail: participant.email,
+        registrationId: participant.registration_id,
+        eventSlug: reg.event_slug,
+        eventTitle: reg.event_title,
+        successUrl,
+        cancelUrl: seatPayPageUrl(reg.event_slug, token, { cancelled: true }),
+        discountCode: typeof body?.code === 'string' ? body.code.slice(0, 64) : null,
+        groupCouponId: reg.invoice_coupon_id,
+      })
+      if ('waived' in shared) return NextResponse.json({ waived: true, message: 'Nothing to pay: your place is confirmed.' })
+      if ('error' in shared) {
+        const status = shared.error === 'bad_code' ? 400 : shared.error === 'no_price' ? 503 : 409
+        return NextResponse.json({ error: shared.message, code: shared.error }, { status })
+      }
+      return NextResponse.json({ url: shared.url })
+    } catch (e) {
+      console.error('[register/pay-seat] shared checkout create failed:', e)
+      return NextResponse.json({ error: 'Payment could not be started. Please try again shortly.' }, { status: 502 })
+    }
+  }
 
   try {
     const result = await createSeatCheckout(stripe, {

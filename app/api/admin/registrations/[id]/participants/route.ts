@@ -1,12 +1,36 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventStaff } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { addParticipantToGroup, GROUP_FOR_ADD_COLUMNS, type GroupForAdd } from '@/lib/group-participant-add'
+import { withAudit } from '@/lib/audit/route'
+import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
 export const maxDuration = 300
+
+const ROUTE = '/api/admin/registrations/[id]/participants'
+
+const notFound = () => NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
+
+// What this request acted on, which withAudit's spec cannot read for itself. Who was added
+// stays out of the event: they may be a minor, and the row can never be erased.
+const audited = new WeakMap<Request, { id: string; userId: string; tenantId: string; eventSlug: string | null }>()
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, { params: Promise<{ id: string }> }] }) => {
+    const a = audited.get(req)
+    return {
+      action: 'registration.participant.staff_add',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { tenantId: a?.tenantId ?? null },
+      target: { table: 'registrations', id: a?.id ?? null },
+      metadata: { eventSlug: a?.eventSlug ?? null },
+    }
+  },
+  addParticipant,
+)
 
 // POST /api/admin/registrations/[id]/participants — staff add a person to a
 // group's roster from the admin event roster (4 Nov 2026). Admins, and the
@@ -14,27 +38,32 @@ export const maxDuration = 300
 // group actions (Finish setup, Invoice). The add itself is the organiser's,
 // shared through lib/group-participant-add.ts, so billing, the consent form,
 // the school link and the payment link behave exactly as on the Teams page.
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const access = await requireEventAccess()
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+async function addParticipant(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const staff = await requireEventStaff({ route: ROUTE })
+  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
 
   const { id } = await params
   const db = supabaseServer()
-  const { data: reg } = await db
-    .from('registrations')
-    .select(`type, ${GROUP_FOR_ADD_COLUMNS}`)
-    .eq('id', id)
-    .maybeSingle()
-  if (!reg || reg.type !== 'group') return NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
-  if (!access.isAdmin && !(access.assignedSlugs ?? []).includes(reg.event_slug as string)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const loaded = await loadEventRecord<GroupForAdd & { type: string | null; event_slug: string; event_title?: string | null }>(staff, 'registrations', id, {
+    db,
+    select: `type, ${GROUP_FOR_ADD_COLUMNS}`,
+    notFound,
+    label: ROUTE,
+  })
+  if (!loaded.ok) return loaded.response
+  const reg = loaded.row
+  if (reg.type !== 'group') return notFound()
+  // The add looks members up across every tenant, writes their event history and activity
+  // log, and bills through Stellr's Stripe account.
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
+  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId, eventSlug: reg.event_slug })
 
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
   const actor = await actorFromAuth()
-  const result = await addParticipantToGroup(db, reg as unknown as GroupForAdd, body as Record<string, unknown>, {
+  const result = await addParticipantToGroup(db, reg, body as Record<string, unknown>, {
     memberId: actor.actorMemberId ?? null,
     label: 'admin',
   })
@@ -42,7 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (result.status === 201 && result.memberId) {
     await logActivity({
       memberId: result.memberId,
-      actorType: access.isAdmin ? 'admin' : 'member',
+      actorType: staff.isAdmin ? 'admin' : 'member',
       actorMemberId: actor.actorMemberId ?? null,
       actorLabel: actor.actorLabel ?? null,
       category: 'event',

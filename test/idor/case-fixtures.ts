@@ -110,6 +110,28 @@ export const CASE_FIXTURES: Record<string, CaseFixture> = {
     methods: ['PATCH'],
     body: { action: 'toggle-announcement' },
   },
+  'app/api/admin/docusigns/[id]/credential-sharing/route.ts': {
+    reason: 'optOut must be a boolean, and the route checks that before it loads the agreement',
+    refusesWithoutQuery: 'the participant holds no role: the tenant admin check answers before any read',
+    body: { optOut: true },
+  },
+  // A row that is not a group answers 404 before the event check would, so without this the
+  // event manager's case passes whether or not the route confines them.
+  'app/api/admin/registrations/[id]/finish-setup/route.ts': {
+    reason: 'only a group registration goes on to the event check',
+    refusesWithoutQuery: 'the participant holds no role: the staff check answers before any read',
+    honey: { type: 'group' },
+  },
+  'app/api/admin/registrations/[id]/invoice/route.ts': {
+    reason: 'only a group registration goes on to the event check',
+    refusesWithoutQuery: 'the participant holds no role: the staff check answers before any read',
+    honey: { type: 'group' },
+  },
+  'app/api/admin/registrations/[id]/participants/route.ts': {
+    reason: 'only a group registration goes on to the event check',
+    refusesWithoutQuery: 'the participant holds no role: the staff check answers before any read',
+    honey: { type: 'group' },
+  },
   'app/api/credentials/[number]/visibility/route.ts': {
     reason: 'visibility must be public or private',
     body: { visibility: 'private' },

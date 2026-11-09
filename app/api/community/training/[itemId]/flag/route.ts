@@ -4,12 +4,18 @@ import { notifyCommunityAdmins } from '@/lib/notify'
 import { supabaseServer } from '@/lib/supabase'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { escapeHtml } from '@/lib/email-layout'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // A member reports that a training lesson's resource is unavailable/broken
 // (e.g. no link provided, or a placeholder like "TBC"). Routes an in-app +
 // email alert to community admins so they can fix or replace it.
-export async function POST(
-  _req: Request,
+export async function POST(req: Request, ctx: { params: Promise<{ itemId: string }> }) {
+  return audited(req, { action: 'community.training_item.flag', table: 'training_items' }, () => flagTrainingItem(req, ctx))
+}
+
+async function flagTrainingItem(
+  req: Request,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
   const { itemId } = await params
@@ -28,6 +34,7 @@ export async function POST(
     .eq('id', itemId)
     .maybeSingle()
   if (!item) return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
+  noteAudit(req, { targetId: itemId })
 
   const moduleTitle = (item.training_modules as { title?: string } | null)?.title ?? 'a course'
   const memberName = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || 'A member'
@@ -51,4 +58,22 @@ export async function POST(
   })
 
   return NextResponse.json({ ok: true })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

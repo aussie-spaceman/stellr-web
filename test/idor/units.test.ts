@@ -121,7 +121,7 @@ describe('requestIdInputs', () => {
 
 describe('idor targets', () => {
   it('derives URL patterns and segments', () => {
-    expect(urlPatternOf('app/(public)/credentials/[number]/badge/route.tsx')).toBe('/credentials/[number]/badge')
+    expect(urlPatternOf('app/(stellr)/(public)/credentials/[number]/badge/route.tsx')).toBe('/credentials/[number]/badge')
     expect(segmentsOf('app/api/community/media/[...path]/route.ts')).toEqual(['...path'])
     expect(segmentsOf('app/api/members/teams/[id]/participants/[pid]/route.ts')).toEqual(['id', 'pid'])
     expect(segmentsOf('app/api/x/[[...rest]]/route.ts')).toEqual(['...rest'])
@@ -564,7 +564,7 @@ describe('tenant-host cap', () => {
       'app/api/admin/list/route.ts': 'tenant_staff',
       'app/api/admin/[id]/route.ts': 'platform_admin',
       'app/api/members/route.ts': 'participant',
-      'app/(admin)/x/page.tsx': 'tenant_staff',
+      'app/(stellr)/(admin)/x/page.tsx': 'tenant_staff',
     } as const
     const read = (f: string) => (f.includes('list') ? 'export async function GET() {}' : 'export async function PATCH(req, { params }) {}')
     const found = staffTargets(read, manifest)
@@ -575,7 +575,7 @@ describe('tenant-host cap', () => {
     expect(idorTargetFor('app/api/admin/list/route.ts', 'tenant_staff', read('app/api/admin/list/route.ts'))).toBeNull()
     expect(() => staffTargets(() => 'export const x = 1', { 'app/api/admin/none/route.ts': 'tenant_staff' })).toThrow('no handler')
     expect(staffTargets().map((t) => t.file)).toEqual(
-      Object.entries(ROUTE_MANIFEST).filter(([f, c]) => /route\.tsx?$/.test(f) && (c === 'tenant_staff' || c === 'platform_admin')).map(([f]) => f).sort(),
+      Object.entries(ROUTE_MANIFEST).filter(([f, c]) => /route\.tsx?$/.test(f) && (c === 'tenant_staff' || c === 'platform_admin' || c === 'platform_destined')).map(([f]) => f).sort(),
     )
   })
 

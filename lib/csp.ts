@@ -36,6 +36,10 @@ import { gtmInitScript } from '@/lib/gtm'
 //    inline script and name the script hosts instead, which still reports any
 //    script from a host not listed (for example, a new tag added in GTM).
 //
+// A page on a tenant host is the exception: see tenantPagePolicy() below. It is
+// enforced, and only proxy.ts's tenant handler sends it, so neither policy above
+// changes for Stellr.
+//
 // Script inventory: test/inline-scripts.test.ts. Hosts below come from the
 // code, except the HubSpot and Google subdomains that the HubSpot loader and
 // GTM pull in themselves, taken from those vendors' published CSP lists, and
@@ -52,7 +56,7 @@ export { NONCE_HEADER } from '@/lib/csp-nonce-header'
 
 // Route groups that always render per request (each reads the session, the
 // search params, or is force-dynamic). test/csp.test.ts checks this list
-// against app/(admin), app/(member), app/(auth) and app/(flow).
+// against app/(stellr)/(admin), app/(stellr)/(member), app/(stellr)/(auth) and app/(stellr)/(flow).
 const NONCE_ROUTE =
   /^\/(admin|account|campaigns|community|home|join|sign-in|sign-up|check-in|register|sign|survey|team-profile|api)(\/|$)/
 
@@ -273,6 +277,104 @@ export function cspFor(pathname: string): { value: string; nonce: string | null 
 /** Set the Report-Only policy and the Reporting API endpoint on a response. */
 export function applyCsp(res: Response, value: string, requestUrl: string): Response {
   res.headers.set(CSP_HEADER, value)
+  res.headers.set('Reporting-Endpoints', `${CSP_REPORT_GROUP}="${new URL(CSP_REPORT_PATH, requestUrl).href}"`)
+  return res
+}
+
+// ── Enforcing policy for a page on a tenant host (S5, B6) ────────────────────
+//
+// Every page in the tenant tree renders per request (its root layout says so), so
+// each can hold a nonce and none needs 'unsafe-inline' or a list of script hosts.
+// The tree loads no tag manager, so this names no tracker host and no hash for
+// ConsentMode or GTM, and a beacon or a new tag is blocked rather than reported.
+//
+// What a tenant page does need, and where each is proved. test/tenant-csp.test.ts
+// holds the policy and the tree's imports to this list, and e2e/tenancy/tenant-csp.spec.ts
+// runs the signing page in a browser under the real header.
+//   - Next's scripts and clerk-js: the nonce. clerk-js's UI bundle, and Turnstile
+//     inside Clerk's sign-up, come through 'strict-dynamic'.
+//   - Clerk's calls: its Frontend API, img.clerk.com, its telemetry hosts and its bot
+//     protection hosts. Those last two are more than the Report-Only policy names,
+//     which only reports them. The test reads Clerk's own list, so a Clerk upgrade
+//     that adds a host fails there and not on a live sign-in.
+//   - The signing page: pdf.js's worker ('self'), and the text version in a sandboxed
+//     srcdoc frame, which frame-src does not govern. pdf.js needs no 'wasm-unsafe-eval'
+//     or data: fonts on the page: its WebAssembly runs in the worker, whose own response
+//     has no script rule (next.config.mjs).
+//   - The check-in code page: a QR code as a data: image.
+//
+// Clerk's list also names Stripe and Google Maps, for its billing and address
+// components. No tenant page uses them, and checkout is a top-level navigation.
+//
+// 'strict-dynamic' trusts whatever a running script adds, so this stops injected
+// markup and what follows from it, not a script the page itself loads. That is why
+// the test also holds what the tree imports.
+//
+// 'frame-ancestors' is 'none' on every page, because the proxy's header replaces the
+// private-link header next.config.mjs sets on /sign and the like, and nothing frames
+// a tenant page. 'object-src' stays off API responses (see proxy.ts): on a PDF it
+// can stop the browser's own viewer.
+
+export const ENFORCING_CSP_HEADER = 'Content-Security-Policy'
+
+// Clerk's bot protection. The port wildcard is in Clerk's own list, for connect-src.
+const CLERK_PROTECT = 'https://*.protect.clerk.com'
+
+function tenantDirectives(env: Env): string {
+  const clerk = clerkFrontendApi(env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+  return [
+    "default-src 'self'",
+    // Clerk and next/font inject styles.
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https://img.clerk.com",
+    "font-src 'self'",
+    `connect-src 'self' ${clerk} https://img.clerk.com https://clerk-telemetry.com https://*.clerk-telemetry.com ${CLERK_PROTECT}:*`,
+    `frame-src 'self' ${TURNSTILE} ${CLERK_PROTECT}`,
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    `report-uri ${CSP_REPORT_PATH}`,
+    `report-to ${CSP_REPORT_GROUP}`,
+  ].join('; ')
+}
+
+let defaultTenantDirectives: string | undefined
+
+/** The enforcing policy for a page on a tenant host, with this request's nonce. */
+export function tenantPagePolicy(nonce: string, env: Env = process.env): string {
+  const directives = env === process.env ? (defaultTenantDirectives ??= tenantDirectives(env)) : tenantDirectives(env)
+  // `next dev` evals for Fast Refresh. As in noncePolicy, https: and 'unsafe-inline'
+  // only apply in browsers too old for nonces and 'strict-dynamic'.
+  const script = [`'nonce-${nonce}'`, "'strict-dynamic'", ...(env.NODE_ENV === 'development' ? ["'unsafe-eval'"] : []), 'https:', "'unsafe-inline'"]
+  return `script-src ${script.join(' ')}; ${directives}`
+}
+
+// An allowed API that draws an HTML page of its own, from values in the request. Its page
+// has inline styles and one form, and no script, so it needs no nonce. Any other API stays
+// off this list because it renders no page (see proxy.ts). test/tenant-csp.test.ts fails
+// when an allowed API starts answering with HTML and is not named here.
+const TENANT_HTML_API_POLICY = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "form-action 'self'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  `report-uri ${CSP_REPORT_PATH}`,
+  `report-to ${CSP_REPORT_GROUP}`,
+].join('; ')
+export const TENANT_HTML_APIS: ReadonlySet<string> = new Set(['/api/email/unsubscribe'])
+
+/** The enforcing policy for an API on a tenant host, or null when it sends none of its own. */
+export function tenantApiPolicy(pathname: string): string | null {
+  return TENANT_HTML_APIS.has(pathname) ? TENANT_HTML_API_POLICY : null
+}
+
+/** Set an enforcing policy and the Reporting API endpoint on a response. */
+export function applyEnforcingCsp(res: Response, value: string, requestUrl: string): Response {
+  res.headers.set(ENFORCING_CSP_HEADER, value)
   res.headers.set('Reporting-Endpoints', `${CSP_REPORT_GROUP}="${new URL(CSP_REPORT_PATH, requestUrl).href}"`)
   return res
 }

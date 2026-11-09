@@ -103,6 +103,25 @@ export function typescriptConfig(env = process.env) {
 const APP_HOST = new URL(process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org').host
 
 /**
+ * The hosts that keep Stellr's own 404: the list in proxy.ts's matcher, plus this
+ * deployment's two URLs, so a build whose site or app host is not on that list keeps it
+ * too. Exported for test/proxy-tenant-routing.test.ts, which holds the list to the matcher.
+ *
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function stellrHostsPattern(env = process.env) {
+  const named = '(?:(?:www\\.|app\\.)?stellreducation\\.org|localhost|127\\.0\\.0\\.1|.+\\.vercel\\.app)'
+  const configured = [env.NEXT_PUBLIC_SITE_URL, env.NEXT_PUBLIC_AUTH_APP_URL].flatMap((url) => {
+    try {
+      return [new URL(url ?? '').hostname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')]
+    } catch {
+      return []
+    }
+  })
+  return configured.length > 0 ? `(?:${named}|${configured.join('|')})` : named
+}
+
+/**
  * True for the legacy service_role key: a JWT whose `role` claim says so. Read
  * without verifying the signature, only to catch it in a public slot, where it
  * looks the same by prefix as the anon key.
@@ -152,6 +171,9 @@ const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
   transpilePackages: ['@stellr/web-ui', '@stellr/icons'],
   typescript: typescriptConfig(),
+  // Stellr's pages and the tenant tree have separate root layouts, so a URL no page
+  // answers gets its document from app/global-not-found.tsx.
+  experimental: { globalNotFound: true },
   // deep review TEST-12: the repo's lint (eslint.config.mjs) is deliberately
   // non-blocking and run on its own via `npm run lint`, not during the build.
   // Next 16 no longer lints during `next build` at all, so the old
@@ -286,6 +308,14 @@ const nextConfig = {
           { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
         ],
       },
+      // What skips the proxy on a host that is not one of Stellr's. A miss here gets the
+      // tenant tree's 404 from the fallback rewrite below, whose scripts carry no nonce, so
+      // this can have no script rule. That document must hold no tenant or request data.
+      ...['/_next/:path*', '/api/img/:path*', '/api/csp-report/:path*'].map((source) => ({
+        source,
+        missing: [{ type: 'host', value: stellrHostsPattern() }],
+        headers: [{ key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'none'; object-src 'none'" }],
+      })),
       // One Next app serves both hosts, so every public page (/academy,
       // /curriculum, /competitions, …) also answers 200 on the member app.
       // Canonicals already point at www, but a canonical is a hint; this keeps
@@ -361,6 +391,26 @@ const nextConfig = {
       // static files; beforeFiles so this wins over the www one on the app host.
       beforeFiles: [
         { source: '/manifest.webmanifest', has: [{ type: 'host', value: APP_HOST }], destination: '/app.webmanifest' },
+      ],
+      // Next names a share card under a route group by a hash of the group's path, so
+      // the move into app/(stellr) renamed these two. A preview that kept the old URL
+      // still gets its image.
+      afterFiles: [
+        { source: '/lp/:slug/opengraph-image-k8l0a9', destination: '/lp/:slug/opengraph-image-1ypvlb' },
+        { source: '/credentials/:number/opengraph-image-14f88v', destination: '/credentials/:number/opengraph-image-bboc2v' },
+      ],
+      // A URL that no file and no page answered, on a host that is not one of Stellr's:
+      // the tenant tree's own catch-all answers, because app/global-not-found.tsx is
+      // Stellr's whole document. A rewrite and not the proxy, since /_next and the two
+      // bypass routes skip the proxy, and a path with a static extension passes through
+      // it. The destination names no real tenant and carries no part of the path, so it
+      // can only ever reach that catch-all.
+      fallback: [
+        {
+          source: '/:path*',
+          missing: [{ type: 'host', value: stellrHostsPattern() }],
+          destination: '/_t/no-tenant/no-page',
+        },
       ],
     }
   },

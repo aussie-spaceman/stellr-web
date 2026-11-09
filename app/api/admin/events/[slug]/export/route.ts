@@ -1,21 +1,31 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { getEventRoster } from '@/lib/event-admin'
 import { toCsv } from '@/lib/csv'
 import { displayGrade } from '@/lib/member-enums'
 import { supabaseServer } from '@/lib/supabase'
 import { MEDIA_REASON_LABEL, mediaForParticipants } from '@/lib/survey/media'
+import { enforcedTenantFilter } from '@/lib/tenancy/load-scoped'
+import { isStellrScope } from '@/lib/tenancy/scope-context'
 
 // GET /api/admin/events/[slug]/export — roster CSV (admins + assigned event managers)
 // media_ok: may Stellr use this person's photo/media (lib/survey/media.ts) —
 // yes, no, or check (read the signed form); the reason is beside it.
+//
+// That answer rests on shared member settings and on forms signed for any organiser, so it
+// is Stellr's alone. A tenant's staff get "check" for everyone: A10 and A11 say what a
+// tenant's own answer is.
+const TENANT_MEDIA_NOTE = 'Not available for your organisation yet: check your own records'
+
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/export' })
+  if (!staff.ok) return staff.response
 
-  const roster = await getEventRoster(slug)
-  const media = await mediaForParticipants(supabaseServer(), roster.groups.flatMap((g) => g.participants.map((p) => p.id)))
+  const roster = await getEventRoster(slug, undefined, { tenant: enforcedTenantFilter(staff.scope, 'registrations') })
+  const media = isStellrScope(staff.scope)
+    ? await mediaForParticipants(supabaseServer(), roster.groups.flatMap((g) => g.participants.map((p) => p.id)))
+    : null
 
   const header = [
     'Registration Type', 'Group', 'First Name', 'Last Name', 'Email', 'Role', 'School', 'Grade',
@@ -49,8 +59,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       p.docusign,
       p.docusign_pill,
       p.checked_in_at ?? '',
-      media.get(p.id)?.status ?? 'check',
-      MEDIA_REASON_LABEL[media.get(p.id)?.reason ?? 'form_unread'],
+      media?.get(p.id)?.status ?? 'check',
+      media ? MEDIA_REASON_LABEL[media.get(p.id)?.reason ?? 'form_unread'] : TENANT_MEDIA_NOTE,
     ])
   )
 

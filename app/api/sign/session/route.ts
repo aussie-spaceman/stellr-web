@@ -13,7 +13,7 @@ import { clearSessionCookie, invalidLink, json, readJson, sameOrigin, setSession
 // birth, so a link sent to a mistyped address shows a stranger nothing.
 
 export async function POST(req: Request) {
-  const limited = throttle(req, 'session', 20)
+  const limited = await throttle(req, 'session', 20)
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
 

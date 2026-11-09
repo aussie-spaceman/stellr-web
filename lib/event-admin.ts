@@ -5,6 +5,7 @@ import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/paym
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { classifyAgreement } from '@/lib/docusign'
+import type { TenantFilter } from '@/lib/tenancy/load-scoped'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -141,34 +142,52 @@ export interface EventRosterData {
  */
 export { isRosterMinor }
 
-export async function getEventRoster(eventSlug: string, eventDate?: string): Promise<EventRosterData> {
+export async function getEventRoster(
+  eventSlug: string,
+  eventDate?: string,
+  opts: {
+    /** Only this tenant's rows of the event (lib/tenancy/load-scoped enforcedTenantFilter). Absent: every row, as today. */
+    tenant?: TenantFilter | null
+  } = {},
+): Promise<EventRosterData> {
   const db = supabaseServer()
+  const tenant = opts.tenant
+  // A slug is not proof of a tenant: every read keyed by it carries the filter.
+  const inTenant = <Q>(query: Q): Q => {
+    if (!tenant) return query
+    const q = query as unknown as { eq(column: string, value: string): Q; or(filters: string): Q }
+    return tenant.includeNull ? q.or(`${tenant.column}.eq.${tenant.value},${tenant.column}.is.null`) : q.eq(tenant.column, tenant.value)
+  }
 
   const [{ data: regs, error: regError }, { data: envelopes, error: envError }, { data: offers }] = await Promise.all([
-    db
-      .from('registrations')
-      .select(
-        `id, type, status, teacher_first_name, teacher_last_name, teacher_email, school_name,
+    inTenant(
+      db
+        .from('registrations')
+        .select(
+          `id, type, status, teacher_first_name, teacher_last_name, teacher_email, school_name,
          member_pays_individually, invoice_requested, invoice_paid_at,
          participants(id, member_id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
            school_name, event_role, dietary_requirements, health_conditions, company_id,
            checked_in_at, individual_payment_status,
            emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email,
            emergency_contact_phone, emergency_contact_relationship)`
-      )
-      .eq('event_slug', eventSlug)
+        )
+        .eq('event_slug', eventSlug),
+    )
       .neq('status', 'withdrawn')
       .order('created_at', { ascending: true }),
-    db
-      .from('agreements')
-      .select('id, participant_id, status, signers_total, signers_completed, reused_from, envelope_id, issue_error')
-      .eq('event_slug', eventSlug)
-      .order('created_at', { ascending: true }),
-    db
-      .from('scholarship_applications')
-      .select('id, first_name, last_name, email, percent_off, registration_id, offered_at')
-      .eq('event_slug', eventSlug)
-      .eq('status', 'offered'),
+    inTenant(
+      db
+        .from('agreements')
+        .select('id, participant_id, status, signers_total, signers_completed, reused_from, envelope_id, issue_error')
+        .eq('event_slug', eventSlug),
+    ).order('created_at', { ascending: true }),
+    inTenant(
+      db
+        .from('scholarship_applications')
+        .select('id, first_name, last_name, email, percent_off, registration_id, offered_at')
+        .eq('event_slug', eventSlug),
+    ).eq('status', 'offered'),
   ])
   const offerRows = (offers ?? []) as {
     id: string; first_name: string; last_name: string; email: string
@@ -176,10 +195,10 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
   }[]
   const offerByRegistration = new Map(offerRows.filter((o) => o.registration_id).map((o) => [o.registration_id as string, o]))
   // Reimbursements to students who had paid before their scholarship.
-  const { data: scholarshipRefunds } = await db
+  const { data: scholarshipRefunds } = await inTenant(db
     .from('event_refunds')
     .select('registration_id, refund_cents')
-    .eq('event_slug', eventSlug)
+    .eq('event_slug', eventSlug))
     .eq('kind', 'scholarship')
     .in('refund_type', ['cash', 'credit'])
   const scholarshipRefundByReg = new Map(
@@ -188,10 +207,10 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
   if (regError) throw new Error(`Failed to load registrations: ${regError.message}`)
   if (envError) throw new Error(`Failed to load docusign envelopes: ${envError.message}`)
 
-  const { data: profileRows } = await db
+  const { data: profileRows } = await inTenant(db
     .from('team_profiles')
     .select('participant_id')
-    .eq('event_slug', eventSlug)
+    .eq('event_slug', eventSlug))
     .not('submitted_at', 'is', null)
   const profileSubmitted = new Set((profileRows ?? []).map((r) => r.participant_id as string))
 
@@ -237,10 +256,10 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
   // Refunds made in the Stripe dashboard (recorded by the charge.refunded
   // webhook). A group payment has no single participant, so its rows carry only
   // the registration and are shown against everyone on it.
-  const { data: externalRefunds } = await db
+  const { data: externalRefunds } = await inTenant(db
     .from('event_refunds')
     .select('participant_id, registration_id, refund_cents, currency')
-    .eq('event_slug', eventSlug)
+    .eq('event_slug', eventSlug))
     .eq('source', 'stripe_external')
     .eq('refund_type', 'cash')
   const refundedByKey = new Map<string, { cents: number; currency: string }>()
@@ -329,6 +348,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         p.event_role as string | null,
         p.date_of_birth as string | null,
         eventDate,
+        records?.external ?? null,
       ).state
 
       const ecName =

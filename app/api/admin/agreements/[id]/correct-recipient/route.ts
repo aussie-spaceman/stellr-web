@@ -1,59 +1,98 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventStaff, type EventStaff } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { correctAgreementRecipient } from '@/lib/agreement-correction'
 import { maskEmail } from '@/lib/utils'
 import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
+import { withAudit } from '@/lib/audit/route'
+import { loadEventRecord, loadScopedRows } from '@/lib/tenancy/load-scoped'
+import { isStellrScope } from '@/lib/tenancy/scope-context'
+import { pendingSuggestions, supersedeOpenLinks } from '@/lib/esign/email-changes'
+import { lookupSuppressions } from '@/lib/email/suppressions'
 
 // "Correct email" on a live agreement (admins, and event managers for their
 // own events). Changes the signer's address on the same agreement: signatures
 // already given are kept and no new envelope is used. See
 // lib/agreement-correction.ts.
 
-type Db = ReturnType<typeof supabaseServer>
+const ROUTE = '/api/admin/agreements/[id]/correct-recipient'
 
-/** Null when the caller may act on this agreement, otherwise the response to send. */
-async function guard(db: Db, id: string): Promise<NextResponse | null> {
+type Db = ReturnType<typeof supabaseServer>
+type Agreement = { event_slug: string | null; envelope_id: string; provider: string | null; status: string | null }
+type Staff = Extract<EventStaff, { ok: true }>
+
+const notFound = () => NextResponse.json({ error: 'Agreement not found' }, { status: 404 })
+
+/** The agreement when the caller may act on it, otherwise the response to send. */
+async function guard(db: Db, id: string, req: Request): Promise<{ staff: Staff; row: Agreement } | { denied: Response }> {
   // Who is asking comes first: a signed-out caller gets 401 before any
   // lookup, so the route never says whether an agreement id exists.
-  const access = await requireEventAccess()
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventStaff({ route: ROUTE })
+  if (!staff.ok) return { denied: NextResponse.json({ error: 'Forbidden' }, { status: staff.status }) }
+  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
 
-  const { data: row } = await db.from('agreements').select('event_slug').eq('id', id).maybeSingle()
-  if (!row) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 })
-  const slug = (row.event_slug as string | null) || null
-  if (access.isAdmin) return null
-  // Event managers: only their own events. An agreement with no event (a
+  // An event manager reaches only their own events. An agreement with no event (a
   // membership agreement) is admins only.
-  if (!slug || !(access.assignedSlugs ?? []).includes(slug)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const loaded = await loadEventRecord<Agreement>(staff, 'agreements', id, {
+    db,
+    select: 'event_slug, envelope_id, provider, status',
+    notFound,
+    label: ROUTE,
+  })
+  return loaded.ok ? { staff, row: loaded.row } : { denied: loaded.response }
+}
+
+// What this request acted on, which withAudit's spec cannot read for itself.
+const audited = new WeakMap<Request, { id: string; userId: string; tenantId: string }>()
+
+type Args = [Request, { params: Promise<{ id: string }> }]
+
+function eventFor(req: Request) {
+  const a = audited.get(req)
+  return {
+    actor: a ? { userId: a.userId } : { session: true as const },
+    tenant: { tenantId: a?.tenantId ?? null },
+    target: { table: 'agreements', id: a?.id ?? null },
   }
-  return null
 }
 
 // GET — the agreement's signers, for the dialog: { status, recipients[] }.
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+// Refreshing them from the engine writes, so this is audited like the POST.
+export const GET = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'agreement.recipient.sync', ...eventFor(req) }), listRecipients)
+
+async function listRecipients(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
-  const denied = await guard(db, id)
-  if (denied) return denied
+  const g = await guard(db, id, req)
+  if ('denied' in g) return g.denied
 
-  const { data: env } = await db.from('agreements').select('envelope_id, provider, status').eq('id', id).maybeSingle()
+  const env = g.row
   // Refresh from the engine first: the dialog must show who has signed now,
   // not as of the last Connect event (and an envelope never synced has no rows).
-  if (env && (env.status === 'sent' || env.status === 'delivered')) {
-    await syncEnvelopeRecipients(db, id, env.envelope_id as string, env.provider as string | null).catch((err) =>
+  if (env.status === 'sent' || env.status === 'delivered') {
+    await syncEnvelopeRecipients(db, id, env.envelope_id, env.provider).catch((err) =>
       console.error(`[admin/correct-recipient] sync failed for ${id}:`, err),
     )
   }
-  const { data: recipients } = await db
-    .from('agreement_recipients')
-    .select('recipient_id, role_name, name, email, status, routing_order')
-    .eq('envelope_row', id)
-    .order('routing_order', { ascending: true })
+  const { data: recipients } = await loadScopedRows<{
+    recipient_id: string
+    role_name: string | null
+    name: string | null
+    email: string | null
+    status: string | null
+    routing_order: number | null
+  }>(g.staff.scope, 'agreement_recipients', {
+    db,
+    select: 'recipient_id, role_name, name, email, status, routing_order',
+    match: { envelope_row: id },
+    order: { column: 'routing_order', ascending: true },
+    label: ROUTE,
+  })
   return NextResponse.json({
-    status: env?.status ?? null,
+    status: env.status ?? null,
+    // Student suggestions for a bounced parent/guardian address, waiting for an adult.
+    pending: await pendingSuggestions(db, id),
     recipients: (recipients ?? []).map((r) => ({
       recipientId: r.recipient_id,
       roleName: r.role_name,
@@ -66,11 +105,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 // POST — body: { recipientId: string, email: string, name?: string }
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'agreement.recipient.correct', ...eventFor(req) }), correctRecipient)
+
+async function correctRecipient(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
-  const denied = await guard(db, id)
-  if (denied) return denied
+  const g = await guard(db, id, req)
+  if ('denied' in g) return g.denied
 
   const body = await req.json().catch(() => null)
   const recipientId = typeof body?.recipientId === 'string' ? body.recipientId : null
@@ -86,14 +127,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'The signing service did not accept the change. Try again shortly.' }, { status: 502 })
   }
 
-  if (result.kind === 'not_found') return NextResponse.json({ error: 'Agreement not found' }, { status: 404 })
+  if (result.kind === 'not_found') return notFound()
   if (result.kind === 'refused') {
     return NextResponse.json({ error: result.message, code: result.code }, { status: result.code === 'INVALID_EMAIL' ? 400 : 409 })
   }
 
+  // Staff fixed it: any one-time link or student suggestion for this signer is moot.
+  await supersedeOpenLinks(db, id, recipientId).catch(() => {})
+  // Staff may still use an address that bounced before, but are told.
+  const previouslyBounced = await lookupSuppressions(db, [result.recipient.email])
+    .then((m) => ['bounce', 'complaint'].includes(m.get(result.recipient.email.toLowerCase()) ?? ''))
+    .catch(() => false)
+
   const actor = await actorFromAuth()
   const memberId = result.memberId ?? actor.actorMemberId ?? null
-  if (memberId) {
+  // The member's activity log is global, and a tenant's records stay off it (owner decision B8).
+  if (memberId && isStellrScope(g.staff.scope)) {
     await logActivity(
       {
         memberId,
@@ -123,5 +172,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     recipient: result.recipient,
     participantField: result.participantField,
     participantSkipped: result.participantSkipped,
+    previouslyBounced,
   })
 }

@@ -42,7 +42,7 @@ vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.pr
 vi.mock('@/lib/pending-consent', () => ({ childAwaitingConsentBlock: h.consentBlock }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rateLimit, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rateLimit }))
 vi.mock('@/lib/member-sync', () => ({ upsertMember: h.upsertMember }))
 vi.mock('@/lib/email', () => ({ sendEmail: h.sendEmail, groupMemberJoinedEmail: h.joinedEmail }))
 vi.mock('@/lib/individual-payment', () => ({ ensureIndividualPayments: h.payments }))

@@ -2,8 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { summariseSigners, type EnvelopeRecipient } from './docusign'
 import type { RecipientLike } from './docusign-status'
 import { fetchEnvelopeRecipients } from './esign/operations'
-import { notifyCommunityAdmins } from './notify'
-import { escapeHtml as esc } from './email-layout'
+import { announceBounces } from './esign/bounce-notices'
 
 // Persistence for agreement_recipients (migration 148): pull the signer
 // list from DocuSign and mirror it into the DB so every surface can answer "who
@@ -39,6 +38,7 @@ export async function syncEnvelopeRecipients(
       .from('agreements')
       .update({ signers_total: total, signers_completed: completed, updated_at: now })
       .eq('id', envelopeRowId)
+    await announceIfBounced(db, envelopeRowId, recipients)
     return recipients
   }
 
@@ -68,7 +68,20 @@ export async function syncEnvelopeRecipients(
     .update({ signers_total: total, signers_completed: completed, updated_at: now })
     .eq('id', envelopeRowId)
 
+  await announceIfBounced(db, envelopeRowId, recipients)
   return recipients
+}
+
+/**
+ * Every sync is a place a bounce can first be seen: Connect, the reminder cron
+ * and the roster's Correct email refresh. Announcing from here, rather than from
+ * the Connect webhook alone, means a bounce Connect never delivered is still
+ * announced. The claim in lib/esign/bounce-notices.ts makes it once per address,
+ * whichever sync sees it first. Never throws.
+ */
+async function announceIfBounced(db: SupabaseClient, envelopeRowId: string, recipients: EnvelopeRecipient[]): Promise<void> {
+  if (!recipients.some((r) => r.status === 'autoresponded')) return
+  await announceBounces(db, envelopeRowId, { kind: 'bounced' })
 }
 
 /** PostgREST caps a response at 1000 rows and a long `.in()` makes an overlong
@@ -119,51 +132,4 @@ export async function loadRecipientsByEnvelopeRows(
     byRow.set(row.envelope_row as string, list)
   }
   return byRow
-}
-
-/**
- * Alerts admins the first time a recipient's address is reported as bounced.
- *
- * DocuSign reports this as recipient status 'autoresponded' and we previously
- * discarded it, so a guardian with a dead address looked exactly like one who
- * was merely slow — the chase emails kept going out and nobody was told the mail
- * was never arriving. Only fires on a transition into 'autoresponded' so a
- * replayed Connect event can't spam the admins.
- */
-export async function alertOnNewBounces(
-  previous: RecipientLike[],
-  current: EnvelopeRecipient[],
-  context: { minorName: string; eventTitle: string; participantId: string | null },
-): Promise<void> {
-  const wasBounced = new Set(
-    previous.filter((r) => r.status === 'autoresponded').map((r) => r.email.toLowerCase()),
-  )
-  const newlyBounced = current.filter(
-    (r) => r.status === 'autoresponded' && !wasBounced.has(r.email.toLowerCase()),
-  )
-  if (newlyBounced.length === 0) return
-
-  // Plain-text lines for the in-app body / SMS / email text (not HTML-rendered).
-  const lines = newlyBounced.map((r) => `${r.name} <${r.email}>${r.roleName ? ` — ${r.roleName}` : ''}`)
-  // deep review DS-5: the recipient name/email/role (and the subject's name and
-  // event title) are registrant-controlled and go unescaped into an admin HTML
-  // email — notify.ts treats a caller-supplied `email.html` as already-safe, so
-  // this sink is the caller's to escape. PUB-2 (#357) escaped the lib/email.ts
-  // templates but missed this file (it did not even import esc). Escape every
-  // interpolation that lands in the HTML so a bounced "signer" named
-  // `<a href="…">…</a>` cannot phish staff from a trusted sender.
-  const htmlLines = newlyBounced.map((r) => `${esc(r.name)} &lt;${esc(r.email)}&gt;${r.roleName ? ` — ${esc(r.roleName)}` : ''}`)
-  await notifyCommunityAdmins({
-    type: 'action',
-    body: `DocuSign email bounced for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Use Correct email on the event roster: it fixes the address on the same envelope. Reminders will never reach them until then.`,
-    referenceType: 'participant',
-    referenceId: context.participantId ?? undefined,
-    email: {
-      subject: `Action needed: DocuSign email bounced for ${context.minorName}`,
-      html: `<p>DocuSign reported a bounced address on the agreement for <strong>${esc(context.minorName)}</strong> (${esc(context.eventTitle)}):</p><ul>${htmlLines.map((l) => `<li>${l}</li>`).join('')}</ul><p>Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope, keeps any signature already given and uses no new envelope.</p>`,
-      text: `DocuSign reported a bounced address on the agreement for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope.`,
-    },
-  }).catch(() => {})
-  // Deliberately swallowed: a failed admin notification must never roll back a
-  // successful recipient sync.
 }

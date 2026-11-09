@@ -55,6 +55,22 @@ export function fakeDb(tables: Tables = {}): FakeDb {
         filters.push((r) => vals.includes(r[col]))
         return builder
       },
+      // The PostgREST `or` forms the readers use: "<col>.is.null" and
+      // "<col>.gt.<value>" (lib/event-manager-active.ts). A missing column is null.
+      or: (expr: string) => {
+        const parts = expr.split(',').map((p) => {
+          const [col, op, ...rest] = p.split('.')
+          const val = rest.join('.')
+          return (r: Row) => {
+            const v = r[col] ?? null
+            if (op === 'is' && val === 'null') return v === null
+            if (op === 'gt') return v !== null && String(v) > val
+            throw new Error(`fakeDb.or: unsupported ${p}`)
+          }
+        })
+        filters.push((r) => parts.some((keep) => keep(r)))
+        return builder
+      },
       maybeSingle: async () => {
         const r = result()
         return r.error ? r : { data: (r.data as Row[])[0] ?? null, error: null }

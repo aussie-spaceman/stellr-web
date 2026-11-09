@@ -11,7 +11,7 @@ import { LEGACY_IDIOMS, measureIdioms } from '../authz-idioms.mjs'
 import { collectSources, isTestFile, parse } from '../s5-inventory.mjs'
 
 const ROUTE = 'app/api/admin/x/route.ts'
-const PAGE = 'app/(admin)/admin/x/page.tsx'
+const PAGE = 'app/(stellr)/(admin)/admin/x/page.tsx'
 const R = "{ route: '/api/admin/x' }"
 const P = "{ route: '/admin/x' }"
 const AUTH = "import { auth } from '@clerk/nextjs/server'\n"
@@ -351,7 +351,7 @@ describe('authz codemod: what stays', () => {
   it.each([
     ['proxy.ts', 'the proxy, which must stay database-free'],
     ['lib/community.ts', 'a lib helper that serves members'],
-    ['app/(member)/layout.tsx', 'the member shell'],
+    ['app/(stellr)/(member)/layout.tsx', 'the member shell'],
     ['app/api/store/returns/route.ts', 'a route members reach'],
     ['components/layout/NavUserButton.tsx', 'a client component outside the surface'],
     ['lib/admin-auth.ts', 'the legacy module'],
@@ -395,7 +395,7 @@ describe('authz codemod: what stays', () => {
 
   it('refuses a client component on the admin surface', () => {
     const src = `'use client'\n${AUTH}import { isAdminClaims } from '@/lib/admin-auth'\nexport async function f() {\n  const { sessionClaims } = await auth()\n  return isAdminClaims(sessionClaims)\n}\n`
-    const out = transformSource('app/(admin)/admin/x/Thing.tsx', src)
+    const out = transformSource('app/(stellr)/(admin)/admin/x/Thing.tsx', src)
     expect(out.src).toBe(src)
     expect(out.manual.map((m) => m.why).join()).toMatch(/client component/)
   })
@@ -692,21 +692,21 @@ describe('authz codemod: the command line', () => {
 describe('authz codemod: helpers', () => {
   it('names a route by its pattern, never a concrete path', () => {
     expect(routeOf('app/api/admin/events/[slug]/export/route.ts')).toBe('/api/admin/events/[slug]/export')
-    expect(routeOf('app/(admin)/admin/members/[id]/page.tsx')).toBe('/admin/members/[id]')
-    expect(routeOf('app/(admin)/layout.tsx')).toBeNull()
+    expect(routeOf('app/(stellr)/(admin)/admin/members/[id]/page.tsx')).toBe('/admin/members/[id]')
+    expect(routeOf('app/(stellr)/(admin)/layout.tsx')).toBeNull()
     expect(routeOf('app/api/admin/esign/templates/guard.ts')).toBeNull()
     expect(routeOf('lib/store/auth.ts')).toBeNull()
   })
 
   it('knows the admin surface', () => {
     expect(isAdminSurface('app/api/admin/x/route.ts')).toBe(true)
-    expect(isAdminSurface('app/(admin)/admin/x/page.tsx')).toBe(true)
+    expect(isAdminSurface('app/(stellr)/(admin)/admin/x/page.tsx')).toBe(true)
     expect(isAdminSurface('lib/scholarship-admin.ts')).toBe(true)
     expect(isAdminSurface('lib/survey/admin-auth.ts')).toBe(true)
     expect(isAdminSurface('lib/store/auth.ts')).toBe(false)
     expect(isAdminSurface('lib/uploads.ts')).toBe(false)
     expect(isAdminSurface('app/api/community/x/route.ts')).toBe(false)
-    expect(isAdminSurface('app/(member)/layout.tsx')).toBe(false)
+    expect(isAdminSurface('app/(stellr)/(member)/layout.tsx')).toBe(false)
   })
 })
 

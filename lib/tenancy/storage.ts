@@ -78,6 +78,23 @@ export function assertTenantObjectPath(tenantId: string, path: string): string {
   return path
 }
 
+/**
+ * The paths a request acting for `tenantId` may delete from a row it holds. Stellr's are its
+ * legacy paths, all of them. Any other tenant's are those in its own folder: a path outside
+ * it stays in storage.
+ */
+export function deletableObjectPaths(tenantId: string, paths: readonly string[]): string[] {
+  if (assertTenantId(tenantId) === STELLR_TENANT_ID) return [...paths]
+  return paths.filter((path) => {
+    try {
+      assertTenantObjectPath(tenantId, path)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 /** Whether `tenantId` may read the object at `path` under the ownership rule. */
 export function objectVisibleToTenant(path: string, tenantId: string, tenantIds: Iterable<string>): boolean {
   return objectTenantId(path, tenantIds) === assertTenantId(tenantId)

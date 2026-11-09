@@ -360,6 +360,8 @@ const EXPECTED_FORMATS: Record<UploadPurpose, FileFormat[]> = {
   'container-contribution': SHARED,
   'compliance-document': LICENSE,
   'compliance-document-admin': LICENSE,
+  'external-bc-document': LICENSE,
+  'external-bc-document-admin': LICENSE,
 }
 
 // Each purpose, against a sample of every format there is.
@@ -993,6 +995,7 @@ describe('claimUpload — PDF page cap', () => {
     ['space-attachment', `${spaceAttachmentPrefix('s1', 'm1')}1-notes.pdf`, spaceAttachmentPrefix('s1', 'm1')],
     ['container-contribution', `${contributionPrefix('m1')}1-notes.pdf`, contributionPrefix('m1')],
     ['compliance-document', 'm1/1-licence.pdf'],
+    ['external-bc-document', 'm1/bc/1-check.pdf', 'm1/bc/'],
   ]
 
   it('caps every member purpose that takes a PDF, and no staff-only one', () => {

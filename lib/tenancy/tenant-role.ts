@@ -40,6 +40,7 @@
  * them through tenantDb until A11, which must say which columns it needs.
  */
 export const TENANT_APP_READ_ONLY_TABLES: readonly string[] = [
+  'public.agreement_email_changes',
   'public.agreement_recipients',
   'public.esign_access_log',
   'public.esign_audit_events',
@@ -87,6 +88,7 @@ export interface TenantParentRef {
 
 /** Every single-column foreign key from an own/derived/inherited tenant table to a tenant table (tenant_id itself excluded). */
 export const TENANT_PARENT_REFS: readonly TenantParentRef[] = [
+  { table: 'public.agreement_email_changes', column: 'agreement_id', parent: 'public.agreements' },
   { table: 'public.agreement_recipients', column: 'envelope_row', parent: 'public.agreements' },
   { table: 'public.agreements', column: 'participant_id', parent: 'public.participants' },
   { table: 'public.agreements', column: 'reused_from', parent: 'public.agreements' },

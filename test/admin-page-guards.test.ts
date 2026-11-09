@@ -16,7 +16,7 @@ import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 // competitions/ and campaigns/ pages are excluded: they use requireEventAccess
 // (which admits an assigned event manager) rather than the admin-only guard.
 
-const BASE = 'app/(admin)/admin'
+const BASE = 'app/(stellr)/(admin)/admin'
 
 // readdirSync(dir, { recursive: true }) returns paths relative to `dir`.
 // (fs.globSync is Node 22+ but isn't in this repo's @types/node yet; CI/Vercel

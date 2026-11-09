@@ -286,12 +286,15 @@ export async function matchRequest(
   requestId: string,
   coachId: string,
   eligibility: CoachingEligibility,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; awardGranted?: boolean }> {
   const db = supabaseServer()
   const req = await getRequestById(requestId)
   if (!req) return { ok: false, error: 'Request not found' }
   if (req.status !== 'pending') return { ok: false, error: 'This request has already been handled' }
 
+  // The grant stays ahead of the status change. The other way round, a failed grant would
+  // leave a matched request with no lot behind it and no way to retry. A retry from here
+  // is safe: fn_grant_adhoc does nothing for a source_ref it has already granted.
   if (eligibility === 'award') {
     await grantAdhocEntitlement(req.memberId, 'coaching_session', 1, `coaching_request:${requestId}`)
   }
@@ -303,7 +306,7 @@ export async function matchRequest(
     .eq('status', 'pending')
   if (error) {
     console.error('[coaching-requests] match error:', error)
-    return { ok: false, error: 'Could not match this request' }
+    return { ok: false, error: 'Could not match this request', awardGranted: eligibility === 'award' }
   }
 
   const { data: coach } = await db.from('members').select('first_name, last_name').eq('id', coachId).maybeSingle()

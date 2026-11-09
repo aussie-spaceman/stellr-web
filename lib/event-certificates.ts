@@ -200,7 +200,18 @@ export async function listEventStudents(db: SupabaseClient, slug: string): Promi
     .sort(bySurname)
 }
 
-// ── Mentors ──────────────────────────────────────────────────────────────────
+/**
+ * The students who took part: the checked-in ones when the event used
+ * check-in, otherwise all of them. The same rule the participation
+ * credential follows (D2, 21 Sept 2026; credentials route POST). Awards and
+ * certificates use it so a no-show is never placed, judged or printed.
+ */
+export function attendees<T extends { checked_in_at: string | null }>(students: T[]): T[] {
+  const checkedIn = students.filter((s) => s.checked_in_at)
+  return checkedIn.length ? checkedIn : students
+}
+
+// ── Mentors──────────────────────────────────────────────────────────────────
 
 export interface EventMentor {
   member_id: string

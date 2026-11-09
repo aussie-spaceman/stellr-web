@@ -4,6 +4,8 @@ import { STELLR_TENANT_ID, TENANT_MIN_PARTICIPANT_AGE } from '@/lib/tenancy/cons
 import { CANARY_TENANT } from '@/lib/testing/honeytokens'
 import {
   assertEligible,
+  assertRegistrable,
+  TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT,
   eligibilityContextFromMirror,
   stellrContext,
   stellrUndatedContext,
@@ -305,6 +307,41 @@ describe('tenant context', () => {
     expect(assertEligible('2000-01-01', { kind: 'unresolved', isPlatformOwner: false, tenantId: null, detail: 'tenant_mismatch' })).toEqual({
       ok: false, reason: 'eligibility_unavailable', detail: 'tenant_mismatch', error: UNAVAILABLE,
     })
+  })
+})
+
+describe('assertRegistrable: the register routes’ consent rule (S5 A7)', () => {
+  const CONSENT = 'You must be 18 or older to register for this event online. Please contact the event organiser.'
+  // Event 2 Dec 2026 in Sydney; "today" is 4 Nov 2026.
+  const ctx = tenantCtx({ eventStartsAt: '2026-12-01T13:00:00.000Z' })
+
+  it('on a tenant’s event, refuses anyone under 18 the floor admits, today or on the day', () => {
+    expect(assertRegistrable('2012-12-02', ctx)).toEqual({ ok: false, reason: 'under_minimum_age', error: CONSENT })
+    expect(assertRegistrable('2010-06-01', ctx)).toEqual({ ok: false, reason: 'under_minimum_age', error: CONSENT })
+    // 18 on the day but 17 today: still a minor now, and refused.
+    expect(assertRegistrable('2008-11-20', ctx)).toEqual({ ok: false, reason: 'under_minimum_age', error: CONSENT })
+    expect(assertRegistrable('2010-06-01', ctx, { name: 'Sam Lee' })).toMatchObject({
+      error: 'Sam Lee must be 18 or older to register for this event online. Please contact the event organiser.',
+    })
+  })
+
+  it('on a tenant’s event, admits an adult, and gives the floor’s answer under it', () => {
+    expect(assertRegistrable('2008-11-04', ctx)).toEqual(assertEligible('2008-11-04', ctx))
+    expect(assertRegistrable('2008-11-04', ctx)).toMatchObject({ ok: true, isMinor: false })
+    expect(assertRegistrable('2012-12-03', ctx)).toEqual(assertEligible('2012-12-03', ctx))
+    expect(assertRegistrable('', ctx)).toEqual(assertEligible('', ctx))
+  })
+
+  it('on Stellr’s events, is assertEligible: 12-, 13- and 15-year-olds are admitted as before', () => {
+    const stellr = stellrContext({ date: '2026-12-02' })
+    for (const dob of ['2014-06-01', '2013-06-01', '2011-06-01', '1990-01-01', '', '2999-01-01']) {
+      expect(assertRegistrable(dob, stellr)).toEqual(assertEligible(dob, stellr))
+    }
+    expect(assertRegistrable('2011-06-01', stellr)).toMatchObject({ ok: true, isMinor: true })
+  })
+
+  it('the age is the one the rule names', () => {
+    expect(TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT).toBe(18)
   })
 })
 

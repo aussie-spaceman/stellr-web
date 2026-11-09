@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Users, User, Calendar, MapPin } from 'lucide-react'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { formatDate, formatDateRange, eventLastDay, registrationStatus } from '@/lib/utils'
 import { getCurrentMember } from '@/lib/community'
 import { RegistrationAuthBanner } from '@/components/registration/RegistrationAuthBanner'

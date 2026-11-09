@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
-import type { GroupJoinLink } from './gate'
+import type { ConfirmedJoinLink } from './gate'
 import type { GroupJoiner } from './identify'
 
 // POST /api/register/group-join, the participant row: is there still a place for
@@ -11,7 +11,7 @@ import type { GroupJoiner } from './identify'
 
 export async function persistGroupJoin(
   db: SupabaseClient,
-  link: GroupJoinLink,
+  link: ConfirmedJoinLink,
   joiner: GroupJoiner,
 ): Promise<Refusable<{ participantId: string }>> {
   const { reg, registrationId, schoolName, memberPaysIndividually } = link
@@ -88,6 +88,8 @@ export async function persistGroupJoin(
   // Insert participant row
   const { data: partRow, error: partError } = await db.from('participants').insert({
     registration_id: registrationId,
+    // S5 A7: from the resolved event, Stellr's included.
+    tenant_id: link.context.tenantId,
     member_id: memberId,
     first_name: person.first_name,
     last_name: person.last_name,

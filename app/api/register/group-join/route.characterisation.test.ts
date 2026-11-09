@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { AUTH_APP_URL } from '@/lib/env'
 import {
   rec, AGE_CASES, OPEN_EVENT, CLOSED_EVENT, EVENT_UNDER_WAY, EVENT_A_YEAR_OUT,
@@ -223,8 +224,9 @@ describe('characterisation: POST /api/register/group-join — a member already o
 
   it('a submitted school address adds two lookups, before the member is written', async () => {
     await post(newcomer({ school_email: OLD_ADDRESS }))
-    expect(rec.log.slice(0, 6)).toEqual([
+    expect(rec.log.slice(0, 7)).toEqual([
       'select group_join_tokens',
+      'select events', // S5 A7: the event's owner
       'select members', // by email
       'select members', // by school_email
       'select members', // the submitted school address, as someone's email
@@ -434,6 +436,7 @@ describe('characterisation: POST /api/register/group-join — a brand-new partic
     expect((await post(newcomer())).status).toBe(201)
     expect(rec.log).toEqual([
       'select group_join_tokens',
+      'select events', // S5 A7: the event's owner
       'select members', // prior member by email
       'select members', // prior member by school_email
       'hook upsertMember',
@@ -457,6 +460,7 @@ describe('characterisation: POST /api/register/group-join — a brand-new partic
     await post(newcomer())
     expect(rec.payloads('insert', 'participants')).toEqual([{
       registration_id: 'reg-1',
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       member_id: 'm-1',
       first_name: 'K',
       last_name: 'Id',
@@ -571,6 +575,7 @@ describe('characterisation: POST /api/register/group-join — a signed-in member
     expect((await post()).status).toBe(201)
     expect(rec.log).toEqual([
       'select group_join_tokens',
+      'select events', // S5 A7: the event's owner
       'select members', // the signed-in profile
       'select participants',
       'select participants',

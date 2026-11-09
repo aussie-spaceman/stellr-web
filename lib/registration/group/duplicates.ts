@@ -26,6 +26,12 @@ export async function answerDuplicates(
   event: { stripePriceId?: string },
   sessionEmail: string | null | undefined,
   linkedSlotNames: LinkedSlotNames,
+  /**
+   * S5 A7: payments false for a tenant's event. No pay link is resent and no Checkout
+   * is opened for its earlier registration: nothing reaches Stellr's Stripe account
+   * for a tenant. The answers are otherwise the same.
+   */
+  { payments }: { payments: boolean },
 ): Promise<Response | null> {
   const { event_slug, details_method } = body
 
@@ -45,7 +51,7 @@ export async function answerDuplicates(
     const existingRegId = dup.registration.registrationId
     if (!sessionMatches) {
       // An unfinished INDIVIDUAL registration isn't resumed from the group form.
-      if (dup.kind === 'email_link' && dup.registration.type === 'group') {
+      if (payments && dup.kind === 'email_link' && dup.registration.type === 'group') {
         resendPayLinkAfterResponse(db, existingRegId, 'register/group pay-link resend')
       }
       return registrationOnFileAnswer('Teams')
@@ -57,7 +63,7 @@ export async function answerDuplicates(
         { status: 409 },
       )
     }
-    if (dup.kind === 'resume') {
+    if (payments && dup.kind === 'resume') {
       const stripe = stripeClient()
       if (stripe) {
         try {

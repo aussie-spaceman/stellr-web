@@ -3,8 +3,8 @@ import { resolveEmailPair } from '@/lib/member-email'
 import {
   normalizeEventRole, normalizeGender, normalizeGrade, normalizeTshirt,
 } from '@/lib/member-enums'
-import { checkRegistrationAge } from '@/lib/registration-eligibility'
-import { ageRefused, refuse, type Refusable } from '../refusal'
+import { assertRegistrable, type EligibilityContext } from '../eligibility'
+import { eligibilityRefused, refuse, type Refusable } from '../refusal'
 
 // POST /api/register/group-join, who is joining, as data: no reads and no writes.
 
@@ -89,10 +89,14 @@ export function personFromProfile(
   }
 }
 
-/** The details a brand-new participant submitted, or the answer that refuses them. */
+/**
+ * The details a brand-new participant submitted, or the answer that refuses them.
+ * S5 A7: the date of birth goes through assertRegistrable (assertEligible and the consent rule) with the event's context:
+ * for Stellr's events today's check, for a tenant's its minimum age.
+ */
 export function personFromDetails(
   details: Record<string, unknown> | undefined,
-  eventDate: string | null,
+  eligibility: EligibilityContext,
 ): Refusable<{ person: JoinPerson }> {
   if (!details) {
     return refuse(NextResponse.json({ error: 'Please complete your details to join.' }, { status: 400 }))
@@ -110,8 +114,8 @@ export function personFromDetails(
     return refuse(NextResponse.json({ error: 'First name, last name, email and date of birth are required.' }, { status: 400 }))
   }
 
-  const ageCheck = checkRegistrationAge(dob, { eventDate })
-  if (!ageCheck.ok) return refuse(ageRefused(ageCheck))
+  const ageCheck = assertRegistrable(dob, eligibility)
+  if (!ageCheck.ok) return refuse(eligibilityRefused(ageCheck))
 
   const isMinor = ageCheck.isMinor
   const role = normalizeEventRole(str(d.type) || 'participant')

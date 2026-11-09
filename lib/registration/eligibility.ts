@@ -1,9 +1,9 @@
 // Who may take part in an event: the one eligibility check for every route
 // that writes a participant (multi-tenancy plan S5, registration lane, A2).
 //
-// NOTHING IMPORTS THIS YET. It is the library the registration handler split
-// (A4 onward) and the tenant event gate will call. Until then it changes no
-// live behaviour.
+// The register routes call it through lib/registration/event-context (S5 A7).
+// For Stellr's events it makes exactly today's call, so their answers are
+// unchanged.
 //
 // Two kinds of context:
 //
@@ -105,8 +105,10 @@ export interface AssertEligibleOptions {
   name?: string
 }
 
-const UNAVAILABLE_MESSAGE =
+/** Safe to show the person filling in the form. Wording is a proposal for the owner (S5 A7). */
+export const ELIGIBILITY_UNAVAILABLE_MESSAGE =
   "We can't confirm who can take part in this event right now, so we can't complete this registration. Please contact the event organiser."
+const UNAVAILABLE_MESSAGE = ELIGIBILITY_UNAVAILABLE_MESSAGE
 
 /**
  * The youngest anyone can be today to register for a tenant event, whatever
@@ -116,6 +118,14 @@ const UNAVAILABLE_MESSAGE =
  * test/registration/participants-eligibility-sql.test.ts keeps the two equal.
  */
 export const TENANT_MIN_AGE_TODAY = 13
+
+/**
+ * The youngest anyone can be, today or on the day, to register for a tenant event
+ * while tenants have no way to collect a guardian's consent (S5 A7). The API's
+ * rule only: the A3 trigger keeps the platform floor, so a later consent flow
+ * lowers this without a migration.
+ */
+export const TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT = 18
 
 function unavailable(detail: EligibilityUnavailableDetail): EligibilityUnavailable {
   return { ok: false, reason: 'eligibility_unavailable', detail, error: UNAVAILABLE_MESSAGE }
@@ -151,25 +161,13 @@ export function assertEligible(
       opts.name === undefined ? { eventDate: ctx.eventDate } : { eventDate: ctx.eventDate, name: opts.name },
     )
   }
+  const problem = eligibilityContextProblem(ctx)
+  if (problem) return unavailable(problem)
   if (ctx.kind === 'unresolved') return unavailable(ctx.detail)
 
-  if (ctx.tenantMinAge === null) return unavailable('tenant_missing')
-  if (!isAge(ctx.tenantMinAge)) return unavailable('min_age_invalid')
-  if (ctx.eventMinAge !== null && !isAge(ctx.eventMinAge)) return unavailable('min_age_invalid')
-
-  const tz = ctx.eventTimeZone
-  if (!tz || !isValidTimeZone(tz)) return unavailable('time_zone_invalid')
-
-  let eventDate: string | null = null
-  if (ctx.eventStartsAt) {
-    eventDate = localDateOf(ctx.eventStartsAt, tz)
-    if (!eventDate) return unavailable('start_date_invalid')
-  } else if (ctx.activityType !== 'campaign') {
-    // A live event with no start date: the day ages are taken on is unknown.
-    return unavailable('start_date_missing')
-  }
-
-  const minAge = Math.max(TENANT_MIN_PARTICIPANT_AGE, ctx.tenantMinAge, ctx.eventMinAge ?? 0)
+  const tz = ctx.eventTimeZone as string
+  const eventDate = ctx.eventStartsAt ? (localDateOf(ctx.eventStartsAt, tz) as string) : null
+  const minAge = Math.max(TENANT_MIN_PARTICIPANT_AGE, ctx.tenantMinAge as number, ctx.eventMinAge ?? 0)
   const today = onDate(localDate(new Date(), tz))
   const result = checkRegistrationAge(dateOfBirth, {
     eventDate,
@@ -188,6 +186,63 @@ export function assertEligible(
     }
   }
   return result
+}
+
+/**
+ * assertEligible, then the register routes' consent rule (S5 A7): on a tenant's
+ * event nobody under 18, today or on the day, is admitted until tenants have a way
+ * to collect a parent's or guardian's consent. Stellr's consent is its own agreement,
+ * sent as Stellr, which a tenant's event does not send, and nothing records a consent
+ * still owed. So this fails closed until the owner decides (docs/TENANCY-S5.md, Owner
+ * gates). Stellr's events are unchanged: this returns assertEligible's answer.
+ *
+ * assertEligible itself stays the age floor the A3 trigger mirrors. The refusal keeps
+ * the `under_minimum_age` reason so every route answers it as it does an age refusal.
+ * Wording is a proposal.
+ */
+export function assertRegistrable(
+  dateOfBirth: unknown,
+  ctx: EligibilityContext,
+  opts: AssertEligibleOptions = {},
+): EligibilityResult {
+  const result = assertEligible(dateOfBirth, ctx, opts)
+  if (!result.ok || ctx.kind === 'platform_owner' || !result.isMinor) return result
+  const whose = opts.name?.trim()
+  const age = TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT
+  return {
+    ok: false,
+    reason: 'under_minimum_age',
+    error: whose
+      ? `${whose} must be ${age} or older to register for this event online. Please contact the event organiser.`
+      : `You must be ${age} or older to register for this event online. Please contact the event organiser.`,
+  }
+}
+
+/**
+ * Why this context cannot decide anyone's eligibility, or null when it can. The
+ * same checks assertEligible makes before it looks at a date of birth, so a route
+ * can refuse a tenant event whose rules are unusable before it reads the people
+ * (S5 A7). Null for the platform owner, whose rules need nothing from the event
+ * beyond its date.
+ *
+ * A live tenant event with no start date answers 'start_date_missing': the day
+ * ages are taken on is unknown, so it refuses. That stays so until the owner
+ * decides how such events are dated (docs/TENANCY-S5.md, Owner gates).
+ */
+export function eligibilityContextProblem(ctx: EligibilityContext): EligibilityUnavailableDetail | null {
+  if (ctx.kind === 'platform_owner') return null
+  if (ctx.kind === 'unresolved') return ctx.detail
+  if (ctx.tenantMinAge === null) return 'tenant_missing'
+  if (!isAge(ctx.tenantMinAge)) return 'min_age_invalid'
+  if (ctx.eventMinAge !== null && !isAge(ctx.eventMinAge)) return 'min_age_invalid'
+  const tz = ctx.eventTimeZone
+  if (!tz || !isValidTimeZone(tz)) return 'time_zone_invalid'
+  if (ctx.eventStartsAt) {
+    if (!localDateOf(ctx.eventStartsAt, tz)) return 'start_date_invalid'
+  } else if (ctx.activityType !== 'campaign') {
+    return 'start_date_missing'
+  }
+  return null
 }
 
 /**

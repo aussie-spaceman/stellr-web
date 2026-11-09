@@ -177,6 +177,28 @@ describe("Stellr's group join page", () => {
   })
 })
 
+describe("the tenant tree's join page (S5 A7)", () => {
+  it('signed in, hands the form tenant mode and no prefill, and reads nothing from the member record', async () => {
+    signedIn()
+    vi.doMock('@/lib/tenancy/request-tenant', () => ({
+      tenantFromParams: async () => ({ tenantId: 'c0000000-0000-4000-8000-0000000000aa', slug: 'canary' }),
+    }))
+    vi.doMock('@/lib/tenancy/tenant-records', () => ({ requireTenantJoinLink: async () => {} }))
+    const { default: TenantPage } = await import('@/app/%5Ft/[tenant]/(flow)/register/[slug]/join/[token]/page')
+    reads.length = 0
+    const html = renderToStaticMarkup(
+      <>{await TenantPage({ params: Promise.resolve({ tenant: 'canary', slug: 'nv', token: 'tok' }) })}</>,
+    )
+    expect(html).toContain('&quot;tenantMode&quot;:true')
+    expect(html).toContain('&quot;isAuthenticated&quot;:true')
+    expect(html).toContain('&quot;prefill&quot;:null')
+    expect(reads).not.toContain('getRegistrationPrefill()')
+    expect(reads.filter((r) => r.startsWith('members.'))).toEqual([])
+    vi.doUnmock('@/lib/tenancy/request-tenant')
+    vi.doUnmock('@/lib/tenancy/tenant-records')
+  })
+})
+
 describe('the shared body, as a tenant page calls it', () => {
   it('reads no prefill for a signed-in member and hands the form none', async () => {
     signedIn()

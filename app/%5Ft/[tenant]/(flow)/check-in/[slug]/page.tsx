@@ -1,4 +1,4 @@
-import CheckInPage from '@/app/(flow)/check-in/[slug]/page'
+import CheckInPage from '@/app/(stellr)/(flow)/check-in/[slug]/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantEvent } from '@/lib/tenancy/tenant-records'
 

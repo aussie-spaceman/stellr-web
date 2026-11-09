@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isMemberRequestable, getEntityDef } from '@/lib/deletion/registry'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // POST /api/members/deletion-requests  { entity, id, reason }
 // A member requests deletion of one of the allowed entity types (event activity,
@@ -11,6 +13,10 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 const ALLOWED = new Set(['event_participation', 'school', 'session'])
 
 export async function POST(req: Request) {
+  return audited(req, { action: 'member.deletion_request.create', table: 'deletion_requests' }, () => requestDeletion(req))
+}
+
+async function requestDeletion(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — see lib/impersonation.
   const impersonationBlock = await assertNotImpersonating()
@@ -50,7 +56,11 @@ export async function POST(req: Request) {
     .eq('entity_id', id)
     .eq('status', 'pending')
     .maybeSingle()
-  if (existing) return NextResponse.json({ request: existing, duplicate: true })
+  noteAudit(req, { metadata: { entity_type: entity } })
+  if (existing) {
+    noteAudit(req, { targetId: existing.id, metadata: { duplicate: true } })
+    return NextResponse.json({ request: existing, duplicate: true })
+  }
 
   const { data, error } = await db
     .from('deletion_requests')
@@ -62,6 +72,7 @@ export async function POST(req: Request) {
     console.error('Deletion request insert error:', error)
     return NextResponse.json({ error: 'Failed to submit request' }, { status: 500 })
   }
+  noteAudit(req, { targetId: (data as { id?: string } | null)?.id ?? null })
   return NextResponse.json({ request: data })
 }
 
@@ -107,4 +118,22 @@ async function memberOwnsEntity(
     return (c2 ?? 0) > 0
   }
   return false
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

@@ -4,7 +4,7 @@ import { currentStoreMember } from '@/lib/store/auth'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS } from '@/lib/store/orders'
 import { stripeClient } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 import { auditMutation } from '@/lib/audit/route'
 

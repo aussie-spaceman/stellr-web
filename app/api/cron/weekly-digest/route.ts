@@ -9,6 +9,8 @@ import { loadMemberDigest, outstandingCount } from '@/lib/admin-digest'
 import { renderDigestEmail } from '@/lib/admin-digest-email'
 import { appUrl } from '@/lib/email-campaigns'
 import { isDigestSendTime } from '@/lib/weekly-digest-schedule'
+import { staffAudienceEmails } from '@/lib/authz/audiences'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // GET /api/cron/weekly-digest — the admin dashboard's week, emailed every
 // Friday at midday Mountain time (see lib/weekly-digest-schedule for why
@@ -27,15 +29,14 @@ export const maxDuration = 60
 
 const JOB = 'weekly-digest'
 
-/** Emails of active members holding the 'all' staff scope. Throws so the caller can fall back. */
-async function digestRecipients(db: SupabaseClient): Promise<string[]> {
-  const { data: roles, error } = await db.from('staff_roles').select('member_id').overlaps('scopes', ['all'])
-  if (error) throw new Error(error.message)
-  const ids = [...new Set((roles ?? []).map((r) => r.member_id as string).filter(Boolean))]
-  if (ids.length === 0) return []
-  const { data: members, error: memberError } = await db.from('members').select('email').in('id', ids).eq('is_active', true)
-  if (memberError) throw new Error(memberError.message)
-  return [...new Set((members ?? []).map((m) => (m.email as string | null)?.trim().toLowerCase()).filter((e): e is string => !!e))]
+/**
+ * Emails of active members holding the 'all' staff scope, through the Stellr
+ * staff audience (S5 B17), which reads staff_roles whatever AUTHZ_SOURCE says.
+ * The digest is Stellr's: its sections read Stellr's rows only (S5 B11). Throws
+ * AuthzLookupError so the caller can fall back.
+ */
+function digestRecipients(db: SupabaseClient): Promise<string[]> {
+  return staffAudienceEmails(db, STELLR_TENANT_ID, ['all'])
 }
 
 /** Whether a run already sent the digest in the last 20 hours. */

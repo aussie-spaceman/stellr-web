@@ -58,8 +58,8 @@ describe('the check itself', () => {
 
   it('fires on a tracker reached through a reused module', () => {
     const files: Record<string, string> = {
-      'app/%5Ft/page.tsx': "import { F } from '@/app/(flow)/page'\nexport default F\n",
-      'app/(flow)/page.tsx': "export { TrackEvent as F } from '@/components/analytics/TrackEvent'\n",
+      'app/%5Ft/page.tsx': "import { F } from '@/app/(stellr)/(flow)/page'\nexport default F\n",
+      'app/(stellr)/(flow)/page.tsx': "export { TrackEvent as F } from '@/components/analytics/TrackEvent'\n",
       'components/analytics/TrackEvent.tsx': 'export const TrackEvent = 1\n',
     }
     expect(violations(['app/%5Ft/page.tsx'], (rel) => files[rel] ?? null)).toEqual([

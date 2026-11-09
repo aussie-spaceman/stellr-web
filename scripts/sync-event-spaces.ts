@@ -96,9 +96,12 @@ async function main() {
     process.exit(1)
   }
 
-  const { syncEventSpace } = await import('../lib/event-space-sync')
+  const { syncEventSpace, eventSpaceSyncFailed, otherTenantEventIds } = await import('../lib/event-space-sync')
 
   if (!APPLY) {
+    // Another tenant's event gets no Space. Say so, as --apply will.
+    const otherTenant = await otherTenantEventIds(db)
+
     // Dry run: report what each event currently resolves to, without writing.
     const { data: spaces, error: spacesErr } = await db
       .from('community_spaces')
@@ -120,8 +123,14 @@ async function main() {
       (links ?? []).map((l) => [(l as { space_id: string }).space_id, (l as { object_ref: string }).object_ref]),
     )
 
-    let willCreate = 0, willRename = 0, willRepair = 0
+    let willCreate = 0, willRename = 0, willRepair = 0, willSkip = 0
     for (const ev of events) {
+      if (otherTenant.has(ev._id)) {
+        willSkip++
+        console.log(`  SKIP     ${ev.slug}\n           → another tenant's event; community is Stellr-only`)
+        continue
+      }
+
       const found =
         byId.get(ev._id) ??
         (spaces ?? []).find((s) => linkedSlug.get(s.id) === ev.slug && !s.sanity_event_id) ??
@@ -142,27 +151,29 @@ async function main() {
     }
     console.log(
       `\nDry run — nothing written. ${willCreate} Space(s) to create, ` +
-      `${willRename} to rename, ${willRepair} slug repair(s).\nRe-run with --apply to make these changes.`,
+      `${willRename} to rename, ${willRepair} slug repair(s)` +
+      `${willSkip ? `, ${willSkip} skipped as another tenant's` : ''}.\nRe-run with --apply to make these changes.`,
     )
     return
   }
 
-  let created = 0, renamed = 0, failed = 0
+  let created = 0, renamed = 0, failed = 0, skipped = 0
   for (const ev of events) {
     try {
       const r = await syncEventSpace(db, { sanityId: ev._id, slug: ev.slug!, title: ev.title })
       if (r.created) created++
       if (r.renamedFrom) renamed++
-      const label = r.created ? 'CREATED' : 'synced '
-      console.log(`  ${label}  ${ev.slug}${r.spaceId ? '' : '  (NO SPACE)'}`)
+      if (r.skippedOtherTenant) skipped++
+      const label = r.skippedOtherTenant ? 'skipped' : r.created ? 'CREATED' : 'synced '
+      console.log(`  ${label}  ${ev.slug}${r.spaceId || r.skippedOtherTenant ? '' : '  (NO SPACE)'}`)
       for (const note of r.notes) console.log(`           · ${note}`)
-      if (!r.spaceId) failed++
+      if (eventSpaceSyncFailed(r)) failed++
     } catch (e) {
       failed++
       console.error(`  FAILED   ${ev.slug}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  console.log(`\n${created} created, ${renamed} slug repair(s), ${failed} failure(s).`)
+  console.log(`\n${created} created, ${renamed} slug repair(s), ${failed} failure(s)${skipped ? `, ${skipped} skipped as another tenant's` : ''}.`)
   if (failed) process.exit(1)
 }
 

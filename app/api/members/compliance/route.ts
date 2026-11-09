@@ -6,6 +6,8 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { alertLicenseReview } from '@/lib/license-review'
 import { LICENSE_DOCUMENT_URL_TTL_SECONDS, TEACHER_LICENSE_BUCKET, teacherLicenseSchema } from '@/lib/teacher-license'
+import { auditMutation } from '@/lib/audit/route'
+import { selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // GET /api/members/compliance — the current member's clearance state (license +
 // background check), so the account page can show status and the license form.
@@ -42,6 +44,10 @@ export async function GET() {
 // and RESETS verification, since the documentation changed and must be reviewed
 // again by an admin.
 export async function POST(req: Request) {
+  return audited(req, { action: 'member.compliance_license.update', table: 'member_teacher_licenses' }, () => saveLicense(req))
+}
+
+async function saveLicense(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -93,4 +99,22 @@ export async function POST(req: Request) {
 
   const summary = await loadComplianceForMember(db, member.id)
   return NextResponse.json({ ok: true, state: summary?.state ?? 'awaiting_verification', license: summary?.license ?? null })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

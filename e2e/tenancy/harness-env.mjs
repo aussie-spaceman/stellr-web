@@ -37,6 +37,16 @@ export const HARNESS_BUILD_ENV = {
   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: '/account',
   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: '/account/onboarding',
   NEXT_PUBLIC_MEDIA_BASE_URL: 'https://l3zabozgfpz3vahd.public.blob.vercel-storage.com',
+  // Emitted only when set, so without them losing the tags would go unseen.
+  NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: 'harness-google-verification',
+  NEXT_PUBLIC_BING_SITE_VERIFICATION: 'harness-bing-verification',
+  // Containers and portals that do not exist. Stellr's tags render nothing without them,
+  // so check (d)'s localhost control could not show a tag loading. Its browser never
+  // lets a third-party request leave the machine.
+  NEXT_PUBLIC_GTM_ID: 'GTM-HARNESS',
+  NEXT_PUBLIC_HUBSPOT_PORTAL_ID: '00000000',
+  // Signs check-in codes, here only, so check (c) can name another tenant's real code.
+  CREDENTIAL_LINK_SECRET: 'harness-check-in-signing-value-0123456789',
   SUPABASE_SECRET_KEY: 'harness-secret-key',
   CLERK_SECRET_KEY: 'sk_test_harness_placeholder',
   // verify's build type-checks this code. See next.config.mjs.
@@ -67,7 +77,7 @@ const KEPT_SETTINGS = new Set([
   'NODE_OPTIONS', 'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
   'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
   'FORCE_COLOR', 'NO_COLOR', 'DEBUG_COLORS', 'NEXT_TELEMETRY_DISABLED',
-  'TEST_WORKER_INDEX', 'TEST_PARALLEL_INDEX', 'E2E_TENANT_HOST_LOGS',
+  'TEST_WORKER_INDEX', 'TEST_PARALLEL_INDEX', 'E2E_TENANT_HOST_LOGS', 'E2E_DOCUMENT_CAPTURE', 'E2E_TENANT_HOST_NO_BROWSER',
 ])
 const KEPT_PREFIXES = /^(LC_|PLAYWRIGHT_|PW_|PWTEST_|PWDEBUG)/
 

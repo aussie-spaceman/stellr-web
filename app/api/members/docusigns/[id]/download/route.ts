@@ -10,9 +10,15 @@ import {
   type StoredRecordRow,
 } from '@/lib/esign/archive'
 import { signedRecordResponse } from '@/lib/esign/download-response'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // GET /api/members/docusigns/[id]/download — the member's own signed agreement.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  return audited(req, { action: 'member.agreement.download', table: 'agreements' }, () => downloadAgreement(req, ctx))
+}
+
+async function downloadAgreement(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // An admin viewing as a member sees the member's status but cannot pull
   // their signed documents through this lens: that would be an unlogged copy
   // of a minor's consent form. Admins download from the admin consent-forms
@@ -42,6 +48,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .maybeSingle()
 
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  noteAudit(req, { targetId: id })
   if ((row as StoredRecordRow).status !== 'completed') {
     return NextResponse.json({ error: 'Document not yet signed' }, { status: 400 })
   }
@@ -64,4 +71,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     })
   }
   return signedRecordResponse(record)
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

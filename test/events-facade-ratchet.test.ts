@@ -52,7 +52,7 @@ describe('events-facade ratchet', () => {
   })
 
   it('a synthetic new getEventBySlug importer fails the ratchet', () => {
-    const file = 'app/(public)/zz-synthetic/page.tsx'
+    const file = 'app/(stellr)/(public)/zz-synthetic/page.tsx'
     const src = "import { getEventBySlug } from '@/lib/sanity'\nexport default async function P() { return getEventBySlug('x') }\n"
     const measured = { ...live.getters, ...measure(new Map([[file, src]])).getters }
     expect(gettersDiff(baseline, measured).added).toEqual([`${file}: getEventBySlug`])

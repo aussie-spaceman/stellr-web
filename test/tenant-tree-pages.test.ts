@@ -35,7 +35,7 @@ const RECORDLESS: Record<string, string> = {
 
 /** Every headers() or cookies() call a tenant page can reach, and why it isn't deciding the tenant. */
 const REQUEST_READS: Record<string, string> = {
-  'app/(flow)/check-in/[slug]/page.tsx#CheckInPage:cookies': "the phone's signed check-in cookie for this event slug: who is checking in, not which tenant",
+  'app/(stellr)/(flow)/check-in/[slug]/page.tsx#CheckInPage:cookies': "the phone's signed check-in cookie for this event slug: who is checking in, not which tenant",
   'lib/impersonation.ts#viewAsState:cookies': 'the admin view-as cookie, read inside the identity helpers: who the person is, on any host',
   'lib/request-nonce.ts#requestNonce:headers': "this response's CSP nonce, for ClerkProvider's script tag",
   'lib/tenancy/request-tenant.ts#requestTenant:headers': 'for app/api only: it sits beside tenantFromParams, and the banned list below fails any call to it in the closure',
@@ -56,9 +56,9 @@ function measure(entries: string[], read = readRepoFile) {
 
 describe('the tenant page tree', () => {
   it('has one page for each flow page allowed on a tenant host, and no others', () => {
-    const allowed = allowedTenantFiles().filter((f) => f.startsWith('app/(flow)/') && f.endsWith('/page.tsx'))
+    const allowed = allowedTenantFiles().filter((f) => f.startsWith('app/(stellr)/(flow)/') && f.endsWith('/page.tsx'))
     expect(allowed).toHaveLength(16)
-    expect(flowPages().sort()).toEqual(allowed.map((f) => f.replace('app/(flow)/', `${FLOW_TREE}/`)).sort())
+    expect(flowPages().sort()).toEqual(allowed.map((f) => f.replace('app/(stellr)/(flow)/', `${FLOW_TREE}/`)).sort())
   })
 
   it('resolves the tenant from params and checks the record on every page', () => {
@@ -83,9 +83,9 @@ describe('the tenant page tree', () => {
     const walked = closure(treeFiles())
     expect(walked.size).toBeGreaterThan(100)
     for (const file of [
-      'app/(flow)/survey/[token]/page.tsx',
-      'app/(flow)/register/[slug]/individual/individual-body.tsx',
-      'app/(flow)/register/[slug]/confirmation/confirmation-body.tsx',
+      'app/(stellr)/(flow)/survey/[token]/page.tsx',
+      'app/(stellr)/(flow)/register/[slug]/individual/individual-body.tsx',
+      'app/(stellr)/(flow)/register/[slug]/confirmation/confirmation-body.tsx',
       'lib/survey/access.ts',
       'lib/tenancy/request-tenant.ts',
     ]) {
@@ -109,7 +109,7 @@ describe('the tenant page tree', () => {
 describe('the check itself', () => {
   const FILE = `${FLOW_TREE}/survey/[token]/page.tsx`
   const GOOD = `
-    import SurveyPage from '@/app/(flow)/survey/[token]/page'
+    import SurveyPage from '@/app/(stellr)/(flow)/survey/[token]/page'
     import { tenantFromParams } from '@/lib/tenancy/request-tenant'
     import { requireTenantSurveyInvitation } from '@/lib/tenancy/tenant-records'
     export const dynamic = 'force-dynamic'
@@ -125,9 +125,9 @@ describe('the check itself', () => {
   })
 
   it.each([
-    ['export default from a Stellr page', "export { default } from '@/app/(flow)/survey/[token]/page'\n"],
-    ['import then export default', "import P from '@/app/(flow)/survey/[token]/page'\nexport default P\n"],
-    ['export star', "export * from '@/app/(flow)/survey/[token]/page'\nexport { default } from '@/app/(flow)/survey/[token]/page'\n"],
+    ['export default from a Stellr page', "export { default } from '@/app/(stellr)/(flow)/survey/[token]/page'\n"],
+    ['import then export default', "import P from '@/app/(stellr)/(flow)/survey/[token]/page'\nexport default P\n"],
+    ['export star', "export * from '@/app/(stellr)/(flow)/survey/[token]/page'\nexport { default } from '@/app/(stellr)/(flow)/survey/[token]/page'\n"],
   ])('fails a bare re-export: %s', (_name, src) => {
     expect(pageProblems(FILE, src).join()).toContain('bare re-export')
   })
@@ -203,8 +203,8 @@ describe('the check itself', () => {
 
   it('finds a headers() call two imports away, by name', () => {
     const read = fixture({
-      [page]: "import { x } from '@/app/(flow)/thing'\nexport default x\n",
-      'app/(flow)/thing.ts': "export { x } from '@/lib/deep'\n",
+      [page]: "import { x } from '@/app/(stellr)/(flow)/thing'\nexport default x\n",
+      'app/(stellr)/(flow)/thing.ts': "export { x } from '@/lib/deep'\n",
       'lib/deep.ts': "import { headers as h } from 'next/headers'\nexport async function x() { return (await h()).get('accept') }\n",
     })
     expect(measure([page], read).calls).toEqual(['lib/deep.ts#x:headers'])

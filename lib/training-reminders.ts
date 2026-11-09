@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { formatDateShort } from '@/lib/utils'
-import { getEventsByIds } from '@/lib/sanity'
+import { getEventsByIds } from '@/lib/events/repo'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
 import { audienceIncludes, eventVolunteers } from '@/lib/training-audience'

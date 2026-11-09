@@ -855,6 +855,9 @@ SELECT is(
 );
 
 -- 5. The trigger derives tenant_id from public.events, and in log mode never blocks.
+-- training_modules stands in for a Sanity-keyed table, so its Stellr-only check is dropped for this
+-- rolled-back transaction. community_stellr_only.test.sql proves the check.
+ALTER TABLE public.training_modules DROP CONSTRAINT training_modules_stellr_only;
 INSERT INTO public.tenants (id, slug, legal_name, display_name, country, payment_region, currency, time_zone)
   VALUES ('11111111-1111-4111-8111-111111111111', 'pgtap-au', 'PgTap Pty Ltd', 'PgTap', 'AU', 'AU', 'aud', 'Australia/Sydney');
 INSERT INTO public.events (tenant_id, slug, sanity_id, title, time_zone, country, currency, grade_system)

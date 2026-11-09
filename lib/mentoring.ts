@@ -11,6 +11,7 @@
 // unused credits roll over (allowance rows are never expired); paid top-ups are
 // allowed; cohort cancellation refunds the spent credit as account credit.
 import 'server-only'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { supabaseServer } from '@/lib/supabase'
 import type { CommunityMember } from '@/lib/community'
 import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
@@ -548,6 +549,7 @@ export async function createCohort(input: CreateCohortInput): Promise<string> {
   const { data, error } = await db
     .from('mentoring_cohorts')
     .insert({
+      tenant_id: STELLR_TENANT_ID,
       name: input.name,
       mentor_member_id: input.mentorMemberId,
       container_type: 'mentoring',

@@ -1,4 +1,4 @@
-import RegisterTypePage from '@/app/(flow)/register/[slug]/page'
+import RegisterTypePage from '@/app/(stellr)/(flow)/register/[slug]/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantEvent } from '@/lib/tenancy/tenant-records'
 

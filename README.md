@@ -8,9 +8,9 @@ One codebase serves three surfaces, split by host in `proxy.ts`:
 
 | Surface | Host | Route group |
 |---|---|---|
-| Public site | `www.stellreducation.org` | `app/(public)` |
-| Member app | `app.stellreducation.org` | `app/(member)`, `app/(auth)` |
-| Admin console | `app.stellreducation.org/admin` | `app/(admin)` |
+| Public site | `www.stellreducation.org` | `app/(stellr)/(public)` |
+| Member app | `app.stellreducation.org` | `app/(stellr)/(member)`, `app/(stellr)/(auth)` |
+| Admin console | `app.stellreducation.org/admin` | `app/(stellr)/(admin)` |
 
 Plus `app/api` (webhooks, crons, member/admin APIs), `/studio` (embedded Sanity Studio),
 and the shared component library in `packages/` (`@stellr/web-ui`, `@stellr/icons`).

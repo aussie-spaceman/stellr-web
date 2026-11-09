@@ -5,6 +5,8 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { supabaseServer } from '@/lib/supabase'
 import { COMMUNITY_MEDIA_STAGING, claimUpload, discardUpload } from '@/lib/uploads'
 import { contentTypeFor } from '@/lib/file-sniff'
+import { auditMutation } from '@/lib/audit/route'
+import { selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 
@@ -20,6 +22,10 @@ const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 // until it has passed claimUpload, and the published copy is written by the
 // server under a type taken from the bytes, not the uploader's.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.media.publish' }, () => publishMedia(req))
+}
+
+async function publishMedia(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -61,4 +67,22 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ src: `/api/community/media/${publishedPath.split('/').map(encodeURIComponent).join('/')}` })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

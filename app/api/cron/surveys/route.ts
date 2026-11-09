@@ -24,8 +24,10 @@ export const GET = withCronAudit('surveys', async (req: NextRequest) => {
   const db = supabaseServer()
   const run = await startCronRun(db, 'surveys')
   try {
-    const result = await runSurveys(db, { budgetMs: 45_000 })
-    for (const e of result.errors) run.fail(e.where, e.message)
+    // runSurveys records each failure on `run` itself, per tenant (S5 B13).
+    // tenantLedger is empty when only Stellr's surveys had work, so that run's
+    // result is the same as before.
+    const { tenantLedger, ...result } = await runSurveys(db, run, { budgetMs: 45_000 })
     await run.finish({
       created: result.events.created,
       rescheduled: result.events.rescheduled,
@@ -38,6 +40,7 @@ export const GET = withCronAudit('surveys', async (req: NextRequest) => {
       failed: result.tally.failed,
       quotaHit: result.tally.quotaHit,
       distributions: result.distributions,
+      ...tenantLedger,
     })
     return NextResponse.json(result)
   } catch (err) {

@@ -17,6 +17,7 @@
 // allowance resets annually (validity_days), no rollover; paid top-ups allowed;
 // a cancelled session returns to the allowance (refund-on-cancel).
 import 'server-only'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { supabaseServer } from '@/lib/supabase'
 import type { CommunityMember } from '@/lib/community'
 import { notifyMember, notifyMembers } from '@/lib/notify'
@@ -432,6 +433,7 @@ export async function createWorkshop(input: CreateWorkshopInput): Promise<string
   const { data, error } = await db
     .from('mentoring_cohorts')
     .insert({
+      tenant_id: STELLR_TENANT_ID,
       name,
       mentor_member_id: input.coachMemberId,
       container_type: CONTAINER,

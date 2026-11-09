@@ -10,6 +10,8 @@ import {
   TEACHER_LICENSE_BUCKET,
   isLicenseDocumentType,
 } from '@/lib/teacher-license'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const BUCKET = TEACHER_LICENSE_BUCKET
 
@@ -18,6 +20,10 @@ const BUCKET = TEACHER_LICENSE_BUCKET
 // member's existing license row; the image is sensitive and only ever served
 // via short-lived signed URLs.
 export async function POST(req: NextRequest) {
+  return audited(req, { action: 'member.compliance_document.create', table: 'member_teacher_licenses' }, () => attachDocument(req))
+}
+
+async function attachDocument(req: NextRequest) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -55,6 +61,7 @@ export async function POST(req: NextRequest) {
   // Defence in depth: the declared type can be spoofed, so claimUpload confirms
   // the actual leading bytes are one of the purpose's formats. A failed check
   // deletes the object.
+  noteAudit(req, { targetId: license.id })
   const claimed = await claimUpload({ purpose: 'compliance-document', storagePath })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
@@ -86,7 +93,11 @@ export async function POST(req: NextRequest) {
 }
 
 // DELETE — the member removes their uploaded license image at any time.
-export async function DELETE() {
+export async function DELETE(req: Request) {
+  return audited(req, { action: 'member.compliance_document.delete', table: 'member_teacher_licenses' }, () => removeDocument(req))
+}
+
+async function removeDocument(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -103,6 +114,7 @@ export async function DELETE() {
     .maybeSingle()
   if (!license?.document_path) return NextResponse.json({ ok: true })
 
+  noteAudit(req, { targetId: license.id })
   await db.storage.from(BUCKET).remove([license.document_path as string])
   const { error } = await db
     .from('member_teacher_licenses')
@@ -120,4 +132,22 @@ export async function DELETE() {
   )
 
   return NextResponse.json({ ok: true })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

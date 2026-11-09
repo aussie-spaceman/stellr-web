@@ -143,8 +143,8 @@ describe('route manifest: 100% classification', () => {
     expect(METADATA_FILES.length).toBeGreaterThanOrEqual(MIN_METADATA_FILES)
     expect(PAGE_FILES.length).toBeGreaterThanOrEqual(MIN_PAGES)
     // The two dynamic share cards are the reason metadata routes are swept.
-    expect(METADATA_FILES).toContain('app/(public)/credentials/[number]/opengraph-image.tsx')
-    expect(METADATA_FILES).toContain('app/(public)/lp/[slug]/opengraph-image.tsx')
+    expect(METADATA_FILES).toContain('app/(stellr)/(public)/credentials/[number]/opengraph-image.tsx')
+    expect(METADATA_FILES).toContain('app/(stellr)/(public)/lp/[slug]/opengraph-image.tsx')
   })
 
   it('classifies every route handler, metadata route and page file', () => {
@@ -171,7 +171,7 @@ describe('route manifest: 100% classification', () => {
     for (const [f, cls] of Object.entries(ROUTE_MANIFEST)) {
       if (f.startsWith('app/api/cron/')) expect(cls, f).toBe('cron')
       if (f.startsWith('app/api/webhooks/') || /\/webhook\/route\.ts$/.test(f)) expect(cls, f).toBe('webhook')
-      if (f.startsWith('app/(admin)/')) expect(cls, f).toBe('stellr_only')
+      if (f.startsWith('app/(stellr)/(admin)/')) expect(cls, f).toBe('stellr_only')
       // Every admin API is stellr_only until S5 converts it, except the one
       // Sanity calls with a shared secret.
       if (f.startsWith('app/api/admin/') && f !== 'app/api/admin/sanity/event-sync/route.ts') {

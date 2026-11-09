@@ -9,6 +9,8 @@ import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 4000
 
@@ -17,7 +19,11 @@ const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 
 // (or an exhausted allowance) routes through Stripe, and the webhook grants the
 // purchased lot and completes the booking — so the DB is the source of truth even
 // if the member closes the tab.
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return audited(req, { action: 'community.coaching_request.book', table: 'coaching_requests' }, () => bookCoachingRequest(req, ctx))
+}
+
+async function bookCoachingRequest(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -38,6 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const request = await getRequestById(id)
   if (!request || request.memberId !== member.id) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+  noteAudit(req, { targetId: id })
   if (request.status === 'scheduled') return NextResponse.json({ ok: true, redirect: `/community/coaching/request/${id}` })
   if (request.status !== 'matched') return NextResponse.json({ error: 'This request is not ready to book.' }, { status: 400 })
 
@@ -84,5 +91,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     payment_intent_data: { metadata: meta },
   })
 
+  noteAudit(req, { metadata: { checkout_session: checkout.id } })
   return NextResponse.json({ url: checkout.url })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

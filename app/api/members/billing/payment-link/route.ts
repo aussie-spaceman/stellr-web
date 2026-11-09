@@ -7,7 +7,7 @@ import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { createRegistrationCheckout, RegistrationCheckoutError } from '@/lib/registration-checkout'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
-import { seatDiscount } from '@/lib/individual-payment'
+import { ensureSeatPayToken, seatDiscount, seatPayPageUrl } from '@/lib/individual-payment'
 import { auditMutation } from '@/lib/audit/route'
 import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
@@ -46,7 +46,7 @@ async function createPaymentLink(req: NextRequest) {
 
   const { data: registration } = await db
     .from('registrations')
-    .select('event_slug, event_title, type, status, member_pays_individually, invoice_coupon_id')
+    .select('event_slug, event_title, type, status, member_pays_individually, invoice_coupon_id, share_estimate')
     .eq('id', registrationId)
     .maybeSingle()
   if (!registration) return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
@@ -66,7 +66,8 @@ async function createPaymentLink(req: NextRequest) {
   const isIndividual = registration.type === 'individual'
   const selfPayable = isIndividual
     ? registration.status === 'pending'
-    : registration.member_pays_individually && participant.individual_payment_status === 'pending'
+    // Pending = owed by their own link, in an individually paid or a split group.
+    : participant.individual_payment_status === 'pending'
   if (!selfPayable) {
     return NextResponse.json({ error: 'No payment is due from you for this registration.' }, { status: 400 })
   }
@@ -91,6 +92,13 @@ async function createPaymentLink(req: NextRequest) {
       }
       throw e
     }
+  }
+
+  // A group sharing the teacher's cost: the seat's own pay page prices the share
+  // and takes a code for the place only (lib/teacher-share.ts).
+  if ((registration as { share_estimate?: number | null }).share_estimate != null) {
+    const token = await ensureSeatPayToken(db, participant.id as string)
+    return NextResponse.json({ url: seatPayPageUrl(registration.event_slug as string, token) })
   }
 
   const event = await getEventBySlug(registration.event_slug)

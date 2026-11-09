@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { isAdultRole } from '@/lib/group-payer'
 import { isRegistrationMinor } from '@/lib/registration-eligibility'
 import { SCHOOL_DATA_TERMS_VERSION, schoolDataTermsSha256 } from '@/lib/school-data-terms'
 import { normalizeGender, normalizeAgeBracket, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
@@ -53,7 +54,14 @@ export async function insertGroupRegistration(
     school_address_city: teacher.school_address_city,
     school_address_state: teacher.school_address_state,
     school_address_zip: teacher.school_address_zip,
-    invoice_requested: payment_method === 'invoice',
+    invoice_requested: payment_method === 'invoice' || payment_method === 'invoice_some',
+    // Marks a split group ("Invoice for some") and says how later joiners pay (lib/group-payer.ts).
+    late_joiner_payer: payment_method === 'invoice_some' ? (body.late_joiner_payer === 'group' ? 'group' : 'self') : null,
+    // "Students share the teacher's cost" (lib/teacher-share.ts): the estimate and a
+    // teacher's full price now. The share itself is worked out once the roster exists.
+    ...(payment_method === 'teacher_share'
+      ? { share_estimate: body.share_estimate ?? null, share_unit_cents: group.price.feeUnitAmount ?? null }
+      : {}),
     // Pay-later capability for card payments — see lib/registration-checkout.ts.
     pay_token: payToken,
     registrant_role,
@@ -357,7 +365,7 @@ function participantRowBuilder(group: GatedGroup, regId: string, members: SavedM
   // Build participant rows. event_role is normalised to the enum values the
   // admin roster, Companies auto-assign, and check-in filter on — same
   // under-18 override as the members upsert.
-  return (p: ParticipantPayload, paymentStatus?: 'pending' | 'waived' | null) => ({
+  return (p: ParticipantPayload, paymentStatus?: 'pending' | 'waived' | 'covered' | null, payer?: 'group' | 'self' | 'shared' | null) => ({
     registration_id: regId,
     member_id: resolveMemberId(p),
     details_from_member: !!p._linked_member_id,
@@ -380,6 +388,7 @@ function participantRowBuilder(group: GatedGroup, regId: string, members: SavedM
     emergency_contact_phone: p.emergency_contact_phone || null,
     emergency_contact_relationship: p.emergency_contact_relationship || null,
     individual_payment_status: paymentStatus ?? null,
+    payer: payer ?? null,
   })
 }
 
@@ -409,6 +418,19 @@ export async function insertGroupParticipants(
   const seatPayStatus: 'pending' | 'waived' | null = member_pays_individually
     ? (group.price.canBill ? 'pending' : 'waived')
     : null
+  // "Invoice for some": each person is on the invoice or pays by their own link.
+  const split = body.payment_method === 'invoice_some'
+  const ownLinkStatus: 'pending' | 'waived' = group.price.canBill ? 'pending' : 'waived'
+  const payerOf = (onInvoice: boolean | undefined): 'group' | 'self' | null => (split ? (onInvoice ? 'group' : 'self') : null)
+  const statusOf = (onInvoice: boolean | undefined) => (split ? (onInvoice ? null : ownLinkStatus) : seatPayStatus)
+  // "Students share the teacher's cost": adults are covered, students pay their own way.
+  const sharing = body.payment_method === 'teacher_share'
+  const shareRow = (row: ParticipantInsert): ParticipantInsert => {
+    if (!sharing) return row
+    return isAdultRole(row.event_role)
+      ? { ...row, payer: 'shared', individual_payment_status: 'covered' }
+      : { ...row, payer: 'self' }
+  }
   const registrantRow = buildParticipant({
     first_name: teacher.first_name, last_name: teacher.last_name,
     nickname: teacher.nickname,
@@ -425,13 +447,14 @@ export async function insertGroupParticipants(
     emergency_contact_email: teacher.emergency_contact_email,
     emergency_contact_phone: teacher.emergency_contact_phone,
     emergency_contact_relationship: teacher.emergency_contact_relationship,
-  }, seatPayStatus)
+  }, statusOf(body.registrant_on_invoice), payerOf(body.registrant_on_invoice))
+  const registrantShared = shareRow(registrantRow)
 
-  const participantRows = [registrantRow]
+  const participantRows = [registrantShared]
 
   if (details_method === 'add_now') {
-    for (const a of (additional_adults ?? [])) participantRows.push(buildParticipant(a, seatPayStatus))
-    for (const s of (students ?? [])) participantRows.push(buildParticipant(s, seatPayStatus))
+    for (const a of (additional_adults ?? [])) participantRows.push(shareRow(buildParticipant(a, statusOf(a.on_invoice), payerOf(a.on_invoice))))
+    for (const s of (students ?? [])) participantRows.push(shareRow(buildParticipant(s, statusOf(s.on_invoice), payerOf(s.on_invoice))))
   }
 
   const { data: insertedParts, error: partError } = await db

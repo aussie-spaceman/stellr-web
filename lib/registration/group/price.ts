@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { collectsNothing } from '@/lib/event-pricing'
 import { stripeClient } from '@/lib/stripe'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
-import type { GroupBody } from './parse'
+import { GROUP_PAYMENT_METHODS, invoiceSeatsFor, type GroupBody } from './parse'
 
 /** What this registration owes, as far as the gate could tell. */
 export interface GroupPrice {
@@ -20,9 +20,38 @@ export interface GroupPrice {
  */
 export async function priceGroupRegistration(
   event: { stripePriceId?: string; activityType?: string } | null,
-  body: Pick<GroupBody, 'event_slug' | 'payment_method' | 'total_participants'>,
+  body: Pick<GroupBody, 'event_slug' | 'payment_method' | 'total_participants'> &
+    Partial<Pick<GroupBody, 'registrant_on_invoice' | 'late_joiner_payer' | 'details_method' | 'additional_adults' | 'students' | 'share_estimate' | 'student_count'>>,
 ): Promise<Refusable<{ price: GroupPrice }>> {
-  const { event_slug, payment_method, total_participants } = body
+  const { event_slug, total_participants } = body
+  // Only the ways the form offers. Anything else used to fall through as a
+  // card registration with no checkout.
+  if (body.payment_method != null && !(GROUP_PAYMENT_METHODS as readonly unknown[]).includes(body.payment_method)) {
+    return refuse(NextResponse.json({ error: 'Choose how the group will pay.' }, { status: 400 }))
+  }
+  // "Invoice for some" is an invoice for the ticked places; the rest pay by link.
+  const invoiceSome = body.payment_method === 'invoice_some'
+  const payment_method = invoiceSome ? 'invoice' : body.payment_method
+  const billedSeats = invoiceSome
+    ? invoiceSeatsFor({ details_method: 'add_now', ...body } as Parameters<typeof invoiceSeatsFor>[0])
+    : total_participants ?? 0
+  // "Students share the teacher's cost": a sensible estimate, and students to share it.
+  if (body.payment_method === 'teacher_share') {
+    const estimate = body.share_estimate
+    if (!Number.isInteger(estimate) || (estimate as number) < 1 || (estimate as number) > 200) {
+      return refuse(NextResponse.json({ error: 'Say how many students you expect to bring (1 to 200).' }, { status: 400 }))
+    }
+    if ((body.student_count ?? 0) < 1) {
+      return refuse(NextResponse.json({ error: 'Sharing the teacher’s cost needs at least one student.' }, { status: 400 }))
+    }
+  }
+  // "Invoice for some" always has someone on the invoice.
+  if (invoiceSome && billedSeats <= 0) {
+    return refuse(NextResponse.json(
+      { error: 'Tick at least one person for the invoice, or choose "Group members will pay individually".' },
+      { status: 400 },
+    ))
+  }
 
   // Amount owed for this registration: per-seat event fee × seats, or 0 when the
   // event has no Stripe price (campaigns / free events). Drives the payment gate.
@@ -34,7 +63,7 @@ export async function priceGroupRegistration(
     try {
       const pr = await feeStripe.prices.retrieve(feePriceId)
       feeUnitAmount = pr.unit_amount ?? 0
-      amountDueCents = feeUnitAmount * (total_participants ?? 0)
+      amountDueCents = feeUnitAmount * billedSeats
     } catch (e) {
       console.error('[register/group] price lookup failed:', event_slug, feePriceId, e)
       // The event has a fee and we don't know it, so this registration's amount
@@ -128,6 +157,14 @@ export async function priceGroupRegistration(
       {
         error: 'This event has no registration fee configured, so no invoice can be issued. Please refresh the page — if the event is meant to be paid, contact Stellr.',
       },
+      { status: 400 },
+    ))
+  }
+
+  // Sharing the teacher's cost needs a fee to share.
+  if (body.payment_method === 'teacher_share' && (!feePriceId || !feeStripe || nothingToCollect)) {
+    return refuse(NextResponse.json(
+      { error: 'This event has no registration fee, so there is no teacher’s cost to share. Choose another way to pay.' },
       { status: 400 },
     ))
   }

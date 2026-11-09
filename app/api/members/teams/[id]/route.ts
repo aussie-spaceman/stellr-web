@@ -32,7 +32,7 @@ export async function GET(
       teacher_first_name, teacher_last_name, teacher_email, teacher_member_id,
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
-      member_pays_individually, details_method,
+      member_pays_individually, late_joiner_payer, details_method,
       participants(*, event_companies(number, name))
     `)
     .eq('id', id)

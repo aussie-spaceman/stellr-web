@@ -64,7 +64,7 @@ export async function executeRefund(
 
   const { data: participant } = await db
     .from('participants')
-    .select('id, registration_id, email, first_name, last_name, member_id, individual_payment_status, stripe_payment_intent_id')
+    .select('id, registration_id, email, first_name, last_name, member_id, individual_payment_status, stripe_payment_intent_id, payer, base_paid_cents, share_paid_cents')
     .eq('id', participantId)
     .maybeSingle()
   if (!participant) return { type: 'none', refundCents: 0, detail: 'Participant not found' }

@@ -7,7 +7,7 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
-import { seatDiscount } from '@/lib/individual-payment'
+import { ensureSeatPayToken, seatDiscount, seatPayPageUrl } from '@/lib/individual-payment'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -53,11 +53,18 @@ export async function POST(
   // Load registration to get event slug
   const { data: registration } = await db
     .from('registrations')
-    .select('event_slug, event_title, invoice_coupon_id')
+    .select('event_slug, event_title, invoice_coupon_id, share_estimate')
     .eq('id', registrationId)
     .maybeSingle()
 
   if (!registration) return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
+
+  // A group sharing the teacher's cost: the seat's own pay page prices the share
+  // and takes a code for the place only (lib/teacher-share.ts).
+  if ((registration as { share_estimate?: number | null }).share_estimate != null) {
+    const token = await ensureSeatPayToken(db, participant.id as string)
+    return NextResponse.json({ url: seatPayPageUrl(registration.event_slug as string, token) })
+  }
 
   const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })

@@ -239,7 +239,7 @@ export function buildPaymentItems(
 
     if (reg.member_pays_individually) {
       if (!isUpcoming(reg.event_slug)) continue
-      const unpaid = parts.filter((p) => p.individual_payment_status !== 'paid' && p.individual_payment_status !== 'waived')
+      const unpaid = parts.filter((p) => p.individual_payment_status !== 'paid' && p.individual_payment_status !== 'waived' && p.individual_payment_status !== 'covered')
       if (unpaid.length === 0) continue
       items.push({
         key: `seats:${reg.id}`, kind: 'seats', who, minor, eventSlug: reg.event_slug, eventTitle: title,

@@ -771,6 +771,7 @@ describe('characterisation: POST /api/register/group — rows written (add_now)'
       school_address_state: undefined,
       school_address_zip: undefined,
       invoice_requested: false,
+      late_joiner_payer: null,
       pay_token: null,
       registrant_role: 'teacher',
       teacher_poc_first_name: null,

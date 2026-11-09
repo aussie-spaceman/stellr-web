@@ -863,7 +863,7 @@ describe('branches: POST /api/register/group — participant rows', () => {
       dietary_requirements: ['veg'], health_conditions: 'asthma',
       emergency_contact_first_name: 'P', emergency_contact_last_name: 'Arent',
       emergency_contact_email: 'parent1@example.com', emergency_contact_phone: '556',
-      emergency_contact_relationship: 'Parent', individual_payment_status: null,
+      emergency_contact_relationship: 'Parent', individual_payment_status: null, payer: null,
     })
     expect(participantRows()[2]).toMatchObject({
       nickname: null, school_email: null, grade: null, ethnicity: [], dietary_requirements: [], health_conditions: null,
@@ -886,7 +886,7 @@ describe('branches: POST /api/register/group — participant rows', () => {
       school_name: 'Denver High', age_bracket: 'adult', event_role: 'teacher',
       dietary_requirements: ['d'], health_conditions: 'h',
       emergency_contact_first_name: 'A', emergency_contact_last_name: 'B', emergency_contact_email: 'c@example.com',
-      emergency_contact_phone: '556', emergency_contact_relationship: 'Spouse', individual_payment_status: null,
+      emergency_contact_phone: '556', emergency_contact_relationship: 'Spouse', individual_payment_status: null, payer: null,
     })
   })
 
@@ -1408,5 +1408,58 @@ describe('branches: POST /api/register/group — pinned after the split', () => 
     expect((await post(body())).status).toBe(201)
     expect(registrationRow()).toMatchObject({ amount_due_cents: 0, status: 'confirmed' })
     expect(h.merch).toHaveBeenCalledWith(expect.anything(), 'reg-1')
+  })
+})
+
+// "Invoice for some" (9 Nov 2026): the registrant on the invoice, the others by link.
+describe('branches: POST /api/register/group — invoice for some', () => {
+  beforeEach(() => {
+    withStripe()
+    h.getEventBySlug.mockResolvedValue(PRICED)
+  })
+
+  it('invoices only the ticked places and sends links to everyone else', async () => {
+    const res = await post(body({ payment_method: 'invoice_some', registrant_on_invoice: true, late_joiner_payer: 'self' }))
+    expect(res.status).toBe(201)
+    expect(h.invoice.mock.calls[0][2]).toMatchObject({ amountCents: 13500, perSeatCents: 13500, totalParticipants: 1 })
+    expect(registrationRow()).toMatchObject({ invoice_requested: true, member_pays_individually: false, late_joiner_payer: 'self', amount_due_cents: 13500 })
+    expect(h.payments).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses when nobody would be on the invoice, before anything is written', async () => {
+    const res = await post(body({ payment_method: 'invoice_some', registrant_on_invoice: false, late_joiner_payer: 'self' }))
+    expect(res.status).toBe(400)
+    expect(rec.writes()).toEqual(NOTHING_WRITTEN)
+  })
+
+  it('refuses a payment method the form never offers', async () => {
+    const res = await post(body({ payment_method: 'cheque' }))
+    expect(res.status).toBe(400)
+    expect(rec.writes()).toEqual(NOTHING_WRITTEN)
+  })
+})
+
+// "Students share the teacher's cost" (9 Nov 2026).
+describe('branches: POST /api/register/group — students share the teacher’s cost', () => {
+  beforeEach(() => {
+    withStripe()
+    h.getEventBySlug.mockResolvedValue(PRICED)
+  })
+
+  it('covers the teacher, sends the students links, and records the estimate and price', async () => {
+    const res = await post(body({ payment_method: 'teacher_share', share_estimate: 2 }))
+    expect(res.status).toBe(201)
+    expect(registrationRow()).toMatchObject({ member_pays_individually: true, invoice_requested: false, share_estimate: 2, share_unit_cents: 13500 })
+    const [registrant, ...others] = participantRows()
+    expect(registrant).toMatchObject({ payer: 'shared', individual_payment_status: 'covered' })
+    expect(others.every((p) => p.payer === 'self' && p.individual_payment_status === 'pending')).toBe(true)
+    expect(h.invoice).not.toHaveBeenCalled()
+    expect(h.payments).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a missing or silly estimate, before anything is written', async () => {
+    expect((await post(body({ payment_method: 'teacher_share' }))).status).toBe(400)
+    expect((await post(body({ payment_method: 'teacher_share', share_estimate: 0 }))).status).toBe(400)
+    expect(rec.writes()).toEqual(NOTHING_WRITTEN)
   })
 })

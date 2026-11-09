@@ -46,7 +46,7 @@ beforeEach(() => {
 describe('/api/admin/registrations/[id]/payment-method', () => {
   it('lets an admin change it, and logs it against the organizer', async () => {
     expect((await post()).status).toBe(200)
-    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'reg-1', 'individual', expect.objectContaining({ by: 'staff' }))
+    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'reg-1', { method: 'individual' }, expect.objectContaining({ by: 'staff' }))
     expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ memberId: 'm-t', action: 'group_payment_method_changed' }), expect.anything())
   })
 

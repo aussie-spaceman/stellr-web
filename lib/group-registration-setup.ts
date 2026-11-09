@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto'
+import { isSplitGroup, seatsOnInvoice } from '@/lib/group-payer'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getEventBySlug } from '@/lib/sanity'
 import { stripeClient } from '@/lib/stripe'
@@ -37,6 +38,7 @@ type Reg = {
   invoice_paid_at: string | null; amount_due_cents: number | null; member_pays_individually: boolean | null
   details_method: string | null; adult_count: number | null; student_count: number | null
   registrant_role: string | null
+  late_joiner_payer?: string | null
 }
 type Part = {
   id: string; member_id: string | null; first_name: string; last_name: string; email: string | null
@@ -46,6 +48,7 @@ type Part = {
   emergency_contact_email: string | null; emergency_contact_phone: string | null; emergency_contact_relationship: string | null
   school_email?: string | null
   individual_payment_status?: string | null
+  payer?: string | null
 }
 
 async function load(db: SupabaseClient, registrationId: string) {
@@ -54,7 +57,7 @@ async function load(db: SupabaseClient, registrationId: string) {
     .select(`id, type, status, event_slug, event_title, teacher_first_name, teacher_last_name, teacher_email,
       teacher_poc_email, teacher_member_id, school_name, school_address_state, spreadsheet_id, invoice_requested,
       invoice_paid_at, amount_due_cents, member_pays_individually, details_method, adult_count, student_count,
-      registrant_role`)
+      registrant_role, late_joiner_payer`)
     .eq('id', registrationId)
     .maybeSingle()
   if (!reg || (reg as Reg).type !== 'group') return null
@@ -62,7 +65,7 @@ async function load(db: SupabaseClient, registrationId: string) {
     .from('participants')
     .select(`id, member_id, first_name, last_name, email, phone, date_of_birth, event_role, school_name, grade, gender,
       t_shirt_size, dietary_requirements, health_conditions, emergency_contact_first_name, emergency_contact_last_name,
-      emergency_contact_email, emergency_contact_phone, emergency_contact_relationship, school_email, individual_payment_status`)
+      emergency_contact_email, emergency_contact_phone, emergency_contact_relationship, school_email, individual_payment_status, payer`)
     .eq('registration_id', registrationId)
     .order('created_at', { ascending: true })
   return { reg: reg as Reg, parts: (parts ?? []) as Part[] }
@@ -227,8 +230,12 @@ export async function finishGroupSetup(
           const event = await getEventBySlug(reg.event_slug)
           const priceId = (event as { stripePriceId?: string } | null)?.stripePriceId
           const price = priceId ? await stripe.prices.retrieve(priceId) : null
-          // Anyone who paid individually before the group moved to an invoice isn't billed again.
-          const total = parts.filter((p) => p.individual_payment_status !== 'paid').length
+          // Anyone who paid individually before the group moved to an invoice isn't billed
+          // again, and in a split group only the people on the invoice are (lib/group-payer.ts).
+          const declared = (reg.adult_count ?? 0) + (reg.student_count ?? 0)
+          const total = isSplitGroup(reg)
+            ? seatsOnInvoice(Math.max(declared, parts.length), parts, reg)
+            : parts.filter((p) => p.individual_payment_status !== 'paid').length
           await createAndSendGroupInvoice(db, stripe, {
             registrationId: reg.id,
             eventSlug: reg.event_slug,
@@ -258,7 +265,10 @@ export async function finishGroupSetup(
         eventTitle,
         participantCount: (reg.adult_count ?? 0) + (reg.student_count ?? 0) || parts.length,
         registrationId: reg.id,
-        paymentMethod: reg.invoice_requested ? 'invoice' : reg.member_pays_individually ? 'individual' : 'card',
+        paymentMethod: isSplitGroup(reg) ? 'invoice_some' : reg.invoice_requested ? 'invoice' : reg.member_pays_individually ? 'individual' : 'card',
+        invoiceSeats: isSplitGroup(reg)
+          ? seatsOnInvoice(Math.max((reg.adult_count ?? 0) + (reg.student_count ?? 0), parts.length), parts, reg)
+          : undefined,
         detailsMethod: (reg.details_method as 'add_now' | 'spreadsheet' | 'email_link' | null) ?? 'add_now',
         spreadsheetUrl: spreadsheetUrl ?? undefined,
         joinUrl: joinUrl ?? undefined,

@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import { accessCoversEvent, requireEventAccess } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { changeGroupPaymentMethod, paymentChangeView, PAYMENT_METHOD_LABEL } from '@/lib/group-payment-change'
+import { paymentChangeBody } from '@/lib/group-payment-change-body'
 
 // "Payment method…" on a group in the event roster.
 //   GET  → how the group pays now, and what each alternative would do.
-//   POST { method } → move the group's unpaid balance to that method.
+//   POST { method, invoiceParticipantIds?, lateJoinerPayer? } → move the group's
+//   unpaid balance to that method (the two extras for "Invoice for some").
 // Open to admins and to event managers assigned to the event.
 // See lib/group-payment-change.ts.
 
 // Up to a Checkout sweep, an invoice void, and one email per person on the roster.
 export const maxDuration = 120
 
-const bodySchema = z.object({ method: z.enum(['invoice', 'card', 'individual']) })
 
 // withAudit records every answer but a 4xx, including a 5xx after a partial change.
 // A group's fee is Stripe-billed through Stellr, so a change that did anything is on
@@ -63,13 +63,13 @@ export const POST = withAudit(auditSpec, async (req: Request, { params }: { para
   const g = await guard(db, id)
   if (g instanceof NextResponse) return g
 
-  const parsed = bodySchema.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'Choose a payment method' }, { status: 400 })
+  const parsed = paymentChangeBody.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Choose a payment method' }, { status: 400 })
   const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Stripe is not configured here' }, { status: 503 })
 
   const actor = await actorFromAuth()
-  const result = await changeGroupPaymentMethod(db, stripe, id, parsed.data.method, {
+  const result = await changeGroupPaymentMethod(db, stripe, id, parsed.data, {
     memberId: actor.actorMemberId ?? null,
     label: 'admin',
     by: 'staff',

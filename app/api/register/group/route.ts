@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
       details_method = 'add_now',
       payment_method,
       member_pays_individually = false,
+      registrant_on_invoice,
+      late_joiner_payer,
+      share_estimate,
       additional_adults,
       students,
       school_dpa_agreed,
@@ -58,6 +61,14 @@ export async function POST(req: NextRequest) {
       event_slug, event_title: body.event_title, registrant_role, teacher, teacher_poc,
       adult_count, student_count, total_participants,
       details_method, payment_method, member_pays_individually,
+      registrant_on_invoice: registrant_on_invoice === true,
+      late_joiner_payer: late_joiner_payer === 'group' ? 'group' : 'self',
+      // "Invoice for some" is never everyone paying individually; sharing the
+      // teacher's cost always is (the teachers are covered, the students pay).
+      ...(payment_method === 'invoice_some' ? { member_pays_individually: false } : {}),
+      ...(payment_method === 'teacher_share'
+        ? { member_pays_individually: true, share_estimate: Number.isInteger(share_estimate) ? share_estimate : undefined }
+        : {}),
       additional_adults, students, school_dpa_agreed,
     }
 

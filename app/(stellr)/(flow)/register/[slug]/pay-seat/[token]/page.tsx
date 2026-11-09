@@ -5,6 +5,8 @@ import { getEventBySlug } from '@/lib/sanity'
 import { maskEmail } from '@/lib/utils'
 import { stripeClient } from '@/lib/stripe'
 import PayNowButton from '../../pay/[token]/PayNowButton'
+import SharedSeatPay from './SharedSeatPay'
+import { loadShareGroup, summarise } from '@/lib/teacher-share'
 import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
 
 // The durable "pay your seat" page for a "members pay individually" participant
@@ -83,12 +85,14 @@ export default async function SeatPayPage({ params, searchParams }: PageProps) {
 
   const { data: regRow } = await db
     .from('registrations')
-    .select('event_slug, event_title, member_pays_individually')
+    .select('event_slug, event_title, member_pays_individually, share_estimate')
     .eq('id', participant.registration_id)
     .maybeSingle()
-  const reg = regRow as { event_slug: string; event_title: string; member_pays_individually: boolean } | null
+  const reg = regRow as { event_slug: string; event_title: string; member_pays_individually: boolean; share_estimate: number | null } | null
 
-  if (!reg || !reg.member_pays_individually) {
+  // A pending seat is owed by its own link: an individually paid group, or a split
+  // one where this person pays their own way ("Invoice for some").
+  if (!reg || (!reg.member_pays_individually && participant.individual_payment_status !== 'pending')) {
     return (
       <Shell icon="🧾" title="Nothing to pay here">
         <p className="text-content-body mb-6">This group now pays together, so nothing is due from you. Questions? Ask your group&apos;s organizer or reply to your registration email.</p>
@@ -103,16 +107,26 @@ export default async function SeatPayPage({ params, searchParams }: PageProps) {
   // the price can't be read we still show the button — the amount is confirmed on
   // the Stripe Checkout page itself.
   let amountLabel = ''
+  let listCents = 0
   const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId ?? null
   const stripe = stripeClient()
   if (stripePriceId && stripe) {
     try {
       const price = await stripe.prices.retrieve(stripePriceId)
-      if (price.unit_amount) amountLabel = `$${(price.unit_amount / 100).toFixed(2)}`
+      if (price.unit_amount) {
+        listCents = price.unit_amount
+        amountLabel = `$${(price.unit_amount / 100).toFixed(2)}`
+      }
     } catch (e) {
       console.error('[register/pay-seat] price lookup failed (non-fatal):', e)
     }
   }
+
+  // A group sharing the teacher's cost: the place plus the student's share (read
+  // only here; the checkout recomputes it). A code is entered on this page.
+  const shared = reg.share_estimate != null ? await loadShareGroup(db, participant.registration_id).catch(() => null) : null
+  const shareCents = shared ? summarise(shared.reg, shared.people).shareCents : 0
+  const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
   const firstName = participant.first_name?.trim() ?? ''
   const emailForNote = participant.email ?? ''
@@ -132,13 +146,33 @@ export default async function SeatPayPage({ params, searchParams }: PageProps) {
           <p className="text-content-body mb-6">
             Payment for <strong>{firstName || 'your place'}</strong>
           </p>
-          {amountLabel && (
-            <div className="bg-surface rounded-lg px-4 py-3 mb-6">
-              <div className="text-xs uppercase tracking-wide text-content-body">Amount due</div>
-              <div className="text-3xl font-display font-bold text-ink">{amountLabel}</div>
-            </div>
+          {shared && listCents > 0 ? (
+            <>
+              <dl className="bg-surface rounded-lg px-4 py-3 mb-4 space-y-1 text-sm text-left">
+                <div className="flex justify-between gap-4"><dt>Your place</dt><dd>{usd(listCents)}</dd></div>
+                {shareCents > 0 && (
+                  <div className="flex justify-between gap-4"><dt>Your share of the teacher’s cost</dt><dd>{usd(shareCents)}</dd></div>
+                )}
+                <div className="flex justify-between gap-4 border-t border-line pt-1 font-semibold text-ink"><dt>Amount due</dt><dd>{usd(listCents + shareCents)}</dd></div>
+              </dl>
+              {shareCents > 0 && (
+                <p className="text-xs text-content-body mb-6 text-left">
+                  The teacher’s cost is split evenly across the group’s students, and your share can only go down. If more students join after you pay, the difference comes back to you after the event.
+                </p>
+              )}
+              <SharedSeatPay token={token} totalLabel={usd(listCents + shareCents)} />
+            </>
+          ) : (
+            <>
+              {amountLabel && (
+                <div className="bg-surface rounded-lg px-4 py-3 mb-6">
+                  <div className="text-xs uppercase tracking-wide text-content-body">Amount due</div>
+                  <div className="text-3xl font-display font-bold text-ink">{amountLabel}</div>
+                </div>
+              )}
+              <PayNowButton token={token} amountLabel={amountLabel} endpoint="/api/register/pay-seat" />
+            </>
           )}
-          <PayNowButton token={token} amountLabel={amountLabel} endpoint="/api/register/pay-seat" />
           <MoneyBackGuarantee variant="compact" className="mt-5 justify-center text-left" />
           <p className="text-xs text-content-body mt-4">
             Secure payment by Stripe. Your place is confirmed as soon as payment goes through, and a confirmation email follows.

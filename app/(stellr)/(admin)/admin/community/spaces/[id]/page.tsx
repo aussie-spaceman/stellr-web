@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { loadSpaceAdmin } from '@/lib/space-admin'
 import { resolveTierMap } from '@/lib/tiers-server'
 import { SpaceConfig } from '@/components/admin/community/spaces/SpaceConfig'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function AdminSpaceConfigPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/community/spaces/[id]' })
   const { id } = await params
   const [config, tierMap] = await Promise.all([loadSpaceAdmin(id), resolveTierMap()])
   if (!config) notFound()

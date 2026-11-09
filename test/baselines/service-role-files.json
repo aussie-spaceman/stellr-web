@@ -323,7 +323,7 @@
     },
     "app/api/admin/agreements/[id]/correct-recipient/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreement_recipients, agreements"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/artwork-defaults/[theme]/badge-templates/preview/route.ts": {
       "class": "convert",
@@ -343,7 +343,7 @@
     },
     "app/api/admin/campaigns/[slug]/email/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/coaching/route.ts": {
       "class": "convert",
@@ -419,11 +419,11 @@
     },
     "app/api/admin/credentials/[id]/resend/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: credentials"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/credentials/[id]/revoke/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: credentials"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/deletion-requests/[id]/route.ts": {
       "class": "convert",
@@ -435,15 +435,15 @@
     },
     "app/api/admin/docusigns/[id]/credential-sharing/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreements"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/docusigns/[id]/download/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreements"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/docusigns/[id]/resend/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreements"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/docusigns/route.ts": {
       "class": "convert",
@@ -511,7 +511,7 @@
     },
     "app/api/admin/event-participations/[id]/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: event_participations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/awards/issue/route.ts": {
       "class": "convert",
@@ -563,11 +563,11 @@
     },
     "app/api/admin/events/[slug]/docusign-reissue/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: participants"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/emails/[id]/attachments/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: event_emails"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/emails/[id]/catch-up/route.ts": {
       "class": "convert",
@@ -579,7 +579,7 @@
     },
     "app/api/admin/events/[slug]/emails/[id]/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: event_emails"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/emails/[id]/send/route.ts": {
       "class": "convert",
@@ -587,7 +587,7 @@
     },
     "app/api/admin/events/[slug]/emails/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: event_email_sends, event_emails"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/export/route.ts": {
       "class": "convert",
@@ -595,7 +595,7 @@
     },
     "app/api/admin/events/[slug]/invoice-paid/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/merch/commit/route.ts": {
       "class": "convert",
@@ -607,15 +607,15 @@
     },
     "app/api/admin/events/[slug]/participants/[pid]/guardian/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: agreements, members, participants"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/payment-link/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: participants, registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/pd-credentials/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: credentials, members, registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members"
     },
     "app/api/admin/events/[slug]/remind/route.ts": {
       "class": "convert",
@@ -623,7 +623,7 @@
     },
     "app/api/admin/events/[slug]/survey/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: survey_distributions, survey_invitations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/team-profiles/route.ts": {
       "class": "convert",
@@ -631,7 +631,7 @@
     },
     "app/api/admin/events/[slug]/volunteers/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: cohort_members, event_participations, members, mentoring_cohorts, volunteer_event_interest"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members"
     },
     "app/api/admin/events/slug-guard/route.ts": {
       "class": "convert",
@@ -735,11 +735,11 @@
     },
     "app/api/admin/registrations/[id]/finish-setup/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/registrations/[id]/invoice/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: registrations"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/registrations/[id]/participants/route.ts": {
       "class": "convert",

@@ -60,13 +60,13 @@ function req(id: string) {
 
 describe('DELETE /api/admin/community/spaces — DB-4 archive-before-delete', () => {
   it('refuses a non-admin (403) before touching the database', async () => {
-    authMock.mockResolvedValue({ sessionClaims: { metadata: { role: 'member' } } })
+    authMock.mockResolvedValue({ userId: 'user_member', sessionClaims: { metadata: { role: 'member' } } })
     expect((await DELETE(req('s1'))).status).toBe(403)
     expect(state.deletedSpace).toBe(false)
   })
 
   it('returns 409 and does NOT delete when the space has posts', async () => {
-    authMock.mockResolvedValue({ sessionClaims: { metadata: { role: 'admin' } } })
+    authMock.mockResolvedValue({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } })
     state.counts.community_posts = 1
     const res = await DELETE(req('s1'))
     expect(res.status).toBe(409)
@@ -76,7 +76,7 @@ describe('DELETE /api/admin/community/spaces — DB-4 archive-before-delete', ()
   })
 
   it('returns 409 and does NOT delete when the space has chat messages', async () => {
-    authMock.mockResolvedValue({ sessionClaims: { metadata: { role: 'admin' } } })
+    authMock.mockResolvedValue({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } })
     state.channels = [{ id: 'c1' }]
     state.counts.chat_messages = 4
     const res = await DELETE(req('s1'))
@@ -85,7 +85,7 @@ describe('DELETE /api/admin/community/spaces — DB-4 archive-before-delete', ()
   })
 
   it('FAILS CLOSED (500, no delete) when a content count errors', async () => {
-    authMock.mockResolvedValue({ sessionClaims: { metadata: { role: 'admin' } } })
+    authMock.mockResolvedValue({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } })
     state.countError = { message: 'boom' }
     const res = await DELETE(req('s1'))
     expect(res.status).toBe(500)
@@ -93,7 +93,7 @@ describe('DELETE /api/admin/community/spaces — DB-4 archive-before-delete', ()
   })
 
   it('deletes an empty space (200)', async () => {
-    authMock.mockResolvedValue({ sessionClaims: { metadata: { role: 'admin' } } })
+    authMock.mockResolvedValue({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } })
     const res = await DELETE(req('s1'))
     expect(res.status).toBe(200)
     expect(state.deletedSpace).toBe(true)

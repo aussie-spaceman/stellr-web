@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
 import { describeDispatchOutcome } from '@/lib/docusign-status'
+import { loadRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/docusign-reissue — the roster's "Reissue
 // DocuSign" action (admins + assigned event managers).
@@ -11,14 +14,30 @@ import { describeDispatchOutcome } from '@/lib/docusign-status'
 // A live envelope is simply resent. Anything that would consume one of the
 // monthly envelopes answers 409 { needsConfirm } first, and only proceeds when
 // the caller repeats the request with confirmNewEnvelope: true.
-export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+//
+// Stellr's signing accounts and shared member records: C22 and A11 open this to a tenant.
+
+const ROUTE = '/api/admin/events/[slug]/docusign-reissue'
+
+type Ctx = { params: Promise<{ slug: string }> }
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'agreement.participant.reissue', ...auditSubject(req, 'participants') }),
+  reissueAgreement,
+)
+
+async function reissueAgreement(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const body = await req.json().catch(() => null)
   const participantId = typeof body?.participantId === 'string' ? body.participantId : null
   if (!participantId) return NextResponse.json({ error: 'participantId required' }, { status: 400 })
+  noteAuditSubject(req, { id: participantId })
 
   const db = supabaseServer()
   let result
@@ -46,9 +65,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       break
   }
 
-  const { data: part } = await db.from('participants').select('member_id').eq('id', participantId).maybeSingle()
+  // Reached only for a participant the reissue found on this event.
+  const part = await loadRecord<{ member_id: string | null }>(staff.scope, 'participants', participantId, {
+    db,
+    select: 'member_id',
+    notFound: () => NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 }),
+    label: ROUTE,
+  })
   const actor = await actorFromAuth()
-  const memberId = (part?.member_id as string | null) ?? actor.actorMemberId ?? null
+  const memberId = (part.ok ? part.row.member_id : null) ?? actor.actorMemberId ?? null
   if (memberId) {
     const issued = result.kind === 'reissued' && result.outcome === 'issued'
     await logActivity(

@@ -3,12 +3,12 @@ import { Plus } from 'lucide-react'
 import { listAllCohorts, getAdminCohortStats } from '@/lib/mentoring'
 import { themeTile } from '@/lib/mentoring-format'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · Mentoring cohorts' }
 
 export default async function AdminCohortsPage() {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring' })
   const [cohorts, stats] = await Promise.all([listAllCohorts(), getAdminCohortStats()])
 
   return (

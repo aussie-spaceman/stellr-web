@@ -1,16 +1,14 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
+import { isStellrAdmin } from '@/lib/authz'
 
 // GET /api/admin/community/spaces/sources/search?type=event|training|mentoring|coaching&q=…
 // Powers the Access-tab object picker: resolve human-friendly options for linking
 // an Object to a Space (community_space_sources). Returns { ref, label } where
 // `ref` is what gets stored as object_ref (event slug / module id / cohort id).
 export async function GET(req: Request) {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces/sources/search' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') ?? ''

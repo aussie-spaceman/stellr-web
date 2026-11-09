@@ -1,12 +1,12 @@
 import { listAllMentoringSessions } from '@/lib/mentoring'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
 import { SessionsCalendar } from '@/components/admin/mentoring/SessionsCalendar'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · Sessions calendar' }
 
 export default async function SessionsCalendarPage() {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring/calendar' })
   const sessions = await listAllMentoringSessions()
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">

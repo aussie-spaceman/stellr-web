@@ -2,12 +2,12 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { listAllWorkshops, getAdminWorkshopStats } from '@/lib/coaching'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · Coaching workshops' }
 
 export default async function AdminWorkshopsPage() {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/coaching' })
   const [workshops, stats] = await Promise.all([listAllWorkshops(), getAdminWorkshopStats()])
 
   return (

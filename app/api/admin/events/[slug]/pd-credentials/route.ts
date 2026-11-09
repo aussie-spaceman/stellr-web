@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventRoute } from '@/lib/authz'
 import { getEventBySlug } from '@/lib/events/repo'
+import { eventTitleFromRegistrations, stellrOnlyDb } from '@/lib/events/admin-records'
 import { getSignedInMember } from '@/lib/community'
 import { issueCredential, CREDENTIAL_COLUMNS } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { logActivity } from '@/lib/activity-log'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
+import { withAudit } from '@/lib/audit/route'
 import { themeFromType } from '@/lib/campaigns'
 import { parsePdHours, pdCredentialTitle, pdStandardCodes, formatPdHours } from '@/lib/pd-standards'
+import { loadScopedRows, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { isStellrScope, type ScopeContext } from '@/lib/tenancy/scope-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,30 +23,46 @@ export const dynamic = 'force-dynamic'
 // GET is open to the event's managers (read-only list). POST is admins only:
 // hours on a certificate a teacher submits to a licensing body are an
 // attestation, and finding the teacher needs the all-members search.
+//
+// The credential says Stellr Education issued it, on standards Stellr mapped, to someone
+// found across all members. So a tenant's staff may read their event's list and not issue.
 
-export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+const ROUTE = '/api/admin/events/[slug]/pd-credentials'
+
+type Ctx = { params: Promise<{ slug: string }> }
+
+export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
 
-  const { data, error } = await supabaseServer()
-    .from('credentials')
-    .select(CREDENTIAL_COLUMNS)
-    .eq('event_slug', slug)
-    .eq('source', 'pd')
-    .order('issued_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ credentials: data ?? [], canIssue: access.isAdmin })
+  const { data, error } = await loadScopedRows(staff.scope, 'credentials', {
+    db: supabaseServer(),
+    select: CREDENTIAL_COLUMNS,
+    match: { event_slug: slug, source: 'pd' },
+    order: { column: 'issued_at', ascending: false },
+    label: ROUTE,
+  })
+  if (error) return NextResponse.json({ error: (error as { message?: string }).message }, { status: 500 })
+  return NextResponse.json({ credentials: data ?? [], canIssue: staff.isAdmin && isStellrScope(staff.scope) })
 }
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [Request, Ctx] }) => ({ action: 'credential.pd.issue', ...auditSubject(req, 'credentials') }),
+  issuePdCredential,
+)
 
 // POST { memberId, hours } — issue one. Idempotent: a live PD credential for
 // this member and event is returned as-is (created: false), whatever the hours
 // sent; a correction is revoke + issue again.
-export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+async function issuePdCredential(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
-  if (!access.isAdmin) return NextResponse.json({ error: 'Only admins can record PD hours' }, { status: 403 })
+  const staff = await requireEventRoute(slug, { route: ROUTE })
+  if (!staff.ok) return staff.response
+  if (!staff.isAdmin) return NextResponse.json({ error: 'Only admins can record PD hours' }, { status: 403 })
+  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as { memberId?: unknown; hours?: unknown }
   const memberId = typeof body.memberId === 'string' ? body.memberId : ''
@@ -55,7 +76,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       .select('id, first_name, last_name, email, date_of_birth, is_active')
       .eq('id', memberId)
       .maybeSingle(),
-    eventFor(slug),
+    eventFor(staff.scope, slug),
   ])
   if (!member || member.is_active === false) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
@@ -88,6 +109,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
+  noteAuditSubject(req, { id: (result.row as { id?: string }).id ?? null, detail: { created: result.created } })
 
   let emailed = false
   if (result.created) {
@@ -116,15 +138,9 @@ type EventFacts = { title?: string; type?: string; date?: string | null; venue?:
  * title stored on the event's registrations: the certificate then carries no
  * date or place rather than the issue being refused.
  */
-async function eventFor(slug: string): Promise<EventFacts | null> {
+async function eventFor(scope: ScopeContext, slug: string): Promise<EventFacts | null> {
   const fromSanity = (await getEventBySlug(slug).catch(() => null)) as EventFacts | null
   if (fromSanity?.title) return fromSanity
-  const { data } = await supabaseServer()
-    .from('registrations')
-    .select('event_title')
-    .eq('event_slug', slug)
-    .not('event_title', 'is', null)
-    .limit(1)
-    .maybeSingle()
-  return data?.event_title ? { title: data.event_title as string } : null
+  const title = await eventTitleFromRegistrations(stellrOnlyDb(scope, supabaseServer()), slug)
+  return title ? { title } : null
 }

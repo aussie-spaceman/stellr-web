@@ -575,7 +575,7 @@ describe('tenant-host cap', () => {
     expect(idorTargetFor('app/api/admin/list/route.ts', 'tenant_staff', read('app/api/admin/list/route.ts'))).toBeNull()
     expect(() => staffTargets(() => 'export const x = 1', { 'app/api/admin/none/route.ts': 'tenant_staff' })).toThrow('no handler')
     expect(staffTargets().map((t) => t.file)).toEqual(
-      Object.entries(ROUTE_MANIFEST).filter(([f, c]) => /route\.tsx?$/.test(f) && (c === 'tenant_staff' || c === 'platform_admin')).map(([f]) => f).sort(),
+      Object.entries(ROUTE_MANIFEST).filter(([f, c]) => /route\.tsx?$/.test(f) && (c === 'tenant_staff' || c === 'platform_admin' || c === 'platform_destined')).map(([f]) => f).sort(),
     )
   })
 

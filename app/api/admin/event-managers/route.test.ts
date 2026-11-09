@@ -18,10 +18,9 @@ const memberIdForClerkUser = vi.fn()
 const captureRequestError = vi.fn()
 
 vi.mock('@clerk/nextjs/server', () => ({
-  auth: async () => ({ sessionClaims: { metadata: { role: 'admin' } } }),
+  auth: async () => ({ userId: 'user_admin', sessionClaims: { metadata: { role: 'admin' } } }),
   clerkClient: async () => ({ users: { getUserList: async () => ({ data: [] }) } }),
 }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))
 vi.mock('@/lib/activity-log', () => ({
   logActivity: (...a: unknown[]) => logActivity(...a),
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'admin1' }),

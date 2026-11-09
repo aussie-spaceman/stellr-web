@@ -3,15 +3,41 @@ import { NextResponse } from 'next/server'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { executeDeletion, DeletionBlockedError } from '@/lib/deletion/execute'
 import { memberIdForClerkUser } from '@/lib/deletion/actor'
+import { getEntityDef } from '@/lib/deletion/registry'
+import { withAudit } from '@/lib/audit/route'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
 export const maxDuration = 300
 
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const audited = new WeakMap<Request, { entity: string; id: string; mode: string; refundChoice?: string; userId: string | null }>()
+
+export const DELETE = withAudit(
+  ({ args: [req] }) => {
+    const a = audited.get(req)
+    const def = a && getEntityDef(a.entity)
+    return {
+      action: 'deletion.entity.delete',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { stellr: true },
+      target: { table: def?.table ?? 'unknown', id: a?.id ?? null },
+      metadata: {
+        entity: a?.entity ?? null,
+        mode: a?.mode ?? null,
+        refundChoice: a?.refundChoice ?? null,
+        // An event is keyed by its slug, which is not stored as a target id.
+        ...(a && def?.keyType === 'slug' ? { eventSlug: a.id } : {}),
+      },
+    }
+  },
+  deleteEntity,
+)
+
 // DELETE /api/admin/deletion  { entity, id, mode: 'soft' | 'hard', refundChoice?: 'cash' | 'none', refundNote? }
 // Central admin delete. Blocks (409) with the dependent list when linked records
 // remain; otherwise runs external cleanup + soft/hard delete.
-export async function DELETE(req: Request) {
+async function deleteEntity(req: Request) {
   const { userId, sessionClaims } = await auth()
   if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -27,6 +53,7 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'A reason is required to remove a registration without a refund' }, { status: 400 })
   }
 
+  audited.set(req, { entity, id, mode, refundChoice, userId })
   const deletedBy = await memberIdForClerkUser(userId)
 
   try {

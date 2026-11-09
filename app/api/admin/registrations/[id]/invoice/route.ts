@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventStaff } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
@@ -12,6 +12,8 @@ import {
   setGroupDiscount,
   formatMoney,
 } from '@/lib/group-billing'
+import { withAudit } from '@/lib/audit/route'
+import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
 // "Invoice & discount…" on a group in the event roster.
 //   GET  → the group's places, current invoice and invoice history.
@@ -22,6 +24,8 @@ import {
 // Reading is open to the event's managers; changing money is admins only.
 // See lib/group-billing.ts.
 
+const ROUTE = '/api/admin/registrations/[id]/invoice'
+
 const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('preview'), code: z.string().trim().min(1).max(64) }),
   z.object({ action: z.literal('apply'), code: z.string().trim().min(1).max(64) }),
@@ -30,33 +34,65 @@ const bodySchema = z.discriminatedUnion('action', [
 ])
 
 type Db = ReturnType<typeof supabaseServer>
+type Args = [Request, { params: Promise<{ id: string }> }]
 
-async function guard(db: Db, id: string, write: boolean) {
-  const access = await requireEventAccess()
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
-  const { data: reg } = await db.from('registrations').select('event_slug, type, teacher_member_id').eq('id', id).maybeSingle()
-  if (!reg || reg.type !== 'group') return NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
-  if (!access.isAdmin && (write || !(access.assignedSlugs ?? []).includes(reg.event_slug as string))) {
-    return NextResponse.json({ error: write ? 'Only admins can change an invoice' : 'Forbidden' }, { status: 403 })
-  }
-  return { slug: reg.event_slug as string, teacherMemberId: (reg.teacher_member_id as string | null) ?? null }
+const notFound = () => NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
+
+async function guard(db: Db, id: string, write: boolean, req: Request) {
+  const staff = await requireEventStaff({ route: ROUTE })
+  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
+  // Before any read, so the answer says nothing about the record.
+  if (write && !staff.isAdmin) return NextResponse.json({ error: 'Only admins can change an invoice' }, { status: 403 })
+  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
+  const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(staff, 'registrations', id, {
+    db,
+    select: 'event_slug, type, teacher_member_id',
+    notFound,
+    label: ROUTE,
+  })
+  if (!loaded.ok) return loaded.response
+  if (loaded.row.type !== 'group') return notFound()
+  // Every action here reads or changes Stellr's Stripe account, its coupons included.
+  const refused = refuseOutsideStellr(staff.scope)
+  if (refused) return refused
+  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null }
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+// What this request acted on, which withAudit's spec cannot read for itself. A discount code
+// is what a person typed, so only the Stripe coupon it resolved to is recorded.
+const audited = new WeakMap<Request, { id: string; userId: string; tenantId: string; action?: string; invoiceId?: string | null; couponId?: string | null }>()
+
+function eventFor(req: Request) {
+  const a = audited.get(req)
+  return {
+    actor: a ? { userId: a.userId } : { session: true as const },
+    tenant: { tenantId: a?.tenantId ?? null },
+    target: { table: 'registrations', id: a?.id ?? null },
+    metadata: { invoiceAction: a?.action ?? null, invoiceId: a?.invoiceId ?? null, couponId: a?.couponId ?? null },
+  }
+}
+
+export const GET = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'registration.invoice.read', ...eventFor(req) }), readInvoice)
+
+async function readInvoice(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
-  const g = await guard(db, id, false)
-  if (g instanceof NextResponse) return g
+  const g = await guard(db, id, false, req)
+  if (g instanceof Response) return g
   const summary = await groupInvoiceSummary(db, stripeClient(), id)
-  if (!summary) return NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
+  if (!summary) return notFound()
   return NextResponse.json(summary)
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+// One event per request, whichever action it was. `preview` changes nothing, and the row says so.
+export const POST = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'registration.invoice.change', ...eventFor(req) }), changeInvoice)
+
+async function changeInvoice(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
-  const g = await guard(db, id, true)
-  if (g instanceof NextResponse) return g
+  const g = await guard(db, id, true, req)
+  if (g instanceof Response) return g
+  const event = audited.get(req)
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Enter a discount code' }, { status: 400 })
@@ -64,6 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!stripe) return NextResponse.json({ error: 'Stripe is not configured here' }, { status: 503 })
 
   const body = parsed.data
+  if (event) event.action = body.action
 
   if (body.action === 'reissue') {
     const actor = await actorFromAuth()
@@ -75,6 +112,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: `Stripe refused the change: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 })
     }
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 })
+    if (event) event.invoiceId = result.invoiceId
     if (g.teacherMemberId) {
       await logActivity({
         memberId: g.teacherMemberId,
@@ -92,6 +130,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.action !== 'remove' && !discount) {
     return NextResponse.json({ error: `"${body.code}" isn't an active discount code or coupon in Stripe.` }, { status: 404 })
   }
+  if (event) event.couponId = discount?.couponId ?? null
 
   if (body.action === 'preview') {
     const summary = await groupInvoiceSummary(db, stripe, id)
@@ -113,6 +152,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: `Stripe refused the change: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 })
   }
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 })
+  if (event) event.invoiceId = result.invoiceId
 
   if (g.teacherMemberId) {
     await logActivity({

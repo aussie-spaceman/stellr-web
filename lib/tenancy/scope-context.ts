@@ -2,8 +2,8 @@
 // data they may see. lib/tenancy/load-scoped.ts reads it; lib/authz.ts (the
 // S5 authz lane) will produce it from the request.
 //
-// Until host routing exists every request is Stellr's, so the only producer
-// today is stellrScope(). Nothing in the app builds a ScopeContext yet.
+// lib/authz.ts requireEventStaff builds one per request for a tenant_staff route,
+// from the tenant its answer holds in.
 //
 //   tenantId    the tenant whose rows the caller may reach (a tenant uuid)
 //   eventSlugs  null = every event in the tenant. An array = only these
@@ -107,6 +107,14 @@ export function assertMadeScope(scope: ScopeContext): void {
 /** Stellr's scope: tenant #1. `eventSlugs` narrows it; null means every event. */
 export function stellrScope(actor: ScopeActor, eventSlugs: readonly string[] | null): ScopeContext {
   return makeScope({ tenantId: STELLR_TENANT_ID, eventSlugs, actor })
+}
+
+/**
+ * Every event in a tenant. For a route that has made its own event check: an event
+ * manager passes `staff` here, because the event_manager kind must name its events.
+ */
+export function tenantWideScope(tenantId: unknown, kind: 'tenant_admin' | 'staff'): ScopeContext {
+  return makeScope({ tenantId, eventSlugs: null, actor: { kind, memberId: null } })
 }
 
 /** True when the scope is Stellr's (the platform owner, tenant #1). */

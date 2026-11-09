@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 import { AUDIENCES, objectUsesAudience, type Audience } from '@/lib/training-audience'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // Admin CRUD for course_object_assignments — assign a course to an Object with
 // per-membership-tier requirements (Course builder · Assignments & requirements).
@@ -16,10 +20,20 @@ function audienceFor(objectType: string, v: unknown): Audience {
   return objectUsesAudience(objectType) && AUDIENCES.includes(v as Audience) ? (v as Audience) : 'all'
 }
 
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.assignment.save',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'course_object_assignments', id: auditedId.get(req) ?? null },
+  }),
+  saveAssignment,
+)
+
 // POST — create/upsert an assignment.
 // Body: { moduleId, objectType, objectRef, objectLabel?, defaultRequirement?, tierRequirements?, dueAt?, audience? }
-export async function POST(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function saveAssignment(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/training/assignments' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
   if (!b.moduleId || !OBJECT_TYPES.includes(b.objectType) || !b.objectRef) {
     return NextResponse.json({ error: 'moduleId, valid objectType and objectRef required' }, { status: 400 })
@@ -57,14 +71,26 @@ export async function POST(req: Request) {
     console.error('[training] assignment upsert error:', error)
     return NextResponse.json({ error: 'Could not save assignment' }, { status: 500 })
   }
+  auditedId.set(req, data.id)
   return NextResponse.json({ id: data.id })
 }
 
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.assignment.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'course_object_assignments', id: auditedId.get(req) ?? null },
+  }),
+  updateAssignment,
+)
+
 // PATCH — update requirements / due date / audience. Body: { id, defaultRequirement?, tierRequirements?, dueAt?, audience? }
-export async function PATCH(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function updateAssignment(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/training/assignments' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, b.id)
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (REQS.includes(b.defaultRequirement)) patch.default_requirement = b.defaultRequirement
   if (b.tierRequirements && typeof b.tierRequirements === 'object') patch.tier_requirements = b.tierRequirements
@@ -81,11 +107,22 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'training.assignment.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'course_object_assignments', id: auditedId.get(req) ?? null },
+  }),
+  deleteAssignment,
+)
+
 // DELETE — ?id=
-export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function deleteAssignment(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/training/assignments' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
   const db = supabaseServer()
   const { error } = await db.from('course_object_assignments').delete().eq('id', id)
   if (error) return NextResponse.json({ error: 'Could not remove assignment' }, { status: 500 })

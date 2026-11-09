@@ -1,15 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireEventAccess } from '@/lib/event-access'
+import { requireEventStaff } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/events/repo'
 import { sendEmail, campaignBroadcastEmail } from '@/lib/email'
+import { withAudit } from '@/lib/audit/route'
+import { loadScopedRows } from '@/lib/tenancy/load-scoped'
+
+const ROUTE = '/api/admin/campaigns/[slug]/email'
+
+// What this request acted on, which withAudit's spec cannot read for itself. The subject
+// and message are free text, so they stay out of the event.
+const audited = new WeakMap<Request, { slug: string; userId: string; tenantId: string; sent?: number; failed?: number }>()
+
+export const POST = withAudit(
+  ({ args: [req] }: { args: [NextRequest, { params: Promise<{ slug: string }> }] }) => {
+    const a = audited.get(req)
+    return {
+      action: 'campaign.email.send',
+      actor: a ? { userId: a.userId } : { session: true },
+      tenant: { tenantId: a?.tenantId ?? null },
+      metadata: { eventSlug: a?.slug ?? null, sent: a?.sent ?? null, failed: a?.failed ?? null },
+    }
+  },
+  emailCampaign,
+)
 
 // Admin "Email everyone" — send one message to every teacher / student manager
 // registered in a campaign.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+async function emailCampaign(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const access = await requireEventAccess(slug)
-  if (!access.ok) return NextResponse.json({ error: 'Not authorised.' }, { status: access.status })
+  const staff = await requireEventStaff({ route: ROUTE })
+  if (!staff.ok) return NextResponse.json({ error: 'Not authorised.' }, { status: staff.status })
+  // Compares against the caller's own list, so it says nothing about whether the event exists.
+  if (!staff.covers(slug)) return NextResponse.json({ error: 'Not authorised.' }, { status: 403 })
+  const event: { slug: string; userId: string; tenantId: string; sent?: number; failed?: number } = { slug, userId: staff.userId, tenantId: staff.tenantId }
+  audited.set(req, event)
 
   const body = await req.json()
   const subject = String(body.subject ?? '').trim()
@@ -19,11 +44,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   }
 
   const db = supabaseServer()
-  const { data: rows } = await db
-    .from('registrations')
-    .select('teacher_first_name, teacher_email, event_title')
-    .eq('type', 'campaign')
-    .eq('event_slug', slug)
+  const { data: rows } = await loadScopedRows<{ teacher_first_name: string | null; teacher_email: string | null; event_title: string | null }>(staff.scope, 'registrations', {
+    db,
+    select: 'teacher_first_name, teacher_email, event_title',
+    match: { type: 'campaign', event_slug: slug },
+    label: ROUTE,
+  })
 
   const recipients = (rows ?? []).filter((r) => !!r.teacher_email)
   if (recipients.length === 0) return NextResponse.json({ sent: 0, failed: 0 })
@@ -43,6 +69,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       failed++
     }
   }
+  event.sent = sent
+  event.failed = failed
 
   return NextResponse.json({ sent, failed })
 }

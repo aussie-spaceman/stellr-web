@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-provider'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { isStellrAdmin } from '@/lib/authz'
 
 // GET /api/admin/training/live-room?itemId=
 // Mints a HOST (moderator/recorder) token for a 'live' (Record) lesson's JaaS
@@ -11,7 +11,7 @@ import { currentUserIsAdmin } from '@/lib/admin-auth'
 // + recording webhook), so the recording attaches to this lesson.
 
 export async function GET(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/training/live-room' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
 

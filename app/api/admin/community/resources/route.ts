@@ -1,14 +1,28 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { finaliseStoredUpload } from '@/lib/resource-finalise'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
+
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // The watermark pass re-reads and rewrites the stored object, so give it more
 // room than the default for a 25MB PDF.
 export const maxDuration = 60
+
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.resource.create',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_resources', id: auditedId.get(req) ?? null },
+  }),
+  createResource,
+)
 
 // POST /api/admin/community/resources — create a resource record (JSON only).
 // Either a link ({ url, title, … }) or an already-uploaded file
@@ -16,10 +30,8 @@ export const maxDuration = 60
 // storage via /api/uploads/sign. File bodies are no longer accepted: the
 // platform caps a request body at 4.5MB before the function runs, so posting
 // bytes here silently capped every upload.
-export async function POST(req: Request) {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function createResource(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const uploader = await getSignedInMember()
 
@@ -48,6 +60,7 @@ export async function POST(req: Request) {
       if ('error' in done) return NextResponse.json({ error: done.error }, { status: done.status })
       const db = supabaseServer()
       if (spaceId) await attachSpaceResource(db, spaceId, done.id)
+      auditedId.set(req, done.id)
       return NextResponse.json({ id: done.id })
     }
 
@@ -68,6 +81,7 @@ export async function POST(req: Request) {
 
     const db = supabaseServer()
     if (spaceId) await attachSpaceResource(db, spaceId, created.binaryId)
+    auditedId.set(req, created.binaryId)
     return NextResponse.json({ id: created.binaryId })
   }
 
@@ -79,9 +93,7 @@ export async function POST(req: Request) {
 
 // GET /api/admin/community/resources — list all resources for admin UI
 export async function GET() {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/community/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data } = await db
@@ -92,17 +104,26 @@ export async function GET() {
   return NextResponse.json({ resources: data ?? [] })
 }
 
+export const PATCH = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.resource.update',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_resources', id: auditedId.get(req) ?? null },
+  }),
+  updateResource,
+)
+
 // PATCH /api/admin/community/resources — edit a stored binary.
 // Body: { id, title?, spaceId? }. title renames the binary; spaceId re-homes it.
 // Per-resource access (min_tier_rank / tier allowlist) was retired with the
 // catalogue (decision 6b) — access is inherited from the container.
-export async function PATCH(req: Request) {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function updateResource(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, b.id)
 
   const db = supabaseServer()
 
@@ -120,15 +141,24 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'community.resource.delete',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'community_resources', id: auditedId.get(req) ?? null },
+  }),
+  deleteResource,
+)
+
 // DELETE /api/admin/community/resources?id=<uuid> — remove a single resource,
 // deleting its stored file first so the bucket doesn't accumulate orphans.
-export async function DELETE(req: Request) {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function deleteResource(req: Request) {
+  if (!(await isStellrAdmin({ route: '/api/admin/community/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  auditedId.set(req, id)
 
   const db = supabaseServer()
   const { data: resource } = await db

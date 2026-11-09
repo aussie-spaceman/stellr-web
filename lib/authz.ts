@@ -32,6 +32,8 @@ import { notFound, redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { eventInScope } from '@/lib/tenancy/event-in-scope'
+import { tenantWideScope, type ScopeContext } from '@/lib/tenancy/scope-context'
 import { currentTenantId } from '@/lib/authz/tenant'
 import {
   anonymousPrincipal,
@@ -318,6 +320,110 @@ export async function requireEventAccess(eventSlug?: string, opts: AuthzOptions 
   )
 }
 
+/** requireEventStaff's answer. Allowed, it carries the scope to load with and the event check to make. */
+export type EventStaff =
+  | { ok: false; status: 401 | 403 }
+  | {
+      ok: true
+      userId: string
+      isAdmin: boolean
+      tenantId: string
+      /** Tenant-wide in every case: the event check is `covers`, which the loaders in lib/tenancy/load-scoped.ts apply. */
+      scope: ScopeContext
+      /** May this caller act on a record of this event? A record with no event: only someone reaching every event. */
+      covers: (eventSlug: string | null | undefined) => boolean
+    }
+
+/**
+ * For a tenant_staff route that loads a record by global id: the tenant's admins, and its
+ * event managers for their own events. Asks who is calling before any record is read.
+ * The answer is requireEventAccess's, so nobody's access differs from it. An event manager
+ * is confined by `covers`, and the IDOR personas prove each route applies it.
+ */
+export async function requireEventStaff(opts: AuthzOptions = {}): Promise<EventStaff> {
+  return eventStaff(opts)
+}
+
+/**
+ * requireEventStaff, with the slug passed on to requireEventAccess when one is given. Under
+ * clerk the slug changes no answer (the host's tenant decides, and covers holds the event);
+ * under shadow it makes the postgres side compare the event's tenant as well.
+ */
+async function eventStaff(opts: AuthzOptions, eventSlug?: string): Promise<EventStaff> {
+  const access = await requireEventAccess(eventSlug, opts)
+  if (!access.ok) return access
+  const assigned = access.assignedSlugs
+  return {
+    ok: true,
+    userId: access.userId,
+    isAdmin: access.isAdmin,
+    tenantId: access.tenantId,
+    scope: tenantWideScope(access.tenantId, access.isAdmin ? 'tenant_admin' : 'staff'),
+    covers: (eventSlug) => assigned === null || (!!eventSlug && assigned.includes(eventSlug)),
+  }
+}
+
+/** requireEventRoute's answer. Refused, `response` is the route's answer. */
+export type EventRoute =
+  | { ok: false; status: 401 | 403 | 404; response: NextResponse }
+  | {
+      ok: true
+      userId: string
+      isAdmin: boolean
+      tenantId: string
+      eventSlug: string
+      /** Tenant-wide, as requireEventStaff's: the event is this route's, and `covers` holds a child row to it. */
+      scope: ScopeContext
+      /** Is a child row this route's event's? For loadEventRecord. An admin gets no wider answer. */
+      covers: (eventSlug: string | null | undefined) => boolean
+    }
+
+/**
+ * For a tenant_staff route under events/[slug]: the tenant's admins and the event's managers,
+ * on an event in that tenant. Nobody's access differs from requireEventAccess(slug) under
+ * today's settings: a manager without this event gets its 403, and with LOADSCOPED_MODE off
+ * no event is read. Enforced, another tenant's event and a slug nobody knows both answer a
+ * 404, so a refusal does not say which.
+ *
+ * Under AUTHZ_SOURCE=postgres the event's tenant decides in every LOADSCOPED_MODE, as it does
+ * in requireEventAccess(slug): a slug the mirror does not hold reads as Stellr's, and a read
+ * that fails is a refusal. Clerk makes no such read. Shadow answers from Clerk, and its
+ * postgres side reads the event's tenant, as requireEventAccess(slug) does, so a decision
+ * that would differ after the flip is logged before it.
+ */
+export async function requireEventRoute(eventSlug: string, opts: AuthzOptions = {}): Promise<EventRoute> {
+  const refused = (status: 401 | 403 | 404): EventRoute => ({
+    ok: false,
+    status,
+    response: NextResponse.json({ error: status === 404 ? 'Not found' : 'Forbidden' }, { status }),
+  })
+  const staff = await eventStaff(opts, getAuthzSource() === 'shadow' ? eventSlug : undefined)
+  if (!staff.ok) return refused(staff.status)
+  if (!staff.covers(eventSlug)) return refused(403)
+  if (getAuthzSource() === 'postgres') {
+    const owner = await loadEventTenantId(supabaseServer(), eventSlug).catch(() => null)
+    if (owner !== staff.tenantId) return refused(404)
+  }
+  const inScope = await eventInScope(staff.scope, eventSlug, {
+    db: () => supabaseServer(),
+    existsUnmirrored: async () => {
+      const { getEventBySlug } = await import('@/lib/events/repo')
+      return !!(await getEventBySlug(eventSlug))
+    },
+    label: opts.route,
+  })
+  if (!inScope) return refused(404)
+  return {
+    ok: true,
+    userId: staff.userId,
+    isAdmin: staff.isAdmin,
+    tenantId: staff.tenantId,
+    eventSlug,
+    scope: staff.scope,
+    covers: (slug) => slug === eventSlug,
+  }
+}
+
 /**
  * Does a section-level answer from requireEventAccess cover a row of this event?
  * For a route that checks the section and then loads a row by global id: the
@@ -530,6 +636,8 @@ export const authz = {
   requireTenantStaff,
   hasPortalAccess,
   requireEventAccess,
+  requireEventStaff,
+  requireEventRoute,
   accessCoversEvent,
   hasScope,
   isStaffTarget,

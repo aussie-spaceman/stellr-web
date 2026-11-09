@@ -5,15 +5,19 @@
 // lib/security/stellr-only-dispositions.ts.
 import { describe, expect, it } from 'vitest'
 import { idorTargets } from '@/lib/security/idor-targets'
+import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 import { DISPOSITION_REGISTER_STATUS, STELLR_ONLY_DISPOSITIONS, dispositionCounts } from '@/lib/security/stellr-only-dispositions'
 
-// Lower only: C16 to C20 take it to 0. It equals the register's count, so a conversion
+// Lower only: C16 to C21 take it to 0. It equals the register's count, so a conversion
 // has to lower it and a route cannot be quietly moved into the bucket. The plan's 51 was
 // measured before registrations/[id]/participants and registrations/[id]/payment-method
-// existed.
-const MAX_TENANT_DESTINED_STELLR_ONLY = 53
+// existed. C16 moved 14 of its 15 to tenant_staff: event-managers keeps the Stellr admin
+// guard until C21. C17 moved 17 more. registrations/[id]/payment-method (#573) arrived
+// after C16 and waits for its follow-up.
+const MAX_TENANT_DESTINED_STELLR_ONLY = 22
 
-const stellrOnly = idorTargets().filter((t) => t.cls === 'stellr_only').map((t) => t.file)
+// platform_destined routes stay listed: the owner's choice for each is still to come.
+const stellrOnly = idorTargets().filter((t) => t.cls === 'stellr_only' || t.cls === 'platform_destined').map((t) => t.file)
 
 describe('stellr_only disposition register', () => {
   it('lists every stellr_only id-bearing route', () => {
@@ -24,6 +28,12 @@ describe('stellr_only disposition register', () => {
   it('lists nothing else: a converted or removed route leaves', () => {
     const stale = Object.keys(STELLR_ONLY_DISPOSITIONS).filter((f) => !stellrOnly.includes(f))
     expect(stale, 'remove these from lib/security/stellr-only-dispositions.ts').toEqual([])
+  })
+
+  it('the manifest class platform_destined and the register are the same routes', () => {
+    const inManifest = Object.entries(ROUTE_MANIFEST).filter(([, c]) => c === 'platform_destined').map(([f]) => f).sort()
+    const inRegister = Object.entries(STELLR_ONLY_DISPOSITIONS).filter(([, e]) => e.disposition === 'platform_destined').map(([f]) => f).sort()
+    expect(inManifest).toEqual(inRegister)
   })
 
   it('holds the tenant-destined count at its cap', () => {

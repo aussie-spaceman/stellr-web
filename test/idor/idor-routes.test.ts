@@ -29,8 +29,8 @@
 // when more cases are `unexercised` (request validation refused before the id
 // was used) than MAX_UNEXERCISED.
 //
-// Every tenant_staff and platform_admin route handler (none yet), with or without an
-// id, also runs the staff personas, strict, with no accepted reason possible:
+// Every tenant_staff, platform_admin and platform_destined route handler, with or without
+// an id, also runs the staff personas, strict, with no accepted reason possible:
 // test/idor/harness.ts STAFF_PERSONAS_FOR and staffCaseProblem.
 // A refusal that changes with the row, or with a malformed id, fails there and is
 // only reported here for every other class: test/idor/reported-oracles.ts, pinned in the
@@ -105,6 +105,8 @@ interface Snapshot {
 
 const STAFF_CLASSES = ['tenant_staff', 'platform_admin'] as const
 const isStaffClass = (c: string): c is (typeof STAFF_CLASSES)[number] => (STAFF_CLASSES as readonly string[]).includes(c)
+// Same guard as stellr_only, so the same rules as stellr_only in the participant cases.
+const hasStellrOnlyGuard = (c: string) => c === 'stellr_only' || c === 'platform_destined'
 
 // scripts/idor-canary.mjs: `<route file>=<absolute path of a mutated copy>`.
 // The case for that route loads the copy instead, so the canary can prove the
@@ -149,12 +151,16 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
     for (const t of targets) expect(ROUTE_MANIFEST[t.file]).toBe(t.cls)
   })
 
-  // Every tenant_staff and platform_admin route handler, with or without an id. Empty until
-  // C15 and C16 move the first routes. test/idor/fixtures.test.ts runs the same functions
-  // over handlers with known guards, and the canary proves they can fail.
+  // Every tenant_staff, platform_admin and platform_destined route handler, with or without
+  // an id. test/idor/fixtures.test.ts runs the same functions over handlers with known
+  // guards, and the canary proves they can fail.
+  it('runs the staff personas on routes: the nine platform_destined at least', () => {
+    expect(staffTargets().filter((t) => t.cls === 'platform_destined')).toHaveLength(9)
+  })
+
   for (const t of staffTargets()) {
     const cls = t.cls
-    if (!isStaffClass(cls)) continue
+    if (!isStaffClass(cls) && cls !== 'platform_destined') continue
     it(`${cls} ${t.urlPattern}: the staff personas are refused`, async () => {
       const fixture = CASE_FIXTURES[t.file]
       const restoreEnv = applyEnv(fixture?.env)
@@ -319,9 +325,9 @@ function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
     if (FAILING_OUTCOMES.includes(r.outcome)) {
       expect(accepted, `${detail}\ntenant-B data reached a tenant-A caller, and the snapshot does not accept it`).toBeDefined()
     }
-    if (t.cls === 'stellr_only' && accepted === undefined) {
+    if (hasStellrOnlyGuard(t.cls) && accepted === undefined) {
       // By construction: an admin guard refuses a participant before any read.
-      expect([401, 403, 404], `${detail}\na stellr_only route must refuse a participant`).toContain(r.status)
+      expect([401, 403, 404], `${detail}\na ${t.cls} route must refuse a participant`).toContain(r.status)
     }
     expect(r.outcome, `${detail}\noutcome changed from the snapshot: review, then \`npm run idor:snapshot\``).toBe(outcomeOf(entry))
   }
@@ -356,7 +362,7 @@ function writeSnapshot() {
       if (!r) throw new Error(`no result for ${t.file} ${m}`)
       const prevEntry = prev?.methods[m]
       const keep = acceptedOf(prevEntry)
-      const needsReason = FAILING_OUTCOMES.includes(r.outcome) || (t.cls === 'stellr_only' && ![401, 403, 404].includes(r.status))
+      const needsReason = FAILING_OUTCOMES.includes(r.outcome) || (hasStellrOnlyGuard(t.cls) && ![401, 403, 404].includes(r.status))
       if (keep !== undefined && prevEntry && outcomeOf(prevEntry) === r.outcome) methods[m] = { outcome: r.outcome, accepted: keep }
       else if (needsReason) methods[m] = { outcome: r.outcome, accepted: TODO }
       else methods[m] = r.outcome

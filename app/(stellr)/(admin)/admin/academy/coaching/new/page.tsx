@@ -5,12 +5,12 @@ import { supabaseServer } from '@/lib/supabase'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CreateWorkshopForm } from '@/components/admin/coaching/CreateWorkshopForm'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · New coaching workshop' }
 
 export default async function NewWorkshopPage() {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/coaching/new' })
   const member = await getSignedInMember()
   if (!member) redirect('/sign-in')
   if (!member.isAdmin) redirect('/community/coaching')

@@ -1,13 +1,15 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  access: { ok: true, isAdmin: true, assignedSlugs: null } as Record<string, unknown>,
+  session: { userId: 'user_staff', sessionClaims: { metadata: { role: 'admin' } } } as Record<string, unknown>,
+  assigned: [] as string[],
   reg: { id: 'reg-1', type: 'group', event_slug: 'nevada', event_title: 'Nevada', school_name: 'S', school_address_state: 'NV' } as Record<string, unknown> | null,
   add: vi.fn(),
   log: vi.fn(),
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess: async () => h.access }))
+vi.mock('@clerk/nextjs/server', () => ({ auth: async () => h.session }))
 vi.mock('@/lib/activity-log', () => ({
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'staff-1', actorLabel: 'Staff' }),
   logActivity: h.log,
@@ -18,8 +20,14 @@ vi.mock('@/lib/group-participant-add', () => ({
 }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
-    from: () => {
-      const chain = { select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: h.reg, error: null }) }
+    from: (table: string) => {
+      const rows = () => h.assigned.map((event_slug) => ({ clerk_user_id: h.session.userId, event_slug, tenant_id: null }))
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        maybeSingle: async () => ({ data: h.reg, error: null }),
+        then: (resolve: (v: unknown) => unknown) => resolve({ data: table === 'event_manager_assignments' ? rows() : [], error: null }),
+      }
       return chain
     },
   }),
@@ -27,26 +35,36 @@ vi.mock('@/lib/supabase', () => ({
 
 import { POST } from './route'
 
+const asEventManager = (assigned: string[]) => {
+  h.session = { userId: 'user_em', sessionClaims: { metadata: { role: 'event_manager' } } }
+  h.assigned = assigned
+}
+
 const call = (body: unknown = { first_name: 'A', last_name: 'B', email: 'a@example.com', date_of_birth: '2011-05-12' }) =>
   POST(new Request('http://x', { method: 'POST', body: JSON.stringify(body) }), { params: Promise.resolve({ id: 'reg-1' }) })
 
 describe('POST /api/admin/registrations/[id]/participants', () => {
   beforeEach(() => {
-    h.access = { ok: true, isAdmin: true, assignedSlugs: null }
+    h.session = { userId: 'user_staff', sessionClaims: { metadata: { role: 'admin' } } }
+    h.assigned = []
     h.reg = { id: 'reg-1', type: 'group', event_slug: 'nevada', event_title: 'Nevada', school_name: 'S', school_address_state: 'NV' }
     h.add.mockReset().mockResolvedValue({ status: 201, body: { participant: { id: 'p-1' } }, memberId: 'm-1' })
     h.log.mockReset()
   })
 
   it('refuses anyone who is not staff', async () => {
-    h.access = { ok: false, status: 403 }
+    h.session = { userId: 'user_student', sessionClaims: { metadata: { role: 'student' } } }
     expect((await call()).status).toBe(403)
     expect(h.add).not.toHaveBeenCalled()
   })
 
-  it('refuses an event manager for an event that is not theirs', async () => {
-    h.access = { ok: true, isAdmin: false, assignedSlugs: ['colorado'] }
-    expect((await call()).status).toBe(403)
+  it('refuses an event manager for an event that is not theirs, as if the group were missing', async () => {
+    asEventManager(['colorado'])
+    const refused = await call()
+    expect(refused.status).toBe(404)
+    h.reg = null
+    const missing = await call()
+    expect(await refused.json()).toEqual(await missing.json())
     expect(h.add).not.toHaveBeenCalled()
   })
 
@@ -66,7 +84,7 @@ describe('POST /api/admin/registrations/[id]/participants', () => {
   })
 
   it('lets the event manager of that event add', async () => {
-    h.access = { ok: true, isAdmin: false, assignedSlugs: ['nevada'] }
+    asEventManager(['nevada'])
     expect((await call()).status).toBe(201)
   })
 

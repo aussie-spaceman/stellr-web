@@ -41,12 +41,13 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 // change must come with its tenant-host decision.
 const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
-  tenant_staff: 0,
+  platform_destined: 9,
+  tenant_staff: 31,
   participant: 127,
   public: 129,
   webhook: 12,
   cron: 23,
-  stellr_only: 204,
+  stellr_only: 164,
 }
 const MANIFEST_TOTAL = 495
 

@@ -63,6 +63,8 @@
 /lib/tenancy/host-pure.ts           @aussie-spaceman
 /lib/tenancy/tenant-surface.ts      @aussie-spaceman
 /lib/tenancy/load-scoped.ts         @aussie-spaceman
+/lib/tenancy/load-scoped-mode.ts    @aussie-spaceman
+/lib/tenancy/event-in-scope.ts      @aussie-spaceman
 /lib/tenancy/scope-context.ts       @aussie-spaceman
 /lib/registration/eligibility.ts    @aussie-spaceman
 /test/tenant-surface-routes.test.ts @aussie-spaceman
@@ -91,6 +93,11 @@
 /test/route-manifest.test.ts        @aussie-spaceman
 /test/authz-ratchet.test.ts         @aussie-spaceman
 /test/authz-load-closure.test.ts    @aussie-spaceman
+/test/authz-pilot-c13.test.ts       @aussie-spaceman
+/test/platform-destined-c15.test.ts @aussie-spaceman
+/test/events-admin-records-c16.test.ts @aussie-spaceman
+/test/events-admin-paperwork-c17.test.ts @aussie-spaceman
+/test/training-tracking-stellr-scope.test.ts @aussie-spaceman
 /test/fixtures/authz-legacy.ts      @aussie-spaceman
 /scripts/authz-idioms.mjs           @aussie-spaceman
 /scripts/idor-canary.mjs            @aussie-spaceman

@@ -6,12 +6,12 @@ import { listModules } from '@/lib/training'
 import { listMentoringTiers } from '@/lib/mentoring'
 import { CreateCohortForm } from '@/components/community/mentoring/CreateCohortForm'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
-import { requireAdminPage } from '@/lib/admin-auth'
+import { authz } from '@/lib/authz'
 
 export const metadata = { title: 'Admin · New cohort' }
 
 export default async function AdminNewCohortPage() {
-  await requireAdminPage()
+  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring/new' })
   const member = await getSignedInMember()
   if (!member) redirect('/sign-in')
 

@@ -1,18 +1,16 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { attachAllowed, resolveAccessObject } from '@/lib/access-objects'
+import { isStellrAdmin } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
 
-function requireAdmin(sessionClaims: Record<string, unknown> | null | undefined) {
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  return role === 'admin'
-}
+// What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
+const auditedId = new WeakMap<Request, string>()
 
 // GET /api/admin/containers/[id]/contents — training modules assigned to this container
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!requireAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isStellrAdmin({ route: '/api/admin/containers/[id]/contents' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()
@@ -50,10 +48,19 @@ const postSchema = z.object({
   dueAt: z.string().nullable().optional(),
 })
 
+export const POST = withAudit(
+  ({ args: [req] }) => ({
+    action: 'container.content.add',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'container_contents', id: auditedId.get(req) ?? null },
+  }),
+  addContent,
+)
+
 // POST /api/admin/containers/[id]/contents — assign a training module to this container
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!requireAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function addContent(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await isStellrAdmin({ route: '/api/admin/containers/[id]/contents' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const parsed = postSchema.safeParse(await req.json().catch(() => null))
@@ -88,19 +95,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  auditedId.set(req, data.id)
   return NextResponse.json({ id: data.id })
 }
 
 const deleteSchema = z.object({ id: z.guid() })
 
+export const DELETE = withAudit(
+  ({ args: [req] }) => ({
+    action: 'container.content.remove',
+    actor: { session: true },
+    tenant: { stellr: true },
+    target: { table: 'container_contents', id: auditedId.get(req) ?? null },
+  }),
+  removeContent,
+)
+
 // DELETE /api/admin/containers/[id]/contents — remove an assignment
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!requireAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+async function removeContent(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await isStellrAdmin({ route: '/api/admin/containers/[id]/contents' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: containerId } = await params
   const parsed = deleteSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+  auditedId.set(req, parsed.data.id)
 
   const db = supabaseServer()
   const { error } = await db

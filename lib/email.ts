@@ -278,11 +278,13 @@ export function individualConfirmationEmail({
 export function groupConfirmationEmail({
   teacherFirstName, teacherLastName, schoolName, eventTitle,
   participantCount, registrationId, paymentMethod, detailsMethod, spreadsheetUrl, joinUrl,
-  remainingCount = 0, payUrl, checkInCodeUrl,
+  remainingCount = 0, payUrl, checkInCodeUrl, invoiceSeats,
 }: {
   teacherFirstName: string; teacherLastName: string; schoolName: string
   eventTitle: string; participantCount: number; registrationId: string
-  paymentMethod: 'invoice' | 'card' | 'individual'
+  paymentMethod: 'invoice' | 'invoice_some' | 'teacher_share' | 'card' | 'individual'
+  /** "Invoice for some": the places on the invoice. */
+  invoiceSeats?: number
   detailsMethod: 'add_now' | 'spreadsheet' | 'email_link'
   spreadsheetUrl?: string; joinUrl?: string
   // Card payments: the durable pay page for this registration. This email goes
@@ -304,6 +306,10 @@ export function groupConfirmationEmail({
       ? `<li style="margin-bottom:8px"><strong>Payment:</strong> Your group is confirmed once the card payment for all ${seats} goes through.${payUrl ? ` If you didn't finish paying, use this link whenever you're ready: <a href="${payUrl}" style="color:#1e3a5f;font-weight:600">Pay now →</a>` : ''} Already paid? Your confirmation is on its way — nothing more to do.</li>`
     : paymentMethod === 'individual'
       ? '<li style="margin-bottom:8px"><strong>Payment:</strong> Each group member will receive their own payment link by email. Each member\'s spot is confirmed once they complete their individual payment.</li>'
+    : paymentMethod === 'teacher_share'
+      ? '<li style="margin-bottom:8px"><strong>Payment:</strong> Teachers pay nothing directly. Each student gets their own payment link by email, which includes an equal share of the teachers\' cost. That share can only go down: if more students join after some have paid, the difference goes back to them after the event.</li>'
+    : paymentMethod === 'invoice_some'
+      ? `<li style="margin-bottom:8px"><strong>Payment:</strong> An invoice for ${invoiceSeats ?? 0} place${invoiceSeats === 1 ? '' : 's'} will be emailed to you. Everyone else gets their own payment link by email, and each person's spot is confirmed once their place is paid.</li>`
       : `<li style="margin-bottom:8px"><strong>Payment:</strong> An invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed to you within 1–2 business days. Registration is confirmed once payment is received.</li>`
 
   // A partial add_now (remainingCount > 0) still has people to provide later, so it
@@ -388,6 +394,10 @@ export function groupConfirmationEmail({
       ? `Payment: your group is confirmed once the card payment for all ${seats} goes through.${payUrl ? ` Didn't finish paying? Pay here whenever you're ready: ${payUrl}` : ''}`
     : paymentMethod === 'individual'
       ? 'Payment: each group member will receive their own payment link by email; each spot is confirmed once that member pays.'
+    : paymentMethod === 'teacher_share'
+      ? 'Payment: teachers pay nothing directly. Each student gets their own payment link, which includes an equal share of the teachers\' cost; that share can only go down, and any difference goes back after the event.'
+    : paymentMethod === 'invoice_some'
+      ? `Payment: an invoice for ${invoiceSeats ?? 0} place${invoiceSeats === 1 ? '' : 's'} will be emailed to you; everyone else gets their own payment link by email, and each spot is confirmed once that place is paid.`
       : `Payment: an invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed within 1–2 business days; registration is confirmed once paid.`
   const registrationText =
     rosterComplete

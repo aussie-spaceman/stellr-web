@@ -1,5 +1,6 @@
 import { normalizeEventRole, normalizeEmail } from '@/lib/member-enums'
 import { resolveEmailPair, schoolEmailToStore } from '@/lib/member-email'
+import { registrationInvoiceSeats } from '@/lib/group-payer'
 
 // POST /api/register/group, the shape of what comes in. The route names each field
 // itself (see the note there); nothing here validates: these are the types the
@@ -18,6 +19,8 @@ export interface ParticipantPayload {
   // Member-ID linking (organiser entered an existing Stellr Member ID + Accept).
   linked?: boolean
   existing_membership_id?: string
+  // "Invoice for some": this person's place goes on the organizer's invoice.
+  on_invoice?: boolean
   // Set during server-side resolution — the linked member's id. When present the
   // participant is built from the on-file record and the member is NOT overwritten.
   _linked_member_id?: string | null
@@ -49,9 +52,33 @@ export interface GroupBody {
   details_method: string
   payment_method: string
   member_pays_individually: boolean
+  /** "Invoice for some": the registrant's own place goes on the invoice. */
+  registrant_on_invoice?: boolean
+  /** "Invoice for some": how people who join later pay ('group' = the invoice, 'self' = own link). */
+  late_joiner_payer?: string
+  /** "Students share the teacher's cost": how many students the teacher expects. */
+  share_estimate?: number
   additional_adults?: ParticipantPayload[] | null
   students?: ParticipantPayload[] | null
   school_dpa_agreed?: unknown
+}
+
+/** The ways the form can say a group pays. 'none' is a campaign or a free event. */
+export const GROUP_PAYMENT_METHODS = ['invoice', 'invoice_some', 'teacher_share', 'card', 'individual', 'none'] as const
+
+/**
+ * The places on the organizer's invoice: everyone for 'invoice', the ticked people
+ * (plus unfilled places when later joiners go on it) for 'invoice_some', else 0.
+ */
+export function invoiceSeatsFor(body: Pick<GroupBody, 'payment_method' | 'total_participants' | 'registrant_on_invoice' | 'late_joiner_payer' | 'details_method' | 'additional_adults' | 'students'>): number {
+  if (body.payment_method === 'invoice') return body.total_participants ?? 0
+  if (body.payment_method !== 'invoice_some') return 0
+  return registrationInvoiceSeats({
+    declaredSeats: body.total_participants ?? 0,
+    registrantOnInvoice: body.registrant_on_invoice === true,
+    entered: body.details_method === 'add_now' ? enteredPeople(body) : [],
+    lateJoinerPayer: body.late_joiner_payer === 'group' ? 'group' : 'self',
+  })
 }
 
 // deep review REG-5: a sane upper bound on a single group registration. The

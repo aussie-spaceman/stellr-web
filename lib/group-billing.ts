@@ -4,6 +4,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { runAfterResponse } from '@/lib/after-response'
+import { loadPayerPeople, seatsOnInvoice } from '@/lib/group-payer'
 
 // What a group pays when its roster changes after registration (29 Oct 2026).
 //
@@ -97,12 +98,17 @@ export interface GroupRegistration {
   teacher_member_id: string | null
   invoice_coupon_id: string | null
   invoice_promotion_code: string | null
+  /** Set only on an "Invoice for some" group: how people who join later pay (lib/group-payer.ts). */
+  late_joiner_payer: string | null
+  /** Set only on a group whose students share the teacher's cost (lib/teacher-share.ts). */
+  share_estimate?: number | null
+  share_first_paid_at?: string | null
 }
 
 const REG_COLUMNS =
   'id, type, event_slug, event_title, status, invoice_requested, invoice_paid_at, member_pays_individually, ' +
   'stripe_payment_intent_id, amount_due_cents, adult_count, student_count, teacher_first_name, teacher_last_name, ' +
-  'teacher_email, teacher_member_id, invoice_coupon_id, invoice_promotion_code'
+  'teacher_email, teacher_member_id, invoice_coupon_id, invoice_promotion_code, late_joiner_payer, share_estimate, share_first_paid_at'
 
 // ── Pure rules ───────────────────────────────────────────────────────────────
 
@@ -260,6 +266,14 @@ export async function paidSeatCount(db: Db, registrationId: string): Promise<num
     .eq('registration_id', registrationId)
     .eq('individual_payment_status', 'paid')
   return count ?? 0
+}
+
+/**
+ * The places the group's own invoice (or card payment) has to cover now: declared
+ * places, less those paid or being paid one person at a time (lib/group-payer.ts).
+ */
+export async function invoiceSeatCount(db: Db, reg: GroupRegistration): Promise<number> {
+  return seatsOnInvoice((reg.adult_count ?? 0) + (reg.student_count ?? 0), await loadPayerPeople(db, reg.id), reg)
 }
 
 /** The event's per-place list price, from its Stripe Price. */
@@ -654,9 +668,9 @@ async function writeCounts(
   before: { adult: number; student: number },
   counts: { adult: number; student: number },
   perSeat: number | null,
-  paidSeats: number,
+  seatsToBill: (declaredSeats: number) => number,
 ): Promise<boolean> {
-  const seats = billableSeats(counts.adult + counts.student, paidSeats)
+  const seats = seatsToBill(counts.adult + counts.student)
   const update: Record<string, unknown> = { adult_count: counts.adult, student_count: counts.student }
   if (perSeat != null && perSeat > 0) update.amount_due_cents = seats * perSeat
   const { data, error } = await db.from('registrations').update(update)
@@ -683,6 +697,23 @@ export async function alertStaff(body: string) {
  * 'failed', because the roster change itself has already happened.
  */
 export async function applyRosterChange(
+  db: Db,
+  stripe: Stripe | null,
+  input: Parameters<typeof applyRosterChangeToBilling>[2],
+): Promise<BillingOutcome> {
+  const outcome = await applyRosterChangeToBilling(db, stripe, input)
+  // A group sharing the teacher's cost: the share follows the roster (it only
+  // goes down once someone has paid). Lazy: lib/teacher-share reads Sanity.
+  try {
+    const { refreshShare } = await import('@/lib/teacher-share')
+    await refreshShare(db, input.registrationId)
+  } catch (e) {
+    console.error('[group-billing] share refresh failed (non-fatal):', e, { registrationId: input.registrationId })
+  }
+  return outcome
+}
+
+async function applyRosterChangeToBilling(
   db: Db,
   stripe: Stripe | null,
   input: {
@@ -719,9 +750,12 @@ export async function applyRosterChange(
     || (stripe ? (await eventSeatPrice(stripe, reg.event_slug))?.unitCents : null)
     || null
 
-  // Per-person groups are owed seat by seat; for the others, places already paid
-  // individually stay out of what the group's own payment has to cover.
-  const paidSeats = mode === 'individual' ? 0 : await paidSeatCount(db, reg.id)
+  // Per-person groups are owed seat by seat; for the others, places paid (or being
+  // paid) one person at a time stay out of what the group's own payment covers.
+  // Read after the change, so a person just added or removed is counted.
+  const people = mode === 'individual' ? [] : await loadPayerPeople(db, reg.id)
+  const seatsToBill = (declaredSeats: number) =>
+    mode === 'individual' ? declaredSeats : seatsOnInvoice(declaredSeats, people, reg as GroupRegistration)
 
   // Plan and write together: if another change moved the counts first, plan again.
   let plan: SeatPlan | null = null
@@ -751,7 +785,7 @@ export async function applyRosterChange(
       const toStudents = Math.min(delta, students)
       nextCounts = adjustCounts(adjustCounts(counts, 'student', toStudents), 'adult', delta - toStudents)
     }
-    if (await writeCounts(db, reg, counts, nextCounts, perSeat, paidSeats)) break
+    if (await writeCounts(db, reg, counts, nextCounts, perSeat, seatsToBill)) break
     if (attempt === COUNT_WRITE_ATTEMPTS - 1) {
       console.error('[group-billing] seat counts kept changing; gave up writing them', { registrationId: reg.id })
     }
@@ -805,7 +839,7 @@ export async function applyRosterChange(
 
   // The removed place had been paid individually, so the invoice was never for it
   // and doesn't change.
-  if (plan.invoice === 'revise' && current?.row && current.row.seats === billableSeats(plan.seatsAfter, paidSeats)) {
+  if (plan.invoice === 'revise' && current?.row && current.row.seats === seatsToBill(plan.seatsAfter)) {
     return { message: `Your group is now ${plural(plan.seatsAfter, 'participant')}.`, action: 'none', seatsAfter: plan.seatsAfter }
   }
 
@@ -919,6 +953,18 @@ export async function withInvoiceLock<T>(db: Db, registrationId: string, work: (
   }
 }
 
+/**
+ * Marks the group's unpaid invoice for an update and waits out the quiet period
+ * after the response. For changes that aren't a roster change: who in a split
+ * group is on the invoice (lib/group-payment-change.ts). False if it couldn't be
+ * scheduled.
+ */
+export async function queueInvoiceSync(db: Db, stripe: Stripe, registrationId: string): Promise<boolean> {
+  if (!(await markInvoiceSyncDue(db, registrationId))) return false
+  scheduleInvoiceSync(db, stripe, registrationId)
+  return true
+}
+
 /** Waits out the quiet period after the response, then settles the invoice if this change was the last. */
 function scheduleInvoiceSync(db: Db, stripe: Stripe, registrationId: string) {
   runAfterResponse('group-billing:invoice-sync', async () => {
@@ -971,7 +1017,7 @@ async function settleGroupInvoice(
   const current = await currentSeatsInvoice(db, stripe, reg)
   if (!current) return 'none'
   const { invoice, row } = current
-  const seats = billableSeats((reg.adult_count ?? 0) + (reg.student_count ?? 0), await paidSeatCount(db, reg.id))
+  const seats = await invoiceSeatCount(db, reg)
   const invoiceSeats = row?.seats ?? null
   noteInvoiceSeats(invoiceSeats)
   if (invoiceSeats === seats) return 'none'
@@ -1098,7 +1144,7 @@ export async function groupInvoiceSummary(db: Db, stripe: Stripe | null, registr
   if (!reg || reg.type !== 'group') return null
   const current = stripe && reg.invoice_requested ? await currentSeatsInvoice(db, stripe, reg).catch(() => null) : null
   const price = current?.row?.per_seat_cents ?? (stripe ? (await eventSeatPrice(stripe, reg.event_slug))?.unitCents ?? null : null)
-  const seats = billableSeats((reg.adult_count ?? 0) + (reg.student_count ?? 0), reg.invoice_requested ? await paidSeatCount(db, reg.id) : 0)
+  const seats = reg.invoice_requested ? await invoiceSeatCount(db, reg) : (reg.adult_count ?? 0) + (reg.student_count ?? 0)
   const invoiceSeats = current?.row?.seats ?? null
   const needsCorrection = !!stripe && !!current && !!price && invoiceNeedsCorrection({
     seats,
@@ -1180,7 +1226,7 @@ async function applyGroupDiscount(
     .eq('id', reg.id)
   if (error) return { ok: false, error: 'Could not save the discount.' }
 
-  const seats = billableSeats((reg.adult_count ?? 0) + (reg.student_count ?? 0), await paidSeatCount(db, reg.id)) || current.row?.seats || 0
+  const seats = (await invoiceSeatCount(db, reg)) || current.row?.seats || 0
   const perSeat = current.row?.per_seat_cents || (await eventSeatPrice(stripe, reg.event_slug))?.unitCents || 0
   if (seats <= 0 || perSeat <= 0) return { ok: false, error: 'Could not work out the group size or price.' }
   const customerId = await invoiceCustomer(db, stripe, reg, current.invoice)
@@ -1223,7 +1269,7 @@ async function correctGroupInvoice(
   if (reg.invoice_paid_at) return { ok: false, error: 'This invoice has already been paid, so it can no longer be changed.' }
   const current = await currentSeatsInvoice(db, stripe, reg)
   if (!current) return { ok: false, error: 'No invoice has been sent yet. Use "Finish setup…" to send it first.' }
-  const seats = billableSeats((reg.adult_count ?? 0) + (reg.student_count ?? 0), await paidSeatCount(db, reg.id))
+  const seats = await invoiceSeatCount(db, reg)
   const perSeat = current.row?.per_seat_cents || (await eventSeatPrice(stripe, reg.event_slug))?.unitCents || 0
   if (seats <= 0 || perSeat <= 0) return { ok: false, error: 'Could not work out the group size or price.' }
   const status = current.invoice.status ?? null

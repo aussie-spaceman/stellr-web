@@ -18,7 +18,7 @@ export interface RegistrationPaymentFacts {
 
 /** Roster pill states, derived from the same facts as registrationPaid(). */
 export type PaymentPillState =
-  | 'invoice_issued' | 'invoice_paid' | 'link_unpaid' | 'link_paid' | 'waived'
+  | 'invoice_issued' | 'invoice_paid' | 'link_unpaid' | 'link_paid' | 'waived' | 'covered'
 
 // The admin roster's payment pill. Lives here rather than inline in
 // lib/event-admin.ts so the mapping is a pure function that can be tested
@@ -27,6 +27,11 @@ export function paymentPill(facts: RegistrationPaymentFacts): PaymentPillState {
   const paid = registrationPaid(facts)
   // A place paid individually before the group moved to an invoice is a real receipt.
   if (facts.individualPaymentStatus === 'paid') return 'link_paid'
+  // A person paying by their own link in a group where the rest are invoiced
+  // ("Invoice for some", lib/group-payer.ts) owes that link, not the invoice.
+  if (facts.individualPaymentStatus === 'pending') return 'link_unpaid'
+  // A teacher whose place the students' shares pay for (lib/teacher-share.ts).
+  if (facts.individualPaymentStatus === 'covered') return 'covered'
   if (facts.invoiceRequested) return paid ? 'invoice_paid' : 'invoice_issued'
   // Checked before `paid` because registrationPaid() counts 'waived' as paid —
   // settled, but no money changed hands, which staff reconciling payments need
@@ -38,6 +43,11 @@ export function paymentPill(facts: RegistrationPaymentFacts): PaymentPillState {
 export function registrationPaid(facts: RegistrationPaymentFacts): boolean {
   // First: a place someone paid for stays paid if the group later changes how it pays.
   if (facts.individualPaymentStatus === 'paid') return true
+  // Their own link is still unpaid, whatever the group's invoice or status says:
+  // an invoice paid for the others, or a confirmed group, doesn't cover them.
+  if (facts.individualPaymentStatus === 'pending') return false
+  // Covered by the students' shares: nothing for them to pay.
+  if (facts.individualPaymentStatus === 'covered') return true
   if (facts.invoiceRequested) return facts.invoicePaidAt != null
   return (
     facts.status === 'confirmed' ||

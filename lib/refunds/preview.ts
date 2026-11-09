@@ -29,7 +29,7 @@ export interface RefundPreview {
 export const EMPTY_REFUND_PREVIEW: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysSincePayment: null, guaranteeDays: GUARANTEE_DAYS, options: {}, hasPaymentRef: false, alreadyRefunded: false, externalRefund: null }
 
 type PreviewParticipant = Parameters<typeof resolveRefundBasis>[2] & { id: string }
-const PREVIEW_COLUMNS = 'id, registration_id, individual_payment_status, stripe_payment_intent_id'
+const PREVIEW_COLUMNS = 'id, registration_id, individual_payment_status, stripe_payment_intent_id, payer, base_paid_cents, share_paid_cents'
 
 // Read-only computation of what a participant deletion would refund, for the
 // admin delete dialog. Mirrors executeRefund's resolution without mutating. With a

@@ -15,6 +15,7 @@ import { requireStripe } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { confirmRegistration } from '@/lib/registration-confirm'
 import { notePaymentAfterMethodChange } from '@/lib/group-payment-change'
+import { recordSeatShare } from '@/lib/teacher-share'
 import { recordGroupInvoicePaid } from '@/lib/group-billing'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { PRICE_CHANGE_EVENTS, revalidatePriceCaches } from '@/lib/price-cache'
@@ -644,6 +645,8 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
       if (!(await refundDuplicateIndividualPayment(session, { registrationId, ...seat }, stripe))) {
         await markIndividualPayment(registrationId, seat)
         await capturePaymentIntent(session, { registrationId, ...seat })
+        // A group sharing the teacher's cost: what went to the place and the share.
+        await recordSeatShare(supabaseServer(), registrationId, participantId, session.metadata)
         await persistStripeCustomer(session)
         await logEventPayment(session, registrationId, seat)
         await notePaymentAfterMethodChange(supabaseServer(), registrationId, 'seat')

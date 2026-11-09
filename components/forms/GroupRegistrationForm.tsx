@@ -27,13 +27,15 @@ import { StepBar as SharedStepBar } from '@/components/registration/StepBar'
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegistrantRole = 'teacher' | 'student_manager'
 type DetailsMethod = 'add_now' | 'spreadsheet' | 'email_link'
-type PaymentMethod = 'invoice' | 'card' | 'individual'
+type PaymentMethod = 'invoice' | 'invoice_some' | 'teacher_share' | 'card' | 'individual'
 
 interface AdultData {
   first_name: string; last_name: string; nickname: string; email: string; school_email: string; phone: string
   date_of_birth: string; gender: string; t_shirt_size: string
   ethnicity: string[]; dietary_requirements: string[]; health_conditions: string
   existing_membership_id: string
+  // "Invoice for some": this person's place goes on the organizer's invoice.
+  on_invoice?: boolean
   // True when the organiser entered a Member ID and accepted the match — the
   // route resolves that ID server-side and builds the participant from the
   // member's on-file record, leaving the other fields untouched.
@@ -49,6 +51,7 @@ interface StudentData {
   emergency_contact_relationship: string
   existing_membership_id: string
   linked: boolean
+  on_invoice?: boolean
 }
 
 function emptyAdult(): AdultData {
@@ -611,6 +614,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   const [studentCount, setStudentCount] = useState(2)
   const [detailsMethod, setDetailsMethod] = useState<DetailsMethod>('add_now')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('invoice')
+  // "Invoice for some": the registrant's own place, and how people who join later pay.
+  const [registrantOnInvoice, setRegistrantOnInvoice] = useState(true)
+  const [lateJoinerPayer, setLateJoinerPayer] = useState<'self' | 'group'>('self')
+  // "Students share the teacher's cost": how many students the teacher expects.
+  const [shareEstimate, setShareEstimate] = useState('')
   const [additionalAdults, setAdditionalAdults] = useState<AdultData[]>([])
   const [students, setStudents] = useState<StudentData[]>([emptyStudent(), emptyStudent()])
   const [expandedAdult, setExpandedAdult] = useState<number | null>(null)
@@ -908,7 +916,15 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
           // the gap this fixes. Campaigns keep their own confirmation email.
           member_pays_individually: isCampaign
             ? false
-            : isFree || paymentMethod === 'individual',
+            : isFree || paymentMethod === 'individual' || paymentMethod === 'teacher_share',
+          ...(paymentMethod === 'teacher_share' && !isCampaign && !isFree
+            ? { share_estimate: Number(shareEstimate) || studentCount }
+            : {}),
+          // "Invoice for some": who is on the invoice (each person's on_invoice rides
+          // along below) and how people who join later pay.
+          ...(paymentMethod === 'invoice_some' && !isCampaign && !isFree
+            ? { registrant_on_invoice: registrantOnInvoice, late_joiner_payer: lateJoinerPayer }
+            : {}),
           // For SM: all additional_adults entries are genuinely additional (PoC is adults[0])
           // For teacher: additional_adults excludes teacher themselves. Map with the
           // ORIGINAL index (so PoC role detection holds), then drop blank/deferred
@@ -1346,9 +1362,37 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
           <h3 id={paymentMethodLabelId} className="font-semibold text-brand-blue-dark">How will the group pay?</h3>
           <Select aria-labelledby={paymentMethodLabelId} value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}>
             <option value="invoice">Have an invoice emailed to you</option>
+            <option value="invoice_some">Invoice for some of the group</option>
+            <option value="teacher_share">Students share the teacher’s cost</option>
             <option value="card">Pay now via credit card</option>
             <option value="individual">Group members will pay individually</option>
           </Select>
+          {paymentMethod === 'teacher_share' && (
+            <div className="space-y-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm">
+              <p className="font-medium text-ink">Teachers pay nothing directly. Each student pays for their own place by link, plus an equal share of the teachers’ full price.</p>
+              <Field label="How many students do you expect to bring?" hint="The teachers’ cost is split across this number, or across the students who actually join if that’s more.">
+                <Input type="number" inputMode="numeric" min={1} max={200} value={shareEstimate || String(studentCount)}
+                  onChange={(e) => setShareEstimate(e.target.value)} className="max-w-[8rem]" />
+              </Field>
+              <ul className="list-disc space-y-1 pl-5 text-content-muted">
+                <li>Discount codes apply to a student’s own place, never to the teachers’ share.</li>
+                <li>The share can only go down. If more students join after some have paid, the difference goes back to them after the event.</li>
+              </ul>
+            </div>
+          )}
+          {paymentMethod === 'invoice_some' && (
+            <InvoiceSomePicker
+              registrantOnInvoice={registrantOnInvoice}
+              onRegistrantChange={setRegistrantOnInvoice}
+              people={detailsMethod === 'add_now' ? [
+                ...additionalAdults.map((a, i) => ({ key: `a${i}`, person: a, kind: 'Adult' as const, set: (v: boolean) => setAdditionalAdults((prev) => prev.map((x, j) => (j === i ? { ...x, on_invoice: v } : x))) })),
+                ...students.map((st, i) => ({ key: `s${i}`, person: st, kind: 'Student' as const, set: (v: boolean) => setStudents((prev) => prev.map((x, j) => (j === i ? { ...x, on_invoice: v } : x))) })),
+              ] : []}
+              totalParticipants={registrantRole === 'student_manager' ? 1 + adultCount + studentCount : adultCount + studentCount}
+              lateJoinerPayer={lateJoinerPayer}
+              onLateJoinerChange={setLateJoinerPayer}
+            />
+          )}
           {paymentMethod === 'invoice' && <p className="text-sm text-content-muted">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
           {paymentMethod === 'card' && (
             <p className="text-sm text-content-muted">
@@ -1441,6 +1485,49 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
       </div>
 
       <p className="text-xs text-content-faint text-center">By submitting you confirm all details are accurate.</p>
+    </div>
+  )
+}
+
+// ── "Invoice for some": who goes on the invoice ─────────────────────────────
+// The registrant is ticked by default (the request that started this: a teacher
+// wanting an invoice for herself, her students paying their own way). Only people
+// already entered can be ticked; anyone who joins later follows the choice below.
+function InvoiceSomePicker({
+  registrantOnInvoice, onRegistrantChange, people, totalParticipants, lateJoinerPayer, onLateJoinerChange,
+}: {
+  registrantOnInvoice: boolean
+  onRegistrantChange: (v: boolean) => void
+  people: { key: string; person: { first_name: string; last_name: string; email: string; linked: boolean; on_invoice?: boolean }; kind: 'Adult' | 'Student'; set: (v: boolean) => void }[]
+  totalParticipants: number
+  lateJoinerPayer: 'self' | 'group'
+  onLateJoinerChange: (v: 'self' | 'group') => void
+}) {
+  // The same people the form submits: started or member-linked slots.
+  const entered = people.filter(({ person: p }) => p.linked || p.first_name || p.last_name || p.email)
+  const unfilled = Math.max(0, totalParticipants - 1 - entered.length)
+  const onInvoice = (registrantOnInvoice ? 1 : 0)
+    + entered.filter(({ person }) => person.on_invoice).length
+    + (lateJoinerPayer === 'group' ? unfilled : 0)
+  const label = (p: { first_name: string; last_name: string; email: string; linked: boolean }) =>
+    `${p.first_name} ${p.last_name}`.trim() || p.email || (p.linked ? 'Linked member' : 'Unnamed')
+  return (
+    <div className="space-y-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm">
+      <Fieldset legend="Who goes on the invoice?" hint="Everyone not ticked gets their own payment link by email.">
+        <Choice label="You" checked={registrantOnInvoice} onChange={() => onRegistrantChange(!registrantOnInvoice)} />
+        {entered.map(({ key, person, kind, set }) => (
+          <Choice key={key} label={`${label(person)} (${kind})`} checked={!!person.on_invoice} onChange={() => set(!person.on_invoice)} />
+        ))}
+      </Fieldset>
+      <Fieldset legend="People who join later" hint={unfilled > 0 ? `${unfilled} ${unfilled === 1 ? 'place is' : 'places are'} still to be filled.` : undefined}>
+        <Choice type="radio" name="late-joiner-payer" label="Pay for their own place by link" checked={lateJoinerPayer === 'self'} onChange={() => onLateJoinerChange('self')} />
+        <Choice type="radio" name="late-joiner-payer" label="Go on the invoice" checked={lateJoinerPayer === 'group'} onChange={() => onLateJoinerChange('group')} />
+      </Fieldset>
+      <p className={onInvoice > 0 ? 'font-medium text-ink' : 'font-medium text-danger'}>
+        {onInvoice > 0
+          ? `The invoice covers ${onInvoice} ${onInvoice === 1 ? 'place' : 'places'}, emailed to you. Registration for each place is confirmed once it's paid.`
+          : 'Tick at least one person for the invoice, or choose "Group members will pay individually".'}
+      </p>
     </div>
   )
 }

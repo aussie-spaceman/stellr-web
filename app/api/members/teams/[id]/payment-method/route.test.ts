@@ -62,7 +62,7 @@ describe('POST /api/members/teams/[id]/payment-method', () => {
   it('lets the teacher change it, as an organizer', async () => {
     const res = await post()
     expect(res.status).toBe(200)
-    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'reg-1', 'individual', expect.objectContaining({ by: 'organizer', memberId: 'm-1' }))
+    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'reg-1', { method: 'individual' }, expect.objectContaining({ by: 'organizer', memberId: 'm-1' }))
   })
 
   it('lets the Teacher POC change it', async () => {
@@ -94,9 +94,18 @@ describe('POST /api/members/teams/[id]/payment-method', () => {
     expect((await post()).status).toBe(401)
   })
 
-  it('accepts only the three existing methods', async () => {
+  it('accepts only the methods the dialog offers', async () => {
     expect((await post({ method: 'purchase_order' })).status).toBe(400)
     expect(h.change).not.toHaveBeenCalled()
+  })
+
+  it('invoice for some needs who is on the invoice and how later joiners pay', async () => {
+    expect((await post({ method: 'invoice_some' })).status).toBe(400)
+    expect(h.change).not.toHaveBeenCalled()
+    const ids = ['3f1c6c2e-8a6b-4f53-9a3e-2f7a1b0c9d11']
+    expect((await post({ method: 'invoice_some', invoiceParticipantIds: ids, lateJoinerPayer: 'self' })).status).toBe(200)
+    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'reg-1',
+      { method: 'invoice_some', invoiceParticipantIds: ids, lateJoinerPayer: 'self' }, expect.objectContaining({ by: 'organizer' }))
   })
 
   it('passes on a refusal', async () => {

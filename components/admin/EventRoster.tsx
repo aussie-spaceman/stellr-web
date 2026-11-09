@@ -34,6 +34,8 @@ const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> =
   // Free event — settled, but nothing was ever charged. Deliberately not green:
   // staff reconciling payments need to tell this apart from money received.
   waived:         { label: 'No Fee',           className: 'bg-brand-hairline text-brand-muted-soft' },
+  // A teacher whose place the students' shares pay for (lib/teacher-share.ts).
+  covered:        { label: 'Shared by Students', className: 'bg-brand-hairline text-brand-muted-soft' },
 }
 
 // Label and colour both come from lib/docusign-status now. This file used to

@@ -1,4 +1,5 @@
 import type Stripe from 'stripe'
+import { payerOf } from '@/lib/group-payer'
 import type { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/events/repo'
 import { currentSeatsInvoice, invoicePaymentIntent, loadRegistration, openAdditionalInvoiceFor, perSeatPaidCents } from '@/lib/group-billing'
@@ -40,6 +41,9 @@ interface ParticipantFacts {
   registration_id: string
   individual_payment_status: string | null
   stripe_payment_intent_id: string | null
+  payer?: string | null
+  base_paid_cents?: number | null
+  share_paid_cents?: number | null
 }
 
 export async function resolveRefundBasis(db: Db, stripe: Stripe | null, p: ParticipantFacts): Promise<RefundBasis | null> {
@@ -48,9 +52,12 @@ export async function resolveRefundBasis(db: Db, stripe: Stripe | null, p: Parti
   const { data: extra } = await db.from('registrations').select('checkout_session_id').eq('id', p.registration_id).maybeSingle()
   const checkoutSessionId = (extra as { checkout_session_id?: string | null } | null)?.checkout_session_id ?? null
 
-  let paymentIntent = p.stripe_payment_intent_id ?? reg.stripe_payment_intent_id ?? null
+  // In a split group ("Invoice for some") a person paying their own way was never
+  // covered by the organizer's invoice: only their own payment counts.
+  const ownWay = reg.type === 'group' && !reg.member_pays_individually && payerOf(p, reg) === 'self'
+  let paymentIntent = p.stripe_payment_intent_id ?? (ownWay ? null : reg.stripe_payment_intent_id) ?? null
   const fromParticipant = !!p.stripe_payment_intent_id
-  const invoicedAndPaid = !!reg.invoice_requested && !!reg.invoice_paid_at
+  const invoicedAndPaid = !ownWay && !!reg.invoice_requested && !!reg.invoice_paid_at
 
   // Added after the group paid and still on an unpaid "additional" invoice: the
   // group's payment never covered this place, so there is nothing to refund.
@@ -78,7 +85,7 @@ export async function resolveRefundBasis(db: Db, stripe: Stripe | null, p: Parti
   // Only hard payment evidence counts (registrations.status='confirmed' never
   // did): a per-person payment, a stored intent, or an invoice marked paid.
   const paid = p.individual_payment_status === 'paid' || !!paymentIntent || invoicedAndPaid
-  const payer: RefundBasis['payer'] = reg.type === 'group' && !reg.member_pays_individually ? 'organiser' : 'self'
+  const payer: RefundBasis['payer'] = reg.type === 'group' && !reg.member_pays_individually && !ownWay ? 'organiser' : 'self'
   if (!paid) return { paymentIntent: null, paid: false, perPlaceCents: 0, currency: 'usd', stripeInvoiceId: null, payer }
 
   // Paid by a group invoice (the main one or an "additional places" one)?
@@ -93,6 +100,13 @@ export async function resolveRefundBasis(db: Db, stripe: Stripe | null, p: Parti
     if (row && perPlace) {
       return { paymentIntent, paid, perPlaceCents: perPlace, currency: row.currency, stripeInvoiceId: row.stripe_invoice_id, payer: 'organiser' }
     }
+  }
+
+  // A student in a group sharing the teacher's cost: their own payment was the
+  // place (after any code) plus their share, both recorded when it settled.
+  if (fromParticipant && p.base_paid_cents != null && p.share_paid_cents != null) {
+    const perPlace = p.base_paid_cents + p.share_paid_cents
+    if (perPlace > 0) return { paymentIntent, paid, perPlaceCents: perPlace, currency: 'usd', stripeInvoiceId: null, payer: 'self' }
   }
 
   const listPrice = await eventListPrice(stripe, reg.event_slug)

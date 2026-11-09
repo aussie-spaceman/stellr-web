@@ -1,6 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
 import { rateLimit } from '@/lib/rate-limit-async'
@@ -10,11 +9,13 @@ import { assertNotImpersonating, resolveRequestMember } from '@/lib/impersonatio
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
 import { changeGroupPaymentMethod, paymentChangeView, PAYMENT_METHOD_LABEL } from '@/lib/group-payment-change'
+import { paymentChangeBody } from '@/lib/group-payment-change-body'
 
 // The organizer's view of how their group pays (Account → Teams).
 //   GET  → how the group pays now, what each alternative would do, whether this
 //          member may change it. Anyone who manages the group can read it.
-//   POST { method } → move the group's unpaid balance to that method. The teacher
+//   POST { method, invoiceParticipantIds?, lateJoinerPayer? } → move the group's
+//   unpaid balance to that method (the two extras for "Invoice for some"). The teacher
 //          and the Teacher POC only: a student manager manages the roster, but
 //          redirecting a school's bill or emailing classmates for money is an
 //          adult's call. See lib/group-payment-change.ts.
@@ -22,7 +23,6 @@ import { changeGroupPaymentMethod, paymentChangeView, PAYMENT_METHOD_LABEL } fro
 // Up to a Checkout sweep, an invoice void, and one email per person on the roster.
 export const maxDuration = 120
 
-const bodySchema = z.object({ method: z.enum(['invoice', 'card', 'individual']) })
 
 // withAudit records every answer but a 4xx, including a 5xx after a partial change.
 // A group's fee is Stripe-billed through Stellr, so a change that did anything is on
@@ -57,7 +57,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const readOnlyNote = impersonating
       ? 'Read-only while viewing as a member.'
       : role === 'student_manager' ? 'Your teacher can change how the group pays.' : null
-    return NextResponse.json({ ...view, canChange: !readOnlyNote, readOnlyNote })
+    // What Stellr absorbs if the shares fall short is for staff, not the group.
+    const share = view.share?.current
+      ? { ...view.share, current: { ...view.share.current, projectedShortfallCents: undefined } }
+      : view.share
+    return NextResponse.json({ ...view, share, canChange: !readOnlyNote, readOnlyNote })
   } catch (e) {
     console.error('[teams/payment-method] view failed:', e)
     return NextResponse.json({ error: 'We couldn’t load your group’s payment details. Try again shortly.' }, { status: 502 })
@@ -93,12 +97,12 @@ export const POST = withAudit(auditSpec, async (req: NextRequest, { params }: { 
     return NextResponse.json({ error: 'Your teacher can change how the group pays.' }, { status: 403 })
   }
 
-  const parsed = bodySchema.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'Choose a payment method' }, { status: 400 })
+  const parsed = paymentChangeBody.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Choose a payment method' }, { status: 400 })
   const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments are not configured.' }, { status: 503 })
 
-  const result = await changeGroupPaymentMethod(db, stripe, id, parsed.data.method, {
+  const result = await changeGroupPaymentMethod(db, stripe, id, parsed.data, {
     memberId: member.id as string,
     label: role,
     by: 'organizer',

@@ -64,3 +64,16 @@ describe('paymentPill — admin roster', () => {
     expect(paymentPill({ status: 'confirmed' })).toBe('link_paid')
   })
 })
+
+describe('a link of their own in an invoiced group ("Invoice for some")', () => {
+  it('stays unpaid, whatever the invoice says', () => {
+    expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: '2026-11-10T00:00:00Z', status: 'confirmed', individualPaymentStatus: 'pending' })).toBe(false)
+    expect(paymentPill({ invoiceRequested: true, invoicePaidAt: '2026-11-10T00:00:00Z', status: 'confirmed', individualPaymentStatus: 'pending' })).toBe('link_unpaid')
+  })
+
+  it('people on the invoice still follow it', () => {
+    expect(paymentPill({ invoiceRequested: true, invoicePaidAt: null, status: 'pending', individualPaymentStatus: null })).toBe('invoice_issued')
+    expect(paymentPill({ invoiceRequested: true, invoicePaidAt: '2026-11-10T00:00:00Z', status: 'confirmed', individualPaymentStatus: null })).toBe('invoice_paid')
+  })
+})
+

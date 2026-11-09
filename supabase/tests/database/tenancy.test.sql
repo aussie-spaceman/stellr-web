@@ -72,6 +72,8 @@ SELECT set_eq(
     'public.email_campaign_queue',
     'public.email_campaign_sends',
     'public.email_campaigns',
+    'public.email_outbox',
+    'public.email_outbox_blobs',
     'public.email_send_quota',
     'public.email_suppressions',
     'public.email_templates',

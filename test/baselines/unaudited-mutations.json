@@ -4,7 +4,7 @@
   "totals": {
     "mutatingHandlers": 282,
     "unauditedMutations": 128,
-    "cronHandlers": 23,
+    "cronHandlers": 24,
     "unauditedCrons": 0,
     "getMutations": 17,
     "unauditedGetMutations": 6

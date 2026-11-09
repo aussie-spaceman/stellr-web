@@ -53,6 +53,8 @@ export interface EventEmailRow {
   catch_up_claimed_at?: string | null
   created_at: string
   updated_at: string
+  /** Derived from event_slug (S4). NULL or absent means Stellr. */
+  tenant_id?: string | null
 }
 
 export interface EventEmailSendRow {

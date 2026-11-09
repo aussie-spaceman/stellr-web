@@ -11,9 +11,9 @@ import { makeScope, type ScopeContext } from './tenancy/scope-context'
 // tenant ids that have work. It is not a loop over the tenants table, so cost
 // follows work, not tenant count, and vercel.json keeps its schedules.
 //
-// A run that only touches Stellr adds one small read of `tenants` and is
-// otherwise a plain call: the whole budget, no child ledger row, no change to
-// failure labels or to the run's result JSON. So crons keep today's ledger on
+// A run that only touches Stellr is a plain call: no read of `tenants`, the
+// whole budget, no child ledger row, no change to failure labels or to the run's
+// result JSON. So crons keep today's ledger on
 // production, and nothing writes the new cron_runs columns until a second tenant
 // has work. A run with no work at all reads nothing and adds nothing.
 //
@@ -29,7 +29,10 @@ const DEFAULT_FLOOR_MS = 5_000
 const DEFAULT_OVERRUN_MS = 5_000
 const TIMED_OUT = Symbol('timed out')
 
-/** Used only when `tenants` cannot be read, so that Stellr's work still runs. */
+/**
+ * Stellr's seeded row (tenancy_core migration). Used for a Stellr-only run, which
+ * skips the read, and when `tenants` cannot be read, so that Stellr's work still runs.
+ */
 const STELLR_FALLBACK: CronTenant = {
   id: STELLR_TENANT_ID,
   status: 'active',
@@ -225,7 +228,11 @@ export async function runPerTenant<R extends Record<string, unknown>>(
 
   if (tenantIds?.length === 0) return { results: new Map(), skipped: [], notReached: [], ledger: {} }
 
-  const loaded = await loadTenants(db, run, tenantIds)
+  // Stellr alone needs nothing from `tenants`: it runs whatever the row says, and
+  // the fallback carries its seeded values. Skipping the read keeps that run's
+  // queries and failures as they were before the runner.
+  const stellrAlone = tenantIds?.length === 1 && tenantIds[0] === STELLR_TENANT_ID
+  const loaded = stellrAlone ? [STELLR_FALLBACK] : await loadTenants(db, run, tenantIds)
   const known = new Map((loaded ?? []).map((t) => [t.id, t]))
   // Stellr runs whatever the read said: its work must not depend on this table.
   if (!known.has(STELLR_TENANT_ID) && (!tenantIds || tenantIds.includes(STELLR_TENANT_ID))) {
@@ -261,7 +268,10 @@ export async function runPerTenant<R extends Record<string, unknown>>(
 
   for (let i = 0; i < order.length; i++) {
     const remaining = deadline - now()
-    if (remaining <= 0) {
+    // Stellr alone always gets its call, even past the deadline, as before the
+    // runner: fn checks job.deadline itself, so late work is counted as deferred
+    // (and its housekeeping still runs) rather than the whole pass vanishing.
+    if (remaining <= 0 && !stellrOnly) {
       notReached.push(...order.slice(i))
       break
     }

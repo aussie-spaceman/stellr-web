@@ -50,6 +50,19 @@ export function todayInMountain(now = new Date()): string {
   return now.toLocaleDateString('en-CA', { timeZone: TIME_ZONE })
 }
 
+/**
+ * Today's calendar date in a tenant's time zone (S5 B14), as YYYY-MM-DD. Stellr
+ * keeps todayInMountain(). A zone Intl does not know falls back to Mountain
+ * rather than throwing in the middle of a cron.
+ */
+export function todayInZone(timeZone: string, now = new Date()): string {
+  try {
+    return now.toLocaleDateString('en-CA', { timeZone })
+  } catch {
+    return todayInMountain(now)
+  }
+}
+
 export function eventMergeVars(event: EventForEmail, today = todayInMountain()): Record<string, string> {
   return {
     event_name:       event.title,

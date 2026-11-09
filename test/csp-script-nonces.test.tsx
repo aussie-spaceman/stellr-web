@@ -51,10 +51,13 @@ describe('clerk-js carries the request nonce', () => {
   })
 
   const layouts: [string, () => Promise<{ default: (p: { children: React.ReactNode }) => unknown }>][] = [
-    ['(auth)', () => import('@/app/(auth)/layout')],
-    ['(member)', () => import('@/app/(member)/layout')],
-    ['(admin)', () => import('@/app/(admin)/layout')],
-    ['(flow)/register', () => import('@/app/(flow)/register/layout')],
+    ['(auth)', () => import('@/app/(stellr)/(auth)/layout')],
+    ['(member)', () => import('@/app/(stellr)/(member)/layout')],
+    ['(admin)', () => import('@/app/(stellr)/(admin)/layout')],
+    ['(flow)/register', () => import('@/app/(stellr)/(flow)/register/layout')],
+    // The tenant tree's only Clerk layout. There the policy is enforced, so a missing
+    // nonce stops the registration forms instead of sending a report.
+    ['tenant (flow)/register', () => import('@/app/%5Ft/[tenant]/(flow)/register/layout')],
   ]
 
   it.each(layouts)('the %s layout passes x-nonce to its ClerkProvider', async (_name, load) => {
@@ -68,7 +71,7 @@ describe('clerk-js carries the request nonce', () => {
 
   it('passes no nonce when the proxy sent none', async () => {
     mocks.nonce = null
-    const Layout = (await import('@/app/(auth)/layout')).default
+    const Layout = (await import('@/app/(stellr)/(auth)/layout')).default
     const el = (await Layout({ children: null })) as ReactElement<{ nonce?: string }>
     expect(el.props.nonce).toBeUndefined()
   })

@@ -149,7 +149,7 @@ describe('SMMA and the Stellr-only surface', () => {
 
   it('allows no community, home, store or academy route on a tenant host', () => {
     const smma = FILES.filter((f) =>
-      /^app\/(?:\(member\)\/community\/|api\/community\/|\(member\)\/home\/|\(public\)\/store\/|api\/store\/|\(public\)\/academy\/)/.test(
+      /^app\/(?:\(stellr\)\/\(member\)\/community\/|api\/community\/|\(stellr\)\/\(member\)\/home\/|\(stellr\)\/\(public\)\/store\/|api\/store\/|\(stellr\)\/\(public\)\/academy\/)/.test(
         f,
       ),
     )
@@ -161,7 +161,7 @@ describe('SMMA and the Stellr-only surface', () => {
 
   it('denies all 80 community and home entries', () => {
     const community = FILES.filter((f) =>
-      /^app\/(?:\(member\)\/community\/|api\/community\/|\(member\)\/home\/)/.test(f),
+      /^app\/(?:\(stellr\)\/\(member\)\/community\/|api\/community\/|\(stellr\)\/\(member\)\/home\/)/.test(f),
     )
     expect(community).toHaveLength(80)
     for (const f of community) expect(tenantSurfaceDecision(f), f).toBe('deny')
@@ -170,7 +170,7 @@ describe('SMMA and the Stellr-only surface', () => {
   it('denies every admin page, admin API, cron and webhook', () => {
     const mustDeny = FILES.filter(
       (f) =>
-        f.startsWith('app/(admin)/') ||
+        f.startsWith('app/(stellr)/(admin)/') ||
         f.startsWith('app/api/admin/') ||
         ROUTE_MANIFEST[f] === 'cron' ||
         ROUTE_MANIFEST[f] === 'webhook' ||
@@ -197,7 +197,7 @@ describe('routes held back from allow', () => {
   it.each([
     ['app/api/registrations/[id]/spreadsheet/route.ts', /anyone-can-edit/],
     ['app/api/uploads/sign/route.ts', /per-purpose/],
-    ['app/(member)/account/page.tsx', /community directory/],
+    ['app/(stellr)/(member)/account/page.tsx', /community directory/],
     ['app/api/consent/request/route.ts', /membership consent/],
   ])('keeps %s pending, with the reason', (file, reason) => {
     const match = classifyTenantSurface(file)
@@ -208,7 +208,7 @@ describe('routes held back from allow', () => {
   it('finds no direct community import or public Drive link in an allowed file', () => {
     // Direct imports only: B8 walks the full import closure.
     const offenders = allowedTenantFiles().filter((f) =>
-      /@\/components\/community|@\/app\/\(member\)\/community|type:\s*'anyone'/.test(
+      /@\/components\/community|@\/app\/\(stellr\)\/\(member\)\/community|type:\s*'anyone'/.test(
         readFileSync(`${REPO_ROOT}${f}`, 'utf8'),
       ),
     )
@@ -366,12 +366,12 @@ describe('isAllowedOnTenantHost', () => {
   })
 
   it('builds URL patterns for route groups and catch-alls', () => {
-    expect(urlPatternForFile('app/(auth)/sign-in/[[...sign-in]]/page.tsx')).toBe('^/sign-in(?:/[^/]+)*$')
-    expect(urlPatternForFile('app/(flow)/register/[slug]/page.tsx')).toBe('^/register/[^/]+$')
+    expect(urlPatternForFile('app/(stellr)/(auth)/sign-in/[[...sign-in]]/page.tsx')).toBe('^/sign-in(?:/[^/]+)*$')
+    expect(urlPatternForFile('app/(stellr)/(flow)/register/[slug]/page.tsx')).toBe('^/register/[^/]+$')
     expect(urlPatternForFile('app/api/community/media/[...path]/route.ts')).toBe(
       '^/api/community/media(?:/[^/]+)+$',
     )
-    expect(urlPatternForFile('app/(public)/page.tsx')).toBe('^/$')
+    expect(urlPatternForFile('app/(stellr)/(public)/page.tsx')).toBe('^/$')
     expect(() => urlPatternForFile('app/robots.ts')).toThrow()
   })
 })

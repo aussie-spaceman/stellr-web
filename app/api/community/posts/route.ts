@@ -8,6 +8,8 @@ import { getChannelPosts } from '@/lib/space-posts'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { runAfterResponse } from '@/lib/after-response'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const createPostSchema = z.object({
   spaceSlug: z.string().min(1),
@@ -54,6 +56,10 @@ export async function GET(req: Request) {
 // POST /api/community/posts — create a post. Channel path uses the Spaces access
 // model (access_type + roster) and posting policy; legacy path is unchanged.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.post.create', table: 'community_posts' }, () => createPost(req))
+}
+
+async function createPost(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -108,6 +114,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to create post' }, { status: 500 })
     }
 
+    noteAudit(req, { targetId: data.id })
     fireMentions(bodyJson, member, data.id, spaceSlug)
     return NextResponse.json({ id: data.id, spaceSlug, channelSlug })
   }
@@ -148,6 +155,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create post' }, { status: 500 })
   }
 
+  noteAudit(req, { targetId: data.id })
   fireMentions(bodyJson, member, data.id, spaceSlug)
   return NextResponse.json({ id: data.id, spaceSlug })
 }
@@ -156,6 +164,10 @@ export async function POST(req: Request) {
 // channel announcement (the "Pinned announcement" ribbon). Restricted to a space's
 // admins/mentors (or a platform admin) — the in-space moderator roles.
 export async function PATCH(req: Request) {
+  return audited(req, { action: 'community.post.update', table: 'community_posts' }, () => moderatePost(req))
+}
+
+async function moderatePost(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -204,6 +216,7 @@ export async function PATCH(req: Request) {
     .update({ is_announcement: next, is_pinned: next })
     .eq('id', postId)
   if (error) return NextResponse.json({ error: 'Could not update post' }, { status: 500 })
+  noteAudit(req, { targetId: postId, metadata: { announcement: next } })
 
   return NextResponse.json({ ok: true, isAnnouncement: next })
 }
@@ -231,4 +244,22 @@ function fireMentions(
       spaceSlug,
     })
   )
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

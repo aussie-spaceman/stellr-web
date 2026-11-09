@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { sendEmail, loadMemberDigest, tables, inserted } = vi.hoisted(() => ({
+const { sendEmail, loadMemberDigest, tables, inserted, seededClient } = vi.hoisted(() => ({
+  /** When set, supabaseServer() returns this seeded client instead of the stand-in below. */
+  seededClient: { current: null as unknown },
   sendEmail: vi.fn(),
   loadMemberDigest: vi.fn(),
   /** Rows each table returns, keyed by table name. */
@@ -22,12 +24,15 @@ function builder(table: string) {
   return b
 }
 
-vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from: (t: string) => builder(t) }) }))
+vi.mock('@/lib/supabase', () => ({ supabaseServer: () => seededClient.current ?? { from: (t: string) => builder(t) } }))
 vi.mock('@/lib/email', () => ({ sendEmail, staffAlertEmail: () => 'staff-inbox@example.org' }))
 vi.mock('@/lib/admin-digest', () => ({ loadMemberDigest, outstandingCount: () => 4 }))
 vi.mock('@/lib/admin-digest-email', () => ({ renderDigestEmail: () => ({ subject: 'Digest', html: '<p/>', text: 'Digest' }) }))
 
 const { GET } = await import('./route')
+const { fakeSupabase } = await import('@/test/fake-supabase')
+const { STELLR_TENANT_ID } = await import('@/lib/tenancy/constants')
+type SupabaseClient = import('@supabase/supabase-js').SupabaseClient
 
 const call = () => GET(new Request('https://app.example.org/api/cron/weekly-digest', {
   headers: { authorization: 'Bearer test-secret' },
@@ -42,6 +47,7 @@ beforeEach(() => {
   loadMemberDigest.mockReset().mockResolvedValue({ growth: { newMembers: { current: 2 } }, outstanding: {}, errors: [] })
   for (const k of Object.keys(tables)) delete tables[k]
   inserted.length = 0
+  seededClient.current = null
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -86,5 +92,67 @@ describe('GET /api/cron/weekly-digest', () => {
     const res = await GET(new Request('https://app.example.org/api/cron/weekly-digest') as never)
     expect(res.status).toBe(401)
     expect(sendEmail).not.toHaveBeenCalled()
+  })
+})
+
+// S5 B17: recipients come from lib/authz/audiences (not mocked), on seeded rows
+// where every filter runs.
+describe('weekly digest recipients (S5 B17)', () => {
+  const seed = () => ({
+    staff_roles: [
+      { member_id: 'm-all', scopes: ['all'] },
+      { member_id: 'm-both', scopes: ['all', 'events'] },
+      { member_id: 'm-events', scopes: ['events'] },
+      // A community-only holder gets admin alerts but not the digest, so a
+      // widened digest scope fails the comparison below.
+      { member_id: 'm-community', scopes: ['community'] },
+      { member_id: 'm-gone', scopes: ['all'] },
+      { member_id: 'm-shared', scopes: ['all'] },
+      { member_id: null, scopes: ['all'] },
+    ],
+    members: [
+      { id: 'm-all', email: ' Admin@Example.org ', is_active: true },
+      { id: 'm-both', email: 'coadmin@example.org', is_active: true },
+      { id: 'm-events', email: 'events@example.org', is_active: true },
+      { id: 'm-community', email: 'community@example.org', is_active: true },
+      { id: 'm-gone', email: 'gone@example.org', is_active: false },
+      { id: 'm-shared', email: 'ADMIN@example.org', is_active: true },
+      { id: 'm-tenant', email: 'tenant-admin@example.org', is_active: true },
+    ],
+    tenant_memberships: [
+      { tenant_id: STELLR_TENANT_ID, member_id: 'm-tenant', clerk_user_id: null, role: 'tenant_admin' },
+      { tenant_id: '11111111-1111-4111-8111-111111111111', member_id: 'm-tenant', clerk_user_id: null, role: 'tenant_admin' },
+    ],
+  })
+
+  /** The recipient query the route ran before B17, on the same rows. */
+  async function before(db: SupabaseClient): Promise<string[]> {
+    const { data: roles } = await db.from('staff_roles').select('member_id').overlaps('scopes', ['all'])
+    const ids = [...new Set((roles ?? []).map((r) => r.member_id as string).filter(Boolean))]
+    const { data: members } = await db.from('members').select('email').in('id', ids).eq('is_active', true)
+    return [...new Set((members ?? []).map((m) => (m.email as string | null)?.trim().toLowerCase()).filter((e): e is string => !!e))].sort()
+  }
+
+  it("sends to the same addresses as before, under the default AUTHZ_SOURCE", async () => {
+    vi.stubEnv('AUTHZ_SOURCE', '')
+    const fake = fakeSupabase(seed())
+    seededClient.current = fake.client
+    const expected = await before(fake.client as unknown as SupabaseClient)
+    const body = await (await call()).json()
+    expect(expected).toEqual(['admin@example.org', 'coadmin@example.org'])
+    expect(sendEmail.mock.calls.map(([o]) => o.to).sort()).toEqual(expected)
+    expect(body).toMatchObject({ sent: true, recipients: 2, delivered: 2, fallback: false })
+  })
+
+  it('falls back to the staff inbox, and records the failure, when staff_roles cannot be read', async () => {
+    const fake = fakeSupabase(seed(), { failOn: (t) => (t === 'staff_roles' ? 'boom' : null) })
+    seededClient.current = fake.client
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const body = await (await call()).json()
+    errorSpy.mockRestore()
+    expect(body).toMatchObject({ sent: true, recipients: 1, fallback: true })
+    expect(sendEmail.mock.calls.map(([o]) => o.to)).toEqual(['staff-inbox@example.org'])
+    const run = fake.table('cron_runs')[0] as { errors: { step: string }[] }
+    expect(JSON.stringify(run.errors)).toContain('recipients')
   })
 })

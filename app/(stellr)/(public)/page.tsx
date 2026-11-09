@@ -1,0 +1,304 @@
+import type { Metadata } from 'next'
+import Link from '@/components/ui/SiteLink'
+import { ArrowRight, Users, Trophy, Rocket, GraduationCap, BookOpen, HeartHandshake, Microscope } from 'lucide-react'
+import { getFeaturedEvents } from '@/lib/events/repo'
+import { type StellarEvent } from '@/lib/sanity'
+import { EventCard } from '@/components/ui/EventCard'
+import { CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
+import { QuoteRotator } from '@/components/sections/QuoteRotator'
+import { ProofStrip } from '@/components/sections/ProofStrip'
+import { WorkCard } from '@/components/sections/WorkCard'
+import { FLYERS, PHOTOS } from '@/lib/media-manifest'
+import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+  // Title intentionally omitted: the homepage inherits the root layout's
+  // non-templated `title.default` ("Stellr Education — Real-World STEM Competitions"),
+  // avoiding the doubled "| Stellr Education" the title template would add.
+  description:
+    'A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.',
+}
+
+// Revalidate every 60 minutes
+export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
+
+const roleCards = [
+  { label: 'Student', icon: GraduationCap, href: '/students' },
+  { label: 'Teacher', icon: BookOpen, href: '/educators' },
+  { label: 'Parent', icon: HeartHandshake, href: '/why-stellr#parents' },
+  { label: 'Mentor / Volunteer', icon: Microscope, href: '/mentors' },
+]
+
+const whatWeDo = [
+  {
+    icon: Trophy,
+    title: 'Multi-Disciplinary Competitions',
+    href: '/competitions',
+    body: 'Real-world scenarios requiring STEM and business skills — engineering, science, communication, and strategy working together.',
+  },
+  {
+    icon: Users,
+    title: 'Mentored by Industry Experts',
+    href: '/academy#mentoring',
+    body: 'Students network with aerospace, engineering, and science professionals who guide them through competition challenges.',
+  },
+  {
+    icon: Rocket,
+    title: 'STEM Careers',
+    href: undefined,
+    body: 'Almost 90% of Stellr alumni pursue STEM or medicine at college.',
+  },
+]
+
+// Prices are NOT stored here — they come from membership_tiers via getTierPriceMap()
+// (see HomePage). Only names, copy and layout live in this const.
+const membershipTiers = [
+  {
+    name: 'Explorer',
+    benefits: [
+      'STEM Power Skills training material',
+      'Access to Community Spaces',
+      'Store discount',
+    ],
+  },
+  {
+    name: 'Pathfinder',
+    highlight: true,
+    benefits: [
+      '1 year free membership with competition participation',
+      'Dedicated Pathfinder Community Space + additional training material',
+      'Invites to quarterly group mentoring sessions',
+    ],
+  },
+  {
+    name: 'Scholar',
+    benefits: [
+      '1 year free membership to competition award winners',
+      'Exclusive scholar content',
+      'Free coaching sessions',
+    ],
+  },
+]
+
+const communityQuotes = [
+  {
+    quote:
+      'I didn’t know what I wanted to study when I left high school. Now I am laser focused.',
+    author: 'Aiden · 2025 Competition Participant',
+  },
+  {
+    quote:
+      'I’ve never seen my daughter so engaged and excited to be learning. What an opportunity for her!',
+    author: 'Aaron · Parent of 2019 Competition Participant',
+  },
+  {
+    quote:
+      'There’s no other forum available for school-aged students to learn about real-world work. These events should be mandatory for every student, globally.',
+    author: 'Senior Aerospace Executive and Competition Judge',
+  },
+]
+
+export default async function HomePage() {
+  const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
+
+  const featuredEvents = await getFeaturedEvents().catch(() => null)
+  const tierPrices = await getTierPriceMap()
+  const tierPriceLabel = (name: string) => {
+    const label = formatTierPrice(tierPrices[name])
+    return label === 'Free' ? 'Free' : `${label}/yr`
+  }
+
+  const events: StellarEvent[] = featuredEvents?.length ? featuredEvents : []
+
+  return (
+    <>
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <section className="relative bg-brand-blue-dark text-white overflow-hidden">
+        {/* Dark hero, no photo, until a replacement photo is chosen. */}
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36">
+          <div className="max-w-5xl">
+            <h1 className="text-4xl sm:text-5xl sm:leading-none xl:text-6xl xl:leading-none font-bold leading-tight">
+              <span className="block">Real-World STEM</span>
+              {/* Line 2 is 33 characters — it needs its own size ramp so it stays
+                  on one line at every width. Lines 1 and 3 keep the h1 sizes. */}
+              <span className="block text-hero-dim text-lg sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl">
+                Competitions | Community | Careers
+              </span>
+              <span className="block">Begin Here</span>
+            </h1>
+            <p className="mt-6 text-lg sm:text-xl text-hero-lead max-w-2xl">
+              A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Link href="/competitions" className="btn-primary text-base px-8 py-4">
+                Explore Competitions
+              </Link>
+              <a href={`${authUrl}/sign-up`} className="btn-outline-white text-base px-8 py-4">
+                Join Free
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Role Selector ────────────────────────────────────────────── */}
+      <section className="bg-brand-grey-light section-padding">
+        <div className="container-max">
+          <p className="text-center text-sm font-semibold uppercase tracking-widest text-content-muted mb-8">
+            I am a…
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {roleCards.map((card) => (
+              <Link
+                key={card.label}
+                href={card.href}
+                className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all border border-line-light"
+              >
+                <card.icon size={32} className="text-brand-blue" strokeWidth={1.75} />
+                <span className="font-semibold text-brand-blue-dark">{card.label}</span>
+                <span className="text-xs text-brand-blue flex items-center gap-1">
+                  Learn more <ArrowRight size={12} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── What We Do ───────────────────────────────────────────────── */}
+      <section className="section-padding">
+        <div className="container-max">
+          <h2 className="text-3xl font-bold text-center text-brand-blue-dark mb-12">
+            Why Stellr?
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {whatWeDo.map((item) => {
+              const heading = (
+                <>
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4 group-hover:bg-blue-100 transition-colors">
+                    <item.icon size={28} className="text-brand-blue" />
+                  </div>
+                  <h3 className="text-xl font-bold text-brand-blue-dark mb-3 group-hover:text-brand-blue transition-colors">
+                    {item.title}
+                  </h3>
+                </>
+              )
+              return (
+                <div key={item.title} className="text-center">
+                  {item.href ? (
+                    <Link href={item.href} className="group block">
+                      {heading}
+                    </Link>
+                  ) : (
+                    heading
+                  )}
+                  <p className="text-brand-grey-dark leading-relaxed">{item.body}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Featured Events ───────────────────────────────────────────── */}
+      <section className="bg-brand-grey-light section-padding">
+        <div className="container-max">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-3xl font-bold text-brand-blue-dark">Upcoming Competitions</h2>
+            <Link href="/events" className="text-brand-blue font-semibold text-sm flex items-center gap-1 hover:underline">
+              View all <ArrowRight size={14} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {events.map((event) => (
+              <EventCard key={event._id} event={event} imageSizes={CARD_IMAGE_SIZES.threeUp} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── About Stellr flyer (open download, no email gate) ────────── */}
+      <section className="section-padding">
+        <div className="container-max">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+              <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">
+                Share Stellr with your school
+              </h2>
+              <p className="text-brand-grey-dark leading-relaxed">
+                Our two-page overview: how a competition works, the ways to take part, costs and scholarships, and the teacher grant. Print it, pin it up, or forward it to a colleague.
+              </p>
+            </div>
+            <WorkCard asset={FLYERS['about-stellr-2027']} />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Proof strip ──────────────────────────────────────────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <h2 className="text-3xl font-bold text-brand-blue-dark mb-8">
+            Real students, real competitions
+          </h2>
+          <ProofStrip photos={[PHOTOS['home-strip-3'], PHOTOS['about-team-1']]} columns={2} />
+        </div>
+      </section>
+
+      {/* ── Testimonials ─────────────────────────────────────────────── */}
+      <section className="bg-brand-blue-dark section-padding">
+        <div className="container-max">
+          <h2 className="text-3xl font-bold text-center text-white mb-10">
+            Hear From Our Community
+          </h2>
+          <QuoteRotator quotes={communityQuotes} />
+        </div>
+      </section>
+
+      {/* ── Membership Tiers Preview ─────────────────────────────────── */}
+      <section className="section-padding">
+        <div className="container-max">
+          <h2 className="text-3xl font-bold text-center text-brand-blue-dark mb-4">
+            Find Your Place in the Stellr Community
+          </h2>
+          <p className="text-center text-brand-grey-dark mb-12 max-w-xl mx-auto">
+            There&apos;s always a free tier to get started — regardless of whether you&apos;re competing, teaching, or volunteering.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {membershipTiers.map((tier) => (
+              <div
+                key={tier.name}
+                className={`rounded-xl border p-6 ${
+                  tier.highlight
+                    ? 'border-brand-blue shadow-lg ring-2 ring-brand-blue'
+                    : 'border-line'
+                }`}
+              >
+                {tier.highlight && (
+                  <span className="inline-block text-xs font-bold uppercase tracking-wider text-brand-blue mb-3">
+                    Most Popular
+                  </span>
+                )}
+                <h3 className="text-xl font-bold text-brand-blue-dark">{tier.name}</h3>
+                <p className="text-2xl font-bold text-brand-blue mt-1">{tierPriceLabel(tier.name)}</p>
+                <ul className="mt-4 space-y-2">
+                  {tier.benefits.map((b) => (
+                    <li key={b} className="flex items-start gap-2 text-sm text-brand-grey-dark">
+                      <span className="text-brand-blue mt-0.5">✓</span>
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 text-center">
+            <Link href="/membership" className="btn-primary">
+              See All Plans
+            </Link>
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}

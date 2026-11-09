@@ -5,11 +5,17 @@ import { getHostCaps } from '@/lib/sessions'
 import { createCohort } from '@/lib/mentoring'
 import { DEFAULT_TZ, type CohortTheme } from '@/lib/mentoring-format'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // POST /api/community/mentoring/cohorts — create a cohort + send invites.
 // Available to platform admins and members holding the mentor role. A mentor
 // becomes the cohort's mentor by default; an admin may name a different mentor.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.mentoring_cohort.create', table: 'mentoring_cohorts' }, () => createMentoringCohort(req))
+}
+
+async function createMentoringCohort(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -53,5 +59,24 @@ export async function POST(req: Request) {
       : [],
   })
 
+  noteAudit(req, { targetId: cohortId })
   return NextResponse.json({ ok: true, cohortId })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

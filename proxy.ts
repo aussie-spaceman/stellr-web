@@ -8,7 +8,7 @@ import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { authPath } from '@/lib/auth-path'
 import { safeNext } from '@/lib/safe-next'
-import { NONCE_HEADER, applyCsp, cspFor } from '@/lib/csp'
+import { CSP_HEADER, ENFORCING_CSP_HEADER, NONCE_HEADER, applyCsp, applyEnforcingCsp, createNonce, cspFor, tenantApiPolicy, tenantPagePolicy } from '@/lib/csp'
 import {
   TENANT_ID_HEADER,
   TENANT_ROUTING_FLAG,
@@ -138,6 +138,31 @@ function plainResponse(body: string, status: number, extra: Record<string, strin
 
 const tenantHostNotFound = () => plainResponse('Not found', 404)
 
+/** Request headers with nothing a client sent to choose a tenant, a nonce or a policy. */
+function tenantRequestHeaders(req: NextRequest): Headers {
+  const headers = new Headers(req.headers)
+  headers.delete(TENANT_ID_HEADER)
+  headers.delete(TENANT_SLUG_HEADER)
+  headers.delete(PRIVATE_ROUTE_HEADER)
+  headers.delete(ENFORCING_CSP_HEADER)
+  headers.delete(CSP_HEADER)
+  headers.delete(NONCE_HEADER)
+  return headers
+}
+
+/**
+ * Mints this request's enforcing policy (S5, B6; lib/csp.ts, tenantPagePolicy). Next reads
+ * the nonce from the policy on the request headers, and x-nonce takes it to the Clerk
+ * layouts, as on Stellr's routes. Returns the policy for the response.
+ */
+function setTenantPagePolicy(headers: Headers): string {
+  const nonce = createNonce()
+  const policy = tenantPagePolicy(nonce)
+  headers.set(ENFORCING_CSP_HEADER, policy)
+  headers.set(NONCE_HEADER, nonce)
+  return policy
+}
+
 /** Answers a request on a host that is not Stellr's. Never falls through to the Stellr path. */
 async function respondOnNonStellrHost(
   req: NextRequest,
@@ -151,8 +176,15 @@ async function respondOnNonStellrHost(
       return tenantHostNotFound()
     case 'robots':
       return new NextResponse(TENANT_HOST_ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
-    case 'static':
-      return NextResponse.next(withoutClientTenantHeaders(req))
+    case 'static': {
+      // With no such file, next.config.mjs's fallback rewrite renders the tenant tree's
+      // 404 here, so this needs the page policy. On a real file it changes nothing: the
+      // only script under public/ is the check-in desk's service worker, which only the
+      // desk registers, on Stellr's admin pages.
+      const headers = tenantRequestHeaders(req)
+      const policy = setTenantPagePolicy(headers)
+      return applyEnforcingCsp(NextResponse.next({ request: { headers } }), policy, req.url)
+    }
     default:
       return (await tenantClerkHandler(req, event)) || tenantHostNotFound()
   }
@@ -213,31 +245,35 @@ const tenantClerkHandler = clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) await auth.protect()
 
   const pathname = req.nextUrl.pathname
-  const headers = new Headers(req.headers)
-  headers.delete(TENANT_ID_HEADER)
-  headers.delete(TENANT_SLUG_HEADER)
-  headers.delete(PRIVATE_ROUTE_HEADER)
+  const headers = tenantRequestHeaders(req)
   if (isPrivatePath(pathname)) headers.set(PRIVATE_ROUTE_HEADER, '1')
-  headers.delete('content-security-policy')
-  headers.delete('content-security-policy-report-only')
-  headers.delete(NONCE_HEADER)
-  const csp = cspFor(pathname)
-  if (csp.nonce) {
-    headers.set('content-security-policy-report-only', csp.value)
-    headers.set(NONCE_HEADER, csp.nonce)
-  }
 
   // An API cannot live in the tenant tree, so it gets the trusted headers
   // (lib/tenancy/request-tenant.ts). A page gets the tenant from its URL instead,
   // which keeps the tenant in the cache key, so it never sees these headers.
+  //
+  // An API keeps the Report-Only policy, so the enforcing header it may have from
+  // next.config.mjs stands: an enforcing 'object-src' on a PDF can stop the browser's
+  // own viewer. The one API that draws an HTML page also gets a fixed enforcing policy
+  // of its own (lib/csp.ts, tenantApiPolicy).
   if (tenantHostRoute(pathname) === 'api') {
+    const csp = cspFor(pathname)
+    if (csp.nonce) {
+      headers.set('content-security-policy-report-only', csp.value)
+      headers.set(NONCE_HEADER, csp.nonce)
+    }
     headers.set(TENANT_ID_HEADER, resolution.tenantId)
     headers.set(TENANT_SLUG_HEADER, resolution.tenantSlug)
-    return applyCsp(NextResponse.next({ request: { headers } }), csp.value, req.url)
+    const res = applyCsp(NextResponse.next({ request: { headers } }), csp.value, req.url)
+    const enforcing = tenantApiPolicy(pathname)
+    if (enforcing) res.headers.set(ENFORCING_CSP_HEADER, enforcing)
+    return res
   }
+
+  const policy = setTenantPagePolicy(headers)
   const target = req.nextUrl.clone()
   target.pathname = `/_t/${resolution.tenantSlug}${pathname === '/' ? '' : pathname}`
-  return applyCsp(NextResponse.rewrite(target, { request: { headers } }), csp.value, req.url)
+  return applyEnforcingCsp(NextResponse.rewrite(target, { request: { headers } }), policy, req.url)
 })
 
 const clerkHandler = clerkMiddleware(async (auth, req, event) => {

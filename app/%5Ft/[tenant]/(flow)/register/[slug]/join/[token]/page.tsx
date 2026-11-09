@@ -1,4 +1,4 @@
-import { groupJoinBody } from '@/app/(flow)/register/[slug]/join/[token]/join-body'
+import { groupJoinBody } from '@/app/(stellr)/(flow)/register/[slug]/join/[token]/join-body'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantJoinLink } from '@/lib/tenancy/tenant-records'
 

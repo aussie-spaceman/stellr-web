@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Runtime equivalent of the migration-062 backfill. Keeps the competition
 // container model in sync as registrations happen — one event-level container
@@ -31,7 +32,7 @@ export async function ensureEventContainer(
 
   const { data: created, error } = await db
     .from('mentoring_cohorts')
-    .insert({ name: eventTitle || eventSlug, container_type: EVENT_CONTAINER, campaign_ref: eventSlug, lifecycle: 'active' })
+    .insert({ tenant_id: STELLR_TENANT_ID, name: eventTitle || eventSlug, container_type: EVENT_CONTAINER, campaign_ref: eventSlug, lifecycle: 'active' })
     .select('id')
     .maybeSingle()
   if (error) {
@@ -59,6 +60,7 @@ async function getOrCreateGroupContainer(
   const { data: created, error } = await db
     .from('mentoring_cohorts')
     .insert({
+      tenant_id: STELLR_TENANT_ID,
       name: `${eventTitle || eventSlug} — ${label || 'group'}`,
       container_type: EVENT_CONTAINER,
       campaign_ref: eventSlug,
@@ -108,7 +110,7 @@ export async function ensureCoachingContainer(
 
     const { data: created, error } = await db
       .from('mentoring_cohorts')
-      .insert({ name: `Coaching — ${nm}`, container_type: 'coaching', mentor_member_id: coachId, lifecycle: 'active' })
+      .insert({ tenant_id: STELLR_TENANT_ID, name: `Coaching — ${nm}`, container_type: 'coaching', mentor_member_id: coachId, lifecycle: 'active' })
       .select('id')
       .maybeSingle()
     if (error || !created) {
@@ -139,7 +141,7 @@ export async function ensureSpaceContainer(
   if (existing) return existing.id as string
   const { data: created, error } = await db
     .from('mentoring_cohorts')
-    .insert({ name: spaceName, container_type: 'space', campaign_ref: spaceSlug, lifecycle: 'active' })
+    .insert({ tenant_id: STELLR_TENANT_ID, name: spaceName, container_type: 'space', campaign_ref: spaceSlug, lifecycle: 'active' })
     .select('id')
     .maybeSingle()
   if (error) {
@@ -203,7 +205,7 @@ export async function ensureTrainingContainer(
   if (existing) return existing.id as string
   const { data: created, error } = await db
     .from('mentoring_cohorts')
-    .insert({ name: moduleTitle, container_type: 'training', campaign_ref: moduleId, lifecycle: 'active' })
+    .insert({ tenant_id: STELLR_TENANT_ID, name: moduleTitle, container_type: 'training', campaign_ref: moduleId, lifecycle: 'active' })
     .select('id')
     .maybeSingle()
   if (error) {

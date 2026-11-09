@@ -50,7 +50,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { TABLE_REGISTRY } from '../lib/tenancy/registry.ts'
+import { STELLR_ONLY_CHECKS, TABLE_REGISTRY } from '../lib/tenancy/registry.ts'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants.ts'
 import { TENANT_APP_NO_ACCESS_TABLES, TENANT_APP_READ_ONLY_TABLES, TENANT_APP_UNWRITABLE_COLUMNS, TENANT_PARENT_REFS } from '../lib/tenancy/tenant-role.ts'
 
@@ -409,6 +409,9 @@ export function generate(registry = TABLE_REGISTRY, fixtures = FIXTURES) {
     '',
     '-- 2. Fixtures, written as the migration owner (RLS does not bind it): a canary tenant beside Stellr,',
     '--    two events each, shared parents, then one row per tenant in every tenant table.',
+    '--    The Stellr-only checks are dropped for this rolled-back transaction: this matrix proves the row',
+    '--    policies hold on those tables by themselves. community_stellr_only.test.sql proves the checks.',
+    ...STELLR_ONLY_CHECKS.map((c) => `ALTER TABLE ${c.table} DROP CONSTRAINT ${c.constraint};`),
     `INSERT INTO public.tenants (id, slug, legal_name, display_name, country, payment_region, currency, time_zone)
   VALUES (${lit(B)}, 'iso-canary', 'Iso Canary Pty Ltd', 'Iso Canary', 'AU', 'AU', 'aud', 'Australia/Sydney');`,
   )

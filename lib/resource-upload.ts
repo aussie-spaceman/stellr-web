@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET, type CommunityMember } from '@/lib/community'
 
@@ -146,6 +147,7 @@ export async function createLinkBinary(opts: {
   const { data, error } = await db
     .from('community_resources')
     .insert({
+      tenant_id: STELLR_TENANT_ID,
       title: opts.title,
       description: opts.description ?? null,
       source_url: opts.url,

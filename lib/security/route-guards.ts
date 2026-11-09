@@ -317,7 +317,7 @@ export const PUBLIC_DATA_GATES: Record<
   string,
   { calls: Record<string, readonly string[]>; compares: readonly string[]; why: string }
 > = {
-  'app/(public)/credentials/[number]/opengraph-image.tsx#default': {
+  'app/(stellr)/(public)/credentials/[number]/opengraph-image.tsx#default': {
     calls: { ageBlock: ['lib/credentials-core'], credentialState: ['lib/credentials-core'] },
     compares: ['visibility=public'],
     why:
@@ -347,15 +347,15 @@ export const GUARD_EXCEPTIONS: Record<string, string> = {
     'ends view-as: clearing the cookie can only reduce access; the end is logged against the signed ticket',
 
   // ── participant ─────────────────────────────────────────────────────────
-  'app/(member)/community/training/[moduleId]/[itemId]/page.tsx#default':
+  'app/(stellr)/(member)/community/training/[moduleId]/[itemId]/page.tsx#default':
     'legacy link stub: redirects to the course page, which reads the session itself; renders no data',
 
   // ── stellr_only ─────────────────────────────────────────────────────────
-  'app/studio/[[...tool]]/page.tsx#default':
+  'app/(stellr)/studio/[[...tool]]/page.tsx#default':
     'embedded Sanity Studio; the editor authenticates against Sanity, not Clerk, and the page holds no Stellr data',
 
   // ── public, not rate-limited (each reviewed in S2) ──────────────────────
-  'app/(public)/credentials/[number]/badge/route.tsx#GET':
+  'app/(stellr)/(public)/credentials/[number]/badge/route.tsx#GET':
     'renders a badge image for a credential number; proxy.ts rate-limits /credentials/*',
   'app/api/check-in-desk/manifest/route.ts#GET':
     'static web-app manifest built from a slug matched against a strict pattern; reads nothing',

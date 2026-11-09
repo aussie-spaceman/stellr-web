@@ -10,7 +10,7 @@ import { FIXTURES, storageStatePath } from '../fixtures/users'
  * rejects the wrong person. A rendering bug is visible; a missing authorisation
  * check is not.
  *
- * `app/(admin)/layout.tsx:14` redirects anyone without portal access to
+ * `app/(stellr)/(admin)/layout.tsx:14` redirects anyone without portal access to
  * /account, and admin status comes from Clerk's publicMetadata.role, NOT from
  * the member_roles table — a member row carrying 'staff' grants nothing. These
  * tests pin that behaviour so a future refactor cannot quietly widen it.

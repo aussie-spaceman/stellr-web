@@ -283,6 +283,19 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.video_watermark_jobs': system(),
 }
 
+/**
+ * Derived tables that hold only Stellr's rows (S5 B9): community and training, plan
+ * decision 12. Each has this CHECK (tenant_id IS NULL OR Stellr), so a write that would
+ * stamp another tenant is refused with 23514. Migration
+ * 20261106234759_community_stellr_only_check.sql; test/community-stellr-only.test.ts.
+ */
+export const STELLR_ONLY_CHECKS: readonly { table: string; constraint: string }[] = [
+  { table: 'public.community_resources', constraint: 'community_resources_stellr_only' },
+  { table: 'public.community_spaces', constraint: 'community_spaces_stellr_only' },
+  { table: 'public.mentoring_cohorts', constraint: 'mentoring_cohorts_stellr_only' },
+  { table: 'public.training_modules', constraint: 'training_modules_stellr_only' },
+]
+
 /** Tables whose tenant_id the S3 trigger derives, with their event key. */
 export function derivedTables(): { table: string; column: string; kind: EventKeyKind }[] {
   return Object.entries(TABLE_REGISTRY)

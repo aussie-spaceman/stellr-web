@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import StopRemindersPage from '@/app/(flow)/survey/[token]/stop-reminders/page'
+import StopRemindersPage from '@/app/(stellr)/(flow)/survey/[token]/stop-reminders/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantSurveyInvitation } from '@/lib/tenancy/tenant-records'
 

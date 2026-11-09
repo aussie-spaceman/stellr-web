@@ -1,4 +1,4 @@
-import { confirmationBody, type ConfirmationQuery } from '@/app/(flow)/register/[slug]/confirmation/confirmation-body'
+import { confirmationBody, type ConfirmationQuery } from '@/app/(stellr)/(flow)/register/[slug]/confirmation/confirmation-body'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { googleSheetParam, requireTenantEvent } from '@/lib/tenancy/tenant-records'
 

@@ -31,7 +31,7 @@ function resolveImport(from: string, spec: string): string | null {
 
 function publicGraph(): string[] {
   const seen = new Set<string>()
-  const queue = [...walk(join(ROOT, 'app/(public)')).filter(isSource), join(ROOT, 'app/layout.tsx')]
+  const queue = [...walk(join(ROOT, 'app/(stellr)/(public)')).filter(isSource), join(ROOT, 'app/(stellr)/layout.tsx')]
   while (queue.length) {
     const file = queue.pop() as string
     if (seen.has(file)) continue

@@ -9,7 +9,7 @@ import {
   type LeadSource,
   type RegistrationInterest,
 } from '@/lib/hubspot-fields'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'

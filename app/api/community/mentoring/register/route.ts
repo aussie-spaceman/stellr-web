@@ -12,6 +12,8 @@ import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, knownOperation, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // A seat this member already holds in the ledger but staff have yet to roster
 // (a held paid seat). Same answer on every path, so nobody pays twice.
@@ -25,6 +27,10 @@ function bookingPending() {
 // Self-register for an open mentoring cohort: free-with-membership, with a
 // mentoring credit, or via a one-off Stripe payment.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.mentoring.register', table: 'mentoring_cohorts' }, () => registerForCohort(req))
+}
+
+async function registerForCohort(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -40,6 +46,7 @@ export async function POST(req: Request) {
   const cohortId = String(body?.cohortId || '')
   const method = String(body?.method || '') as 'free' | 'credit' | 'paid'
   if (!cohortId) return NextResponse.json({ error: 'Missing cohort' }, { status: 400 })
+  noteAudit(req, { targetId: cohortId, metadata: { method: knownOperation(method, ['free', 'credit', 'paid']) } })
 
   const cohort = await getCohortFull(cohortId)
   if (!cohort || !cohort.takesRegistrations) return NextResponse.json({ error: 'This cohort is not open for registration' }, { status: 404 })
@@ -140,4 +147,22 @@ export async function POST(req: Request) {
   })
 
   return NextResponse.json({ url: checkout.url })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

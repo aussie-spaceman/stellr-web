@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import EventSurveyQrPage from '@/app/(flow)/survey/event/[slug]/page'
+import EventSurveyQrPage from '@/app/(stellr)/(flow)/survey/event/[slug]/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantEvent } from '@/lib/tenancy/tenant-records'
 

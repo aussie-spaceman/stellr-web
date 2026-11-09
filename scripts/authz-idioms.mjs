@@ -87,8 +87,8 @@ export const ROLE_TABLES = ['staff_roles', 'event_manager_assignments']
 /** Screens whose job is to show or edit a role table. A read here decides nothing, and it stays after C25. */
 export const ROLE_TABLE_MANAGERS = {
   'app/api/admin/event-managers/route.ts': 'the screen that assigns event managers',
-  'app/(admin)/admin/staff/page.tsx': 'lists staff scopes for editing',
-  'app/(admin)/admin/competitions/[slug]/page.tsx': 'lists the managers assigned to the event being edited',
+  'app/(stellr)/(admin)/admin/staff/page.tsx': 'lists staff scopes for editing',
+  'app/(stellr)/(admin)/admin/competitions/[slug]/page.tsx': 'lists the managers assigned to the event being edited',
 }
 
 const SKIP_FILE = /^scripts\/|\.stories\.[jt]sx?$|^lib\/authz(\.|\/)/

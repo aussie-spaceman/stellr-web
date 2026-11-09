@@ -3,7 +3,7 @@ import { Lock } from 'lucide-react'
 import { AccessBadge, SpaceIcon } from './badges'
 import { JoinSpaceButton } from './JoinSpaceButton'
 import { describeAssignedTiers } from '@/lib/tiers'
-import { membershipUpgradeHref } from '@/app/(public)/membership/tier-data'
+import { membershipUpgradeHref } from '@/app/(stellr)/(public)/membership/tier-data'
 import type { SpaceSummary } from '@/lib/spaces'
 
 interface Props {

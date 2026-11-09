@@ -94,7 +94,7 @@ export const HELD_WRAPPERS: Readonly<Record<string, string>> = {
 
 export function isAdminSurface(file: string): boolean {
   if (file in HELD_WRAPPERS) return false
-  return /^app\/api\/admin\//.test(file) || /^app\/\(admin\)\//.test(file) || WRAPPER_FILES.includes(file)
+  return /^app\/api\/admin\//.test(file) || /^app\/\(stellr\)\/\(admin\)\//.test(file) || WRAPPER_FILES.includes(file)
 }
 
 /** What to do after --write. A conversion moves both counts. */

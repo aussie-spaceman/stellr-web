@@ -4,7 +4,7 @@
   "reported4xxOracleCount": 20,
   "reported4xxOracleHash": "b09c83855154b1d242e0ab2b1626b07a21fff81f7832c6319160fa8c016cfa1c",
   "targets": {
-    "app/(public)/credentials/[number]/badge/route.tsx": {
+    "app/(stellr)/(public)/credentials/[number]/badge/route.tsx": {
       "class": "public",
       "segments": [
         "number"

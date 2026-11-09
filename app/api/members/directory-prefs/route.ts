@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberIsMinor } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { auditMutation } from '@/lib/audit/route'
+import { selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const prefsSchema = z.object({
   is_visible: z.boolean(),
@@ -27,6 +29,10 @@ export async function GET() {
 
 // PATCH /api/members/directory-prefs — upsert directory visibility preferences
 export async function PATCH(req: Request) {
+  return audited(req, { action: 'member.directory_prefs.update', table: 'member_directory_prefs' }, () => savePrefs(req))
+}
+
+async function savePrefs(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -64,4 +70,22 @@ export async function PATCH(req: Request) {
   }
 
   return NextResponse.json({ ok: true })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

@@ -26,6 +26,9 @@
  * (SURVEY_RETENTION_APPLY unset) until nearer the first due dates.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { CronRun } from '@/lib/cron-runs'
+import { partitionByTenant, runPerTenant } from '@/lib/cron-tenants'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { purgeSurveyDataFor } from './purge'
 
 export const SURVEY_RETENTION_YEARS = 7
@@ -75,6 +78,12 @@ export interface RetentionPlan {
   /** Email-only recipients held back because a member has the address or a newer survey went to it. */
   emailsHeld: number
   totals: { subjects: number; invitations: number; responses: number }
+  /**
+   * The tenants whose rows each subject holds, keyed `kind:id`, sorted. NULL
+   * counts as Stellr. Only the per-tenant apply reads it; it is not printed or
+   * stored with the report.
+   */
+  tenantsOf: Map<string, string[]>
 }
 
 interface Inv {
@@ -91,6 +100,7 @@ interface Resp {
   member_id: string | null
   participant_id: string | null
   event_year: number | null
+  tenant_id?: string | null
 }
 
 const PAGE = 1000
@@ -120,10 +130,13 @@ async function byIds<T>(ids: string[], read: (slice: string[]) => PromiseLike<{ 
 export async function planSurveyRetention(db: SupabaseClient, now: Date = new Date()): Promise<RetentionPlan> {
   const [invs, resps, dists] = await Promise.all([
     readAll<Inv>((a, b) => db.from('survey_invitations').select('id, distribution_id, member_id, participant_id, email, send_via').order('id').range(a, b)),
-    readAll<Resp>((a, b) => db.from('survey_responses').select('id, invitation_id, member_id, participant_id, event_year').eq('source', 'app').order('id').range(a, b)),
-    readAll<{ id: string; event_date: string }>((a, b) => db.from('survey_distributions').select('id, event_date').order('id').range(a, b)),
+    // tenant_id on both since S4. survey_invitations gains its own only with C0b,
+    // so an invitation's tenant is its distribution's.
+    readAll<Resp>((a, b) => db.from('survey_responses').select('id, invitation_id, member_id, participant_id, event_year, tenant_id').eq('source', 'app').order('id').range(a, b)),
+    readAll<{ id: string; event_date: string; tenant_id?: string | null }>((a, b) => db.from('survey_distributions').select('id, event_date, tenant_id').order('id').range(a, b)),
   ])
   const yearOfDist = new Map(dists.map((d) => [d.id, Number(d.event_date.slice(0, 4))]))
+  const tenantOfDist = new Map(dists.map((d) => [d.id, d.tenant_id ?? STELLR_TENANT_ID]))
   const invById = new Map(invs.map((i) => [i.id, i]))
 
   const participantIds = [...new Set([...invs, ...resps].map((r) => r.participant_id).filter(Boolean))] as string[]
@@ -139,19 +152,20 @@ export async function planSurveyRetention(db: SupabaseClient, now: Date = new Da
     return { kind: 'email', id: (inv?.email ?? '').toLowerCase() }
   }
 
-  type Acc = { kind: SubjectKind; id: string; invitations: number; responses: number; years: number[] }
+  type Acc = { kind: SubjectKind; id: string; invitations: number; responses: number; years: number[]; tenants: Set<string> }
   const subjects = new Map<string, Acc>()
-  const add = (o: { kind: SubjectKind; id: string }, field: 'invitations' | 'responses', year: number | null | undefined) => {
+  const add = (o: { kind: SubjectKind; id: string }, field: 'invitations' | 'responses', year: number | null | undefined, tenant: string) => {
     const key = `${o.kind}:${o.id}`
-    const s = subjects.get(key) ?? { kind: o.kind, id: o.id, invitations: 0, responses: 0, years: [] }
+    const s = subjects.get(key) ?? { kind: o.kind, id: o.id, invitations: 0, responses: 0, years: [], tenants: new Set<string>() }
     s[field]++
     if (year) s.years.push(year)
+    s.tenants.add(tenant)
     subjects.set(key, s)
   }
-  for (const i of invs) add(ownerOf(i, i), 'invitations', yearOfDist.get(i.distribution_id))
+  for (const i of invs) add(ownerOf(i, i), 'invitations', yearOfDist.get(i.distribution_id), tenantOfDist.get(i.distribution_id) ?? STELLR_TENANT_ID)
   for (const r of resps) {
     const inv = r.invitation_id ? invById.get(r.invitation_id) : undefined
-    add(ownerOf(r, inv), 'responses', r.event_year ?? (inv ? yearOfDist.get(inv.distribution_id) : null))
+    add(ownerOf(r, inv), 'responses', r.event_year ?? (inv ? yearOfDist.get(inv.distribution_id) : null), r.tenant_id ?? STELLR_TENANT_ID)
   }
 
   const memberIds = [...subjects.values()].filter((s) => s.kind === 'member').map((s) => s.id)
@@ -176,6 +190,7 @@ export async function planSurveyRetention(db: SupabaseClient, now: Date = new Da
     inactiveWithoutDate: 0,
     emailsHeld: 0,
     totals: { subjects: 0, invitations: 0, responses: 0 },
+    tenantsOf: new Map([...subjects].map(([key, s]) => [key, [...s.tenants].sort()])),
   }
   const dueAtOf = new Map<string, Date | null>()
   for (const [key, s] of subjects) {
@@ -227,34 +242,118 @@ export interface RetentionResult {
   failures: { kind: SubjectKind; id: string; error: string }[]
 }
 
+/** Deletes one due subject's survey data, adding to `out`. Never throws: a failure goes on `out.failures` and is returned. */
+async function purgeSubject(
+  db: SupabaseClient,
+  s: RetentionSubject,
+  actor: string,
+  out: RetentionResult,
+): Promise<RetentionResult['failures'][number] | null> {
+  try {
+    let r: { responses: number; invitations: number }
+    if (s.kind === 'member') {
+      r = await purgeSurveyDataFor(db, 'member', s.id, actor)
+    } else {
+      // Participant: its own rows only (no email, which could reach another
+      // event). Email: only reached when every survey to it is due.
+      const { data, error } = await db.rpc('survey_purge_person', {
+        p_member_id: null,
+        p_participant_ids: s.kind === 'participant' ? [s.id] : [],
+        p_emails: s.kind === 'email' ? [s.id] : [],
+        p_actor: actor,
+      })
+      if (error) throw new Error(error.message)
+      r = data as { responses: number; invitations: number }
+    }
+    out.purged++
+    out.responses += r.responses
+    out.invitations += r.invitations
+    return null
+  } catch (err) {
+    const failure = { kind: s.kind, id: s.id, error: err instanceof Error ? err.message : String(err) }
+    out.failures.push(failure)
+    return failure
+  }
+}
+
 /** Full deletion for every due subject. The caller decides whether to call this. */
 export async function applySurveyRetention(db: SupabaseClient, plan: RetentionPlan, actor: string): Promise<RetentionResult> {
   const out: RetentionResult = { purged: 0, responses: 0, invitations: 0, failures: [] }
-  for (const s of plan.due) {
-    try {
-      let r: { responses: number; invitations: number }
-      if (s.kind === 'member') {
-        r = await purgeSurveyDataFor(db, 'member', s.id, actor)
-      } else {
-        // Participant: its own rows only (no email, which could reach another
-        // event). Email: only reached when every survey to it is due.
-        const { data, error } = await db.rpc('survey_purge_person', {
-          p_member_id: null,
-          p_participant_ids: s.kind === 'participant' ? [s.id] : [],
-          p_emails: s.kind === 'email' ? [s.id] : [],
-          p_actor: actor,
-        })
-        if (error) throw new Error(error.message)
-        r = data as { responses: number; invitations: number }
-      }
-      out.purged++
-      out.responses += r.responses
-      out.invitations += r.invitations
-    } catch (err) {
-      out.failures.push({ kind: s.kind, id: s.id, error: err instanceof Error ? err.message : String(err) })
-    }
-  }
+  for (const s of plan.due) await purgeSubject(db, s, actor, out)
   return out
+}
+
+/** The cron_runs label for one subject's failure. Email subjects are not named. */
+export function retentionFailureLabel(f: { kind: SubjectKind; id: string }): string {
+  return `${f.kind}:${f.kind === 'email' ? 'email' : f.id}`
+}
+
+/**
+ * The tenant slot a due subject is deleted in. A subject whose rows all sit with
+ * one tenant goes there. One whose rows span tenants goes in Stellr's slot: the
+ * purge is per person and reaches all of their survey rows, so it is one piece of
+ * work, and Stellr's slot runs first and is never skipped.
+ */
+export function retentionTenantOf(plan: Pick<RetentionPlan, 'tenantsOf'>, s: Pick<RetentionSubject, 'kind' | 'id'>): string {
+  const tenants = plan.tenantsOf.get(`${s.kind}:${s.id}`) ?? []
+  return tenants.length === 1 ? tenants[0] : STELLR_TENANT_ID
+}
+
+export interface PerTenantRetention {
+  result: RetentionResult
+  /** Due subjects left for the next run because their tenant's time ran out. */
+  notApplied: number
+  /** Spread into the run's result. Empty when only Stellr had subjects due. */
+  ledger: Record<string, unknown>
+}
+
+/**
+ * The cron's apply step (S5 B13): the same deletions as applySurveyRetention,
+ * run per tenant through runPerTenant with includeInactive, because offboarding
+ * does not stop a retention clock (lib/cron-scope.ts). Each failure is recorded
+ * on `run` as it happens, under retentionFailureLabel; when only Stellr has
+ * subjects due, the labels and order are the same as recording them afterwards.
+ */
+export async function applySurveyRetentionPerTenant(
+  db: SupabaseClient,
+  run: CronRun,
+  plan: RetentionPlan,
+  actor: string,
+  opts: { deadline: number },
+): Promise<PerTenantRetention> {
+  const out: RetentionResult = { purged: 0, responses: 0, invitations: 0, failures: [] }
+  let notApplied = 0
+  const byTenant = partitionByTenant(plan.due.map((subject) => ({ subject, tenant_id: retentionTenantOf(plan, subject) })))
+  const outcome = await runPerTenant<{ purged: number; failed: number; notApplied: number }>(db, run, {
+    job: 'survey-retention',
+    deadline: opts.deadline,
+    tenantIds: [...byTenant.keys()],
+    includeInactive: true,
+    fn: async (job) => {
+      const mine = { purged: 0, failed: 0, notApplied: 0 }
+      for (const { subject } of byTenant.get(job.tenant.id) ?? []) {
+        if (job.signal.aborted || Date.now() > job.deadline) {
+          mine.notApplied++
+          notApplied++
+          continue
+        }
+        const failure = await purgeSubject(db, subject, actor, out)
+        if (failure) {
+          mine.failed++
+          job.fail(retentionFailureLabel(failure), failure.error)
+        } else {
+          mine.purged++
+        }
+      }
+      return mine
+    },
+  })
+  // Tenants the deadline cut off before they started: their subjects wait too.
+  for (const id of outcome.notReached) notApplied += byTenant.get(id)?.length ?? 0
+  // Deletions the law requires must not wait silently: a run that left any for
+  // later is not ok, so cron_runs shows it even when only Stellr had work.
+  if (notApplied) run.fail('not_applied', new Error(`${notApplied} due subject(s) left for the next run: time ran out`))
+  return { result: out, notApplied, ledger: outcome.ledger }
 }
 
 /** A due list safe to print or store: ids for people with an account or participant row, masked emails. */

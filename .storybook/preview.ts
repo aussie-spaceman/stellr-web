@@ -5,7 +5,7 @@ import '../styles/tokens.css'
 import '../styles/globals.css'
 import { fontVariables } from '../lib/fonts'
 
-// The app sets the next/font variables on <html> in app/layout.tsx; Storybook
+// The app sets the next/font variables on <html> in each root layout; Storybook
 // doesn't render that layout, so set them here.
 if (typeof document !== 'undefined') document.documentElement.classList.add(...fontVariables.split(' '))
 

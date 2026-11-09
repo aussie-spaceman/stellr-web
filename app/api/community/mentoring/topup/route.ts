@@ -10,6 +10,8 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 // Buy extra mentoring SESSION credits (top-up beyond the tier allowance). Mentoring
 // is accounted per session — a cohort enrollment draws its planned 4/6/8 sessions
@@ -18,6 +20,10 @@ import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 // `quantity` on success (grantPurchasedLot), which enrollment then draws FIFO
 // alongside the tier allowance (migration 122). Mirrors /api/community/coaching/topup.
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.mentoring.topup' }, () => startMentoringTopup(req))
+}
+
+async function startMentoringTopup(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -72,5 +78,24 @@ export async function POST(req: Request) {
     payment_intent_data: { metadata: { type: 'mentoring_topup', memberId: member.id, quantity: String(quantity) } },
   })
 
+  noteAudit(req, { metadata: { quantity, checkout_session: checkout.id } })
   return NextResponse.json({ url: checkout.url })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

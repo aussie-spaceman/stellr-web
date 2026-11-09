@@ -163,7 +163,7 @@ describe('lib/csp policies', () => {
 
   it('every per-request route group is on the nonce list, and no public page is', () => {
     const top = (group: string) =>
-      readdirSync(`app/${group}`, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => `/${d.name}`)
+      readdirSync(`app/(stellr)/${group}`, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => `/${d.name}`)
     for (const group of ['(admin)', '(member)', '(auth)', '(flow)']) {
       for (const path of top(group)) expect(usesNonce(path), path).toBe(true)
     }

@@ -1,4 +1,4 @@
-import SeatPayPage from '@/app/(flow)/register/[slug]/pay-seat/[token]/page'
+import SeatPayPage from '@/app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantSeatPayLink } from '@/lib/tenancy/tenant-records'
 

@@ -8,6 +8,8 @@ import { sendEmail, communityReplyEmail } from '@/lib/email'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { runAfterResponse } from '@/lib/after-response'
+import { auditMutation } from '@/lib/audit/route'
+import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const createCommentSchema = z.object({
   postId: z.guid(),
@@ -74,6 +76,10 @@ async function notifyPostAuthor({
 
 // POST /api/community/comments — reply to a post or another comment (FR-COM-02).
 export async function POST(req: Request) {
+  return audited(req, { action: 'community.comment.create', table: 'community_comments' }, () => createComment(req))
+}
+
+async function createComment(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -143,6 +149,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 })
   }
 
+  noteAudit(req, { targetId: comment.id })
+
   // Keep the denormalised count in sync (best-effort).
   // deep review QUAL-10: supabase-js resolves `{ error }` on a failed query — it
   // never rejects — so the old `.then(ok, fallback)` rejection handler was dead
@@ -185,4 +193,22 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ id: comment.id })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

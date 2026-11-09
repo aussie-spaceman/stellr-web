@@ -19,11 +19,17 @@ import {
   openPendingConsent, openScreenedRequest, sendConsentRequest,
 } from '@/lib/pending-consent'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
+import { auditMutation } from '@/lib/audit/route'
+import { selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
+  return audited(req, { action: 'member.onboarding.submit', table: 'members' }, () => submitOnboarding(req))
+}
+
+async function submitOnboarding(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — see lib/impersonation.
   const impersonationBlock = await assertNotImpersonating()
@@ -889,4 +895,22 @@ async function childPendingSignup(
     console.error('[onboarding] consent request failed (non-fatal):', e)
   }
   return NextResponse.json({ success: true, signNowUrl: null, pendingConsent: 'parent' })
+}
+
+// The audit event for this route (docs/TENANCY-S5.md, B16): written after the response,
+// never for a 4xx, ids and short codes only. lib/community/self-service-audit decides
+// what is written; the call stays here because the coverage gate reads it here.
+async function audited(req: Request, spec: SelfServiceAudit, run: () => Promise<Response>): Promise<Response> {
+  let res: Response | undefined
+  try {
+    return (res = await run())
+  } finally {
+    await record(req, res, spec)
+  }
+}
+
+async function record(req: Request, res: Response | undefined, spec: SelfServiceAudit) {
+  const event = await selfServiceEvent(req, res, spec)
+  if (!event) return
+  await auditMutation(event, { afterResponse: true })
 }

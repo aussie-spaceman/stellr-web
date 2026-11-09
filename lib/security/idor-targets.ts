@@ -37,7 +37,7 @@ export interface IdorTarget {
 
 const ROUTE_FILE = /(^|\/)route\.(ts|tsx)$/
 
-/** `app/(public)/api/x/[id]/route.ts` → `/api/x/[id]`. */
+/** `app/(stellr)/(public)/api/x/[id]/route.ts` → `/api/x/[id]`. */
 export function urlPatternOf(file: string): string {
   const parts = file
     .replace(/^app\//, '')

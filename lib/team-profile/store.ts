@@ -15,6 +15,9 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import type { CronRun } from '@/lib/cron-runs'
+import { partitionByTenant, runPerTenant } from '@/lib/cron-tenants'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { isMinorOn, onDate } from '@/lib/age'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
 import { markdownToTiptap } from '@/lib/event-emails/defaults'
@@ -114,21 +117,28 @@ interface Candidate {
   emergency_contact_email: string | null
   emergency_contact_first_name: string | null
   event_slug: string
+  /** The registration's tenant. Only the daily sweep selects it; elsewhere it is left undefined. */
+  tenant_id: string | null
 }
 
 const CANDIDATE_SELECT =
   'id, member_id, first_name, last_name, email, date_of_birth, event_role, emergency_contact_email, ' +
   'emergency_contact_first_name, registrations!inner(event_slug, status)'
 
+/** The daily sweep's read: the same rows, plus each registration's tenant. */
+const SWEEP_SELECT =
+  'id, member_id, first_name, last_name, email, date_of_birth, event_role, emergency_contact_email, ' +
+  'emergency_contact_first_name, registrations!inner(event_slug, status, tenant_id)'
+
 function toCandidates(rows: Record<string, unknown>[] | null): Candidate[] {
   const out: Candidate[] = []
   for (const r of rows ?? []) {
     const reg = (Array.isArray(r.registrations) ? r.registrations[0] : r.registrations) as
-      | { event_slug: string; status: string }
+      | { event_slug: string; status: string; tenant_id?: string | null }
       | null
     if (!reg || reg.status === 'withdrawn') continue
     if (!STUDENT_ROLES.includes((r.event_role as string) ?? '')) continue
-    out.push({ ...(r as unknown as Candidate), event_slug: reg.event_slug })
+    out.push({ ...(r as unknown as Candidate), event_slug: reg.event_slug, tenant_id: reg.tenant_id as string | null })
   }
   return out
 }
@@ -265,14 +275,22 @@ async function sendInvite(
 
 // ── Creating rows ─────────────────────────────────────────────────────────────
 
-/** The member's most recent submitted profile, for pre-filling. */
-async function previousProfile(db: SupabaseClient, memberId: string | null, excludeParticipant: string) {
+/**
+ * The member's most recent submitted profile with the same tenant, for
+ * pre-filling. Answers given to one tenant never fill another tenant's row.
+ * `tenantId` is the registration's tenant where the caller selected it (the
+ * daily sweep); otherwise Stellr's, since only CMS events take profiles
+ * (eventTakesProfiles). NULL rows count as Stellr's, as everywhere in S5.
+ */
+async function previousProfile(db: SupabaseClient, memberId: string | null, excludeParticipant: string, tenantId: string) {
   if (!memberId) return null
-  const { data } = await db
+  let q = db
     .from('team_profiles')
     .select('id, answers')
     .eq('member_id', memberId)
     .neq('participant_id', excludeParticipant)
+  q = tenantId === STELLR_TENANT_ID ? q.or(`tenant_id.is.null,tenant_id.eq.${STELLR_TENANT_ID}`) : q.eq('tenant_id', tenantId)
+  const { data } = await q
     .not('submitted_at', 'is', null)
     .order('submitted_at', { ascending: false })
     .limit(1)
@@ -286,7 +304,7 @@ async function ensureRow(db: SupabaseClient, p: Candidate): Promise<{ row: TeamP
   if (existing) return { row: existing as unknown as TeamProfileRow, created: false }
 
   const id = randomUUID()
-  const prev = await previousProfile(db, p.member_id, p.id)
+  const prev = await previousProfile(db, p.member_id, p.id, p.tenant_id ?? STELLR_TENANT_ID)
   const { data, error } = await db
     .from('team_profiles')
     .insert({
@@ -315,7 +333,8 @@ async function ensureRow(db: SupabaseClient, p: Candidate): Promise<{ row: TeamP
 
 // ── Public operations ─────────────────────────────────────────────────────────
 
-export interface DispatchResult {
+// A type, not an interface, so it fits runPerTenant's Record<string, unknown> results.
+export type DispatchResult = {
   sent: number
   failed: number
   /** Students still waiting on a permission form. */
@@ -331,14 +350,28 @@ export interface DispatchResult {
  */
 export async function dispatchTeamProfiles(
   db: SupabaseClient,
-  scope: { participantIds?: string[]; eventSlug?: string; budgetMs?: number } = {},
+  scope: {
+    participantIds?: string[]
+    eventSlug?: string
+    budgetMs?: number
+    /**
+     * The daily sweep's cron run (S5 B13). With it, and no participantIds or
+     * eventSlug, the sends run per tenant through runPerTenant, and the result
+     * carries the run's per-tenant ledger (empty when only Stellr had work).
+     */
+    run?: CronRun
+    /** The runner's slice floor and overrun. Left to its defaults outside tests. */
+    slice?: { floorMs?: number; overrunMs?: number }
+  } = {},
   now = new Date(),
-): Promise<DispatchResult> {
+): Promise<DispatchResult & Record<string, unknown>> {
   const result: DispatchResult = { sent: 0, failed: 0, waiting: 0, deferred: 0 }
   const events = new Map<string, EventContext | null>()
+  const sweep = !scope.participantIds && !scope.eventSlug
+  const perTenant = sweep && scope.run ? scope.run : null
 
   let slugs: string[] | null = null
-  if (!scope.participantIds && !scope.eventSlug) {
+  if (sweep) {
     const all = await loadAllSurveyEvents()
     slugs = all.filter((e) => !e.isCampaign && profileOpen(e, now)).map((e) => e.slug)
     if (!slugs.length) return result
@@ -346,7 +379,9 @@ export async function dispatchTeamProfiles(
     slugs = [scope.eventSlug]
   }
 
-  let q = db.from('participants').select(CANDIDATE_SELECT)
+  // registrations has carried tenant_id since S4. participants has no column of
+  // its own on production yet, so a student's tenant is their registration's.
+  let q = db.from('participants').select(perTenant ? SWEEP_SELECT : CANDIDATE_SELECT)
   if (scope.participantIds) q = q.in('id', scope.participantIds)
   if (slugs) q = q.in('registrations.event_slug', slugs)
   const { data, error } = await q
@@ -363,26 +398,63 @@ export async function dispatchTeamProfiles(
   const dates = new Map([...events].map(([slug, ctx]) => [slug, ctx?.meta.date ?? null]))
   const ready = await formsComplete(db, people, dates)
 
+  // Shared by every tenant: the spacing is Resend's rate, which is one account's.
   let first = true
   const started = Date.now()
-  for (const p of people) {
-    if (!ready.has(p.id)) {
-      result.waiting++
-      continue
+  const sendTo = async (group: Candidate[], stop: () => boolean): Promise<DispatchResult> => {
+    const mine: DispatchResult = { sent: 0, failed: 0, waiting: 0, deferred: 0 }
+    const count = (key: keyof DispatchResult) => {
+      mine[key]++
+      result[key]++
     }
-    if (scope.budgetMs && Date.now() - started > scope.budgetMs) {
-      result.deferred++
-      continue
+    for (const p of group) {
+      if (!ready.has(p.id)) {
+        count('waiting')
+        continue
+      }
+      if (stop()) {
+        count('deferred')
+        continue
+      }
+      const { row, created } = await ensureRow(db, p)
+      if (!created) continue
+      if (!first) await sleep(SEND_SPACING_MS)
+      first = false
+      const sent = await sendInvite(db, row, p, events.get(p.event_slug)!.email)
+      if (sent.ok) count('sent')
+      else count('failed')
     }
-    const { row, created } = await ensureRow(db, p)
-    if (!created) continue
-    if (!first) await sleep(SEND_SPACING_MS)
-    first = false
-    const sent = await sendInvite(db, row, p, events.get(p.event_slug)!.email)
-    if (sent.ok) result.sent++
-    else result.failed++
+    return mine
   }
-  return result
+
+  if (!perTenant) {
+    await sendTo(people, () => !!scope.budgetMs && Date.now() - started > scope.budgetMs)
+    return result
+  }
+
+  const byTenant = partitionByTenant(people)
+  // Only Stellr has work: the runner makes a plain call, and a failure here ends
+  // the run as it always has, with the caller recording 'run' alone and no counts.
+  const stellrOnly = byTenant.size === 1 && byTenant.has(STELLR_TENANT_ID)
+  const stellrFailure: unknown[] = []
+  const outcome = await runPerTenant<DispatchResult>(db, perTenant, {
+    job: 'team-profiles',
+    // The runner needs a finite deadline; the cron always passes its budget.
+    deadline: started + (scope.budgetMs || 45_000),
+    tenantIds: [...byTenant.keys()],
+    ...scope.slice,
+    fn: async (job) => {
+      try {
+        return { ...(await sendTo(byTenant.get(job.tenant.id) ?? [], () => job.signal.aborted || Date.now() > job.deadline)) }
+      } catch (err) {
+        if (!stellrOnly) throw err
+        stellrFailure.push(err)
+        return { ...result }
+      }
+    },
+  })
+  if (stellrFailure.length) throw stellrFailure[0]
+  return { ...result, ...outcome.ledger }
 }
 
 export type ResendOutcome =

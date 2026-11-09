@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { getCurrentMember } from '@/lib/community'
 import { getMemberCampaignRegistration } from '@/lib/campaign-registrations'
 import { sendEmail, campaignProposalReceivedEmail } from '@/lib/email'

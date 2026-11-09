@@ -21,7 +21,7 @@ export type Fingerprint = {
 
 // Set by the server or by state, not by the request's route. Any other header
 // is compared, so a new one that routing adds is a difference.
-const IGNORED_HEADERS = new Set([
+export const IGNORED_HEADERS = new Set([
   'connection',
   'content-length', // the body hash covers it
   'date',
@@ -46,7 +46,7 @@ function policyNonce(headers: RawResponse['headers']): string | null {
 }
 
 /** Masks this response's nonce wherever it appears, and the port of the server that sent it. */
-function masker(res: RawResponse, port: number): (text: string) => string {
+export function masker(res: RawResponse, port: number): (text: string) => string {
   const nonce = policyNonce(res.headers)
   return (text) => {
     let out = nonce ? text.split(nonce).join('NONCE') : text
@@ -69,6 +69,58 @@ export function fingerprint(res: RawResponse, port: number): Fingerprint {
     bodyLength: body.length,
     bodySha256: createHash('sha256').update(body).digest('hex'),
   }
+}
+
+/**
+ * Where a value the request forged came back, by name. Read from the raw answer: a
+ * fingerprint masks every nonce attribute, whatever its value, so it can't see this.
+ */
+export function echoedIn(res: RawResponse, value: string): string[] {
+  const out = res.body.includes(value) ? ['body'] : []
+  for (const [name, header] of Object.entries(res.headers)) {
+    if (header !== undefined && (Array.isArray(header) ? header.join('\n') : header).includes(value)) out.push(`header ${name}`)
+  }
+  return out
+}
+
+const RELATIVE_BASE = 'http://relative.invalid'
+const REDIRECT_PARAM = 'redirect_url'
+
+/**
+ * What a forged host moved in an absolute sign-in redirect, by name. The host may be the
+ * plain answer's or exactly the forged one, since the redirect is built from the forwarded
+ * host the platform sets. Nothing else may move: the sign-in path, its query, and the path
+ * and query of the address it sends you back to.
+ */
+export function redirectMoved(plainLocation: unknown, forgedLocation: unknown, forgedHost: string): string[] {
+  const plain = new URL(String(plainLocation), RELATIVE_BASE)
+  const forged = new URL(String(forgedLocation), RELATIVE_BASE)
+  const out: string[] = []
+  const hostOk = (url: URL, against: URL) => url.hostname === against.hostname || url.hostname === forgedHost
+
+  if (!hostOk(forged, plain)) out.push('location host')
+  if (forged.pathname !== plain.pathname) out.push('location path')
+
+  const rest = (url: URL) => {
+    const params = new URLSearchParams(url.search)
+    params.delete(REDIRECT_PARAM)
+    params.sort()
+    return params.toString()
+  }
+  if (rest(forged) !== rest(plain)) out.push('location query')
+
+  const backTo = (url: URL) => {
+    const value = url.searchParams.get(REDIRECT_PARAM)
+    return value === null ? null : new URL(value, RELATIVE_BASE)
+  }
+  const [plainBack, forgedBack] = [backTo(plain), backTo(forged)]
+  if (!plainBack || !forgedBack) {
+    if (plainBack || forgedBack) out.push(`${REDIRECT_PARAM} on one side only`)
+    return out
+  }
+  if (!hostOk(forgedBack, plainBack)) out.push(`${REDIRECT_PARAM} host`)
+  if (`${forgedBack.pathname}${forgedBack.search}` !== `${plainBack.pathname}${plainBack.search}`) out.push(`${REDIRECT_PARAM} path`)
+  return out
 }
 
 /** What differs between two fingerprints, by name. Values stay out of the log: it is public. */

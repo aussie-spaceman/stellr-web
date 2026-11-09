@@ -10,6 +10,7 @@ import {
   type Assignment,
 } from '@/lib/event-awards'
 import {
+  attendees,
   fullName,
   listAssignments,
   listEventCompanies,
@@ -35,9 +36,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   return NextResponse.json(await snapshot(supabaseServer(), slug))
 }
 
+// Only students who took part can be judged: a registered no-show (never
+// checked in, usually never placed) would otherwise surface as a "No company"
+// row and be eligible for awards.
+async function eligibleStudents(db: SupabaseClient, slug: string) {
+  return attendees(await listEventStudents(db, slug))
+}
+
 async function snapshot(db: SupabaseClient, slug: string) {
   const [students, companies, assignments, pending, { data: settings }] = await Promise.all([
-    listEventStudents(db, slug),
+    eligibleStudents(db, slug),
     listEventCompanies(db, slug),
     listAssignments(db, slug),
     pendingAwardChanges(db, slug),
@@ -70,7 +78,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
 
   const body = (await req.json().catch(() => ({}))) as Partial<Body> & Record<string, unknown>
   const db = supabaseServer()
-  const students = await listEventStudents(db, slug)
+  const students = await eligibleStudents(db, slug)
   const byId = new Map(students.map((s) => [s.id, s]))
   const assignments = (await listAssignments(db, slug)).map(toAssignment)
   const table = () => db.from('event_award_assignments')

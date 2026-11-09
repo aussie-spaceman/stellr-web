@@ -37,6 +37,8 @@ INSERT INTO public.tenants (id, slug, legal_name, display_name, country, payment
   VALUES ('11111111-1111-4111-8111-111111111111', 'b9-canary', 'B9 Canary Pty Ltd', 'B9 Canary', 'AU', 'AU', 'aud', 'Australia/Sydney');
 INSERT INTO public.events (tenant_id, slug, sanity_id, title, time_zone, country, currency, grade_system) VALUES
   ('00000000-0000-4000-8000-000000000001', 'b9-stellr-event', 'b9-stellr-sanity', 'B9 Stellr', 'UTC', 'US', 'usd', 'us_grades'),
+  -- A second Stellr event: community_spaces.sanity_event_id is unique, so enforce mode needs its own.
+  ('00000000-0000-4000-8000-000000000001', 'b9-stellr-event-2', 'b9-stellr-sanity-2', 'B9 Stellr 2', 'UTC', 'US', 'usd', 'us_grades'),
   ('11111111-1111-4111-8111-111111111111', 'b9-canary-event', 'b9-canary-sanity', 'B9 Canary', 'UTC', 'AU', 'aud', 'au_years');
 
 -- The canary tenant's id, supplied directly.
@@ -93,7 +95,7 @@ SELECT lives_ok($q$UPDATE public.community_spaces SET name = 'Renamed' WHERE slu
 -- ── Enforce mode: the cut-over must not change this ──────────────────────────
 UPDATE public.tenancy_settings SET derivation_mode = 'enforce';
 
-SELECT lives_ok($q$INSERT INTO public.community_spaces (slug, name, sanity_event_id) VALUES ('b9-s4', 'B9', 'b9-stellr-sanity')$q$, 'enforce: a row for a Stellr event writes');
+SELECT lives_ok($q$INSERT INTO public.community_spaces (slug, name, sanity_event_id) VALUES ('b9-s4', 'B9', 'b9-stellr-sanity-2')$q$, 'enforce: a row for a Stellr event writes');
 SELECT throws_ok($q$INSERT INTO public.community_spaces (slug, name, sanity_event_id) VALUES ('b9-y', 'B9', 'b9-canary-sanity')$q$, '23514', NULL, 'enforce: community_spaces refuses another tenant''s event');
 SELECT throws_ok($q$INSERT INTO public.community_resources (title, event_ref) VALUES ('b9-y', 'b9-canary-sanity')$q$, '23514', NULL, 'enforce: community_resources refuses another tenant''s event');
 SELECT throws_ok($q$INSERT INTO public.mentoring_cohorts (name, sanity_event_id) VALUES ('b9-y', 'b9-canary-sanity')$q$, '23514', NULL, 'enforce: mentoring_cohorts refuses another tenant''s event');

@@ -102,6 +102,7 @@ SELECT set_eq(
     'public.member_background_checks',
     'public.member_directory_prefs',
     'public.member_ethnicities',
+    'public.member_external_background_checks',
     'public.member_group_members',
     'public.member_groups',
     'public.member_memberships',

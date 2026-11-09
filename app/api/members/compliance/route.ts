@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
-import { loadComplianceForMember } from '@/lib/compliance'
+import { externalCheckValidUntil, loadComplianceForMember } from '@/lib/compliance'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { alertLicenseReview } from '@/lib/license-review'
+import { recheckEventManagerClearance } from '@/lib/event-manager'
 import { LICENSE_DOCUMENT_URL_TTL_SECONDS, TEACHER_LICENSE_BUCKET, teacherLicenseSchema } from '@/lib/teacher-license'
 
 // GET /api/members/compliance — the current member's clearance state (license +
@@ -25,7 +26,27 @@ export async function GET() {
     documentUrl = signed?.signedUrl ?? null
   }
 
+  // The member's own uploaded background check, with its document likewise.
+  const external = summary?.external ?? null
+  let externalDocumentUrl: string | null = null
+  if (external?.document_path) {
+    const { data: signed } = await db.storage
+      .from(TEACHER_LICENSE_BUCKET)
+      .createSignedUrl(external.document_path, LICENSE_DOCUMENT_URL_TTL_SECONDS)
+    externalDocumentUrl = signed?.signedUrl ?? null
+  }
+
   return NextResponse.json({
+    external: external
+      ? {
+          issuer: external.issuer,
+          completed_on: external.completed_on,
+          document_expires_on: external.document_expires_on,
+          verified: !!external.verified_at,
+          valid_until: externalCheckValidUntil(external),
+        }
+      : null,
+    externalDocumentUrl,
     required: summary ? summary.state !== 'not_required' : false,
     state: summary?.state ?? 'not_required',
     detail: summary?.detail ?? null,
@@ -90,6 +111,8 @@ export async function POST(req: Request) {
   )
   // Staff are told there is a license to verify (never throws).
   await alertLicenseReview(db, member.id, 'details')
+  // Re-entry clears verification: Event Manager access it supported ends now.
+  await recheckEventManagerClearance(db, member.id, actor)
 
   const summary = await loadComplianceForMember(db, member.id)
   return NextResponse.json({ ok: true, state: summary?.state ?? 'awaiting_verification', license: summary?.license ?? null })

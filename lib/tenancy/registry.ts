@@ -181,6 +181,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.member_addresses': identity(),
   'public.member_allergies': identity(),
   'public.member_background_checks': identity('safeguarding checks; per-jurisdiction records in S11'),
+  'public.member_external_background_checks': identity('background checks the member already holds from another organisation; admin-verified'),
   'public.member_directory_prefs': identity(),
   'public.member_ethnicities': identity(),
   'public.member_notification_prefs': identity(),

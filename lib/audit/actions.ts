@@ -44,6 +44,16 @@ export const AUDIT_ACTIONS = [
   'privacy.request.create',
   'privacy.request.confirm',
   'teacher_grant.application.create',
+
+  // Event Manager role (app/api/admin/members/[id]/event-manager)
+  'role.event_manager.assign',
+  'role.event_manager.update',
+  'role.event_manager.remove',
+
+  // Background checks a member already holds (…/external-check)
+  'compliance.external_check.submit',
+  'compliance.external_check.verify',
+  'compliance.external_check.remove',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

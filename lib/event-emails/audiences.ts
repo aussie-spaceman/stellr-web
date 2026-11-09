@@ -13,6 +13,7 @@ import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
 import type { AudienceKey, RecipientRole } from './types'
 import type { PaymentLine, RecipientForRender } from './render'
+import { activeAssignmentFilter } from '@/lib/event-manager-active'
 
 export interface ResolvedRecipient extends RecipientForRender {
   /** Display name for previews and history. */
@@ -300,6 +301,7 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
     .from('event_manager_assignments')
     .select('clerk_user_id')
     .eq('event_slug', slug)
+    .or(activeAssignmentFilter())
   if (managers?.length) {
     try {
       const client = await clerkClient()

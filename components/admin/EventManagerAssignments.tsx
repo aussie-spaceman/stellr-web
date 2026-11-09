@@ -2,11 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { formatDateShort } from '@/lib/utils'
 
 interface Assignment {
   id: string
   clerk_user_id: string
   email?: string | null
+  expires_on?: string | null
+  active?: boolean
 }
 
 export default function EventManagerAssignments({
@@ -60,7 +63,12 @@ export default function EventManagerAssignments({
         <ul className="space-y-1.5">
           {initialAssignments.map((a) => (
             <li key={a.id} className="flex items-center justify-between text-sm">
-              <span className="text-brand-muted">{a.email ?? a.clerk_user_id}</span>
+              <span className="text-content-body">
+                {a.email ?? a.clerk_user_id}
+                <span className="ml-2 text-xs text-content-muted">
+                  {a.active === false ? 'expired' : a.expires_on ? `until ${formatDateShort(a.expires_on)}` : 'no expiry set'}
+                </span>
+              </span>
               <button
                 onClick={() => remove(a.clerk_user_id)}
                 disabled={busy}
@@ -90,7 +98,8 @@ export default function EventManagerAssignments({
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <p className="text-xs text-brand-muted-soft">
-        The user must already have an account with the Event Manager role in Clerk.
+        They need a Stellr login, must be 18+ and cleared (background check, verified uploaded check or verified
+        teaching license). Access ends 30 days after the event; change the date on their member page.
       </p>
     </div>
   )

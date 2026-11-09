@@ -89,6 +89,7 @@ export const ROLE_TABLE_MANAGERS = {
   'app/api/admin/event-managers/route.ts': 'the screen that assigns event managers',
   'app/(admin)/admin/staff/page.tsx': 'lists staff scopes for editing',
   'app/(admin)/admin/competitions/[slug]/page.tsx': 'lists the managers assigned to the event being edited',
+  'lib/event-manager.ts': 'the service both assignment screens call to grant, change, remove and sweep event managers',
 }
 
 const SKIP_FILE = /^scripts\/|\.stories\.[jt]sx?$|^lib\/authz(\.|\/)/

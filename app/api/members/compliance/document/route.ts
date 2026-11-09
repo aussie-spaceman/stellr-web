@@ -5,6 +5,7 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { claimUpload } from '@/lib/uploads'
 import { alertLicenseReview } from '@/lib/license-review'
+import { recheckEventManagerClearance } from '@/lib/event-manager'
 import {
   LICENSE_DOCUMENT_URL_TTL_SECONDS,
   TEACHER_LICENSE_BUCKET,
@@ -80,6 +81,8 @@ export async function POST(req: NextRequest) {
   )
   // Staff are told there is a license to verify (never throws).
   await alertLicenseReview(db, member.id, 'document')
+  // A new image clears verification: Event Manager access it supported ends now.
+  await recheckEventManagerClearance(db, member.id, actor)
 
   const { data: signed } = await db.storage.from(BUCKET).createSignedUrl(storagePath, LICENSE_DOCUMENT_URL_TTL_SECONDS)
   return NextResponse.json({ ok: true, documentUrl: signed?.signedUrl ?? null })

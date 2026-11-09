@@ -3,7 +3,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import { isAdminClaims, requireAdminPage } from '@/lib/admin-auth'
 import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
-import { loadComplianceForMember } from '@/lib/compliance'
+import { externalCheckValidUntil, loadComplianceForMember } from '@/lib/compliance'
+import { isKnownMinorOn } from '@/lib/age'
 import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
 import type { MemberAgreement } from '@/components/admin/MemberAgreementPanel'
 import { loadVolunteerAgreement } from '@/lib/volunteer'
@@ -95,14 +96,30 @@ export default async function AdminMemberPage({
     }
   })
 
-  // Background-check / license compliance (PRD §13) — null when not required.
+  // Background-check / license compliance (PRD §13). Shown for every member who
+  // isn't a known minor: an adult whose current role needs no clearance can
+  // still need it recorded (Event Manager access requires it), so the panel is
+  // there with a "not required for their role" pill. Null for a known minor.
   const summary = await loadComplianceForMember(db, id)
+  const memberDob = (member as { date_of_birth?: string | null }).date_of_birth ?? null
   const compliance: MemberCompliance | null =
-    summary && summary.state !== 'not_required'
+    summary && (summary.state !== 'not_required' || !isKnownMinorOn(memberDob))
       ? {
           state: summary.state,
           detail: summary.detail,
           license: summary.license,
+          external: summary.external
+            ? {
+                issuer: summary.external.issuer,
+                completed_on: summary.external.completed_on,
+                document_expires_on: summary.external.document_expires_on,
+                verified_at: summary.external.verified_at,
+                verified_label: summary.external.verified_label,
+                submitted_by: summary.external.submitted_by ?? 'member',
+                updated_at: summary.external.updated_at ?? null,
+                valid_until: externalCheckValidUntil(summary.external),
+              }
+            : null,
           check: summary.check
             ? {
                 id: summary.check.id,
@@ -161,8 +178,10 @@ export default async function AdminMemberPage({
   // even if they reach this page. Statuses only here; answers are a click away
   // (and that view is logged).
   const { sessionClaims } = await auth()
+  // Also gates Classification → Event Manager: only an admin grants access.
+  const viewerIsAdmin = isAdminClaims(sessionClaims)
   let surveys: MemberSurveyItem[] | null = null
-  if (isAdminClaims(sessionClaims)) {
+  if (viewerIsAdmin) {
     surveys = await memberSurveyRows(db, id)
       .then((rows) => toMemberSurveyItems(rows))
       .catch((err) => {
@@ -186,6 +205,7 @@ export default async function AdminMemberPage({
       agreement={agreement}
       scholarships={scholarships}
       surveys={surveys}
+      canManageEventManager={viewerIsAdmin}
     />
   )
 }

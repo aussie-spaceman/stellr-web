@@ -23,7 +23,7 @@ vi.mock('@/lib/supabase', async () => {
 })
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: () => null }))
 vi.mock('@/lib/scholarships', () => ({ findOfferForRegistration: h.findOffer }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => h.stripe }))
 vi.mock('@/lib/registration-checkout', async () => {

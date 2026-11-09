@@ -7,7 +7,7 @@ import { actingSession, invalidLink, json, throttle } from '@/lib/esign/native/h
 // they have already agreed to sign electronically.
 
 export async function GET(req: Request) {
-  const limited = throttle(req, 'context', 60)
+  const limited = await throttle(req, 'context', 60)
   if (limited) return limited
   const db = supabaseServer()
   const ctx = await actingSession(db, req, 'read')

@@ -7,7 +7,7 @@ import { actingSession, invalidLink, json, readJson, requestMeta, sameOrigin, th
 // or legal guardian). Recorded with the disclosure version they saw.
 
 export async function POST(req: Request) {
-  const limited = throttle(req, 'consent', 20)
+  const limited = await throttle(req, 'consent', 20)
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()

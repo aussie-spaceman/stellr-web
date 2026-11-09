@@ -10,7 +10,7 @@ import { actingSession, invalidLink, json, readJson, sameOrigin, throttle } from
 // they keep the record of what they signed.
 
 export async function POST(req: Request) {
-  const limited = throttle(req, 'copy', 10)
+  const limited = await throttle(req, 'copy', 10)
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()

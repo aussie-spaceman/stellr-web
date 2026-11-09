@@ -8,7 +8,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, getSignedInMember } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { invitationByToken, invitationForMember, isWrongMember, loadSession, type OpenedFrom, type SurveySession } from './access'
 
 export type Ref = { token: string } | { invitationId: string }
@@ -17,8 +18,12 @@ export type Resolved = { db: SupabaseClient; session: SurveySession; from: Opene
 
 const json = (status: number, error: string) => ({ error: NextResponse.json({ error }, { status }) })
 
+async function limitSurveyRequest(req: Request, write: boolean): Promise<Response | null> {
+  return await rateLimit(req, 'survey', { limit: write ? 120 : 60, windowMs: 60_000, tenantId: (await requestTenant()).tenantId })
+}
+
 export async function resolveSession(req: Request, ref: Ref, opts: { write: boolean }): Promise<Resolved> {
-  const limited = rateLimitGuard(req, 'survey', { limit: opts.write ? 120 : 60, windowMs: 60_000 })
+  const limited = await limitSurveyRequest(req, opts.write)
   if (limited) return { error: limited }
   const db = supabaseServer()
 

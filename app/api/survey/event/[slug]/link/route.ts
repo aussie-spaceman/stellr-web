@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { distributionForEvent, loadDefinition, statusNow } from '@/lib/survey/distributions'
 import { sendLinkEmail, type InvitationRow } from '@/lib/survey/send'
 
@@ -9,7 +10,7 @@ import { sendLinkEmail, type InvitationRow } from '@/lib/survey/send'
 // link". Sends only to the address the invitation was issued to, and answers
 // the same whether or not one exists, so it can't be used to probe who attended.
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const limited = rateLimitGuard(req, 'survey-link', { limit: 5, windowMs: 10 * 60_000 })
+  const limited = await rateLimit(req, 'survey-link', { limit: 5, windowMs: 10 * 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
   const parsed = z.object({ email: z.string().email().max(254) }).safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })

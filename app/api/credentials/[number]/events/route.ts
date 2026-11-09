@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { getCredentialByNumber, recordCredentialEvent, type CredentialEventKind } from '@/lib/credentials'
 
 // POST /api/credentials/[number]/events  { kind }
@@ -10,7 +11,7 @@ import { getCredentialByNumber, recordCredentialEvent, type CredentialEventKind 
 const CLIENT_KINDS: CredentialEventKind[] = ['linkedin_add', 'linkedin_share', 'copy_link']
 
 export async function POST(req: Request, { params }: { params: Promise<{ number: string }> }) {
-  const limited = rateLimitGuard(req, 'credential-events', { limit: 30, windowMs: 60_000 })
+  const limited = await rateLimit(req, 'credential-events', { limit: 30, windowMs: 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
 
   const body = (await req.json().catch(() => ({}))) as { kind?: string }

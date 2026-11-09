@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { appToday } from '@/lib/age'
 
 // Deep-review REG-3 / REG-4 / REG-5 regression tests for the group registration
@@ -102,7 +103,7 @@ vi.mock('@clerk/nextjs/server', () => ({
   }),
 }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: () => {} }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rlGuard }))
 vi.mock('@/lib/group-registration-followup', () => ({ runGroupRegistrationFollowUp: h.followUp }))
 // Hold post-response work so a test can assert what ran before the response.
 vi.mock('@/lib/after-response', () => ({
@@ -362,7 +363,7 @@ describe('POST /api/register/group', () => {
     expect(h.rlGuard).toHaveBeenCalledWith(
       expect.anything(),
       'register-group',
-      { limit: 3, windowMs: 3_600_000 },
+      { limit: 3, windowMs: 3_600_000, tenantId: STELLR_TENANT_ID },
       'colorado',
     )
   })

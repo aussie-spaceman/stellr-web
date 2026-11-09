@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { appToday } from '@/lib/age'
 
 // Deep-review REG-4 regression test for the individual registration route: the
@@ -74,7 +75,7 @@ vi.mock('@/lib/stripe', () => ({ stripeClient: () => null }))
 vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: h.dispatch }))
 vi.mock('@/lib/registration-pay-link', () => ({ sendPayLinkEmail: async () => ({ sent: false, recipients: [] }) }))
 vi.mock('@/lib/registration-duplicates', () => ({ findExistingRegistrations: async () => new Map(), resolveDuplicate: () => ({ kind: 'none' }) }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rlGuard }))
 vi.mock('@/lib/school-link', () => ({ resolveAndLinkSchool: async () => ({ state: 'CO' }) }))
 vi.mock('@/lib/member-profile-options', () => ({ syncMemberOptionSelections: async () => {} }))
 vi.mock('@/lib/event-participation-sync', () => ({ recordEventParticipation: async () => {} }))
@@ -146,7 +147,7 @@ describe('POST /api/register/individual', () => {
     expect(h.rlGuard).toHaveBeenCalledWith(
       expect.anything(),
       'register-individual',
-      { limit: 3, windowMs: 3_600_000 },
+      { limit: 3, windowMs: 3_600_000, tenantId: STELLR_TENANT_ID },
       'colorado',
     )
   })

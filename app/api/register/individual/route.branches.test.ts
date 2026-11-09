@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { rec, OPEN_EVENT, CLOSED_EVENT, eqFilter, jsonRequest, settle } from '@/test/registration/fixtures'
 
 // S5 A4: what route.characterisation.test.ts names as unprotected by the handler
@@ -60,7 +61,7 @@ vi.mock('@/lib/community', () => ({ getCurrentMember: h.getCurrentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: h.impersonation }))
 vi.mock('@/lib/pending-consent', () => ({ sessionChildAwaitingConsentBlock: h.consentBlock }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.provision }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rateLimit, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rateLimit }))
 vi.mock('@clerk/nextjs/server', () => ({ auth: h.auth }))
 vi.mock('@/lib/scholarships', () => ({ findOfferByToken: h.findOffer, attachOfferToRegistration: h.attachOffer }))
 vi.mock('@/lib/stripe', () => ({
@@ -297,7 +298,7 @@ describe('POST /api/register/individual — the gate, in order', () => {
 
   it('a slug that is not a string is not used as the rate limit sub-key', async () => {
     await post({ event_slug: 42 })
-    expect(h.rateLimit).toHaveBeenCalledWith(expect.anything(), 'register-individual', { limit: 3, windowMs: 3_600_000 }, undefined)
+    expect(h.rateLimit).toHaveBeenCalledWith(expect.anything(), 'register-individual', { limit: 3, windowMs: 3_600_000, tenantId: STELLR_TENANT_ID }, undefined)
   })
 
   it('a child awaiting consent gets that response, before the session is read', async () => {

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { rateLimitGuard, checkRateLimit, HOUR_MS } from '@/lib/rate-limit'
+import { HOUR_MS } from '@/lib/rate-limit'
+import { limit, rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import {
   CHECK_IN_COOKIE,
   CHECK_IN_COOKIE_MAX_AGE,
@@ -39,14 +41,16 @@ export async function POST(req: Request) {
 
   // Keyed by slug+ip and set generously: a whole event legitimately checks in
   // from one venue's Wi-Fi (shared NAT IP), so this only stops bulk scraping.
-  const limited = rateLimitGuard(req, 'check-in', { limit: 600, windowMs: HOUR_MS }, slug)
+  const { tenantId } = await requestTenant()
+  const limited = await rateLimit(req, 'check-in', { limit: 600, windowMs: HOUR_MS, tenantId }, slug)
   if (limited) return limited
   // Guessing someone's birthday means many tries at one name; a real person
   // needs two or three. Keyed by name, so a busy shared IP is unaffected.
   if (byName) {
-    const rl = checkRateLimit(`check-in-name:${slug}:${normaliseName(firstName)}:${normaliseName(lastName)}`, {
+    const rl = await limit(`check-in-name:${slug}:${normaliseName(firstName)}:${normaliseName(lastName)}`, {
       limit: 10,
       windowMs: HOUR_MS,
+      tenantId,
     })
     if (!rl.ok) {
       return NextResponse.json({ error: 'Too many tries. Please see the registration desk.' }, { status: 429 })

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { appToday } from '@/lib/age'
 
 // Deep-review REG-4 regression test for the group-join route: the event lookup
@@ -80,7 +81,7 @@ vi.mock('@/lib/school-link', () => ({ linkMembersToSchoolByName: async () => {} 
 vi.mock('@/lib/event-participation-sync', () => ({ recordEventParticipation: async () => {} }))
 vi.mock('@/lib/space-inheritance', () => ({ syncObjectSpaceRoster: async () => {}, reconcileEventSpaceRoster: async () => {} }))
 vi.mock('@/lib/member-sync', () => ({ upsertMember: h.upsertMember }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rlGuard }))
 
 const { POST } = await import('./route')
 
@@ -151,7 +152,7 @@ describe('POST /api/register/group-join', () => {
     expect(h.rlGuard).toHaveBeenCalledWith(
       expect.anything(),
       'register-group-join',
-      { limit: 3, windowMs: 3_600_000 },
+      { limit: 3, windowMs: 3_600_000, tenantId: STELLR_TENANT_ID },
       'tok',
     )
   })

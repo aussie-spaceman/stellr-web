@@ -86,17 +86,8 @@ describe('characterisation: POST /api/register/pay', () => {
     })
   })
 
-  it('a closed window is a 403', async () => {
+  it('a closed window can still pay: closing stops new sign-ups, not payment for a held place', async () => {
     h.getEventBySlug.mockResolvedValue(CLOSED_EVENT)
-    expect(await settle(await post())).toEqual({
-      status: 403, body: { error: 'Registration for this event has closed.' },
-    })
-    expect(h.createCheckout).not.toHaveBeenCalled()
-  })
-
-  it('a closed window with a scholarship offer can still pay', async () => {
-    h.getEventBySlug.mockResolvedValue(CLOSED_EVENT)
-    h.findOffer.mockResolvedValue({ id: 'sch-1' })
     expect(await settle(await post())).toEqual({ status: 200, body: { url: 'https://checkout.test/cs_1' } })
   })
 

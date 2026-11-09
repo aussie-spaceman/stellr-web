@@ -45,6 +45,7 @@ type Part = {
   health_conditions: string | null; emergency_contact_first_name: string | null; emergency_contact_last_name: string | null
   emergency_contact_email: string | null; emergency_contact_phone: string | null; emergency_contact_relationship: string | null
   school_email?: string | null
+  individual_payment_status?: string | null
 }
 
 async function load(db: SupabaseClient, registrationId: string) {
@@ -61,7 +62,7 @@ async function load(db: SupabaseClient, registrationId: string) {
     .from('participants')
     .select(`id, member_id, first_name, last_name, email, phone, date_of_birth, event_role, school_name, grade, gender,
       t_shirt_size, dietary_requirements, health_conditions, emergency_contact_first_name, emergency_contact_last_name,
-      emergency_contact_email, emergency_contact_phone, emergency_contact_relationship, school_email`)
+      emergency_contact_email, emergency_contact_phone, emergency_contact_relationship, school_email, individual_payment_status`)
     .eq('registration_id', registrationId)
     .order('created_at', { ascending: true })
   return { reg: reg as Reg, parts: (parts ?? []) as Part[] }
@@ -226,7 +227,8 @@ export async function finishGroupSetup(
           const event = await getEventBySlug(reg.event_slug)
           const priceId = (event as { stripePriceId?: string } | null)?.stripePriceId
           const price = priceId ? await stripe.prices.retrieve(priceId) : null
-          const total = parts.length
+          // Anyone who paid individually before the group moved to an invoice isn't billed again.
+          const total = parts.filter((p) => p.individual_payment_status !== 'paid').length
           await createAndSendGroupInvoice(db, stripe, {
             registrationId: reg.id,
             eventSlug: reg.event_slug,

@@ -288,6 +288,26 @@ export interface SeatCheckoutOptions {
   cancelUrl: string
   /** Pre-fills Stripe's email field; omit/null to let the payer enter their own. */
   customerEmail?: string | null
+  /** A discount an admin set on the group (registrations.invoice_coupon_id). */
+  couponId?: string | null
+}
+
+/**
+ * The group's discount on one person's checkout, if it carries over. A percentage
+ * applies per person; a fixed amount was the group's, once, and doesn't (the same
+ * rule as an "additional places" invoice). Stripe refuses a session with both
+ * `discounts` and `allow_promotion_codes`, so the result decides which one is sent.
+ */
+export async function seatDiscount(
+  stripe: Stripe,
+  couponId: string | null | undefined,
+): Promise<Pick<Stripe.Checkout.SessionCreateParams, 'discounts' | 'allow_promotion_codes'>> {
+  if (couponId) {
+    const coupon = await stripe.coupons.retrieve(couponId).catch(() => null)
+    if (coupon?.valid && coupon.percent_off) return { discounts: [{ coupon: couponId }] }
+  }
+  // Surfaces the "Add promotion code" field for codes set up in Stripe.
+  return { allow_promotion_codes: true }
 }
 
 /**
@@ -317,8 +337,7 @@ export async function createSeatCheckout(
     // The money-back guarantee, on Stripe's page above the Pay button.
     custom_text: GUARANTEE_CHECKOUT_TEXT,
     mode: 'payment',
-    // Surfaces the "Add promotion code" field for codes set up in Stripe.
-    allow_promotion_codes: true,
+    ...(await seatDiscount(stripe, opts.couponId)),
     line_items: [{ price: stripePriceId, quantity: 1 }],
     ...(opts.customerEmail ? { customer_email: opts.customerEmail } : {}),
     customer_creation: 'always',

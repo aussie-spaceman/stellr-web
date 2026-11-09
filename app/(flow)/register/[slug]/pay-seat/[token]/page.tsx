@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { registrationIsOpen } from '@/lib/registration'
 import { maskEmail } from '@/lib/utils'
 import { stripeClient } from '@/lib/stripe'
 import PayNowButton from '../../pay/[token]/PayNowButton'
@@ -91,22 +90,14 @@ export default async function SeatPayPage({ params, searchParams }: PageProps) {
 
   if (!reg || !reg.member_pays_individually) {
     return (
-      <Shell icon="🧾" title="This seat isn't paid here">
-        <p className="text-content-body mb-6">This registration isn&apos;t paid per person. Reply to your registration email if you think that&apos;s wrong.</p>
+      <Shell icon="🧾" title="Nothing to pay here">
+        <p className="text-content-body mb-6">This group now pays together, so nothing is due from you. Questions? Ask your group&apos;s organizer or reply to your registration email.</p>
         <Link href="/events" className="btn-primary">Browse Events</Link>
       </Shell>
     )
   }
 
   const event = await getEventBySlug(slug).catch(() => null)
-  if (event && !registrationIsOpen(event)) {
-    return (
-      <Shell icon="⏰" title="Registration has closed">
-        <p className="text-content-body mb-6">Registration for <strong>{reg.event_title}</strong> is no longer open, so this payment link has stopped working. Reply to your registration email if you think that&apos;s a mistake.</p>
-        <Link href="/events" className="btn-primary">Browse Events</Link>
-      </Shell>
-    )
-  }
 
   // Resolve the per-seat fee to display (server-side, read-only). Non-fatal: if
   // the price can't be read we still show the button — the amount is confirmed on

@@ -9,8 +9,9 @@ import { DISPOSITION_REGISTER_STATUS, STELLR_ONLY_DISPOSITIONS, dispositionCount
 
 // Lower only: C16 to C20 take it to 0. It equals the register's count, so a conversion
 // has to lower it and a route cannot be quietly moved into the bucket. The plan's 51 was
-// measured before registrations/[id]/participants existed.
-const MAX_TENANT_DESTINED_STELLR_ONLY = 52
+// measured before registrations/[id]/participants and registrations/[id]/payment-method
+// existed.
+const MAX_TENANT_DESTINED_STELLR_ONLY = 53
 
 const stellrOnly = idorTargets().filter((t) => t.cls === 'stellr_only').map((t) => t.file)
 

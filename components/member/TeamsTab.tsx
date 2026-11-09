@@ -8,6 +8,7 @@ import { displayEventRole } from '@/lib/member-enums'
 import { formatDateShort } from '@/lib/utils'
 import { registrationPaid } from '@/lib/payment-status'
 import { Copy, Check } from 'lucide-react'
+import { GroupPaymentMethod } from '@/components/registration/GroupPaymentMethod'
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -166,8 +167,9 @@ function JoinedTeamsView({
   }
 
   function paymentInfo(entry: StudentTeam, reg: StudentTeam['registrations']): { label: string; style: string } {
+    // A place paid individually stays paid if the group later changes how it pays.
+    if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
     if (reg.member_pays_individually) {
-      if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
       // Free event — nothing was ever owed. Kept distinct from 'Paid' so the
       // member isn't told they paid for something that had no fee.
       if (entry.individual_payment_status === 'waived') return { label: 'No payment required', style: 'bg-green-100 text-green-700' }
@@ -502,6 +504,24 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                     ({fullTeam.registration.teacher_poc_email}) — cc&apos;d on all correspondence
                   </div>
                 )}
+
+                {/* How the group pays. Read-only for a student manager and in view-as:
+                    the route says so through canChange. */}
+                <GroupPaymentMethod
+                  endpoint={`/api/members/teams/${team.id}/payment-method`}
+                  groupLabel={team.event_title}
+                  variant="section"
+                  onChanged={() => {
+                    fetch(`/api/members/teams`)
+                      .then(r => r.json())
+                      .then(d => { if (!d.error && Array.isArray(d.teams)) setTeams(d.teams) })
+                      .catch(() => {})
+                    fetch(`/api/members/teams/${team.id}`)
+                      .then(r => r.json())
+                      .then(d => { if (!d.error) setFullTeam(d) })
+                      .catch(() => {})
+                  }}
+                />
 
                 {/* Join link — shown for every group, not just the email-link
                     method, so the organiser can always hand it to a member. The

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { FieldCrypto, blindIndexEquals, fieldKeyId, type DekRow, type DekStore } from '@/lib/field-crypto'
+import { FieldCrypto, blindIndexEquals, fieldKeyId, isFieldCiphertext, type DekRow, type DekStore } from '@/lib/field-crypto'
 import {
   applyShadowPatch,
   buildShadowPatch,
@@ -12,7 +12,7 @@ import {
   syncShadowRows,
   type ShadowRow,
 } from '@/lib/field-crypto-patch'
-import { sensitiveTable } from '@/lib/field-crypto-fields'
+import { bidxColumn, encColumn, sensitiveTable } from '@/lib/field-crypto-fields'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 const TENANT = STELLR_TENANT_ID
@@ -110,7 +110,17 @@ describe('buildShadowPatch', () => {
     // The index matches a lookup of the same address in another case.
     const idx = await fc.blindIndex({ tenantId: TENANT, table: 'participants', column: 'emergency_contact_email' }, 'guardian@example.test', 'email')
     expect(blindIndexEquals(patch.emergency_contact_email_bidx, idx)).toBe(true)
-    for (const v of Object.values(patch)) expect(v).not.toMatch(/Asthma|Pat|Example|555/)
+    // No column holds its plaintext: each is sf1 ciphertext that opens, under
+    // authentication, to that column's value, and each index is a bi1 HMAC.
+    // Don't search these for plaintext fragments: they are random base64url, so
+    // a short string such as "Pat" turns up by chance and fails the test.
+    const row = participantRow()
+    for (const f of participants.fields) {
+      const enc = patch[encColumn(f.column)]
+      expect(isFieldCiphertext(enc), f.column).toBe(true)
+      expect(await fc.decrypt({ ...ctx, column: f.column }, enc!)).toBe(encodeFieldValue(f, row[f.column as keyof typeof row]))
+      if (f.blindIndex) expect(patch[bidxColumn(f.column)], f.column).toMatch(/^bi1\.[\w-]+\.[\w-]+$/)
+    }
   })
 
   it('is a no-op for a row that is already current', async () => {

@@ -14,6 +14,7 @@ import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedL
 import { requireStripe } from '@/lib/stripe'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { confirmRegistration } from '@/lib/registration-confirm'
+import { notePaymentAfterMethodChange } from '@/lib/group-payment-change'
 import { recordGroupInvoicePaid } from '@/lib/group-billing'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { PRICE_CHANGE_EVENTS, revalidatePriceCaches } from '@/lib/price-cache'
@@ -645,6 +646,7 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
         await capturePaymentIntent(session, { registrationId, ...seat })
         await persistStripeCustomer(session)
         await logEventPayment(session, registrationId, seat)
+        await notePaymentAfterMethodChange(supabaseServer(), registrationId, 'seat')
       }
     }
   } else {
@@ -655,6 +657,7 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
       // PAY-4: if this registration was already paid under a different intent,
       // refund this duplicate and keep the first — don't re-confirm or overwrite.
       if (!(await refundDuplicateRegistrationPayment(session, registrationId, stripe))) {
+        if (isGroup) await notePaymentAfterMethodChange(supabaseServer(), registrationId, 'group')
         await confirmRegistration(registrationId, isGroup)
         await capturePaymentIntent(session, { registrationId })
         await persistStripeCustomer(session)

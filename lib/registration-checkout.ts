@@ -11,6 +11,7 @@ import {
   resolveScholarshipCoupon,
 } from '@/lib/scholarships'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
+import { billableSeats, paidSeatCount } from '@/lib/group-billing'
 
 // The one place that knows how to build a Stripe Checkout for a registration.
 //
@@ -79,10 +80,12 @@ interface RegistrationForCheckout {
   // expire it before minting a new one (a registration must never hold two live
   // sessions that can both be paid).
   checkout_session_id: string | null
+  // A discount an admin set on the group. Kept if the group moves from invoice to card.
+  invoice_coupon_id: string | null
 }
 
 const REGISTRATION_COLUMNS =
-  'id, event_slug, event_title, type, status, invoice_requested, member_pays_individually, adult_count, student_count, teacher_first_name, teacher_last_name, teacher_email, checkout_session_id'
+  'id, event_slug, event_title, type, status, invoice_requested, member_pays_individually, adult_count, student_count, teacher_first_name, teacher_last_name, teacher_email, checkout_session_id, invoice_coupon_id'
 
 export async function createRegistrationCheckout(
   db: SupabaseClient,
@@ -205,6 +208,8 @@ export async function createRegistrationCheckout(
     }
     metadata.scholarshipId = offer.id
     amountCents = discountedCents(amountCents, offer.percent_off)
+  } else if (reg.type === 'group' && reg.invoice_coupon_id) {
+    discounts = [{ coupon: reg.invoice_coupon_id }]
   }
 
   // deep review PAY-4 part-1: expire the registration's previous Checkout session
@@ -258,15 +263,16 @@ export async function createRegistrationCheckout(
 }
 
 // Declared group size is authoritative (adult_count + student_count); rows
-// created before migration 037 have neither, so count the roster instead.
+// created before migration 037 have neither, so count the roster instead. Places
+// already paid individually (the group changed how it pays) aren't charged again.
 async function groupSeatCount(db: SupabaseClient, reg: RegistrationForCheckout): Promise<number> {
   const declared = (reg.adult_count ?? 0) + (reg.student_count ?? 0)
-  if (declared > 0) return declared
+  if (declared > 0) return billableSeats(declared, await paidSeatCount(db, reg.id))
   const { count } = await db
     .from('participants')
     .select('id', { count: 'exact', head: true })
     .eq('registration_id', reg.id)
-  return count ?? 0
+  return billableSeats(count ?? 0, await paidSeatCount(db, reg.id))
 }
 
 interface PendingAddonLine {

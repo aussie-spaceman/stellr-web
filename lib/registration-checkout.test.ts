@@ -31,12 +31,15 @@ interface Reg {
   teacher_email?: string | null
   pay_token?: string | null
   checkout_session_id?: string | null
+  invoice_coupon_id?: string | null
 }
 
 function makeDb(opts: {
   registration: Reg | null
   participant?: { first_name: string; last_name: string; email: string } | null
   participantCount?: number
+  /** Places already paid individually, before the group changed how it pays. */
+  paidSeats?: number
   addons?: { name: string; qty: number; unit_amount_cents: number }[]
   /** An offered scholarship on the registration. */
   offer?: { id: string; percent_off: number } | null
@@ -63,7 +66,14 @@ function makeDb(opts: {
         const chain = {
           select: (_cols: string, o?: { count?: string; head?: boolean }) => {
             if (o?.head) {
-              const countChain = { eq: async () => ({ count: opts.participantCount ?? 0, error: null }) }
+              // Filtered on individual_payment_status: places already paid individually.
+              // Otherwise the whole roster.
+              const countChain = {
+                eq: (column: string) => column === 'individual_payment_status'
+                  ? Promise.resolve({ count: opts.paidSeats ?? 0, error: null })
+                  : countChain,
+                then: (resolve: (v: { count: number; error: null }) => void) => resolve({ count: opts.participantCount ?? 0, error: null }),
+              }
               return countChain
             }
             return chain
@@ -225,6 +235,32 @@ describe('createRegistrationCheckout — individual', () => {
 })
 
 describe('createRegistrationCheckout — group', () => {
+  const GROUP = { type: 'group', status: 'pending', adult_count: 1, student_count: 14 } as const
+
+  it('charges only the places not already paid individually', async () => {
+    const { db } = makeDb({ registration: { ...GROUP }, paidSeats: 3 })
+    const { stripe, create } = makeStripe(7500)
+    const result = await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+    expect(result.amountCents).toBe(12 * 7500)
+    expect((create.mock.calls[0][0] as { line_items: unknown[] }).line_items).toEqual([{ price: 'price_fee', quantity: 12 }])
+  })
+
+  it('refuses when every place has been paid individually', async () => {
+    const { db } = makeDb({ registration: { ...GROUP }, paidSeats: 15 })
+    const { stripe, create } = makeStripe(7500)
+    await expect(createRegistrationCheckout(db, stripe, 'reg-1', URLS)).rejects.toMatchObject({ code: 'nothing_to_pay' })
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('keeps a discount an admin set when the group moves from invoice to card', async () => {
+    const { db } = makeDb({ registration: { ...GROUP, invoice_coupon_id: 'coupon_15' } })
+    const { stripe, create } = makeStripe(7500)
+    await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+    const params = create.mock.calls[0][0] as Record<string, unknown>
+    expect(params.discounts).toEqual([{ coupon: 'coupon_15' }])
+    expect(params.allow_promotion_codes).toBeUndefined() // Stripe refuses a session with both
+  })
+
   it('charges the declared seat count with isGroup metadata and the organiser email', async () => {
     const { db } = makeDb({
       registration: {

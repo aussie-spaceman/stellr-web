@@ -91,7 +91,7 @@ The scoped globs `lib/credentials/**` and `lib/check-in*/**` matched nothing, an
 | `lib/security/route-manifest.ts`, `route-guards.ts`, `route-ast.ts` | C | Minimal hunks for their own routes or guard names only (B5 appends the `%5Ft` page entries; B4 and B15 the `rate_limit` names and the two `schools/search` and `store/checkout` allow-list removals). Lane C review plus CODEOWNERS. |
 | `lib/tenancy/registry.ts` | B | Lane B review. C0b's `child()` changes are a Lane C hunk here. |
 | `lib/tenancy/constants.ts` | C, frozen | No S5 edits. Import from it: `TENANT_MIN_PARTICIPANT_AGE` already lives there. |
-| `package.json`, `package-lock.json` | C | No new dependency without the owner's approval. The only two proposed are `ts-morph` (C10) and `postgres` (C11), each exact-pinned, at least 2 weeks old, installed with `--before`. |
+| `package.json`, `package-lock.json` | C | No new dependency without the owner's approval. The only two proposed are `ts-morph` (C10) and `postgres` (C11), each exact-pinned, at least 2 weeks old, installed with `--before`. `postgres` (postgres.js) was approved by the owner on 9 Nov 2026. |
 | `.github/workflows/ci.yml` | C | B10 may append one job block, with CODEOWNERS review. |
 | `.github/CODEOWNERS` | C | A PR that adds a guard, gate test or security file appends its path in the same PR, as the file's own header asks: one added line per path, nothing reordered, Lane C review. |
 | `test/integration/**` | C | An A or B hunk is allowed for its own area, with Lane C review. |
@@ -687,7 +687,7 @@ S5 finishes when all of these hold. Each names its proof.
 - **`tenant_app_login`.** Create on dev, then production; store `TENANT_DATABASE_URL` as a server-only secret. Needed only for a deployed flip, not to build, merge or CI-test.
 - **Roles.** Run `scripts/map-tenancy-roles.ts --apply`, decide `--platform-admins`, and decide route by route which of the 9 platform-destined routes become owner-only (class `platform_destined` since C15). After C9, stop assigning `admin` or `event_manager` in the Clerk dashboard, or run `--check` after any change.
 - **Environment flips**, each with the rules above: `AUTHZ_SOURCE`, `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`, `PLATFORM_AUDIT_ENABLED`, `RATE_LIMIT_STORE`, `TENANT_ROUTING_ENABLED` and `TENANT_HOST_SUFFIX` (before the zone is attached: see Real tenant hosts). Create `RATE_LIMIT_KEY_SECRET` before any non-memory limiter mode, and flip `RATE_LIMIT_STORE` only after A9 and B15 (`docs/S5-CRONS-LIMITS-SMMA.md`). Add the WAF rules for `/credentials/`, then tenant hosts (`docs/RUNBOOK-waf-rule.md`).
-- **Dependencies.** `postgres` (runtime, C11) and `ts-morph` (dev, C10), or the TypeScript-API fallback.
+- **Dependencies.** `ts-morph` (dev, C10), or the TypeScript-API fallback. **`postgres` (runtime, C11): approved 9 Nov 2026**, postgres.js, on the terms in the file-ownership table. The login (`tenant_app_login`) and `TENANT_DB_ENABLED` stay separate gates.
 - **CODEOWNERS reviews**, `DB_CI_ENFORCE=true` and the tenant-db job as required.
 - **`tenant-host-routing` as required.** B10a landed it report-only: a failure blocks nothing and the run can still look green. Proposed: required at the latest before B5c merges, and before `TENANT_ROUTING_ENABLED` is set on any deployment with a zone attached. Until then a B5c or A7 PR cites this job's step outcome, not the run's badge.
 - **Decisions:**
@@ -697,7 +697,7 @@ S5 finishes when all of these hold. Each names its proof.
   - where tenant staff work;
   - whether `group/route` gets `childAwaitingConsentBlock`;
   - live tenant events with no start date;
-  - the tenant email share (blocks B14);
+  - **the tenant email share: settled 9 Nov 2026.** The owner chose one shared pool, until the move to SES: tenants' event mail counts against the same daily counter in `lib/email-budget.ts` as Stellr's, under the same rules, with no per-tenant allowance. Transactional mail is never refused by the counter, and the transactional reserve keeps bulk mail out, not any one sender. B14 builds on that. The risk the owner accepted: one busy tenant can reach Resend's own daily limit, after which Resend rejects mail for every sender, Stellr included;
   - cron fairness;
   - audit exemptions for anonymous writes;
   - the audit gate's `OPERATIONAL_WRITERS` list (`lib/security/audit-coverage.ts`), a second exemption route, and in it the sign-in consent gate: `childAwaitingConsent` and `childAwaitingConsentBlock` record through the activity log, and whether they also need a platform audit event;

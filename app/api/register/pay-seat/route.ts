@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { stripeClient } from '@/lib/stripe'
 import { createSeatCheckout, seatPayPageUrl } from '@/lib/individual-payment'
 
@@ -15,7 +16,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducatio
 // Works whether or not the event's registration is still open: closing it stops
 // new sign-ups, not payment for a place someone already holds.
 export async function POST(req: NextRequest) {
-  const limited = rateLimitGuard(req, 'register/pay-seat', { limit: 20, windowMs: 10 * 60_000 })
+  const limited = await rateLimit(req, 'register/pay-seat', { limit: 20, windowMs: 10 * 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
 
   const body = await req.json().catch(() => null)

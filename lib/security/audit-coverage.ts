@@ -120,6 +120,8 @@ export const OPERATIONAL_WRITERS: Readonly<Record<string, string>> = {
   'lib/survey/audit#writeAudit': 'already a record of who did what: a survey audit log',
   'lib/survey/audit#logSurveyAccess': 'already a record of who read what: a survey access log',
   'lib/esign/archive#logRecordAccess': 'already a record of who read what: esign_access_log',
+  'lib/rate-limit-store#takeFromStore':
+    "the rate limiter's request counter: rate_limit_take adds one to a window keyed by an HMAC of the limiter key, and stores nothing else. Owner-approved 9 Nov 2026",
   'lib/pending-consent#childAwaitingConsent':
     'the sign-in gate every member route passes through. It closes a request whose consent is already signed, at most once per member, and writes guardian_consent_received to the activity log when it does. Awaiting the owner decision above',
   'lib/pending-consent#childAwaitingConsentBlock': 'the same gate, for routes that resolve the member themselves. Awaiting the owner decision above',

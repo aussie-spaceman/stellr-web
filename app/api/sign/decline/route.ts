@@ -7,7 +7,7 @@ import { actingSession, clearSessionCookie, invalidLink, json, readJson, request
 // after a decline; admins are told so a person can follow up.
 
 export async function POST(req: Request) {
-  const limited = throttle(req, 'decline', 10)
+  const limited = await throttle(req, 'decline', 10)
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()

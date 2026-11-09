@@ -2,7 +2,8 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { SITE_URL, AUTH_APP_URL } from '@/lib/env'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS } from '@/lib/esign/native/tokens'
 import { resolveSession, type RequestMeta, type SessionContext } from '@/lib/esign/native/flow'
 
@@ -52,9 +53,9 @@ export function requestMeta(req: Request): RequestMeta {
   return { ip, userAgent: req.headers.get('user-agent')?.slice(0, 400) ?? null }
 }
 
-/** Throttles the public signing endpoints per IP. */
-export function throttle(req: Request, route: string, limit = 30): Response | null {
-  return rateLimitGuard(req, `sign:${route}`, { limit, windowMs: 60_000 })
+/** Throttles the public signing endpoints per IP. Await it: a Promise is always truthy. */
+export async function throttle(req: Request, route: string, limit = 30): Promise<Response | null> {
+  return await rateLimit(req, `sign:${route}`, { limit, windowMs: 60_000, tenantId: (await requestTenant()).tenantId })
 }
 
 // deep review ES-1: one browser-wide signing cookie let a parent with two

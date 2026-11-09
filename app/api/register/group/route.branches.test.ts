@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import Stripe from 'stripe'
 import { rec, OPEN_EVENT, inFilter, jsonRequest, settle } from '@/test/registration/fixtures'
 import { maskEmail } from '@/lib/utils'
@@ -59,7 +60,7 @@ vi.mock('@/lib/field-crypto-shadow', async () => {
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/community', () => ({ getCurrentMember: h.getCurrentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: h.impersonation }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rateLimit, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rateLimit }))
 vi.mock('@clerk/nextjs/server', () => ({ auth: h.auth }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => h.stripe }))
 vi.mock('@/lib/registration-duplicates', () => ({
@@ -194,9 +195,9 @@ describe('branches: POST /api/register/group — before the event is read', () =
 
   it('the rate limit is keyed by the slug, or nothing when the slug is not a string', async () => {
     await post(body())
-    expect(h.rateLimit.mock.calls[0].slice(1)).toEqual(['register-group', { limit: 3, windowMs: 3_600_000 }, 'colorado'])
+    expect(h.rateLimit.mock.calls[0].slice(1)).toEqual(['register-group', { limit: 3, windowMs: 3_600_000, tenantId: STELLR_TENANT_ID }, 'colorado'])
     await post(body({ event_slug: 7 }))
-    expect(h.rateLimit.mock.calls[1].slice(1)).toEqual(['register-group', { limit: 3, windowMs: 3_600_000 }, undefined])
+    expect(h.rateLimit.mock.calls[1].slice(1)).toEqual(['register-group', { limit: 3, windowMs: 3_600_000, tenantId: STELLR_TENANT_ID }, undefined])
   })
 
   it('a throttled caller is answered before view-as, the session or any read', async () => {

@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { assertNotImpersonating, resolveRequestMember } from '@/lib/impersonation'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
@@ -64,7 +65,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export const POST = withAudit(auditSpec, async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  const limited = rateLimitGuard(req, 'members/teams/payment-method', { limit: 10, windowMs: 10 * 60_000 })
+  const limited = await rateLimit(req, 'members/teams/payment-method', { limit: 10, windowMs: 10 * 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
 
   // Read-only while an admin is viewing as this member. Impersonation is a lens,

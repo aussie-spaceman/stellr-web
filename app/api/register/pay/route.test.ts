@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: () => null }))
 vi.mock('@/lib/scholarships', () => ({ findOfferForRegistration }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({}) }))
 vi.mock('@/lib/registration-checkout', async () => {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { rateLimitGuard } from '@/lib/rate-limit'
+import { rateLimit } from '@/lib/rate-limit-async'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { invitationByToken } from '@/lib/survey/access'
 
 // POST /api/survey/[token]/stop-reminders — stop survey reminders for this
@@ -9,7 +10,7 @@ import { invitationByToken } from '@/lib/survey/access'
 // reminders only: marketing consent is untouched. GET does nothing, so link
 // scanners that prefetch email links cannot opt anyone out.
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
-  const limited = rateLimitGuard(req, 'survey-stop', { limit: 30, windowMs: 60_000 })
+  const limited = await rateLimit(req, 'survey-stop', { limit: 30, windowMs: 60_000, tenantId: (await requestTenant()).tenantId })
   if (limited) return limited
   const db = supabaseServer()
   const inv = await invitationByToken(db, (await params).token)

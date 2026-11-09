@@ -167,6 +167,126 @@ describe('tenant keys', () => {
   })
 })
 
+describe('the store budget, for keys a client chooses', () => {
+  const BUDGET = 2_000
+  const ip = () => `198.51.100.${++n % 250}`
+
+  /** Spend an IP's budget on keys that each hold something new, as a client spraying slugs would. */
+  async function spend(addr: string) {
+    for (let i = 0; i < BUDGET; i++) await rateLimit(request(addr), 'spray', WINDOW, fresh())
+  }
+
+  it('stops one IP writing a row for every request, and refuses nobody for it', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    const addr = ip()
+    await spend(addr)
+    expect(h.take).toHaveBeenCalledTimes(BUDGET)
+
+    expect(await rateLimit(request(addr), 'spray', WINDOW, fresh())).toBeNull()
+    expect(h.take).toHaveBeenCalledTimes(BUDGET)
+
+    await rateLimit(request(ip()), 'spray', WINDOW, fresh())
+    expect(h.take).toHaveBeenCalledTimes(BUDGET + 1)
+  })
+
+  it('keeps counting in memory past the budget', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    const addr = ip()
+    await spend(addr)
+    const suffix = fresh()
+    expect(await rateLimit(request(addr), 'spray', WINDOW, suffix)).toBeNull()
+    expect((await rateLimit(request(addr), 'spray', WINDOW, suffix))?.status).toBe(429)
+  })
+
+  it('is per route, and leaves unsuffixed calls and limit() reaching the store', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    const addr = ip()
+    await spend(addr)
+    h.take.mockClear()
+
+    await rateLimit(request(addr), 'spray', WINDOW, fresh())
+    expect(h.take).not.toHaveBeenCalled()
+    await limit(fresh(), WINDOW)
+    await rateLimit(request(addr), fresh(), WINDOW)
+    await rateLimit(request(addr), fresh(), WINDOW, fresh())
+    expect(h.take).toHaveBeenCalledTimes(3)
+  })
+
+  it('cannot be spent to lift a limit() the store is already refusing', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    await spend(ip())
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    expect(await limit(fresh(), WINDOW)).toEqual({ ok: false, retryAfterSeconds: 9 })
+  })
+
+  it('past the budget, a key the store would refuse is decided in memory', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    const addr = ip()
+    await spend(addr)
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    expect(await rateLimit(request(addr), 'spray', WINDOW, fresh())).toBeNull()
+  })
+
+  it('holds when a spray pushes the in-memory limiter past its key cap', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    const addr = ip()
+    for (let i = 0; i < 12_000; i++) await rateLimit(request(addr), 'spray', WINDOW, fresh())
+    expect(h.take).toHaveBeenCalledTimes(BUDGET)
+  })
+
+  it('starts again when its hour is up', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const addr = ip()
+      await spend(addr)
+      h.take.mockClear()
+      vi.setSystemTime(Date.now() + 60 * 60 * 1000)
+      await rateLimit(request(addr), 'spray', WINDOW, fresh())
+      expect(h.take).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a bounded number of budgets, dropping the oldest first', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    const addr = ip()
+    await spend(addr)
+    for (let i = 0; i < 10_000; i++) {
+      await rateLimit(request(`2001:db8::${i.toString(16)}`), 'spray', WINDOW, 'one-key')
+    }
+    h.take.mockClear()
+    await rateLimit(request(addr), 'spray', WINDOW, fresh())
+    expect(h.take).toHaveBeenCalledOnce()
+  })
+
+  it('does not apply in shadow mode answers, and memory mode keeps no count of it', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    const addr = ip()
+    await spend(addr)
+    expect(await rateLimit(request(addr), 'spray', WINDOW, fresh())).toBeNull()
+
+    vi.stubEnv('RATE_LIMIT_STORE', 'memory')
+    const untouched = ip()
+    await spend(untouched)
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockClear()
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    await rateLimit(request(untouched), 'spray', WINDOW, fresh())
+    expect(h.take).toHaveBeenCalledOnce()
+  })
+})
+
 describe('rateLimit', () => {
   it('returns null under the limit, then the same 429 the sync guard sends', async () => {
     const route = fresh()

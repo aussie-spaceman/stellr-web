@@ -54,7 +54,7 @@ vi.mock('@/lib/pending-consent', async (orig) => {
 })
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: h.impersonation }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null, HOUR_MS: 3_600_000 }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: () => null }))
 vi.mock('@/lib/member-sync', async () => {
   const { rec } = await import('@/test/registration/fixtures')
   return {

@@ -14,7 +14,7 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: h.userId }) }))
-vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: async () => null }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({}) }))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'member' }), logActivity: vi.fn() }))
 vi.mock('@/lib/audit/route', () => ({ withAudit: (_spec: unknown, handler: unknown) => handler }))

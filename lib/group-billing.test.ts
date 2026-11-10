@@ -29,6 +29,8 @@ import {
   recordGroupInvoicePaid,
   syncGroupInvoice,
   syncDueGroupInvoices,
+  resolveDiscountCode,
+  promotionCodeUsable,
 } from './group-billing'
 import { runAfterResponse } from '@/lib/after-response'
 import { notifyCommunityAdmins } from '@/lib/notify'
@@ -832,6 +834,75 @@ describe('setGroupDiscount', () => {
     const f = fakeDb({ registrations: [{ ...REG, invoice_paid_at: '2026-11-01T00:00:00Z' }], participants: roster(19), group_invoices: [] })
     const res = await setGroupDiscount(f.db, {} as never, 'reg-1', null, { memberId: null, label: 'admin' })
     expect(res).toMatchObject({ ok: false })
+  })
+})
+
+// Who may type which code (9 Nov 2026). Staff may enter a bare coupon id; a teacher,
+// a student or the registration form only a promotion code a customer could use at
+// checkout. The scholarship coupons are coupons, so they never resolve for them.
+describe('resolveDiscountCode', () => {
+  const coupons: Record<string, Record<string, unknown>> = {
+    co_15: { id: 'co_15', valid: true, percent_off: 15, amount_off: null, applies_to: null },
+    SCHOLARSHIP100: { id: 'SCHOLARSHIP100', valid: true, percent_off: 100, amount_off: null, applies_to: null },
+    co_other: { id: 'co_other', valid: true, percent_off: 10, amount_off: null, applies_to: { products: ['prod_other'] } },
+    co_gone: { id: 'co_gone', valid: false, percent_off: 20, amount_off: null, applies_to: null },
+  }
+  const promos: Record<string, Record<string, unknown>> = {
+    STEMCAREERS: { code: 'STEMCAREERS', coupon: 'co_15', active: true, customer: null, expires_at: null, max_redemptions: null, times_redeemed: 3 },
+    OTHEREVENT: { code: 'OTHEREVENT', coupon: 'co_other', active: true, customer: null, expires_at: null, max_redemptions: null, times_redeemed: 0 },
+    EXPIRED: { code: 'EXPIRED', coupon: 'co_15', active: true, customer: null, expires_at: 1_700_000_000, max_redemptions: null, times_redeemed: 0 },
+    USEDUP: { code: 'USEDUP', coupon: 'co_15', active: true, customer: null, expires_at: null, max_redemptions: 5, times_redeemed: 5 },
+    ONECUSTOMER: { code: 'ONECUSTOMER', coupon: 'co_15', active: true, customer: 'cus_1', expires_at: null, max_redemptions: null, times_redeemed: 0 },
+    INVALIDCOUPON: { code: 'INVALIDCOUPON', coupon: 'co_gone', active: true, customer: null, expires_at: null, max_redemptions: null, times_redeemed: 0 },
+  }
+  const stripe = {
+    promotionCodes: { list: vi.fn(async ({ code }: { code: string }) => ({ data: promos[code] ? [promos[code]] : [] })) },
+    coupons: {
+      retrieve: vi.fn(async (id: string) => {
+        if (coupons[id]) return coupons[id]
+        throw new Error('No such coupon')
+      }),
+    },
+  }
+  const strict = { promotionCodesOnly: true, productId: 'prod_event' }
+
+  it('resolves a promotion code for anyone', async () => {
+    expect(await resolveDiscountCode(stripe as never, ' STEMCAREERS ', strict)).toMatchObject({ couponId: 'co_15', code: 'STEMCAREERS', terms: { percentOff: 15 } })
+  })
+
+  it('resolves a bare coupon id for staff only', async () => {
+    expect(await resolveDiscountCode(stripe as never, 'SCHOLARSHIP100')).toMatchObject({ couponId: 'SCHOLARSHIP100' })
+    expect(await resolveDiscountCode(stripe as never, 'SCHOLARSHIP100', strict)).toBeNull()
+  })
+
+  it('refuses a promotion code that is expired, used up, or tied to one customer', async () => {
+    for (const code of ['EXPIRED', 'USEDUP', 'ONECUSTOMER']) {
+      expect(await resolveDiscountCode(stripe as never, code, strict)).toBeNull()
+    }
+  })
+
+  it('refuses a code for another event’s product, or whose coupon is no longer valid', async () => {
+    expect(await resolveDiscountCode(stripe as never, 'OTHEREVENT', strict)).toBeNull()
+    expect(await resolveDiscountCode(stripe as never, 'OTHEREVENT', { promotionCodesOnly: true, productId: 'prod_other' })).toMatchObject({ couponId: 'co_other' })
+    expect(await resolveDiscountCode(stripe as never, 'INVALIDCOUPON', strict)).toBeNull()
+  })
+
+  it('refuses a product-limited code when the product is unknown', async () => {
+    expect(await resolveDiscountCode(stripe as never, 'OTHEREVENT', { promotionCodesOnly: true, productId: null })).toBeNull()
+    expect(await resolveDiscountCode(stripe as never, 'STEMCAREERS', { promotionCodesOnly: true, productId: null })).toMatchObject({ couponId: 'co_15' })
+  })
+})
+
+describe('promotionCodeUsable', () => {
+  const ok = { active: true, customer: null, expires_at: null, max_redemptions: null, times_redeemed: 0 }
+  it('is usable until it expires or runs out', () => {
+    const now = 1_800_000_000_000
+    expect(promotionCodeUsable(ok as never, now)).toBe(true)
+    expect(promotionCodeUsable({ ...ok, expires_at: now / 1000 + 60 } as never, now)).toBe(true)
+    expect(promotionCodeUsable({ ...ok, expires_at: now / 1000 } as never, now)).toBe(false)
+    expect(promotionCodeUsable({ ...ok, max_redemptions: 2, times_redeemed: 1 } as never, now)).toBe(true)
+    expect(promotionCodeUsable({ ...ok, max_redemptions: 2, times_redeemed: 2 } as never, now)).toBe(false)
+    expect(promotionCodeUsable({ ...ok, active: false } as never, now)).toBe(false)
   })
 })
 

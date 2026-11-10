@@ -393,14 +393,18 @@ describe('event managers keep the events they have', () => {
     expect((await setup.GET(req(), idCtx)).status).toBe(404)
   })
 
-  it('changing an invoice stays with admins, and they are told so before any read', async () => {
+  // Owner, 9 Nov 2026: an assigned manager applies and removes discount codes too.
+  // A body the route can't read is answered after the guard, so it shows how far
+  // each caller gets without asking Stripe anything.
+  it('changing an invoice is open to the manager of that event, and no other', async () => {
     asEventManager('nevada')
     state.rows.registrations = GROUP
     const invoice = await import('@/app/api/admin/registrations/[id]/invoice/route')
-    const res = await invoice.POST(req({ action: 'remove' }), idCtx)
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'Only admins can change an invoice' })
-    expect(queries('registrations')).toEqual([])
+    const own = await invoice.POST(req({ action: 'nope' }), idCtx)
+    expect(own.status).toBe(400)
+    expect(await own.json()).toEqual({ error: 'Enter a discount code' })
+    asEventManager('colorado')
+    expect((await invoice.POST(req({ action: 'nope' }), idCtx)).status).toBe(404)
   })
 
   it('the routes that were admin-only stay admin-only', async () => {

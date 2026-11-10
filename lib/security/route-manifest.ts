@@ -320,6 +320,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/members/teams/[id]/participants/[pid]/route.ts': 'participant',
   'app/api/members/teams/[id]/participants/route.ts': 'participant',
   'app/api/members/teams/[id]/payment-link/route.ts': 'participant',
+  'app/api/members/teams/[id]/discount/route.ts': 'participant',
   'app/api/members/teams/[id]/payment-method/route.ts': 'participant',
   'app/api/members/teams/[id]/route.ts': 'participant',
   'app/api/members/teams/[id]/sheet-sync/route.ts': 'participant',

@@ -14,8 +14,10 @@ import { enteredPeople, resolveRoleForAge, type GroupBody, type ParticipantPaylo
 // participants. The route runs them in that order with stellr-hooks between the
 // members and the participants.
 //
-// S5 A7: a tenant-age refusal belongs before insertGroupRegistration, in the gate
-// beside checkDatesOfBirth (docs/TENANCY-S5.md). route.branches.test.ts pins this path.
+// S5 A7: the eligibility refusal comes before insertGroupRegistration, in the gate
+// (checkDatesOfBirth, over everyone). route.branches.test.ts pins this path. Every
+// row here carries the resolved event's tenant_id, Stellr's included, and a tenant's
+// registration writes only its registration and participant rows: no member rows.
 
 export interface SavedRegistration {
   regId: string
@@ -35,6 +37,10 @@ export async function insertGroupRegistration(
   const payToken = payment_method === 'card' && !nothingToCollect && !isCampaign ? mintPayToken() : null
   const { data: registration, error: regError } = await db.from('registrations').insert({
     event_slug, event_title: eventTitle,
+    // S5 A7: from the resolved event. For Stellr it is the value the derivation
+    // trigger stamps, and it keeps an unmirrored Stellr event registering once
+    // derivation enforces.
+    tenant_id: group.context.tenantId,
     // Campaign group registrations are stored as type 'campaign' so they
     // surface in the member's campaign context + workspace (which filter on
     // type='campaign'); regular group event registrations stay type 'group'.
@@ -55,6 +61,8 @@ export async function insertGroupRegistration(
     school_address_state: teacher.school_address_state,
     school_address_zip: teacher.school_address_zip,
     invoice_requested: payment_method === 'invoice' || payment_method === 'invoice_some',
+    // A code the teacher typed, already checked in the gate: the first invoice carries it.
+    ...(group.price.discount ? { invoice_coupon_id: group.price.discount.couponId, invoice_promotion_code: group.price.discount.code } : {}),
     // Marks a split group ("Invoice for some") and says how later joiners pay (lib/group-payer.ts).
     late_joiner_payer: payment_method === 'invoice_some' ? (body.late_joiner_payer === 'group' ? 'group' : 'self') : null,
     // "Students share the teacher's cost" (lib/teacher-share.ts): the estimate and a
@@ -127,6 +135,23 @@ export async function saveGroupMembers(
 ): Promise<Refusable<{ members: SavedMembers }>> {
   const { db, teacher, eventDate } = group
   const { details_method, registrant_role } = body
+
+  // S5 A7: the member record is shared across organisers, so a tenant's registration
+  // neither reads nor writes it. Every participant row keeps what was submitted, with
+  // no member link, and nobody is given a login.
+  if (!group.context.isPlatformOwner) {
+    return {
+      ok: true,
+      members: {
+        memberIdMap: {},
+        memberEmailOwner: new Map(),
+        newlyCreatedEmails: new Set(),
+        optionsByEmail: new Map(),
+        registrantMemberIsNew: false,
+        registrantMemberId: null,
+      },
+    }
+  }
 
   // Upsert all known participants into members table
   const allPeople: ParticipantPayload[] = details_method === 'add_now' ? [
@@ -367,6 +392,7 @@ function participantRowBuilder(group: GatedGroup, regId: string, members: SavedM
   // under-18 override as the members upsert.
   return (p: ParticipantPayload, paymentStatus?: 'pending' | 'waived' | 'covered' | null, payer?: 'group' | 'self' | 'shared' | null) => ({
     registration_id: regId,
+    tenant_id: group.context.tenantId,
     member_id: resolveMemberId(p),
     details_from_member: !!p._linked_member_id,
     first_name: p.first_name, last_name: p.last_name,

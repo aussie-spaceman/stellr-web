@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import {
   eqFilter,
   rec, AGE_CASES, OPEN_EVENT, CLOSED_EVENT, EVENT_UNDER_WAY, EVENT_A_YEAR_OUT,
@@ -725,6 +726,7 @@ describe('characterisation: POST /api/register/group — rows written (add_now)'
   it('reads and writes in this order', async () => {
     expect((await post(body())).status).toBe(201)
     expect(rec.log).toEqual([
+      'select events', // S5 A7: the event's owner
       'select members', // the gate: the organiser on file by email?
       'select members', // the gate: the organiser on file by school_email?
       'insert registrations',
@@ -757,6 +759,7 @@ describe('characterisation: POST /api/register/group — rows written (add_now)'
     expect(reg).toEqual({
       event_slug: 'colorado',
       event_title: 'Colorado',
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       type: 'group',
       status: 'confirmed',
       amount_due_cents: 0,

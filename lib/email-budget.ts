@@ -14,6 +14,13 @@
 // mail (campaigns, event-email blasts) is refused once the non-reserved budget
 // is spent, so a burst of bulk mail can never drain the day's last sends that a
 // minor's consent email needs.
+//
+// Tenants (S5 B14; owner decision, 9 Nov 2026): ONE SHARED POOL until the move to
+// SES. A tenant's event mail goes through sendEmail() like Stellr's, so it is
+// counted here on the same row and held to the same caps. There is no per-tenant
+// allowance and no tenant argument: the reserve keeps bulk mail out, not any one
+// sender. The accepted risk is that one busy tenant can reach Resend's own daily
+// limit, after which Resend refuses mail for every sender, Stellr included.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 

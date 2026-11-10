@@ -108,6 +108,19 @@ describe('GroupRegistrationForm — step 2, the participants', () => {
     expect(lastName).toHaveAccessibleDescription('Required')
   })
 
+  // An invoice has no code box of its own (9 Nov 2026), so the form asks for the code.
+  it('asks for a discount code when the group pays by invoice, and only then', async () => {
+    const user = await reachStep2()
+    const payment = screen.getByRole('combobox', { name: 'How will the group pay?' })
+    expect(screen.getByLabelText(label('Discount code (optional)'))).toHaveAttribute('autocomplete', 'off')
+    await user.selectOptions(payment, 'invoice_some')
+    expect(screen.getByLabelText(label('Discount code (optional)'))).toBeInTheDocument()
+    for (const method of ['card', 'individual', 'teacher_share']) {
+      await user.selectOptions(payment, method)
+      expect(screen.queryByLabelText(label('Discount code (optional)'))).toBeNull()
+    }
+  })
+
   it('focuses the School Data Terms box when it is the only thing missing', async () => {
     const user = await reachStep2()
     await user.click(screen.getByRole('button', { name: /Submit Registration|Continue to Payment/ }))

@@ -1,19 +1,27 @@
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { runGroupRegistrationFollowUp, type FollowUpPerson } from '@/lib/group-registration-followup'
 import { runAfterResponse } from '@/lib/after-response'
-import { linkMembersToSchoolByName } from '@/lib/school-link'
-import { recordEventParticipation } from '@/lib/event-participation-sync'
-import { syncObjectSpaceRoster, reconcileEventSpaceRoster } from '@/lib/space-inheritance'
-import { syncMemberOptionSelections } from '@/lib/member-profile-options'
-import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
+import {
+  autoGrantBaseMembership,
+  linkMembersToSchoolByName,
+  reconcileEventSpaceRoster,
+  recordParticipation,
+  syncMemberOptionSelections,
+  syncObjectSpaceRoster,
+} from '@/lib/community/event-hooks'
 import type { GatedGroup } from './gate'
 import type { GroupBody } from './parse'
 import type { SavedMembers, SavedParticipants } from './persist'
 
-// POST /api/register/group, what hangs off the rows. Run on every registration
-// today. Not everything here is Stellr-only: a tenant event can have minors, and
-// the follow-up's agreement is their consent. Do not gate the whole of this on the
-// platform owner.
+// POST /api/register/group, what hangs off the rows. S5 A7: every function here sits
+// behind isPlatformOwner, so a tenant's event gets none of it: no school links,
+// event activity, Spaces, memberships, logins, agreements or clearance notices. The
+// social hooks also go through lib/community/event-hooks, which does nothing for a
+// tenant on its own. The follow-up's agreement is a minor's consent, and for a
+// tenant's event it is held, not sent as Stellr: Stellr's DocuSign templates and
+// sender are Stellr's, and the signing engine has no tenant sender yet (A11).
+// Whether a tenant's minors may be registered before that exists is an owner
+// decision.
 
 // deep review QUAL-7 / 28 Oct 2026: the follow-up stops starting new work at this
 // budget, so it always finishes inside the route's maxDuration. Anything left is
@@ -27,14 +35,15 @@ export async function runGroupMemberHooks(
   regId: string,
   members: SavedMembers,
 ): Promise<void> {
-  const { db, teacher, eventTitle } = group
+  if (!group.context.isPlatformOwner) return
+  const { db, teacher, eventTitle, context } = group
   const { event_slug } = body
   const { memberIdMap, optionsByEmail, newlyCreatedEmails } = members
 
   // Resolve the group's school to a schools row and link every member to it,
   // so the school surfaces in /admin/schools and on each member page — not
   // just as free text on the registration/participant rows.
-  await linkMembersToSchoolByName(db, Object.values(memberIdMap), {
+  await linkMembersToSchoolByName(context, db, Object.values(memberIdMap), {
     name: teacher.school_name,
     address_street: teacher.school_address_street ?? null,
     address_city: teacher.school_address_city ?? null,
@@ -47,7 +56,7 @@ export async function runGroupMemberHooks(
   // just on the event roster. Non-fatal, idempotent per (member, event).
   await Promise.all(
     Object.values(memberIdMap).map((memberId) =>
-      recordEventParticipation(db, {
+      recordParticipation(context, db, {
         memberId,
         eventSlug: event_slug,
         eventTitle,
@@ -64,13 +73,13 @@ export async function runGroupMemberHooks(
   await Promise.all(
     Object.values(memberIdMap)
       .filter((id): id is string => Boolean(id))
-      .map((memberId) => syncObjectSpaceRoster(db, 'event', event_slug, memberId))
+      .map((memberId) => syncObjectSpaceRoster(context, db, 'event', event_slug, memberId))
   )
   // Safety net: reconcile the event's linked Space rosters from the cohort roster.
   // If any per-member grant above failed transiently (the prior silent-swallow bug
   // that stranded the Nevada 2027 group), everyone the event knows about is still
   // enrolled. Non-fatal, idempotent.
-  await reconcileEventSpaceRoster(db, event_slug)
+  await reconcileEventSpaceRoster(context, db, event_slug)
 
   // Turn non-members into members: grant the free base tier (Explorer for
   // students, Educator for adults) to anyone who still has no membership after
@@ -79,7 +88,7 @@ export async function runGroupMemberHooks(
   await Promise.all(
     Object.values(memberIdMap)
       .filter((id): id is string => Boolean(id))
-      .map((memberId) => autoGrantBaseMembership(db, memberId))
+      .map((memberId) => autoGrantBaseMembership(context, db, memberId))
   )
 
   // Persist ethnicity/dietary selections onto the canonical join tables (030),
@@ -87,6 +96,7 @@ export async function runGroupMemberHooks(
   // so an anonymous group submission must not rewrite an existing member's
   // selections (deep review C-3, finding REG-2). Same non-fatal contract.
   await syncMemberOptionSelections(
+    context,
     db,
     [...optionsByEmail].map(([email, sel]) =>
       memberIdMap[email] && newlyCreatedEmails.has(email)
@@ -106,6 +116,7 @@ export async function runGroupMemberHooks(
  * under 13 gets no login here (COPPA guard): no parent can have signed yet.
  */
 export async function provisionRegistrantLogin(group: GatedGroup, members: SavedMembers): Promise<string | null> {
+  if (!group.context.isPlatformOwner) return null
   const { db, teacher, hasSession } = group
   const { registrantMemberIsNew, registrantMemberId } = members
 
@@ -149,6 +160,7 @@ export function scheduleGroupFollowUp(
   { registrantRow, participantsWithId }: SavedParticipants,
   requestStartedAt: number,
 ): void {
+  if (!group.context.isPlatformOwner) return
   const { db, teacher, eventTitle, eventDate } = group
   const { event_slug } = body
 

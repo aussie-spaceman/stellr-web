@@ -55,7 +55,10 @@ export async function pendingAwardChanges(db: SupabaseClient, slug: string): Pro
 }
 
 export interface IssueAwardsResult {
+  /** Credentials, not people: a champion can also hold one individual award. */
   issued: number
+  /** Distinct students given a new or reinstated award this run. */
+  students: number
   reinstated: number
   revoked: number
   unchanged: number
@@ -77,9 +80,10 @@ export async function issueAwards(
   const held = new Map(credentials.map((c) => [key(c.participant_id, c.award_type), c]))
   const plan = planAwardIssue(assignments, credentials)
   const result: IssueAwardsResult = {
-    issued: 0, reinstated: 0, revoked: 0, emailed: 0, failures: [],
+    issued: 0, students: 0, reinstated: 0, revoked: 0, emailed: 0, failures: [],
     unchanged: assignments.length - plan.toIssue.length,
   }
+  const awarded = new Set<string>()
 
   for (const a of plan.toIssue) {
     const p = byId.get(a.participant_id)
@@ -94,7 +98,7 @@ export async function issueAwards(
       const revoked = held.get(key(a.participant_id, a.award_type))
       if (revoked) {
         row = await reinstateCredential(db, revoked.id)
-        if (row) result.reinstated++
+        if (row) { result.reinstated++; awarded.add(p.id) }
       } else {
         const def = EVENT_AWARDS[a.award_type]
         const out = await issueCredential(db, {
@@ -113,7 +117,7 @@ export async function issueAwards(
           theme: opts.theme,
         })
         row = out.row
-        if (out.created) result.issued++
+        if (out.created) { result.issued++; awarded.add(p.id) }
         else result.unchanged++
       }
       if (row) {
@@ -140,5 +144,6 @@ export async function issueAwards(
     .upsert({ event_slug: slug, awards_issued_at: new Date().toISOString() }, { onConflict: 'event_slug' })
   if (error) result.failures.push(`Could not record the issue time: ${error.message}`)
 
+  result.students = awarded.size
   return result
 }

@@ -161,13 +161,13 @@
       "class": "convert",
       "reason": "The group join page's body, moved here unchanged from its page.tsx by S5 B5b so a tenant page can reuse it without the prefill. Reads the join link, its registration and roster for someone who may not be signed in, by the link's token. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page.tsx": {
+    "app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/pay-seat-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: participants, registrations"
+      "reason": "The seat pay page's body, moved here from its page.tsx by S5 A7 so the tenant page can reuse it while Stellr's page refuses another tenant's seat. Reads the seat and its registration for a payer who may not be signed in, by the seat's pay token. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/register/[slug]/pay/[token]/page.tsx": {
+    "app/(stellr)/(flow)/register/[slug]/pay/[token]/pay-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: participants, registrations"
+      "reason": "The registration pay page's body, moved here from its page.tsx by S5 A7 so the tenant page can reuse it while Stellr's page refuses another tenant's registration. Reads the registration, its paid seats and scholarship offer for a payer who may not be signed in, by the pay token. Same access as before the move, for the area conversion to decide."
     },
     "app/(stellr)/(flow)/survey/[token]/page.tsx": {
       "class": "convert",
@@ -569,6 +569,14 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
+    "app/api/admin/events/[slug]/email-templates/[id]/route.ts": {
+      "class": "convert",
+      "reason": "saved event email templates: reads and writes event_email_templates by the route's tenant (requireEventRoute tenantId) and loads the source email through loadEventRecord; no tenantDb slice covers this table yet"
+    },
+    "app/api/admin/events/[slug]/email-templates/route.ts": {
+      "class": "convert",
+      "reason": "saved event email templates: reads and writes event_email_templates by the route's tenant (requireEventRoute tenantId) and loads the source email through loadEventRecord; no tenantDb slice covers this table yet"
+    },
     "app/api/admin/events/[slug]/emails/[id]/attachments/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
@@ -949,6 +957,10 @@
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: agreements, members"
     },
+    "app/api/credentials/[number]/certificate/route.ts": {
+      "class": "convert",
+      "reason": "family certificate link from an event email: no session (a guardian has no account), so the credential, its artwork and the D1 survey gate are read by service role after an HMAC token check, exactly as the credential page's ?k= link does"
+    },
     "app/api/credentials/[number]/events/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
@@ -996,6 +1008,10 @@
     "app/api/cron/docusign-reminders/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: agreements, members"
+    },
+    "app/api/cron/email-outbox/route.ts": {
+      "class": "system",
+      "reason": "Drains the email outbox (lib/email/outbox.ts): reads and updates email_outbox and email_outbox_blobs, reads email_suppressions and email_send_quota, calls bump_email_quota and prune_email_outbox_blobs, and writes its cron_runs row. Every queued message was already addressed by the sender that queued it; reads no tenant data."
     },
     "app/api/cron/entitlements/route.ts": {
       "class": "convert",
@@ -1144,6 +1160,10 @@
     "app/api/members/surveys/responses/[id]/withdraw-quote/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
+    },
+    "app/api/members/teams/[id]/discount/route.ts": {
+      "class": "convert",
+      "reason": "An organizer sets the discount code on their group's invoice: resolves the member and registration to check ownership, then lib/group-billing revises the invoice and its ledger with this client. Converts with the registration lane."
     },
     "app/api/members/teams/[id]/email-changes/[changeId]/route.ts": {
       "class": "convert",

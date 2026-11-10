@@ -64,7 +64,10 @@ import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { TENANT_ID_HEADER } from '@/lib/tenancy/host'
 import type { IdorTarget } from '@/lib/security/idor-targets'
 import { applyEnv, CASE_FIXTURES, fixtureFor, type CaseFixture } from './case-fixtures'
+// Not lib/tenancy/area-switch: it loads next/server, which this file mocks (a cycle).
+import { setTenantDbDriver } from '@/lib/tenancy/db'
 import { honeyClient, newHoneyDbState, type HoneyDbState, type HoneyWrite } from './honey-db'
+import { honeyTenantDriver } from './tenant-db-fake'
 
 export type Outcome = 'leak' | 'honey_write' | 'oracle' | 'oracle_4xx' | 'refused' | 'unexercised' | 'ok' | 'error'
 
@@ -186,6 +189,20 @@ export interface ResetOptions {
   modelUuidErrors?: boolean
   strict?: boolean
 }
+
+/** Values that, bound in a tenantDb statement, scope it to the running case's caller. */
+function scopingValues(): string[] {
+  const own: string[] = [TENANT_A_PARTICIPANT.memberId, TENANT_A_PARTICIPANT.clerkUserId]
+  if (harness.persona === 'stellr_event_manager') own.push(ASSIGNED_EVENT_SLUG)
+  // A filter on the caller's own tenant narrows only when the honey row is another tenant's.
+  if (harness.context.callerTenantId !== harness.context.honeyTenantId) own.push(harness.context.callerTenantId)
+  return own
+}
+
+// A converted area's tenantDb reads land on the same honey row as supabase-js reads.
+// Inert until a case turns tenantDb on: a case fixture's `env` sets TENANT_DB_ENABLED
+// to 'true' and TENANT_DB_AREAS to the area's path (test/idor/case-fixtures.ts).
+setTenantDbDriver(honeyTenantDriver(() => ({ db: harness.db, scopingValues: scopingValues() })))
 
 /** What a staff persona holds in the role tables: read by lib/authz under the postgres source. */
 function staffRows(persona: StaffPersona, tenantId: string): Record<string, Record<string, unknown>[]> {

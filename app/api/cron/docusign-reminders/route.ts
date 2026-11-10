@@ -16,6 +16,8 @@ import {
 import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
+import { partitionByTenant, runPerTenant } from '@/lib/cron-tenants'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Hobby's ceiling: no lower value is safe to pick without run times to prove it
 // (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
@@ -51,6 +53,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // chases after this; the rest are picked up by the next daily run.
 const CHASE_BUDGET_MS = 90_000
 
+/** How long past its slice the runner waits on a tenant's envelope before moving on (S5 B14). */
+const CHASE_OVERRUN_MS = 60_000
+
 export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
@@ -62,7 +67,7 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
 
   const { data: envelopes, error: queryError } = await db
     .from('agreements')
-    .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
+    .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count, tenant_id')
     .in('status', ['sent', 'delivered'])
     .lt('sent_at', firstChaseCutoff)
     .lt('reminder_count', MAX_CHASES)
@@ -95,122 +100,150 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
   let skippedBounced = 0
   let deferred = 0
   const stopAt = Date.now() + CHASE_BUDGET_MS
-  for (const env of envelopes) {
-    try {
-      // Out of time: leave the rest for the next run so the housekeeping below
-      // (outbox drain, heartbeat, run.finish) always gets its turn.
-      if (Date.now() >= stopAt) { deferred++; continue }
+  // Per tenant (S5 B14). Stellr's envelopes, DocuSign and Stellr signing alike,
+  // are chased exactly as before: Stellr alone is the runner's plain call, with
+  // the whole budget and failures under the same labels. Another tenant's
+  // envelopes are held, whatever TENANT_EVENT_MAIL_ENABLED says, and counted in
+  // `tenantHeld`: DocuSign stays Stellr's, and a Stellr signing reminder goes
+  // out through lib/esign/outbox.ts, which has no tenant sender yet. Chasing a
+  // tenant's envelope now would send it as Stellr, with replies to Stellr's
+  // inbox, which tenant mail never is (lib/event-emails/tenant-mail.ts). The
+  // slice that gives the signing engine a tenant sender lifts this hold.
+  const work = new Map<string, typeof envelopes>()
+  let tenantHeld = 0
+  for (const [id, rows] of partitionByTenant(envelopes)) {
+    if (id === STELLR_TENANT_ID) work.set(id, rows)
+    else tenantHeld += rows.length
+  }
 
-      // Refresh recipients first: the copy below depends on who is actually
-      // outstanding, and a stale list would reproduce the exact bug this fixes.
-      let recipients: Awaited<ReturnType<typeof syncEnvelopeRecipients>> = []
-      try {
-        recipients = await syncEnvelopeRecipients(db, env.id, env.envelope_id, env.provider)
-      } catch (err) {
-        console.error(`[cron] docusign-reminders: recipient sync failed for ${env.id}:`, err)
-      }
+  const outcome = await runPerTenant<{ processed: number; skippedBounced: number; deferred: number }>(db, run, {
+    job: 'docusign-reminders',
+    deadline: stopAt,
+    tenantIds: [...work.keys()],
+    // One envelope's sync and resend can take tens of seconds in a DocuSign
+    // slowdown; wait it out rather than start the next tenant alongside it.
+    overrunMs: CHASE_OVERRUN_MS,
+    fn: async (job) => {
+      const before = { processed, skippedBounced, deferred }
+      for (const env of work.get(job.tenant.id) ?? []) {
+        try {
+          // Out of time: leave the rest for the next run so the housekeeping below
+          // (outbox drain, heartbeat, run.finish) always gets its turn.
+          if (job.signal.aborted || Date.now() >= job.deadline) { deferred++; continue }
 
-      const description = describeEnvelope(
-        {
-          status: env.status,
-          signers_total: env.signers_total,
-          signers_completed: env.signers_completed,
-          reused_from: env.reused_from,
-        },
-        recipients.map(r => ({
-          name: r.name, email: r.email, role_name: r.roleName,
-          status: r.status, delivered_at: r.deliveredAt,
-        })),
-      )
+          // Refresh recipients first: the copy below depends on who is actually
+          // outstanding, and a stale list would reproduce the exact bug this fixes.
+          let recipients: Awaited<ReturnType<typeof syncEnvelopeRecipients>> = []
+          try {
+            recipients = await syncEnvelopeRecipients(db, env.id, env.envelope_id, env.provider)
+          } catch (err) {
+            console.error(`[cron] docusign-reminders: recipient sync failed for ${env.id}:`, err)
+          }
 
-      // Completed between the query and now — nothing to chase.
-      if (description.pill === 'complete' || description.pill === 'on_file') continue
+          const description = describeEnvelope(
+            {
+              status: env.status,
+              signers_total: env.signers_total,
+              signers_completed: env.signers_completed,
+              reused_from: env.reused_from,
+            },
+            recipients.map(r => ({
+              name: r.name, email: r.email, role_name: r.roleName,
+              status: r.status, delivered_at: r.deliveredAt,
+            })),
+          )
 
-      // A bounced address will never receive a resend. Chasing it burns a slot
-      // and tells the family to watch an inbox that cannot receive the mail.
-      // The sync above has already announced it (lib/esign/bounce-notices.ts),
-      // even if DocuSign Connect never told us.
-      if (description.pill === 'bounced') {
-        skippedBounced++
-        continue
-      }
+          // Completed between the query and now — nothing to chase.
+          if (description.pill === 'complete' || description.pill === 'on_file') continue
 
-      // deep review DS-8: claim the row BEFORE resending. Two overlapping
-      // invocations (a Vercel retry, a manual trigger) otherwise both select
-      // this row and both resend + email the family; and stamping
-      // reminder_sent_at only AFTER the emails meant a send that threw left the
-      // row un-stamped, so DocuSign re-notified the next day. A conditional
-      // update keyed on the reminder_count we read claims the slot atomically:
-      // exactly one runner's update matches, and the stamp lands before any send.
-      const prevCount = env.reminder_count ?? 0
-      const claimedAt = new Date().toISOString()
-      const { data: claimed } = await db
-        .from('agreements')
-        .update({ reminder_sent_at: claimedAt, reminder_count: prevCount + 1, updated_at: claimedAt })
-        .eq('id', env.id)
-        .eq('reminder_count', prevCount)
-        .select('id')
-      // No row matched: another runner already claimed it this cycle. Skip.
-      if (!claimed?.length) continue
+          // A bounced address will never receive a resend. Chasing it burns a slot
+          // and tells the family to watch an inbox that cannot receive the mail.
+          // The sync above has already announced it (lib/esign/bounce-notices.ts),
+          // even if DocuSign Connect never told us.
+          if (description.pill === 'bounced') {
+            skippedBounced++
+            continue
+          }
 
-      await remindEnvelopeRow(db, env)
+          // deep review DS-8: claim the row BEFORE resending. Two overlapping
+          // invocations (a Vercel retry, a manual trigger) otherwise both select
+          // this row and both resend + email the family; and stamping
+          // reminder_sent_at only AFTER the emails meant a send that threw left the
+          // row un-stamped, so DocuSign re-notified the next day. A conditional
+          // update keyed on the reminder_count we read claims the slot atomically:
+          // exactly one runner's update matches, and the stamp lands before any send.
+          const prevCount = env.reminder_count ?? 0
+          const claimedAt = new Date().toISOString()
+          const { data: claimed } = await db
+            .from('agreements')
+            .update({ reminder_sent_at: claimedAt, reminder_count: prevCount + 1, updated_at: claimedAt })
+            .eq('id', env.id)
+            .eq('reminder_count', prevCount)
+            .select('id')
+          // No row matched: another runner already claimed it this cycle. Skip.
+          if (!claimed?.length) continue
 
-      const type = (env.envelope_type ?? 'minor') as AgreementType
-      const member = env.member_id ? memberById.get(env.member_id) : null
-      // On Stellr signing the reminder IS the signing email, with a fresh
-      // link, already sent to each outstanding signer by remindEnvelopeRow.
-      // The emails below exist because DocuSign's own reminder arrives
-      // separately and is easy to miss; sending them too would double up.
-      const nativeRow = (env.provider ?? 'docusign') === 'native'
+          await remindEnvelopeRow(db, env)
 
-      if (member && !nativeRow) {
-        const content = type === 'minor'
-          ? docusignReminderToMinorEmail({
-              firstName:  member.first_name,
-              eventTitle: env.event_title,
-              waitingOn:  description.waitingOn.map(r => ({
-                name: r.name || r.email,
-                role: roleLabel(r.role_name),
-                neverOpened: description.neverOpened.includes(r),
-                queued:      description.queued.includes(r),
-              })),
-            })
-          : docusignReminderToSignerEmail({
-              firstName:      member.first_name,
-              eventTitle:     env.event_title,
-              agreementLabel: AGREEMENT_LABEL[type],
-            })
-        await sendEmail({ to: member.email, ...content })
-      }
+          const type = (env.envelope_type ?? 'minor') as AgreementType
+          const member = env.member_id ? memberById.get(env.member_id) : null
+          // On Stellr signing the reminder IS the signing email, with a fresh
+          // link, already sent to each outstanding signer by remindEnvelopeRow.
+          // The emails below exist because DocuSign's own reminder arrives
+          // separately and is easy to miss; sending them too would double up.
+          const nativeRow = (env.provider ?? 'docusign') === 'native'
 
-      // Chase the outstanding guardian directly too. Previously only the student
-      // was emailed and asked to relay the message to their parent — which fails
-      // completely when the student is a minor who does not read that inbox.
-      if (type === 'minor' && !nativeRow) {
-        const guardian = description.waitingOn.find(r => (r.role_name ?? '').toLowerCase() === 'guardian')
-        if (guardian?.email) {
-          await sendEmail({
-            to: guardian.email,
-            ...docusignSentToGuardianEmail({
-              guardianName: guardian.name || env.signer_name,
-              minorName:    env.minor_name,
-              eventTitle:   env.event_title,
-              isReminder:   true,
-            }),
-            // Critical mail (lib/email/suppressions.ts): guardian consent.
-            critical: true,
-          })
+          if (member && !nativeRow) {
+            const content = type === 'minor'
+              ? docusignReminderToMinorEmail({
+                  firstName:  member.first_name,
+                  eventTitle: env.event_title,
+                  waitingOn:  description.waitingOn.map(r => ({
+                    name: r.name || r.email,
+                    role: roleLabel(r.role_name),
+                    neverOpened: description.neverOpened.includes(r),
+                    queued:      description.queued.includes(r),
+                  })),
+                })
+              : docusignReminderToSignerEmail({
+                  firstName:      member.first_name,
+                  eventTitle:     env.event_title,
+                  agreementLabel: AGREEMENT_LABEL[type],
+                })
+            await sendEmail({ to: member.email, ...content })
+          }
+
+          // Chase the outstanding guardian directly too. Previously only the student
+          // was emailed and asked to relay the message to their parent — which fails
+          // completely when the student is a minor who does not read that inbox.
+          if (type === 'minor' && !nativeRow) {
+            const guardian = description.waitingOn.find(r => (r.role_name ?? '').toLowerCase() === 'guardian')
+            if (guardian?.email) {
+              await sendEmail({
+                to: guardian.email,
+                ...docusignSentToGuardianEmail({
+                  guardianName: guardian.name || env.signer_name,
+                  minorName:    env.minor_name,
+                  eventTitle:   env.event_title,
+                  isReminder:   true,
+                }),
+                // Critical mail (lib/email/suppressions.ts): guardian consent.
+                critical: true,
+              })
+            }
+          }
+
+          // reminder_sent_at / reminder_count were already stamped by the atomic
+          // claim above (deep review DS-8), so there is no post-send bookkeeping.
+          processed++
+        } catch (err) {
+          console.error(`[cron] docusign-reminders: failed for envelope ${env.id}:`, err)
+          job.fail(env.id, err)
         }
       }
-
-      // reminder_sent_at / reminder_count were already stamped by the atomic
-      // claim above (deep review DS-8), so there is no post-send bookkeeping.
-      processed++
-    } catch (err) {
-      console.error(`[cron] docusign-reminders: failed for envelope ${env.id}:`, err)
-      run.fail(env.id, err)
-    }
-  }
+      return { processed: processed - before.processed, skippedBounced: skippedBounced - before.skippedBounced, deferred: deferred - before.deferred }
+    },
+  })
 
   // Signing emails held back by yesterday's budget go out with the new day's.
   let outbox: unknown = null
@@ -223,6 +256,7 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
   await checkHeartbeat(db, ['esign-maintenance', 'docusign-form-data']).catch((err) => run.fail('heartbeat', err))
 
   console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address, ${deferred} deferred — out of time)`)
-  await run.finish({ processed, eligible: envelopes.length, skippedBounced, deferred, outbox })
+  // tenantHeld and the ledger are absent from a Stellr-only run's result.
+  await run.finish({ processed, eligible: envelopes.length, skippedBounced, deferred, outbox, ...(tenantHeld ? { tenantHeld } : {}), ...outcome.ledger })
   return NextResponse.json({ processed, skippedBounced, deferred })
 })

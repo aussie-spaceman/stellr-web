@@ -58,6 +58,8 @@ export interface GroupBody {
   late_joiner_payer?: string
   /** "Students share the teacher's cost": how many students the teacher expects. */
   share_estimate?: number
+  /** A discount code for the group's invoice ('invoice' and 'invoice_some' only). */
+  discount_code?: string
   additional_adults?: ParticipantPayload[] | null
   students?: ParticipantPayload[] | null
   school_dpa_agreed?: unknown

@@ -9,7 +9,15 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { stripeClient } from '@/lib/stripe'
 import { findOfferByToken, type ScholarshipApplication } from '@/lib/scholarships'
 import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
-import { ageRefused, refuse, temporarilyUnavailable, type Refusable } from '../refusal'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { assertRegistrable, stellrContext } from '../eligibility'
+import {
+  eventOwnerOrRefusal,
+  readRegistrationEvent,
+  tenantPaymentsUnavailable,
+  type RegistrationEventContext,
+} from '../event-context'
+import { eligibilityRefused, refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import { answerDuplicate } from './duplicates'
 import { hasSchool, registrantEmails, type IndividualBody } from './parse'
 
@@ -32,12 +40,16 @@ export type IndividualEvent = RegistrationGateSource & {
 export interface GateDeps {
   serviceClient: () => SupabaseClient
   getEvent: (slug: string) => Promise<IndividualEvent | null>
+  /** requestTenant().tenantId: Stellr unless the proxy marked this request as a tenant host's. */
+  requestTenantId: string
 }
 
 /** What the gate established, for the writes that follow. */
 export interface GatedRegistration {
   db: SupabaseClient
   event: IndividualEvent
+  /** The event's owner and rules (lib/registration/event-context). */
+  context: RegistrationEventContext
   eventTitle: string
   email: string
   schoolEmail: string | null
@@ -84,14 +96,19 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   // Arrived from a scholarship offer email (?scholarship=<token>). The offer
   // must be live and for this event; a stale link is refused rather than
   // silently registering the student at full price.
+  //
+  // S5 A7: offers are Stellr's. On a tenant's host none is looked up, and every
+  // offer link gets the answer an unknown one does.
+  const offerInvalid = () => NextResponse.json(
+    { error: 'This scholarship link is no longer valid. Reply to your scholarship email and we’ll sort it out.' },
+    { status: 400 },
+  )
+  if (body.scholarship_token && deps.requestTenantId !== STELLR_TENANT_ID) return refuse(offerInvalid())
   const scholarship = body.scholarship_token
     ? await findOfferByToken(deps.serviceClient(), body.scholarship_token)
     : null
   if (body.scholarship_token && (!scholarship || scholarship.event_slug !== event_slug)) {
-    return refuse(NextResponse.json(
-      { error: 'This scholarship link is no longer valid. Reply to your scholarship email and we’ll sort it out.' },
-      { status: 400 },
-    ))
+    return refuse(offerInvalid())
   }
 
   // Registration window gate — reject before creating any records / sending
@@ -104,16 +121,12 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   // to null and skipped the gate — so a bogus slug still created a member,
   // participant and DocuSign envelope. Distinguish a transient failure
   // (retryable 503) from a genuinely unknown event (404); never fall through.
-  let event: IndividualEvent | null
-  try {
-    event = await deps.getEvent(event_slug)
-  } catch (e) {
-    console.error('[register/individual] event lookup failed:', e)
-    return refuse(temporarilyUnavailable())
-  }
-  if (!event) {
+  const read = await readRegistrationEvent(event_slug, { getEvent: deps.getEvent, route: 'register/individual' })
+  if (read.kind === 'unavailable') return refuse(temporarilyUnavailable())
+  if (read.kind === 'not_found') {
     return refuse(NextResponse.json({ error: 'Event not found' }, { status: 404 }))
   }
+  const { event } = read
   if (!registrationIsOpen(event) && !scholarship) {
     return refuse(NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 }))
   }
@@ -129,8 +142,29 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   // S0 (2 Nov 2026): a real past date of birth, checked here before anything
   // is written. An empty or unreadable one used to fall through to an adult
   // role, bracket and agreement. Age is taken on the event's start date.
-  const ageCheck = checkRegistrationAge(body.date_of_birth, { eventDate: event.date ?? null })
-  if (!ageCheck.ok) return refuse(ageRefused(ageCheck))
+  //
+  // S5 A7: through assertRegistrable, with the event's rules (lib/registration/
+  // event-context). On a tenant's host the event's owner is read first, because its
+  // rules decide this check. On Stellr's hosts the event can only go ahead as
+  // Stellr's, so Stellr's rules apply, which is exactly the check above, and the
+  // owner is read below, before the first read that looks at this person: an event
+  // owned by anyone else then gets the unknown event's answer, before anything is
+  // read about the person or written.
+  // An offer for another tenant's event answers as an unknown offer would.
+  const ownerCheck = () =>
+    eventOwnerOrRefusal(event, event_slug, {
+      db: deps.serviceClient(),
+      requestTenantId: deps.requestTenantId,
+      route: 'register/individual',
+    }, () => (scholarship ? offerInvalid() : NextResponse.json({ error: 'Event not found' }, { status: 404 })))
+  let context: RegistrationEventContext | null = null
+  if (deps.requestTenantId !== STELLR_TENANT_ID) {
+    const owned = await ownerCheck()
+    if (!owned.ok) return refuse(owned.response)
+    context = owned.context
+  }
+  const ageCheck = assertRegistrable(body.date_of_birth, context?.eligibility ?? stellrContext(event))
+  if (!ageCheck.ok) return refuse(eligibilityRefused(ageCheck))
 
   // Signed in, the registration is for the account holder, and it writes to their
   // own row. A different date of birth means this is someone else, such as a child
@@ -149,6 +183,18 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
     ))
   }
 
+  if (!context) {
+    const owned = await ownerCheck()
+    if (!owned.ok) return refuse(owned.response)
+    context = owned.context
+  }
+  // S5 A7: a tenant event takes no money until S9: no fee, no add-ons and no
+  // scholarship, so nothing here can reach Stellr's Stripe account for a tenant.
+  // Refused before the duplicate check, which can open a Checkout.
+  if (!context.isPlatformOwner && (event.stripePriceId || body.scholarship_token || (body.merch_addons ?? []).length > 0)) {
+    return refuse(tenantPaymentsUnavailable())
+  }
+
   const db = deps.serviceClient()
 
   const duplicateAnswer = await answerDuplicate(db, {
@@ -157,6 +203,7 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
     event,
     sessionEmail: sessionMember?.email,
     scholarship,
+    payments: context.isPlatformOwner,
   })
   if (duplicateAnswer) return refuse(duplicateAnswer)
 
@@ -164,8 +211,12 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   // that member's name (lib/registration/member-on-file). An offer sent to this
   // address is the exception: making it can create the member row, its link went
   // to this address, and a 13-17-year-old may have no way to make a login yet.
+  //
+  // S5 A7: not on a tenant's event. It writes no member row and makes no login (see
+  // persist), so nothing is written in that member's name, and asking would tell a
+  // tenant's form whether an address is on file with Stellr.
   const offerIsForThisAddress = !!scholarship && normalizeEmail(scholarship.email) === email
-  if (!sessionMember && !offerIsForThisAddress) {
+  if (context.isPlatformOwner && !sessionMember && !offerIsForThisAddress) {
     const onFile = await findMemberOnFile(db, email, schoolEmail)
     if (!onFile.ok) {
       console.error('[register/individual] prior-member lookup failed:', onFile.error)
@@ -238,6 +289,7 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
     registration: {
       db,
       event,
+      context,
       eventTitle,
       email,
       schoolEmail,

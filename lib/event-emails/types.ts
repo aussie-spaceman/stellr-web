@@ -53,6 +53,8 @@ export interface EventEmailRow {
   catch_up_claimed_at?: string | null
   created_at: string
   updated_at: string
+  /** Derived from event_slug (S4). NULL or absent means Stellr. */
+  tenant_id?: string | null
 }
 
 export interface EventEmailSendRow {
@@ -89,6 +91,15 @@ export const EVENT_MERGE_FIELDS = [
   { token: 'team_profile_link',    example: 'Fill in your team profile here: …', label: 'Team profile link (team profile emails)' },
   { token: 'portal_link',         example: 'https://app.stellreducation.org/sign-in', label: 'Stellr portal sign-in' },
   { token: 'event_link',           example: 'https://www.stellreducation.org/events/…', label: 'Public event page' },
+  // After the event: awards, feedback, certificates and credentials.
+  { token: 'champion_company',         example: 'Orbital Works',                 label: 'Overall Event Champions: the company name' },
+  { token: 'individual_award_winners', example: 'Avery, Jordan and Taylor',           label: 'All individual award winners (Anita Gale, Dick Edwards, Norm Chaffee)' },
+  { token: 'norm_chaffee_winners',     example: 'Avery and Quinn',               label: 'Norm Chaffee Award winners' },
+  { token: 'anita_gale_winners',       example: 'Jordan and Morgan',               label: 'Anita Gale Award winners' },
+  { token: 'dick_edwards_winners',     example: 'Taylor and Casey',             label: 'Dick Edwards Award winners' },
+  { token: 'feedback_link',            example: 'https://app.stellreducation.org/survey/event/…', label: 'Post-event feedback survey' },
+  { token: 'certificate_links',        example: 'Alex’s Certificate of Participation: Download PDF', label: 'Their certificate PDFs (issued awards)' },
+  { token: 'credential_links',         example: 'Alex’s Certificate of Participation: View credential', label: 'Their credential pages (issued awards)' },
 ] as const
 
 export type EventMergeToken = (typeof EVENT_MERGE_FIELDS)[number]['token']

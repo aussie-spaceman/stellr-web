@@ -1,4 +1,4 @@
-import SeatPayPage from '@/app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page'
+import { seatPayBody } from '@/app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/pay-seat-body'
 import { tenantFromParams } from '@/lib/tenancy/request-tenant'
 import { requireTenantSeatPayLink } from '@/lib/tenancy/tenant-records'
 
@@ -13,6 +13,7 @@ export default async function TenantSeatPayPage({
 }) {
   const tenant = await tenantFromParams(params)
   const { slug, token } = await params
+  const { cancelled } = await searchParams
   await requireTenantSeatPayLink(tenant, slug, token)
-  return <SeatPayPage params={Promise.resolve({ slug, token })} searchParams={searchParams} />
+  return seatPayBody({ slug, token, cancelled })
 }

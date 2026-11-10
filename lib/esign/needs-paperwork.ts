@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { classifyAgreement } from '@/lib/docusign'
 import { ISSUE_FAILED_PREFIX } from '@/lib/docusign-agreements'
-import { getEventsBySlugs } from '@/lib/sanity'
+import { getEventsBySlugs } from '@/lib/events/repo'
 import { stellrRows } from '@/lib/tenancy/stellr-scope'
 
 // "Needs paperwork": participants of upcoming events who need an agreement and

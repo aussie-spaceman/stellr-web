@@ -6,10 +6,13 @@ hash-chained, so an edited or removed row can be detected. S5 adds `audit()`
 to every mutation, and S6 shows each tenant its own slice.
 
 **Today it runs in the background.** Nothing writes to it unless
-`PLATFORM_AUDIT_ENABLED=true`, and that flag is off by default. The only caller
-so far is view-as start and stop (`app/api/admin/impersonation`). That call is
-a shadow copy written after the existing `member_activity_log` row, and its
-result never changes the response.
+`PLATFORM_AUDIT_ENABLED=true`, and that flag is off by default. S5 has since
+wired more than half of the mutating route handlers and every cron to it, through
+`lib/audit/route.ts` and `lib/cron-audit.ts`, with the actions catalogued in
+`lib/audit/actions.ts`. What is still unaudited is
+`test/baselines/unaudited-mutations.json`. A failed audit write never changes a
+response. The order to turn it on, what it costs and what cannot be undone are in
+`docs/TENANCY-S5-data.md`; the steps below are the first, view-as-only check.
 
 ## Pieces
 

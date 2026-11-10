@@ -34,9 +34,15 @@ export async function answerDuplicate(
     event: { stripePriceId?: string }
     sessionEmail: string | null | undefined
     scholarship: ScholarshipApplication | null
+    /**
+     * S5 A7: false for a tenant's event. No pay link is resent and no Checkout is
+     * opened for its earlier registration: nothing reaches Stellr's Stripe account
+     * for a tenant. The answers are otherwise the same.
+     */
+    payments: boolean
   },
 ): Promise<Response | null> {
-  const { email, eventSlug, event, sessionEmail, scholarship } = ctx
+  const { email, eventSlug, event, sessionEmail, scholarship, payments } = ctx
   const existing = await findExistingRegistrations(db, [email], eventSlug)
   const sessionMatches = !!sessionEmail && normalizeEmail(sessionEmail) === email
   const dup = resolveDuplicate(existing.get(email), { sessionMatches })
@@ -48,7 +54,7 @@ export async function answerDuplicate(
   // scholarship confirm it now if nothing else is owed. Only for the person the
   // offer was made to, or someone signed in as the registrant.
   const offerIsTheirs = !!scholarship && (sessionMatches || normalizeEmail(scholarship.email) === email)
-  if (scholarship && offerIsTheirs && dup.registration.type === 'individual' && dup.kind !== 'in_group') {
+  if (payments && scholarship && offerIsTheirs && dup.registration.type === 'individual' && dup.kind !== 'in_group') {
     const { data: existingReg } = await db
       .from('registrations')
       .select('id, status, amount_due_cents')
@@ -82,7 +88,7 @@ export async function answerDuplicate(
     }
     // An unfinished GROUP registration isn't resumed from the individual form:
     // the organiser has the pay link in their confirmation email.
-    if (dup.kind === 'email_link' && dup.registration.type === 'individual') {
+    if (payments && dup.kind === 'email_link' && dup.registration.type === 'individual') {
       resendPayLinkAfterResponse(db, regId, 'register/individual pay-link resend')
     }
     return registrationOnFileAnswer('Events')
@@ -96,7 +102,7 @@ export async function answerDuplicate(
       { status: 409 },
     )
   }
-  if (dup.kind === 'resume') {
+  if (payments && dup.kind === 'resume') {
     const stripe = stripeClient()
     if (stripe) {
       try {

@@ -25,6 +25,13 @@ export async function respondToIndividualRegistration(
   const { regId, payToken, memberId } = row
   const { event_slug } = body
 
+  // S5 A7: a tenant's event takes no money (the gate refused a fee, add-ons and an
+  // offer), so there is no checkout, pay link or add-on order, and nothing is asked
+  // of Stellr's Stripe account.
+  if (!gated.context.isPlatformOwner) {
+    return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken: null }, { status: 201 })
+  }
+
   // Price any merch add-ons selected — validated + persisted as pending items
   // on the registration's event-merch order until payment clears.
   const event = await getEvent(event_slug)

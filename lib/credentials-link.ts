@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto'
 import { safeStrEqual } from '@/lib/secret-compare'
 import { credentialUrl } from '@/lib/credentials-core'
+import { AUTH_APP_URL } from '@/lib/env'
 
 // ── The family link: a private credential, opened from the issued email ──────
 //
@@ -52,4 +53,35 @@ export function familyCredentialUrl(credential: { id: string; number: string }):
   const token = credentialViewToken(credential.id)
   const url = credentialUrl(credential.number)
   return token ? `${url}?${FAMILY_LINK_PARAM}=${token}` : url
+}
+
+// ── The family certificate link: the PDF, opened from an event email ─────────
+//
+// Same idea for the certificate itself: a guardian has no account, so the
+// holder-only download (app/api/credentials/[number]/pdf) is closed to them.
+// An event email's {{certificate_links}} carries
+//
+//   <app>/api/credentials/<number>/certificate?k=<base64url HMAC-SHA256(secret, "stellr-credential|pdf|<id>")>
+//
+// with its own purpose prefix, so a view link never downloads the PDF and a
+// PDF link never opens the page. Nothing is stored.
+
+export function credentialPdfToken(credentialId: string): string | null {
+  const s = secret()
+  if (!s) return null
+  return createHmac('sha256', s).update(`stellr-credential|pdf|${credentialId}`).digest('base64url')
+}
+
+export function verifyCredentialPdfToken(credentialId: string, token: string | null | undefined): boolean {
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false
+  const expected = credentialPdfToken(credentialId)
+  return !!expected && safeStrEqual(token, expected)
+}
+
+/** The certificate download link for an event email, or null when no secret is set. */
+export function familyCertificateUrl(credential: { id: string; number: string }): string | null {
+  const token = credentialPdfToken(credential.id)
+  return token
+    ? `${AUTH_APP_URL}/api/credentials/${encodeURIComponent(credential.number)}/certificate?${FAMILY_LINK_PARAM}=${token}`
+    : null
 }

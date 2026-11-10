@@ -6,6 +6,7 @@ import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { withAudit } from '@/lib/audit/route'
 import { insertEventEmailCopy } from '@/lib/events/admin-records'
 import { createFromDefault } from '@/lib/event-emails/store'
+import { createFromSavedTemplate, getTemplate } from '@/lib/event-emails/templates'
 import type { EventEmailRow } from '@/lib/event-emails/types'
 import { loadEventRecord, loadScopedRows } from '@/lib/tenancy/load-scoped'
 
@@ -13,6 +14,7 @@ import { loadEventRecord, loadScopedRows } from '@/lib/tenancy/load-scoped'
 // event managers).
 //   GET  → { emails, history }
 //   POST { templateKey } → a new draft from one of the starter emails (or blank)
+//   POST { savedTemplateId } → a new draft from a saved template (the tenant's, any event)
 //   POST { duplicateOf } → a new draft copied from another email (attachments not copied)
 
 const ROUTE = '/api/admin/events/[slug]/emails'
@@ -62,6 +64,16 @@ async function createEmail(req: Request, { params }: Ctx) {
     if (error || !data) return NextResponse.json({ error: 'Could not duplicate the email' }, { status: 500 })
     noteAuditSubject(req, { id: data.id as string })
     return NextResponse.json({ email: data }, { status: 201 })
+  }
+
+  // A saved template: the tenant's, shared across its events.
+  if (typeof body?.savedTemplateId === 'string') {
+    const template = await getTemplate(db, staff.tenantId, body.savedTemplateId)
+    if (!template) return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+    const email = await createFromSavedTemplate(db, slug, template, createdBy)
+    if (!email) return NextResponse.json({ error: 'Could not create the email' }, { status: 500 })
+    noteAuditSubject(req, { id: email.id })
+    return NextResponse.json({ email }, { status: 201 })
   }
 
   const templateKey = typeof body?.templateKey === 'string' ? body.templateKey : 'blank'

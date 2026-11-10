@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { rows, sendEventEmail, reclaimStuckSending, statusWrites, today, runCatchUps } = vi.hoisted(() => ({
   runCatchUps: vi.fn(async (..._a: unknown[]) => ({ checked: 1, emailed: 4, deferred: 0, errors: [] as { id: string; error: string }[] })),
-  rows: [] as { id: string; event_slug: string; schedule_days_before: number }[],
+  // S5 B14: the cron selects tenant_id to run per tenant. NULL is Stellr's.
+  rows: [] as { id: string; event_slug: string; schedule_days_before: number; tenant_id: string | null }[],
   sendEventEmail: vi.fn(async (..._a: unknown[]) => ({ ok: true })),
   // deep review INT-1: the cron now re-drives stale 'sending' rows.
   reclaimStuckSending: vi.fn(async (..._a: unknown[]) => ({ reclaimed: 0, errors: [] as { id: string; error: string }[] })),
@@ -24,6 +25,7 @@ vi.mock('@/lib/supabase', () => ({
         select: () => chain,
         eq: (col: string, v: string) => { if (col === 'id') id = v; return chain },
         not: () => chain,
+        in: () => chain,
         order: async () => ({ data: rows, error: null }),
         update: (values: { status: string }) => {
           const upd = { eq: (col: string, v: string) => { if (col === 'id') statusWrites.push({ id: v, status: values.status }); return upd } }
@@ -48,9 +50,9 @@ beforeEach(() => {
 describe('GET /api/cron/event-emails', () => {
   it('sends what is due, waits on the rest, skips a passed event', async () => {
     rows.push(
-      { id: 'due', event_slug: 'co', schedule_days_before: 5 },    // Oct 3 − 5 = Sep 28 → today
-      { id: 'later', event_slug: 'co', schedule_days_before: 2 },  // Oct 1
-      { id: 'stale', event_slug: 'past', schedule_days_before: 3 },
+      { id: 'due', event_slug: 'co', schedule_days_before: 5, tenant_id: null },    // Oct 3 − 5 = Sep 28 → today
+      { id: 'later', event_slug: 'co', schedule_days_before: 2, tenant_id: null },  // Oct 1
+      { id: 'stale', event_slug: 'past', schedule_days_before: 3, tenant_id: null },
     )
     expect(await run()).toMatchObject({ due: 1, sent: 1, skipped: 1, deferred: 0 })
     expect(sendEventEmail).toHaveBeenCalledTimes(1)
@@ -59,12 +61,15 @@ describe('GET /api/cron/event-emails', () => {
   })
 
   it('leaves a due email for the next slot once the time budget is spent', async () => {
-    rows.push({ id: 'a', event_slug: 'co', schedule_days_before: 7 }, { id: 'b', event_slug: 'co', schedule_days_before: 7 })
-    const now = vi.spyOn(Date, 'now')
-    now.mockReturnValueOnce(0)          // start
-    now.mockReturnValueOnce(1_000)      // before a
-    now.mockReturnValue(40_000)         // before b
+    rows.push({ id: 'a', event_slug: 'co', schedule_days_before: 7, tenant_id: null }, { id: 'b', event_slug: 'co', schedule_days_before: 7, tenant_id: null })
+    // The clock stands at the start until the first send, which takes 40 s.
+    // (S5 B14: the per-tenant runner reads the clock too, so a fixed sequence
+    // of readings no longer says which one is "before b".)
+    let clock = 0
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    sendEventEmail.mockImplementationOnce(async () => { clock = 40_000; return { ok: true } })
     expect(await run()).toMatchObject({ due: 2, sent: 1, deferred: 1 })
+    expect(sendEventEmail).toHaveBeenCalledTimes(1)
     now.mockRestore()
   })
 

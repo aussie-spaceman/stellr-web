@@ -184,6 +184,7 @@ export const FIXTURES = {
   'public.event_companies': (c) => ({ event_slug: lit(c.ev.slug), number: '1' }),
   'public.event_email_sends': (c) => ({ event_slug: lit(c.ev.slug), email_name: lit('iso'), subject: lit('Iso'), trigger: lit('manual') }),
   'public.event_emails': (c) => ({ event_slug: lit(c.ev.slug), name: lit('iso') }),
+  'public.event_email_templates': (c) => ({ tenant_id: lit(c.t.id), name: lit('iso') }),
   'public.event_manager_assignments': (c) => ({ clerk_user_id: lit(`user_iso_${c.s}`), event_slug: lit(c.ev.slug) }),
   'public.event_participations': (c) => ({ member_id: lit(MEMBER), event_slug: lit(c.ev.slug) }),
   'public.event_refunds': (c) => ({ refund_type: lit('none'), event_slug: lit(c.ev.slug) }),

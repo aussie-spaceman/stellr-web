@@ -107,6 +107,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.tenant_memberships': own('roles inside a tenant'),
   'public.platform_admins': platform(),
   'public.events': own('mirror of Sanity events'),
+  'public.event_email_templates': own('saved event emails, shared across the tenant’s events'),
   'public.tenancy_settings': system('derivation mode'),
   'public.tenancy_derivation_log': system('derivation orphan counts'),
 
@@ -274,6 +275,8 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   // Stays system: its nullable tenant_id only labels a per-tenant child row
   // (S5 B3). tenant_app has no grant on it (TENANT_APP_NO_ACCESS_TABLES).
   'public.cron_runs': system(),
+  'public.email_outbox': system('platform mail queue; each row was addressed by the sender that queued it'),
+  'public.email_outbox_blobs': system(),
   'public.email_send_quota': system(),
   'public.esign_email_budget': system(),
   'public.esign_provider_state': system(),

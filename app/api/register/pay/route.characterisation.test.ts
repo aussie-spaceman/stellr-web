@@ -227,6 +227,6 @@ describe('characterisation: POST /api/register/pay', () => {
   it('the route itself writes nothing', async () => {
     await post()
     expect(rec.writes()).toEqual([])
-    expect(rec.log).toEqual(['select registrations'])
+    expect(rec.log).toEqual(['select registrations', 'select events']) // S5 A7: the event's owner
   })
 })

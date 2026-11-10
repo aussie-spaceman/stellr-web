@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEventsBySlugs } from '@/lib/sanity'
+import { getEventsBySlugs } from '@/lib/events/repo'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // ── The check-in banner: one QR code for every event ─────────────────────────

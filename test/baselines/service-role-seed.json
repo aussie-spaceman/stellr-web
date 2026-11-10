@@ -39,8 +39,6 @@
     "app/(stellr)/(flow)/check-in/[slug]/code/page.tsx",
     "app/(stellr)/(flow)/check-in/[slug]/page.tsx",
     "app/(stellr)/(flow)/check-in/page.tsx",
-    "app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page.tsx",
-    "app/(stellr)/(flow)/register/[slug]/pay/[token]/page.tsx",
     "app/(stellr)/(flow)/survey/[token]/page.tsx",
     "app/(stellr)/(flow)/survey/event/[slug]/page.tsx",
     "app/(stellr)/(flow)/team-profile/[token]/page.tsx",

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { rec, OPEN_EVENT, eqFilter, jsonRequest, settle, type DbCall, type DbResult } from '@/test/registration/fixtures'
 
 // S5 A5: what route.characterisation.test.ts leaves unprotected by the handler
@@ -225,6 +226,7 @@ describe('branches: POST /api/register/group-join — a signed-in member', () =>
     await post()
     expect(participantInsert()).toEqual({
       registration_id: 'reg-1',
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       member_id: 'm-signed',
       first_name: 'Mem',
       last_name: 'Ber',
@@ -338,6 +340,7 @@ describe('branches: POST /api/register/group-join — a brand-new participant', 
     await post(DETAILS)
     expect(participantInsert()).toEqual({
       registration_id: 'reg-1',
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       member_id: 'm-1',
       first_name: 'K',
       last_name: 'Id',

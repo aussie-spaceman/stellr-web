@@ -27,6 +27,7 @@ export const AUDIT_ACTIONS = [
   'registration.participant.create',
   'registration.participant.update',
   'registration.payment_method.change',
+  'registration.invoice_discount.change',
 
   // Consent and uploads (A14)
   'consent.request.send',
@@ -187,6 +188,8 @@ export const AUDIT_ACTIONS = [
   'registration.invoice.read',
   'registration.participant.staff_add',
   'survey.quote.withdraw',
+  // C16 follow-up: registrations/[id]/payment-method (its change is catalogued under Registration)
+  'registration.payment_method.read',
 
   // Events admin: paperwork and communications under an event (C17)
   'agreement.participant.reissue',
@@ -200,6 +203,9 @@ export const AUDIT_ACTIONS = [
   'event_email.record.create',
   'event_email.record.delete',
   'event_email.record.update',
+  'event_email.template.create',
+  'event_email.template.delete',
+  'event_email.template.update',
   'event_volunteer.assignment.create',
   'event_volunteer.assignment.delete',
   'participant.guardian_email.correct',

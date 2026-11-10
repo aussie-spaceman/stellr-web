@@ -155,7 +155,7 @@ describe('runPerTenant, no work', () => {
 })
 
 describe('runPerTenant, Stellr alone', () => {
-  it('matches a plain call: whole budget, no child row, no new result keys, one read of tenants', async () => {
+  it('matches a plain call: whole budget, no child row, no new result keys, no read of tenants', async () => {
     const { db, inserts, updates, reads } = fakeDb()
     const { run, fails } = fakeRun()
     const deadline = 41_000
@@ -179,7 +179,7 @@ describe('runPerTenant, Stellr alone', () => {
     expect(fails).toEqual([{ where: 'item-1', message: 'one bad row' }])
     expect(inserts).toEqual([])
     expect(updates).toEqual([])
-    expect(reads).toEqual(['tenants'])
+    expect(reads).toEqual([])
   })
 
   it('hands over the run deadline exactly when the clock moves during the run', async () => {
@@ -197,6 +197,27 @@ describe('runPerTenant, Stellr alone', () => {
       },
     })
     expect(handed).toBe(10_000)
+  })
+
+  it('still calls Stellr alone when the deadline has already passed, so its own budget checks count the late work', async () => {
+    const { db } = fakeDb()
+    const { run, fails } = fakeRun()
+    let handed = 0
+    const out = await runPerTenant(db, run, {
+      job: 'event-emails',
+      deadline: 10_000,
+      tenantIds: [STELLR],
+      now: () => 25_000,
+      fn: async ({ deadline }) => {
+        handed = deadline
+        return { deferred: 3 }
+      },
+    })
+    expect(handed).toBe(10_000)
+    expect(out.results.get(STELLR)).toEqual({ deferred: 3 })
+    expect(out.notReached).toEqual([])
+    expect(out.ledger).toEqual({})
+    expect(fails).toEqual([])
   })
 
   it('does not race Stellr alone against its slice', async () => {
@@ -256,6 +277,32 @@ describe('runPerTenant, Stellr alone', () => {
     const out = await runPerTenant(db, fakeRun().run, { job: 'x', deadline: 10_000, tenantIds: [STELLR], now: () => 0, fn })
     expect(fn).toHaveBeenCalledTimes(1)
     expect(out.skipped).toEqual([])
+  })
+
+  it('makes no tenants read for Stellr alone, so a read that would fail records nothing', async () => {
+    // What event-emails and docusign-reminders pass on a day only Stellr has work.
+    const { db, reads, inserts } = fakeDb({ tenantsError: true })
+    const { run, fails } = fakeRun()
+    const out = await runPerTenant(db, run, {
+      job: 'event-emails',
+      deadline: 10_000,
+      tenantIds: [STELLR],
+      now: () => 0,
+      fn: async ({ tenant }) => ({ sent: 4, platformOwner: tenant.isPlatformOwner }),
+    })
+    expect(out.results.get(STELLR)).toEqual({ sent: 4, platformOwner: true })
+    expect(out.ledger).toEqual({})
+    expect(reads).toEqual([])
+    expect(inserts).toEqual([])
+    expect(fails).toEqual([])
+  })
+
+  it('still reads tenants, and records a failed read, once any other tenant has work', async () => {
+    const { db, reads } = fakeDb({ tenantsError: true })
+    const { run, fails } = fakeRun()
+    await runPerTenant(db, run, { job: 'surveys', deadline: 10_000, tenantIds: [CANARY], now: () => 0, fn: async () => ({}) })
+    expect(reads[0]).toBe('tenants')
+    expect(fails.map((f) => f.where).sort()).toEqual(['t:' + CANARY + ':run', 'tenants'].sort())
   })
 
   it('still runs Stellr when tenants cannot be read, and records the read failure', async () => {

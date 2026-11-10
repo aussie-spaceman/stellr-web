@@ -10,6 +10,23 @@ import type { NativeRecipient } from '@/lib/esign/native/flow'
 import { escapeHtml } from '@/lib/email-layout'
 import { announceBounces } from '@/lib/esign/bounce-notices'
 import { maskEmail } from '@/lib/utils'
+import { isTenantRow, loadTenantSender, loadTenantSenders, tenantEventMailEnabled, type EventSender } from '@/lib/event-emails/tenant-mail'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { STELLR_OR_NULL } from '@/lib/tenancy/stellr-scope'
+
+// Another tenant's signing mail (S5 B14 follow-up). An envelope whose
+// agreements.tenant_id names a tenant other than Stellr is sent only with that
+// tenant's sender, "<Tenant> via Stellr" with the tenant's Reply-To
+// (lib/event-emails/tenant-mail.ts), and only while TENANT_EVENT_MAIL_ENABLED is
+// exactly true. Without a usable sender its signers are held: nothing is sent,
+// no budget is claimed, nothing is written, and they stay in the outbox. So a
+// tenant's signing mail never goes out as Stellr. Stellr's envelopes (NULL or
+// Stellr tenant_id) never meet this: same sender, same budget, same mail.
+//
+// The budget below is one pool for every tenant, by the owner's decision of
+// 9 Nov 2026 (lib/email-budget.ts): a tenant's signing email claims the same
+// daily signing allowance as Stellr's, after Stellr's waiting signers have had
+// theirs (drainOutbox).
 
 // Signing emails go through a daily budget. Resend's free plan allows 100
 // emails a day for everything Stellr sends; signing takes at most
@@ -60,6 +77,8 @@ interface EnvelopeForEmail {
   minor_name: string | null
   status: string
   prefill: Record<string, string> | null
+  /** S5: the envelope's tenant. NULL, or absent, is Stellr's. */
+  tenant_id?: string | null
 }
 
 /** A link the signer can use right now, e.g. to sign straight after joining. */
@@ -74,6 +93,8 @@ export interface SendResult {
   sent: number
   deferred: number
   failed: number
+  /** S5: another tenant's signers not sent for want of a sender. Present only when non-zero. */
+  held?: number
 }
 
 // ── Batching ─────────────────────────────────────────────────────────────────
@@ -108,7 +129,12 @@ export async function batchInvites<T>(db: SupabaseClient, fn: () => Promise<T>):
 export async function sendInvites(
   db: SupabaseClient,
   recipients: NativeRecipient[],
-  opts: { reminder?: boolean; now?: Date } = {},
+  opts: {
+    reminder?: boolean
+    now?: Date
+    /** S5: tenant senders the caller has already resolved, so this call does not read them again. */
+    senders?: ReadonlyMap<string, EventSender | null>
+  } = {},
 ): Promise<SendResult> {
   const held = batch.getStore()
   if (held && !opts.reminder) {
@@ -123,12 +149,20 @@ export async function sendInvites(
     if (!envelopes.has(id)) {
       const { data } = await db
         .from('agreements')
-        .select('id, envelope_type, event_title, minor_name, status, prefill')
+        .select('id, envelope_type, event_title, minor_name, status, prefill, tenant_id')
         .eq('id', id)
         .maybeSingle()
       envelopes.set(id, (data as EnvelopeForEmail | null) ?? null)
     }
     return envelopes.get(id) ?? null
+  }
+  // S5: each other tenant's sender, read once per call; null when it has none
+  // usable or the flag is off. Stellr's envelopes never ask. A sender the caller
+  // passed in is used as given (still only while the flag is on).
+  const senders = new Map<string, EventSender | null>(tenantEventMailEnabled() ? opts.senders ?? [] : [])
+  const senderFor = async (tenantId: string) => {
+    if (!senders.has(tenantId)) senders.set(tenantId, await loadTenantSender(db, tenantId))
+    return senders.get(tenantId) ?? null
   }
 
   // One email per unit: a parent's forms together, everyone else on their own.
@@ -144,99 +178,145 @@ export async function sendInvites(
   }
   const remaining = (from: number) => units.slice(from).reduce((n, u) => n + u.length, 0)
 
-  for (let i = 0; i < units.length; i++) {
-    const live: { r: NativeRecipient; env: EnvelopeForEmail }[] = []
+  units: for (let i = 0; i < units.length; i++) {
+    const unitLive: { r: NativeRecipient; env: EnvelopeForEmail }[] = []
     for (const r of units[i]) {
       const env = await envelopeFor(r.envelope_row)
-      if (env && ['sent', 'delivered'].includes(env.status)) live.push({ r, env })
+      if (env && ['sent', 'delivered'].includes(env.status)) unitLive.push({ r, env })
     }
-    if (!live.length) continue
+    if (!unitLive.length) continue
 
-    if (!(await claimSend(db, now))) {
-      result.deferred += remaining(i)
-      if (opts.reminder) {
-        // Put the rest back in the outbox, so they still hear from us.
-        await db.from('agreement_recipients').update({ invite_sent_at: null }).in('id', units.slice(i).flat().map((q) => q.id))
+    // S5: one email has one sender, so a unit splits by its envelopes' tenant.
+    // Stellr's envelopes (NULL or Stellr tenant_id) are one part, which for
+    // Stellr alone is the whole unit, exactly as before.
+    const byTenant = new Map<string, typeof unitLive>()
+    for (const item of unitLive) {
+      const key = isTenantRow(item.env.tenant_id) ? item.env.tenant_id : STELLR_TENANT_ID
+      const part = byTenant.get(key)
+      if (part) part.push(item)
+      else byTenant.set(key, [item])
+    }
+    const parts = [...byTenant]
+    // Recipients of this unit already sent, failed or held, so a stop part-way
+    // through a split unit neither counts nor re-queues them twice.
+    const done = new Set<string>()
+    const later = (p: number) => parts.slice(p + 1).reduce((n, [, part]) => n + part.length, 0)
+
+    for (let p = 0; p < parts.length; p++) {
+      const [tenantId, live] = parts[p]
+      let sender: EventSender | undefined
+      if (tenantId !== STELLR_TENANT_ID) {
+        const found = await senderFor(tenantId)
+        if (!found) {
+          // No usable sender: never sent as Stellr. Held where they are, with no
+          // budget claimed and nothing written, for a later send.
+          result.held = (result.held ?? 0) + live.length
+          for (const { r } of live) done.add(r.id)
+          continue
+        }
+        sender = found
       }
-      break
-    }
 
-    const expiryOf = (r: NativeRecipient) => r.token_expires_at ?? new Date(now.getTime() + 30 * 86_400_000).toISOString()
-    const urlOf = (r: NativeRecipient) => signNowUrlFor({ ...r, token_expires_at: expiryOf(r) }, now.getTime())
-    const subjectOf = (env: EnvelopeForEmail) => env.prefill?.MinorName || env.prefill?.MemberName || env.minor_name || 'your child'
-    const first = live[0]
-    const content = live.length > 1
-      ? signatureBundleEmail({
-          recipientName: first.r.name,
-          reminder: !!opts.reminder,
-          items: live.map(({ r, env }) => ({
-            documentLabel: DOCUMENT_LABEL[env.envelope_type] ?? 'Agreement',
-            eventTitle: env.event_title,
-            subjectName: subjectOf(env),
-            url: urlOf(r),
-            expiresAt: expiryOf(r),
-          })),
-        })
-      : (() => {
-          const role = ROLE[first.r.role_name] ?? 'adult'
-          return signatureRequestEmail({
-            role,
+      if (!(await claimSend(db, now))) {
+        result.deferred += remaining(i) - done.size
+        if (opts.reminder) {
+          // Put the rest back in the outbox, so they still hear from us.
+          await db.from('agreement_recipients').update({ invite_sent_at: null }).in('id', units.slice(i).flat().map((q) => q.id).filter((id) => !done.has(id)))
+        }
+        break units
+      }
+
+      const expiryOf = (r: NativeRecipient) => r.token_expires_at ?? new Date(now.getTime() + 30 * 86_400_000).toISOString()
+      const urlOf = (r: NativeRecipient) => signNowUrlFor({ ...r, token_expires_at: expiryOf(r) }, now.getTime())
+      const subjectOf = (env: EnvelopeForEmail) => env.prefill?.MinorName || env.prefill?.MemberName || env.minor_name || 'your child'
+      const first = live[0]
+      const content = live.length > 1
+        ? signatureBundleEmail({
             recipientName: first.r.name,
-            documentLabel: DOCUMENT_LABEL[first.env.envelope_type] ?? 'Agreement',
-            eventTitle: first.env.event_title,
-            subjectName: role === 'guardian' ? subjectOf(first.env) : null,
-            url: urlOf(first.r),
-            expiresAt: expiryOf(first.r),
             reminder: !!opts.reminder,
-            afterGuardian: role === 'student' || (role === 'member' && first.r.routing_order > 1),
+            items: live.map(({ r, env }) => ({
+              documentLabel: DOCUMENT_LABEL[env.envelope_type] ?? 'Agreement',
+              eventTitle: env.event_title,
+              subjectName: subjectOf(env),
+              url: urlOf(r),
+              expiresAt: expiryOf(r),
+            })),
           })
-        })()
-    const ids = live.map(({ r }) => r.id)
+        : (() => {
+            const role = ROLE[first.r.role_name] ?? 'adult'
+            return signatureRequestEmail({
+              role,
+              recipientName: first.r.name,
+              documentLabel: DOCUMENT_LABEL[first.env.envelope_type] ?? 'Agreement',
+              eventTitle: first.env.event_title,
+              subjectName: role === 'guardian' ? subjectOf(first.env) : null,
+              url: urlOf(first.r),
+              expiresAt: expiryOf(first.r),
+              reminder: !!opts.reminder,
+              afterGuardian: role === 'student' || (role === 'member' && first.r.routing_order > 1),
+            })
+          })()
+      const ids = live.map(({ r }) => r.id)
 
-    try {
-      // Critical mail (lib/email/suppressions.ts): a signing invitation is how a
-      // guardian consents, so the suppression list never holds it back. An
-      // address Resend itself blocks still bounces, and the bounce webhook puts
-      // it on the roster as Email Bounced (lib/esign/bounces.ts).
-      //
-      // deferOnFailure: false — this outbox is already durable (a signer whose
-      // email did not go keeps invite_sent_at null and is retried by
-      // drainOutbox), and invite_email_id must be Resend's real id because the
-      // bounce webhook finds the signer by it (lib/esign/bounces.ts).
-      const sent = await sendEmail({ to: first.r.email, ...content, critical: true, deferOnFailure: false })
-      if (sent.suppressed) {
-        // Not reachable while the send is critical; kept so a future change
-        // cannot turn a skipped invitation back into a silent "Sent".
-        await markSuppressed(db, live.map(({ r }) => r))
-        result.failed += live.length
-        continue
-      }
-      await db
-        .from('agreement_recipients')
-        .update({ invite_sent_at: now.toISOString(), invite_email_id: sent.id, invite_error: null, invite_attempts: 0 })
-        .in('id', ids)
-      for (const { r } of live) {
-        await appendAuditQuietly(db, {
-          envelopeRow: r.envelope_row,
-          recipientRow: r.id,
-          event: 'invite_sent',
-          detail: { reminder: !!opts.reminder, emailId: sent.id, ...(live.length > 1 ? { formsInEmail: live.length } : {}) },
+      try {
+        // Critical mail (lib/email/suppressions.ts): a signing invitation is how a
+        // guardian consents, so the suppression list never holds it back. An
+        // address Resend itself blocks still bounces, and the bounce webhook puts
+        // it on the roster as Email Bounced (lib/esign/bounces.ts).
+        //
+        // deferOnFailure: false — this outbox is already durable (a signer whose
+        // email did not go keeps invite_sent_at null and is retried by
+        // drainOutbox), and invite_email_id must be Resend's real id because the
+        // bounce webhook finds the signer by it (lib/esign/bounces.ts).
+        //
+        // S5: another tenant's envelope goes from its own sender with its Reply-To;
+        // Stellr's carries neither key and keeps the default sender.
+        const sent = await sendEmail({
+          to: first.r.email,
+          ...content,
+          ...(sender ? { from: sender.from, replyTo: sender.replyTo } : {}),
+          critical: true,
+          deferOnFailure: false,
         })
-      }
-      result.sent += live.length
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      for (const { r } of live) {
+        for (const id of ids) done.add(id)
+        if (sent.suppressed) {
+          // Not reachable while the send is critical; kept so a future change
+          // cannot turn a skipped invitation back into a silent "Sent".
+          await markSuppressed(db, live.map(({ r }) => r))
+          result.failed += live.length
+          continue
+        }
         await db
           .from('agreement_recipients')
-          .update({ invite_sent_at: null, invite_attempts: ((r as { invite_attempts?: number }).invite_attempts ?? 0) + 1, invite_error: message.slice(0, 500) })
-          .eq('id', r.id)
-      }
-      result.failed += live.length
-      // Resend's rate limit or daily quota: everything after this would fail too.
-      if (err instanceof EmailSendError && err.isQuota) {
-        result.deferred += remaining(i + 1)
-        break
+          .update({ invite_sent_at: now.toISOString(), invite_email_id: sent.id, invite_error: null, invite_attempts: 0 })
+          .in('id', ids)
+        for (const { r } of live) {
+          await appendAuditQuietly(db, {
+            envelopeRow: r.envelope_row,
+            recipientRow: r.id,
+            event: 'invite_sent',
+            detail: { reminder: !!opts.reminder, emailId: sent.id, ...(live.length > 1 ? { formsInEmail: live.length } : {}) },
+          })
+        }
+        result.sent += live.length
+      } catch (err) {
+        for (const id of ids) done.add(id)
+        const message = err instanceof Error ? err.message : String(err)
+        for (const { r } of live) {
+          await db
+            .from('agreement_recipients')
+            .update({ invite_sent_at: null, invite_attempts: ((r as { invite_attempts?: number }).invite_attempts ?? 0) + 1, invite_error: message.slice(0, 500) })
+            .eq('id', r.id)
+        }
+        result.failed += live.length
+        // Resend's rate limit or daily quota: everything after this would fail too.
+        // Signers in later parts or units are counted as deferred, including any
+        // whose tenant turns out to have no sender: those senders are not read
+        // after a quota stop, so they cannot be told apart here.
+        if (err instanceof EmailSendError && err.isQuota) {
+          result.deferred += remaining(i + 1) + later(p)
+          break units
+        }
       }
     }
   }
@@ -266,33 +346,78 @@ async function markSuppressed(db: SupabaseClient, rows: NativeRecipient[]): Prom
   }
 }
 
-/** Sends what is waiting in the outbox, oldest and guardians first. */
-export async function drainOutbox(db: SupabaseClient, opts: { limit?: number; now?: Date } = {}): Promise<SendResult & { waiting: number }> {
-  const { data, error } = await db
+/**
+ * Signers waiting in the outbox, oldest and guardians first: Stellr's envelopes,
+ * or (S5) those of the other tenants named in `tenantIds`.
+ */
+async function waitingSigners(
+  db: SupabaseClient,
+  whose: 'stellr' | 'tenants',
+  limit: number,
+  tenantIds: readonly string[] = [],
+): Promise<NativeRecipient[]> {
+  const query = db
     .from('agreement_recipients')
-    .select('id, envelope_row, recipient_id, role_name, name, email, status, routing_order, member_id, token_version, token_expires_at, invite_sent_at, invite_attempts, envelope:agreements!inner(provider, status)')
+    .select('id, envelope_row, recipient_id, role_name, name, email, status, routing_order, member_id, token_version, token_expires_at, invite_sent_at, invite_attempts, envelope:agreements!inner(provider, status, tenant_id)')
     .eq('status', 'sent')
     .is('invite_sent_at', null)
     .eq('envelope.provider', 'native')
     .in('envelope.status', ['sent', 'delivered'])
+  // The inner join drops a signer whose envelope fails the filter.
+  const scoped = whose === 'stellr'
+    ? query.or(STELLR_OR_NULL, { referencedTable: 'envelope' })
+    : query.not('envelope.tenant_id', 'is', null).neq('envelope.tenant_id', STELLR_TENANT_ID).in('envelope.tenant_id', [...tenantIds])
+  const { data, error } = await scoped
     .order('routing_order', { ascending: true })
     .order('created_at', { ascending: true })
-    .limit(opts.limit ?? 50)
-  if (error) throw new Error(`Outbox query failed: ${error.message}`)
-  const waiting = (data ?? []) as unknown as NativeRecipient[]
-  if (!waiting.length) return { sent: 0, deferred: 0, failed: 0, waiting: 0 }
-  const result = await sendInvites(db, waiting, { now: opts.now })
-  return { ...result, waiting: waiting.length }
+    .limit(limit)
+  if (error) throw new Error(`Outbox query failed${whose === 'tenants' ? ' (other tenants)' : ''}: ${error.message}`)
+  return (data ?? []) as unknown as NativeRecipient[]
 }
 
-/** Signing emails waiting to go out. */
+/**
+ * Sends what is waiting in the outbox, oldest and guardians first.
+ *
+ * S5: Stellr's waiting signers are read and sent first, on their own read, so
+ * another tenant's held signers can never fill the batch and keep Stellr's in
+ * the outbox, and Stellr's keep first call on the day's budget. Other tenants'
+ * are read only while TENANT_EVENT_MAIL_ENABLED is true, and sent with what is
+ * left. Only the signers of tenants with a usable sender are read, so a tenant
+ * without one cannot fill the batch and keep another tenant's in the outbox;
+ * its signers wait, unread and uncounted, until it has a sender.
+ */
+export async function drainOutbox(db: SupabaseClient, opts: { limit?: number; now?: Date } = {}): Promise<SendResult & { waiting: number }> {
+  const limit = opts.limit ?? 50
+  const stellr = await waitingSigners(db, 'stellr', limit)
+  const result: SendResult & { waiting: number } = stellr.length
+    ? { ...(await sendInvites(db, stellr, { now: opts.now })), waiting: stellr.length }
+    : { sent: 0, deferred: 0, failed: 0, waiting: 0 }
+  if (!tenantEventMailEnabled()) return result
+
+  const senders = await loadTenantSenders(db)
+  if (!senders.size) return result
+  const tenants = await waitingSigners(db, 'tenants', limit, [...senders.keys()])
+  if (!tenants.length) return result
+  const more = await sendInvites(db, tenants, { now: opts.now, senders })
+  const held = (result.held ?? 0) + (more.held ?? 0)
+  return {
+    sent: result.sent + more.sent,
+    deferred: result.deferred + more.deferred,
+    failed: result.failed + more.failed,
+    ...(held ? { held } : {}),
+    waiting: result.waiting + tenants.length,
+  }
+}
+
+/** Stellr's signing emails waiting to go out (S5: another tenant's are not counted on Stellr's pages). */
 export async function outboxDepth(db: SupabaseClient): Promise<number> {
   const { count } = await db
     .from('agreement_recipients')
-    .select('id, envelope:agreements!inner(provider, status)', { count: 'exact', head: true })
+    .select('id, envelope:agreements!inner(provider, status, tenant_id)', { count: 'exact', head: true })
     .eq('status', 'sent')
     .is('invite_sent_at', null)
     .eq('envelope.provider', 'native')
     .in('envelope.status', ['sent', 'delivered'])
+    .or(STELLR_OR_NULL, { referencedTable: 'envelope' })
   return count ?? 0
 }

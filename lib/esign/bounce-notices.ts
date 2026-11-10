@@ -7,6 +7,7 @@ import { AUTH_APP_URL } from '@/lib/env'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { eventManagerAudienceClerkIds, staffAudienceMemberIds } from '@/lib/authz/audiences'
 import { changeLinkUrl, createChangeLink } from '@/lib/esign/email-change-tokens'
+import { isTenantRow, loadTenantSender } from '@/lib/event-emails/tenant-mail'
 
 // Who is told when a signing email bounces, and what each of them sees. The one
 // place every bounce is announced from, for both engines:
@@ -221,15 +222,33 @@ async function resolvePeople(db: SupabaseClient, people: Person[], exclude: Set<
   return out
 }
 
-/** A member gets their usual channels (bell + email, by their preferences); anyone else an email. */
-async function tell(person: Person, input: NotifyInput, stellr: boolean): Promise<void> {
+// S5 B14 follow-up: who the notices to signers and group organisers are from.
+// On Stellr's agreements, Stellr's default sender (no keys). On another
+// tenant's, that tenant's own sender ("<Tenant> via Stellr", its Reply-To),
+// read once per notice and only while TENANT_EVENT_MAIL_ENABLED is true; with
+// none, those notices are not sent (logged), so a tenant's family never gets one
+// as Stellr. Notices to staff and event managers are unchanged.
+type SignerMail = { from?: string; replyTo?: string }
+
+async function signerMailFor(db: SupabaseClient, a: BounceAgreement): Promise<SignerMail | null> {
+  if (!isTenantRow(a.tenant_id)) return {}
+  const sender = await loadTenantSender(db, a.tenant_id)
+  if (!sender) console.error(`[bounce-notices] agreement ${a.id}: its tenant has no usable sender; signer and organiser notices not sent`)
+  return sender
+}
+
+/**
+ * A member gets their usual channels (bell + email, by their preferences); anyone else an email.
+ * `mail` is the sender for a signer or organiser (S5): null sends nothing; left out, Stellr's default.
+ */
+async function tell(person: Person, input: NotifyInput, stellr: boolean, mail: SignerMail | null = {}): Promise<void> {
   try {
     if (person.memberId && stellr) {
       await notifyMember(person.memberId, input)
       return
     }
-    if (!person.email || !input.email) return
-    await sendEmail({ to: person.email, subject: input.email.subject, html: input.email.html, text: input.email.text ?? input.body })
+    if (!person.email || !input.email || !mail) return
+    await sendEmail({ to: person.email, subject: input.email.subject, html: input.email.html, text: input.email.text ?? input.body, ...mail })
   } catch (err) {
     console.error('[bounce-notices] notice failed:', err instanceof Error ? err.message : err)
   }
@@ -363,6 +382,7 @@ async function deliverBounceNotices(
   )
   for (const m of managers) await tell(m, staffInput, stellr)
   if (!live) return
+  const mail = await signerMailFor(db, a)
 
   const staffLike = new Set([...managers.map((m) => m.memberId).filter(Boolean), ...staffIds])
   const staffEmails = new Set(managers.map((m) => m.email).filter(Boolean))
@@ -393,11 +413,14 @@ async function deliverBounceNotices(
         },
       },
       stellr,
+      mail,
     )
   }
 
   // 3. The other signer on a two-person form.
   const organiserEmails = new Set(organisers.map((o) => o.email).filter(Boolean))
+  // No sender for this tenant: no change link is minted, since nobody is sent it.
+  if (!mail) return
   for (const b of bounced) {
     const other = others.get(b.recipient_id)
     if (!other?.email) continue
@@ -418,7 +441,8 @@ async function deliverBounceNotices(
     const masked = maskEmail(b.email as string)
     const first = (other.name ?? '').trim().split(/\s+/)[0] || 'there'
     const until = formatDate(expiresAt)
-    const checker = ctx.organisers ? 'your teacher' : 'Stellr'
+    // On another tenant's agreement, its own staff check the address, not Stellr.
+    const checker = ctx.organisers ? 'Your teacher checks' : stellr ? 'Stellr checks' : 'The event organiser checks'
     const email = studentBounced
       ? {
           subject: `We couldn't reach ${about}`,
@@ -434,7 +458,7 @@ async function deliverBounceNotices(
           heading: 'We couldn’t reach your parent or guardian',
           paras: [
             `Hi ${first}, we sent the ${event} consent form to your parent or guardian at ${masked}, but the email bounced.`,
-            `Ask them for the address they use, then suggest it here. ${checker === 'Stellr' ? 'Stellr checks' : 'Your teacher checks'} it before the form is sent again.`,
+            `Ask them for the address they use, then suggest it here. ${checker} it before the form is sent again.`,
           ],
           cta: 'Suggest an address',
         }
@@ -449,6 +473,7 @@ async function deliverBounceNotices(
           bodyHtml: email.paras.map((p) => `<p>${esc(p)}</p>`).join('') + button(link, email.cta) + `<p style="font-size:14px">${esc(note)}</p>`,
         }),
         text: `${email.paras.join('\n\n')}\n\n${email.cta}: ${link}\n\n${note}`,
+        ...mail,
       })
     } catch (err) {
       console.error('[bounce-notices] other-signer notice failed:', err instanceof Error ? err.message : err)
@@ -510,24 +535,26 @@ export async function announceCorrection(
     const staffLike = new Set([...staffIds, ...managers.map((m) => m.memberId).filter(Boolean)])
 
     const actorId = input.actor.kind === 'organiser' ? input.actor.memberId : null
+    const mail = await signerMailFor(db, a)
     if (ctx.organisers && input.actor.kind !== 'organiser') {
       const orgText = `The ${role}'s address on ${about}'s consent form for ${event} was updated by ${by}, and the form was sent to the new address (${input.newEmail}).`
       for (const o of await resolvePeople(db, ctx.organisers.people, exclude)) {
         if (o.memberId && (staffLike.has(o.memberId) || o.memberId === actorId)) continue
-        await tell(o, { type: 'action', body: orgText, email: { subject: `Consent form address updated for ${about}`, html: emailLayout({ heading: `Consent form address updated for ${about}`, bodyHtml: `<p>${esc(orgText)}</p>` }), text: orgText } }, stellr)
+        await tell(o, { type: 'action', body: orgText, email: { subject: `Consent form address updated for ${about}`, html: emailLayout({ heading: `Consent form address updated for ${about}`, bodyHtml: `<p>${esc(orgText)}</p>` }), text: orgText } }, stellr, mail)
       }
     }
 
-    if (input.actor.kind === 'organiser' && signer) {
+    if (input.actor.kind === 'organiser' && signer && mail) {
       const other = otherSigner(ctx.recipients, { ...signer, email: input.oldEmail, status: 'autoresponded' })
       if (other?.email && norm(other.email) !== norm(input.newEmail)) {
-        const text = `The ${role}'s email on ${about}'s ${event} form was changed by ${by} to ${maskEmail(input.newEmail)}, because the old address bounced. If that looks wrong, reply to your teacher or contact Stellr.`
+        const text = `The ${role}'s email on ${about}'s ${event} form was changed by ${by} to ${maskEmail(input.newEmail)}, because the old address bounced. If that looks wrong, reply to your teacher or contact ${stellr ? 'Stellr' : 'the event organiser'}.`
         try {
           await sendEmail({
             to: other.email,
             subject: `An email address on ${about}'s form was updated`,
             html: emailLayout({ heading: `An email address on ${about}'s form was updated`, bodyHtml: `<p>${esc(text)}</p>` }),
             text,
+            ...mail,
           })
         } catch (err) {
           console.error('[bounce-notices] change notice failed:', err instanceof Error ? err.message : err)
@@ -554,6 +581,7 @@ export async function announceSuggestion(db: SupabaseClient, input: { agreementI
     const about = aboutName(a)
     const event = a.event_title?.trim() || 'the event'
     if (ctx.organisers) {
+      const mail = await signerMailFor(db, a)
       const text = `${about} suggested a new parent/guardian email for their ${event} consent form, because the old one bounced. Open Your group to approve or reject it: it is used only once you approve.`
       for (const o of await resolvePeople(db, ctx.organisers.people, new Set())) {
         await tell(
@@ -568,6 +596,7 @@ export async function announceSuggestion(db: SupabaseClient, input: { agreementI
             },
           },
           stellr,
+          mail,
         )
       }
       return

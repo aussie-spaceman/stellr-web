@@ -13,11 +13,14 @@ vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins, notifyMember }))
 vi.mock('@/lib/email', () => ({ sendEmail }))
 vi.mock('@/lib/authz/audiences', () => ({ eventManagerAudienceClerkIds, staffAudienceMemberIds }))
 
-import { announceBounces, announceCorrection, otherSigner, isTwoPersonForm } from './bounce-notices'
+import { announceBounces, announceCorrection, announceSuggestion, otherSigner, isTwoPersonForm } from './bounce-notices'
 import { hashToken } from './email-change-tokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 const TENANT = '11111111-1111-4111-8111-111111111111'
+// Another tenant with no Reply-To, so no sender (lib/event-emails/tenant-mail.ts).
+const QUIET = '33333333-3333-4333-8333-333333333333'
+const ROCKET_FROM = '"Rocket Club via Stellr" <no-reply@mail.stellreducation.org>'
 
 type Over = {
   agreement?: Record<string, unknown>
@@ -46,6 +49,10 @@ function setup(over: Over = {}) {
       { id: 'm-em', email: 'em@stellr.test', clerk_user_id: 'user_em', is_active: true },
     ],
     agreement_email_changes: [],
+    tenants: [
+      { id: TENANT, display_name: 'Rocket Club', branding: { reply_to: 'events@rocket.example.org' } },
+      { id: QUIET, display_name: 'Quiet Org', branding: {} },
+    ],
   })
   return fake
 }
@@ -55,8 +62,115 @@ const emailTo = (to: string) => sendEmail.mock.calls.map((c) => c[0] as { to: st
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllEnvs()
   eventManagerAudienceClerkIds.mockResolvedValue([])
   staffAudienceMemberIds.mockResolvedValue([])
+})
+
+// S5 B14 follow-up: on another tenant's form, the notices to signers and group
+// organisers go from that tenant's sender, or not at all; never as Stellr.
+describe("another tenant's form: who the family's notices are from", () => {
+  const twoPerson = (guardianEmail: string, guardianStatus: string, minorEmail: string, minorStatus: string) => [
+    { id: 'r-g', envelope_row: 'agr-1', recipient_id: '1', role_name: 'Guardian', name: 'Ash Stone', email: guardianEmail, status: guardianStatus, routing_order: 1, bounce_notified_email: null, invite_error: null },
+    { id: 'r-m', envelope_row: 'agr-1', recipient_id: '2', role_name: 'Minor', name: 'Olive Stone', email: minorEmail, status: minorStatus, routing_order: 2, bounce_notified_email: null, invite_error: null },
+  ]
+
+  it('flag on: the 15-year-old and the organisers hear from the tenant, replies to the tenant, and the copy does not name Stellr', async () => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    const fake = setup({ agreement: { tenant_id: TENANT, provider: 'native' }, registration: null })
+    expect(await announceBounces(fake.client, 'agr-1')).toBe(1)
+    const student = emailTo('olive@school.test') as unknown as Record<string, string>
+    expect(student).toMatchObject({ from: ROCKET_FROM, replyTo: 'events@rocket.example.org' })
+    expect(student.text).toContain('The event organiser checks it')
+    expect(student.text).not.toContain('Stellr checks')
+  })
+
+  it('flag on, group registration: the organiser’s notice goes from the tenant’s sender', async () => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    const fake = setup({ agreement: { tenant_id: TENANT, provider: 'native' } })
+    await announceBounces(fake.client, 'agr-1')
+    for (const to of ['teacher@school.test', 'poc@school.test', 'olive@school.test']) {
+      expect(emailTo(to), to).toMatchObject({ from: ROCKET_FROM, replyTo: 'events@rocket.example.org' })
+    }
+  })
+
+  it.each([
+    ['the flag is off', '', TENANT],
+    ['the tenant has no sender', 'true', QUIET],
+  ])('%s: staff are still told, but no signer or organiser email goes and no change link is made', async (_what, flag, tenant) => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', flag)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fake = setup({ agreement: { tenant_id: tenant, provider: 'native' } })
+    expect(await announceBounces(fake.client, 'agr-1')).toBe(1)
+    expect((notifyCommunityAdmins.mock.calls[0] as unknown[])[1]).toEqual({ tenantId: tenant })
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(fake.table('agreement_email_changes')).toHaveLength(0)
+  })
+
+  it('a bounced student on a tenant form: the guardian’s link comes from the tenant, or not at all', async () => {
+    const recipients = twoPerson('ash@home.test', 'completed', 'olive@dead.test', 'autoresponded')
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    const on = setup({ agreement: { tenant_id: TENANT, provider: 'native' }, recipients, registration: null })
+    await announceBounces(on.client, 'agr-1')
+    expect(emailTo('ash@home.test')).toMatchObject({ from: ROCKET_FROM, replyTo: 'events@rocket.example.org' })
+
+    sendEmail.mockClear()
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', '')
+    const off = setup({ agreement: { tenant_id: TENANT, provider: 'native' }, recipients: twoPerson('ash@home.test', 'completed', 'olive@dead.test', 'autoresponded'), registration: null })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await announceBounces(off.client, 'agr-1')
+    expect(emailsTo()).not.toContain('ash@home.test')
+  })
+
+  it('announceCorrection: the other signer and the organisers hear from the tenant, or not at all', async () => {
+    const correct = (client: Parameters<typeof announceCorrection>[0], actor: Parameters<typeof announceCorrection>[1]['actor']) =>
+      announceCorrection(client, { agreementId: 'agr-1', recipientId: '1', oldEmail: 'ash@dead.test', newEmail: 'ash@new.test', actor })
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    await correct(setup({ agreement: { tenant_id: TENANT } }).client, { kind: 'organiser', memberId: 'm-teacher', role: 'teacher' })
+    const student = emailTo('olive@school.test') as unknown as Record<string, string>
+    expect(student).toMatchObject({ from: ROCKET_FROM, replyTo: 'events@rocket.example.org' })
+    expect(student.text).toContain('contact the event organiser')
+    expect(student.text).not.toContain('Stellr')
+
+    sendEmail.mockClear()
+    await correct(setup({ agreement: { tenant_id: TENANT } }).client, { kind: 'guardian' })
+    expect(emailTo('poc@school.test')).toMatchObject({ from: ROCKET_FROM })
+
+    sendEmail.mockClear()
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', '')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await correct(setup({ agreement: { tenant_id: TENANT } }).client, { kind: 'organiser', memberId: 'm-teacher', role: 'teacher' })
+    await correct(setup({ agreement: { tenant_id: TENANT } }).client, { kind: 'guardian' })
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('announceSuggestion: the organisers hear from the tenant, or not at all', async () => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    await announceSuggestion(setup({ agreement: { tenant_id: TENANT } }).client, { agreementId: 'agr-1', suggested: 'ash@new.test' })
+    expect(emailTo('poc@school.test')).toMatchObject({ from: ROCKET_FROM, replyTo: 'events@rocket.example.org' })
+
+    sendEmail.mockClear()
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', '')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await announceSuggestion(setup({ agreement: { tenant_id: TENANT } }).client, { agreementId: 'agr-1', suggested: 'ash@new.test' })
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('Stellr’s form, flag on or off: no sender keys and no tenants read', async () => {
+    for (const flag of ['', 'true']) {
+      vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', flag)
+      sendEmail.mockClear()
+      const fake = setup()
+      const read = vi.spyOn(fake.client as unknown as { from: (t: string) => unknown }, 'from')
+      await announceBounces(fake.client, 'agr-1')
+      expect(read.mock.calls.map((c) => c[0])).not.toContain('tenants')
+      expect(sendEmail).toHaveBeenCalled()
+      for (const [msg] of sendEmail.mock.calls as unknown as [Record<string, unknown>][]) {
+        expect(msg).not.toHaveProperty('from')
+        expect(msg).not.toHaveProperty('replyTo')
+      }
+    }
+  })
 })
 
 describe('who is told when a guardian’s email bounces (group registration)', () => {
@@ -169,7 +283,8 @@ describe('scope', () => {
     expect(fake.table('agreement_email_changes')).toHaveLength(0)
   })
 
-  it("another tenant's form: its own admins, and email only (the bell is Stellr's)", async () => {
+  it("another tenant's form: its own admins, and email only (the bell is Stellr's), from the tenant's sender", async () => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
     const fake = setup({ agreement: { tenant_id: TENANT } })
     await announceBounces(fake.client, 'agr-1')
     expect((notifyCommunityAdmins.mock.calls[0] as unknown[])[1]).toEqual({ tenantId: TENANT })

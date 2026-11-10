@@ -65,12 +65,6 @@ const GROUPS: readonly DispositionGroup[] = [
   },
   {
     disposition: 'tenant_destined',
-    convertedBy: 'C16 follow-up',
-    reason: 'a record loaded by id inside an event, added (#573) after C16 converted its siblings in registrations/[id]',
-    routes: ['registrations/[id]/payment-method'],
-  },
-  {
-    disposition: 'tenant_destined',
     convertedBy: 'C20',
     reason: 'an event-scoped table; the owner to confirm whether tenants get scholarships in release 1',
     routes: [

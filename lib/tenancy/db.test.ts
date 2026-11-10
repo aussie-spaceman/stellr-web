@@ -15,6 +15,9 @@ import {
   TENANT_SETTING,
   TENANT_DB_FLAG,
   PIN_CHECK_SQL,
+  READ_ONLY_SQL,
+  READ_ONLY_CHECK_SQL,
+  isWriteShaped,
   type TenantSqlDriver,
   type TenantSqlTx,
 } from './db'
@@ -37,6 +40,8 @@ function fakeDriver(
     rows?: Record<string, unknown>[]
     /** A caller statement containing this text moves the pin, the way an unknown in-statement path would. */
     moveOn?: { text: string; to: { role?: string; tenant?: string } }
+    /** SET TRANSACTION READ ONLY does not take (a connection or driver that drops it). */
+    ignoreReadOnly?: boolean
   } = {},
 ) {
   const log: { calls: Call[]; outcome: 'commit' | 'rollback' }[] = []
@@ -45,9 +50,15 @@ function fakeDriver(
       const calls: Call[] = []
       let role = 'session_user'
       let tenant: string | null = null
+      let readOnly = false
       const tx: TenantSqlTx = {
         async query(text, values) {
           calls.push({ text, values })
+          if (text === READ_ONLY_SQL) {
+            readOnly = !opts.ignoreReadOnly
+            return { rows: [], rowCount: 0 }
+          }
+          if (text === READ_ONLY_CHECK_SQL) return { rows: [{ read_only: readOnly ? 'on' : 'off' } as never], rowCount: 1 }
           if (/^SET LOCAL ROLE /.test(text)) role = opts.broken === 'role' ? 'postgres' : text.slice('SET LOCAL ROLE '.length)
           else if (/set_config\('stellr\.tenant_id', \$1, true\)/.test(text)) tenant = opts.broken === 'tenant' ? null : String(values?.[0])
           else if (/current_user AS role/.test(text)) return { rows: [{ role, tenant } as never], rowCount: 1 }
@@ -283,6 +294,63 @@ describe('tenantDb: caller SQL cannot change the role or the tenant', () => {
   })
 })
 
+describe('tenantDb: readOnly (the area switch’s shadow read, C12)', () => {
+  it('sets the transaction read-only before the pin and reads it back before the caller’s statement', async () => {
+    const { driver, log } = fakeDriver()
+    await tenantDb(CANARY, { driver, readOnly: true }).sql`SELECT id FROM public.event_settings`
+    const texts = log[0].calls.map((c) => c.text)
+    expect(texts[0]).toBe(READ_ONLY_SQL)
+    expect(texts.indexOf(READ_ONLY_CHECK_SQL)).toBeGreaterThan(texts.findIndex((t) => t.includes('set_config')))
+    expect(texts.indexOf(READ_ONLY_CHECK_SQL)).toBeLessThan(texts.indexOf('SELECT id FROM public.event_settings'))
+    expect(log[0].outcome).toBe('commit')
+  })
+
+  it('without readOnly sends neither', async () => {
+    const { driver, log } = fakeDriver()
+    await tenantDb(CANARY, { driver }).sql`SELECT 1`
+    expect(log[0].calls.map((c) => c.text)).not.toContain(READ_ONLY_SQL)
+    expect(log[0].calls.map((c) => c.text)).not.toContain(READ_ONLY_CHECK_SQL)
+  })
+
+  it('rolls back, before any caller statement, when the transaction did not become read-only', async () => {
+    const { driver, log } = fakeDriver({ ignoreReadOnly: true })
+    await expect(tenantDb(CANARY, { driver, readOnly: true }).sql`SELECT id FROM public.event_settings`).rejects.toThrow(/read-only/)
+    expect(log[0].outcome).toBe('rollback')
+    expect(log[0].calls.map((c) => c.text)).not.toContain('SELECT id FROM public.event_settings')
+  })
+
+  it('refuses a write-shaped statement before it is sent, through sql and inside a transaction', async () => {
+    const { driver, log } = fakeDriver()
+    const db = tenantDb(CANARY, { driver, readOnly: true })
+    await expect(db.sql`UPDATE public.event_settings SET company_count = ${1}`).rejects.toThrow(/read-only/)
+    await expect(
+      db.transaction(async (q) => {
+        await q.sql`SELECT 1`
+        return q.sql`WITH d AS (DELETE FROM public.event_settings RETURNING id) SELECT id FROM d`
+      }),
+    ).rejects.toThrow(/read-only/)
+    const sent = log.flatMap((l) => l.calls.map((c) => c.text))
+    expect(sent.filter((t) => /UPDATE|DELETE/.test(t))).toEqual([])
+    expect(log.at(-1)?.outcome).toBe('rollback')
+  })
+
+  it('isWriteShaped reads writes at the start or inside a WITH, and leaves reads alone', () => {
+    for (const w of [
+      'INSERT INTO t (a) VALUES ($1)',
+      ' update t set a = 1',
+      'DELETE FROM t',
+      'MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE',
+      'WITH x AS (UPDATE t SET a = 1 RETURNING id) SELECT * FROM x',
+      'WITH x AS (INSERT INTO t (a) VALUES (1) RETURNING id) SELECT * FROM x',
+    ]) {
+      expect(isWriteShaped(w), w).toBe(true)
+    }
+    for (const r of ['SELECT id, updated_at FROM t', 'WITH x AS (SELECT 1) SELECT * FROM x', 'VALUES (1)', 'SELECT deleted_at FROM t']) {
+      expect(isWriteShaped(r), r).toBe(false)
+    }
+  })
+})
+
 describe('tenantDb: off by default', () => {
   it('is off unless the flag is exactly "true"', () => {
     expect(isTenantDbEnabled({})).toBe(false)
@@ -296,8 +364,16 @@ describe('tenantDb: off by default', () => {
     await expect(tenantDb(CANARY, { env: {} }).sql`SELECT 1`).rejects.toThrow(/is off/)
   })
 
-  it('refuses to run with the flag on but no driver registered (nothing in the app registers one yet)', async () => {
-    await expect(tenantDb(CANARY, { env: { [TENANT_DB_FLAG]: 'true' } }).sql`SELECT 1`).rejects.toThrow(/no database driver/)
+  it('with the flag on, no driver registered and no TENANT_DATABASE_URL, refuses: no fallback to the service-role keys', async () => {
+    const env = {
+      [TENANT_DB_FLAG]: 'true',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SECRET_KEY: 'sb_secret_placeholder',
+    }
+    await expect(tenantDb(CANARY, { env }).sql`SELECT 1`).rejects.toThrow(/TENANT_DATABASE_URL is not set/)
+    await expect(tenantDb(CANARY, { env: { ...env, TENANT_DATABASE_URL: '  ' } }).sql`SELECT 1`).rejects.toThrow(
+      /TENANT_DATABASE_URL is not set/,
+    )
   })
 
   it('runs through the registered driver when the flag is on', async () => {
@@ -364,6 +440,41 @@ describe('tenantDb: matches the database and stays allow-listed', () => {
     walk('.')
     expect(files.length).toBeGreaterThan(500)
     expect(tenantDbImporters(files)).toEqual([...TENANT_DB_CALLERS].sort())
+    // The area switch (C12) hands out a tenantDb, so whoever reaches it is listed too.
+    const viaSwitch = areaSwitchImporters(files)
+    expect(viaSwitch).toContain('lib/tenancy/area-switch.test.ts')
+    expect(viaSwitch.filter((f) => !TENANT_DB_CALLERS.includes(f))).toEqual([])
+    // Its test seams (environment, tenant database, mismatch sink) are for tests alone.
+    expect(seamCallersOutsideTests(files)).toEqual([])
+  })
+
+  it('finds a non-test caller of the area switch’s test seams (C12 review)', () => {
+    const probes = [
+      { path: 'app/api/x/route.ts', src: "import { readAreaWithSeams } from '@/lib/tenancy/area-switch'" },
+      { path: 'lib/x/a.ts', src: 'return writeAreaWithSeams(area, opts)' },
+      { path: 'lib/x/b.ts', src: "const { readAreaWithSeams: r } = await import('@/lib/tenancy/area-switch')" },
+    ]
+    expect(seamCallersOutsideTests(probes)).toEqual(['app/api/x/route.ts', 'lib/x/a.ts', 'lib/x/b.ts'])
+    const tests = [
+      { path: 'lib/tenancy/area-switch.test.ts', src: 'readAreaWithSeams(' },
+      { path: 'test/integration/two-tenant/kit.int.test.ts', src: 'readAreaWithSeams(' },
+      { path: 'lib/tenancy/area-switch.ts', src: 'export async function readAreaWithSeams(' },
+    ]
+    expect(seamCallersOutsideTests(tests)).toEqual([])
+  })
+
+  it('finds every way of reaching lib/tenancy/area-switch (C12)', () => {
+    const probes: Record<string, string> = {
+      'app/api/x/route.ts': "import { readArea } from '@/lib/tenancy/area-switch'",
+      'lib/x/a.ts': "import { writeArea } from '../tenancy/area-switch.ts'",
+      'lib/tenancy/b.ts': "export * from './area-switch'",
+      'lib/x/c.ts': "const m = await import('@/lib/tenancy/area-switch')",
+      'test/d.test.ts': "vi.mock('@/lib/tenancy/area-switch', () => ({}))",
+      'lib/x/e.ts': "const { readArea } = await import(`@/lib/tenancy/${name}`)",
+      'lib/x/f.ts': 'return readArea<Row[]>(area, opts)',
+    }
+    expect(areaSwitchImporters(Object.entries(probes).map(([path, src]) => ({ path, src })))).toEqual(Object.keys(probes).sort())
+    expect(areaSwitchImporters([{ path: 'lib/x/g.ts', src: "import { dataPath } from './area-switch-docs'" }])).toEqual([])
   })
 })
 
@@ -375,9 +486,38 @@ describe('tenantDb: matches the database and stays allow-listed', () => {
  * file outside lib/tenancy/db.ts that calls its API by name.
  */
 function tenantDbImporters(files: { path: string; src: string }[]): string[] {
-  const TARGET = 'lib/tenancy/db'
-  const spec = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*\(\s*)['"`]([^'"`]+)['"`]/g
   const api = /\b(?:tenantDb|stellrDb|setTenantDbDriver)\s*\(|\btenantSql\s*`|\{[^}]*\b(?:tenantDb|stellrDb|setTenantDbDriver|tenantSql)\b[^}]*\}\s*=\s*(?:await\s+)?(?:import|require)\b|tenancy\/\$\{/
+  return importersOf(files, 'lib/tenancy/db', api)
+}
+
+/**
+ * Files that reach lib/tenancy/area-switch (C12), the same way. It hands its
+ * callers a tenantDb for any tenant id, so its importers are held to the same
+ * allow-list: otherwise a file could reach tenantDb through it unlisted.
+ */
+function areaSwitchImporters(files: { path: string; src: string }[]): string[] {
+  const api =
+    /\b(?:readArea|writeArea)(?:WithSeams)?\s*(?:<[^>]*>)?\s*\(|\{[^}]*\b(?:readArea|writeArea)(?:WithSeams)?\b[^}]*\}\s*=\s*(?:await\s+)?(?:import|require)\b/
+  return importersOf(files, 'lib/tenancy/area-switch', api)
+}
+
+/**
+ * Files outside the tests that name readAreaWithSeams or writeAreaWithSeams.
+ * Those take the environment, the tenant database and the mismatch sink as
+ * options; a production caller must use readArea / writeArea, which follow
+ * the server's own TENANT_DB_* flags.
+ */
+function seamCallersOutsideTests(files: { path: string; src: string }[]): string[] {
+  const isTest = (p: string) => /\.test\.tsx?$/.test(p) || p.startsWith('test/')
+  return files
+    .map((f) => ({ ...f, path: f.path.replace(/\\/g, '/') }))
+    .filter((f) => f.path !== 'lib/tenancy/area-switch.ts' && !isTest(f.path) && /\b(?:readArea|writeArea)WithSeams\b/.test(f.src))
+    .map((f) => f.path)
+    .sort()
+}
+
+function importersOf(files: { path: string; src: string }[], TARGET: string, api: RegExp): string[] {
+  const spec = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*\(\s*)['"`]([^'"`]+)['"`]/g
   const resolveSpec = (from: string, s: string): string | null => {
     let p: string
     if (s.startsWith('@/')) p = s.slice(2)

@@ -185,7 +185,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/admin/registrations/[id]/finish-setup/route.ts': 'tenant_staff',
   'app/api/admin/registrations/[id]/participants/route.ts': 'tenant_staff',
   'app/api/admin/registrations/[id]/invoice/route.ts': 'tenant_staff',
-  'app/api/admin/registrations/[id]/payment-method/route.ts': 'stellr_only',
+  'app/api/admin/registrations/[id]/payment-method/route.ts': 'tenant_staff',
   'app/api/admin/sanity/event-sync/route.ts': 'webhook',
   'app/api/admin/scholarships/[id]/cancel/route.ts': 'stellr_only',
   'app/api/admin/scholarships/[id]/not-offered/route.ts': 'stellr_only',

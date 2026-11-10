@@ -1562,7 +1562,7 @@
       }
     },
     "app/api/admin/registrations/[id]/payment-method/route.ts": {
-      "class": "stellr_only",
+      "class": "tenant_staff",
       "segments": [
         "id"
       ],

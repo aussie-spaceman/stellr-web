@@ -183,3 +183,13 @@
 
 # Binding instructions for AI agents
 /CLAUDE.md                          @aussie-spaceman
+
+# tenantDb's Postgres driver, its wiring gate and its real-database test (S5 C11)
+/lib/tenancy/driver.ts              @aussie-spaceman
+/lib/tenancy/driver-wiring.test.ts  @aussie-spaceman
+/test/integration/**                @aussie-spaceman
+/vitest.integration.config.mts      @aussie-spaceman
+/scripts/ci-db-build.sh             @aussie-spaceman
+
+# The per-area data-path switch (S5 C12)
+/lib/tenancy/area-switch.ts         @aussie-spaceman

@@ -12,4 +12,28 @@
 export const TENANT_DB_CALLERS: readonly string[] = [
   // The module's own tests.
   'lib/tenancy/db.test.ts',
+  // The Postgres transport (C11). db.ts loads it, never the other way round:
+  // its import of db.ts is type-only. Its unit tests drive tenantDb over a
+  // stand-in postgres.js.
+  'lib/tenancy/driver.ts',
+  'lib/tenancy/driver.test.ts',
+  // The two-tenant test through the real driver, run by CI's tenant-db job
+  // against a throwaway local database (vitest.integration.config.mts).
+  'test/integration/tenant-db.int.test.ts',
+  // The per-area switch (C12) and its tests. It hands its callers a tenantDb,
+  // so lib/tenancy/db.test.ts holds ITS importers to this list as well: an area
+  // that adopts readArea or writeArea is named here, with its two-tenant tests.
+  'lib/tenancy/area-switch.ts',
+  'lib/tenancy/area-switch.test.ts',
+  // The IDOR harness's tenantDb transport over the honey database (C12), so a
+  // converted area's tenantDb reads stay inside test/idor. The harness
+  // registers it; it answers nothing until a case turns tenantDb on.
+  'test/idor/harness.ts',
+  'test/idor/tenant-db-fake.ts',
+  'test/idor/tenant-db-fake.test.ts',
+  // The two-tenant kit (C12): a seed and helpers, on a real database in CI's
+  // tenant-db job, that prove an area returns only its tenant's rows on both
+  // paths.
+  'test/integration/two-tenant/kit.ts',
+  'test/integration/two-tenant/kit.int.test.ts',
 ]

@@ -7,7 +7,7 @@
     "cronHandlers": 24,
     "unauditedCrons": 0,
     "getMutations": 18,
-    "unauditedGetMutations": 7
+    "unauditedGetMutations": 6
   },
   "mutations": [
     "app/api/admin/access/objects/[id]/contents/route.ts#DELETE",
@@ -136,7 +136,6 @@
   ],
   "crons": [],
   "getMutations": [
-    "app/api/admin/registrations/[id]/payment-method/route.ts#GET",
     "app/api/credentials/[number]/pdf/route.ts#GET",
     "app/api/members/teams/[id]/discount/route.ts#GET",
     "app/api/members/teams/[id]/payment-method/route.ts#GET",

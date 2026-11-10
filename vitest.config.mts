@@ -10,7 +10,9 @@ export default defineConfig({
     // .claude/worktrees/<name>/ carries its own node_modules, and the bare
     // pattern only matched the top-level one — so every third-party *.test.ts
     // in there ran and reported ~130 failing files (21 Sept 2026).
-    exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next'],
+    // test/integration needs a real database: CI's tenant-db job runs it with
+    // vitest.integration.config.mts.
+    exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next', 'test/integration/**'],
     // Building a jsdom per file was 44% of the suite's summed time (4 Nov 2026),
     // and most *.test.ts files never touch a DOM. Component tests (*.test.tsx)
     // keep jsdom. A *.test.ts file that needs one says so on its first line:

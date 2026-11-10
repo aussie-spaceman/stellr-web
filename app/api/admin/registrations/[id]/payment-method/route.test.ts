@@ -259,6 +259,22 @@ describe('/api/admin/registrations/[id]/payment-method', () => {
     expect(h.stripe).not.toHaveBeenCalled()
     expect(h.change).not.toHaveBeenCalled()
   })
+
+  it('answers a group the view cannot find as a missing one', async () => {
+    h.view.mockResolvedValue(null)
+    const res = await get()
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'Group registration not found' })
+  })
+
+  it('says so when Stripe is not configured, and changes nothing', async () => {
+    h.stripe.mockReturnValueOnce(null as unknown as object)
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'Stripe is not configured here' })
+    expect(h.change).not.toHaveBeenCalled()
+    expect(h.log).not.toHaveBeenCalled()
+  })
 })
 
 describe('with LOADSCOPED_MODE unset', () => {

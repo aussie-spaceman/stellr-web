@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { EVENT_EMAIL_DEFAULTS } from '@/lib/event-emails/defaults'
 import { scheduledSendDate } from '@/lib/event-emails/schedule'
+import type { EventEmailTemplateRow } from '@/lib/event-emails/templates'
 import { AUDIENCES, type EventEmailRow, type EventEmailSendRow } from '@/lib/event-emails/types'
 import { EventEmailEditor } from './EventEmailEditor'
 import { EventEmailHistory } from './EventEmailHistory'
@@ -29,6 +30,8 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [templates, setTemplates] = useState<EventEmailTemplateRow[]>([])
+  const [managing, setManaging] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/events/${eventSlug}/emails`)
@@ -42,21 +45,52 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
     setLoading(false)
   }, [eventSlug])
 
-  useEffect(() => { void load() }, [load])
+  const loadTemplates = useCallback(async () => {
+    const res = await fetch(`/api/admin/events/${eventSlug}/email-templates`)
+    const data = await res.json().catch(() => null)
+    if (res.ok) setTemplates(data.templates)
+  }, [eventSlug])
 
-  async function add(templateKey: string) {
-    if (!templateKey) return
+  useEffect(() => { void load() }, [load])
+  useEffect(() => { void loadTemplates() }, [loadTemplates])
+
+  const sortTemplates = (list: EventEmailTemplateRow[]) => [...list].sort((a, b) => a.name.localeCompare(b.name))
+
+  async function add(choice: string) {
+    if (!choice) return
     setAdding(true)
+    const saved = choice.startsWith('saved:') ? choice.slice(6) : null
     const res = await fetch(`/api/admin/events/${eventSlug}/emails`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateKey }),
+      body: JSON.stringify(saved ? { savedTemplateId: saved } : { templateKey: choice }),
     })
     const data = await res.json().catch(() => null)
     setAdding(false)
     if (!res.ok) return setError(data?.error ?? 'Could not add the email.')
     setEmails((cur) => [...cur, data.email])
     setSelected(data.email.id)
+  }
+
+  async function renameTemplate(t: EventEmailTemplateRow) {
+    const name = prompt('Rename the template', t.name)?.trim()
+    if (!name || name === t.name) return
+    const res = await fetch(`/api/admin/events/${eventSlug}/email-templates/${t.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) return setError(data?.error ?? 'Could not rename the template.')
+    setTemplates((cur) => sortTemplates(cur.map((x) => (x.id === t.id ? data.template : x))))
+  }
+
+  async function deleteTemplate(t: EventEmailTemplateRow) {
+    if (!confirm(`Delete the template “${t.name}” for every event? Emails already made from it are not affected.`)) return
+    const res = await fetch(`/api/admin/events/${eventSlug}/email-templates/${t.id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) return setError(data?.error ?? 'Could not delete the template.')
+    setTemplates((cur) => cur.filter((x) => x.id !== t.id))
   }
 
   const current = emails.find((e) => e.id === selected) ?? null
@@ -81,12 +115,47 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
             aria-label="Add an email"
           >
             <option value="">{adding ? 'Adding…' : '+ Add email…'}</option>
-            {EVENT_EMAIL_DEFAULTS.map((d) => (
-              <option key={d.key} value={d.key}>{d.name}</option>
-            ))}
-            <option value="blank">Blank email</option>
+            {templates.length > 0 && (
+              <optgroup label="Saved templates">
+                {templates.map((t) => (
+                  <option key={t.id} value={`saved:${t.id}`}>{t.name}</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Starter templates">
+              {EVENT_EMAIL_DEFAULTS.map((d) => (
+                <option key={d.key} value={d.key}>{d.name}</option>
+              ))}
+              <option value="blank">Blank email</option>
+            </optgroup>
           </select>
         </div>
+
+        {templates.length > 0 && (
+          <div className="text-xs text-brand-muted-soft">
+            <button type="button" className="font-medium text-primary hover:text-primary-deep" onClick={() => setManaging((m) => !m)} aria-expanded={managing}>
+              {managing ? 'Hide saved templates' : `Manage saved templates (${templates.length})`}
+            </button>
+            {managing && (
+              <ul className="mt-2 divide-y divide-brand-hairline rounded-xl border border-brand-border bg-white">
+                {templates.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                    <span className="font-medium text-ink">{t.name}</span>
+                    <span className="text-xs text-brand-muted-soft">
+                      Saved {new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}
+                      {t.updated_by && ` by ${t.updated_by}`}
+                    </span>
+                    <span className="ml-auto flex gap-3">
+                      <button type="button" className="text-sm font-medium text-primary hover:text-primary-deep" onClick={() => void renameTemplate(t)}>Rename</button>
+                      <button type="button" className="text-sm text-red-600 hover:text-red-800" onClick={() => void deleteTemplate(t)}>Delete</button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {managing && <p className="mt-1">Saved templates are shared across every event. To update one, open an email and choose “Save as template” with the same name.</p>}
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -149,6 +218,8 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
               setEmails((cur) => [...cur, copy])
               setSelected(copy.id)
             }}
+            templates={templates}
+            onTemplateSaved={(t) => setTemplates((cur) => sortTemplates([...cur.filter((x) => x.id !== t.id), t]))}
           />
         )}
       </section>

@@ -74,6 +74,9 @@ export function eventMergeVars(event: EventForEmail, today = todayInMountain()):
     days_to_go:       event.date ? String(Math.max(0, daysUntil(event.date, today))) : '',
     portal_link:      `${AUTH_APP_URL}/sign-in`,
     event_link:       `${SITE_URL}/events/${event.slug}`,
+    // The event survey page (the event-day QR code): a signed-in member goes
+    // to their own survey; anyone else enters their email and gets their link.
+    feedback_link:    `${AUTH_APP_URL}/survey/event/${event.slug}`,
   }
 }
 
@@ -99,6 +102,19 @@ export interface RecipientForRender {
   agreements?: AgreementLine[]
   /** Team profiles this address still has to fill in, for {{team_profile_link}}. */
   teamProfiles?: TeamProfileLine[]
+  /** Issued event credentials this address is emailed about, for {{certificate_links}} and {{credential_links}}. */
+  credentials?: CredentialLine[]
+}
+
+export interface CredentialLine {
+  /** Whose: a participant's first name, or "your" for the recipient's own. */
+  participantName: string
+  /** The award, e.g. "Certificate of Participation". */
+  label: string
+  /** Family link to the certificate PDF; a placeholder in a preview or test. */
+  certificateUrl: string
+  /** Family link to the credential page; a placeholder in a preview or test. */
+  credentialUrl: string
 }
 
 export interface TeamProfileLine {
@@ -170,6 +186,18 @@ function teamProfileText(lines: TeamProfileLine[]): string {
     .join('\n')
 }
 
+function credentialText(lines: CredentialLine[], url: (l: CredentialLine) => string): string {
+  if (lines.length === 0) return ''
+  const allOwn = lines.every((l) => l.participantName === 'your')
+  return lines
+    .map((l) => {
+      if (allOwn) return `${l.label}: ${url(l)}`
+      const whose = l.participantName === 'your' ? 'Your' : `${l.participantName}’s`
+      return `${whose} ${l.label}: ${url(l)}`
+    })
+    .join('\n')
+}
+
 function link(href: string, label?: string): string {
   return `<a href="${href}" style="color:#1e3a5f;text-decoration:underline">${label ?? href}</a>`
 }
@@ -182,13 +210,15 @@ export function recipientMergeVars(r: RecipientForRender): Record<string, string
     payment_instructions: paymentText(r.payments),
     agreement_link:       agreementText(r.agreements ?? []),
     team_profile_link:    teamProfileText(r.teamProfiles ?? []),
+    certificate_links:    credentialText(r.credentials ?? [], (l) => l.certificateUrl),
+    credential_links:     credentialText(r.credentials ?? [], (l) => l.credentialUrl),
   }
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 const KNOWN = new Set<string>(EVENT_MERGE_FIELDS.map((f) => f.token))
-const URL_FIELDS = new Set(['portal_link', 'event_link'])
+const URL_FIELDS = new Set(['portal_link', 'event_link', 'feedback_link'])
 
 /** Merge fields used in the subject or body that the engine can't fill. */
 export function unknownTokens(subject: string, bodyJson: unknown): string[] {
@@ -266,6 +296,8 @@ export function renderEventEmail(
   if ('payment_instructions' in vars) htmlVars.payment_instructions = linesHtmlFromText(vars.payment_instructions, 'Pay now')
   if ('agreement_link' in vars) htmlVars.agreement_link = linesHtmlFromText(vars.agreement_link, 'Sign now')
   if ('team_profile_link' in vars) htmlVars.team_profile_link = linesHtmlFromText(vars.team_profile_link, 'Open the team profile')
+  if ('certificate_links' in vars) htmlVars.certificate_links = linesHtmlFromText(vars.certificate_links, 'Download PDF')
+  if ('credential_links' in vars) htmlVars.credential_links = linesHtmlFromText(vars.credential_links, 'View credential')
 
   const subject = substituteTokens(email.subject, vars).replace(/\s+/g, ' ').trim()
   const bodyHtml = substituteTokens(tiptapToEmailHtml(email.body_json), htmlVars)
@@ -291,4 +323,4 @@ function linesHtmlFromText(text: string, label: string): string {
 const paymentHtmlFromText = (text: string) => linesHtmlFromText(text, 'Pay now')
 
 // Exported for tests.
-export const __test = { paymentText, paymentHtmlFromText, agreementText, teamProfileText, whoIsRegistered }
+export const __test = { paymentText, paymentHtmlFromText, agreementText, teamProfileText, credentialText, whoIsRegistered }

@@ -9,7 +9,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(388);
+SELECT plan(393);
 
 -- 1. Every table in public and entitlements is classified, and nothing else is.
 SELECT set_eq(
@@ -88,6 +88,7 @@ SELECT set_eq(
     'public.event_certificate_templates',
     'public.event_companies',
     'public.event_email_sends',
+    'public.event_email_templates',
     'public.event_emails',
     'public.event_manager_assignments',
     'public.event_participations',
@@ -234,6 +235,12 @@ SELECT ok(EXISTS (
   WHERE i.indrelid = 'public.event_email_sends'::regclass AND a.attname = 'tenant_id'
 ), 'public.event_email_sends has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.event_email_sends'::regclass), 'public.event_email_sends has RLS enabled');
+SELECT has_column('public', 'event_email_templates', 'tenant_id', 'public.event_email_templates has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.event_email_templates'::regclass AND a.attname = 'tenant_id'
+), 'public.event_email_templates has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.event_email_templates'::regclass), 'public.event_email_templates has RLS enabled');
 SELECT has_column('public', 'event_emails', 'tenant_id', 'public.event_emails has tenant_id');
 SELECT ok(EXISTS (
   SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
@@ -456,6 +463,7 @@ SELECT ok(EXISTS (
   WHERE i.indrelid = 'public.survey_invitations'::regclass AND a.attname = 'tenant_id'
 ), 'public.survey_invitations has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.survey_invitations'::regclass), 'public.survey_invitations has RLS enabled');
+SELECT col_not_null('public', 'event_email_templates', 'tenant_id', 'public.event_email_templates.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'events', 'tenant_id', 'public.events.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'tenant_domains', 'tenant_id', 'public.tenant_domains.tenant_id is NOT NULL');
 SELECT col_not_null('public', 'tenant_memberships', 'tenant_id', 'public.tenant_memberships.tenant_id is NOT NULL');
@@ -1008,6 +1016,7 @@ SELECT is((SELECT count(*)::int FROM public.event_badge_templates WHERE tenant_i
 SELECT is((SELECT count(*)::int FROM public.event_certificate_templates WHERE tenant_id IS NULL), 0, 'public.event_certificate_templates: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_companies WHERE tenant_id IS NULL), 0, 'public.event_companies: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_email_sends WHERE tenant_id IS NULL), 0, 'public.event_email_sends: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.event_email_templates WHERE tenant_id IS NULL), 0, 'public.event_email_templates: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_emails WHERE tenant_id IS NULL), 0, 'public.event_emails: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_manager_assignments WHERE tenant_id IS NULL), 0, 'public.event_manager_assignments: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_participations WHERE tenant_id IS NULL), 0, 'public.event_participations: no NULL tenant_id after the backfill (NOT NULL-ready)');

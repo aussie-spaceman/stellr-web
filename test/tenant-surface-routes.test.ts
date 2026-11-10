@@ -42,9 +42,9 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
   platform_destined: 9,
-  tenant_staff: 32,
+  tenant_staff: 34,
   participant: 131,
-  public: 131,
+  public: 132,
   webhook: 12,
   cron: 24,
   stellr_only: 166,
@@ -54,17 +54,18 @@ const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
 // +5 on 9 Nov 2026: bounced-email fixes: admin agreements/[id]/email-changes/[changeId] (tenant_staff), members/teams/... correct-email and email-changes (participant), sign/email page and API (public).
 // +1 on 9 Nov 2026: members/teams/[id]/discount, an organizer's code on their invoice (participant).
 // +1 on 9 Nov 2026: cron/email-outbox (cron).
-const MANIFEST_TOTAL = 505
+// +3 on 9 Nov 2026: saved event email templates, admin events/[slug]/email-templates and [id] (tenant_staff, denied on tenant hosts like every admin route), and the family certificate link credentials/[number]/certificate (public, allowed like the other credential routes).
+const MANIFEST_TOTAL = 508
 
 // The decisions. Moving a route between them is a deliberate diff here.
 const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
-  allow: 49,
+  allow: 50,
   // members 37, schools 2, privacy request pages 2 and APIs 2, the bounce-notice
   // link page and API 2, and the 4 held
   // files pinned under 'routes held back' below
   pending: 49,
   bypass: 4,
-  deny: 403,
+  deny: 405,
 }
 
 /** A concrete URL a manifest file serves, with sample values for its params. */
@@ -90,7 +91,7 @@ function sampleUrl(file: string): string {
 }
 
 describe('the manifest this classifies', () => {
-  it('has the measured class counts, 505 in total', () => {
+  it('has the measured class counts, 508 in total', () => {
     expect(FILES).toHaveLength(MANIFEST_TOTAL)
     const counts = Object.fromEntries(Object.keys(MANIFEST_CLASS_COUNTS).map((c) => [c, 0])) as Record<
       RouteClass,

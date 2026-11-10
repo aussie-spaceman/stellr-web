@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('@/lib/env', () => ({ SITE_URL: 'https://www.stellreducation.org' }))
+vi.mock('@/lib/env', () => ({ SITE_URL: 'https://www.stellreducation.org', AUTH_APP_URL: 'https://app.stellreducation.org' }))
 
 import {
   credentialViewToken,
   verifyCredentialViewToken,
   familyCredentialUrl,
   familyLinkConfigured,
+  credentialPdfToken,
+  verifyCredentialPdfToken,
+  familyCertificateUrl,
 } from './credentials-link'
 
 const ID = '00000000-0000-4000-e000-000000000002'
@@ -76,5 +79,27 @@ describe('family credential link', () => {
     process.env.CREDENTIAL_LINK_SECRET = SECRET
     const url = familyCredentialUrl({ id: ID, number: 'STL-2026-E2EADA01' })
     expect(url).toBe(`https://www.stellreducation.org/credentials/STL-2026-E2EADA01?k=${credentialViewToken(ID)}`)
+  })
+})
+
+describe('family certificate link', () => {
+  it('round-trips for its credential, and is not interchangeable with the view link', () => {
+    process.env.CREDENTIAL_LINK_SECRET = SECRET
+    const pdf = credentialPdfToken(ID)!
+    expect(verifyCredentialPdfToken(ID, pdf)).toBe(true)
+    expect(verifyCredentialPdfToken(OTHER, pdf)).toBe(false)
+    // A page link never downloads the PDF, and a PDF link never opens the page.
+    expect(verifyCredentialPdfToken(ID, credentialViewToken(ID))).toBe(false)
+    expect(verifyCredentialViewToken(ID, pdf)).toBe(false)
+    expect(verifyCredentialPdfToken(ID, null)).toBe(false)
+    expect(verifyCredentialPdfToken(ID, 'short')).toBe(false)
+  })
+
+  it('builds the app-host download URL, or null with no secret', () => {
+    process.env.CREDENTIAL_LINK_SECRET = SECRET
+    const url = familyCertificateUrl({ id: ID, number: 'STL-2026-7K3MQ8ZD' })!
+    expect(url).toBe(`https://app.stellreducation.org/api/credentials/STL-2026-7K3MQ8ZD/certificate?k=${credentialPdfToken(ID)}`)
+    for (const k of KEYS) delete process.env[k]
+    expect(familyCertificateUrl({ id: ID, number: 'STL-2026-7K3MQ8ZD' })).toBeNull()
   })
 })

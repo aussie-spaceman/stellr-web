@@ -1,23 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
-import { type CourseTheme } from '@/lib/training-display'
-import { renderCertificatePdf } from '@/lib/certificate'
-import { credentialUrl, getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
-import { generateCertificatesPdf } from '@/lib/event-pdf'
-import { EVENT_AWARDS, artworkSupersededFor, isAwardType } from '@/lib/event-awards'
-import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
+import { getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
+import { renderCredentialPdf } from '@/lib/credential-pdf'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
-import { renderPdCertificatePdf } from '@/lib/pd-certificate'
-import { loadPdArtwork, loadPdLayout, pdTheme } from '@/lib/pd-certificate-store'
-import { tokens } from '@/lib/tokens'
 import { runAfterResponse } from '@/lib/after-response'
 
 // GET /api/credentials/[number]/pdf
-// Streams the owner's certificate for a credential. An event credential prints
-// on that event's artwork for its award, else its theme's default — the same
-// page the admin prints for the ceremony (lib/event-pdf.ts). A course credential uses the default design
-// or the course's template (lib/certificate.ts). Owner-only: a verifier gets
+// Streams the owner's certificate for a credential (lib/credential-pdf.ts
+// draws it). Owner-only: a verifier gets
 // the page, not the file. Private credentials download too; consent gates
 // publishing, not the holder's own copy.
 //
@@ -60,50 +51,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
       },
     })
 
-  // A renamed award's uploaded artwork still prints its earlier name, so it
-  // uses the default design until new artwork replaces it.
-  if (cred.source === 'event' && cred.event_slug && isAwardType(cred.award_type) && !artworkSupersededFor(cred.award_type)) {
-    const template = await loadTemplate(db, cred.event_slug, cred.award_type, pdTheme(cred.theme ?? cred.event_slug))
-    const artwork = template ? await downloadArtwork(db, template.artwork_path) : null
-    if (template && artwork) {
-      const out = await generateCertificatesPdf([{ name: cred.recipient_name || 'Member' }], 'us_letter', artwork, placementOf(template))
-      // deep review QUAL-1: register the audit write with after() so it survives
-      // the response flush rather than being dropped on a frozen instance.
-      runAfterResponse('credentials', () => recordCredentialEvent(db, cred.id, 'pdf'))
-      return pdfResponse(out)
-    }
-    // No artwork for this award yet: fall through to the default design.
-  }
-
-  // Educator PD: the event's own Cowork pages, else its theme's, with the four
-  // fields drawn on the front; or the plain page until there is a front. Never
-  // survey-gated.
-  if (cred.source === 'pd' && cred.pd_hours) {
-    const theme = pdTheme(cred.theme)
-    const [artwork, layout] = await Promise.all([
-      loadPdArtwork(db, theme, cred.event_slug),
-      loadPdLayout(db, theme, cred.event_slug),
-    ])
-    const out = await renderPdCertificatePdf(
-      {
-        recipientName:    cred.recipient_name || 'Educator',
-        hours:            Number(cred.pd_hours),
-        eventTitle:       cred.activity_title ?? cred.title,
-        activityDate:     cred.activity_date,
-        activityLocation: cred.activity_location,
-        standards:        cred.standards,
-        number:           cred.number,
-        verifyUrl:        credentialUrl(cred.number).replace(/^https?:\/\//, ''),
-        issuer:           cred.issuer,
-      },
-      artwork,
-      { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet, layout },
-    )
-    runAfterResponse('credentials', () => recordCredentialEvent(db, cred.id, 'pdf'))
-    return pdfResponse(out)
-  }
-
-  let templateBytes: ArrayBuffer | null = null
+  let courseTemplateBytes: ArrayBuffer | null = null
   if (cred.module_id) {
     const { data: mod } = await db
       .from('training_modules')
@@ -113,30 +61,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     const templatePath = (mod?.cert_template_path as string | null) ?? null
     if (templatePath) {
       const url = await signedDownloadUrl(templatePath)
-      if (url) templateBytes = await fetch(url).then((r) => r.arrayBuffer())
+      if (url) courseTemplateBytes = await fetch(url).then((r) => r.arrayBuffer())
     }
   }
 
-  const event = cred.source === 'event' ? eventHeading(cred.award_type) : null
-  const out = await renderCertificatePdf({
-    memberName:  cred.recipient_name || 'Member',
-    courseTitle: cred.title,
-    heading:     event?.heading,
-    lead:        event?.lead,
-    theme:       (cred.theme as CourseTheme | null) ?? null,
-    issuer:      cred.issuer,
-    certNumber:  cred.number,
-    issuedOn:    new Date(cred.issued_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-    templateBytes,
-  })
-
+  const out = await renderCredentialPdf(db, cred, { courseTemplateBytes })
+  // deep review QUAL-1: register the audit write with after() so it survives
+  // the response flush rather than being dropped on a frozen instance.
   runAfterResponse('credentials', () => recordCredentialEvent(db, cred.id, 'pdf'))
   return pdfResponse(out)
-}
-
-/** The default design's wording for an event credential with no artwork. */
-function eventHeading(awardType: string | null): { heading: string; lead: string } {
-  if (awardType === 'mentor') return { heading: EVENT_AWARDS.mentor.label, lead: 'with thanks for their service as' }
-  if (awardType && awardType !== 'participation') return { heading: 'Certificate of Award', lead: 'has been awarded' }
-  return { heading: 'Certificate of Participation', lead: 'took part in' }
 }

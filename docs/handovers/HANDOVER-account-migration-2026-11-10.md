@@ -213,7 +213,9 @@ Each piece of work runs in its own Claude Code session and its own git worktree 
 
 ### B1. On `dev` but not on `main`
 
-`origin/main` is at `91bb225e` (#606, production READY and checked). Late on 10-Nov-2026, `git log --oneline origin/main..origin/dev --first-parent` showed four commits:
+**Update, 21:07 UTC on 10-Nov-2026: all four below are on production.** They were promoted in #612 (merge commit `3d90a6dd`, deployment READY and checked). The record is `.claude/releases/promote-2026-11-10b.md` (#613). The first production run of the changed signing paths (the reminders cron and the outbox drain) is still to be read in `cron_runs`.
+
+Before that promotion, `origin/main` was at `91bb225e` (#606), and `git log --oneline origin/main..origin/dev --first-parent` showed four commits:
 
 | PR | What | Migration |
 |---|---|---|

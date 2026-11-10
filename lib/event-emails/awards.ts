@@ -37,7 +37,7 @@ export function joinNames(names: string[]): string {
   return `${uniq.slice(0, -1).join(', ')} and ${uniq[uniq.length - 1]}`
 }
 
-/** "Lily, Riley S. and Riley T.": first names, a last initial only where two share one. */
+/** "Alex, Robin S. and Robin T.": first names, a last initial only where two share one. */
 export function winnerNames(people: { participantId: string; firstName: string; lastName: string }[]): string {
   const seen = new Map<string, (typeof people)[number]>()
   for (const p of people) if (!seen.has(p.participantId)) seen.set(p.participantId, p)

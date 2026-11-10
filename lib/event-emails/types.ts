@@ -92,14 +92,14 @@ export const EVENT_MERGE_FIELDS = [
   { token: 'portal_link',         example: 'https://app.stellreducation.org/sign-in', label: 'Stellr portal sign-in' },
   { token: 'event_link',           example: 'https://www.stellreducation.org/events/…', label: 'Public event page' },
   // After the event: awards, feedback, certificates and credentials.
-  { token: 'champion_company',         example: 'Rancho Ramjets',                 label: 'Overall Event Champions: the company name' },
-  { token: 'individual_award_winners', example: 'Cole, Laney and Owen',           label: 'All individual award winners (Anita Gale, Dick Edwards, Norm Chaffee)' },
-  { token: 'norm_chaffee_winners',     example: 'Cole and Tristan',               label: 'Norm Chaffee Award winners' },
-  { token: 'anita_gale_winners',       example: 'Laney and Nayeli',               label: 'Anita Gale Award winners' },
-  { token: 'dick_edwards_winners',     example: 'Owen and Sebastian',             label: 'Dick Edwards Award winners' },
+  { token: 'champion_company',         example: 'Orbital Works',                 label: 'Overall Event Champions: the company name' },
+  { token: 'individual_award_winners', example: 'Avery, Jordan and Taylor',           label: 'All individual award winners (Anita Gale, Dick Edwards, Norm Chaffee)' },
+  { token: 'norm_chaffee_winners',     example: 'Avery and Quinn',               label: 'Norm Chaffee Award winners' },
+  { token: 'anita_gale_winners',       example: 'Jordan and Morgan',               label: 'Anita Gale Award winners' },
+  { token: 'dick_edwards_winners',     example: 'Taylor and Casey',             label: 'Dick Edwards Award winners' },
   { token: 'feedback_link',            example: 'https://app.stellreducation.org/survey/event/…', label: 'Post-event feedback survey' },
-  { token: 'certificate_links',        example: 'Lily’s Certificate of Participation: Download PDF', label: 'Their certificate PDFs (issued awards)' },
-  { token: 'credential_links',         example: 'Lily’s Certificate of Participation: View credential', label: 'Their credential pages (issued awards)' },
+  { token: 'certificate_links',        example: 'Alex’s Certificate of Participation: Download PDF', label: 'Their certificate PDFs (issued awards)' },
+  { token: 'credential_links',         example: 'Alex’s Certificate of Participation: View credential', label: 'Their credential pages (issued awards)' },
 ] as const
 
 export type EventMergeToken = (typeof EVENT_MERGE_FIELDS)[number]['token']

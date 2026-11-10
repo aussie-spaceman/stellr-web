@@ -25,37 +25,37 @@ const w = (awardType: string, participantId: string, firstName: string, lastName
 
 describe('award merge fields', () => {
   it('lists first names, sorted, with "and"', () => {
-    expect(winnerNames([w('anita_gale', 'p1', 'Owen'), w('anita_gale', 'p2', 'Laney'), w('anita_gale', 'p3', 'Cole')])).toBe('Cole, Laney and Owen')
-    expect(winnerNames([w('anita_gale', 'p1', 'Owen')])).toBe('Owen')
+    expect(winnerNames([w('anita_gale', 'p1', 'Taylor'), w('anita_gale', 'p2', 'Jordan'), w('anita_gale', 'p3', 'Avery')])).toBe('Avery, Jordan and Taylor')
+    expect(winnerNames([w('anita_gale', 'p1', 'Taylor')])).toBe('Taylor')
     expect(winnerNames([])).toBe('')
   })
 
   it('adds a last initial only where two winners share a first name', () => {
-    expect(winnerNames([w('a', 'p1', 'Riley', 'Smith'), w('a', 'p2', 'Riley', 'Tran'), w('a', 'p3', 'Lily', 'Ng')]))
-      .toBe('Lily, Riley S. and Riley T.')
+    expect(winnerNames([w('a', 'p1', 'Robin', 'Smith'), w('a', 'p2', 'Robin', 'Tran'), w('a', 'p3', 'Alex', 'Ng')]))
+      .toBe('Alex, Robin S. and Robin T.')
   })
 
   it('names the champion company, the winners per award, and all individual winners once each', () => {
     const vars = awardMergeVars(
       [
-        w('overall_champion', 'p1', 'Cole'), w('overall_champion', 'p2', 'Tristan'),
-        w('norm_chaffee', 'p1', 'Cole'), w('norm_chaffee', 'p2', 'Tristan'),
-        w('anita_gale', 'p3', 'Laney', 'X', 'c1'), w('anita_gale', 'p4', 'Nayeli'),
-        w('dick_edwards', 'p5', 'Owen', 'X', 'c1'), w('dick_edwards', 'p6', 'Sebastian'),
+        w('overall_champion', 'p1', 'Avery'), w('overall_champion', 'p2', 'Quinn'),
+        w('norm_chaffee', 'p1', 'Avery'), w('norm_chaffee', 'p2', 'Quinn'),
+        w('anita_gale', 'p3', 'Jordan', 'X', 'c1'), w('anita_gale', 'p4', 'Morgan'),
+        w('dick_edwards', 'p5', 'Taylor', 'X', 'c1'), w('dick_edwards', 'p6', 'Casey'),
       ],
-      [{ id: 'c1', number: 1, name: 'Positronic Industries' }, { id: 'c2', number: 2, name: 'Rancho Ramjets' }],
+      [{ id: 'c1', number: 1, name: 'Nova Labs' }, { id: 'c2', number: 2, name: 'Orbital Works' }],
     )
     expect(vars).toEqual({
-      champion_company: 'Rancho Ramjets',
-      individual_award_winners: 'Cole, Laney, Nayeli, Owen, Sebastian and Tristan',
-      norm_chaffee_winners: 'Cole and Tristan',
-      anita_gale_winners: 'Laney and Nayeli',
-      dick_edwards_winners: 'Owen and Sebastian',
+      champion_company: 'Orbital Works',
+      individual_award_winners: 'Avery, Casey, Jordan, Morgan, Quinn and Taylor',
+      norm_chaffee_winners: 'Avery and Quinn',
+      anita_gale_winners: 'Jordan and Morgan',
+      dick_edwards_winners: 'Casey and Taylor',
     })
   })
 
   it('falls back to "Company N" for an unnamed champion company, and empty with no awards', () => {
-    expect(awardMergeVars([w('overall_champion', 'p1', 'Cole', 'X', 'c3')], [{ id: 'c3', number: 3, name: null }]).champion_company).toBe('Company 3')
+    expect(awardMergeVars([w('overall_champion', 'p1', 'Avery', 'X', 'c3')], [{ id: 'c3', number: 3, name: null }]).champion_company).toBe('Company 3')
     expect(Object.values(awardMergeVars([], [])).every((v) => v === '')).toBe(true)
   })
 })
@@ -93,11 +93,11 @@ describe('post-event fields', () => {
 
     const parent = renderEventEmail(body, {
       ...eventMergeVars(EVENT),
-      ...recipientMergeVars({ email: 'p@x.test', firstName: 'Pat', roles: [], isParticipant: false, participantNames: ['Sam', 'Lily'], payments: [],
-        credentials: [line('Sam', 'Certificate of Participation', 'A'), line('Lily', 'Anita Gale Award for Creative Vision', 'B')] }),
+      ...recipientMergeVars({ email: 'p@x.test', firstName: 'Pat', roles: [], isParticipant: false, participantNames: ['Sam', 'Alex'], payments: [],
+        credentials: [line('Sam', 'Certificate of Participation', 'A'), line('Alex', 'Anita Gale Award for Creative Vision', 'B')] }),
     })
     expect(parent.text).toContain('Sam’s Certificate of Participation: https://app.test/api/credentials/A/certificate?k=t')
-    expect(parent.text).toContain('Lily’s Anita Gale Award for Creative Vision: https://www.test/credentials/B?k=v')
+    expect(parent.text).toContain('Alex’s Anita Gale Award for Creative Vision: https://www.test/credentials/B?k=v')
   })
 
   it('leaves no empty paragraph when a recipient has no credentials', () => {
@@ -130,7 +130,7 @@ const cred = (id: string, award_type: string | null, participant_id: string | nu
 describe('attachCredentialLines', () => {
   const r = roster([
     participant({ id: 'p1', first_name: 'Sam', email: 'sam@example.com' }),
-    participant({ id: 'p2', first_name: 'Lily', email: 'lily@example.com' }),
+    participant({ id: 'p2', first_name: 'Alex', email: 'alex@example.com' }),
   ])
   const mentors = [{ email: 'mentor@example.com', firstName: 'Max', lastName: 'M', role: 'volunteer' as const }]
 
@@ -149,8 +149,8 @@ describe('attachCredentialLines', () => {
     ])
     expect(by('pat@example.com').credentials!.map((c) => `${c.participantName}: ${c.label}`)).toEqual([
       'Sam: Certificate of Participation',
-      'Lily: Certificate of Participation',
-      'Lily: Anita Gale Award for Creative Vision',
+      'Alex: Certificate of Participation',
+      'Alex: Anita Gale Award for Creative Vision',
     ])
     expect(by('mentor@example.com').credentials!.map((c) => c.label)).toEqual(['Certificate of Appreciation'])
   })

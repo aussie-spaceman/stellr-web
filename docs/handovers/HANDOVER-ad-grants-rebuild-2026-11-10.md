@@ -6,7 +6,7 @@ Tracker: `tracker/2026-11-10-ad-grants-rebuild.md` (rows `ad-grants-rebuild.1`â€
 account (customer ID 671-715-4074, the Ad Grants account) through the Ads web
 UI and bulk uploads. Nothing was committed or promoted except this handover.
 The plan and status page is a private claude.ai artifact:
-https://claude.ai/artifact/JbcjiANrH2Z5bFoDmnxiDD.
+https://claude.ai/artifact/RpNDLgZGRNXuvXtvvyEzjZ (republished on the Stellr Claude account, 10 Nov 2026).
 
 ## Context
 

@@ -39,7 +39,7 @@
 - **Tailwind comparison:** production builds of both sides, the same pinned Chromium, and signed-in sessions from the e2e fixtures. Reshot after `dev` was merged in:
   - 92 screenshots (24 pages at 375px and 1280px, plus 44 stories) with 0 perceptual difference and no page height change.
   - 0.012% of pixels shift, at most 28/255, from v4's OKLCH default palette.
-  - Report (private to the maintainer): claude.ai/artifact/8N2qMAtZVc3NZ25QgF7DBB.
+  - Report (private to the maintainer): an artifact on the old Claude account (closed Nov 2026); saved copy in the owner's restricted handover archive, `artifacts/07-tailwind-4-migration-check/`.
 - **E2E hardening, locally:** a survey event was planted with `survey-cli.ts create`. `dev`'s old DocuSign spec failed 5/5 against it, the new one passed 7/7, and the new one then passed 35/35 under `--repeat-each=5`. The dev database was checked clean afterwards.
 - **Stripe 23 in test mode, before promoting:** a script refusing non-`sk_test_` keys called Stripe through `requireStripe()` with `GUARANTEE_CHECKOUT_TEXT` and `GUARANTEE_RECEIPT_LINE`.
   - Payment and subscription Checkout sessions and a Payment Link accepted `custom_text`.

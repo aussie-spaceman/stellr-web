@@ -11,7 +11,7 @@ David asked whether to build an iOS registration and check-in app like RegFox's,
 - RegFox;
 - Eventbrite Organizer, Cvent OnArrival, zkipster, Ticket Tailor and Planning Center Check-Ins.
 
-Report (private artifact): https://claude.ai/artifact/LkvVkPCdkUeEpVvduhEcXS. It recommends **no native app**: extend the web desk in phases, then decide on native at a gate, after two events with real numbers.
+Report: a private artifact on the old Claude account (closed Nov 2026); saved copy in the owner's restricted handover archive, `artifacts/06-check-in-app-review/`. It recommends **no native app**: extend the web desk in phases, then decide on native at a gate, after two events with real numbers.
 
 The case in brief:
 

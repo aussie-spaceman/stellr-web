@@ -26,8 +26,17 @@ export const AUDIT_ACTIONS = [
   'registration.seat_payment.start',
   'registration.participant.create',
   'registration.participant.update',
+  // An organiser's team writes (A8): app/api/members/teams/**
+  'registration.participant.remove',
+  'registration.roster.sheet_sync',
+  'registration.seat_payment_link.create',
   'registration.payment_method.change',
   'registration.invoice_discount.change',
+  // Guardian consent on a tenant's event (S5 wave 6, lib/registration/tenant-guardian-consent.ts)
+  'registration.guardian_consent.request',
+  'registration.guardian_consent.sign',
+  'registration.guardian_consent.decline',
+  'registration.guardian_consent.expire',
 
   // Consent and uploads (A14)
   'consent.request.send',

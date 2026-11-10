@@ -12,6 +12,17 @@ import { stripeClient } from '@/lib/stripe'
 import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { resolveEmailPair } from '@/lib/member-email'
 import { confirmsMemberLastName, memberIdUnusableMessage, normalizeMembershipId } from '@/lib/membership-id'
+import { assertRegistrable } from '@/lib/registration/eligibility'
+import {
+  isEligibilityRefusal,
+  resolveRosterContext,
+  rosterPaymentsRefusal,
+  rosterRefusal,
+  rosterTakesMoney,
+  TENANT_MONEY_COLUMNS,
+  type RosterMoneyColumns,
+  withoutTenantId,
+} from '@/lib/registration/roster-context'
 
 // Adding one person to a group registration's roster (4 Nov 2026).
 //
@@ -27,16 +38,28 @@ import { confirmsMemberLastName, memberIdUnusableMessage, normalizeMembershipId 
 // member's last name and a usable date of birth on the record, and any other case
 // gets one refusal built from what was submitted; a linked row answers with the
 // submitted name. Neither rule applies to a staff caller.
+//
+// Another tenant's group (S5 A8). The registration's tenant decides
+// (lib/registration/roster-context), and that tenant's rules apply: assertRegistrable
+// with the tenant's context, so nobody under 18 is added (this path collects no
+// guardian's consent, whatever TENANT_GUARDIAN_CONSENT_ENABLED says). Only the
+// participant row is written, from the details typed: a Member ID is never looked up
+// and gets the unknown ID's answer (an organiser's refusal; staff carry on with what
+// they typed), and no member row, school link, event history, agreement or payment
+// link is made. A group that takes money is refused with the tenant payments answer
+// before anything else, so nothing here reaches Stripe for a tenant until S9.
 
-export interface GroupForAdd {
+export interface GroupForAdd extends RosterMoneyColumns {
   id: string
   event_slug: string
   event_title: string | null
   school_name: string | null
   school_address_state: string | null
+  /** The registration's tenant. NULL (or absent) is a Stellr row the backfill has not reached. */
+  tenant_id?: string | null
 }
 
-export const GROUP_FOR_ADD_COLUMNS = 'id, event_slug, event_title, school_name, school_address_state'
+export const GROUP_FOR_ADD_COLUMNS = `id, event_slug, event_title, school_name, school_address_state, tenant_id, ${TENANT_MONEY_COLUMNS}`
 
 export interface AddParticipantResult {
   status: number
@@ -65,10 +88,19 @@ export async function addParticipantToGroup(
   const isStaff = actor.label === 'admin'
   const logTag = isStaff ? '[admin/registrations/participants]' : '[teams/participants]'
 
-  const insert: Record<string, unknown> = { registration_id: registrationId }
+  // S5 A8: whose rules apply. Stellr's group makes no read here.
+  const roster = await resolveRosterContext(db, registration, logTag)
+  if (!roster.ok) return rosterRefusal(roster)
+  const tenantGroup = !roster.isPlatformOwner
+  // Until S9, nothing is billed for a tenant: a group that takes money is refused first.
+  if (tenantGroup && rosterTakesMoney(registration)) return rosterPaymentsRefusal()
+
+  const insert: Record<string, unknown> = { registration_id: registrationId, tenant_id: roster.tenantId }
   for (const key of ALLOWED) {
     if (key in body) insert[key] = body[key]
   }
+  // A Stellr Member ID means nothing on another tenant's roster, so none is stored there.
+  if (tenantGroup) delete insert.membership_id
   // Roster filters (Companies auto-assign, studentCount) match enum values.
   if ('event_role' in insert) insert.event_role = normalizeEventRole(insert.event_role)
   // Personal takes primacy: with only a school address, it is the primary.
@@ -84,9 +116,9 @@ export async function addParticipantToGroup(
   // the group registration route. The link is settled before the duplicate guard.
   let linkedMemberId: string | null = null
   if (body.linked && membershipId) {
-    const onFile = await getMemberOnFileByMembershipId(db, membershipId)
-    // S5 A7: run assertEligible here on a tenant event, so a failing record gets
-    // member_id_unusable.
+    // S5 A8: on another tenant's group the ID is never looked up, so it answers as an
+    // unknown one does: an organiser is refused, and staff carry on with what they typed.
+    const onFile = tenantGroup ? null : await getMemberOnFileByMembershipId(db, membershipId)
     if (
       !isStaff &&
       (!onFile ||
@@ -126,12 +158,13 @@ export async function addParticipantToGroup(
   // who is already on the roster (e.g. added via the sheet) before re-adding
   // them. Match on membership_id when supplied, otherwise on email.
   const email = emails.email
-  if (membershipId || email) {
+  const dupeId = tenantGroup ? '' : membershipId
+  if (dupeId || email) {
     const { data: dupe } = await db
       .from('participants')
       .select('id')
       .eq('registration_id', registrationId)
-      .or(membershipId ? `membership_id.eq.${membershipId},email.eq.${email}` : `email.eq.${email}`)
+      .or(dupeId ? `membership_id.eq.${dupeId},email.eq.${email}` : `email.eq.${email}`)
       .maybeSingle()
     if (dupe) {
       return { status: 409, body: { error: 'This person is already on the team roster.' } }
@@ -141,9 +174,15 @@ export async function addParticipantToGroup(
   // S0 (2 Nov 2026): the same date-of-birth check as the registration routes,
   // before anything is written. Age is taken on today's date; this path has no
   // event date. An organiser's link has already passed it.
-  const ageCheck = checkRegistrationAge(insert.date_of_birth, {
+  // S5 A8: through assertRegistrable. For Stellr's group that is exactly the call
+  // above (no event date, no floor); for another tenant's, that tenant's rules, and
+  // no minor, since nothing here can collect a guardian's consent.
+  const ageCheck = assertRegistrable(insert.date_of_birth, roster.eligibility, {
     name: [insert.first_name, insert.last_name].filter(Boolean).join(' ').trim() || 'this person',
   })
+  if (!ageCheck.ok && ageCheck.reason === 'eligibility_unavailable') {
+    return { status: 503, body: { code: ageCheck.reason, error: ageCheck.error } }
+  }
   if (!ageCheck.ok) {
     const error = !linkedMemberId
       ? ageCheck.error
@@ -179,6 +218,8 @@ export async function addParticipantToGroup(
   // linked, never rewritten (`onExisting: 'skip'`): neither an organiser nor
   // this form is the authority on another person's date of birth, role or
   // guardian, and the COPPA guard reads the member row's date of birth first.
+  // S5 A8: another tenant's participant gets no Stellr member row.
+  if (tenantGroup) return addTenantParticipant(db, insert, logTag)
   const memberId = linkedMemberId ?? await upsertMember(db, {
     email: emails.email,
     school_email: emails.school_email,
@@ -264,11 +305,36 @@ export async function addParticipantToGroup(
   // The answer names the slot as submitted.
   const answered = linkedMemberId && !isStaff
     ? { id: participant.id, first_name: text(body.first_name), last_name: text(body.last_name) }
-    : participant
+    : withoutTenantId(participant as Record<string, unknown>)
 
   return {
     status: 201,
     body: { participant: answered, billing: { message: billing?.message ?? null, action: billing?.action ?? 'none' } },
     memberId,
   }
+}
+
+/**
+ * The write for another tenant's group (S5 A8): the participant row and nothing else.
+ * No member row, school link, event history or Stellr agreement, and nothing billed
+ * (a group that takes money was refused before this). The database's eligibility
+ * trigger is the backstop: its refusal answers as the eligibility check's does.
+ */
+async function addTenantParticipant(
+  db: SupabaseClient,
+  insert: Record<string, unknown>,
+  logTag: string,
+): Promise<AddParticipantResult> {
+  const { data: participant, error } = await db.from('participants').insert(insert).select().single()
+  if (error || !participant) {
+    if (isEligibilityRefusal(error)) {
+      console.warn(`${logTag} the participants eligibility check refused a tenant row`)
+      return rosterRefusal({ ok: false, reason: 'rules_unavailable', detail: 'tenant_mismatch' })
+    }
+    // The code and message only: a check or unique violation's details carry the row.
+    console.error(`${logTag} Insert error:`, error?.code, error?.message)
+    return { status: 500, body: { error: 'Failed to add participant' }, memberId: null }
+  }
+  shadowSyncFields('participants', [participant.id as string])
+  return { status: 201, body: { participant: withoutTenantId(participant as Record<string, unknown>), billing: { message: null, action: 'none' } }, memberId: null }
 }

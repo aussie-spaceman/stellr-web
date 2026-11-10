@@ -28,8 +28,13 @@ export async function respondToIndividualRegistration(
   // S5 A7: a tenant's event takes no money (the gate refused a fee, add-ons and an
   // offer), so there is no checkout, pay link or add-on order, and nothing is asked
   // of Stellr's Stripe account.
+  // S5 wave 6: a consent-pending registration says so, for the form to tell the
+  // registrant their place waits on a guardian's signature.
   if (!gated.context.isPlatformOwner) {
-    return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken: null }, { status: 201 })
+    return NextResponse.json(
+      { registrationId: regId, checkoutUrl: null, signInToken: null, ...(row.consent ? { consentPending: true } : {}) },
+      { status: 201 },
+    )
   }
 
   // Price any merch add-ons selected — validated + persisted as pending items

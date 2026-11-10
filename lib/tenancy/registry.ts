@@ -116,6 +116,11 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
     'wrapped per-tenant field-encryption data keys (lib/field-crypto.ts). Platform-level although it carries tenant_id NOT NULL: key material is read only by service_role through lib/field-crypto-store.ts, never by tenant_app (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES)',
   ),
 
+  // ── S5 wave 6 tenant guardian consent ────────────────────────────────────
+  'public.tenant_guardian_consents': platform(
+    'guardian consent state for a 14-17-year-old on another organiser’s event (lib/registration/tenant-guardian-consent.ts). Platform-level although it carries tenant_id NOT NULL: written only by service_role, so a tenant session can never mark its own consent given (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES)',
+  ),
+
   // ── Event-scoped, tenant derived from event_slug ─────────────────────────
   'public.agreements': slug('e-sign envelopes (renamed from docusign_envelopes)'),
   'public.credentials': slug(),

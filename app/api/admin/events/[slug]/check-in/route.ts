@@ -9,6 +9,7 @@ import { checkInsVisibleTo, loadOpenCheckIns, pickBannerEvent, todayUtc } from '
 import { verifyCheckInCode } from '@/lib/check-in-codes'
 import { checkInTime, meaningfulNote, type DeskContact, type DeskDetails, type DeskFlags, type DeskGroup } from '@/lib/check-in-desk'
 import { loadDeskStaff, loadStaffCheckIns, writeStaffCheckIn } from '@/lib/check-in-staff'
+import { GUARDIAN_CONSENT_PENDING_DESK, isConsentPendingRefusal } from '@/lib/check-in-consent'
 
 // Check-in management for an event (admins + assigned event managers).
 //   GET  — settings + live list of participants and school groups (polled by the
@@ -36,6 +37,19 @@ type Params = { params: Promise<{ slug: string }> }
 
 /** A busload is 30; a whole event is under 150. Anything bigger is a mistake. */
 const MAX_GROUP_IDS = 300
+
+/**
+ * A failed check-in write's answer. S5 wave 6: the database refuses to check in a
+ * tenant event's participant whose guardian has not signed the consent form
+ * (zzz_participants_refuse_unconsented_check_in); the desk is told why, not
+ * "Database error". Never a Stellr participant: Stellr has no consent rows.
+ */
+function checkInWriteFailed(error: { code?: string | null; message?: string | null }): NextResponse {
+  if (isConsentPendingRefusal(error)) {
+    return NextResponse.json({ code: 'guardian_consent_pending', error: GUARDIAN_CONSENT_PENDING_DESK }, { status: 409 })
+  }
+  return NextResponse.json({ error: 'Database error' }, { status: 500 })
+}
 
 export async function GET(req: Request, { params }: Params) {
   const { slug } = await params
@@ -314,7 +328,7 @@ export async function POST(req: Request, { params }: Params) {
           : { checked_in_at: null, check_in_method: null }
       )
       .eq('id', participantId)
-    if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    if (error) return checkInWriteFailed(error)
     return NextResponse.json({ ok: true })
   }
 
@@ -334,7 +348,8 @@ export async function POST(req: Request, { params }: Params) {
             .in('id', ids)
             .is('checked_in_at', null)
         : await db.from('participants').update({ checked_in_at: null, check_in_method: null }).in('id', ids)
-    if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    // One consent-pending member refuses the whole statement, so nobody in it is in.
+    if (error) return checkInWriteFailed(error)
     return NextResponse.json({ ok: true })
   }
 
@@ -382,7 +397,7 @@ export async function POST(req: Request, { params }: Params) {
       .update({ checked_in_at: at, check_in_method: 'manual' })
       .eq('id', p.id)
       .is('checked_in_at', null)
-    if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    if (error) return checkInWriteFailed(error)
     return NextResponse.json({ ok: true, kind: 'participant', participantId: p.id, alreadyCheckedIn: false, checkedInAt: at })
   }
 

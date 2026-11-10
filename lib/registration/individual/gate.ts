@@ -10,7 +10,15 @@ import { stripeClient } from '@/lib/stripe'
 import { findOfferByToken, type ScholarshipApplication } from '@/lib/scholarships'
 import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { assertRegistrable, stellrContext } from '../eligibility'
+import { assertRegistrable, minorRefusal, stellrContext } from '../eligibility'
+import {
+  consentInvitationRefusal,
+  consentWindowEnd,
+  guardianFromForm,
+  guardianRequired,
+  tenantGuardianConsentReadiness,
+  type GuardianContact,
+} from '../tenant-guardian-consent'
 import {
   eventOwnerOrRefusal,
   readRegistrationEvent,
@@ -56,13 +64,28 @@ export interface GatedRegistration {
   /**
    * Signed in as a member, not just a caller naming an address. Only the gate may
    * set this: it also means `email` came from the session, which is what allows
-   * persist to rewrite that member's row.
+   * persist to rewrite that member's row. Always false on a tenant's event.
    */
   hasSession: boolean
   scholarship: ScholarshipApplication | null
   dateOfBirth: string
   isMinor: boolean
   amountDueCents: number
+  /**
+   * S5 wave 6: set only for a tenant event's 14-17-year-old admitted pending a
+   * guardian's consent. Persist marks the participant consent-pending and records
+   * the consent envelope; the hooks invite the guardian.
+   */
+  consent: GatedConsent | null
+}
+
+/** What the guardian-consent flow needs from the gate. */
+export interface GatedConsent {
+  guardian: GuardianContact
+  /** When the guardian's window closes. */
+  expiresAt: Date
+  /** The tenant's display name, printed on the consent document. */
+  organiserName: string
 }
 
 export type GateResult = Refusable<{ registration: GatedRegistration }>
@@ -79,14 +102,28 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return refuse(impersonationBlock)
 
+  // S5 A7 follow-up (owner decision, 10 Nov 2026): a Stellr member's profile is not
+  // used at a tenant's event until S7's consent grant exists. On a tenant's host the
+  // event can only go ahead as that tenant's (lib/registration/event-context), so
+  // nothing is read from the signed-in login's Stellr record: the registrant's typed
+  // address and date of birth stand, as on the tenant join page (group-join/identify),
+  // and the registration and participant are linked to no member (persist). A sign-in
+  // there is not taken as an identity, so every answer below is the one someone not
+  // signed in gets.
+  const tenantHost = deps.requestTenantId !== STELLR_TENANT_ID
+
   // Decision 24, COPPA: a signed-in child whose parent has not consented
   // registers for nothing until the parent signs (lib/pending-consent).
   // Asked before getCurrentMember, which resolves no member for them and
   // would otherwise let the submitted email stand in for the session's.
-  const childBlock = await sessionChildAwaitingConsentBlock(deps.serviceClient())
-  if (childBlock) return refuse(childBlock)
+  // Not on a tenant's host, where the session's email is never used, and anyone
+  // under 18 is refused or admitted only pending a guardian's consent (S5 wave 6).
+  if (!tenantHost) {
+    const childBlock = await sessionChildAwaitingConsentBlock(deps.serviceClient())
+    if (childBlock) return refuse(childBlock)
+  }
 
-  const sessionMember = await getCurrentMember().catch(() => null)
+  const sessionMember = tenantHost ? null : await getCurrentMember().catch(() => null)
   const { email, schoolEmail } = registrantEmails(sessionMember?.email, body)
 
   if (!event_slug || !email || !body.first_name || !body.last_name) {
@@ -103,7 +140,7 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
     { error: 'This scholarship link is no longer valid. Reply to your scholarship email and we’ll sort it out.' },
     { status: 400 },
   )
-  if (body.scholarship_token && deps.requestTenantId !== STELLR_TENANT_ID) return refuse(offerInvalid())
+  if (body.scholarship_token && tenantHost) return refuse(offerInvalid())
   const scholarship = body.scholarship_token
     ? await findOfferByToken(deps.serviceClient(), body.scholarship_token)
     : null
@@ -158,18 +195,22 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
       route: 'register/individual',
     }, () => (scholarship ? offerInvalid() : NextResponse.json({ error: 'Event not found' }, { status: 404 })))
   let context: RegistrationEventContext | null = null
-  if (deps.requestTenantId !== STELLR_TENANT_ID) {
+  if (tenantHost) {
     const owned = await ownerCheck()
     if (!owned.ok) return refuse(owned.response)
     context = owned.context
   }
-  const ageCheck = assertRegistrable(body.date_of_birth, context?.eligibility ?? stellrContext(event))
+  // S5 wave 6: this route can collect a guardian, so with TENANT_GUARDIAN_CONSENT_ENABLED
+  // on a tenant event's 14-17-year-old is admitted pending a guardian's consent
+  // (checked below). Stellr's events ignore the option.
+  const ageCheck = assertRegistrable(body.date_of_birth, context?.eligibility ?? stellrContext(event), { guardianConsent: true })
   if (!ageCheck.ok) return refuse(eligibilityRefused(ageCheck))
 
   // Signed in, the registration is for the account holder, and it writes to their
   // own row. A different date of birth means this is someone else, such as a child
   // on a parent's account, or a date that would change which agreement is sent.
   // Members cannot change their date of birth themselves.
+  // Never on a tenant's host: sessionMember is null there (see above).
   const storedDateOfBirth = sessionMember?.date_of_birth
     ? checkRegistrationAge(sessionMember.date_of_birth, { eventDate: event.date ?? null })
     : null
@@ -193,6 +234,27 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
   // Refused before the duplicate check, which can open a Checkout.
   if (!context.isPlatformOwner && (event.stripePriceId || body.scholarship_token || (body.merch_addons ?? []).length > 0)) {
     return refuse(tenantPaymentsUnavailable())
+  }
+
+  // S5 wave 6: a minor admitted pending a guardian's consent. Only if the flow can
+  // run for this event (flag, signing, the consent document, the tenant's sender, a
+  // window before the event starts); otherwise the approved refusal, as with the
+  // flag off. Then only with a parent or legal guardian named on the form, and
+  // within the invitation caps (per guardian address, per organiser). Nothing is
+  // written before any of these answers.
+  let consent: GatedConsent | null = null
+  if ('guardianConsentRequired' in ageCheck && ageCheck.guardianConsentRequired) {
+    const startsAt = context.eligibility.kind === 'tenant' ? context.eligibility.eventStartsAt : null
+    const expiresAt = consentWindowEnd(new Date(), startsAt)
+    const readiness = expiresAt
+      ? await tenantGuardianConsentReadiness(deps.serviceClient(), context.tenantId)
+      : ({ ready: false, reason: 'window' } as const)
+    if (!expiresAt || !readiness.ready) return refuse(eligibilityRefused(minorRefusal()))
+    const guardian = guardianFromForm(body, email, [schoolEmail])
+    if (!guardian) return refuse(guardianRequired())
+    const busy = await consentInvitationRefusal(context.tenantId, guardian.email)
+    if (busy) return refuse(busy)
+    consent = { guardian, expiresAt, organiserName: readiness.organiserName }
   }
 
   const db = deps.serviceClient()
@@ -298,6 +360,7 @@ export async function gateIndividualRegistration(body: IndividualBody, deps: Gat
       dateOfBirth: ageCheck.dateOfBirth,
       isMinor: ageCheck.isMinor,
       amountDueCents,
+      consent,
     },
   }
 }

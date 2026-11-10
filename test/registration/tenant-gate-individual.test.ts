@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextResponse } from 'next/server'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { AGE_CASES, rec, TODAY, dateBefore, jsonRequest, settle, type DbCall, type DbResult } from '@/test/registration/fixtures'
 
@@ -15,13 +16,20 @@ const h = vi.hoisted(() => ({
   })),
   getEventBySlug: vi.fn(async (_slug: string): Promise<unknown> => null),
   findOffer: vi.fn(async (): Promise<unknown> => null),
-  findExisting: vi.fn(async () => new Map()),
+  findExisting: vi.fn(async (_db: unknown, _emails: string[], _slug: string) => new Map()),
+  resolveDuplicate: vi.fn((_rows: unknown, _o: unknown): { kind: string; registration?: unknown } => ({ kind: 'none' })),
+  // The signed-in login's Stellr record, and its consent state (null: signed out).
+  currentMember: vi.fn(async (): Promise<unknown> => null),
+  consentBlock: vi.fn(async (_db: unknown): Promise<Response | null> => null),
   checkout: vi.fn(async () => ({ url: 'https://checkout.test/cs_1' })),
   priceRetrieve: vi.fn(async () => ({ unit_amount: 2500 })),
   tenantConfirmation: vi.fn(async (_db: unknown, _input: Record<string, unknown>) => ({ ok: true, id: 'em_1' })),
   dispatch: vi.fn(async (_db: unknown, _a: Record<string, unknown>) => {}),
   provision: vi.fn(async () => ({ signInToken: 'tkt', clerkUserId: 'user_1' })),
   hook: vi.fn((_name: string) => {}),
+  // The Clerk session and the limiter: signed out and allowed, unless a test says otherwise.
+  auth: vi.fn(async (): Promise<{ userId: string | null }> => ({ userId: null })),
+  rateLimit: vi.fn(async (..._a: unknown[]): Promise<Response | null> => null),
   audit: vi.fn(async (_m: Record<string, unknown>, _o?: unknown) => ({ ok: false, skipped: 'disabled' })),
 }))
 
@@ -33,20 +41,20 @@ vi.mock('@/lib/supabase', async () => {
 })
 vi.mock('@/lib/field-crypto-shadow', () => ({ shadowSyncFields: () => {} }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
-vi.mock('@/lib/community', () => ({ getCurrentMember: async () => null }))
+vi.mock('@/lib/community', () => ({ getCurrentMember: h.currentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/pending-consent', async (orig) => ({
   ...(await orig<typeof import('@/lib/pending-consent')>()),
-  sessionChildAwaitingConsentBlock: async () => null,
+  sessionChildAwaitingConsentBlock: h.consentBlock,
 }))
-vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: null }) }))
+vi.mock('@clerk/nextjs/server', () => ({ auth: h.auth }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.provision }))
-vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: async () => null }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rateLimit }))
 vi.mock('@/lib/scholarships', () => ({ findOfferByToken: h.findOffer, attachOfferToRegistration: async () => h.hook('attachOffer') }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({ prices: { retrieve: h.priceRetrieve } }) }))
 vi.mock('@/lib/registration-duplicates', () => ({
   findExistingRegistrations: h.findExisting,
-  resolveDuplicate: () => ({ kind: 'none' }),
+  resolveDuplicate: h.resolveDuplicate,
 }))
 vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: h.dispatch }))
 vi.mock('@/lib/school-link', () => ({
@@ -130,6 +138,12 @@ beforeEach(() => {
   rec.reset()
   h.getEventBySlug.mockResolvedValue(EVENT)
   h.findOffer.mockResolvedValue(null)
+  h.findExisting.mockResolvedValue(new Map())
+  h.resolveDuplicate.mockReturnValue({ kind: 'none' })
+  h.currentMember.mockResolvedValue(null)
+  h.consentBlock.mockResolvedValue(null)
+  h.auth.mockResolvedValue({ userId: null })
+  h.rateLimit.mockResolvedValue(null)
   onHost(CANARY)
   mirror({})
 })
@@ -221,6 +235,136 @@ describe('S5 A7: register/individual on a tenant event', () => {
     mirror(null)
     expect(await settle(await post())).toEqual({ status: 404, body: { error: 'Event not found' } })
     expect(writes()).toEqual([])
+  })
+})
+
+// Owner decision, 10 Nov 2026: a Stellr member's profile is not used at a tenant's
+// event until S7's consent grant. The individual form takes typed details only, as
+// the tenant join page does: the signed-in login's Stellr record is never read, its
+// address never replaces the typed one, and its date of birth is never compared.
+describe('S5 A7 follow-up: register/individual on a tenant event takes typed details only', () => {
+  /** A Stellr member signed in on the tenant's host, whose record differs from what they type. */
+  const MEMBER = { id: 'm-stellr', email: 'member@example.com', date_of_birth: '1970-03-03' }
+  const TYPED = { email: 'typed@example.com', date_of_birth: '1990-05-05' }
+
+  beforeEach(() => {
+    h.currentMember.mockResolvedValue(MEMBER)
+  })
+
+  it('an adult signed in as a member is registered with the address and date of birth they typed, linked to no member', async () => {
+    const res = await settle(await post(TYPED))
+    expect(res).toEqual({ status: 201, body: { registrationId: 'reg-1', checkoutUrl: null, signInToken: null } })
+    expect(h.currentMember).not.toHaveBeenCalled()
+    expect(h.consentBlock).not.toHaveBeenCalled()
+    expect(rec.calls.some((c) => c.table === 'members')).toBe(false)
+    expect(rec.payloads('insert', 'participants')[0]).toMatchObject({
+      tenant_id: CANARY, member_id: null, email: TYPED.email, date_of_birth: TYPED.date_of_birth,
+    })
+    expect(JSON.stringify(rec.calls)).not.toContain(MEMBER.email)
+    expect(h.findExisting.mock.calls[0][1]).toEqual([TYPED.email])
+    expect(h.tenantConfirmation.mock.calls[0][1]).toMatchObject({ tenantId: CANARY, to: TYPED.email })
+    expect(h.provision).not.toHaveBeenCalled()
+  })
+
+  it('the same date of birth as the account still takes the typed address', async () => {
+    const res = await settle(await post({ ...TYPED, date_of_birth: MEMBER.date_of_birth }))
+    expect(res.status).toBe(201)
+    expect(rec.payloads('insert', 'participants')[0]).toMatchObject({ email: TYPED.email, member_id: null })
+    expect(h.currentMember).not.toHaveBeenCalled()
+  })
+
+  it('typing the account’s own address is not taken as the registrant: an earlier registration gets the answer anyone gets', async () => {
+    h.findExisting.mockResolvedValue(new Map([[MEMBER.email, [{ registrationId: 'reg-old' }]]]))
+    h.resolveDuplicate.mockReturnValue({ kind: 'resume', registration: { registrationId: 'reg-old', type: 'individual', status: 'pending' } })
+    const res = await settle(await post({ ...TYPED, email: MEMBER.email }))
+    expect(h.resolveDuplicate).toHaveBeenCalledWith([{ registrationId: 'reg-old' }], { sessionMatches: false })
+    expect(res).toMatchObject({ status: 409, body: { code: 'registration_on_file' } })
+    expect(h.checkout).not.toHaveBeenCalled()
+    expect(writes()).toEqual([])
+    expect(h.currentMember).not.toHaveBeenCalled()
+  })
+
+  it('a parent signed in, typing their 15-year-old’s details, gets the under-18 refusal and nothing about their own account', async () => {
+    const res = await settle(await post({ email: 'teen@example.com', date_of_birth: dateBefore(15) }))
+    expect(res).toEqual({
+      status: 400,
+      body: { code: 'under_minimum_age', error: 'You must be 18 or older to register for this event online. Please contact the event organiser.' },
+    })
+    expect(h.currentMember).not.toHaveBeenCalled()
+    expect(writes()).toEqual([])
+  })
+
+  it('a 13-year-old signed in to Stellr, awaiting a parent’s consent there, gets the tenant’s age answer, not Stellr’s consent state', async () => {
+    h.currentMember.mockResolvedValue(null)
+    h.consentBlock.mockResolvedValue(NextResponse.json({ code: 'guardian_consent_pending', error: 'pending' }, { status: 403 }))
+    const res = await settle(await post({ email: 'young@example.com', date_of_birth: dateBefore(13) }))
+    expect(res).toMatchObject({ status: 400, body: { code: 'under_minimum_age' } })
+    expect(h.consentBlock).not.toHaveBeenCalled()
+    expect(writes()).toEqual([])
+  })
+
+  // The contrast, through this file's own mocks: Stellr's event on Stellr's host still
+  // reads the session, so the harness reaches the code the tenant path now skips.
+  describe('on Stellr’s own event, as before', () => {
+    beforeEach(() => {
+      onHost(STELLR_TENANT_ID)
+      mirror(null)
+      h.getEventBySlug.mockResolvedValue({ ...EVENT, title: 'Colorado' })
+    })
+
+    it('a different date of birth from the account is refused (date_of_birth_differs), with nothing written', async () => {
+      const res = await settle(await post(TYPED))
+      expect(res).toMatchObject({ status: 409, body: { code: 'date_of_birth_differs' } })
+      expect(h.consentBlock).toHaveBeenCalledTimes(1)
+      expect(h.currentMember).toHaveBeenCalledTimes(1)
+      expect(writes()).toEqual([])
+    })
+
+    it('the session’s address replaces the typed one', async () => {
+      const res = await settle(await post({ ...TYPED, date_of_birth: MEMBER.date_of_birth }))
+      expect(res.status).toBe(201)
+      expect(rec.payloads('insert', 'participants')[0]).toMatchObject({ email: MEMBER.email, tenant_id: STELLR_TENANT_ID })
+    })
+  })
+})
+
+// Review fix: Stellr gives a signed-in retry its own count because an email on file is
+// asked to sign in first. A tenant's event never asks that, and its gate takes no
+// sign-in as an identity, so a signed-in caller there shares the anonymous count:
+// new accounts cannot multiply what one address may register.
+describe('S5 A7 follow-up: register/individual on a tenant host, the rate limit', () => {
+  it('a signed-in caller is counted as anyone is: no per-account bucket, no session cap', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    await post()
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], (c[2] as { limit: number }).limit, c[3]])).toEqual([
+      ['register-individual', 3, 'canary-cup'],
+    ])
+  })
+
+  it('with the real limiter, a second account cannot add to what one IP has registered for the event', async () => {
+    const { rateLimit: real } = await vi.importActual<typeof import('@/lib/rate-limit-async')>('@/lib/rate-limit-async')
+    h.rateLimit.mockImplementation(real as never)
+    mirror({})
+    h.getEventBySlug.mockResolvedValue(EVENT)
+    // A slug of its own, so no other test's count is in this bucket.
+    const send = (n: number) => post({ event_slug: 'canary-cup-limit', email: `typed${n}@example.com` })
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    for (const n of [1, 2, 3]) expect((await send(n)).status).toBe(201)
+    h.auth.mockResolvedValue({ userId: 'user_2' })
+    expect((await send(4)).status).toBe(429)
+    expect(h.tenantConfirmation).toHaveBeenCalledTimes(3)
+  })
+
+  it('on Stellr’s host a signed-in retry keeps its own count, as before', async () => {
+    onHost(STELLR_TENANT_ID)
+    mirror(null)
+    h.getEventBySlug.mockResolvedValue({ ...EVENT, title: 'Colorado' })
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    await post()
+    expect(h.rateLimit.mock.calls.map((c) => [c[1], (c[2] as { limit: number }).limit, c[3]])).toEqual([
+      ['register-individual-session', 30, 'canary-cup'],
+      ['register-individual', 3, 'canary-cup:user_1'],
+    ])
   })
 })
 

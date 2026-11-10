@@ -9,6 +9,8 @@ import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { assertNotImpersonating, resolveRequestMember } from '@/lib/impersonation'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { rowTenant, tenantPaymentsUnavailable } from '@/lib/registration/event-context'
 import {
   eventSeatPrice,
   groupInvoiceSummary,
@@ -35,7 +37,7 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('remove') }),
 ])
 
-const REG_COLUMNS = 'id, type, event_slug, teacher_member_id, teacher_email, teacher_poc_email, registrant_role, invoice_requested, invoice_paid_at'
+const REG_COLUMNS = 'id, type, event_slug, teacher_member_id, teacher_email, teacher_poc_email, registrant_role, invoice_requested, invoice_paid_at, tenant_id'
 
 type Db = ReturnType<typeof supabaseServer>
 
@@ -49,9 +51,18 @@ function lockedReason(reg: { invoice_requested?: boolean | null; invoice_paid_at
   return null
 }
 
-async function loadGroup(db: Db, id: string) {
+type Group = TeamViewerRegistration & { id: string; event_slug: string; teacher_member_id: string | null; invoice_requested: boolean | null; invoice_paid_at: string | null; tenant_id?: string | null }
+
+/**
+ * The group, when it is one of this host's tenant's (Stellr's on Stellr's hosts). S5 A8:
+ * another tenant's group answers as a missing one, so a tenant group's teacher_email
+ * opens nothing in a Stellr member's portal.
+ */
+async function loadGroup(db: Db, id: string): Promise<Group | null> {
   const { data } = await db.from('registrations').select(REG_COLUMNS).eq('id', id).eq('type', 'group').maybeSingle()
-  return data as (TeamViewerRegistration & { id: string; event_slug: string; teacher_member_id: string | null; invoice_requested: boolean | null; invoice_paid_at: string | null }) | null
+  const group = data as Group | null
+  if (!group || rowTenant(group.tenant_id) !== (await requestTenant()).tenantId) return null
+  return group
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -130,6 +141,8 @@ export const POST = withAudit(auditSpec, async (req: NextRequest, { params }: { 
   const body = parsed.data
 
   // Before Stripe is asked anything: the cheap refusals.
+  // S5 A8: nothing is billed for another tenant until S9.
+  if (rowTenant(registration.tenant_id) !== STELLR_TENANT_ID) return tenantPaymentsUnavailable()
   if (!registration.invoice_requested || registration.invoice_paid_at) {
     return NextResponse.json({ error: lockedReason(registration, true) }, { status: 409 })
   }

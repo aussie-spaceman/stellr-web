@@ -343,6 +343,44 @@ describe('assertRegistrable: the register routes’ consent rule (S5 A7)', () =>
   it('the age is the one the rule names', () => {
     expect(TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT).toBe(18)
   })
+
+  describe('S5 wave 6: guardian consent', () => {
+    afterEach(() => vi.unstubAllEnvs())
+
+    it('flag off: guardianConsent changes nothing, every minor is refused', () => {
+      expect(assertRegistrable('2010-06-01', ctx, { guardianConsent: true })).toEqual({ ok: false, reason: 'under_minimum_age', error: CONSENT })
+    })
+
+    it('flag on, a route that can take a guardian: a 14-17-year-old is admitted, marked guardianConsentRequired', () => {
+      vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+      expect(assertRegistrable('2010-06-01', ctx, { guardianConsent: true })).toEqual({ ...assertEligible('2010-06-01', ctx), guardianConsentRequired: true })
+      // 18 on the day but 17 today: still a minor now, so consent is required.
+      expect(assertRegistrable('2008-11-20', ctx, { guardianConsent: true })).toMatchObject({ ok: true, guardianConsentRequired: true })
+    })
+
+    it('flag on, but a route that cannot take a guardian (group, group-join): still refused', () => {
+      vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+      expect(assertRegistrable('2010-06-01', ctx)).toEqual({ ok: false, reason: 'under_minimum_age', error: CONSENT })
+    })
+
+    it('flag on: the floor still refuses a 13-year-old on the day, and an adult needs no consent', () => {
+      vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+      expect(assertRegistrable('2012-12-03', ctx, { guardianConsent: true })).toEqual(assertEligible('2012-12-03', ctx))
+      expect(assertRegistrable('2012-12-03', ctx, { guardianConsent: true })).toMatchObject({ ok: false, reason: 'under_minimum_age' })
+      expect(assertRegistrable('2008-11-04', ctx, { guardianConsent: true })).not.toHaveProperty('guardianConsentRequired')
+    })
+
+    it('only exactly "true" turns it on', () => {
+      vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'TRUE')
+      expect(assertRegistrable('2010-06-01', ctx, { guardianConsent: true })).toMatchObject({ ok: false })
+    })
+
+    it('flag on: Stellr’s events are unchanged', () => {
+      vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+      const stellr = stellrContext({ date: '2026-12-02' })
+      expect(assertRegistrable('2011-06-01', stellr, { guardianConsent: true })).toEqual(assertEligible('2011-06-01', stellr))
+    })
+  })
 })
 
 describe('eligibilityContextFromMirror', () => {

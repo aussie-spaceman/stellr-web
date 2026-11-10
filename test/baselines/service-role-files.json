@@ -1435,7 +1435,7 @@
     },
     "lib/deletion/execute.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: member_pending_consent, participants, registrations"
+      "reason": "auto: touches tenant or event-scoped tables; tables: member_pending_consent, participants, registrations, tenant_guardian_consents"
     },
     "lib/deletion/external.ts": {
       "class": "convert",

@@ -350,7 +350,13 @@ export default function IndividualRegistrationForm({
         throw new Error(payload.error ?? 'Registration failed')
       }
 
-      const { registrationId, checkoutUrl, signInToken, resume } = payload
+      const { registrationId, checkoutUrl, signInToken, resume, consentPending } = payload
+      // S5 wave 6: a 14-17-year-old on another organiser's event, waiting for a
+      // guardian's signature. No checkout and no sign-in on that path.
+      if (consentPending) {
+        router.push(`/register/${eventSlug}/confirmation?id=${registrationId}&type=individual&consent=pending`)
+        return
+      }
       // Their own unfinished registration — straight back to checkout.
       if (resume && checkoutUrl) {
         window.location.href = checkoutUrl

@@ -67,6 +67,7 @@
 /lib/tenancy/event-in-scope.ts      @aussie-spaceman
 /lib/tenancy/scope-context.ts       @aussie-spaceman
 /lib/registration/eligibility.ts    @aussie-spaceman
+/lib/registration/tenant-guardian-consent.ts @aussie-spaceman
 /test/tenant-surface-routes.test.ts @aussie-spaceman
 /lib/tenancy/request-tenant.ts      @aussie-spaceman
 /test/proxy-tenant-routing.test.ts  @aussie-spaceman
@@ -104,6 +105,7 @@
 /scripts/tenant-host-cap.mjs        @aussie-spaceman
 /lib/security/stellr-only-dispositions.ts @aussie-spaceman
 /test/registration/participants-eligibility-sql.test.ts @aussie-spaceman
+/test/registration/tenant-guardian-consent-sql.test.ts @aussie-spaceman
 /scripts/codemods/authz*.ts         @aussie-spaceman
 /scripts/codemods/fixtures/authz/** @aussie-spaceman
 

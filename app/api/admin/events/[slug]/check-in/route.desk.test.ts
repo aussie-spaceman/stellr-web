@@ -166,6 +166,48 @@ describe('mentors and event managers', () => {
   })
 })
 
+describe('S5 wave 6: a tenant participant whose guardian has not signed', () => {
+  // What PostgREST returns when zzz_participants_refuse_unconsented_check_in refuses the write.
+  const REFUSAL = { code: '23514', message: 'guardian_consent_pending', details: null, hint: null }
+  const refuseUpdates = () => {
+    const base = respond.fn
+    respond.fn = ((call: Call, single: boolean) =>
+      call.op === 'update' ? { data: null, error: REFUSAL } : base(call, single)) as typeof respond.fn
+  }
+
+  it.each([
+    // Built in the test, after beforeEach sets the code secret.
+    ['manual', () => ({ action: 'manual', participantId: A })],
+    ['group_check_in', () => ({ action: 'group_check_in', participantIds: [A, B] })],
+    ['scan', () => ({ action: 'scan', code: signCheckInCode('nevada', 'p', A) })],
+  ])('%s: the desk is told why (409), not "Database error"', async (_l, body) => {
+    refuseUpdates()
+    const res = await post(body())
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      code: 'guardian_consent_pending',
+      error: "Not checked in: a parent or guardian hasn't signed the consent form for this participant yet. In a group, check the others in one at a time.",
+    })
+  })
+
+  it('any other failed write is still a 500', async () => {
+    const base = respond.fn
+    respond.fn = ((call: Call, single: boolean) =>
+      call.op === 'update' ? { data: null, error: { code: '23514', message: 'participant eligibility: dob_missing' } } : base(call, single)) as typeof respond.fn
+    const res = await post({ action: 'manual', participantId: A })
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'Database error' })
+  })
+
+  it('a mentor or event manager check-in is not a participant check-in: it never writes participants', async () => {
+    refuseUpdates()
+    const res = await post({ action: 'staff_check_in', staffKey: 'v.m1' })
+    expect(res.status).toBe(200)
+    expect(updates()).toHaveLength(0)
+    expect(calls.filter((c) => c.table === 'participants')).toHaveLength(0)
+  })
+})
+
 describe('scan', () => {
   // Nevada (6 Nov): the event's own manager scans at the desk as well as admins.
   // S0 scoped open/close to the caller's events; scanning must be unaffected.

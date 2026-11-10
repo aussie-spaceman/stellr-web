@@ -133,7 +133,11 @@ export async function POST(req: NextRequest) {
     const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
     note.userId = userId
     const { tenantId } = await requestTenant()
-    if (userId) {
+    // Only on Stellr's host. A tenant's event never asks an organiser on file to sign
+    // in, and its gate takes no sign-in as an identity (S5 A7 follow-up), so a
+    // signed-in caller there counts against the same allowance as anyone else.
+    const sessionUserId = tenantId === STELLR_TENANT_ID ? userId : null
+    if (sessionUserId) {
       const eventCapped = await rateLimit(req, 'register-group-session', { limit: 30, windowMs: HOUR_MS, tenantId }, eventKey)
       if (eventCapped) {
         note.status = eventCapped.status
@@ -144,7 +148,7 @@ export async function POST(req: NextRequest) {
       req,
       'register-group',
       { limit: 3, windowMs: HOUR_MS, tenantId },
-      userId ? `${eventKey}:${userId}` : eventKey,
+      sessionUserId ? `${eventKey}:${sessionUserId}` : eventKey,
     )
     if (rateLimited) {
       note.status = rateLimited.status

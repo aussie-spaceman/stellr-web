@@ -284,13 +284,16 @@ export const eligibilityUnavailable = (): Response =>
  * or invoice is made on Stellr's Stripe account. Wording is a proposal.
  */
 export const tenantPaymentsUnavailable = (): Response =>
-  NextResponse.json(
-    {
-      code: 'tenant_payments_unavailable',
-      error: 'Paid registration for this event isn’t available online yet. Please contact the event organiser.',
-    },
-    { status: 503 },
-  )
+  NextResponse.json({ ...TENANT_PAYMENTS_UNAVAILABLE }, { status: 503 })
+
+/**
+ * The body of that answer, for a writer that hands back a status and body rather than
+ * a Response (S5 A8: the roster add, the sheet sync and the group payment change).
+ */
+export const TENANT_PAYMENTS_UNAVAILABLE = Object.freeze({
+  code: 'tenant_payments_unavailable' as const,
+  error: 'Paid registration for this event isn’t available online yet. Please contact the event organiser.',
+})
 
 /** The tenant a registration row belongs to: its tenant_id, or Stellr for a row the backfill has not reached. */
 export function rowTenant(tenantId: string | null | undefined): string {

@@ -3,6 +3,7 @@ import { correctAgreementRecipient, normaliseEmail } from '@/lib/agreement-corre
 import { lookupSuppressions } from '@/lib/email/suppressions'
 import { ownsTeam, teamViewerRole, type TeamViewerRole } from '@/lib/team-access'
 import { maskEmail } from '@/lib/utils'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { aboutName, announceCorrection, announceSuggestion, roleLabel } from '@/lib/esign/bounce-notices'
 import { hashToken, isWellFormedToken } from '@/lib/esign/email-change-tokens'
 
@@ -41,6 +42,7 @@ interface Registration {
   teacher_member_id: string | null
   teacher_email: string | null
   teacher_poc_email: string | null
+  tenant_id?: string | null
 }
 
 interface LiveAgreement {
@@ -168,14 +170,19 @@ type OrganiserAccess = { ok: true; registration: Registration; role: TeamViewerR
 async function organiserAccess(db: SupabaseClient, member: OrganiserMember, registrationId: string): Promise<OrganiserAccess> {
   const { data } = await db
     .from('registrations')
-    .select('id, type, registrant_role, teacher_member_id, teacher_email, teacher_poc_email')
+    .select('id, type, registrant_role, teacher_member_id, teacher_email, teacher_poc_email, tenant_id')
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
   const registration = data as Registration | null
   // Someone else's group answers exactly as a group that does not exist, so the
   // route cannot be used to learn which registration ids are real (IDOR suite).
-  if (!registration || !ownsTeam(member, registration)) return refuse(404, 'NOT_FOUND', 'Team not found')
+  // S5 A8: so does another tenant's group. These corrections act on Stellr's own
+  // consent forms, and the organiser routes that reach them serve Stellr's hosts only,
+  // so a tenant group's teacher_email opens nothing here.
+  if (!registration || (registration.tenant_id ?? STELLR_TENANT_ID) !== STELLR_TENANT_ID || !ownsTeam(member, registration)) {
+    return refuse(404, 'NOT_FOUND', 'Team not found')
+  }
   const role = teamViewerRole(member, { ...registration, registrant_role: registration.registrant_role }) ?? 'teacher'
   const organiserEmails = [member.email, registration.teacher_email, registration.teacher_poc_email].filter((e): e is string => !!e)
   return { ok: true, registration, role, organiserEmails }

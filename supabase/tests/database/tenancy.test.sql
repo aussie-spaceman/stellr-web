@@ -164,6 +164,7 @@ SELECT set_eq(
     'public.tenancy_settings',
     'public.tenant_data_keys',
     'public.tenant_domains',
+    'public.tenant_guardian_consents',
     'public.tenant_memberships',
     'public.tenants',
     'public.tier_grant_rules',

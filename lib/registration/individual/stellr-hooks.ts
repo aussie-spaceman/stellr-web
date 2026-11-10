@@ -4,6 +4,8 @@ import { autoGrantBaseMembership, recordParticipation } from '@/lib/community/ev
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { attachOfferToRegistration } from '@/lib/scholarships'
 import { sendTenantRegistrationConfirmation } from '../tenant-confirmation'
+import { recordConsentAudit, sendConsentPendingNotice } from '../tenant-guardian-consent'
+import { sendTenantSigningInvitation } from '@/lib/event-emails/tenant-signing'
 import type { GatedRegistration } from './gate'
 import type { IndividualBody } from './parse'
 import type { PersistedRegistration } from './persist'
@@ -15,10 +17,9 @@ import type { PersistedRegistration } from './persist'
  *
  * S5 A7: all of it is Stellr's, so a tenant's event gets none of it. The
  * registrant gets the tenant's confirmation email instead (B14's tenant share).
- * The agreement is the consent for a minor, and it is held for a tenant's event,
- * not sent as Stellr: Stellr's DocuSign templates and sender are Stellr's, and the
- * signing engine has no tenant sender yet (A11). Whether a tenant's minors may be
- * registered before that exists is an owner decision.
+ * Stellr's agreement is never sent for a tenant's event: its templates and sender
+ * are Stellr's. A tenant event's minor (S5 wave 6) gets the platform-locked
+ * guardian consent instead, from the tenant's sender.
  */
 export async function runIndividualHooks(
   gated: GatedRegistration,
@@ -30,6 +31,33 @@ export async function runIndividualHooks(
   const { event_slug, first_name, last_name, phone, grade, school_name, school_address_state } = body
 
   if (!gated.context.isPlatformOwner) {
+    // S5 wave 6: a consent-pending participant. The guardian's invitation goes from
+    // the tenant's sender through B14's checked call, and the registrant is told
+    // their place waits on it. No "registered" confirmation until the guardian signs.
+    if (row.consent) {
+      const tenantId = gated.context.tenantId
+      const invite = await sendTenantSigningInvitation(db, { tenantId, envelopeRowId: row.consent.agreementId })
+      // Sent, or waiting in the signing outbox's daily allowance (deferred), which
+      // sends it later. Anything else did not go: the registrant is not told it did.
+      const invitation = !invite.ok
+        ? invite.reason
+        : invite.result.failed > 0
+          ? 'failed'
+          : invite.result.deferred > 0 && invite.result.sent === 0
+            ? 'deferred'
+            : 'sent'
+      const invitationOut = invitation === 'sent' || invitation === 'deferred'
+      if (!invitationOut) console.error(`[register/individual] guardian invitation not sent: ${invitation}`)
+      // The platform audit is where staff see an invitation that did not go.
+      await recordConsentAudit(
+        'registration.guardian_consent.request',
+        { id: row.consent.consentId, tenant_id: tenantId },
+        { invitation },
+        { afterResponse: true },
+      )
+      await sendConsentPendingNotice(db, { tenantId, to: email, firstName: first_name ?? '', eventTitle, invitationSent: invitationOut })
+      return null
+    }
     await sendTenantRegistrationConfirmation(db, {
       tenantId: gated.context.tenantId,
       to: email,

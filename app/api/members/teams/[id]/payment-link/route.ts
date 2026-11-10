@@ -8,13 +8,25 @@ import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 import { ensureSeatPayToken, seatDiscount, seatPayPageUrl } from '@/lib/individual-payment'
+import { withAudit } from '@/lib/audit/route'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { rowTenant, tenantPaymentsUnavailable } from '@/lib/registration/event-context'
+import { teamAudit, TEAM_SEAT_PAYMENT_LINK_AUDIT } from '@/lib/registration/team-audit'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 // POST /api/members/teams/[id]/payment-link
 // Creates a fresh Stripe checkout session for a member with a pending individual payment.
-export async function POST(
-  _req: NextRequest,
+//
+// S5 A8: only a registration of this host's tenant (another tenant's answers as
+// missing), and never a Checkout for a tenant's registration until S9: that gets the
+// tenant payments answer before Stripe is asked anything. Audited behind
+// PLATFORM_AUDIT_ENABLED on the registration's tenant's chain.
+export const POST = withAudit(TEAM_SEAT_PAYMENT_LINK_AUDIT, createSeatPaymentLink)
+
+async function createSeatPaymentLink(
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -53,11 +65,17 @@ export async function POST(
   // Load registration to get event slug
   const { data: registration } = await db
     .from('registrations')
-    .select('event_slug, event_title, invoice_coupon_id, share_estimate')
+    .select('event_slug, event_title, invoice_coupon_id, share_estimate, tenant_id')
     .eq('id', registrationId)
     .maybeSingle()
 
   if (!registration) return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
+  const regTenant = rowTenant((registration as { tenant_id?: string | null }).tenant_id)
+  if (regTenant !== (await requestTenant()).tenantId) {
+    return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
+  }
+  teamAudit(req, { registrationId, tenantId: regTenant, userId })
+  if (regTenant !== STELLR_TENANT_ID) return tenantPaymentsUnavailable()
 
   // A group sharing the teacher's cost: the seat's own pay page prices the share
   // and takes a code for the place only (lib/teacher-share.ts).

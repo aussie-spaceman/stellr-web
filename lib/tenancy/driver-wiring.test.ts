@@ -42,7 +42,7 @@ describe('the tenant database driver stays server-side and off by default', () =
     expect(files.some((f) => f.path === DRIVER)).toBe(true)
   })
 
-  it("is not in proxy.ts's import closure, dynamic imports included", () => {
+  it("is not in proxy.ts's import closure, dynamic imports included", { timeout: 30_000 }, () => {
     const closure = importClosure('proxy.ts', readRepoFile)
     expect(closure.has('lib/rate-limit.ts')).toBe(true)
     expect(closure.has(DB)).toBe(false)
@@ -51,7 +51,7 @@ describe('the tenant database driver stays server-side and off by default', () =
     expect(pgImporters).toEqual([])
   })
 
-  it("is not reachable from any 'use client' module", () => {
+  it("is not reachable from any 'use client' module", { timeout: 30_000 }, () => {
     const clients = files.filter((f) => !/\.(test|spec)\./.test(f.path) && isClient(f.src)).map((f) => f.path)
     expect(clients.length).toBeGreaterThan(20)
     const closure = importClosureOf(clients, readRepoFile)
@@ -61,15 +61,20 @@ describe('the tenant database driver stays server-side and off by default', () =
     expect(pgImporters).toEqual([])
   })
 
-  it('the postgres package is imported only by the driver and its CI integration test', () => {
-    const importers = files.filter((f) => runtimeImports(f.path, f.src).some((s) => PG.test(s))).map((f) => f.path)
+  // Parsing every file's imports is slow on CI's runner. A file cannot import a
+  // module without naming it in its source, so only files that mention the name
+  // are parsed. The assertions below are unchanged.
+  it('the postgres package is imported only by the driver and its CI integration test', { timeout: 30_000 }, () => {
+    const importers = files
+      .filter((f) => f.src.includes('postgres') && runtimeImports(f.path, f.src).some((s) => PG.test(s)))
+      .map((f) => f.path)
     // The two-tenant kit (C12) is CI-only like the integration test: its owner connection for fixtures.
     expect(importers.sort()).toEqual([DRIVER, 'test/integration/tenant-db.int.test.ts', 'test/integration/two-tenant/kit.ts'])
   })
 
-  it('the driver is loaded only by lib/tenancy/db.ts, and only with a dynamic import', () => {
+  it('the driver is loaded only by lib/tenancy/db.ts, and only with a dynamic import', { timeout: 30_000 }, () => {
     const importers = files
-      .filter((f) => f.path !== DRIVER && runtimeImports(f.path, f.src).some((s) => /(?:^|\/)tenancy\/driver$|^\.\/driver$/.test(s)))
+      .filter((f) => f.path !== DRIVER && f.src.includes('driver') && runtimeImports(f.path, f.src).some((s) => /(?:^|\/)tenancy\/driver$|^\.\/driver$/.test(s)))
       .map((f) => f.path)
     // The kit (C12) imports it only to close the pools after a run.
     expect(importers.sort()).toEqual([

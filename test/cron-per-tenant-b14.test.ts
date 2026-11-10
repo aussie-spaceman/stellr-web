@@ -9,8 +9,9 @@ import { fakeChainDb, runnerAnswer, type ChainCall, type Row } from '@/test/help
 // touches Stellr selects the same rows, sends the same mail and writes the same
 // cron_runs result as before. Another tenant's event mail goes out only with
 // TENANT_EVENT_MAIL_ENABLED, from its own sender, inside its own slice; one
-// tenant failing does not stop the next. Another tenant's envelopes are held
-// whatever the flag says, until the signing engine can send as that tenant.
+// tenant failing does not stop the next. Another tenant's Stellr-signing
+// envelopes are chased only with the flag on, from its own sender; its DocuSign
+// envelopes are always held.
 
 const h = vi.hoisted(() => ({
   db: null as unknown,
@@ -282,6 +283,11 @@ const env = (id: string, provider: 'docusign' | 'native', tenant: string | null)
 
 function remindersDb(envelopes: Row[]) {
   return fakeChainDb((call: ChainCall) => {
+    // One tenant's sender read (loadTenantSender) is a single-row read by id.
+    if (call.table === 'tenants' && call.single) {
+      const id = call.filters.find((f) => f.method === 'eq')?.args[1]
+      return { data: TENANTS.find((t) => t.id === id) ?? null, error: null }
+    }
     const runner = runnerAnswer(call, TENANTS)
     if (runner) return runner
     if (call.table === 'agreements' && call.op === 'select') return { data: envelopes, error: null }
@@ -321,16 +327,89 @@ describe('docusign-reminders', () => {
     expect(finished).toMatchObject({ processed: 1, eligible: 2, tenantHeld: 1 })
   })
 
-  it('flag on: still holds every row of another tenant, Stellr signing included, so nothing is sent to its families as Stellr', async () => {
-    // The signing reminder goes through lib/esign/outbox.ts with Stellr's own
-    // sender; until that path takes a tenant sender, a tenant's envelope waits.
-    h.db = remindersDb([env('s1', 'native', null), env('a-native', 'native', A), env('a-docusign', 'docusign', A), env('b1', 'native', B)]).db
+  it('flag on: chases another tenant’s Stellr-signing envelopes in its own slice, and still holds its DocuSign ones', async () => {
+    // The signing reminder itself goes through lib/esign/outbox.ts with the
+    // tenant's sender (lib/esign/tenant-sender.test.ts proves the From and
+    // Reply-To); here the cron hands each tenant's native rows to the engine.
+    const fake = remindersDb([env('s1', 'native', null), env('a-native', 'native', A), env('a-docusign', 'docusign', A), env('b1', 'native', B)])
+    h.db = fake.db
     const { finished } = await runReminders(true)
-    expect(reminded()).toEqual(['s1'])
+    expect(reminded()).toEqual(['s1', 'a-native', 'b1'])
+    // No DocuSign-era email (Stellr's sender) for any tenant row.
     expect(h.sendEmail).not.toHaveBeenCalled()
-    expect(finished).toMatchObject({ processed: 1, eligible: 4, tenantHeld: 3 })
-    // Only Stellr ran, so the run stays a plain Stellr-only run with no ledger.
-    expect(finished.tenants).toBeUndefined()
+    expect(finished).toMatchObject({ processed: 3, eligible: 4, tenantHeld: 1 })
+    expect(Object.keys(finished.tenants as Row).sort()).toEqual([STELLR_TENANT_ID, A, B].sort())
+    expect(h.fails).toEqual([])
+  })
+
+  it('flag on: a tenant with no usable sender claims nothing, sends nothing, and is recorded; the next tenant still runs', async () => {
+    const fake = remindersDb([env('q1', 'native', NO_SENDER), env('a1', 'native', A)])
+    h.db = fake.db
+    const { finished } = await runReminders(true)
+    expect(reminded()).toEqual(['a1'])
+    expect(h.fails).toEqual([`t:${NO_SENDER}:sender`])
+    // Only A's envelope was claimed.
+    const claims = fake.calls.filter((c) => c.table === 'agreements' && c.op === 'update')
+    expect(claims.map((c) => c.filters.find((f) => f.method === 'eq')?.args[1])).toEqual(['a1'])
+    expect(finished).toMatchObject({ processed: 1, eligible: 2 })
+  })
+
+  it('flag on: a tenant whose sender is gone by the time the engine reads it gets its reminder slot back', async () => {
+    const fake = remindersDb([{ ...env('a1', 'native', A), reminder_count: 1, reminder_sent_at: '2026-10-01T00:00:00.000Z' }, env('b1', 'native', B)])
+    h.db = fake.db
+    h.remind.mockImplementation(async (_db: unknown, row: { id: string }) => {
+      // The same module instance the route was loaded with.
+      const { TenantSenderRequiredError } = await import('@/lib/event-emails/tenant-mail')
+      if (row.id === 'a1') throw new TenantSenderRequiredError()
+      return 1
+    })
+    const { finished } = await runReminders(true)
+    expect(reminded()).toEqual(['a1', 'b1'])
+    expect(h.fails).toEqual([`t:${A}:a1`])
+    expect(finished).toMatchObject({ processed: 1 })
+    const updates = fake.calls.filter((c) => c.table === 'agreements' && c.op === 'update')
+    const a1 = updates.filter((c) => c.filters.find((f) => f.method === 'eq')?.args[1] === 'a1')
+    expect(a1).toHaveLength(2)
+    const claim = a1[0].payload as { reminder_sent_at: string }
+    expect(a1[1].payload).toEqual({ reminder_sent_at: '2026-10-01T00:00:00.000Z', reminder_count: 1 })
+    expect(a1[1].filters.filter((f) => f.method === 'eq').map((f) => f.args)).toEqual([
+      ['id', 'a1'],
+      ['reminder_count', 2],
+      ['reminder_sent_at', claim.reminder_sent_at],
+    ])
+    // b1 was claimed once and not given back.
+    expect(updates.filter((c) => c.filters.find((f) => f.method === 'eq')?.args[1] === 'b1')).toHaveLength(1)
+  })
+
+  it('any other failure keeps the claim, as before', async () => {
+    const fake = remindersDb([env('a1', 'native', A)])
+    h.db = fake.db
+    h.remind.mockImplementation(async () => { throw new Error('engine down') })
+    await runReminders(true)
+    expect(fake.calls.filter((c) => c.table === 'agreements' && c.op === 'update')).toHaveLength(1)
+  })
+
+  it('flag on: a tenant whose chase throws is recorded under its id, and the next tenant still runs', async () => {
+    h.db = remindersDb([env('a1', 'native', A), env('b1', 'native', B)]).db
+    h.remind.mockImplementation(async (_db: unknown, row: { id: string }) => {
+      if (row.id === 'a1') throw new Error('engine down')
+      return 1
+    })
+    const { finished } = await runReminders(true)
+    expect(reminded()).toEqual(['a1', 'b1'])
+    expect(h.fails).toEqual([`t:${A}:a1`])
+    expect(finished).toMatchObject({ processed: 1 })
+  })
+
+  it.each([['TRUE'], ['1'], ['yes']])('flag %s is not exactly true: every tenant row is held', async (value) => {
+    h.db = remindersDb([env('s1', 'native', null), env('a1', 'native', A)]).db
+    vi.resetModules()
+    vi.stubEnv('PLATFORM_AUDIT_ENABLED', '')
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', value)
+    const { GET } = await import('@/app/api/cron/docusign-reminders/route')
+    await GET(new Request('https://example.test/api/cron/docusign-reminders') as never)
+    expect(reminded()).toEqual(['s1'])
+    expect(h.finished[0]).toMatchObject({ processed: 1, tenantHeld: 1 })
   })
 
   it('a Stellr failure keeps its label, and the next envelope still runs', async () => {

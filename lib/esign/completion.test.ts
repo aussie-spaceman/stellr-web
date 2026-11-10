@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
 const { sendEmail, logActivity, recordOptOut, archiveEnvelope } = vi.hoisted(() => ({
@@ -97,5 +97,60 @@ describe('onEnvelopeCompleted', () => {
     await onEnvelopeCompleted(db().client, envelope)
     const sent = sendEmail.mock.calls[0][0] as Record<string, unknown>
     expect(sent.attachments).toBeUndefined()
+  })
+})
+
+// S5 B14 follow-up: Stellr signing's completion emails for another tenant's
+// envelope go from that tenant's sender, or not at all; Stellr's are unchanged.
+describe('onEnvelopeCompleted, Stellr signing, by tenant', () => {
+  const ROCKET = '11111111-1111-4111-8111-111111111111'
+  const QUIET = '33333333-3333-4333-8333-333333333333'
+  const native = (tenant: string | null): CompletedEnvelope => ({
+    ...envelope, provider: 'native', member_id: null, participant_id: null, tenant_id: tenant,
+  })
+  function db() {
+    return fakeSupabase({
+      agreements: [{ id: 'row-1', completion_notified_at: null }],
+      agreement_recipients: [{ id: 'r-1', envelope_row: 'row-1', name: 'Pat Lee', email: 'pat@x.test', member_id: null, token_version: 1 }],
+      tenants: [
+        { id: ROCKET, display_name: 'Rocket Club', branding: { reply_to: 'events@rocket.example.org' } },
+        { id: QUIET, display_name: 'Quiet Org', branding: {} },
+      ],
+    })
+  }
+  const sent = () => sendEmail.mock.calls.map((c) => c[0] as Record<string, unknown>)
+  beforeEach(() => {
+    vi.stubEnv('ESIGN_TOKEN_SECRET', 'k'.repeat(48))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  it.each([[false], [true]])('Stellr’s envelope, flag %s: the signer is emailed from Stellr’s sender', async (on) => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', on ? 'true' : '')
+    await onEnvelopeCompleted(db().client, native(null))
+    expect(sent()).toHaveLength(1)
+    expect(sent()[0]).not.toHaveProperty('from')
+    expect(sent()[0]).not.toHaveProperty('replyTo')
+  })
+
+  it('a tenant’s envelope, flag on: from the tenant’s sender with its Reply-To', async () => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    await onEnvelopeCompleted(db().client, native(ROCKET))
+    expect(sent()).toHaveLength(1)
+    expect(sent()[0]).toMatchObject({
+      to: 'pat@x.test', from: '"Rocket Club via Stellr" <no-reply@mail.stellreducation.org>', replyTo: 'events@rocket.example.org',
+    })
+  })
+
+  it.each([
+    ['the flag is off', '', ROCKET],
+    ['the tenant has no sender', 'true', QUIET],
+  ])('a tenant’s envelope when %s: no email at all, never one as Stellr', async (_what, value, tenant) => {
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', value)
+    expect(await onEnvelopeCompleted(db().client, native(tenant))).toEqual({ notified: true })
+    expect(sendEmail).not.toHaveBeenCalled()
   })
 })

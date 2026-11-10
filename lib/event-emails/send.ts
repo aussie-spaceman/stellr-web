@@ -24,16 +24,11 @@ import {
   type EventForEmail,
 } from './render'
 import { MAX_RECIPIENTS_PER_SEND, type EventEmailRow, type EventEmailStatus } from './types'
-import { isTenantRow, type EventSender } from './tenant-mail'
+import { isTenantRow, TENANT_SENDER_REQUIRED, type EventSender } from './tenant-mail'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
-/**
- * S5 B14: an email belonging to another tenant goes out only with that tenant's
- * sender (lib/event-emails/tenant-mail.ts), never as Stellr. Stellr's rows (NULL
- * or Stellr tenant_id) never meet this. Admin-facing; the wording is a proposal.
- */
-export const TENANT_SENDER_REQUIRED =
-  'This event belongs to another organiser. Its emails go out from their own sender, which isn’t set up yet, so nothing was sent.'
+// S5 B14: defined in tenant-mail.ts since the signing engine refuses with it too.
+export { TENANT_SENDER_REQUIRED }
 
 /** Does a row's tenant_id file it under this tenant? NULL counts as Stellr's, as derivation stamps. */
 export function rowInTenant(rowTenantId: string | null | undefined, tenantId: string): boolean {

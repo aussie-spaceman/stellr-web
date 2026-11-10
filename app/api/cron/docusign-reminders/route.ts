@@ -18,6 +18,7 @@ import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { partitionByTenant, runPerTenant } from '@/lib/cron-tenants'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { loadTenantSender, tenantEventMailEnabled, TenantSenderRequiredError } from '@/lib/event-emails/tenant-mail'
 
 // Hobby's ceiling: no lower value is safe to pick without run times to prove it
 // (a cron cut short mid-batch loses its run.finish), and it cannot be shorter than
@@ -67,7 +68,7 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
 
   const { data: envelopes, error: queryError } = await db
     .from('agreements')
-    .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count, tenant_id')
+    .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count, reminder_sent_at, tenant_id')
     .in('status', ['sent', 'delivered'])
     .lt('sent_at', firstChaseCutoff)
     .lt('reminder_count', MAX_CHASES)
@@ -102,18 +103,24 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
   const stopAt = Date.now() + CHASE_BUDGET_MS
   // Per tenant (S5 B14). Stellr's envelopes, DocuSign and Stellr signing alike,
   // are chased exactly as before: Stellr alone is the runner's plain call, with
-  // the whole budget and failures under the same labels. Another tenant's
-  // envelopes are held, whatever TENANT_EVENT_MAIL_ENABLED says, and counted in
-  // `tenantHeld`: DocuSign stays Stellr's, and a Stellr signing reminder goes
-  // out through lib/esign/outbox.ts, which has no tenant sender yet. Chasing a
-  // tenant's envelope now would send it as Stellr, with replies to Stellr's
-  // inbox, which tenant mail never is (lib/event-emails/tenant-mail.ts). The
-  // slice that gives the signing engine a tenant sender lifts this hold.
+  // the whole budget and failures under the same labels.
+  //
+  // Another tenant's envelopes: with TENANT_EVENT_MAIL_ENABLED exactly 'true',
+  // its Stellr-signing (native) envelopes are chased, inside its own slice, and
+  // the reminder goes from the tenant's own sender ("<Tenant> via Stellr", its
+  // Reply-To) through lib/esign/outbox.ts; a tenant with no usable sender sends
+  // nothing and is recorded as `t:<id>:sender`. Its DocuSign envelopes stay held,
+  // because DocuSign sends as Stellr. Held rows, and every row of another tenant
+  // with the flag off, are counted in `tenantHeld`. A tenant's chase sends none
+  // of the DocuSign-era emails below, which go from Stellr's sender.
+  const tenantMail = tenantEventMailEnabled()
   const work = new Map<string, typeof envelopes>()
   let tenantHeld = 0
   for (const [id, rows] of partitionByTenant(envelopes)) {
-    if (id === STELLR_TENANT_ID) work.set(id, rows)
-    else tenantHeld += rows.length
+    if (id === STELLR_TENANT_ID) { work.set(id, rows); continue }
+    const native = tenantMail ? rows.filter((r) => (r.provider ?? 'docusign') === 'native') : []
+    tenantHeld += rows.length - native.length
+    if (native.length) work.set(id, native)
   }
 
   const outcome = await runPerTenant<{ processed: number; skippedBounced: number; deferred: number }>(db, run, {
@@ -125,6 +132,12 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
     overrunMs: CHASE_OVERRUN_MS,
     fn: async (job) => {
       const before = { processed, skippedBounced, deferred }
+      // Another tenant chases only from its own sender. Without one, nothing is
+      // claimed or sent; its envelopes wait for a later run.
+      if (job.tenant.id !== STELLR_TENANT_ID && !(await loadTenantSender(db, job.tenant.id))) {
+        job.fail('sender', new Error('tenant has no usable sender'))
+        return { processed: 0, skippedBounced: 0, deferred: 0 }
+      }
       for (const env of work.get(job.tenant.id) ?? []) {
         try {
           // Out of time: leave the rest for the next run so the housekeeping below
@@ -183,7 +196,23 @@ export const GET = withCronAudit('docusign-reminders', async (req: NextRequest) 
           // No row matched: another runner already claimed it this cycle. Skip.
           if (!claimed?.length) continue
 
-          await remindEnvelopeRow(db, env)
+          try {
+            await remindEnvelopeRow(db, env)
+          } catch (err) {
+            // S5: a tenant's sender checked above can be gone by the time the
+            // engine reads it again (a failed read, a removed Reply-To). Nothing
+            // was sent, so give the slot back, keyed on this run's own claim, and
+            // the envelope is chased on a later run instead of in a week.
+            if (err instanceof TenantSenderRequiredError) {
+              await db
+                .from('agreements')
+                .update({ reminder_sent_at: env.reminder_sent_at ?? null, reminder_count: prevCount })
+                .eq('id', env.id)
+                .eq('reminder_count', prevCount + 1)
+                .eq('reminder_sent_at', claimedAt)
+            }
+            throw err
+          }
 
           const type = (env.envelope_type ?? 'minor') as AgreementType
           const member = env.member_id ? memberById.get(env.member_id) : null

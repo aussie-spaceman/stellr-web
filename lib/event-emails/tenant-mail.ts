@@ -25,12 +25,40 @@
 // is read from tenants.branding.reply_to until S10 gives it a column; a tenant
 // with no valid Reply-To gets no sender, and its mail is refused rather than sent
 // with replies going to Stellr's inbox.
+//
+// Signing mail (B14 follow-up): the native signing engine uses the same sender
+// for another tenant's envelope, resolved from agreements.tenant_id, for its
+// invitations and reminders (lib/esign/outbox.ts, providers/native.ts remind)
+// and its completion emails (lib/esign/completion.ts), and holds or refuses
+// that envelope's mail when loadTenantSender gives none. DocuSign stays
+// Stellr-only. lib/event-emails/tenant-signing.ts is the checked call for a
+// tenant guardian's invitation.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 export const TENANT_EVENT_MAIL_FLAG = 'TENANT_EVENT_MAIL_ENABLED'
+
+/**
+ * An email belonging to another tenant goes out only with that tenant's sender,
+ * never as Stellr. Stellr's rows (NULL or Stellr tenant_id) never meet this.
+ * Admin-facing; the wording was approved by the owner on 10 Nov 2026. Event
+ * emails (send.ts, catch-up.ts) answer 503 with it, and the signing engine
+ * throws TenantSenderRequiredError with it.
+ */
+export const TENANT_SENDER_REQUIRED =
+  'This event belongs to another organiser. Its emails go out from their own sender, which isn’t set up yet, so nothing was sent.'
+
+/** Thrown by the signing engine for a tenant's envelope that has no usable sender. Nothing was sent or written. */
+export class TenantSenderRequiredError extends Error {
+  readonly code = 'TENANT_SENDER_REQUIRED'
+  readonly status = 503
+  constructor() {
+    super(TENANT_SENDER_REQUIRED)
+    this.name = 'TenantSenderRequiredError'
+  }
+}
 
 /** The platform's sending address for tenant mail: the verified domain's no-reply mailbox. */
 export const TENANT_EVENT_FROM_ADDRESS = 'no-reply@mail.stellreducation.org'
@@ -94,6 +122,28 @@ export async function loadTenantSender(db: SupabaseClient, tenantId: string): Pr
     console.error(`[tenant-mail] sender read failed for tenant ${tenantId}:`, err instanceof Error ? err.message : err)
     return null
   }
+}
+
+/**
+ * Every other tenant that has a usable sender, by tenant id: one read of the
+ * tenants table. Empty when the flag is off or the read fails (logged). Never
+ * throws. The signing outbox uses it to read only the waiting signers it can
+ * send, so one tenant without a sender cannot fill the batch for the rest.
+ */
+export async function loadTenantSenders(db: SupabaseClient): Promise<Map<string, EventSender>> {
+  const out = new Map<string, EventSender>()
+  if (!tenantEventMailEnabled()) return out
+  try {
+    const { data, error } = await db.from('tenants').select('id, display_name, branding').neq('id', STELLR_TENANT_ID)
+    if (error) throw new Error(error.message)
+    for (const t of (data ?? []) as (TenantForSender & { id: string })[]) {
+      const sender = isTenantRow(t.id) ? tenantEventSender(t) : null
+      if (sender) out.set(t.id, sender)
+    }
+  } catch (err) {
+    console.error('[tenant-mail] senders read failed:', err instanceof Error ? err.message : err)
+  }
+  return out
 }
 
 export type TenantConfirmationOutcome =

@@ -8,6 +8,8 @@ export const AUDIENCES = [
   { key: 'docusign_outstanding', label: 'Outstanding DocuSigns',        hint: 'The participant and their parent/guardian' },
   { key: 'payment_outstanding',  label: 'Outstanding payments',         hint: 'The participant, their parent/guardian, and the teacher for group registrations' },
   { key: 'team_profile_outstanding', label: 'Outstanding team profiles', hint: 'Students whose forms are signed but who haven’t submitted a team profile, and their parent/guardian' },
+  // After the event: whoever actually came (lib/event-emails/audiences.ts).
+  { key: 'attendees',            label: 'All attendees',                hint: 'Everyone checked in at the event: students, student managers, teachers, mentors and event managers' },
 ] as const
 
 export type AudienceKey = (typeof AUDIENCES)[number]['key']

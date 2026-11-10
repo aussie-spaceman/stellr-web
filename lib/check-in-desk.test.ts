@@ -13,6 +13,8 @@ import {
   parseCheckInCode,
   pendingFromQueue,
   queuedIds,
+  staffKey,
+  STAFF_KEY,
   type DeskGroup,
   type DeskParticipant,
 } from './check-in-desk'
@@ -147,6 +149,24 @@ describe('the queue kept on the device', () => {
     ])
     expect(pending[ID_A]).toEqual({ checkedInAt: '2026-11-06T15:00:00Z', checkInMethod: 'manual', merchCollected: true })
     expect(pending[ID_B]).toEqual({ checkedInAt: null, checkInMethod: null })
+  })
+
+  it('queues a mentor or event manager by their staff key, so an offline tap survives a reload', () => {
+    expect(queuedIds({ action: 'staff_check_in', staffKey: 'm.user_em', label: 'Em' })).toEqual(['m.user_em'])
+    const pending = pendingFromQueue([
+      { action: 'staff_check_in', staffKey: `v.${ID_A}`, at: '2026-11-06T15:00:00Z', label: 'V' },
+      { action: 'staff_check_in', staffKey: 'm.user_em', at: '2026-11-06T15:01:00Z', label: 'Em' },
+      { action: 'staff_undo', staffKey: 'm.user_em', label: 'Em' },
+    ])
+    expect(pending[`v.${ID_A}`]).toEqual({ checkedInAt: '2026-11-06T15:00:00Z', checkInMethod: 'manual' })
+    expect(pending['m.user_em']).toEqual({ checkedInAt: null, checkInMethod: null })
+  })
+
+  it('names staff the way the server checks them', () => {
+    expect(staffKey('volunteer', ID_A)).toBe(`v.${ID_A}`)
+    expect(staffKey('event_manager', 'user_2abcDEF')).toBe('m.user_2abcDEF')
+    expect(STAFF_KEY.test(staffKey('event_manager', 'user_2abcDEF'))).toBe(true)
+    expect(STAFF_KEY.test('m.user_x; drop')).toBe(false)
   })
 
   it('keeps medical and dietary text off the device', () => {

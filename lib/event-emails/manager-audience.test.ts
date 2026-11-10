@@ -8,7 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const { getUserList } = vi.hoisted(() => ({
   getUserList: vi.fn(async ({ userId }: { userId: string[] }) => ({
-    data: userId.map((id) => ({ primaryEmailAddress: { emailAddress: `${id}@example.test` }, firstName: id, lastName: 'M' })),
+    data: userId.map((id) => ({ id, primaryEmailAddress: { emailAddress: `${id}@example.test` }, firstName: id, lastName: 'M' })),
   })),
 }))
 vi.mock('@clerk/nextjs/server', () => ({ clerkClient: async () => ({ users: { getUserList } }) }))

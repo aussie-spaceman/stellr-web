@@ -8,6 +8,7 @@ import { getEventRoster } from '@/lib/event-admin'
 import { checkInsVisibleTo, loadOpenCheckIns, pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
 import { verifyCheckInCode } from '@/lib/check-in-codes'
 import { checkInTime, meaningfulNote, type DeskContact, type DeskDetails, type DeskFlags, type DeskGroup } from '@/lib/check-in-desk'
+import { loadDeskStaff, loadStaffCheckIns, writeStaffCheckIn } from '@/lib/check-in-staff'
 
 // Check-in management for an event (admins + assigned event managers).
 //   GET  — settings + live list of participants and school groups (polled by the
@@ -25,6 +26,8 @@ import { checkInTime, meaningfulNote, type DeskContact, type DeskDetails, type D
 //          { action: 'scan', code, at? } — a participant's code checks them in; a
 //          group's code returns the group for the desk to confirm (lib/check-in-codes.ts)
 //          { action: 'resources_url', url } — the event's Docs folder ('' clears it)
+//          { action: 'staff_check_in', staffKey, at? } | { action: 'staff_undo', staffKey }
+//          — a volunteer mentor or event manager, from the Mentors tab (lib/check-in-staff.ts)
 //
 // `at` is when a tap happened on the desk. A tap that waited out a Wi-Fi drop
 // keeps its real arrival time (lib/check-in-desk.ts checkInTime).
@@ -49,7 +52,7 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
-  const [{ data: settings }, { data: regs }, { data: merchRows }, openCheckIns] = await Promise.all([
+  const [{ data: settings }, { data: regs }, { data: merchRows }, openCheckIns, staffCheckIns] = await Promise.all([
     db.from('event_settings').select('check_in_token, check_in_open, resources_url').eq('event_slug', slug).maybeSingle(),
     db
       .from('registrations')
@@ -67,6 +70,11 @@ export async function GET(req: Request, { params }: Params) {
       .not('participant_member_id', 'is', null),
     // Polled every few seconds: a hiccup here must not blank the desk list.
     loadOpenCheckIns(db).catch(() => null),
+    // Mentors and event managers checked in. Null on a hiccup, so the desk keeps what it had.
+    loadStaffCheckIns(db, slug).catch((err) => {
+      console.error('[check-in] staff check-ins read failed:', err)
+      return null
+    }),
   ])
 
   const merchByMember = new Map<string, { name: string; qty: number }[]>()
@@ -108,6 +116,7 @@ export async function GET(req: Request, { params }: Params) {
     resourcesUrl: settings?.resources_url ?? null,
     participants,
     groups,
+    staffCheckIns: staffCheckIns ? Object.fromEntries(staffCheckIns) : null,
     // Where the banner points is worked out across every event, but only said
     // as yes/no for this one; the events listed are the caller's own. Null when
     // the open events could not be read, so the desk does not report the banner
@@ -126,7 +135,7 @@ export async function GET(req: Request, { params }: Params) {
  */
 async function loadDeskDetails(db: SupabaseClient, slug: string): Promise<DeskDetails> {
   const event = (await getEventBySlug(slug).catch(() => null)) as { date?: string } | null
-  const [roster, { data: groupRegs }] = await Promise.all([
+  const [roster, { data: groupRegs }, staff] = await Promise.all([
     getEventRoster(slug, event?.date),
     db
       .from('registrations')
@@ -134,6 +143,8 @@ async function loadDeskDetails(db: SupabaseClient, slug: string): Promise<DeskDe
       .eq('event_slug', slug)
       .neq('status', 'withdrawn')
       .neq('type', 'individual'),
+    // Names only: the member id stays on the server.
+    loadDeskStaff(db, slug).then((list) => list.map(({ memberId: _m, ...s }) => s)),
   ])
 
   const flags: Record<string, DeskFlags> = {}
@@ -176,7 +187,7 @@ async function loadDeskDetails(db: SupabaseClient, slug: string): Promise<DeskDe
       email: r.teacher_email || null,
     }
   }
-  return { flags, contacts }
+  return { flags, contacts, staff }
 }
 
 /** Every id belongs to a participant of this event. */
@@ -324,6 +335,17 @@ export async function POST(req: Request, { params }: Params) {
             .is('checked_in_at', null)
         : await db.from('participants').update({ checked_in_at: null, check_in_method: null }).in('id', ids)
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'staff_check_in' || action === 'staff_undo') {
+    const result = await writeStaffCheckIn(
+      db,
+      slug,
+      body?.staffKey,
+      action === 'staff_check_in' ? { checkIn: true, at: checkInTime(body?.at), by: access.userId } : { checkIn: false },
+    )
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
     return NextResponse.json({ ok: true })
   }
 

@@ -60,8 +60,9 @@ describe('table registry (S3)', () => {
       .map((t) => t.name)
       .sort()
     expect(derivedTables().map((d) => d.table)).toEqual(withKey)
-    // ~27 event_slug tables plus the 5 Sanity-id tables (plan S3).
-    expect(derivedTables().filter((d) => d.kind === 'slug')).toHaveLength(27)
+    // ~27 event_slug tables plus the 5 Sanity-id tables (plan S3), and the
+    // derived tables created since (POST_EXPAND below).
+    expect(derivedTables().filter((d) => d.kind === 'slug')).toHaveLength(28)
     expect(derivedTables().filter((d) => d.kind === 'sanity_id')).toHaveLength(5)
   })
 
@@ -70,7 +71,10 @@ describe('table registry (S3)', () => {
     const expand = readFileSync(`${dir}/20261104130000_tenant_id_expand.sql`, 'utf8')
     const backfill = readFileSync(`${dir}/20261104140000_tenant_id_backfill.sql`, 'utf8')
     const fromExpand = [...expand.matchAll(/ADD COLUMN IF NOT EXISTS tenant_id[^;]*;\s*\n?/g)].length
-    expect(fromExpand).toBe(derivedTables().length)
+    // Derived tables created after S3 carry tenant_id, its index and the
+    // trigger in their own CREATE TABLE migration (checked by lint:tenancy).
+    const POST_EXPAND = new Set(['public.event_staff_check_ins'])
+    expect(fromExpand).toBe(derivedTables().filter((d) => !POST_EXPAND.has(d.table)).length)
     // The backfill reads its table list from the catalog (every table with the
     // derivation trigger), so it cannot drift; pgTAP section 6 checks the set.
     expect(backfill).toMatch(/t\.tgname = 'zz_tenancy_derive_tenant_id'/)

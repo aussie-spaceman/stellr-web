@@ -29,6 +29,13 @@ vi.mock('@/lib/check-in-banner', async (importOriginal) => ({
   loadOpenCheckIns: async () => [],
 }))
 vi.mock('@/lib/event-admin', () => ({ getEventRoster }))
+// Mentors and event managers: lib/check-in-staff.test.ts covers the writes themselves.
+const staff = vi.hoisted(() => ({
+  writeStaffCheckIn: vi.fn(async (..._args: unknown[]) => ({ ok: true }) as { ok: true } | { ok: false; status: number; error: string }),
+  loadStaffCheckIns: vi.fn(async (..._args: unknown[]) => new Map([['m.user_em', { checkedInAt: '2026-11-07T15:00:00.000Z', checkInMethod: 'manual' }]])),
+  loadDeskStaff: vi.fn(async (..._args: unknown[]) => [{ id: 'v.m1', firstName: 'Hana', lastName: 'V', role: 'volunteer', memberId: 'm1' }]),
+}))
+vi.mock('@/lib/check-in-staff', () => staff)
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: (table: string) => {
@@ -132,6 +139,30 @@ describe('group check-in', () => {
       expect((await post({ action: 'group_check_in', participantIds })).status).toBe(400)
     }
     expect(updates()).toHaveLength(0)
+  })
+})
+
+describe('mentors and event managers', () => {
+  it('checks one in at the time the desk tapped, recording who tapped', async () => {
+    const at = new Date(Date.now() - 60_000).toISOString()
+    const res = await post({ action: 'staff_check_in', staffKey: 'v.m1', at })
+    expect(res.status).toBe(200)
+    expect(staff.writeStaffCheckIn).toHaveBeenLastCalledWith(expect.anything(), 'nevada', 'v.m1', { checkIn: true, at, by: 'clerk-admin' })
+  })
+
+  it('undoes one, and passes on a refusal', async () => {
+    await post({ action: 'staff_undo', staffKey: 'm.user_em' })
+    expect(staff.writeStaffCheckIn).toHaveBeenLastCalledWith(expect.anything(), 'nevada', 'm.user_em', { checkIn: false })
+    staff.writeStaffCheckIn.mockResolvedValueOnce({ ok: false, status: 404, error: 'Not a mentor or event manager of this event' })
+    expect((await post({ action: 'staff_check_in', staffKey: 'm.user_x' })).status).toBe(404)
+  })
+
+  it('the poll carries their check-ins; the details carry their names, never a member id', async () => {
+    const poll = await (await GET(new Request('https://www.stellreducation.org/api/admin/events/nevada/check-in'), { params: Promise.resolve({ slug: 'nevada' }) })).json()
+    expect(poll.staffCheckIns).toEqual({ 'm.user_em': { checkedInAt: '2026-11-07T15:00:00.000Z', checkInMethod: 'manual' } })
+    getEventRoster.mockResolvedValueOnce({ groups: [] })
+    const details = await (await GET(new Request('https://www.stellreducation.org/api/admin/events/nevada/check-in?details=1'), { params: Promise.resolve({ slug: 'nevada' }) })).json()
+    expect(details.staff).toEqual([{ id: 'v.m1', firstName: 'Hana', lastName: 'V', role: 'volunteer' }])
   })
 })
 

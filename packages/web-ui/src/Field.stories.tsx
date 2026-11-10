@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Choice, Field, Fieldset, Input, Select, Textarea } from './forms'
 
-const meta: Meta = { title: 'Forms/Primitives' }
+const meta: Meta = { title: 'Forms/Field' }
 export default meta
 
 /** Labels tied to their fields, 16px text on touch, 44px tall, ≥3:1 borders. */

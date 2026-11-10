@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { GuaranteeBadge } from './Guarantee'
 
 const meta: Meta<typeof GuaranteeBadge> = {
-  title: 'Guarantee',
+  title: 'Trust/GuaranteeBadge',
   component: GuaranteeBadge,
   args: { days: 45, href: '/terms#guarantee' },
 }

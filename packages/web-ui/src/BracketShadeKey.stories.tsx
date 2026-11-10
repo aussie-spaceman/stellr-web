@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
-import { TierCard } from './competition'
 import {
   BracketShadeKey,
   TIER_IDS_BY_BRACKET,
@@ -9,10 +8,7 @@ import {
   type BracketId,
 } from './tier-shades'
 
-const meta: Meta = {
-  title: 'Foundations/Tier Shading',
-  parameters: { backgrounds: { value: 'surface' } },
-}
+const meta: Meta = { title: 'Foundations/BracketShadeKey', parameters: { backgrounds: { value: 'surface' } } }
 export default meta
 
 /* The bracket key + the three full ramps, with the usage rules. */
@@ -62,21 +58,6 @@ export const Guidelines: StoryObj = {
           <li>One hue per surface region — never mix two bracket hues in the same card or control.</li>
           <li>The light shades (teal <code>educator</code>, violet <code>alumni</code>) are accent/border colours — pair with dark ink text, don’t use them as body text on white.</li>
         </ul>
-      </div>
-    </div>
-  ),
-}
-
-/* TierCard in select mode, rendering the shade strip, shade price and selected glow. */
-export const TierCards: StoryObj = {
-  render: () => (
-    <div className="p-8 max-w-content flex flex-col gap-3">
-      <BracketShadeKey />
-      <div className="flex flex-wrap gap-3">
-        <div className="flex-1 min-w-[200px]"><TierCard tier="educator" role="Everyone starts here" name="Educator" price="Free" priceNote="always" cta={{ label: 'Join Free', href: '#' }} /></div>
-        <div className="flex-1 min-w-[200px]"><TierCard tier="catalyst" role="Competition toolkit" name="Catalyst" price="$149" priceNote="per year" selected cta={{ label: 'Sign up now', href: '#' }} /></div>
-        <div className="flex-1 min-w-[200px]"><TierCard tier="innovator" role="Mentoring & AI tools" name="Innovator" price="$499" priceNote="per year" cta={{ label: 'Sign up now', href: '#' }} /></div>
-        <div className="flex-1 min-w-[200px]"><TierCard tier="trailblazer" role="For teachers who excel" name="Trailblazer" price="$999" priceNote="per year" cta={{ label: 'Sign up now', href: '#' }} /></div>
       </div>
     </div>
   ),

@@ -46,14 +46,15 @@ const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   participant: 131,
   public: 131,
   webhook: 12,
-  cron: 23,
+  cron: 24,
   stellr_only: 166,
 }
 // +3 on 9 Nov 2026: members/compliance/external-check (participant) and the
 // admin members/[id]/event-manager and members/[id]/external-check (stellr_only).
 // +5 on 9 Nov 2026: bounced-email fixes: admin agreements/[id]/email-changes/[changeId] (tenant_staff), members/teams/... correct-email and email-changes (participant), sign/email page and API (public).
 // +1 on 9 Nov 2026: members/teams/[id]/discount, an organizer's code on their invoice (participant).
-const MANIFEST_TOTAL = 504
+// +1 on 9 Nov 2026: cron/email-outbox (cron).
+const MANIFEST_TOTAL = 505
 
 // The decisions. Moving a route between them is a deliberate diff here.
 const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
@@ -63,7 +64,7 @@ const DECISION_COUNTS: Record<TenantSurfaceDecision, number> = {
   // files pinned under 'routes held back' below
   pending: 49,
   bypass: 4,
-  deny: 402,
+  deny: 403,
 }
 
 /** A concrete URL a manifest file serves, with sample values for its params. */
@@ -89,7 +90,7 @@ function sampleUrl(file: string): string {
 }
 
 describe('the manifest this classifies', () => {
-  it('has the measured class counts, 504 in total', () => {
+  it('has the measured class counts, 505 in total', () => {
     expect(FILES).toHaveLength(MANIFEST_TOTAL)
     const counts = Object.fromEntries(Object.keys(MANIFEST_CLASS_COUNTS).map((c) => [c, 0])) as Record<
       RouteClass,

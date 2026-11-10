@@ -5,10 +5,10 @@ Code: PR #192 → `dev` as `9741a3d`. Promotion follows in the same session (see
 
 ## What was asked
 
-1. The maintainer found three "Jack Campbell" members, all registered for CO SDC, and permanently deleted two of them in
+1. The maintainer found three duplicate members for one student, all registered for CO SDC, and permanently deleted two of them in
    different orders:
-   - chriscam2: member first, then removed from the event;
-   - aasaldana: removed from the event first, then the member.
+   - duplicate 1: member first, then removed from the event;
+   - duplicate 2: removed from the event first, then the member.
 
    The ask was to review the code and logs and confirm the deletes left no problems.
 2. Later requests:
@@ -21,10 +21,10 @@ Code: PR #192 → `dev` as `9741a3d`. Promotion follows in the same session (see
 
 | Check | Result |
 |---|---|
-| `members` | Only `e021b94e-3082-4d01-bad2-114474223185` (adelita.campbell@uchealth.org) remains, active, Clerk linked. |
-| Archive snapshots | `deletion_archive` holds four rows: members `962c8ae3…` (chriscam2) and `e926acca…` (aasaldana), plus participants `477cb706…` and `eb9096b2…`. |
+| `members` | Only `e021b94e-3082-4d01-bad2-114474223185` remains, active, Clerk linked. |
+| Archive snapshots | `deletion_archive` holds four rows: members `962c8ae3…` (duplicate 1) and `e926acca…` (duplicate 2), plus participants `477cb706…` and `eb9096b2…`. |
 | Delete order | Both orders behaved correctly. With the member deleted first, `participants.member_id` was already NULL when the participant was removed (the database sets it to NULL). |
-| Registrations | `e26afd3a…` and `7c58fc28…` are individual registrations, withdrawn automatically (`individualRegToTidy`), with 0 participants. The only live Campbell registration is `9f72c6eb…` (confirmed, 1 participant). |
+| Registrations | `e26afd3a…` and `7c58fc28…` are individual registrations, withdrawn automatically (`individualRegToTidy`), with 0 participants. The only live registration for the student is `9f72c6eb…` (confirmed, 1 participant). |
 | Leftover references | Swept every uuid and `*_id` column in `public` for the 8 IDs. The only hits were `audit_log` (history) and two empty `mentoring_cohorts` group containers for the withdrawn registrations. The maintainer chose to keep those. |
 | Survivor | On roster cohort `9f32fb28…` as an active participant. DocuSign envelope `49f70c40…` is completed. |
 | Vercel logs, 21:23–21:25Z | Four `DELETE /api/admin/deletion` requests, all 200. No errors. One warning at 21:24:59: `[docusign-webhook] No envelope record for e790dae1-f168-8aed-8249-e3306f13f59a`. Most likely the void notice for a deleted participant's envelope, arriving after the row had cascaded away. Not confirmed (16.5). |
@@ -51,12 +51,12 @@ No migration.
 ## Not done, or not proven
 
 - **16.1** I declined to delete the two Clerk users, because permanently deleting accounts is for the maintainer to do.
-  They are `user_3JCv5NpvMg0Uqy089QDVfKqW0gB` (chriscam2@gmail.com) and `user_3JCuVNFLz662M7ogxvvFCycIxal`
-  (aasaldana@gmail.com). Deleting them is safe: `user.deleted` in `app/api/webhooks/clerk/route.ts` will match no row.
+  They are the logins of duplicates 1 and 2 (IDs in the private inventory Doc).
+  Deleting them is safe: `user.deleted` in `app/api/webhooks/clerk/route.ts` will match no row.
 - **16.3** No real Clerk deletion has gone through the new path yet.
 - **16.4** Earlier purges left logins behind. 54 member purges are archived (11 Jun to 24 Sept). 30 of them had a Clerk
   login when purged:
-  - 2 are the Campbells (16.1);
+  - 2 are the deleted duplicates (16.1);
   - 2 are the maintainer's own logins, re-linked to live members: `user_3Exea9xaLjGMtewubsfhr6obccp` →
     `abaf744b…` (david.michael.shaw@gmail.com) and `user_3ExgRb5mg9NtHXeDcCkcsx9k2U5` → `3bfe6a67…`
     (david.shaw@stellreducation.org). **Never delete these two.**

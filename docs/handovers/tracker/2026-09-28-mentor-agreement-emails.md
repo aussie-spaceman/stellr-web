@@ -7,7 +7,7 @@ Mentor and Stellr counter-signer now get distinct DocuSign subjects (`Your signa
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| mentor-agreement-emails.1 | Pauline, Sophie and Patrick mentor signatures | All three envelopes are at 1 of 2 with the Mentor still `sent` (prod read, 28 Sept ~22:15Z). They still carry the old identical subject. David is chasing them manually. | Re-read the Mentor recipient rows on 1 Oct. Anything unsigned is David's call before 3 Oct. | ☐ |
+| mentor-agreement-emails.1 | The three other mentors' signatures | All three envelopes are at 1 of 2 with the Mentor still `sent` (prod read, 28 Sept ~22:15Z). They still carry the old identical subject. David is chasing them manually. | Re-read the Mentor recipient rows on 1 Oct. Anything unsigned is David's call before 3 Oct. | ☐ |
 | mentor-agreement-emails.2 | Per-role subjects in a real inbox | In prod and pinned by a unit test. No mentor envelope issued since the deploy. | On the next mentor/volunteer issue, confirm the two emails arrive with different subjects and are not threaded together. | ☐ |
 | mentor-agreement-emails.3 | David's own mentor agreement | `cc25fb6c` `completed` 2/2; Mentor signed 21:48:42Z (prod read). | — | ☑ |
 | mentor-agreement-emails.4 | Fix shipped to prod | #242 merged `4b197c7`; deployment READY for that SHA; www 200, app 307, cron 401. | — | ☑ |

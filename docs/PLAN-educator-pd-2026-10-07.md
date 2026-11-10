@@ -4,7 +4,7 @@
 
 ## Context
 
-Teachers who support Stellr events need two things: a **PD certificate** that shows the hours they gave, mapped to standards, which they can submit as evidence for their own certification; and a **LinkedIn credential** for their profile. The first case is **Maria Gordon**: 8 hours at the STEM School event last weekend. She has no Stellr account yet.
+Teachers who support Stellr events need two things: a **PD certificate** that shows the hours they gave, mapped to standards, which they can submit as evidence for their own certification; and a **LinkedIn credential** for their profile. The first case is **an educator**: 8 hours at the STEM School event last weekend. They have no Stellr account yet.
 
 The membership tiers already promise "PD certificate — 2/6/10 hrs" and standards alignment, but nothing in the schema records hours or standards. A separate Cowork session is designing the certificate artwork. This plan covers the system around it: how a certificate is created, issued and accessed.
 
@@ -92,7 +92,7 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
 - **New `lib/pd-certificate.ts`:** `renderPdCertificatePdf(fields, artwork | null)`, using pdf-lib and fontkit, the same stack as `lib/event-pdf.ts`.
   - **Fields:** recipient name, hours, event title, activity date, location, standards list, credential number, and the verify URL `stellreducation.org/credentials/<number>`.
   - Field positions are fractions of the page, kept in one `PD_LAYOUT` constant. They are tuned to the Cowork artwork, and long values shrink to fit as in `event-pdf.ts`.
-  - **With no artwork uploaded yet**, it draws a plain fallback page, so Maria can be issued before the Cowork design lands.
+  - **With no artwork uploaded yet**, it draws a plain fallback page, so the educator can be issued before the Cowork design lands.
 - **`app/api/credentials/[number]/pdf/route.ts`:** add a `source === 'pd'` branch before the course fallback. It stays owner-only, and there is no survey gate.
 
 ### 5. What the educator sees
@@ -105,10 +105,10 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
   - Check that the wallet's per-slug `certificateGatesFor` lookup does not apply an event's gate to a `'pd'` row with the same slug. If it does, filter on `source`.
 - **Email 2:** `credentialIssuedEmail` in `lib/email.ts` gets an optional `pdHours` line: "This records N hours of professional development you can submit towards your teaching licence renewal." The wording follows `VOICE.md`. There is no other change to email routing.
 
-### 6. Maria, step by step (production, after promotion)
+### 6. The educator, step by step (production, after promotion)
 
-1. `/admin/members/new`: Maria Gordon, her email, adult, role **teacher**, school **STEM School**, invite ticked. This sends email 1, "Complete your account", which leads to `/account/onboarding`.
-2. Open the event's Settings tab, then **Educator PD**: find Maria, enter **8**, click Issue. This sends email 2 with the credential link.
+1. `/admin/members/new`: the educator's name, their email, adult, role **teacher**, school **STEM School**, invite ticked. This sends email 1, "Complete your account", which leads to `/account/onboarding`.
+2. Open the event's Settings tab, then **Educator PD**: find the educator, enter **8**, click Issue. This sends email 2 with the credential link.
 3. She signs in with an email code and completes onboarding. As a teacher she must give date of birth, gender, phone and school. Onboarding also sends her the membership agreement, which is the existing behaviour for every non-volunteer.
 4. She downloads the PDF from the wallet and clicks **Add to LinkedIn**. That click is also the first real check of tracker 11.2 (LinkedIn prefill) and of org ID 66274777.
 
@@ -165,8 +165,8 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
   6. Revoke, then issue again, gives a new number.
   - Restore the shared fixtures in `afterEach`, following the E2E fixture memory note.
 - **Builds:** `npm run lint:tokens` and `next build` (pdf code is verified through the build, not vitest).
-- **On dev:** run Maria's flow against a `+pd` test address, read both emails in the real inbox, and click through onboarding to the LinkedIn link.
-- **Production:** `ship`, then `promote`. That includes the prod migration run by David and checking the deployment by its SHA. Then issue Maria's credential for real.
+- **On dev:** run the educator's flow against a `+pd` test address, read both emails in the real inbox, and click through onboarding to the LinkedIn link.
+- **Production:** `ship`, then `promote`. That includes the prod migration run by David and checking the deployment by its SHA. Then issue the educator's credential for real.
 
 ## 7. What was built (7 Oct 2026) and what changed from the plan
 
@@ -196,7 +196,7 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
 1. **Cowork artwork.** Upload it, check the preview, and tune `PD_LAYOUT` in `lib/pd-certificate.ts` to it.
 2. ~~Confirm the standards set.~~ Confirmed 7 Oct.
 3. **Prod migration** during `promote` (David).
-4. **Maria Gordon, in production:** create her (teacher, STEM School, invite on), then Educator PD on the Colorado event, 8 hours.
+4. **The educator, in production:** create them (teacher, STEM School, invite on), then Educator PD on the Colorado event, 8 hours.
 5. **Her first add-to-LinkedIn click** is the first real check of tracker 11.2 (prefill) and org ID 66274777.
 6. **Onboarding to LinkedIn is unproven end to end** for an admin-created teacher. Nobody has signed in as one. Tracker 15.1 has the same gap.
 

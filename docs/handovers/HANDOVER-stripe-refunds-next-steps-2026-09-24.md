@@ -9,7 +9,7 @@ Doc snapshot: `1vZW74d0TfmYKUfsLEVBWLwhbESEFoVk0rt_CWgHsqfI`.
 - Production has the Stripe check, "No refund — remove only", the `charge.refunded` handler, the
   roster line, and migration `20260923120000`.
 - `charge.refunded` is subscribed in the production Stripe dashboard (24 Sept).
-- Daksha Rayana was removed from Colorado on 24 Sept 15:26Z. One `event_refunds` row
+- A student was removed from Colorado on 24 Sept 15:26Z. One `event_refunds` row
   (`none`/`stripe_external`, 0 cents, `paid_cents 7500`) and no account credit.
 
 ## Code map

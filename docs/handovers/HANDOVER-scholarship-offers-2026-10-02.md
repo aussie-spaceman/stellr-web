@@ -37,12 +37,12 @@ Spec, decisions, and backfill runbook: `docs/PLAN-scholarship-offers-2026-10-02.
   - Admin member page and the student's Account page: a Scholarships section.
 
 ## Backfill state (prod, end of session)
-- **Ethan Lawrence:** application `b8233294…` offered at 50% by David at 21:14Z. Linked to member `7595d329…` and registration `26b91fee…` (pending, **8250** due, was 16500). The 3 emails went to `inbalwal@gmail.com` and `ethanlawrence2011@gmail.com` (activity log). No prod errors or warnings in the following 30 minutes.
-- **Shreyas Shankar:** application `57209595…` is `submitted`. **No Colorado registration in prod** as of ~21:20Z; the event is 3 Oct. Runbook: once he has registered, offer 100% with "Email … now" **unticked**.
-- **Gmail drafts** for both families are in their threads (`r3592371518100805468` Ethan, `r5838390070885391865` Shreyas). Not confirmed sent.
+- **Student A:** application `b8233294…` offered at 50% by David at 21:14Z. Linked to member `7595d329…` and registration `26b91fee…` (pending, **8250** due, was 16500). The 3 emails went to the guardian's and the student's addresses (activity log). No prod errors or warnings in the following 30 minutes.
+- **Student B:** application `57209595…` is `submitted`. **No Colorado registration in prod** as of ~21:20Z; the event is 3 Oct. Runbook: once they have registered, offer 100% with "Email … now" **unticked**.
+- **Gmail drafts** for both families are in their threads (one per family). Not confirmed sent.
 
 ## Not verified
-- **A real discounted checkout through the app.** Dev can't read the events' live Stripe prices, so no event checkout can be built in dev. Ethan's payment is the first. Covered by the Stripe test-mode contract (coupon $165 → $82.50) and unit tests.
+- **A real discounted checkout through the app.** Dev can't read the events' live Stripe prices, so no event checkout can be built in dev. Student A's payment is the first. Covered by the Stripe test-mode contract (coupon $165 → $82.50) and unit tests.
 - **A real scholarship refund through the app.** Same reason. In dev the quote correctly fell to "manual". Covered by unit tests and the test-mode contract (fee line read after the discount; an idempotent retry produces one refund).
 - **The live coupons:** only `SCHOLARSHIP50` was implicitly confirmed (the review page flags the selected level, and none was flagged). 33/67/100 are unchecked.
 - **Email delivery:** the activity log records the send. Delivery to the recipients' inboxes is unconfirmed.

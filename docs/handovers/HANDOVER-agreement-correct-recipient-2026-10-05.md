@@ -16,7 +16,7 @@ So "Correct" in DocuSign's UI is effectively unavailable, and until now the only
 for a typo or bounce was void and reissue:
 
 - it used 1 of the 40 monthly envelopes;
-- it threw away signatures already given (Blake, 29 Sept).
+- it threw away signatures already given (a shared-inbox family, 29 Sept).
 
 **Decision reversed.** On 29 Sept David declined an in-place "change signer email"
 admin action (`HANDOVER-docusign-shared-inbox-2026-09-29.md`, option #3), because the web
@@ -72,7 +72,7 @@ the API (`scripts/docusign-label-minor-tabs.ts` pattern) or in a fresh cycle.
 
 1. Apply `20261005161443_esign_audit_corrected.sql` to production **before** the code merges (`promote`). Prod migrations are run by David.
 2. Promote.
-3. Correct Gabriel Armijo's Minor address (tracker .1), then watch for his signature.
+3. Correct the student's Minor address (tracker .1), then watch for their signature.
 
 ## Close-out (6 Oct 2026)
 
@@ -89,9 +89,9 @@ the API (`scripts/docusign-label-minor-tabs.ts` pattern) or in a fresh cycle.
 - Fixed in #289 (`8c2ba1e`, auth first).
 - Promoted in #291 (`d9b1d9f`), another session's promotion. Re-checked on prod afterwards: a signed-out POST now gets 401.
 
-**Proven in production:** David corrected Gabriel Armijo's Minor at 15:17Z (tracker .1).
+**Proven in production:** David corrected a student's Minor at 15:17Z (tracker .1).
 - The Guardian's signature was kept.
-- The Minor went to `sent` at `chasingtheharvest@gmail.com`.
+- The Minor went to `sent` at the corrected address.
 - The participant row was updated and `docusign_corrected` logged.
 
 **Gaps, stated honestly:**

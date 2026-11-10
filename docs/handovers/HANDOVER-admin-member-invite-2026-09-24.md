@@ -6,7 +6,7 @@ Code: PR #181 → `dev` as `845203b`; promoted in #183 (`e2a99e3`) by a separate
 
 ## What was asked
 
-1. `/admin/members/new` showed "Failed to create member" (Sophie Fleck, no DOB entered). Investigate and fix.
+1. `/admin/members/new` showed "Failed to create member" (a mentor, no DOB entered). Investigate and fix.
 2. **Correction mid-session, which outranks the first ask:** a hand-created member must get an email about the
    new account, with a link to "complete their account" that collects the missing data (date of birth etc.).
 3. Ship. Promotion was done in another session.
@@ -43,7 +43,7 @@ The first fix in the session (make DOB required on the form) was **discarded** a
   - The Resend button returned 429 (cooldown).
 - **CI on #181:** every step of run 36048832343 succeeded, including Build and `npx playwright test`.
 - **Prod after promotion:**
-  - Sophie Fleck was created at 20:39:17Z with no DOB (gender was entered).
+  - The mentor was created at 20:39:17Z with no DOB (gender was entered).
   - `clerk_user_id` is linked, and `account_invite_sent_at` was stamped at 20:39:18Z.
   - There is one activity row and 2 `member_roles` rows, so the prod Clerk webhook fired.
 - **Prod ledger:** `npm run db:status -- --prod` shows nothing pending, so 20260924120000 is recorded under its own name.
@@ -54,7 +54,7 @@ The first fix in the session (make DOB required on the form) was **discarded** a
 - **15.1 (HIGH): the member half.**
   - Nobody has yet gone from email link → sign-in → `/account/onboarding` → submit.
   - Onboarding POST updates the row found by `clerk_user_id` (`app/api/members/onboarding/route.ts`). The admin's `event_role` pre-fills the form.
-  - Sophie Fleck (`sophiefleck926@gmail.com`) is the first real case. Read her row: once `date_of_birth` is not null, the member half is proven.
+  - That mentor is the first real case. Read their row: once `date_of_birth` is not null, the member half is proven.
 - **15.2: delivery.** The stamp only proves Resend returned 2xx. Check the Resend dashboard.
 - **15.8: behaviour change.** Self-serve sign-ups now get a member row from the webhook before onboarding. Before this, the insert failed and onboarding POST created the row. `needsOnboarding` covers the redirect, but it has not been observed in prod. Past failed inserts may have left Clerk users with no member row.
 

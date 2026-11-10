@@ -16,8 +16,8 @@ as hand-written emails quoting a shared, reusable promotion code
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Backfill emails for Shreyas Shankar (Colorado, event 3 Oct) | **No automatic emails** — he registers before this deploys. Record only. Ethan Lawrence stays in scope. |
-| 2 | Ethan already had a pending registration | Attach the scholarship to it; no new registration. |
+| 1 | Backfill emails for student B (Colorado, event 3 Oct) | **No automatic emails** — they register before this deploys. Record only. Student A stays in scope. |
+| 2 | Student A already had a pending registration | Attach the scholarship to it; no new registration. |
 | 3 | Levels | Four Stripe coupons: `SCHOLARSHIP33`, `SCHOLARSHIP50`, `SCHOLARSHIP67`, `SCHOLARSHIP100`. |
 | 4 | Who reviews | **Admins only** (not event managers). |
 | 5 | Whose email | The application email is the **student's** email. |
@@ -71,7 +71,7 @@ email:
 1. Congratulations + summary of the next steps.
 2. Complete your registration → `/register/<slug>/individual?scholarship=<token>`
    (form prefilled, banner shows the discount). DocuSign goes out from the
-   normal registration path. If details are already in (Ethan), this becomes
+   normal registration path. If details are already in (student A), this becomes
    "your details are in — make sure the consent form is signed".
 3. Payment link → `/scholarship/offer/<token>`, a page that always shows the
    next step (details → pay → registered). Not sent for 100%.
@@ -154,7 +154,7 @@ Retrospective case (round 2, same day):
 Not verifiable in dev: a real event checkout with the discount. Sanity events
 carry **live** price ids, which the dev test key cannot read, so dev cannot
 build any event checkout (fee previews fall back to the code). Prove it in prod
-with Ethan's payment.
+with student A's payment.
 
 The cash refund through the app could not run end to end in dev for the same
 reason: the event fee can't be read, so the quote is (correctly) "manual".
@@ -165,21 +165,21 @@ reason: the event fee can't be read, so the quote is (correctly) "manual".
    The review page shows a red note on any level that doesn't resolve.
 2. Insert the two application rows (SQL kept out of the repo — it holds the
    applicants' personal circumstances; idempotent).
-3. **Ethan** — Scholarships → Ethan Lawrence → event *Nevada Space Design
-   Challenge* → member *Ethan Lawrence* (suggested: "application email is their
+3. **Student A** — Scholarships → student A → event *Nevada Space Design
+   Challenge* → student A's member (suggested: "application email is their
    emergency contact") → **50%** → the panel should say "Already registered
-   (unpaid, $165.00 due)" → Offer & register (3 emails). **If he has paid by
+   (unpaid, $165.00 due)" → Offer & register (3 emails). **If they have paid by
    then** (likely with `SCHOLARSHIP50`), the panel instead says "already
    registered and paid" and the reimbursement box should read "nothing to
-   reimburse" ($82.50 paid = the 50% price); he then gets 1–2 emails. Check: registration
-   `26b91fee…` `amount_due_cents` = 8250; emails reached `inbalwal@gmail.com`
-   and `ethanlawrence2011@gmail.com`.
-4. **Shreyas** — first confirm his Colorado registration exists (his mum said
-   they would register on 2 Oct with `SCHOLARSHIP100`). Scholarships → Shreyas
-   Shankar → *Colorado Space Design Challenge* → his member → **100%** →
+   reimburse" ($82.50 paid = the 50% price); they then get 1–2 emails. Check: registration
+   `26b91fee…` `amount_due_cents` = 8250; emails reached the guardian's and the
+   student's addresses.
+4. **Student B** — first confirm their Colorado registration exists (their guardian said
+   they would register on 2 Oct with `SCHOLARSHIP100`). Scholarships → student
+   B → *Colorado Space Design Challenge* → their member → **100%** →
    **untick "Email … now"** → Offer & register. Record only. A `SCHOLARSHIP100`
    checkout leaves no payment intent, so the reimbursement box reads "No card
-   payment on record — nothing to reimburse". If he paid full price, it will
+   payment on record — nothing to reimburse". If they paid full price, it will
    offer to refund $75 — decide then.
 5. Send the two Gmail drafts (in each family's thread).
 6. Switch off the public `SCHOLARSHIP*` **promotion codes** in Stripe (keep the
@@ -197,7 +197,7 @@ reason: the event fee can't be read, so the quote is (correctly) "manual".
   `kind=scholarship`) and in `event_refunds`.
 - **No "withdraw offer" action**: the status exists; if needed, set it in SQL and
   reset the registration's `amount_due_cents`.
-- **Shreyas's checkout today** is the first $0 event checkout in prod. The webhook
+- **Student B's checkout today** is the first $0 event checkout in prod. The webhook
   confirms on `checkout.session.completed` without checking `payment_status` and
   `capturePaymentIntent` no-ops without a payment intent, so it should confirm.
 - Dev data: two test applications (`scholarship-e2e-1002/1003@example.com`) with

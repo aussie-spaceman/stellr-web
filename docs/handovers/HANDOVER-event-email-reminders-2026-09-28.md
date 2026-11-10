@@ -65,7 +65,7 @@ Reminders for the Colorado SDC went out by hand from Outlook on 26–28 Sept. Th
   - the cron's send/skip/defer logic and the `cron_runs` failure recording
 - **Browser (worktree dev server, admin session, sends suppressed with `DEV_EMAIL_SAFELIST=` blank):**
   - Roster link → tab.
-  - Added "Outstanding DocuSign". The preview showed 2 recipients: the student reads "because you are registered", the parent reads "because Lily is registered".
+  - Added "Outstanding DocuSign". The preview showed 2 recipients: the student reads "because you are registered", the parent reads "because <student> is registered".
   - Attached a PDF.
   - Test send went to the admin.
   - Send now: confirm dialog → "Sent to 2 of 2" → History row.

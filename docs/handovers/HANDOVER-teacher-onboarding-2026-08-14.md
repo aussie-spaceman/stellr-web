@@ -97,9 +97,9 @@ is why the Educator Tier Space reports `roster_active = 0`.
   domain — sending from the other returns 403. David said "leave it", so all mail
   currently sends from `hello@mail.stellreducation.org`. The brief still says
   otherwise; revisit if the domain is ever added.
-- **Personal emails to the first two teachers.** Michelle Matlock
-  (`mmmatlock@wcpss.net`, Wake STEM ECHS, 10 Aug) and Janet Ivey-Duensing
-  (`janetsplanetofficial@gmail.com`, 13 Aug). Arming the drip will **not** reach
+- **Personal emails to the first two teachers.** Educator
+  `2561d6c5…` (Wake STEM ECHS, 10 Aug) and Janet Ivey-Duensing
+  (advisory board, 13 Aug). Arming the drip will **not** reach
   them — `member.created` already fired and there is no retro-send. David took
   this one.
 - **Day-5 email is 120 body words** against a stated 50–100 limit. It is David's
@@ -110,8 +110,8 @@ is why the Educator Tier Space reports `roster_active = 0`.
   bodies stop before the signature.
 
 ### Needs a session
-- **Michelle's member record has empty `first_name`/`last_name`** — Clerk
-  captured none at signup. Her emails render the "Hi there," fallback. Set on
+- **Educator `2561d6c5…`'s member record has empty `first_name`/`last_name`** — Clerk
+  captured none at signup. Their emails render the "Hi there," fallback. Set on
   `/admin/members/2561d6c5-8d83-4379-bd16-87c059efc437`. Worth checking whether
   the Clerk sign-up flow collects a name at all, since this will recur.
 - **The house template change affects EVERY transactional email** — DocuSign

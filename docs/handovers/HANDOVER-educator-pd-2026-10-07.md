@@ -1,6 +1,6 @@
 # HANDOVER — Educator PD credentials (7 Oct 2026)
 
-**Update 8 Oct: LIVE in production** (#326 `6d71632`, see the 8 Oct close-out at the end). The paragraph below is the 7 Oct state. PR #320 (`feat/educator-pd-credentials`) is open with squash auto-merge. The first CI run failed on the new e2e spec (fixed in `9314ed5`, CI re-running at close-out). Promotion #318 (`ee441ad`, 7 Oct) did **not** include it. Maria Gordon has **not** been created or issued anything.
+**Update 8 Oct: LIVE in production** (#326 `6d71632`, see the 8 Oct close-out at the end). The paragraph below is the 7 Oct state. PR #320 (`feat/educator-pd-credentials`) is open with squash auto-merge. The first CI run failed on the new e2e spec (fixed in `9314ed5`, CI re-running at close-out). Promotion #318 (`ee441ad`, 7 Oct) did **not** include it. The educator has **not** been created or issued anything.
 
 Tracker: `tracker/2026-10-07-educator-pd.md` (rows `educator-pd.1–.11`). Design and decisions Q1–Q8: `docs/PLAN-educator-pd-2026-10-07.md`, on the #320 branch until it merges.
 
@@ -9,7 +9,7 @@ Tracker: `tracker/2026-10-07-educator-pd.md` (rows `educator-pd.1–.11`). Desig
 The ask: recognise teachers who support events.
 - Give them a **PD certificate** showing their hours, mapped to standards, for their own certification.
 - Give them a **LinkedIn credential**.
-- Build it from Maria Gordon's case: 8 hours at the STEM School event, no Stellr account. She must be created through the same flow as mentors, including the "complete your info" email.
+- Build it from the first educator's case: 8 hours at the STEM School event, no Stellr account. They must be created through the same flow as mentors, including the "complete your info" email.
 - A separate Cowork session is making the certificate artwork. This session built the system around it.
 
 ### Decisions (David, 7 Oct)
@@ -72,9 +72,9 @@ The ask: recognise teachers who support events.
 
 1. **"Promoted" was not true for this work.** #320 had not merged when #318 was promoted. Re-check `gh pr view 320` before the next `promote`, following the memory note on verifying merges.
 2. **I reported the change as verified before CI had run.** The local e2e passed only because the local server had Sanity.
-3. **The core deliverable is not done.** Maria has not been issued anything.
+3. **The core deliverable is not done.** The educator has not been issued anything.
 4. **Single-day only.** `activity_date` uses Sanity `date`; a multi-day event's `endDate` is ignored.
-5. **Inbox, out of scope.** Two guardian replies dated 6 Oct are unanswered: Davidson, and the parent of Lily Nylund. Both say they cannot open a credential. They are most likely the family-link issue fixed in #312 and covered by the `credential-family-link` rows.
+5. **Inbox, out of scope.** Two guardian replies dated 6 Oct are unanswered, from two guardians. Both say they cannot open a credential. They are most likely the family-link issue fixed in #312 and covered by the `credential-family-link` rows.
 
 ## Close-out, 8 Oct 2026
 
@@ -86,11 +86,11 @@ The ask: recognise teachers who support events.
 - Signed-out probes: the PD admin routes answer 401/403, not 404.
 
 **Still not done:**
-- **Maria (`educator-pd.4`).** On 8 Oct production had no PD credential and no Maria Gordon member. Her event is `colorado-space-design-challenge` (3 Oct 2026, STEM School, Highlands Ranch, Colorado, single day), so `.9` does not affect her.
+- **The educator (`educator-pd.4`).** On 8 Oct production had no PD credential and no member for the educator. Their event is `colorado-space-design-challenge` (3 Oct 2026, STEM School, Highlands Ranch, Colorado, single day), so `.9` does not affect them.
 - **Cowork artwork (`.5`).** None in prod storage. That does not block issuing: the PDF is rendered at download, so it picks up the artwork whenever it is uploaded.
 
 **Not verified:**
-- The signed-in admin panel on production. Nobody has opened it yet; issuing Maria is that test.
+- The signed-in admin panel on production. Nobody has opened it yet; issuing the educator is that test.
 - An admin-created teacher going through onboarding to LinkedIn (`.6`).
 - LinkedIn prefill and the org ID (`.7`).
 
@@ -111,12 +111,12 @@ The ask: recognise teachers who support events.
 - **Standards:** the app now uses the 17 Common Core codes printed on the back, replacing the NGSS set.
 
 **Production at close-out:**
-- Maria Gordon was created at 20:38Z on 8 Oct as a teacher. Invite sent; not onboarded; no school linked.
+- The educator was created at 20:38Z on 8 Oct as a teacher. Invite sent; not onboarded; no school linked.
 - **No PD credential has been issued.**
 - The only PD artwork is the old one-page `pd-certificate/current`.
 
 **Gaps:**
-- **The core ask is still undone.** Maria has no credential (`.4`).
+- **The core ask is still undone.** The educator has no credential (`.4`).
 - **The new certificate is not live** until #343 merges (`.12`). Then David must re-upload the front and back (`.5`).
 - **Not proven in a real browser:** the positioner's live preview (`.14`) and the upload/positioner flow. There is no e2e for them (`.16`).
 - **Code spelling on the back:** HSN- versus the official HSA-/HSG- codes (`.13`).

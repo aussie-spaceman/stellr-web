@@ -6,8 +6,7 @@ import { formatDateRange } from '@/lib/utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 import { getEventPrice } from '@/lib/event-pricing'
 import GroupRegistrationForm from '@/components/forms/GroupRegistrationForm'
-import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
-import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
+import type { StellrRegistrationNotes } from '../stellr-notes'
 
 // The group registration page, shared by Stellr's page and the tenant tree's. It
 // holds no tracking and no prefill of its own, and is a plain function called by the
@@ -19,10 +18,13 @@ export async function groupRegistrationBody({
   slug,
   funnel,
   loadPrefill,
+  stellrNotes,
 }: {
   slug: string
   funnel?: (event: RegistrationEvent) => ReactNode
   loadPrefill?: () => Promise<RegistrationPrefill | null>
+  /** S5 A7: Stellr's guarantee and mission note. Only Stellr's page supplies them. */
+  stellrNotes?: StellrRegistrationNotes
 }) {
   const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
@@ -68,8 +70,8 @@ export async function groupRegistrationBody({
           gradeMin={band.min}
           gradeMax={band.max}
         />
-        {!isCampaign && !isFree && <MoneyBackGuarantee className="mt-8" />}
-        <MissionFundingNote className="mt-10" />
+        {!isCampaign && !isFree && stellrNotes?.guarantee}
+        {stellrNotes?.missionFunding}
       </div>
     </div>
   )

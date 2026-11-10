@@ -2,18 +2,25 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, groupMemberJoinedEmail } from '@/lib/email'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
-import type { GroupJoinLink } from './gate'
+import type { ConfirmedJoinLink } from './gate'
 import type { GroupJoiner } from './identify'
 
 /** POST /api/register/group-join, the last step: tell the organiser, then what is owed, then the answer. */
 export async function respondToGroupJoin(
   db: SupabaseClient,
-  link: GroupJoinLink,
+  link: ConfirmedJoinLink,
   joiner: GroupJoiner,
   participantId: string,
 ): Promise<Response> {
   const { reg, registrationId, eventSlug, eventTitle } = link
   const { person, signInToken } = joiner
+
+  // S5 A7: on a tenant's event the organiser's notice would go from Stellr's sender,
+  // and seats paid one by one would reach Stellr's Stripe account, so neither runs.
+  // The person joining had the tenant's confirmation in the hooks.
+  if (!link.context.isPlatformOwner) {
+    return NextResponse.json({ success: true, eventSlug, eventTitle, signInToken: null }, { status: 201 })
+  }
 
   // Count total members who have completed their join
   const { count: joinedCount } = await db

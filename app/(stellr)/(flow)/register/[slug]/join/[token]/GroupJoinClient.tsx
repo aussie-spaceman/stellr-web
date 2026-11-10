@@ -30,6 +30,14 @@ interface Props {
    */
   gradeMin?: number
   gradeMax?: number
+  /**
+   * S5 A7: a tenant's join page. Everyone types their details, signed in or not: the
+   * join route takes no Stellr member profile on a tenant's event. There is no
+   * member-profile confirm, no Stellr sign-in, no account lookup on the address, no
+   * payment notice (a tenant's event collects nothing online), and no link to a
+   * Stellr account. Unset on Stellr's page, which behaves as it always has.
+   */
+  tenantMode?: boolean
 }
 
 const GENDERS = ['Male', 'Female', 'Other']
@@ -102,8 +110,10 @@ const EMPTY_DETAILS: DetailsForm = {
 
 export default function GroupJoinClient({
   token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, schoolState, memberPaysIndividually, isAuthenticated, prefill,
-  gradeMin = DEFAULT_GRADE_BAND.min, gradeMax = DEFAULT_GRADE_BAND.max,
+  gradeMin = DEFAULT_GRADE_BAND.min, gradeMax = DEFAULT_GRADE_BAND.max, tenantMode = false,
 }: Props) {
+  // A tenant's event collects nothing online, so it shows no payment notice.
+  const showPaymentNotice = memberPaysIndividually && !tenantMode
   const band = { min: gradeMin, max: gradeMax }
   const grades = [...gradeOptions(band), ...COLLEGE_GRADES]
   const { isSignedIn } = useAuth()
@@ -126,6 +136,8 @@ export default function GroupJoinClient({
   const signInUrl = authPath(`/register/${eventSlug}/join/${token}`)
 
   async function checkExistingAccount(email: string) {
+    // S5 A7: a tenant's page never asks whether an address has a Stellr account.
+    if (tenantMode) return
     const clean = email.trim().toLowerCase()
     if (!clean || !clean.includes('@')) {
       setExistingAccount(false)
@@ -289,14 +301,14 @@ export default function GroupJoinClient({
         <p className="text-content-body">
           You&apos;ve been registered for <strong>{eventTitle}</strong> as part of {organiserName}&apos;s group from {schoolName}.
         </p>
-        {memberPaysIndividually && (
+        {showPaymentNotice && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
             <p className="font-medium">Payment required</p>
             <p className="mt-1">Check your email — we&apos;ve sent you a payment link to complete your registration.</p>
           </div>
         )}
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-          <a href="/account" className="btn-primary">View My Account →</a>
+          {!tenantMode && <a href="/account" className="btn-primary">View My Account →</a>}
           <Link href={`/events/${eventSlug}`} className="btn-outline">Event Details</Link>
         </div>
       </div>
@@ -304,7 +316,7 @@ export default function GroupJoinClient({
   }
 
   // ── Signed-in member: confirm with stored profile ──────────────────────────
-  if (isAuthenticated) {
+  if (isAuthenticated && !tenantMode) {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-xl border border-line p-5 sm:p-8 space-y-6">
@@ -363,8 +375,9 @@ export default function GroupJoinClient({
     <form onSubmit={handleJoinNew} className="space-y-6">
       {/* Sign-in first. Anyone already in the membership database joins with their
           existing record: the server refuses an address on file from this form.
-          Deliberately above the form, not buried beside the submit button. */}
-      <div className="bg-white rounded-xl border-2 border-brand-blue/40 p-5 sm:p-6">
+          Deliberately above the form, not buried beside the submit button.
+          Not on a tenant's page, which takes no Stellr member details. */}
+      {!tenantMode && <div className="bg-white rounded-xl border-2 border-brand-blue/40 p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
           <div>
             <p className="font-semibold text-brand-blue-dark">Already have a Stellr account?</p>
@@ -376,15 +389,21 @@ export default function GroupJoinClient({
             Log in to register →
           </a>
         </div>
-      </div>
+      </div>}
 
       <div className="bg-white rounded-xl border border-line p-5 sm:p-8 space-y-6">
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Join {organiserName}&apos;s group</h2>
-          <p className="text-sm text-content-muted">
-            Registering for <strong>{eventTitle}</strong> · {schoolName}. New to Stellr? Enter your details below —
-            we&apos;ll create your account and sign you in automatically.
-          </p>
+          {tenantMode ? (
+            <p className="text-sm text-content-muted">
+              Registering for <strong>{eventTitle}</strong> · {schoolName}. Enter your details below to join.
+            </p>
+          ) : (
+            <p className="text-sm text-content-muted">
+              Registering for <strong>{eventTitle}</strong> · {schoolName}. New to Stellr? Enter your details below —
+              we&apos;ll create your account and sign you in automatically.
+            </p>
+          )}
         </div>
 
         <Fieldset legend="I am joining as a">
@@ -502,7 +521,7 @@ export default function GroupJoinClient({
           </div>
         </Fieldset>
 
-        {memberPaysIndividually && (
+        {showPaymentNotice && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
             This group pays individually — a payment link will be emailed to you after you join.
           </div>

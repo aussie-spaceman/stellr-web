@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // GET /api/members/exists?email=&token= — does this email already have a usable
 // Stellr account (a member row linked to a Clerk login)? Used by the group-join
@@ -42,12 +43,23 @@ export async function GET(req: NextRequest) {
   // Validate it the same way the group-join route does (exists + not expired).
   // Any failure path returns the same { hasAccount: false } as a real miss, so
   // the token check itself leaks nothing about which tokens are valid.
+  //
+  // S5 A7: only Stellr's own links. A tenant's join page never asks, and a link
+  // whose registration is not Stellr's gets the same answer as an unknown link, by
+  // the same path (one read, no members query), so it tells nobody whether an
+  // address has a Stellr account. NULL is a Stellr row the backfill has not reached;
+  // a link and registration that disagree are not Stellr's (as the join gate rules).
   const { data: tokenRow, error: tokenError } = await db
     .from('group_join_tokens')
-    .select('expires_at')
+    .select('expires_at, tenant_id, registrations(tenant_id)')
     .eq('token', token)
     .maybeSingle()
-  if (tokenError || !tokenRow || new Date(tokenRow.expires_at as string) < new Date()) {
+  const registration = tokenRow?.registrations as { tenant_id?: string | null } | null | undefined
+  const stellrLink =
+    !!tokenRow &&
+    (tokenRow.tenant_id ?? STELLR_TENANT_ID) === STELLR_TENANT_ID &&
+    (registration?.tenant_id ?? STELLR_TENANT_ID) === STELLR_TENANT_ID
+  if (tokenError || !tokenRow || !stellrLink || new Date(tokenRow.expires_at as string) < new Date()) {
     return NextResponse.json({ hasAccount: false })
   }
 

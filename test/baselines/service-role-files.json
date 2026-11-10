@@ -161,13 +161,13 @@
       "class": "convert",
       "reason": "The group join page's body, moved here unchanged from its page.tsx by S5 B5b so a tenant page can reuse it without the prefill. Reads the join link, its registration and roster for someone who may not be signed in, by the link's token. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page.tsx": {
+    "app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/pay-seat-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: participants, registrations"
+      "reason": "The seat pay page's body, moved here from its page.tsx by S5 A7 so the tenant page can reuse it while Stellr's page refuses another tenant's seat. Reads the seat and its registration for a payer who may not be signed in, by the seat's pay token. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/register/[slug]/pay/[token]/page.tsx": {
+    "app/(stellr)/(flow)/register/[slug]/pay/[token]/pay-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: participants, registrations"
+      "reason": "The registration pay page's body, moved here from its page.tsx by S5 A7 so the tenant page can reuse it while Stellr's page refuses another tenant's registration. Reads the registration, its paid seats and scholarship offer for a payer who may not be signed in, by the pay token. Same access as before the move, for the area conversion to decide."
     },
     "app/(stellr)/(flow)/survey/[token]/page.tsx": {
       "class": "convert",

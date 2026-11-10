@@ -256,13 +256,14 @@ describe('POST /api/register/individual — the gate, in order', () => {
     h.getEventBySlug.mockImplementation(async () => { rec.event('gate event'); return PRICED })
     h.findOffer.mockImplementation(async () => { rec.event('gate findOffer'); return { ...HALF_OFFER, email: 'other@example.com' } })
     await post({ scholarship_token: 'tok' })
-    expect(rec.log.slice(0, 11)).toEqual([
+    expect(rec.log.slice(0, 12)).toEqual([
       'gate rateLimit',
       'gate impersonation',
       'gate consent',
       'gate session',
       'gate findOffer',
       'gate event',
+      'select events', // S5 A7: the event's owner
       'gate findExisting',
       'select members', // on file by email?
       'select members', // on file by school_email?

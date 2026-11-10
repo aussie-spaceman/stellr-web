@@ -95,7 +95,8 @@ export async function linkMembersToSchoolByName(
   opts?: Parameters<typeof linkToSchool>[3],
 ): Promise<void> {
   if (!isStellrEvent(event)) return
-  return linkToSchool(db, memberIds, school, opts)
+  // The same arguments the caller gave: no trailing undefined where it gave no options.
+  return opts === undefined ? linkToSchool(db, memberIds, school) : linkToSchool(db, memberIds, school, opts)
 }
 
 export async function linkMembersToRegistrationSchool(

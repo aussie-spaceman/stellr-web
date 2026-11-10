@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { HOUR_MS } from '@/lib/rate-limit'
 import { rateLimit } from '@/lib/rate-limit-async'
 import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { auditMutation } from '@/lib/audit/route'
 import { gateIndividualRegistration } from '@/lib/registration/individual/gate'
 import type { IndividualBody } from '@/lib/registration/individual/parse'
 import { persistIndividualRegistration } from '@/lib/registration/individual/persist'
@@ -16,7 +18,45 @@ import { runIndividualHooks } from '@/lib/registration/individual/stellr-hooks'
 // maximum so it cannot be cut off mid-flow by the lower platform default.
 export const maxDuration = 60
 
+/** What the audit event says, filled in as the request goes. */
+interface AuditNote {
+  status: number
+  userId: string | null
+  registrationId: string | null
+  eventTenantId: string | null
+}
+
+/**
+ * S5 A7: one platform audit event per registration, after the response, off unless
+ * PLATFORM_AUDIT_ENABLED=true. A 4xx is a refusal that wrote nothing of its own and is
+ * not recorded, the rule withAudit applies (lib/audit/route). A 5xx may have written
+ * part of a registration, so it is.
+ */
+async function recordRegistration(note: AuditNote): Promise<void> {
+  if (note.status >= 400 && note.status < 500) return
+  await auditMutation(
+    {
+      action: 'registration.individual.create',
+      actor: { userId: note.userId },
+      // Stellr's chain, a tenant's event included, until the owner decides which
+      // chain a tenant event's registration rows go on (docs/TENANCY-S5.md, B16).
+      tenant: { stellr: true },
+      target: note.registrationId ? { table: 'registrations', id: note.registrationId } : undefined,
+      metadata: {
+        status: note.status,
+        ...(note.eventTenantId && note.eventTenantId !== STELLR_TENANT_ID ? { event_tenant_id: note.eventTenantId } : {}),
+      },
+    },
+    { afterResponse: true },
+  )
+}
+
 export async function POST(req: NextRequest) {
+  const note: AuditNote = { status: 500, userId: null, registrationId: null, eventTenantId: null }
+  const answer = (res: Response): Response => {
+    note.status = res.status
+    return res
+  }
   try {
     const body = await req.json()
     // Each field is named in this file, not in lib/registration/individual/parse:
@@ -55,10 +95,14 @@ export async function POST(req: NextRequest) {
     // allowance. A wider cap per event stops new accounts multiplying that count.
     const eventKey = typeof fields.event_slug === 'string' ? fields.event_slug : undefined
     const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
+    note.userId = userId
     const { tenantId } = await requestTenant()
     if (userId) {
       const eventCapped = await rateLimit(req, 'register-individual-session', { limit: 30, windowMs: HOUR_MS, tenantId }, eventKey)
-      if (eventCapped) return eventCapped
+      if (eventCapped) {
+        note.status = eventCapped.status
+        return eventCapped
+      }
     }
     const rateLimited = await rateLimit(
       req,
@@ -66,18 +110,30 @@ export async function POST(req: NextRequest) {
       { limit: 3, windowMs: HOUR_MS, tenantId },
       userId ? `${eventKey}:${userId}` : eventKey,
     )
-    if (rateLimited) return rateLimited
+    if (rateLimited) {
+      note.status = rateLimited.status
+      return rateLimited
+    }
 
-    const gate = await gateIndividualRegistration(fields, { serviceClient: supabaseServer, getEvent: getEventBySlug })
-    if (!gate.ok) return gate.response
+    const gate = await gateIndividualRegistration(fields, {
+      serviceClient: supabaseServer,
+      getEvent: getEventBySlug,
+      requestTenantId: tenantId,
+    })
+    if (!gate.ok) return answer(gate.response)
+    note.eventTenantId = gate.registration.context.tenantId
 
     const saved = await persistIndividualRegistration(gate.registration, fields)
-    if (!saved.ok) return saved.response
+    if (!saved.ok) return answer(saved.response)
+    note.registrationId = saved.row.regId
 
     const signInToken = await runIndividualHooks(gate.registration, saved.row, fields)
-    return await respondToIndividualRegistration(gate.registration, saved.row, signInToken, fields, getEventBySlug)
+    return answer(await respondToIndividualRegistration(gate.registration, saved.row, signInToken, fields, getEventBySlug))
   } catch (e) {
     console.error('Individual registration error:', e)
+    note.status = 500
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } finally {
+    await recordRegistration(note)
   }
 }

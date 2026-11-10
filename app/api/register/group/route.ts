@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { HOUR_MS } from '@/lib/rate-limit'
 import { rateLimit } from '@/lib/rate-limit-async'
 import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { auditMutation } from '@/lib/audit/route'
 import { gateGroupRegistration } from '@/lib/registration/group/gate'
 import type { GroupBody } from '@/lib/registration/group/parse'
 import {
@@ -30,8 +32,46 @@ import {
 // left is picked up by the daily sweeps.
 export const maxDuration = 300
 
+/** What the audit event says, filled in as the request goes. */
+interface AuditNote {
+  status: number
+  userId: string | null
+  registrationId: string | null
+  eventTenantId: string | null
+}
+
+/**
+ * S5 A7: one platform audit event per registration, after the response, off unless
+ * PLATFORM_AUDIT_ENABLED=true. A 4xx is a refusal that wrote nothing of its own and is
+ * not recorded, the rule withAudit applies (lib/audit/route). A 5xx may have written
+ * part of a registration, so it is.
+ */
+async function recordRegistration(note: AuditNote): Promise<void> {
+  if (note.status >= 400 && note.status < 500) return
+  await auditMutation(
+    {
+      action: 'registration.group.create',
+      actor: { userId: note.userId },
+      // Stellr's chain, a tenant's event included, until the owner decides which
+      // chain a tenant event's registration rows go on (docs/TENANCY-S5.md, B16).
+      tenant: { stellr: true },
+      target: note.registrationId ? { table: 'registrations', id: note.registrationId } : undefined,
+      metadata: {
+        status: note.status,
+        ...(note.eventTenantId && note.eventTenantId !== STELLR_TENANT_ID ? { event_tenant_id: note.eventTenantId } : {}),
+      },
+    },
+    { afterResponse: true },
+  )
+}
+
 export async function POST(req: NextRequest) {
   const requestStartedAt = Date.now()
+  const note: AuditNote = { status: 500, userId: null, registrationId: null, eventTenantId: null }
+  const answer = (res: Response): Response => {
+    note.status = res.status
+    return res
+  }
   try {
     const body = await req.json()
     // Each field is named in this file, not in lib/registration/group/parse:
@@ -86,10 +126,14 @@ export async function POST(req: NextRequest) {
     // cap per event stops new accounts multiplying that count.
     const eventKey = typeof event_slug === 'string' ? event_slug : undefined
     const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
+    note.userId = userId
     const { tenantId } = await requestTenant()
     if (userId) {
       const eventCapped = await rateLimit(req, 'register-group-session', { limit: 30, windowMs: HOUR_MS, tenantId }, eventKey)
-      if (eventCapped) return eventCapped
+      if (eventCapped) {
+        note.status = eventCapped.status
+        return eventCapped
+      }
     }
     const rateLimited = await rateLimit(
       req,
@@ -97,25 +141,34 @@ export async function POST(req: NextRequest) {
       { limit: 3, windowMs: HOUR_MS, tenantId },
       userId ? `${eventKey}:${userId}` : eventKey,
     )
-    if (rateLimited) return rateLimited
+    if (rateLimited) {
+      note.status = rateLimited.status
+      return rateLimited
+    }
 
     // Read-only while an admin is viewing as this member. Impersonation is a lens,
     // not a login — an admin must never post, book or pay as somebody else.
     const impersonationBlock = await assertNotImpersonating()
-    if (impersonationBlock) return impersonationBlock
+    if (impersonationBlock) return answer(impersonationBlock)
 
-    const gate = await gateGroupRegistration(fields, { serviceClient: supabaseServer, getEvent: getEventBySlug })
-    if (!gate.ok) return gate.response
+    const gate = await gateGroupRegistration(fields, {
+      serviceClient: supabaseServer,
+      getEvent: getEventBySlug,
+      requestTenantId: tenantId,
+    })
+    if (!gate.ok) return answer(gate.response)
     const { group } = gate
+    note.eventTenantId = group.context.tenantId
 
     // The order of these writes is part of the route's behaviour: see the note on
     // partial state in lib/registration/group/persist.
     const saved = await insertGroupRegistration(group, fields)
-    if (!saved.ok) return saved.response
+    if (!saved.ok) return answer(saved.response)
     const { regId } = saved.registration
+    note.registrationId = regId
 
     const savedMembers = await saveGroupMembers(group, fields, regId)
-    if (!savedMembers.ok) return savedMembers.response
+    if (!savedMembers.ok) return answer(savedMembers.response)
     const { members } = savedMembers
 
     await runGroupMemberHooks(group, fields, regId, members)
@@ -123,14 +176,17 @@ export async function POST(req: NextRequest) {
     const signInToken = await provisionRegistrantLogin(group, members)
 
     const savedParticipants = await insertGroupParticipants(group, fields, regId, members)
-    if (!savedParticipants.ok) return savedParticipants.response
+    if (!savedParticipants.ok) return answer(savedParticipants.response)
     const { participants } = savedParticipants
 
     scheduleGroupFollowUp(group, fields, regId, participants, requestStartedAt)
 
-    return await respondToGroupRegistration(group, fields, saved.registration, members, participants, signInToken, getEventBySlug)
+    return answer(await respondToGroupRegistration(group, fields, saved.registration, members, participants, signInToken, getEventBySlug))
   } catch (e) {
     console.error('Group registration error:', e)
+    note.status = 500
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } finally {
+    await recordRegistration(note)
   }
 }

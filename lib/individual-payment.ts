@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import {
   sendEmail,
   groupMemberIndividualPaymentEmail,

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { assertRegistrable, type EligibilityContext } from '../eligibility'
 import { isValidEmail } from '@/lib/member-enums'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { confirmsMemberLastName, memberIdUnusableMessage } from '@/lib/membership-id'
-import { ageRefused } from '../refusal'
+import { ageRefused, eligibilityRefused } from '../refusal'
 import { enteredPeople, type GroupBody, type ParticipantPayload, type TeacherPayload } from './parse'
 
 // POST /api/register/group, the people named in the body: Member ID slots, typed
@@ -27,23 +27,34 @@ export type LinkedSlotNames = Map<ParticipantPayload, { first_name: string; last
  * record has a usable date of birth. Otherwise the slot is what was submitted,
  * the same for an unknown ID, a wrong name and an unusable record.
  *
- * S5 A7: on a tenant event, treat the slot as unusable or scope the ID lookup and
- * profile read to the event's tenant.
+ * S5 A7: the record must pass assertRegistrable with the event's own context, the
+ * same check checkDatesOfBirth makes, so a record under the event's minimum age is
+ * an unusable ID like any other. For Stellr's events that is today's check.
+ *
+ * On a tenant's event every Member ID slot is unusable, with that same answer, and
+ * nothing is read: Member IDs are Stellr's, held on the member record every
+ * organiser shares, so neither the lookup nor the profile it fills the slot from
+ * may reach across to a tenant. The organiser types the person in instead.
  */
 export async function resolveLinkedSlots(
   db: SupabaseClient,
   people: ParticipantPayload[] | null | undefined,
-  eventDate: string | null,
+  eligibility: EligibilityContext,
   linkedSlotNames: LinkedSlotNames,
   unusedMemberIds: Set<ParticipantPayload>,
 ): Promise<void> {
   for (const p of people ?? []) {
     if (!p.linked || !p.existing_membership_id) continue
+    if (!eligibility.isPlatformOwner) {
+      p.linked = false
+      unusedMemberIds.add(p)
+      continue
+    }
     const onFile = await getMemberOnFileByMembershipId(db, p.existing_membership_id)
     if (
       !onFile ||
       !confirmsMemberLastName(p.last_name, onFile) ||
-      !checkRegistrationAge(onFile.date_of_birth, { eventDate }).ok
+      !assertRegistrable(onFile.date_of_birth, eligibility).ok
     ) {
       p.linked = false
       unusedMemberIds.add(p)
@@ -110,15 +121,16 @@ export function refuseBadEmails(body: Pick<GroupBody, 'additional_adults' | 'stu
  * participant row cannot be saved without it.
  *
  * S5 A7: this loop is the one place every person a participant row will be written
- * for passes through before the first write (route.branches.test.ts pins that). The
- * tenant-age assertion belongs beside it. It also belongs in the age check in
- * resolveLinkedSlots, with the same context, so a record that fails takes the unused
- * ID path and gets the one answer below.
+ * for passes through before the first write (route.branches.test.ts pins that), so
+ * the event's eligibility rules are asserted here, over everyone, through
+ * assertRegistrable: for Stellr's events exactly the check above, and for a tenant's,
+ * its minimum age and no one under 18. resolveLinkedSlots makes the same check with the same context, so
+ * a record that fails it takes the unused ID path and gets the one answer below.
  */
 export function checkDatesOfBirth(
   teacher: TeacherPayload,
   body: Pick<GroupBody, 'details_method' | 'additional_adults' | 'students'>,
-  eventDate: string | null,
+  eligibility: EligibilityContext,
   unusedMemberIds: Set<ParticipantPayload>,
 ): Response | null {
   const peopleToCheck: Array<{ p: ParticipantPayload; isRegistrant: boolean }> = [
@@ -129,11 +141,11 @@ export function checkDatesOfBirth(
   ]
   for (const { p, isRegistrant } of peopleToCheck) {
     const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || 'one person'
-    const check = checkRegistrationAge(p.date_of_birth, { eventDate, name: isRegistrant ? undefined : name })
+    const check = assertRegistrable(p.date_of_birth, eligibility, isRegistrant ? {} : { name })
     if (!check.ok) {
       return unusedMemberIds.has(p) && check.reason === 'dob_missing'
         ? ageRefused({ reason: check.reason, error: memberIdUnusableMessage(name) })
-        : ageRefused(check)
+        : eligibilityRefused(check)
     }
     p.date_of_birth = check.dateOfBirth
   }

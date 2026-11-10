@@ -1,9 +1,9 @@
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGrade } from '@/lib/member-enums'
-import { recordEventParticipation } from '@/lib/event-participation-sync'
-import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
+import { autoGrantBaseMembership, recordParticipation } from '@/lib/community/event-hooks'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { attachOfferToRegistration } from '@/lib/scholarships'
+import { sendTenantRegistrationConfirmation } from '../tenant-confirmation'
 import type { GatedRegistration } from './gate'
 import type { IndividualBody } from './parse'
 import type { PersistedRegistration } from './persist'
@@ -13,8 +13,12 @@ import type { PersistedRegistration } from './persist'
  * event activity, membership, the agreement and the login. Run in this order on
  * every registration today. Returns the sign-in token, when one was minted.
  *
- * Not everything here is Stellr-only: a tenant event can have minors, and the
- * agreement is their consent. Do not gate the whole of this on the platform owner.
+ * S5 A7: all of it is Stellr's, so a tenant's event gets none of it. The
+ * registrant gets the tenant's confirmation email instead (B14's tenant share).
+ * The agreement is the consent for a minor, and it is held for a tenant's event,
+ * not sent as Stellr: Stellr's DocuSign templates and sender are Stellr's, and the
+ * signing engine has no tenant sender yet (A11). Whether a tenant's minors may be
+ * registered before that exists is an owner decision.
  */
 export async function runIndividualHooks(
   gated: GatedRegistration,
@@ -25,6 +29,17 @@ export async function runIndividualHooks(
   const { regId, memberId, memberIsNew, participantId, resolvedRole, schoolState } = row
   const { event_slug, first_name, last_name, phone, grade, school_name, school_address_state } = body
 
+  if (!gated.context.isPlatformOwner) {
+    await sendTenantRegistrationConfirmation(db, {
+      tenantId: gated.context.tenantId,
+      to: email,
+      firstName: first_name ?? '',
+      eventTitle,
+      kind: 'individual',
+    })
+    return null
+  }
+
   // A scholarship offer now has its registration: link it, and record the
   // discounted amount due (the checkout below applies the coupon itself).
   if (scholarship) {
@@ -33,12 +48,12 @@ export async function runIndividualHooks(
 
   // Record this registration in event_participations so it appears in the
   // "Event Activity" lists on the member portal and admin member page.
-  await recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle, registrationId: regId })
+  await recordParticipation(gated.context, db, { memberId, eventSlug: event_slug, eventTitle, registrationId: regId })
 
   // Turn a non-member registrant into a member: grant the free base tier
   // (Explorer / Educator / Alumni) if they still hold no membership after the
   // grant rules ran above. Idempotent + non-fatal — existing members untouched.
-  await autoGrantBaseMembership(db, memberId)
+  await autoGrantBaseMembership(gated.context, db, memberId)
 
   // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
   // adult/mentor participation agreement) for this participant.

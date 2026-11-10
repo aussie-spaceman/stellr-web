@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { runAfterResponse } from '@/lib/after-response'

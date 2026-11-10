@@ -18,3 +18,13 @@ export const temporarilyUnavailable = (): Response =>
 /** A date of birth the person just typed, refused in checkRegistrationAge's own words. */
 export const ageRefused = (check: { reason: string; error: string }): Response =>
   NextResponse.json({ code: check.reason, error: check.error }, { status: 400 })
+
+/**
+ * assertEligible's refusal (S5 A7). A tenant event whose rules can't be worked out
+ * is not the person's doing, so it is a 503, not a 400. Stellr's events never give
+ * that reason, so for them this is ageRefused.
+ */
+export const eligibilityRefused = (check: { reason: string; error: string }): Response =>
+  check.reason === 'eligibility_unavailable'
+    ? NextResponse.json({ code: check.reason, error: check.error }, { status: 503 })
+    : ageRefused(check)

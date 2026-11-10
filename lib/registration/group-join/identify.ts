@@ -4,7 +4,8 @@ import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { AUTH_APP_URL } from '@/lib/env'
 import { upsertMember } from '@/lib/member-sync'
 import { childAwaitingConsentBlock } from '@/lib/pending-consent'
-import { checkRegistrationAge } from '@/lib/registration-eligibility'
+import { assertEligible } from '../eligibility'
+import type { DeferredEventContext } from '../event-context'
 import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import { personFromDetails, personFromProfile, type JoinMemberProfile, type JoinPerson } from './parse'
@@ -19,22 +20,44 @@ import { personFromDetails, personFromProfile, type JoinMemberProfile, type Join
  */
 export interface GroupJoiner {
   person: JoinPerson
-  memberId: string
+  /** Null for someone new joining a tenant's group: S5 A7 writes no member row for them. */
+  memberId: string | null
   signInToken: string | null
 }
 
 export type IdentifyResult = Refusable<{ joiner: GroupJoiner }>
 
-/** Signed-in member: their stored profile is authoritative. */
+/**
+ * Signed-in member: on Stellr's events their stored profile is authoritative.
+ *
+ * S5 A7: on a tenant's event nothing is read from Stellr's member records and no
+ * member is linked. The member record is shared across organisers, so a sign-in is
+ * not taken as leave to copy it into a tenant's participant row: the person joins
+ * with the details they type, as someone new does (identifyNewParticipant).
+ */
 export async function identifySignedInMember(
   db: SupabaseClient,
   userId: string,
-  eventDate: string | null,
+  owner: DeferredEventContext,
+  details?: Record<string, unknown>,
 ): Promise<IdentifyResult> {
+  // S5 A7: on a tenant's host the gate has already confirmed the owner, and its rules
+  // are the tenant's, so this is known before any read. On Stellr's hosts the rules
+  // are Stellr's here and the owner is confirmed below, before the profile is read.
+  if (!owner.eligibility.isPlatformOwner) return identifyNewParticipant(db, details, owner)
+
   // Decision 24, COPPA: a child whose parent has not consented joins
-  // nothing until the parent signs (lib/pending-consent).
+  // nothing until the parent signs (lib/pending-consent). On Stellr's hosts this
+  // reads Stellr's own records for this login, before the owner read.
   const childBlock = await childAwaitingConsentBlock(db, userId)
   if (childBlock) return refuse(childBlock)
+
+  // S5 A7: the event's owner, before the profile is read.
+  const owned = await owner.confirm()
+  if (!owned.ok) return refuse(owned.response)
+  const { eligibility } = owned.context
+  // Defensive: on Stellr's hosts an event owned by anyone else was refused above.
+  if (!eligibility.isPlatformOwner) return identifyNewParticipant(db, details, owner)
 
   const { data: member } = await db
     .from('members')
@@ -49,8 +72,17 @@ export async function identifySignedInMember(
   // The stored date of birth is what the participant row and the agreement
   // use. Without a usable one the row cannot be saved, and the agreement
   // would not know whether a parent has to sign.
-  const profileAge = checkRegistrationAge(member.date_of_birth, { eventDate })
+  //
+  // S5 A7: through assertEligible with the event's context: for Stellr's events
+  // today's check, for a tenant's its minimum age.
+  const profileAge = assertEligible(member.date_of_birth, eligibility)
   if (!profileAge.ok) {
+    if (profileAge.reason === 'under_minimum_age' || profileAge.reason === 'eligibility_unavailable') {
+      return refuse(NextResponse.json(
+        { code: profileAge.reason, error: profileAge.error },
+        { status: profileAge.reason === 'eligibility_unavailable' ? 503 : 400 },
+      ))
+    }
     // Members cannot edit a date of birth on Account → Profile. A missing one
     // is added on the profile-completion page; a wrong one only staff can fix.
     return refuse(NextResponse.json(
@@ -78,11 +110,23 @@ export async function identifySignedInMember(
 export async function identifyNewParticipant(
   db: SupabaseClient,
   details: Record<string, unknown> | undefined,
-  eventDate: string | null,
+  owner: DeferredEventContext,
 ): Promise<IdentifyResult> {
-  const parsed = personFromDetails(details, eventDate)
+  const parsed = personFromDetails(details, owner.eligibility)
   if (!parsed.ok) return parsed
   const { person } = parsed
+
+  // S5 A7: the event's owner, before the first read about this person. On Stellr's
+  // hosts the details were checked with Stellr's rules, which are the event's once
+  // this confirms it is Stellr's; on a tenant's host it was confirmed in the gate.
+  const owned = await owner.confirm()
+  if (!owned.ok) return refuse(owned.response)
+  const { eligibility } = owned.context
+
+  // S5 A7: someone new joining a tenant's group gets only their participant row. The
+  // member record is shared across organisers, so it is neither read nor written, no
+  // login is made, and nobody is told whether the address is on file with Stellr.
+  if (!eligibility.isPlatformOwner) return { ok: true, joiner: { person, memberId: null, signInToken: null } }
 
   // On file: they sign in, and join by identifySignedInMember, before anything is
   // written (lib/registration/member-on-file).

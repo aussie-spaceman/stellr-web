@@ -4,6 +4,14 @@ import { registrationIsOpen, type RegistrationGateSource } from '@/lib/registrat
 import { getCurrentMember } from '@/lib/community'
 import { findMemberOnFile, SIGN_IN_REQUIRED } from '../member-on-file'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { stellrContext } from '../eligibility'
+import {
+  eventOwnerOrRefusal,
+  readRegistrationEvent,
+  tenantPaymentsUnavailable,
+  type RegistrationEventContext,
+} from '../event-context'
 import { answerDuplicates } from './duplicates'
 import { GROUP_SIZE_MAX, isValidCount, settleAddresses, type GroupBody, type ParticipantPayload, type TeacherPayload } from './parse'
 import { priceGroupRegistration, type GroupPrice } from './price'
@@ -25,15 +33,22 @@ export type GroupEvent = RegistrationGateSource & {
  * What the route hands in. It stays the one file that takes the service-role
  * client and the Sanity getter, so test/baselines/** still list it for both.
  */
+/** S5 A7: the ways to pay a tenant's event refuses until S9, whatever its price. */
+const TENANT_REFUSED_PAYMENT_METHODS: ReadonlySet<unknown> = new Set(['card', 'invoice', 'invoice_some', 'teacher_share'])
+
 export interface GateDeps {
   serviceClient: () => SupabaseClient
   getEvent: (slug: string) => Promise<GroupEvent | null>
+  /** requestTenant().tenantId: Stellr unless the proxy marked this request as a tenant host's. */
+  requestTenantId: string
 }
 
 /** What the gate established, for the writes that follow. */
 export interface GatedGroup {
   db: SupabaseClient
   event: GroupEvent
+  /** The event's owner and rules (lib/registration/event-context). */
+  context: RegistrationEventContext
   eventTitle: string
   eventDate: string | null
   isCampaign: boolean
@@ -76,16 +91,12 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
   // was written `confirmed` with $0 owing and no payment. Distinguish a
   // transient failure (retryable 503) from a genuinely unknown event (404), and
   // never fall through to free/open.
-  let event: GroupEvent | null
-  try {
-    event = await deps.getEvent(event_slug)
-  } catch (e) {
-    console.error('[register/group] event lookup failed:', e)
-    return refuse(temporarilyUnavailable())
-  }
-  if (!event) {
+  const read = await readRegistrationEvent(event_slug, { getEvent: deps.getEvent, route: 'register/group' })
+  if (read.kind === 'unavailable') return refuse(temporarilyUnavailable())
+  if (read.kind === 'not_found') {
     return refuse(NextResponse.json({ error: 'Event not found' }, { status: 404 }))
   }
+  const { event } = read
   if (!registrationIsOpen(event)) {
     return refuse(NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 }))
   }
@@ -156,22 +167,68 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
   const db = deps.serviceClient()
   const eventDate = event.date ?? null
 
+  // S5 A7: every person is checked with the event's rules (lib/registration/
+  // event-context). On a tenant's host the event's owner is read first, because its
+  // rules decide the checks below, and every Member ID slot is unusable there. On
+  // Stellr's hosts the event can only go ahead as Stellr's, so Stellr's rules apply,
+  // exactly today's checks, and the owner is read after them: after Member IDs are
+  // looked up in Stellr's own records, and before this event's registrations are read
+  // and before anything is written. An event owned by anyone else then gets the
+  // unknown event's answer, though a Member ID or date-of-birth answer can come first.
+  const ownerCheck = () =>
+    eventOwnerOrRefusal(event, event_slug, {
+      db,
+      requestTenantId: deps.requestTenantId,
+      route: 'register/group',
+    }, () => NextResponse.json({ error: 'Event not found' }, { status: 404 }))
+  let context: RegistrationEventContext | null = null
+  if (deps.requestTenantId !== STELLR_TENANT_ID) {
+    const owned = await ownerCheck()
+    if (!owned.ok) return refuse(owned.response)
+    context = owned.context
+  }
+  const eligibility = context?.eligibility ?? stellrContext(event)
+
   const unusedMemberIds = new Set<ParticipantPayload>()
   const linkedSlotNames: LinkedSlotNames = new Map()
   if (details_method === 'add_now') {
-    await resolveLinkedSlots(db, additional_adults, eventDate, linkedSlotNames, unusedMemberIds)
-    await resolveLinkedSlots(db, students, eventDate, linkedSlotNames, unusedMemberIds)
+    await resolveLinkedSlots(db, additional_adults, eligibility, linkedSlotNames, unusedMemberIds)
+    await resolveLinkedSlots(db, students, eligibility, linkedSlotNames, unusedMemberIds)
     const badEmail = refuseBadEmails(body)
     if (badEmail) return refuse(badEmail)
   }
 
-  const ageRefusal = checkDatesOfBirth(teacher, body, eventDate, unusedMemberIds)
+  const ageRefusal = checkDatesOfBirth(teacher, body, eligibility, unusedMemberIds)
   if (ageRefusal) return refuse(ageRefusal)
 
-  // S5 A7: the refusal of a priced tenant event goes before this line, not in
-  // priceGroupRegistration. A duplicate's answer can open a Checkout on the earlier
-  // registration, and that must never happen for a tenant.
-  const duplicate = await answerDuplicates(db, body, teacher, event, sessionMember?.email, linkedSlotNames)
+  if (!context) {
+    const owned = await ownerCheck()
+    if (!owned.ok) return refuse(owned.response)
+    context = owned.context
+  }
+  // S5 A7: priced tenant events fail closed until S9. A fee, a card or invoice, or
+  // seats paid one by one would each reach Stellr's Stripe account, so all are
+  // refused here: before answerDuplicates, which can open a Checkout on an earlier
+  // unpaid registration, and before anything is written.
+  // Seats paid one by one (member_pays_individually) count as a payment only where
+  // there is something to collect, a price on the event, which the first test below
+  // already refuses. GroupRegistrationForm sends member_pays_individually for every
+  // free, non-campaign event, where it means each seat is settled at nothing owed,
+  // so on its own it is not a reason to refuse. "Invoice for some" is an invoice, and
+  // "students share the teacher's cost" is a fee paid seat by seat, so both are too.
+  if (
+    !context.isPlatformOwner &&
+    (event.stripePriceId || TENANT_REFUSED_PAYMENT_METHODS.has(body.payment_method))
+  ) {
+    return refuse(tenantPaymentsUnavailable())
+  }
+
+  // S5 A7: a priced tenant event was refused above, before this line. A duplicate's
+  // answer can open a Checkout on the earlier registration, and for a tenant's event
+  // it opens none and resends no pay link (payments: false).
+  const duplicate = await answerDuplicates(db, body, teacher, event, sessionMember?.email, linkedSlotNames, {
+    payments: context.isPlatformOwner,
+  })
   if (duplicate) return refuse(duplicate)
 
   // The organiser is not on this event, but is on file: they sign in before
@@ -179,7 +236,9 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
   // People they enter are not asked, because the organiser is naming them, not
   // claiming to be them. Their profile is not rewritten, but the group's other
   // effects still follow for them: docs/TENANCY-S5.md, Owner decisions.
-  if (!sessionMember) {
+  // S5 A7: not on a tenant's event, which writes no member rows and makes no login,
+  // and where asking would tell the tenant's form who is on file with Stellr.
+  if (context.isPlatformOwner && !sessionMember) {
     const onFile = await findMemberOnFile(db, teacher.email, teacher.school_email)
     if (!onFile.ok) {
       console.error('[register/group] prior-member lookup failed:', onFile.error)
@@ -226,6 +285,7 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
     group: {
       db,
       event,
+      context,
       eventTitle,
       eventDate,
       isCampaign,

@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { RegistrationRow } from '@/lib/database.types'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
-import { resolveAndLinkSchool } from '@/lib/school-link'
-import { syncMemberOptionSelections } from '@/lib/member-profile-options'
+import { resolveAndLinkSchool, syncMemberOptionSelections } from '@/lib/community/event-hooks'
 import { mintPayToken } from '@/lib/registration-checkout'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
@@ -29,7 +28,7 @@ export interface PersistedRegistration {
 export type PersistResult = Refusable<{ row: PersistedRegistration }>
 
 export async function persistIndividualRegistration(gated: GatedRegistration, body: IndividualBody): Promise<PersistResult> {
-  const { db, email, schoolEmail, dateOfBirth: dob, isMinor, amountDueCents, eventTitle: event_title } = gated
+  const { db, email, schoolEmail, dateOfBirth: dob, isMinor, amountDueCents, eventTitle: event_title, context } = gated
   const {
     event_slug,
     first_name, last_name, nickname, phone,
@@ -49,6 +48,10 @@ export async function persistIndividualRegistration(gated: GatedRegistration, bo
     .insert({
       event_slug,
       event_title,
+      // S5 A7: from the resolved event, Stellr's included. For Stellr it is the
+      // value the derivation trigger stamps, and it keeps an unmirrored Stellr event
+      // registering once derivation enforces.
+      tenant_id: context.tenantId,
       type: 'individual',
       status: 'pending',
       amount_due_cents: amountDueCents,
@@ -93,6 +96,13 @@ export async function persistIndividualRegistration(gated: GatedRegistration, bo
     const { error: takeBackError } = await db.from('registrations').delete().eq('id', regId)
     if (takeBackError) console.error('[register/individual] could not take back registration', regId, takeBackError)
     return refuse(temporarilyUnavailable())
+  }
+  //
+  // S5 A7: a tenant's registration writes only its registration and participant
+  // rows. The member record is shared across organisers, so it is neither read nor
+  // written here, and the participant row carries what the form submitted.
+  if (!context.isPlatformOwner) {
+    return saveParticipant(gated, body, { regId, payToken, resolvedRole }, { memberId: null, memberIsNew: false, schoolState: null })
   }
   const { data: priorByEmail, error: priorByEmailError } = await db
     .from('members').select('id').eq('email', email).maybeSingle()
@@ -175,7 +185,7 @@ export async function persistIndividualRegistration(gated: GatedRegistration, bo
   // participant row below still carries the submitted school and options
   // (deep review C-3, finding REG-2).
   const linkMemberIds = mayWriteMemberRow && memberId ? [memberId] : []
-  const resolvedSchool = await resolveAndLinkSchool(db, linkMemberIds, {
+  const resolvedSchool = await resolveAndLinkSchool(context, db, linkMemberIds, {
     id: body.school_id ?? null,
     name: school_name,
     address_street: body.school_address_street ?? null,
@@ -184,14 +194,37 @@ export async function persistIndividualRegistration(gated: GatedRegistration, bo
     address_zip: body.school_address_zip ?? null,
   })
   if (mayWriteMemberRow && memberId) {
-    await syncMemberOptionSelections(db, [
+    await syncMemberOptionSelections(context, db, [
       { memberId, ethnicity, dietary: dietary_requirements },
     ])
   }
 
-  // Create participant record
+  return saveParticipant(gated, body, { regId, payToken, resolvedRole }, { memberId, memberIsNew, schoolState: resolvedSchool?.state })
+}
+
+/** The participant row, last of the three. Takes back the registration if it fails. */
+async function saveParticipant(
+  gated: GatedRegistration,
+  body: IndividualBody,
+  saved: { regId: string; payToken: string; resolvedRole: ReturnType<typeof normalizeEventRole> },
+  member: { memberId: string | null; memberIsNew: boolean; schoolState: string | null | undefined },
+): Promise<PersistResult> {
+  const { db, email, schoolEmail, dateOfBirth: dob, context } = gated
+  const { regId, payToken, resolvedRole } = saved
+  const { memberId, memberIsNew, schoolState } = member
+  const {
+    first_name, last_name, nickname, phone,
+    grade, gender, ethnicity, t_shirt_size, school_name,
+    age_bracket,
+    dietary_requirements, health_conditions,
+    emergency_contact_first_name, emergency_contact_last_name,
+    emergency_contact_email, emergency_contact_phone,
+    emergency_contact_relationship,
+  } = body
+
   const { data: partRow, error: partError } = await db.from('participants').insert({
     registration_id: regId,
+    tenant_id: context.tenantId,
     member_id: memberId,
     first_name, last_name, nickname: nickname || null,
     email, school_email: schoolEmail, phone, date_of_birth: dob, grade, gender,
@@ -222,7 +255,7 @@ export async function persistIndividualRegistration(gated: GatedRegistration, bo
       memberIsNew,
       participantId: partRow.id,
       resolvedRole,
-      schoolState: resolvedSchool?.state,
+      schoolState,
     },
   }
 }

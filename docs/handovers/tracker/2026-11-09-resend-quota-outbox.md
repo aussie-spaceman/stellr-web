@@ -1,0 +1,17 @@
+# Resend quota: mail is delayed, never dropped — 2026-11-09
+
+Slug: `resend-quota-outbox`. Handover: `HANDOVER-resend-quota-outbox-2026-11-09.md`. Doc snapshot: `1mubjalm19rChjTv9rH_DzbSzcZEC8E2OFI_u6CghUh4`.
+PR #592 → `dev` as `6e8b1066`; not promoted (promotion is a separate session). Migration: `20261109224229_email_outbox.sql` (dev only).
+
+When Resend refuses a send for a reason that will pass, `sendEmail` writes it to `email_outbox` and returns `{ queued: true }`. The reasons are the daily or monthly quota, the rate limit, an outage, or a key or domain problem. The `email-outbox` cron sends the queue four times a day, transactional first. Only a message Resend calls invalid (400/422) still throws. E-sign keeps its own outbox (`deferOnFailure: false`).
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| resend-quota-outbox.1 | Reaches production | On `dev` only (#592, `6e8b1066`). CI green, every step read: build, unit, `db` (migration applied, pgTAP), `e2e-tests / Run npx playwright test`, `e2e-local`. Production still drops refused mail. | Promote. Apply `20261109224229_email_outbox.sql` to production first, with the owner's yes. Without it, code falls back to the old throw, so it is no worse than today, but nothing is protected. | ☐ |
+| resend-quota-outbox.2 | First production drain | The cron has never run on a deployment (crons skip outside prod). Proven only by unit tests and a stubbed-Resend run against the dev database. | After `.1`: read `cron_runs` for job `email-outbox` at the next slot (00:05/06:05/12:05/18:05 UTC). When the quota is next hit, check `email_outbox` rows go `pending` → `sent`. | ☐ |
+| resend-quota-outbox.3 | Resend's real 429 body and Idempotency-Key | Not observed live: the error names and the header follow Resend's docs. An unknown 429 name is treated as the daily quota (still queued). | On the first real refusal, read `email_outbox.last_error` and confirm the `name`. If it is not `daily_quota_exceeded` / `monthly_quota_exceeded` / `rate_limit_exceeded`, adjust `deferReason`. | ☐ |
+| resend-quota-outbox.4 | Resend plan | Free: 100/day, 3,000/month. The outbox delays mail but cannot make it on time, and the monthly cap can hold mail for weeks. | Owner's call: upgrade to a paid plan with no daily cap, then set `EMAIL_DAILY_CAP` to match (or leave the default). | ☐ |
+| resend-quota-outbox.5 | Staff see a stuck outbox | A run is marked failed in `cron_runs` when mail waits more than 48 hours or Resend rejects one as invalid. Whether those failures surface on the admin dashboard or the Friday digest was not checked. | Check the admin dashboard / digest show a failed `email-outbox` run. If not, add it. | ☐ |
+| resend-quota-outbox.6 | Queued mail reads as "sent" | Event-email history, the campaign ledger, survey invitations and `account_invite_sent_at` record a queued send as sent. | Owner's call: show "queued" where staff look, or accept "sent" meaning "accepted for sending". | ☐ |
+| resend-quota-outbox.7 | Database down at the moment of refusal | The email cannot be queued, so the caller gets the old error. | Accept, or add a last-resort fallback. Low likelihood. | ☐ |
+| resend-quota-outbox.8 | Session worktree | `.claude/worktrees/resend-quota-outbox` was left in place: the session was confined to it and could not remove it. | The next ship, promote or close-out from the main checkout clears it (`npm run worktrees -- --apply`). | ☐ |

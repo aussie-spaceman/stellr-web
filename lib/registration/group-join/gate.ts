@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrationIsOpen, type RegistrationGateSource } from '@/lib/registration'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
+import {
+  deferredEventContext,
+  readRegistrationEvent,
+  rowTenant,
+  type DeferredEventContext,
+  type RegistrationEventContext,
+} from '../event-context'
 
 // POST /api/register/group-join, whether this link admits anyone right now. Only
 // reads. Nothing about the person joining is looked at here: every refusal is the
@@ -21,7 +28,15 @@ export interface GroupJoinLink {
   memberPaysIndividually: boolean
   /** S0 (2 Nov 2026): ages are taken on the event's start date (else today). */
   eventDate: string | null
+  /**
+   * S5 A7: the event's rules, and its owner once confirmed (lib/registration/
+   * event-context). identify confirms it before its first read about the person.
+   */
+  owner: DeferredEventContext
 }
+
+/** A link whose event's owner has been confirmed: what persist and after it take. */
+export type ConfirmedJoinLink = GroupJoinLink & { context: RegistrationEventContext }
 
 /**
  * The route hands in the Sanity getter, as it hands in the service-role client: it
@@ -31,6 +46,8 @@ export async function gateGroupJoinLink(
   db: SupabaseClient,
   token: string,
   getEvent: (slug: string) => Promise<GroupJoinEvent | null>,
+  /** requestTenant().tenantId: Stellr unless the proxy marked this request as a tenant host's. */
+  requestTenantId: string,
 ): Promise<Refusable<{ link: GroupJoinLink }>> {
   // Validate token
   const { data: tokenRow, error: tokenError } = await db
@@ -39,9 +56,14 @@ export async function gateGroupJoinLink(
     .eq('token', token)
     .maybeSingle()
 
-  if (tokenError || !tokenRow) {
-    return refuse(NextResponse.json({ error: 'Invalid or expired registration link' }, { status: 404 }))
-  }
+  const invalidLink = () => refuse(NextResponse.json({ error: 'Invalid or expired registration link' }, { status: 404 }))
+  if (tokenError || !tokenRow) return invalidLink()
+  // S5 A7: a link belongs to its registration's tenant (NULL is a Stellr row the
+  // backfill has not reached). Another tenant's link gets the unknown link's answer,
+  // before anything else about it, its expiry included, is told.
+  const linkTenant = rowTenant(tokenRow.tenant_id)
+  const registrationTenant = rowTenant((tokenRow.registrations as { tenant_id?: string | null } | null)?.tenant_id)
+  if (linkTenant !== registrationTenant || linkTenant !== requestTenantId) return invalidLink()
   if (new Date(tokenRow.expires_at) < new Date()) {
     return refuse(NextResponse.json({ error: 'This registration link has expired' }, { status: 410 }))
   }
@@ -66,19 +88,21 @@ export async function gateGroupJoinLink(
   // each join adds a real participant with a DocuSign envelope, Space grant and
   // payment email. A transient failure is a retryable 503; an unresolved event
   // can't be confirmed open, so refuse rather than admit.
-  let joinEvent: GroupJoinEvent | null
-  try {
-    joinEvent = await getEvent(eventSlug)
-  } catch (e) {
-    console.error('[register/group-join] event lookup failed:', e)
-    return refuse(temporarilyUnavailable())
-  }
-  if (!joinEvent || !registrationIsOpen(joinEvent)) {
-    return refuse(NextResponse.json(
-      { error: 'Registration for this event is closed.' },
-      { status: 403 },
-    ))
-  }
+  //
+  // S5 A7: the event's owner is read too: here on a tenant's host, and on Stellr's
+  // before identify's first read about the person (lib/registration/event-context).
+  // An event owned by anyone but the link's tenant gets the closed answer, and a
+  // tenant event whose rules can't be worked out refuses.
+  const closed = () => refuse(NextResponse.json(
+    { error: 'Registration for this event is closed.' },
+    { status: 403 },
+  ))
+  const read = await readRegistrationEvent(eventSlug, { getEvent, route: 'register/group-join' })
+  if (read.kind === 'unavailable') return refuse(temporarilyUnavailable())
+  if (read.kind === 'not_found' || !registrationIsOpen(read.event)) return closed()
+  const joinEvent = read.event
+  const owned = await deferredEventContext(joinEvent, eventSlug, { db, requestTenantId, route: 'register/group-join' }, () => closed().response)
+  if (!owned.ok) return refuse(owned.response)
 
   return {
     ok: true,
@@ -90,6 +114,7 @@ export async function gateGroupJoinLink(
       schoolName: (reg.school_name as string) ?? '',
       memberPaysIndividually: (reg.member_pays_individually as boolean) ?? false,
       eventDate: joinEvent.date ?? null,
+      owner: owned.owner,
     },
   }
 }

@@ -1,12 +1,13 @@
 # S5: crons, rate limiter and SMMA guardrail
 
-What is built, what it does for Stellr today, and what has to happen before it does more. Plan of record: `docs/TENANCY-S5.md`. Checked against the code on 6 Nov 2026, with wave 3's Lanes A, B and C merged to `dev` (#562, #563, #564), and updated on 8 Nov 2026 for wave 4's A9, B9, B10 and B13, read on their lane branches before merge. Neither wave is on production.
+What is built, what it does for Stellr today, and what has to happen before it does more. Plan of record: `docs/TENANCY-S5.md`. Checked against the code on 6 Nov 2026, with wave 3's Lanes A, B and C merged to `dev` (#562, #563, #564), updated on 8 Nov 2026 for wave 4's A9, B9, B10 and B13, read on their lane branches before merge, and on 9 Nov 2026 for wave 5's B14 (#588) and A7 (#594), read on `dev` at `b620a113` after merge. Wave 3 is on production (#561, `.claude/releases/promote-2026-11-06.md`), and so is wave 4 (#587, `.claude/releases/promote-2026-11-09.md`); wave 5 is on `dev` and not promoted.
 
 **In one line each:**
 
-- **Crons:** Stellr-only crons are limited to Stellr's rows, every cron declares `maxDuration` and audits each finished run. **Three crons run per tenant (B13):** `surveys`, `team-profiles` and `survey-retention`. B14 is not built.
+- **Crons:** Stellr-only crons are limited to Stellr's rows, every cron declares `maxDuration` and audits each finished run. **Five crons run per tenant:** `surveys`, `team-profiles` and `survey-retention` (B13), and `event-emails` and `docusign-reminders` (B14). `group-invoice-sync` has no slice.
+- **Email:** one shared daily pool for every sender, tenants included, by the owner's decision of 9 Nov 2026. A tenant's event mail is held unless `TENANT_EVENT_MAIL_ENABLED` is on (B14).
 - **Limiter:** the Postgres store is built and its migration is on production. **Lane A's participant routes call it (A9)**, so a shadow flip now has real traffic to compare. B15 is not built, so flip only after it.
-- **SMMA:** the allow-list and the lint are built. The 4-table CHECK (B9) is built and applied nowhere. The browser test (B10(d)) is built and runs report-only. The self-assessment is held privately pending the owner's decision.
+- **SMMA:** the allow-list and the lint are built. The 4-table CHECK (B9) is applied on `dev` and production (9 Nov 2026). The browser test (B10(d)) is built and runs report-only. The self-assessment is held privately pending the owner's decision.
 
 ## Crons
 
@@ -26,13 +27,14 @@ From `lib/cron-scope.ts`. Nothing reads this at runtime.
 
 ### The per-tenant runner
 
-`lib/cron-tenants.ts` (B3). **B13 moved `surveys`, `team-profiles` and `survey-retention` onto it.** `docusign-reminders`, `event-emails` and `group-invoice-sync` still run one global work list under one deadline, so a second tenant's backlog could starve or fail Stellr's run in those until B14 (and a slice for `group-invoice-sync`) lands. Those must land before a tenant has work in them.
+`lib/cron-tenants.ts` (B3). **B13 moved `surveys`, `team-profiles` and `survey-retention` onto it, and B14 `event-emails` and `docusign-reminders`.** `group-invoice-sync` still runs one global work list under one deadline, so a second tenant's backlog could starve or fail Stellr's run there until a slice for it lands, before a tenant has a group invoice.
 
 How it behaves:
 
 - It partitions the work list a cron has already fetched. It does not loop over `tenants`, and `vercel.json` keeps its schedules.
 - A NULL `tenant_id` goes in Stellr's slot. A row read without the column throws.
-- A run that touches only Stellr adds one small read of `tenants` and is otherwise a plain call: same budget, no child row, no change to failure labels or result JSON.
+- A run that touches only Stellr is a plain call: no read of `tenants` (it uses Stellr's seeded values), the whole budget, no child row, no change to failure labels or result JSON. A run with no work reads nothing. **Since wave 5, Stellr alone is always called, even when the deadline has passed before the runner starts;** the cron's own function sees the deadline and counts late work as deferred, as it did before the runner existed. Before, such a run would have recorded Stellr as not reached, and a Stellr-only run read `tenants` once and could record a `tenants` failure. Both apply to all five crons on the runner.
+- `tenants` is read only when another tenant has work. If that read fails, the run records a `tenants` failure and finishes not ok, and Stellr's work still runs.
 - With more than one tenant, each gets a slice: an equal share of what is left, at least 5 s, with 5 s of overrun. A tenant still running past that is aborted, marked failed, and the next one starts. `fn` must honour the abort signal, or its work carries on in the background.
 - Each tenant has its own try/catch and a child `cron_runs` row (`parent_id`, `tenant_id`). `lastCronResult` ignores child rows, so the `apollo-reconcile` cursor is safe.
 - Inactive tenants are skipped, except where the cron passes `includeInactive`. `survey-retention` is marked for it, because offboarding does not stop a retention clock.
@@ -48,14 +50,31 @@ No flag: with only Stellr's work, each is the runner's plain call, so the order,
 | `team-profiles` (`lib/team-profile/store.ts`) | The daily sweep reads each student's tenant from their registration (`registrations!inner(… tenant_id)`), because `participants.tenant_id` comes with C0b, which is not on production | Calls for some participants or one event (agreement completion, registration) keep the plain path. The 550 ms gap and the 45 s budget are unchanged, and the gap is shared across tenants, since Resend's rate is one account's. If only Stellr has work and a write fails, the error is thrown again after the runner, so the route still answers 500 as today |
 | `survey-retention` (`lib/survey/retention.ts`) | Planning stays one read and now also selects `tenant_id` on `survey_distributions` and `survey_responses`. Deletions run per tenant with `includeInactive` | Still report-only unless `SURVEY_RETENTION_APPLY` is true. A person whose rows span tenants is one purge, in Stellr's slot. With apply on, deletions stop starting 45 s after the route starts (the plan read counts); anyone left is recorded as a `not_applied` failure and `notApplied` in the result. Before, such a run was cut off at `maxDuration` and recorded nothing |
 
-**What changes for Stellr:** when `surveys` or `team-profiles` has work, it reads `tenants` once. If that read fails, the run records a `tenants` failure and finishes not ok, while Stellr's work still runs. Read a `tenants` error in `cron_runs` as a ledger signal, not a send failure.
+**What changes for Stellr:** nothing in what runs. As built in wave 4, a cron with only Stellr's work read `tenants` once and could record a `tenants` failure; since wave 5 that run skips the read, so a `tenants` error in `cron_runs` can only come from a run where another tenant had work. Read it as a ledger signal, not a send failure.
 
 **Preconditions it leaves:**
 
 - The per-tenant `surveys` and `team-profiles` functions read with the service-role client by `event_slug`, so their isolation rests on slugs being unique across tenants. Before S8 makes slugs unique per tenant, those reads go through the job's scope, or check each row's `tenant_id`.
 - `dispatchTeamProfiles`' path for named participants does not read the registration's tenant. That is correct while only CMS events take team profiles. The slice that lets tenant events take them adds the tenant there and drops inactive tenants' candidates.
 
-**Proof still owed:** after promotion, confirm in `cron_runs` that `surveys` still opens and invites.
+**Proof still owed:** now that wave 4 is promoted, confirm in `cron_runs` that `surveys` still opens and invites.
+
+### The two mail crons (B14)
+
+On `dev` since #588 (wave 5), not promoted. A run with only Stellr's work is the runner's plain call: the same rows, order, budget, mail, failure labels and `cron_runs` result keys as before, and no read of `tenants`. The three `event_emails` reads and the `agreements` read now also select `tenant_id`. Only `event-emails` with the flag on can give another tenant a turn, and only then is `tenants` read, along with each such tenant's sender row; `docusign-reminders` hands the runner Stellr's envelopes alone, so it never reads `tenants`.
+
+| Cron | How it splits | Another tenant's work |
+|---|---|---|
+| `event-emails` | Scheduled sends, the re-drive of sends left in `sending`, and catch-ups, per tenant, Stellr first. Stellr keeps Mountain time for "today" | **Held** unless `TENANT_EVENT_MAIL_ENABLED` is exactly `true`: its scheduled rows stay for a later run and are counted as `tenantHeld`, a result key that appears only when something was held. With the flag on, it sends from `"<Tenant> via Stellr" <no-reply@mail.stellreducation.org>` with the tenant's Reply-To (`tenants.branding.reply_to`), takes "today" from the tenant's time zone, sends only inside its own slice and stops between recipients when the slice is aborted. A tenant with no usable sender sends nothing (`t:<id>:sender`); a tenant that throws is recorded as `t:<id>:…` and the next one still runs. With the flag on, one more read finds tenants with only a re-drive or catch-up to do |
+| `docusign-reminders` | Envelopes per tenant, Stellr first | **Held whatever the flag says,** and counted as `tenantHeld`. DocuSign stays Stellr's, and the signing engine's reminders go through its outbox, which has no tenant sender yet, so chasing a tenant's envelope would send it as Stellr. The slice that gives the signing engine a tenant sender lifts this (A11 is the nearest) |
+
+**Guards in the library, not only the crons.** `sendEventEmail` and `sendCatchUp` (`lib/event-emails/send.ts`, `lib/event-emails/catch-up.ts`) answer 503 to a tenant row that arrives without its sender, before they claim or send anything, so no caller can send a tenant's mail as Stellr. Stellr's rows, with `tenant_id` NULL or Stellr's, never meet the check. The admin email routes under `events/[slug]` still give a tenant's staff C17's 503: B14 did not lift those refusals.
+
+**A7's confirmation helper.** `sendTenantConfirmation` in `lib/event-emails/tenant-mail.ts` sends one transactional email from the tenant's sender. It refuses while the flag is off, for Stellr, and for a tenant with no sender, and it never throws. A7's register routes call it with the address on the row just saved and a fixed, escaped template, behind their rate limiter. Any new caller keeps those three rules (`docs/TENANCY-S5.md`, PR amendments).
+
+**Before the flag is set anywhere:** the tenant's Reply-To is set, the tenant's events resolve through the events facade (until C8 and C25 give it a Postgres path, that means the CMS, which holds no tenant event), and the owner has named the slice that gives the signing engine a tenant sender. Until that slice lands, a tenant family's consent reminders are not chased by the cron.
+
+**Proof still owed:** after promotion, confirm in `cron_runs` that both crons keep their result keys, with no `tenantHeld` and no `tenants` failure.
 
 **`group-invoice-sync` has no slice.** It is classed `per_tenant`, but B13 and B14 do not list it. A7's refusal of priced tenant events means no tenant has a group invoice until S9, so it can wait, but name a slice before then.
 
@@ -108,7 +127,7 @@ ORDER BY r.job;
 
 ### Email budget
 
-**No per-tenant share exists.** `lib/email-budget.ts` still has one daily cap, with a transactional reserve, shared by every sender. B14 builds the share and is blocked on the owner's decision. Until then a tenant's sends could use up Stellr's day, so no tenant event sends mail before B14.
+**One shared pool, by the owner's decision of 9 Nov 2026, until the move to SES.** `lib/email-budget.ts` keeps one daily counter with a transactional reserve, and B14 sends every tenant's mail through `sendEmail()`, so tenants count on the same row under the same rules, with no per-tenant allowance and no tenant argument. Event blasts keep the bulk class (`kind: 'marketing'`) Stellr's carry, so they stop at the same cap and skip unsubscribed addresses. Transactional mail is never refused by the counter; the reserve keeps bulk mail out, not any one sender. **The accepted risk:** one busy tenant can reach Resend's own daily limit, after which Resend refuses mail for every sender, Stellr included. B14 changes no counter code; the file gains a comment.
 
 ## Rate limiter
 
@@ -143,7 +162,7 @@ Every mode counts in memory first. **A request memory has already denied stops t
 Limiter keys hold IP addresses, and `check-in-name` keys hold minors' names. Only an HMAC-SHA256 under `RATE_LIMIT_KEY_SECRET` leaves the process, and the table's CHECK takes 32 bytes only. Without a secret of at least 32 characters nothing is sent at all.
 
 - **Secret:** different per Vercel project. Changing it restarts every open window, which is harmless.
-- **Tenant:** `tenantId` is required by the types, and only another tenant's id changes the key. So Stellr's keys stay as they are, and a tenant's traffic counts separately from Stellr's. A9's routes take it from `requestTenant()`, which answers Stellr without reading the request while routing is off. Because the count is per tenant, check-in and the register routes must refuse another tenant's event before tenant hosts go live (A7, A12), or the by-name tries and the hourly allowances would multiply with each host.
+- **Tenant:** `tenantId` is required by the types, and only another tenant's id changes the key. So Stellr's keys stay as they are, and a tenant's traffic counts separately from Stellr's. A9's routes take it from `requestTenant()`, which answers Stellr without reading the request while routing is off. Because the count is per tenant, check-in and the register routes must refuse another tenant's event before tenant hosts go live, or the by-name tries and the hourly allowances would multiply with each host. A7 does this for the register, pay and pay-seat routes (wave 5); check-in waits on A12.
 - **Logs:** shadow lines carry the route label and the two answers, no key. The 429 line keeps the IP, as the sync limiter's does.
 - **Backups: open.** The table is UNLOGGED, but a logical `pg_dump` still includes its rows, and `ops/backups/backup.sh` does not exclude it. Owner decision from wave 2.
 
@@ -217,11 +236,11 @@ The baseline is `test/tenant-surface-baseline.json`, generated by `scripts/tenan
 
 - It covers participation, both Space roster syncs, the base membership grant, the three school links, and `syncMemberOptionSelections`. The last was first left out, and review added it, because it writes the shared person record.
 - **A tenant event writes no `event_participations` row or activity entry**, until the owner decides otherwise (wave 3 decisions).
-- **Nothing imports the hooks yet, so they hold nothing back on their own.** The register routes still call these modules directly, until A7. Team and sheet paths move in A8.
+- **The register routes go through them since A7** (wave 5): each route's `stellr-hooks.ts` runs behind `isPlatformOwner`, so a tenant registration writes only its registration and participant rows. The tenant-surface baseline fell to 7 modules, 25 first-step imports and 16 table files. Team and sheet paths move in A8.
 
 ### The database CHECK (B9)
 
-Migration `20261106234759_community_stellr_only_check.sql`, built in wave 4 and **applied to no database**. It adds CHECK (`tenant_id IS NULL OR` Stellr) to `community_spaces`, `community_resources`, `mentoring_cohorts` and `training_modules`, so a write that would stamp another tenant's event on them is refused with 23514. `STELLR_ONLY_CHECKS` in `lib/tenancy/registry.ts` lists the four. Every row today is Stellr's or NULL. Its production apply needs the owner's approval of the rule and runs outside event hours, because the file holds ACCESS EXCLUSIVE on all four tables through the validation scans (`lock_timeout` 5 s, then it rolls back).
+Migration `20261106234759_community_stellr_only_check.sql`, built in wave 4, applied to the `dev` database and then, with the owner's approval of the rule, to production on 9 Nov 2026, before #587 promoted wave 4. It adds CHECK (`tenant_id IS NULL OR` Stellr) to `community_spaces`, `community_resources`, `mentoring_cohorts` and `training_modules`, so a write that would stamp another tenant's event on them is refused with 23514. `STELLR_ONLY_CHECKS` in `lib/tenancy/registry.ts` lists the four. Every row today is Stellr's or NULL. Any re-apply runs outside event hours, because the file holds ACCESS EXCLUSIVE on all four tables through the validation scans (`lock_timeout` 5 s, then it rolls back).
 
 - `syncEventSpace` writes nothing for an event the mirror gives another tenant, and fails the sync if the mirror read fails: the Sanity webhook answers 500, and Sanity's retry and `sync:event-spaces` catch up.
 - Lane B's 11 inserts into three of the tables name `tenant_id: STELLR_TENANT_ID` (B16), the value log mode already stamped.
@@ -241,7 +260,8 @@ The harness has no CMS, so the register form and check-in page have not been ope
 | Control | Slice |
 |---|---|
 | The two community `TODO(S5)` IDOR snapshot entries: the check now holds those tables to Stellr or NULL, and Lane C changes the text | Lane C, after B9 |
-| Register routes through the hooks, tenant confirmations email-only | A7 |
+| Team-leader add and edit and the roster sheet import through the hooks | A8 |
+| A tenant sender for the signing engine, so `docusign-reminders` can chase a tenant's envelopes | No slice named; A11 is the nearest |
 | `tenant-host-routing` as a required check | Owner decision |
 
 Until then, keep `TENANT_ROUTING_ENABLED` off on any deployment with a zone attached (see `docs/TENANCY-S5.md`, Real tenant hosts).

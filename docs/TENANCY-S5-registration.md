@@ -8,12 +8,14 @@ Registration stays open: anyone can register, and control is by age. Nothing her
 
 | Piece | Where | State |
 |---|---|---|
-| The check that gives the registrant a message | `lib/registration/eligibility.ts`, `assertEligible()` | Built. **Nothing calls it yet.** A7 wires the routes |
+| The check that gives the registrant a message | `lib/registration/eligibility.ts`, `assertEligible()` | Built. **A7 wires it into the register routes** (on `dev` since #594, not promoted), through `assertRegistrable`, which adds the consent rule below for tenant events |
 | The database backstop | `supabase/migrations/20261105041211_participants_eligibility.sql` | On the `dev` database since 5 Nov 2026, with the ledger re-read |
 | Its tests | `supabase/tests/database/participant_eligibility.test.sql`, `test/registration/participants-eligibility-sql.test.ts` | The second reads the constants and the SQL, and fails if one side changes alone. The pgTAP passes in CI's `db` job |
-| Production | | Not applied. Goes through `prod-migrate` with the owner's approval, before the code that needs it |
+| Production | | Applied on 5 Nov 2026 with the owner's yes, through the Supabase MCP (`.claude/releases/promote-2026-11-05.md`) |
 
-Until A7, the live age check is `checkRegistrationAge` in `lib/registration-eligibility.ts`, unchanged. A7 replaces it with `assertEligible` in the routes.
+On production, until A7 is promoted, the live age check is `checkRegistrationAge` in `lib/registration-eligibility.ts`. On `dev`, A7 has replaced it with `assertEligible` in individual, group (both roster points) and group-join; for Stellr's events that makes exactly the old call.
+
+**Tenant events and consent (A7, fail-closed).** Tenants have no way yet to collect a parent's or guardian's consent: Stellr's consent is its own agreement, sent as Stellr. So the register API refuses anyone under 18, today or on the day, for a non-Stellr event, through `TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT`, with the reason `under_minimum_age`. The trigger keeps the platform floor of 14, so a later consent flow can lower the API's rule without a migration. Which way to go is the owner's (`docs/TENANCY-S5.md`, Owner decisions wave 5 raised), and the refusal wording is a proposal. A live tenant event with no start date refuses everyone (`eligibility_unavailable`, 503) until the owner decides how such events are dated.
 
 ## The rule
 
@@ -95,7 +97,7 @@ Recorded so they are decided on purpose.
 - **Not re-checked:** `tenants.min_participant_age` changing; a new `events` row arriving for a slug that already has registrations; `activity_type` changing, where a campaign going live with no start date refuses only new writes.
 - **Concurrency.** None of the triggers takes a row lock, so that Stellr writes gain no wait. Under READ COMMITTED, a participant insert running alongside a registration move or an event change can commit a row neither check judged against the final state. Accepted: this is the backstop behind the API gate, and such moves are rare staff actions.
 - **Slug renames.** `rename_event_slug` on a tenant event with participants needs the mirror to hold the new slug first, or it is refused as an unmirrored tenant event.
-- **Partial state in `register/group`.** It writes the registration and members before participants, so a trigger refusal would leave them behind. A6 pinned that every person with a row passes one check before the first write. A7 runs `assertEligible` there, so the risk stays open until A7. See the note in `lib/registration/group/persist.ts`.
+- **Partial state in `register/group`.** It writes the registration and members before participants, so a trigger refusal would leave them behind. A6 pinned that every person with a row passes one check before the first write. A7 runs `assertEligible` over everyone there before the first write, so the risk is closed on `dev` (#594) and closes on production when A7 is promoted. See the note in `lib/registration/group/persist.ts`.
 - **Writers that drop the error.** `lib/sheet-participant-sync.ts` ignores the error on `update(payload)` in its existing-row and raced branches, so a 23514 would vanish. A8 handles it. The other six files that update `participants` must not touch `date_of_birth` or `registration_id`, or need the same.
 - **Date of birth is self-declared.** A liar can still pass. Accepted in `docs/THREAT-MODEL.md`, section 9.
 
@@ -114,11 +116,11 @@ WHERE e.starts_at IS NOT NULL
 
 1. **`dev` migration.** Applied 5 Nov 2026, and the ledger re-read. Still owed: confirm a Stellr registration on `dev` still writes.
 2. **Parity query on `dev`, then production.** `dev`, 5 Nov 2026: 0 mismatches across 9 dated events, after `scripts/backfill-events-mirror.ts` filled the mirror (11 rows, all Stellr's). Production's backfill and query are still owed.
-3. **Production migration.** Through `prod-migrate`, with the owner's approval, one file, then re-read `db:status --prod`. It is a no-op for Stellr apart from the one lookup above. It must land before any code that relies on it.
-4. **A7** wires `assertEligible` into the register routes, supplies `tenant_id` on every write, Stellr's too, and refuses priced tenant events. **A8** does the same for team-leader add and edit and the roster sheet import.
+3. **Production migration.** Applied 5 Nov 2026 with the owner's yes, through the Supabase MCP, and the ledger re-read (`.claude/releases/promote-2026-11-05.md`). It is a no-op for Stellr apart from the one lookup above.
+4. **A7** wires `assertEligible` into the register routes, supplies `tenant_id` on every write, Stellr's too, and refuses priced tenant events. On `dev` since #594, not promoted. For Stellr it adds an owner read of `public.events` to each register, pay and pay-seat request (one read, or two when the row for the CMS document holds another slug or is missing, so that the owner agrees with the slug's row the trigger uses), and a failed read, or two rows naming different owners, answers a retryable 503. **A8** does the same for team-leader add and edit and the roster sheet import.
 5. **The S3 enforce flip**, after A7, A8, B16 and C20 and 7 clean days, and before the first non-owner event on production. A3 relies on it.
 6. **Before the first tenant event:** the sync fix above, and the owner's decision below.
-7. **Owner's manual test on a tenant event:** a 13-year-old, a NULL date of birth, a future date and an over-120 date refused by the API and by the database. A Stellr 12-year-old still registers.
+7. **Owner's manual test on a tenant event:** a 13-year-old, a NULL date of birth, a future date and an over-120 date refused by the API and by the database. While A7's consent rule stands, a 15-year-old is refused by the API too. A Stellr 12-year-old still registers.
 
 `docs/THREAT-MODEL.md` lowers "Age-gate bypass" from M to L only once A3 and A7 are both on production.
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import {
   rec, AGE_CASES, OPEN_EVENT, CLOSED_EVENT, EVENT_UNDER_WAY, EVENT_A_YEAR_OUT,
   DOB_18_TODAY, DOB_18_TOMORROW, DOB_13_TOMORROW, DOB_MISSING_SELF, DOB_INVALID_SELF,
@@ -541,6 +542,7 @@ describe('characterisation: POST /api/register/individual — rows written', () 
   it('writes this registration, member and participant, reads and all, in this order', async () => {
     expect((await post()).status).toBe(201)
     expect(rec.log).toEqual([
+      'select events', // S5 A7: the event's owner
       'select members', // the gate: on file by email?
       'select members', // the gate: on file by school_email?
       'insert registrations',
@@ -565,6 +567,7 @@ describe('characterisation: POST /api/register/individual — rows written', () 
     expect(rec.payloads('insert', 'registrations')).toEqual([{
       event_slug: 'colorado',
       event_title: 'Colorado',
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       type: 'individual',
       status: 'pending',
       amount_due_cents: 0,
@@ -586,6 +589,7 @@ describe('characterisation: POST /api/register/individual — rows written', () 
     await post()
     expect(rec.payloads('insert', 'participants')).toEqual([{
       registration_id: 'reg-1',
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       member_id: 'm-1',
       first_name: 'K', last_name: 'Id', nickname: null,
       email: 'kid@example.com', school_email: null, phone: '555',

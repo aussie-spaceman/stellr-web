@@ -1,6 +1,6 @@
 import QRCode from 'qrcode'
 import { Eyebrow } from '@stellr/web-ui'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { formatDate } from '@/lib/utils'
 import { supabaseServer } from '@/lib/supabase'
 import { checkInCodeUrl, verifyCheckInCode } from '@/lib/check-in-codes'

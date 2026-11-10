@@ -26,9 +26,9 @@ const HOW = 'Go through lib/community/event-hooks, or stop importing it. A remov
 
 // The size of the baseline. Lower these as it falls. Raising one takes a visible edit
 // to this file, which .github/CODEOWNERS sends for review.
-const MAX_MODULES = 10
-const MAX_EDGES = 37
-const MAX_TABLE_FILES = 17
+const MAX_MODULES = 7
+const MAX_EDGES = 25
+const MAX_TABLE_FILES = 16
 const MAX_CHANNEL_FILES = 0
 
 const baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) as TenantSurface
@@ -141,12 +141,9 @@ describe('the tenant surface', () => {
   // community and grant work unconditionally, so a new caller needs an event hook
   // or a tenant check of its own, and a visible edit here.
   it('only known files call the participation writers', () => {
+    // A7 moved the register hooks onto the event hook.
     expect(runtimeImportersOf('lib/event-participation-sync', 'recordEventParticipation')).toEqual([
       'lib/community/event-hooks.ts',
-      // A7 moves these to the hook.
-      'lib/registration/group-join/stellr-hooks.ts',
-      'lib/registration/group/stellr-hooks.ts',
-      'lib/registration/individual/stellr-hooks.ts',
     ])
     // Refuses another tenant's row itself: see its test in lib/community/event-hooks.test.ts.
     expect(runtimeImportersOf('lib/event-participation-sync', 'recordEventParticipationForRegistration')).toEqual([
@@ -228,7 +225,7 @@ describe('the check itself', () => {
       ['@/lib/membership-grants', 'lib/membership-grants.ts'],
       ['@/lib/event-participation-sync', 'lib/event-participation-sync.ts'],
       ['@/lib/spaces', 'lib/spaces.ts'],
-      ['@/lib/school-link', 'lib/school-link.ts'],
+      ['@/lib/container-sync', 'lib/container-sync.ts'],
     ]) {
       expect(baseline.modules).toContain(file)
       const planted = (rel: string) => {

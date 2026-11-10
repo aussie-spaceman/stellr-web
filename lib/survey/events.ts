@@ -1,7 +1,7 @@
 /**
  * The slice of a Sanity event the survey needs, read fresh (no CDN).
  */
-import { getEventBySlug, getEventsForSurveySchedule } from '@/lib/sanity'
+import { getEventBySlug, getEventsForSurveySchedule } from '@/lib/events/repo'
 import { eventLastDay } from './schedule'
 import { eventTimeZone } from './timezone'
 

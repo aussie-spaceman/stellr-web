@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { HOUR_MS } from '@/lib/rate-limit'
 import { limit, rateLimit } from '@/lib/rate-limit-async'
 import { requestTenant } from '@/lib/tenancy/request-tenant'

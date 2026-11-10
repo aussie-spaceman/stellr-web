@@ -2,6 +2,7 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { individualRegistrationBody } from './individual-body'
+import { stellrRegistrationNotes } from '../stellr-notes'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -15,6 +16,7 @@ export default async function IndividualRegistrationPage({ params, searchParams 
     slug,
     scholarshipToken,
     loadPrefill: () => getRegistrationPrefill().catch(() => null),
+    stellrNotes: stellrRegistrationNotes(),
     // Funnel: user is filling the registration form (individual). No PII.
     funnel: (event) => (
       <TrackEvent

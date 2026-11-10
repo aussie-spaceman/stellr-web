@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { isVolunteer } from '@/lib/volunteer'
 import { logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'

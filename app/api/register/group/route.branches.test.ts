@@ -904,6 +904,7 @@ describe('branches: POST /api/register/group — participant rows', () => {
     ] }))
     expect(participantRows()[1]).toEqual({
       registration_id: 'reg-1', member_id: M('s1@example.com'), details_from_member: false,
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       first_name: 'Stu', last_name: 'Dent1', nickname: 'Stu',
       email: 's1@example.com', school_email: 's1@school.example.com', phone: '555',
       date_of_birth: '2011-01-01', grade: '9', gender: 'Female', ethnicity: ['eth'], t_shirt_size: 'M',
@@ -928,6 +929,7 @@ describe('branches: POST /api/register/group — participant rows', () => {
     }))
     expect(participantRows()[0]).toEqual({
       registration_id: 'reg-1', member_id: M(TEACHER), details_from_member: false,
+      tenant_id: STELLR_TENANT_ID, // S5 A7: from the resolved event
       first_name: 'T', last_name: 'Eacher', nickname: 'Tee',
       email: TEACHER, school_email: null, phone: '555',
       date_of_birth: '1980-01-01', grade: '12', gender: 'Male', ethnicity: ['e'], t_shirt_size: 'L',

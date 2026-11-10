@@ -59,8 +59,8 @@ vi.mock('@/app/(stellr)/(flow)/register/[slug]/individual/individual-body', () =
 vi.mock('@/app/(stellr)/(flow)/register/[slug]/group/group-body', () => ({ groupRegistrationBody: async (args: Record<string, unknown>) => ((hoisted.bodyArgs.group = args), 'group body') }))
 vi.mock('@/app/(stellr)/(flow)/register/[slug]/confirmation/confirmation-body', () => ({ confirmationBody: async (args: Record<string, unknown>) => ((hoisted.bodyArgs.confirmation = args), 'confirmation body') }))
 vi.mock('@/app/(stellr)/(flow)/register/[slug]/join/[token]/join-body', () => ({ groupJoinBody: async (args: Record<string, unknown>) => ((hoisted.bodyArgs.join = args), 'join body') }))
-vi.mock('@/app/(stellr)/(flow)/register/[slug]/pay/[token]/page', () => ({ default: function Pay() { return null } }))
-vi.mock('@/app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/page', () => ({ default: function PaySeat() { return null } }))
+vi.mock('@/app/(stellr)/(flow)/register/[slug]/pay/[token]/pay-body', () => ({ registrationPayBody: async (args: Record<string, unknown>) => ((hoisted.bodyArgs.pay = args), 'pay body') }))
+vi.mock('@/app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/pay-seat-body', () => ({ seatPayBody: async (args: Record<string, unknown>) => ((hoisted.bodyArgs.paySeat = args), 'pay seat body') }))
 vi.mock('@/app/(stellr)/(flow)/check-in/[slug]/page', () => ({ default: function CheckIn() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/check-in/[slug]/code/page', () => ({ default: function CheckInCode() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/check-in/not-open', () => ({ checkInNotOpen: () => 'not open' }))
@@ -280,7 +280,17 @@ describe('what a tenant page hands the shared body', () => {
     await call(await load(PAGES['register/[slug]/join/[token]/page.tsx']), { tenant: 'alpha', slug: 'a-event', token: 'join-a' })
     expect(Object.keys(hoisted.bodyArgs.individual)).toEqual(['slug', 'scholarshipToken'])
     expect(Object.keys(hoisted.bodyArgs.group)).toEqual(['slug'])
-    expect(hoisted.bodyArgs.join).toEqual({ slug: 'a-event', token: 'join-a' })
+    // tenantMode: the form always collects details and never asks about Stellr accounts.
+    expect(hoisted.bodyArgs.join).toEqual({ slug: 'a-event', token: 'join-a', tenantMode: true })
+  })
+
+  // S5 A7: Stellr's pages pass ownedHere, so another tenant's link is unknown there.
+  // The tenant tree has checked its own record, and passes none.
+  it('the pay pages: the slug, token and cancel flag only', async () => {
+    await call(await load(PAGES['register/[slug]/pay/[token]/page.tsx']), { tenant: 'alpha', slug: 'a-event', token: 'pay-a' })
+    await call(await load(PAGES['register/[slug]/pay-seat/[token]/page.tsx']), { tenant: 'alpha', slug: 'a-event', token: 'seat-a' })
+    expect(hoisted.bodyArgs.pay).toEqual({ slug: 'a-event', token: 'pay-a', cancelled: undefined })
+    expect(hoisted.bodyArgs.paySeat).toEqual({ slug: 'a-event', token: 'seat-a', cancelled: undefined })
   })
 
   const sheet = async (value: unknown) => {

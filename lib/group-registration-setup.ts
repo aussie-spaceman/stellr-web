@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto'
 import { isSplitGroup, seatsOnInvoice } from '@/lib/group-payer'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEventBySlug } from '@/lib/sanity'
+import { getEventBySlug } from '@/lib/events/repo'
 import { stripeClient } from '@/lib/stripe'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { groupConfirmationEmail, sendEmail } from '@/lib/email'

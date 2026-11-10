@@ -10,6 +10,7 @@ import { createRegistrationCheckout, ensurePayToken, payPageUrl } from '@/lib/re
 import { createAndSendGroupInvoice } from '@/lib/group-invoice'
 import { checkInCodeLink } from '@/lib/check-in-codes'
 import type { GatedGroup } from './gate'
+import { sendTenantRegistrationConfirmation } from '../tenant-confirmation'
 import { SITE_URL, invoiceSeatsFor, type GroupBody, type ParticipantPayload } from './parse'
 import type { SavedMembers, SavedParticipants, SavedRegistration } from './persist'
 
@@ -152,8 +153,9 @@ async function collectPayment(
 
   // ── Look up Stripe Price ID ───────────────────────────────────────────────
   // A second read, kept from the original route. S5 A7: a price added after the
-  // gate's read would get past a refusal of priced tenant events, so A7 uses
-  // group.event here or applies the refusal again to this read.
+  // gate's read must not get past the refusal of priced tenant events, so a tenant's
+  // event stops here, before this read: it collects nothing, by any route.
+  if (!group.context.isPlatformOwner) return null
   const event = await getEvent(event_slug)
   const stripePriceId = event?.stripePriceId
   const stripe = stripeClient()
@@ -285,6 +287,24 @@ export async function respondToGroupRegistration(
     event_slug, registrant_role, adult_count, student_count, total_participants,
     details_method, payment_method, additional_adults, students,
   } = body
+
+  // S5 A7: a tenant's group gets its confirmation through B14's tenant share, and
+  // none of Stellr's: no Google Sheet in Stellr's Drive, no payment, no merch, and no
+  // join link, which Stellr builds on its own host. Its organiser adds people later
+  // through the tenant's own tools once they exist.
+  if (!group.context.isPlatformOwner) {
+    await sendTenantRegistrationConfirmation(db, {
+      tenantId: group.context.tenantId,
+      to: teacher.email,
+      firstName: teacher.first_name ?? '',
+      eventTitle,
+      kind: 'group',
+    })
+    return NextResponse.json(
+      { registrationId: regId, checkoutUrl: null, spreadsheetUrl: null, joinUrl: null, signInToken: null },
+      { status: 201 },
+    )
+  }
 
   const spreadsheetUrl = await createGroupSheet(group, body, regId)
 

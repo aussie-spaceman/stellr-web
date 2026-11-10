@@ -18,10 +18,25 @@ export async function groupJoinBody({
   slug,
   token,
   loadPrefill,
+  ownedHere,
+  tenantMode,
 }: {
   slug: string
   token: string
   loadPrefill?: () => Promise<RegistrationPrefill | null>
+  /**
+   * S5 A7: whether a link with this tenant_id belongs on this host. Stellr's page
+   * passes it, so another tenant's link gets the unknown link's page there. The tenant
+   * tree has already checked its own (lib/tenancy/tenant-records).
+   */
+  ownedHere?: (tenantId: string | null | undefined) => boolean
+  /**
+   * S5 A7: the tenant tree's page. Nothing is read from Stellr's member record, and
+   * the form always collects the person's details (GroupJoinClient's tenantMode):
+   * the join route takes no member profile on a tenant's event. Stellr's page leaves
+   * it unset, and hands the form exactly the props it did before.
+   */
+  tenantMode?: boolean
 }) {
   // Brand-new participants don't need an account up front — they fill their
   // details on this page and are auto-provisioned + signed in on submit (the
@@ -43,7 +58,7 @@ export async function groupJoinBody({
 
   if (error) console.error('[group-join] token lookup error:', error)
 
-  if (error || !tokenRow) {
+  if (error || !tokenRow || (ownedHere && !ownedHere(tokenRow.tenant_id as string | null | undefined))) {
     return (
       <div className="bg-surface flex items-start justify-center px-4 py-10 sm:py-16">
         <div className="max-w-md text-center">
@@ -137,7 +152,7 @@ export async function groupJoinBody({
   // On the roster under their other address: an organiser may have added them by
   // their school address, and they sign in with their primary. Matched on the
   // address, as the join route does (lib/registration/group-join/persist).
-  if (!alreadyRegistered && userId) {
+  if (!alreadyRegistered && userId && !tenantMode) {
     const { data: member } = await db.from('members').select('school_email').eq('clerk_user_id', userId).maybeSingle()
     if (member?.school_email) {
       const { data: otherAddress } = await db
@@ -212,6 +227,7 @@ export async function groupJoinBody({
             prefill={userId && loadPrefill ? await loadPrefill() : null}
             gradeMin={band.min}
             gradeMax={band.max}
+            {...(tenantMode ? { tenantMode: true } : {})}
           />
         )}
       </div>

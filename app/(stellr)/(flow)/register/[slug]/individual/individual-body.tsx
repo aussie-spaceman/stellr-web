@@ -9,8 +9,7 @@ import { listEventAddons } from '@/lib/store/event-merch'
 import IndividualRegistrationForm, { type ScholarshipFormOffer } from '@/components/forms/IndividualRegistrationForm'
 import { findOfferByToken, discountedCents, formatUsd } from '@/lib/scholarships'
 import { stripeClient } from '@/lib/stripe'
-import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
-import { MoneyBackGuarantee } from '@/components/ui/MoneyBackGuarantee'
+import type { StellrRegistrationNotes } from '../stellr-notes'
 import { getEventPrice } from '@/lib/event-pricing'
 import { StepBar } from '@/components/registration/StepBar'
 
@@ -58,11 +57,14 @@ export async function individualRegistrationBody({
   scholarshipToken,
   funnel,
   loadPrefill,
+  stellrNotes,
 }: {
   slug: string
   scholarshipToken: string | undefined
   funnel?: (event: RegistrationEvent) => ReactNode
   loadPrefill?: () => Promise<RegistrationPrefill | null>
+  /** S5 A7: Stellr's guarantee and mission note. Only Stellr's page supplies them. */
+  stellrNotes?: StellrRegistrationNotes
 }) {
   const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
@@ -110,8 +112,8 @@ export async function individualRegistrationBody({
           gradeMax={band.max}
           scholarship={scholarship}
         />
-        {price.kind === 'priced' && <MoneyBackGuarantee className="mt-8" />}
-        <MissionFundingNote className="mt-10" />
+        {price.kind === 'priced' && stellrNotes?.guarantee}
+        {stellrNotes?.missionFunding}
       </div>
     </div>
   )

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import GroupJoinClient from './GroupJoinClient'
 
-vi.mock('@clerk/nextjs', () => ({ useAuth: () => ({ isSignedIn: false }) }))
+const clerk = vi.hoisted(() => ({ signedIn: false }))
+vi.mock('@clerk/nextjs', () => ({ useAuth: () => ({ isSignedIn: clerk.signedIn }) }))
 vi.mock('@clerk/nextjs/legacy', () => ({ useSignIn: () => ({ signIn: null, setActive: vi.fn(), isLoaded: false }) }))
 
 const BACK = '/sign-in?next=%2Fregister%2Fcolorado%2Fjoin%2Ftok'
@@ -51,6 +52,51 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  clerk.signedIn = false
+})
+
+describe('GroupJoinClient on a tenant’s join page (S5 A7)', () => {
+  /** The join answers 201 as the route does for a tenant's group; anything else is recorded. */
+  function answerJoined() {
+    return vi.fn(async (_url: string, _init?: RequestInit) => ({
+      status: 201,
+      ok: true,
+      json: async () => ({ success: true, eventSlug: 'colorado', eventTitle: 'Colorado', signInToken: null }),
+    }))
+  }
+
+  it('someone signed in to Stellr types their details, and the join sends them', async () => {
+    clerk.signedIn = true
+    const fetchSpy = answerJoined()
+    vi.stubGlobal('fetch', fetchSpy)
+    render(<GroupJoinClient {...PROPS} isAuthenticated tenantMode />)
+    expect(screen.queryByText(/Your Stellr member profile will be used/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Confirm Registration/ })).toBeNull()
+    fillIn()
+    fireEvent.blur(screen.getAllByLabelText(/email/i)[0])
+    fireEvent.click(screen.getByRole('button', { name: /Join Group/ }))
+    await waitFor(() => expect(screen.getByText(/You.re in!/)).toBeTruthy())
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe('/api/register/group-join')
+    const sent = JSON.parse(String(init?.body))
+    expect(sent.token).toBe('tok')
+    expect(sent.details).toMatchObject({ first_name: 'Pat', last_name: 'Lee', email: 'pat@example.com', type: 'Adult' })
+  })
+
+  it('signed out, it never asks whether the address has a Stellr account or offers a Stellr sign-in', async () => {
+    const fetchSpy = answerJoined()
+    vi.stubGlobal('fetch', fetchSpy)
+    render(<GroupJoinClient {...PROPS} tenantMode />)
+    expect(screen.queryByRole('link', { name: /Log in to register/ })).toBeNull()
+    expect(screen.queryByText(/Stellr account/)).toBeNull()
+    fillIn()
+    fireEvent.blur(screen.getAllByLabelText(/email/i)[0])
+    fireEvent.click(screen.getByRole('button', { name: /Join Group/ }))
+    await waitFor(() => expect(screen.getByText(/You.re in!/)).toBeTruthy())
+    expect(fetchSpy.mock.calls.map(([u]) => String(u))).toEqual(['/api/register/group-join'])
+    expect(screen.queryByRole('link', { name: /View My Account/ })).toBeNull()
+  })
 })
 
 describe('GroupJoinClient, signed out', () => {

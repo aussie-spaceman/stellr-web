@@ -59,10 +59,14 @@ describe('events-facade ratchet', () => {
   })
 
   it('a second getter in an already-listed file also fails', () => {
-    const [file, gs] = Object.entries(live.getters)[0] as [string, string[]]
+    // At 0 importers nothing is listed, so the case is built on a listed file of its own,
+    // in the baseline and the measurement alike.
+    const listed = Object.entries(live.getters)[0] as [string, string[]] | undefined
+    const [file, gs] = listed ?? ['lib/zz-synthetic-listed.ts', [SANITY_EVENT_GETTERS[0] as string]]
+    const base = listed ? baseline : { ...baseline, files: { ...(baseline?.files ?? {}), [file]: gs } }
     const extra = SANITY_EVENT_GETTERS.find((g: string) => !gs.includes(g)) as string
     const measured = { ...live.getters, [file]: [...gs, extra] }
-    expect(gettersDiff(baseline, measured).added).toEqual([`${file}: ${extra}`])
+    expect(gettersDiff(base, measured).added).toEqual([`${file}: ${extra}`])
   })
 
   it('no new file holds raw event GROQ, and none has gone unrecorded', () => {

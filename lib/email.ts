@@ -5,7 +5,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { canSend, recordSend, type EmailKind } from '@/lib/email-budget'
 import { GUARANTEE_RECEIPT_LINE } from '@/lib/guarantee'
 import { maskEmail } from '@/lib/utils'
-import { EmailSendError, resendTransport } from '@/lib/email/transport'
+import { EmailSendError, resendTransport, sendRespectingRateLimit, type OutgoingEmail } from '@/lib/email/transport'
+import { deferReason, enqueueEmail, type OutboxReason } from '@/lib/email/outbox'
 import { lookupSuppressions, normaliseEmail, suppressionBlocks } from '@/lib/email/suppressions'
 
 // deep review PUB-2 / HTML-injection cluster: every user-supplied value that is
@@ -132,17 +133,31 @@ interface SendEmailOptions {
    * non-critical by default — see lib/email/suppressions.ts for the policy.
    */
   critical?: boolean
+  /**
+   * Resend daily quota: when Resend refuses a send for a reason that will pass
+   * (the daily or monthly quota, the rate limit, an outage, a key or domain
+   * problem), the message is written to the email outbox (lib/email/outbox.ts)
+   * and sent by the email-outbox cron as soon as Resend accepts mail again.
+   * sendEmail then returns { queued: true } instead of throwing. Default true.
+   *
+   * false keeps the old behaviour, throwing EmailSendError: only for a caller
+   * that keeps its own durable queue and needs Resend's message id on every
+   * send it records (the e-sign outbox matches bounces by that id).
+   */
+  deferOnFailure?: boolean
 }
 
 /**
  * The provider's id for the message, when one was sent. `suppressed` is set
- * when the recipient is on the suppression list and nothing was sent.
+ * when the recipient is on the suppression list and nothing was sent. `queued`
+ * is set when Resend could not take the message now and it waits in the email
+ * outbox: it WILL be sent, later (lib/email/outbox.ts).
  */
-export interface SentEmail { id: string | null; suppressed?: true }
+export interface SentEmail { id: string | null; suppressed?: true; queued?: true }
 
 export { EmailSendError }
 
-export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers, kind = 'transactional', critical = false }: SendEmailOptions): Promise<SentEmail> {
+export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers, kind = 'transactional', critical = false, deferOnFailure = true }: SendEmailOptions): Promise<SentEmail> {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to?.replace(/^.*@/, '…@'), subject)
     return { id: null }
@@ -160,9 +175,10 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
 
   // deep review INT-2 / PUB-4: hold marketing/bulk mail back once the shared
   // daily budget's non-reserved portion is spent, so it can't drain the sends
-  // reserved for transactional mail. Refusing throws EmailSendError(isQuota) so
-  // a bulk loop STOPS and leaves the recipient unrecorded for retry rather than
-  // burning the rest of its list on failures. Transactional mail is never gated
+  // reserved for transactional mail. A held-back send goes to the email outbox
+  // and is sent on a later day (lib/email/outbox.ts); only if the outbox cannot
+  // be written does it throw EmailSendError(isQuota), so a bulk loop STOPS and
+  // leaves the recipient unrecorded for retry. Transactional mail is never gated
   // (see canSend) — it is the fail-safe path. The quota client is obtained
   // defensively: if the service-role env is absent the whole app is broken
   // anyway, and we would rather let a send through than crash the mailer here.
@@ -200,11 +216,7 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
     }
   }
 
-  if (kind === 'marketing' && quotaDb && !(await canSend('marketing', quotaDb))) {
-    throw new EmailSendError('Daily email budget reserved for transactional mail is exhausted', 429)
-  }
-
-  const sent = await resendTransport(RESEND_API_KEY).send({
+  const message: OutgoingEmail = {
     from: from ?? FROM,
     to: [routed.to],
     cc: ccOut,
@@ -214,7 +226,36 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
     text,
     headers,
     attachments,
-  })
+  }
+  // Resend daily quota: park the message in the outbox for the email-outbox
+  // cron. Null when the outbox could not be written; the caller then gets the
+  // original error, exactly as before the outbox existed.
+  const queue = async (reason: OutboxReason, error?: string): Promise<SentEmail | null> => {
+    if (!deferOnFailure || !quotaDb) return null
+    const id = await enqueueEmail(quotaDb, { message, kind, critical, intendedTo: to, intendedCc: cc ?? [], reason, error })
+    if (!id) return null
+    console.warn(`[email] Queued for later (${reason}) — ${maskEmail(normaliseEmail(to))}:`, subject)
+    return { id: null, queued: true }
+  }
+
+  if (kind === 'marketing' && quotaDb && !(await canSend('marketing', quotaDb))) {
+    const queued = await queue('budget')
+    if (queued) return queued
+    throw new EmailSendError('Daily email budget reserved for transactional mail is exhausted', 429)
+  }
+
+  let sent
+  try {
+    // A per-second rate limit is waited out here; the daily quota is not.
+    sent = await sendRespectingRateLimit(resendTransport(RESEND_API_KEY), message)
+  } catch (err) {
+    const reason = deferReason(err)
+    if (reason) {
+      const queued = await queue(reason, err instanceof Error ? err.message : String(err))
+      if (queued) return queued
+    }
+    throw err
+  }
   // deep review INT-2 / PUB-4: count the send that actually went out against the
   // shared daily budget, keyed by UTC day. Best-effort: recordSend never throws,
   // since the mail has already been sent.

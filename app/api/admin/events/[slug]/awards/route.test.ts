@@ -8,14 +8,16 @@ const { requireEventAccess, writes, state } = vi.hoisted(() => ({
   requireEventAccess: vi.fn(async (_slug: string): Promise<{ ok: boolean; status: number; userId?: string }> => ({ ok: true, status: 200, userId: 'user_admin' })),
   writes: [] as { op: string; table: string; payload?: unknown; filters: [string, unknown][] }[],
   state: {
-    students: [] as { id: string; first_name: string; last_name: string; company_id: string | null }[],
+    students: [] as { id: string; first_name: string; last_name: string; company_id: string | null; checked_in_at?: string | null }[],
     assignments: [] as { id: string; award_type: string; participant_id: string; company_id: string | null; assigned_at: string }[],
   },
 }))
 
 vi.mock('@/lib/event-access', () => ({ requireEventAccess }))
 vi.mock('@/lib/event-award-issue', () => ({ pendingAwardChanges: async () => 0 }))
-vi.mock('@/lib/event-certificates', () => ({
+vi.mock('@/lib/event-certificates', async () => ({
+  // The real attendance rule; only the database reads are faked.
+  attendees: (await vi.importActual<typeof import('@/lib/event-certificates')>('@/lib/event-certificates')).attendees,
   fullName: (p: { first_name: string; last_name: string }) => `${p.first_name} ${p.last_name}`,
   listEventStudents: async () => state.students,
   listEventCompanies: async () => [{ id: 'co-1', number: 1, name: null }, { id: 'co-2', number: 2, name: null }],
@@ -41,7 +43,7 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 
-const { PUT } = await import('./route')
+const { GET, PUT } = await import('./route')
 
 function put(body: unknown) {
   return PUT(
@@ -167,5 +169,39 @@ describe('PUT /api/admin/events/[slug]/awards — Norm Chaffee Award', () => {
     await put({ action: 'remove', awardType: 'norm_chaffee', participantId: 'p1' })
     expect(writes).toHaveLength(1)
     expect(writes[0]).toMatchObject({ op: 'delete', filters: [['event_slug', 'colorado'], ['award_type', 'norm_chaffee'], ['participant_id', 'p1']] })
+  })
+})
+
+describe('/api/admin/events/[slug]/awards — no-shows', () => {
+  const get = async () =>
+    (await (await GET(new Request('https://app.stellreducation.org/api/admin/events/colorado/awards'), {
+      params: Promise.resolve({ slug: 'colorado' }),
+    })).json()) as { students: { id: string; companyId: string | null }[] }
+
+  beforeEach(() => {
+    state.students = [
+      { id: 'p1', first_name: 'Daniel', last_name: 'Ahaiwe', company_id: 'co-1', checked_in_at: '2026-11-07T15:00:00Z' },
+      { id: 'p3', first_name: 'Ava', last_name: 'Zed', company_id: 'co-2', checked_in_at: '2026-11-07T15:05:00Z' },
+      // Registered, never checked in, never placed: the Nevada "No company" row.
+      { id: 'p9', first_name: 'Nora', last_name: 'Show', company_id: null, checked_in_at: null },
+    ]
+  })
+
+  it('leaves a student who never checked in off the panel, so no "No company" row', async () => {
+    const { students } = await get()
+    expect(students.map((s) => s.id)).toEqual(['p1', 'p3'])
+    expect(students.some((s) => s.companyId === null)).toBe(false)
+  })
+
+  it('refuses to award a student who never checked in', async () => {
+    const res = await put({ action: 'set_specialist', awardType: 'anita_gale', companyId: null, participantId: 'p9' })
+    expect(res.status).toBe(404)
+    expect(writes).toHaveLength(0)
+  })
+
+  it('keeps every student eligible when the event did not use check-in', async () => {
+    state.students = state.students.map((s) => ({ ...s, checked_in_at: null }))
+    const { students } = await get()
+    expect(students.map((s) => s.id)).toEqual(['p1', 'p3', 'p9'])
   })
 })

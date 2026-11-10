@@ -7,6 +7,7 @@ import { markWatermarked } from '@/lib/watermark/pdf'
 import { eventArtworkTheme } from '@/lib/artwork-defaults'
 import { AWARD_TYPES, EVENT_AWARDS, isAwardType, type AwardType } from '@/lib/event-awards'
 import {
+  attendees,
   downloadArtwork,
   fullName,
   listAssignments,
@@ -22,7 +23,7 @@ export const dynamic = 'force-dynamic'
 
 // GET /api/admin/events/[slug]/certificates?award=<type>|all&format=us_letter|a4
 // Print certificates: each award's artwork (the event's own, else its theme's
-// default) with the recipient's name, one page each. participation = every student; the judged awards = their assignees
+// default) with the recipient's name, one page each. participation = every student who took part (attendees()); the judged awards = their assignees
 // (draft or issued — printing for the ceremony comes before issuing); all =
 // every certificate in one file, award by award.
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -42,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const theme = await eventArtworkTheme(slug)
   const [templates, students, assignments, companies, mentors] = await Promise.all([
     loadTemplates(db, slug, theme),
-    listEventStudents(db, slug),
+    listEventStudents(db, slug).then(attendees),
     listAssignments(db, slug),
     listEventCompanies(db, slug),
     awards.includes('mentor') ? listEventMentors(db, slug) : Promise.resolve([]),

@@ -55,6 +55,8 @@ export async function insertGroupRegistration(
     school_address_state: teacher.school_address_state,
     school_address_zip: teacher.school_address_zip,
     invoice_requested: payment_method === 'invoice' || payment_method === 'invoice_some',
+    // A code the teacher typed, already checked in the gate: the first invoice carries it.
+    ...(group.price.discount ? { invoice_coupon_id: group.price.discount.couponId, invoice_promotion_code: group.price.discount.code } : {}),
     // Marks a split group ("Invoice for some") and says how later joiners pay (lib/group-payer.ts).
     late_joiner_payer: payment_method === 'invoice_some' ? (body.late_joiner_payer === 'group' ? 'group' : 'self') : null,
     // "Students share the teacher's cost" (lib/teacher-share.ts): the estimate and a

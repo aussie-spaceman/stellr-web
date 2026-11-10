@@ -277,12 +277,13 @@ export async function invoiceSeatCount(db: Db, reg: GroupRegistration): Promise<
 }
 
 /** The event's per-place list price, from its Stripe Price. */
-export async function eventSeatPrice(stripe: Stripe, eventSlug: string): Promise<{ unitCents: number; currency: string } | null> {
+export async function eventSeatPrice(stripe: Stripe, eventSlug: string): Promise<{ unitCents: number; currency: string; productId: string | null } | null> {
   const event = (await getEventBySlug(eventSlug).catch(() => null)) as { stripePriceId?: string } | null
   if (!event?.stripePriceId) return null
   try {
     const price = await stripe.prices.retrieve(event.stripePriceId)
-    return { unitCents: price.unit_amount ?? 0, currency: price.currency ?? 'usd' }
+    const productId = typeof price.product === 'string' ? price.product : price.product?.id ?? null
+    return { unitCents: price.unit_amount ?? 0, currency: price.currency ?? 'usd', productId }
   } catch (e) {
     console.error('[group-billing] price lookup failed:', e)
     return null
@@ -1084,12 +1085,35 @@ export async function syncDueGroupInvoices(db: Db, stripe: Stripe, limit = 50): 
 
 export interface ResolvedDiscount { couponId: string; code: string; label: string; terms: CouponTerms }
 
-/** A promotion code (e.g. "STEMCAREERS") or a coupon id, resolved to its coupon. */
-export async function resolveDiscountCode(stripe: Stripe, raw: string): Promise<ResolvedDiscount | null> {
+export interface ResolveDiscountOptions {
+  /**
+   * Anyone who isn't staff (a teacher, a student, the registration form): only a
+   * promotion code a customer could use at checkout. A bare coupon id is internal
+   * (the scholarship coupons are coupons), so it never resolves here, and nor does a
+   * code that is expired, used up, or tied to one customer.
+   */
+  promotionCodesOnly?: boolean
+  /** The Stripe product being paid for: a coupon limited to other products doesn't resolve. */
+  productId?: string | null
+}
+
+/** Whether a customer could redeem this promotion code right now, as far as Stripe's own rules go. */
+export function promotionCodeUsable(promo: Pick<Stripe.PromotionCode, 'active' | 'customer' | 'expires_at' | 'max_redemptions' | 'times_redeemed'>, now = Date.now()): boolean {
+  if (promo.active === false || promo.customer) return false
+  if (promo.expires_at != null && promo.expires_at * 1000 <= now) return false
+  return promo.max_redemptions == null || promo.times_redeemed < promo.max_redemptions
+}
+
+/**
+ * A promotion code (e.g. "STEMCAREERS"), or for staff a coupon id, resolved to its coupon.
+ * Pass `promotionCodesOnly` for anyone else (see ResolveDiscountOptions).
+ */
+export async function resolveDiscountCode(stripe: Stripe, raw: string, opts: ResolveDiscountOptions = {}): Promise<ResolvedDiscount | null> {
   const code = raw.trim()
   if (!code) return null
   const promos = await stripe.promotionCodes.list({ code, active: true, limit: 1 })
   const promo = promos.data[0]
+  if (promo && opts.promotionCodesOnly && !promotionCodeUsable(promo)) return null
   let couponId: string | null = null
   if (promo) {
     const p = promo as Stripe.PromotionCode & { promotion?: { coupon?: string | { id: string } | null }; coupon?: string | { id: string } }
@@ -1097,14 +1121,19 @@ export async function resolveDiscountCode(stripe: Stripe, raw: string): Promise<
     couponId = typeof ref === 'string' ? ref : ref?.id ?? null
   }
   if (!couponId) {
+    if (opts.promotionCodesOnly) return null
     try {
       couponId = (await stripe.coupons.retrieve(code)).id
     } catch {
       return null
     }
   }
-  const coupon = await stripe.coupons.retrieve(couponId)
+  const coupon = await stripe.coupons.retrieve(couponId, opts.productId !== undefined ? { expand: ['applies_to'] } : undefined)
   if (!coupon.valid) return null
+  if (opts.productId !== undefined) {
+    const limited = coupon.applies_to?.products ?? []
+    if (limited.length > 0 && (!opts.productId || !limited.includes(opts.productId))) return null
+  }
   const terms = { percentOff: coupon.percent_off ?? null, amountOffCents: coupon.amount_off ?? null }
   const off = terms.percentOff ? `${terms.percentOff}% off` : terms.amountOffCents ? `${formatMoney(terms.amountOffCents, coupon.currency ?? 'usd')} off` : 'discount'
   return { couponId, code: promo?.code ?? code, label: `${promo?.code ?? coupon.name ?? code} (${off})`, terms }
@@ -1174,6 +1203,26 @@ export async function groupInvoiceSummary(db: Db, stripe: Stripe | null, registr
         }
       : null,
     history: await ledgerFor(db, reg.id),
+  }
+}
+
+/** What the group's invoice would come to with this discount, for the confirm step. */
+export async function previewGroupDiscount(
+  db: Db,
+  stripe: Stripe,
+  registrationId: string,
+  discount: ResolvedDiscount,
+): Promise<{ ok: true; label: string; subtotalCents: number; discountCents: number; totalCents: number; currency: string; summary: string } | { ok: false; error: string }> {
+  const summary = await groupInvoiceSummary(db, stripe, registrationId)
+  if (!summary?.perSeatCents) return { ok: false, error: 'Could not work out the per-participant price.' }
+  const totals = invoiceTotals(summary.seats, summary.perSeatCents, discount.terms)
+  const { currency } = summary
+  return {
+    ok: true,
+    label: discount.label,
+    ...totals,
+    currency,
+    summary: `${summary.seats} × ${formatMoney(summary.perSeatCents, currency)} = ${formatMoney(totals.subtotalCents, currency)}, less ${formatMoney(totals.discountCents, currency)} = ${formatMoney(totals.totalCents, currency)}`,
   }
 }
 

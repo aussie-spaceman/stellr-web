@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       registrant_on_invoice,
       late_joiner_payer,
       share_estimate,
+      discount_code,
       additional_adults,
       students,
       school_dpa_agreed,
@@ -68,6 +69,10 @@ export async function POST(req: NextRequest) {
       ...(payment_method === 'invoice_some' ? { member_pays_individually: false } : {}),
       ...(payment_method === 'teacher_share'
         ? { member_pays_individually: true, share_estimate: Number.isInteger(share_estimate) ? share_estimate : undefined }
+        : {}),
+      // A code for the invoice; the other ways to pay have their own code box.
+      ...((payment_method === 'invoice' || payment_method === 'invoice_some') && typeof discount_code === 'string' && discount_code.trim()
+        ? { discount_code: discount_code.trim().slice(0, 64) }
         : {}),
       additional_adults, students, school_dpa_agreed,
     }

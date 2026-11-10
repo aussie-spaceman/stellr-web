@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { collectsNothing } from '@/lib/event-pricing'
 import { stripeClient } from '@/lib/stripe'
+import { resolveDiscountCode } from '@/lib/group-billing'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
 import { GROUP_PAYMENT_METHODS, invoiceSeatsFor, type GroupBody } from './parse'
 
@@ -12,6 +13,8 @@ export interface GroupPrice {
   /** The event has a price and Stripe is configured, so seats can be billed. */
   canBill: boolean
   nothingToCollect: boolean
+  /** A discount code typed for an invoiced group, resolved: the first invoice carries it. */
+  discount: { couponId: string; code: string } | null
 }
 
 /**
@@ -21,7 +24,7 @@ export interface GroupPrice {
 export async function priceGroupRegistration(
   event: { stripePriceId?: string; activityType?: string } | null,
   body: Pick<GroupBody, 'event_slug' | 'payment_method' | 'total_participants'> &
-    Partial<Pick<GroupBody, 'registrant_on_invoice' | 'late_joiner_payer' | 'details_method' | 'additional_adults' | 'students' | 'share_estimate' | 'student_count'>>,
+    Partial<Pick<GroupBody, 'registrant_on_invoice' | 'late_joiner_payer' | 'details_method' | 'additional_adults' | 'students' | 'share_estimate' | 'student_count' | 'discount_code'>>,
 ): Promise<Refusable<{ price: GroupPrice }>> {
   const { event_slug, total_participants } = body
   // Only the ways the form offers. Anything else used to fall through as a
@@ -57,12 +60,14 @@ export async function priceGroupRegistration(
   // event has no Stripe price (campaigns / free events). Drives the payment gate.
   let amountDueCents = 0
   let feeUnitAmount: number | null = null
+  let feeProductId: string | null = null
   const feePriceId = event?.stripePriceId
   const feeStripe = stripeClient()
   if (feePriceId && feeStripe) {
     try {
       const pr = await feeStripe.prices.retrieve(feePriceId)
       feeUnitAmount = pr.unit_amount ?? 0
+      feeProductId = typeof pr.product === 'string' ? pr.product : pr.product?.id ?? null
       amountDueCents = feeUnitAmount * billedSeats
     } catch (e) {
       console.error('[register/group] price lookup failed:', event_slug, feePriceId, e)
@@ -169,8 +174,30 @@ export async function priceGroupRegistration(
     ))
   }
 
+  // A discount code typed on the form. Only an invoice uses it here: a card checkout has
+  // Stripe's own code box, and individual links have theirs. Checked before any record
+  // exists, so a mistyped code costs the teacher a retry, not an invoice at full price.
+  // The same rule as the teacher's code box in their account: promotion codes for this
+  // event only (lib/group-billing resolveDiscountCode).
+  let discount: GroupPrice['discount'] = null
+  const typedCode = typeof body.discount_code === 'string' ? body.discount_code.trim().slice(0, 64) : ''
+  if (typedCode && payment_method === 'invoice' && feeStripe && feePriceId && !nothingToCollect) {
+    const resolved = await resolveDiscountCode(feeStripe, typedCode, { promotionCodesOnly: true, productId: feeProductId }).catch((e) => {
+      console.error('[register/group] discount code lookup failed:', event_slug, e)
+      return undefined
+    })
+    if (resolved === undefined) return refuse(temporarilyUnavailable())
+    if (!resolved) {
+      return refuse(NextResponse.json(
+        { error: 'That discount code isn’t valid for this event. Check it, or leave it blank: you can add a code to your invoice later from your account.' },
+        { status: 400 },
+      ))
+    }
+    discount = { couponId: resolved.couponId, code: resolved.code }
+  }
+
   return {
     ok: true,
-    price: { amountDueCents, feeUnitAmount, canBill: !!(feePriceId && feeStripe), nothingToCollect },
+    price: { amountDueCents, feeUnitAmount, canBill: !!(feePriceId && feeStripe), nothingToCollect, discount },
   }
 }

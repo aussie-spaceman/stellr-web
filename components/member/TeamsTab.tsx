@@ -10,6 +10,7 @@ import { formatDateShort } from '@/lib/utils'
 import { registrationPaid } from '@/lib/payment-status'
 import { Copy, Check } from 'lucide-react'
 import { GroupPaymentMethod } from '@/components/registration/GroupPaymentMethod'
+import { GroupDiscountCode } from './GroupDiscountCode'
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -530,6 +531,11 @@ function TeacherTeamsView({ readOnly }: { readOnly: boolean }) {
                       .catch(() => {})
                   }}
                 />
+
+                {/* The discount code on an invoiced group's invoice: an invoice has no
+                    code box of its own. Keyed on how the group pays, so a move to
+                    invoice shows it straight away. */}
+                <GroupDiscountCode key={`${team.id}-${team.invoice_requested}`} registrationId={team.id} />
 
                 {/* Join link — shown for every group, not just the email-link
                     method, so the organiser can always hand it to a member. The

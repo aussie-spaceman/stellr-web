@@ -619,6 +619,8 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   const [lateJoinerPayer, setLateJoinerPayer] = useState<'self' | 'group'>('self')
   // "Students share the teacher's cost": how many students the teacher expects.
   const [shareEstimate, setShareEstimate] = useState('')
+  // A code for the invoice. Card checkout and individual links have Stripe's own box.
+  const [discountCode, setDiscountCode] = useState('')
   const [additionalAdults, setAdditionalAdults] = useState<AdultData[]>([])
   const [students, setStudents] = useState<StudentData[]>([emptyStudent(), emptyStudent()])
   const [expandedAdult, setExpandedAdult] = useState<number | null>(null)
@@ -924,6 +926,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
           // along below) and how people who join later pay.
           ...(paymentMethod === 'invoice_some' && !isCampaign && !isFree
             ? { registrant_on_invoice: registrantOnInvoice, late_joiner_payer: lateJoinerPayer }
+            : {}),
+          ...((paymentMethod === 'invoice' || paymentMethod === 'invoice_some') && !isCampaign && !isFree && discountCode.trim()
+            ? { discount_code: discountCode.trim() }
             : {}),
           // For SM: all additional_adults entries are genuinely additional (PoC is adults[0])
           // For teacher: additional_adults excludes teacher themselves. Map with the
@@ -1394,6 +1399,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             />
           )}
           {paymentMethod === 'invoice' && <p className="text-sm text-content-muted">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
+          {(paymentMethod === 'invoice' || paymentMethod === 'invoice_some') && (
+            <Field label="Discount code (optional)" hint="Your invoice will include the discount. You can also add a code later from your account, before the invoice is paid.">
+              <Input value={discountCode} onChange={(e) => setDiscountCode(e.target.value)} placeholder="e.g. STEMCAREERS"
+                autoComplete="off" maxLength={64} className="max-w-xs" />
+            </Field>
+          )}
           {paymentMethod === 'card' && (
             <p className="text-sm text-content-muted">
               You&apos;ll be redirected to a secure Stripe checkout page to pay for all{' '}

@@ -6,11 +6,10 @@ import { stripeClient } from '@/lib/stripe'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import {
   groupInvoiceSummary,
-  invoiceTotals,
+  previewGroupDiscount,
   reissueGroupInvoice,
   resolveDiscountCode,
   setGroupDiscount,
-  formatMoney,
 } from '@/lib/group-billing'
 import { withAudit } from '@/lib/audit/route'
 import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
@@ -21,7 +20,8 @@ import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 //   POST { action: 'apply', code }    → revise the open invoice with the discount.
 //   POST { action: 'remove' }         → revise it without one.
 //   POST { action: 'reissue' }        → correct the invoice to the group's current places.
-// Reading is open to the event's managers; changing money is admins only.
+// Admins and the event's assigned managers (loadEventRecord refuses anyone else's
+// event); the teacher has their own code box (app/api/members/teams/[id]/discount).
 // See lib/group-billing.ts.
 
 const ROUTE = '/api/admin/registrations/[id]/invoice'
@@ -38,11 +38,9 @@ type Args = [Request, { params: Promise<{ id: string }> }]
 
 const notFound = () => NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
 
-async function guard(db: Db, id: string, write: boolean, req: Request) {
+async function guard(db: Db, id: string, req: Request) {
   const staff = await requireEventStaff({ route: ROUTE })
   if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
-  // Before any read, so the answer says nothing about the record.
-  if (write && !staff.isAdmin) return NextResponse.json({ error: 'Only admins can change an invoice' }, { status: 403 })
   audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
   const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(staff, 'registrations', id, {
     db,
@@ -55,7 +53,7 @@ async function guard(db: Db, id: string, write: boolean, req: Request) {
   // Every action here reads or changes Stellr's Stripe account, its coupons included.
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
-  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null }
+  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, actorLabel: staff.isAdmin ? 'admin' as const : 'event_manager' as const }
 }
 
 // What this request acted on, which withAudit's spec cannot read for itself. A discount code
@@ -77,7 +75,7 @@ export const GET = withAudit(({ args: [req] }: { args: Args }) => ({ action: 're
 async function readInvoice(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
-  const g = await guard(db, id, false, req)
+  const g = await guard(db, id, req)
   if (g instanceof Response) return g
   const summary = await groupInvoiceSummary(db, stripeClient(), id)
   if (!summary) return notFound()
@@ -90,7 +88,7 @@ export const POST = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'r
 async function changeInvoice(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const db = supabaseServer()
-  const g = await guard(db, id, true, req)
+  const g = await guard(db, id, req)
   if (g instanceof Response) return g
   const event = audited.get(req)
 
@@ -106,7 +104,7 @@ async function changeInvoice(req: Request, { params }: { params: Promise<{ id: s
     const actor = await actorFromAuth()
     let result: Awaited<ReturnType<typeof reissueGroupInvoice>>
     try {
-      result = await reissueGroupInvoice(db, stripe, id, { memberId: actor.actorMemberId ?? null, label: 'admin' })
+      result = await reissueGroupInvoice(db, stripe, id, { memberId: actor.actorMemberId ?? null, label: g.actorLabel })
     } catch (e) {
       console.error('[admin/invoice] reissue failed:', e)
       return NextResponse.json({ error: `Stripe refused the change: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 })
@@ -126,27 +124,23 @@ async function changeInvoice(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ message: result.message, invoiceId: result.invoiceId })
   }
 
-  const discount = body.action === 'remove' ? null : await resolveDiscountCode(stripe, body.code)
+  // An internal coupon id (the scholarship coupons) is for admins; a manager enters codes.
+  const discount = body.action === 'remove' ? null : await resolveDiscountCode(stripe, body.code, { promotionCodesOnly: g.actorLabel !== 'admin' })
   if (body.action !== 'remove' && !discount) {
     return NextResponse.json({ error: `"${body.code}" isn't an active discount code or coupon in Stripe.` }, { status: 404 })
   }
   if (event) event.couponId = discount?.couponId ?? null
 
   if (body.action === 'preview') {
-    const summary = await groupInvoiceSummary(db, stripe, id)
-    if (!summary?.perSeatCents) return NextResponse.json({ error: 'Could not work out the per-participant price.' }, { status: 409 })
-    const totals = invoiceTotals(summary.seats, summary.perSeatCents, discount!.terms)
-    return NextResponse.json({
-      label: discount!.label,
-      ...totals,
-      summary: `${summary.seats} × ${formatMoney(summary.perSeatCents, summary.currency)} = ${formatMoney(totals.subtotalCents, summary.currency)}, less ${formatMoney(totals.discountCents, summary.currency)} = ${formatMoney(totals.totalCents, summary.currency)}`,
-    })
+    const preview = await previewGroupDiscount(db, stripe, id, discount!)
+    if (!preview.ok) return NextResponse.json({ error: preview.error }, { status: 409 })
+    return NextResponse.json(preview)
   }
 
   const actor = await actorFromAuth()
   let result: Awaited<ReturnType<typeof setGroupDiscount>>
   try {
-    result = await setGroupDiscount(db, stripe, id, discount, { memberId: actor.actorMemberId ?? null, label: 'admin' })
+    result = await setGroupDiscount(db, stripe, id, discount, { memberId: actor.actorMemberId ?? null, label: g.actorLabel })
   } catch (e) {
     console.error('[admin/invoice] discount failed:', e)
     return NextResponse.json({ error: `Stripe refused the change: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 })

@@ -27,6 +27,7 @@ export const AUDIT_ACTIONS = [
   'registration.participant.create',
   'registration.participant.update',
   'registration.payment_method.change',
+  'registration.invoice_discount.change',
 
   // Consent and uploads (A14)
   'consent.request.send',

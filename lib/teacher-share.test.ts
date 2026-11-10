@@ -158,7 +158,11 @@ function fakeStripe() {
   return {
     prices: { retrieve: vi.fn(async () => ({ unit_amount: 9700, currency: 'usd', product: 'prod_event' })) },
     refunds: { create: vi.fn(async (args: { amount: number }) => ({ id: `re_${args.amount}` })) },
-    promotionCodes: { list: vi.fn(async ({ code }: { code: string }) => ({ data: code === 'STEMCAREERS' ? [{ code, coupon: 'co_15' }] : [] })) },
+    promotionCodes: {
+      list: vi.fn(async ({ code }: { code: string }) => ({
+        data: code === 'STEMCAREERS' ? [{ code, coupon: 'co_15' }] : code === 'OTHEREVENT' ? [{ code, coupon: 'co_other' }] : [],
+      })),
+    },
     coupons: {
       retrieve: vi.fn(async (id: string) => {
         if (id === 'co_15') return { id, valid: true, percent_off: 15, amount_off: null, applies_to: null }
@@ -288,7 +292,13 @@ describe('a student’s checkout', () => {
   it('refuses a code that isn’t valid, or is for another product', async () => {
     const f = setup(group())
     expect(await createSharedSeatCheckout(f.db, f.stripe as never, { ...opts, discountCode: 'NOPE' })).toMatchObject({ error: 'bad_code' })
-    expect(await createSharedSeatCheckout(f.db, f.stripe as never, { ...opts, discountCode: 'co_other' })).toMatchObject({ error: 'bad_code', message: expect.stringMatching(/doesn’t apply/) })
+    expect(await createSharedSeatCheckout(f.db, f.stripe as never, { ...opts, discountCode: 'OTHEREVENT' })).toMatchObject({ error: 'bad_code', message: expect.stringMatching(/doesn’t apply/) })
+    expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
+
+  it('never takes a bare coupon id, which is internal (the scholarship coupons are coupons)', async () => {
+    const f = setup(group())
+    expect(await createSharedSeatCheckout(f.db, f.stripe as never, { ...opts, discountCode: 'co_15' })).toMatchObject({ error: 'bad_code' })
     expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled()
   })
 

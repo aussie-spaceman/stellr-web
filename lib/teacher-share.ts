@@ -382,7 +382,8 @@ async function placeDiscount(
 ): Promise<{ terms: CouponTerms | null; code: string | null } | { error: string }> {
   if (code?.trim()) {
     const { resolveDiscountCode } = await import('@/lib/group-billing')
-    const resolved = await resolveDiscountCode(stripe, code).catch(() => null)
+    // A code a student types: a promotion code, never a bare coupon id (lib/group-billing).
+    const resolved = await resolveDiscountCode(stripe, code, { promotionCodesOnly: true }).catch(() => null)
     if (!resolved) return { error: 'That code isn’t valid. Check it and try again, or pay without one.' }
     const coupon = await stripe.coupons.retrieve(resolved.couponId, { expand: ['applies_to'] }).catch(() => null)
     const limited = coupon?.applies_to?.products ?? []

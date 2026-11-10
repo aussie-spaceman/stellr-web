@@ -1161,6 +1161,10 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
+    "app/api/members/teams/[id]/discount/route.ts": {
+      "class": "convert",
+      "reason": "An organizer sets the discount code on their group's invoice: resolves the member and registration to check ownership, then lib/group-billing revises the invoice and its ledger with this client. Converts with the registration lane."
+    },
     "app/api/members/teams/[id]/email-changes/[changeId]/route.ts": {
       "class": "convert",
       "reason": "group organiser decides a suggestion: ownsTeam on the registration and the suggestion's participant on it, checked in lib/esign/email-changes.ts before any write"

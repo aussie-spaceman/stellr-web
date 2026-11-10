@@ -15,6 +15,7 @@ import { eventManagerAudienceClerkIds } from '@/lib/authz/audiences'
 import { loadEventTenantId } from '@/lib/authz/principal'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { AudienceKey, RecipientRole } from './types'
+import { staffKey } from '@/lib/check-in-desk'
 import { AWARD_TYPES, EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
 import { familyCertificateUrl, familyCredentialUrl } from '@/lib/credentials-link'
 import type { CredentialLine, PaymentLine, RecipientForRender } from './render'
@@ -124,7 +125,18 @@ export function attachAgreementLines(
   return [...native]
 }
 
-export interface MentorContact { email: string; firstName: string; lastName: string; role: 'volunteer' | 'event_manager' }
+export interface MentorContact {
+  email: string
+  firstName: string
+  lastName: string
+  role: 'volunteer' | 'event_manager'
+  /** How the desk names them (lib/check-in-desk staffKey): v.<members.id> or m.<Clerk user id>. */
+  key: string
+  /** Their members row, when there is one. */
+  memberId: string | null
+  /** Checked in at the desk's Mentors tab. Set only when the attendees group is resolved. */
+  checkedIn?: boolean
+}
 
 interface Add {
   email: string | null | undefined
@@ -135,6 +147,13 @@ interface Add {
   participantName?: string
   isParticipant?: boolean
   payment?: PaymentLine & { key: string }
+}
+
+/** A roster row's role in an email's history: teachers and mentors are on the roster too. */
+function rosterRecipientRole(eventRole: string | null): RecipientRole {
+  if (eventRole === 'teacher') return 'teacher'
+  if (eventRole === 'mentor' || eventRole === 'volunteer') return 'volunteer'
+  return 'participant'
 }
 
 /**
@@ -206,6 +225,12 @@ export function buildRecipients(
       if (want.has('participants')) add({ ...participant, role: 'participant', reason: 'participants' })
       if (want.has('guardians')) add({ ...parent, role: 'guardian', reason: 'guardians' })
 
+      // Everyone the desk (or their own phone) checked in, whatever their role.
+      // A group's organising teacher is here only if they were checked in too.
+      if (want.has('attendees') && p.checked_in_at) {
+        add({ ...participant, role: rosterRecipientRole(p.event_role), reason: 'attendees' })
+      }
+
       if (want.has('docusign_outstanding') && p.docusign === 'outstanding') {
         docusignIds.add(p.id)
         add({ ...participant, role: 'participant', reason: 'docusign_outstanding' })
@@ -249,6 +274,12 @@ export function buildRecipients(
 
   if (want.has('mentors')) {
     for (const m of mentors) add({ email: m.email, firstName: m.firstName, lastName: m.lastName, role: m.role, reason: 'mentors' })
+  }
+  // Volunteer mentors and event managers checked in at the desk's Mentors tab.
+  if (want.has('attendees')) {
+    for (const m of mentors) {
+      if (m.checkedIn) add({ email: m.email, firstName: m.firstName, lastName: m.lastName, role: m.role, reason: 'attendees' })
+    }
   }
 
   const recipients = [...byEmail.values()]
@@ -319,14 +350,16 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
   if (container?.id) {
     const { data: rows } = await db
       .from('cohort_members')
-      .select('members(first_name, last_name, email)')
+      .select('members(id, first_name, last_name, email)')
       .eq('cohort_id', container.id)
       .eq('relationship', 'volunteer')
       .eq('status', 'active')
     for (const r of rows ?? []) {
       const m = (Array.isArray(r.members) ? r.members[0] : r.members) as
-        { first_name: string | null; last_name: string | null; email: string | null } | null
-      if (m?.email) out.push({ email: m.email, firstName: m.first_name ?? '', lastName: m.last_name ?? '', role: 'volunteer' })
+        { id: string; first_name: string | null; last_name: string | null; email: string | null } | null
+      if (m?.email) {
+        out.push({ email: m.email, firstName: m.first_name ?? '', lastName: m.last_name ?? '', role: 'volunteer', key: staffKey('volunteer', m.id), memberId: m.id })
+      }
     }
   }
 
@@ -338,9 +371,20 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
         userId: managers,
         limit: managers.length,
       })
+      const { data: memberRows } = await db.from('members').select('id, clerk_user_id').in('clerk_user_id', managers)
+      const memberByClerk = new Map(((memberRows ?? []) as { id: string; clerk_user_id: string }[]).map((m) => [m.clerk_user_id, m.id]))
       for (const u of users) {
         const email = u.primaryEmailAddress?.emailAddress
-        if (email) out.push({ email, firstName: u.firstName ?? '', lastName: u.lastName ?? '', role: 'event_manager' })
+        if (email) {
+          out.push({
+            email,
+            firstName: u.firstName ?? '',
+            lastName: u.lastName ?? '',
+            role: 'event_manager',
+            key: staffKey('event_manager', u.id),
+            memberId: memberByClerk.get(u.id) ?? null,
+          })
+        }
       }
     } catch (err) {
       console.error('[event-emails] event manager lookup failed:', err)
@@ -453,7 +497,13 @@ export async function resolveAudience(
   opts: { mintPayLinks?: boolean } = {},
 ): Promise<ResolvedAudience> {
   const roster = await getEventRoster(event.slug, event.date ?? undefined)
-  const mentors = audiences.includes('mentors') ? await loadMentorContacts(db, event.slug) : []
+  const attendees = audiences.includes('attendees')
+  const mentors = audiences.includes('mentors') || attendees ? await loadMentorContacts(db, event.slug) : []
+  if (attendees && mentors.length) {
+    const { loadStaffCheckIns } = await import('@/lib/check-in-staff')
+    const checkedIn = await loadStaffCheckIns(db, event.slug)
+    for (const m of mentors) m.checkedIn = checkedIn.has(m.key)
+  }
 
   // Pay tokens are minted only for a real send; a preview shows a placeholder
   // rather than writing a token to every pending registration it looks at.

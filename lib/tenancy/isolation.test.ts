@@ -33,6 +33,7 @@ const CHILD_MIGRATION = 'supabase/migrations/20261106070726_via_parent_tenant_po
 const LATER_CHILD_MIGRATIONS: Record<string, string> = {
   'public.agreement_email_changes': 'supabase/migrations/20261109200000_agreement_email_changes.sql',
   'public.event_email_templates': 'supabase/migrations/20261109230000_event_email_templates.sql',
+  'public.event_staff_check_ins': 'supabase/migrations/20261110120000_event_staff_check_ins.sql',
 }
 const inheritedTenantTables = () => tenantTables().filter((t) => TABLE_REGISTRY[t].tenantColumn === 'inherited')
 /** The S4 file for a table it wrote, the C0b file for a child table, or the later child's own. */
@@ -53,7 +54,7 @@ describe('cross-tenant pgTAP matrix (S4)', () => {
 
   it('has a fixture for every own/derived/inherited tenant table, and none for anything else', () => {
     expect(fixtureProblems()).toEqual([])
-    expect(tenantTables().length).toBe(47)
+    expect(tenantTables().length).toBe(48)
     expect(inheritedTenantTables().length).toBe(11)
     expect(Object.keys(FIXTURES).sort()).toEqual(tenantTables())
   })

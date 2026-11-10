@@ -132,7 +132,7 @@ describe('attachCredentialLines', () => {
     participant({ id: 'p1', first_name: 'Sam', email: 'sam@example.com' }),
     participant({ id: 'p2', first_name: 'Alex', email: 'alex@example.com' }),
   ])
-  const mentors = [{ email: 'mentor@example.com', firstName: 'Max', lastName: 'M', role: 'volunteer' as const }]
+  const mentors = [{ email: 'mentor@example.com', firstName: 'Max', lastName: 'M', role: 'volunteer' as const, key: 'v.m9', memberId: 'm9' }]
 
   it('gives a student their own, a parent each child’s (participation first), and a mentor theirs', () => {
     const { recipients } = buildRecipients(r, mentors, ['participants', 'guardians', 'mentors'], () => null)

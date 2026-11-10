@@ -9,7 +9,7 @@
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(393);
+SELECT plan(398);
 
 -- 1. Every table in public and entitlements is classified, and nothing else is.
 SELECT set_eq(
@@ -94,6 +94,7 @@ SELECT set_eq(
     'public.event_participations',
     'public.event_refunds',
     'public.event_settings',
+    'public.event_staff_check_ins',
     'public.event_store_offerings',
     'public.events',
     'public.group_invoices',
@@ -271,6 +272,12 @@ SELECT ok(EXISTS (
   WHERE i.indrelid = 'public.event_settings'::regclass AND a.attname = 'tenant_id'
 ), 'public.event_settings has an index led by tenant_id');
 SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.event_settings'::regclass), 'public.event_settings has RLS enabled');
+SELECT has_column('public', 'event_staff_check_ins', 'tenant_id', 'public.event_staff_check_ins has tenant_id');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+  WHERE i.indrelid = 'public.event_staff_check_ins'::regclass AND a.attname = 'tenant_id'
+), 'public.event_staff_check_ins has an index led by tenant_id');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.event_staff_check_ins'::regclass), 'public.event_staff_check_ins has RLS enabled');
 SELECT has_column('public', 'event_store_offerings', 'tenant_id', 'public.event_store_offerings has tenant_id');
 SELECT ok(EXISTS (
   SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
@@ -565,6 +572,13 @@ SELECT ok(EXISTS (
     AND tg.tgenabled = 'O'
     AND encode(tg.tgargs, 'escape') = 'event_slug\000slug\000'
 ), 'public.event_settings: derivation trigger on (event_slug, slug), enabled');
+SELECT ok(EXISTS (
+  SELECT 1 FROM pg_trigger tg
+  WHERE tg.tgrelid = 'public.event_staff_check_ins'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
+    AND tg.tgfoid = 'public.tenancy_derive_tenant_id()'::regprocedure
+    AND tg.tgenabled = 'O'
+    AND encode(tg.tgargs, 'escape') = 'event_slug\000slug\000'
+), 'public.event_staff_check_ins: derivation trigger on (event_slug, slug), enabled');
 SELECT ok(EXISTS (
   SELECT 1 FROM pg_trigger tg
   WHERE tg.tgrelid = 'public.event_store_offerings'::regclass AND tg.tgname = 'zz_tenancy_derive_tenant_id'
@@ -974,6 +988,7 @@ SELECT set_eq('SELECT tbl FROM pgtap_backfill', ARRAY[
     'event_participations',
     'event_refunds',
     'event_settings',
+    'event_staff_check_ins',
     'event_store_offerings',
     'group_invoices',
     'group_join_tokens',
@@ -1022,6 +1037,7 @@ SELECT is((SELECT count(*)::int FROM public.event_manager_assignments WHERE tena
 SELECT is((SELECT count(*)::int FROM public.event_participations WHERE tenant_id IS NULL), 0, 'public.event_participations: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_refunds WHERE tenant_id IS NULL), 0, 'public.event_refunds: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_settings WHERE tenant_id IS NULL), 0, 'public.event_settings: no NULL tenant_id after the backfill (NOT NULL-ready)');
+SELECT is((SELECT count(*)::int FROM public.event_staff_check_ins WHERE tenant_id IS NULL), 0, 'public.event_staff_check_ins: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.event_store_offerings WHERE tenant_id IS NULL), 0, 'public.event_store_offerings: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.events WHERE tenant_id IS NULL), 0, 'public.events: no NULL tenant_id after the backfill (NOT NULL-ready)');
 SELECT is((SELECT count(*)::int FROM public.group_invoices WHERE tenant_id IS NULL), 0, 'public.group_invoices: no NULL tenant_id after the backfill (NOT NULL-ready)');

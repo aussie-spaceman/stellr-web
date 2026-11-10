@@ -221,10 +221,48 @@ describe('buildRecipients', () => {
 
   it('mentors are volunteers plus event managers', () => {
     const out = buildRecipients(roster(), [
-      { email: 'Vol@example.com', firstName: 'Pauline', lastName: 'D', role: 'volunteer' },
-      { email: 'em@example.com', firstName: 'Em', lastName: 'M', role: 'event_manager' },
+      { email: 'Vol@example.com', firstName: 'Pauline', lastName: 'D', role: 'volunteer', key: 'v.m1', memberId: 'm1' },
+      { email: 'em@example.com', firstName: 'Em', lastName: 'M', role: 'event_manager', key: 'm.user_1', memberId: null },
     ], ['mentors'], noPay)
     expect(out.recipients.map((x) => [x.email, x.roles[0]])).toEqual([['em@example.com', 'event_manager'], ['vol@example.com', 'volunteer']])
+  })
+
+  describe('All attendees', () => {
+    const r = roster(group({ type: 'group', teacherEmail: 'organiser@example.com', teacherFirstName: 'Ms K' }, [
+      participant({ id: 'p1', first_name: 'Sam', email: 'sam@example.com', emergency_contact_email: 'pat@example.com', checked_in_at: '2026-11-07T15:00:00Z' }),
+      participant({ id: 'p2', first_name: 'Ana', email: 'ana@example.com', emergency_contact_email: 'ana.parent@example.com', event_role: 'school_student_manager', checked_in_at: '2026-11-07T15:01:00Z' }),
+      participant({ id: 'p3', first_name: 'Noshow', email: 'noshow@example.com', emergency_contact_email: 'noshow.parent@example.com', checked_in_at: null }),
+      participant({ id: 'p4', first_name: 'Terry', email: 'teacher@example.com', event_role: 'teacher', minor: false, checked_in_at: '2026-11-07T14:50:00Z' }),
+    ]))
+    const mentors = [
+      { email: 'here@example.com', firstName: 'Hana', lastName: 'V', role: 'volunteer' as const, key: 'v.m1', memberId: 'm1', checkedIn: true },
+      { email: 'away@example.com', firstName: 'Abe', lastName: 'V', role: 'volunteer' as const, key: 'v.m2', memberId: 'm2', checkedIn: false },
+      { email: 'em@example.com', firstName: 'Em', lastName: 'M', role: 'event_manager' as const, key: 'm.user_1', memberId: null, checkedIn: true },
+    ]
+
+    it('is everyone checked in: students, student managers, teachers, mentors and event managers', () => {
+      const out = buildRecipients(r, mentors, ['attendees'], noPay)
+      expect(Object.fromEntries(out.recipients.map((x) => [x.email, x.roles]))).toEqual({
+        'sam@example.com': ['participant'],
+        'ana@example.com': ['participant'],
+        'teacher@example.com': ['teacher'],
+        'here@example.com': ['volunteer'],
+        'em@example.com': ['event_manager'],
+      })
+      expect(out.recipients.every((x) => x.reasons.join() === 'attendees')).toBe(true)
+    })
+
+    it('leaves out no-shows, mentors not checked in, guardians, and an organiser who was not checked in', () => {
+      const emails = buildRecipients(r, mentors, ['attendees'], noPay).recipients.map((x) => x.email)
+      for (const out of ['noshow@example.com', 'away@example.com', 'pat@example.com', 'ana.parent@example.com', 'organiser@example.com']) {
+        expect(emails).not.toContain(out)
+      }
+    })
+
+    it('the Mentors group still reaches every mentor when both are ticked', () => {
+      const emails = buildRecipients(r, mentors, ['attendees', 'mentors'], noPay).recipients.map((x) => x.email)
+      expect(emails).toContain('away@example.com')
+    })
   })
 
   it('a student whose address is also the parent’s is greeted as the student', () => {

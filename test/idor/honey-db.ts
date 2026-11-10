@@ -358,7 +358,8 @@ const TEXT_ID_COLUMN = /(sanity|stripe|hubspot|external|envelope_id|provider|doc
 
 const AUDIT_TABLE = /(audit|(^|_)logs?$|_log_|errors?$|rate_limit|webhook_events|security_events|tenancy_derivation)/
 
-function carriesHoneytoken(v: unknown, ignore: readonly string[] = []): string | null {
+/** The first honeytoken `v` carries (a string, or anywhere inside an array or object), or null. */
+export function carriesHoneytoken(v: unknown, ignore: readonly string[] = []): string | null {
   if (v == null) return null
   if (typeof v === 'string') {
     const s = v.toLowerCase()
@@ -641,6 +642,14 @@ function storageBucket(db: HoneyDbState, bucket: string) {
     info: async () => ({ data: null, error: { message: 'Object not found' } }),
     exists: async () => ({ data: false, error: null }),
   }
+}
+
+/**
+ * The honey row as a SQL read returns it (test/idor/tenant-db-fake.ts): the
+ * default columns plus the case fixture's, answering any other column read.
+ */
+export function honeySqlRow(db: HoneyDbState): Row {
+  return honeyRow(undefined, {}, db.honeyColumns, { tenantId: db.honeyTenantId, tokens: db.honeyTokens })
 }
 
 /** A client shaped like supabase-js's, backed by the honey tables. */

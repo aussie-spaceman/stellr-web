@@ -228,6 +228,8 @@ describe('the routes C16 converted', () => {
     'registrations/[id]/finish-setup',
     'registrations/[id]/invoice',
     'registrations/[id]/participants',
+    // The C16 follow-up: it arrived (#573) after C16 converted its siblings.
+    'registrations/[id]/payment-method',
     'surveys/responses/[id]/withdraw-quote',
   ].map((r) => `app/api/admin/${r}/route.ts`)
 

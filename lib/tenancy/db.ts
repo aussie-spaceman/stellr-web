@@ -37,15 +37,21 @@
 //     pin inside one statement would pass the read-back. Bound values cannot
 //     do it (they are never SQL), so it takes SQL written in an allow-listed
 //     file, which review and the denylist are there to catch;
-//   * it is off unless TENANT_DB_ENABLED is 'true' and a driver is
-//     registered. Nothing in the app registers one yet: S5 wires it, one
-//     feature area per PR, and the allow-list in lib/tenancy/db-callers.ts
-//     names every module that may import this file.
+//   * with `readOnly`, every transaction is SET TRANSACTION READ ONLY before
+//     the pin and read back after it, so the database refuses any write;
+//   * it is off unless TENANT_DB_ENABLED is exactly 'true'. With the flag
+//     off nothing loads the Postgres client and nothing connects. With it on,
+//     a registered driver is used, or else lib/tenancy/driver.ts is loaded on
+//     first use and connects with TENANT_DATABASE_URL alone: a missing or
+//     refused URL throws, and there is no fallback to any other client. No
+//     route calls tenantDb yet: S5 wires it one feature area per PR, and the
+//     allow-list in lib/tenancy/db-callers.ts names every module that may
+//     import this file.
 //
-// The transport is an interface (TenantSqlDriver), not a dependency: S5 adds
-// the Postgres client (postgres.js over the Supavisor pooler, transaction
-// mode, prepare: false) and its credentials, the login role the owner creates
-// (docs/TENANCY-S4.md, owner actions). Nothing here reads a key or a URL.
+// The transport is an interface (TenantSqlDriver). lib/tenancy/driver.ts is
+// the Postgres one (postgres.js over the Supavisor pooler, transaction mode,
+// prepare: false), as the login role the owner creates (docs/TENANCY-S4.md,
+// owner actions). This file reads no key and no URL.
 
 import { STELLR_TENANT_ID } from './constants'
 import { assertTenantId, TenantContextError } from './tenant-id'
@@ -180,8 +186,9 @@ export interface TenantDb {
 let registeredDriver: TenantSqlDriver | null = null
 
 /**
- * Register the transport (S5, once, at server start). Passing null removes it.
- * Not called anywhere in the app yet.
+ * Register a transport in place of the one lib/tenancy/driver.ts builds from
+ * the environment (tests, scripts). Passing null removes it. Not called
+ * anywhere in the app.
  */
 export function setTenantDbDriver(driver: TenantSqlDriver | null): void {
   registeredDriver = driver
@@ -195,6 +202,27 @@ export interface TenantDbOptions {
   /** Use this transport instead of the registered one (tests, scripts). Skips the flag. */
   driver?: TenantSqlDriver
   env?: Record<string, string | undefined>
+  /**
+   * Every transaction is READ ONLY: set before the pin and read back with it,
+   * so the database refuses any write, including one a volatile function
+   * makes. A write-shaped statement is refused before it is sent. The area
+   * switch's shadow read uses this (C12).
+   */
+  readOnly?: boolean
+}
+
+/** Sent before the pin when `readOnly` is set. Postgres refuses to turn it back to read-write after the first query. */
+export const READ_ONLY_SQL = 'SET TRANSACTION READ ONLY'
+
+/** The read-back for `readOnly`: 'on' once the transaction is read-only. */
+export const READ_ONLY_CHECK_SQL = "SELECT current_setting('transaction_read_only') AS read_only"
+
+/** A statement that writes, at its start or inside a WITH. Over-refuses rather than under-refuses: it guards reads. */
+const WRITE_SHAPED = /^\s*(?:insert|update|delete|merge)\b|^\s*with\b[\s\S]*\b(?:insert\s+into|update\b[\s\S]*\bset\b|delete\s+from|merge\s+into)\b/i
+
+/** True when `text` reads as a write. Exported for the area switch's tests. */
+export function isWriteShaped(text: string): boolean {
+  return WRITE_SHAPED.test(text)
 }
 
 /** The read-back: which role the transaction runs as and which tenant app_tenant_id() returns. */
@@ -221,24 +249,41 @@ async function pin(tx: TenantSqlTx, tenantId: string): Promise<void> {
 export function tenantDb(tenantId: string, opts: TenantDbOptions = {}): TenantDb {
   const id = assertTenantId(tenantId)
 
-  const driver = (): TenantSqlDriver => {
+  const driver = async (): Promise<TenantSqlDriver> => {
     if (opts.driver) return opts.driver
-    if (!isTenantDbEnabled(opts.env)) {
+    const env = opts.env ?? process.env
+    if (!isTenantDbEnabled(env)) {
       throw new TenantContextError(`tenantDb is off: ${TENANT_DB_FLAG} is not 'true'`)
     }
-    if (!registeredDriver) throw new TenantContextError('tenantDb has no database driver registered')
-    return registeredDriver
+    if (registeredDriver) return registeredDriver
+    // Loaded only here, so with the flag off the Postgres client is never
+    // imported. Throws, without connecting, when TENANT_DATABASE_URL is
+    // missing or refused.
+    const { tenantDriverFromEnv } = await import('./driver')
+    return tenantDriverFromEnv(env)
   }
 
+  const readOnly = opts.readOnly === true
+
   const transaction = async <T>(fn: (q: TenantQuery) => Promise<T>): Promise<T> =>
-    driver().transaction(async (tx) => {
+    (await driver()).transaction(async (tx) => {
+      if (readOnly) await tx.query(READ_ONLY_SQL)
       await pin(tx, id)
+      if (readOnly) {
+        const check = await tx.query<{ read_only: unknown }>(READ_ONLY_CHECK_SQL)
+        if (check.rows[0]?.read_only !== 'on') {
+          throw new TenantContextError('tenantDb could not make this transaction read-only; it was rolled back')
+        }
+      }
       const run = async <R>(statement: TenantStatement) => {
         if (!statement || typeof statement !== 'object' || !MINTED.has(statement)) {
           throw new TenantContextError('tenantDb runs only statements built with tenantSql')
         }
         const refused = refusedSql(statement.text)
         if (refused) throw new TenantContextError(`tenantDb refused the SQL: ${refused}`)
+        if (readOnly && isWriteShaped(statement.text)) {
+          throw new TenantContextError('tenantDb refused the SQL: this transaction is read-only')
+        }
         const result = await tx.query<R>(statement.text, statement.values)
         // Before the caller sees a row: if the statement moved the role or the
         // tenant by any path refusedSql does not know, throw, and the driver
@@ -258,6 +303,9 @@ export function tenantDb(tenantId: string, opts: TenantDbOptions = {}): TenantDb
     tenantId: id,
     sql: <R>(strings: TemplateStringsArray, ...values: unknown[]) => {
       const statement = tenantSql(strings, ...values)
+      if (readOnly && isWriteShaped(statement.text)) {
+        return Promise.reject(new TenantContextError('tenantDb refused the SQL: this transaction is read-only'))
+      }
       return transaction(async (q) => (await q.run<R>(statement)).rows)
     },
     transaction,

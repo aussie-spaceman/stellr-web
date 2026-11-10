@@ -441,6 +441,24 @@ export async function accessCoversEvent(access: EventAccess, eventSlug: string):
 }
 
 /**
+ * accessCoversEvent for requireEventStaff's answer: the event must be one `covers` holds
+ * and, from the events mirror, in the caller's tenant. For a route whose loaded row's own
+ * tenant stamp is not enough on its own, because the row may predate its event's mirror
+ * row. A read error is false, in every source.
+ */
+export async function staffCoversEvent(
+  staff: { tenantId: string; covers: (eventSlug: string | null | undefined) => boolean },
+  eventSlug: string,
+): Promise<boolean> {
+  if (!staff.covers(eventSlug)) return false
+  try {
+    return (await loadEventTenantId(supabaseServer(), eventSlug)) === staff.tenantId
+  } catch {
+    return false
+  }
+}
+
+/**
  * Replaces currentUserHasScope. Stellr only: reads staff_roles, which the S3
  * mapping does not carry, and no scope holds on another tenant's host. A read
  * error is "no scope" in every source, as today.

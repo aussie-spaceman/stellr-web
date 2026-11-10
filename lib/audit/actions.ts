@@ -187,6 +187,8 @@ export const AUDIT_ACTIONS = [
   'registration.invoice.read',
   'registration.participant.staff_add',
   'survey.quote.withdraw',
+  // C16 follow-up: registrations/[id]/payment-method (its change is catalogued under Registration)
+  'registration.payment_method.read',
 
   // Events admin: paperwork and communications under an event (C17)
   'agreement.participant.reissue',

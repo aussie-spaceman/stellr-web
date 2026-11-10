@@ -813,6 +813,99 @@ jobs:
           echo "::warning::The repository schema differs from the production dump: $n_prod object(s) only in production, $n_repo only in the repository, $n_changed with different definitions. Identifiers are in the job summary."
           exit 1
 
+  # S5 C11: tenantDb's Postgres driver (lib/tenancy/driver.ts) against a real
+  # database. The same throwaway local database as `db` (baseline plus every
+  # migration), a login made for this run only (tenant_app_login, granted
+  # tenant_app, with a random password that never leaves the runner), then
+  # test/integration through the real driver: two tenants, each seeing only its
+  # rows, and a write naming the other tenant refused. It never touches the dev
+  # or production projects and holds no secret.
+  #
+  # Report-only (continue-on-error): making it required, like DB_CI_ENFORCE for
+  # `db`, is the owner's decision. It connects directly, not through the
+  # pooler, which the local database does not start.
+  tenant-db:
+    name: tenant-db
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    env:
+      SUPABASE_CLI_VERSION: 2.105.0
+      DB_CONTAINER: supabase_db_stellr-web
+
+    steps:
+      # Full history without blobs, so the scope step can diff trees (see `db`).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # A PR that touches none of what this job tests finishes green in seconds.
+      # Pushes to dev/main and manual runs always run it.
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          run=true
+          if [ "$EVENT" = pull_request ]; then
+            files=$(git diff --name-only --no-renames HEAD^1 HEAD || true)
+            if [ -n "$files" ] && ! echo "$files" | grep -qE '^supabase/|^lib/tenancy/|^test/integration/|^scripts/ci-db-build\.sh$|^vitest\.integration\.config\.mts$|^package(-lock)?\.json$|^\.github/workflows/ci\.yml$'; then
+              run=false
+              echo "No change to the database, lib/tenancy or this job: tenant-db skipped." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - if: steps.scope.outputs.run == 'true'
+        run: npm ci
+
+      - if: steps.scope.outputs.run == 'true'
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # Postgres only; the CLI must not replay migrations or seed (see `db`).
+      - if: steps.scope.outputs.run == 'true'
+        name: Start the local database
+        env:
+          SUPABASE_DB_MIGRATIONS_ENABLED: 'false'
+          SUPABASE_DB_SEED_ENABLED: 'false'
+          SUPABASE_REALTIME_ENABLED: 'false'
+        run: supabase db start
+
+      - if: steps.scope.outputs.run == 'true'
+        name: Build the schema
+        run: bash scripts/ci-db-build.sh "$DB_CONTAINER"
+
+      # On this runner's database only. The password reaches psql through the
+      # environment and \getenv, so it is in no command line, and is masked.
+      - if: steps.scope.outputs.run == 'true'
+        name: Create the tenant login for this run
+        run: |
+          TENANT_LOGIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$TENANT_LOGIN_PASSWORD"
+          export TENANT_LOGIN_PASSWORD
+          printf '%s\n' \
+            '\getenv pw TENANT_LOGIN_PASSWORD' \
+            "CREATE ROLE tenant_app_login LOGIN NOINHERIT PASSWORD :'pw';" \
+            'GRANT tenant_app TO tenant_app_login;' \
+          | docker exec -i -e PGPASSWORD=postgres -e TENANT_LOGIN_PASSWORD "$DB_CONTAINER" \
+              psql -h 127.0.0.1 -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 -f -
+          {
+            echo "TENANT_DB_TEST_URL=postgres://tenant_app_login:${TENANT_LOGIN_PASSWORD}@127.0.0.1:54322/postgres"
+            echo "TENANT_DB_TEST_ADMIN_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres"
+          } >> "$GITHUB_ENV"
+
+      - if: steps.scope.outputs.run == 'true'
+        name: Two tenants through the real driver
+        run: npx vitest run -c vitest.integration.config.mts
+
   # The e2e suite on a disposable Supabase stack on this runner: no shared dev
   # database, so no repo-wide queue and no fixture collisions between runs. Runs
   # beside `e2e` to prove the two agree (docs/RUNBOOK-ci-database.md, "The

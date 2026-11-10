@@ -13,8 +13,8 @@ import { DISPOSITION_REGISTER_STATUS, STELLR_ONLY_DISPOSITIONS, dispositionCount
 // measured before registrations/[id]/participants and registrations/[id]/payment-method
 // existed. C16 moved 14 of its 15 to tenant_staff: event-managers keeps the Stellr admin
 // guard until C21. C17 moved 17 more. registrations/[id]/payment-method (#573) arrived
-// after C16 and waits for its follow-up.
-const MAX_TENANT_DESTINED_STELLR_ONLY = 22
+// after C16, and its follow-up moved it.
+const MAX_TENANT_DESTINED_STELLR_ONLY = 21
 
 // platform_destined routes stay listed: the owner's choice for each is still to come.
 const stellrOnly = idorTargets().filter((t) => t.cls === 'stellr_only' || t.cls === 'platform_destined').map((t) => t.file)

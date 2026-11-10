@@ -132,6 +132,11 @@ export const CASE_FIXTURES: Record<string, CaseFixture> = {
     refusesWithoutQuery: 'the participant holds no role: the staff check answers before any read',
     honey: { type: 'group' },
   },
+  'app/api/admin/registrations/[id]/payment-method/route.ts': {
+    reason: 'only a group registration goes on to the event check',
+    refusesWithoutQuery: 'the participant holds no role: the staff check answers before any read',
+    honey: { type: 'group' },
+  },
   'app/api/credentials/[number]/visibility/route.ts': {
     reason: 'visibility must be public or private',
     body: { visibility: 'private' },

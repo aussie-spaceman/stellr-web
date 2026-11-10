@@ -28,6 +28,8 @@ const state = vi.hoisted(() => ({
   previewGroupSetup: vi.fn(async () => []),
   finishGroupSetup: vi.fn(async () => ({})),
   groupInvoiceSummary: vi.fn(async () => null),
+  paymentChangeView: vi.fn(async () => null),
+  changeGroupPaymentMethod: vi.fn(async () => ({ ok: false, status: 409, error: 'x' })),
   loadSignedRecord: vi.fn(async () => ({ kind: 'unavailable', reason: 'test' })),
   resolveRefundBasis: vi.fn(async () => null),
   correctAgreementRecipient: vi.fn(async () => ({
@@ -132,6 +134,11 @@ vi.mock('@/lib/group-billing', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   groupInvoiceSummary: state.groupInvoiceSummary,
 }))
+vi.mock('@/lib/group-payment-change', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  paymentChangeView: state.paymentChangeView,
+  changeGroupPaymentMethod: state.changeGroupPaymentMethod,
+}))
 vi.mock('@/lib/esign/archive', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   loadSignedRecord: state.loadSignedRecord,
@@ -166,6 +173,8 @@ beforeEach(() => {
     state.previewGroupSetup,
     state.finishGroupSetup,
     state.groupInvoiceSummary,
+    state.paymentChangeView,
+    state.changeGroupPaymentMethod,
     state.loadSignedRecord,
     state.resolveRefundBasis,
     state.correctAgreementRecipient,
@@ -214,17 +223,35 @@ describe('group money and roster actions on a tenant\'s own group', () => {
     expect(state.logActivity).not.toHaveBeenCalled()
   })
 
+  it('the payment method is refused, reading and changing, with no Stripe client made', async () => {
+    state.rows.registrations = [OWN_GROUP]
+    // The route also asks the events mirror for the group's event's tenant.
+    state.rows.events = [{ slug: 't1', tenant_id: TENANT }]
+    const { GET, POST } = await import('@/app/api/admin/registrations/[id]/payment-method/route')
+    expect((await GET(req(), ctx())).status).toBe(REFUSED)
+    for (const method of ['invoice', 'card', 'individual']) {
+      expect((await POST(req({ method }), ctx())).status, method).toBe(REFUSED)
+    }
+    expect(state.stripeClient).not.toHaveBeenCalled()
+    expect(state.paymentChangeView).not.toHaveBeenCalled()
+    expect(state.changeGroupPaymentMethod).not.toHaveBeenCalled()
+    expect(state.logActivity).not.toHaveBeenCalled()
+  })
+
   it('another tenant\'s group still answers as a missing one, not with the refusal', async () => {
     state.rows.registrations = [{ ...OWN_GROUP, tenant_id: STELLR_TENANT_ID }]
     const participants = await import('@/app/api/admin/registrations/[id]/participants/route')
     const setup = await import('@/app/api/admin/registrations/[id]/finish-setup/route')
     const invoice = await import('@/app/api/admin/registrations/[id]/invoice/route')
+    const paymentMethod = await import('@/app/api/admin/registrations/[id]/payment-method/route')
     const answers = [
       await participants.POST(req({ first_name: 'A' }), ctx()),
       await setup.GET(req(), ctx()),
       await invoice.GET(req(), ctx()),
+      await paymentMethod.GET(req(), ctx()),
+      await paymentMethod.POST(req({ method: 'individual' }), ctx()),
     ]
-    expect(answers.map((r) => r.status)).toEqual([404, 404, 404])
+    expect(answers.map((r) => r.status)).toEqual([404, 404, 404, 404, 404])
     state.rows.registrations = []
     expect(await answers[0].text()).toBe(await (await participants.POST(req({ first_name: 'A' }), ctx())).text())
   })

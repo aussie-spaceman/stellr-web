@@ -9,6 +9,7 @@ import { retainUntilOnCompletion } from '@/lib/esign/storage'
 import { AUTH_APP_URL, SITE_URL } from '@/lib/env'
 import { agreementCompletedEmail } from '@/lib/esign/emails'
 import { DOWNLOAD_LINK_TTL_SECONDS, downloadUrl, mintToken } from '@/lib/esign/native/tokens'
+import { isTenantRow, loadTenantSender, type EventSender } from '@/lib/event-emails/tenant-mail'
 
 // What happens when an agreement is fully signed, whichever engine signed it.
 // The DocuSign Connect webhook and the in-app signing route both end here.
@@ -36,11 +37,13 @@ export interface CompletedEnvelope extends OptOutEnvelope {
   minor_name: string | null
   signer_name: string | null
   event_title: string | null
+  /** S5: whose envelope this is. NULL, or absent, is Stellr's. */
+  tenant_id?: string | null
 }
 
 export const COMPLETED_ENVELOPE_COLUMNS =
   'id, envelope_id, provider, status, envelope_type, reused_from, member_id, participant_id, ' +
-  'credential_sharing_opt_out, completed_at, archived_at, archive_attempts, minor_name, signer_name, event_title'
+  'credential_sharing_opt_out, completed_at, archived_at, archive_attempts, minor_name, signer_name, event_title, tenant_id'
 
 /**
  * Runs the completion side-effects once.
@@ -169,6 +172,19 @@ async function logCompletion(db: SupabaseClient, envelope: CompletedEnvelope): P
  * ours is the only one, so it must go to them too.
  */
 async function notifyNativeSigners(db: SupabaseClient, envelope: CompletedEnvelope): Promise<void> {
+  // S5: another tenant's signers hear from that tenant's sender, never from
+  // Stellr. Without a usable sender (or with TENANT_EVENT_MAIL_ENABLED off) the
+  // completion emails are not sent, and as the claim above stands they are not
+  // retried: a missing email, never one sent as Stellr.
+  let sender: EventSender | undefined
+  if (isTenantRow(envelope.tenant_id)) {
+    const found = await loadTenantSender(db, envelope.tenant_id)
+    if (!found) {
+      console.error(`[esign-completion] completion emails not sent for ${envelope.id}: its tenant has no usable sender`)
+      return
+    }
+    sender = found
+  }
   const { data } = await db
     .from('agreement_recipients')
     .select('id, name, email, member_id, token_version')
@@ -185,7 +201,7 @@ async function notifyNativeSigners(db: SupabaseClient, envelope: CompletedEnvelo
       accountUrl: r.member_id ? `${AUTH_APP_URL}/account?tab=profile` : null,
     })
     try {
-      await sendEmail({ to: r.email, ...content })
+      await sendEmail({ to: r.email, ...content, ...(sender ? { from: sender.from, replyTo: sender.replyTo } : {}) })
     } catch (err) {
       console.error('[esign-completion] completion email failed:', err)
     }

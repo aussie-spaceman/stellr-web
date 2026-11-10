@@ -31,7 +31,7 @@ export const MAX_FAILED_CHECKS = 5
 const NATIVE_ENVELOPE_COLUMNS =
   'id, envelope_id, provider, status, envelope_type, member_id, participant_id, event_title, ' +
   'minor_name, signer_name, template_id, prefill, sent_at, completed_at, sealed_at, reused_from, ' +
-  'credential_sharing_opt_out, archived_at, archive_attempts'
+  'credential_sharing_opt_out, archived_at, archive_attempts, tenant_id'
 
 const RECIPIENT_COLUMNS =
   'id, envelope_row, recipient_id, role_name, name, email, status, routing_order, member_id, ' +
@@ -59,6 +59,8 @@ export interface NativeEnvelope {
   credential_sharing_opt_out: boolean | null
   archived_at: string | null
   archive_attempts: number | null
+  /** S5: whose envelope this is. NULL is Stellr's; absent on rows read without it. */
+  tenant_id?: string | null
 }
 
 export interface NativeRecipient {

@@ -15,6 +15,7 @@ import { appendAudit } from '@/lib/esign/native/audit'
 import { sendInvites, signNowUrlFor } from '@/lib/esign/outbox'
 import { SIGNED_BUCKET } from '@/lib/esign/storage'
 import { SIGN_LINK_TTL_SECONDS, signingConfigured } from '@/lib/esign/native/tokens'
+import { isTenantRow, loadTenantSender, TenantSenderRequiredError, type EventSender } from '@/lib/event-emails/tenant-mail'
 
 // The prefill fields that print each signer's own email on the document. A
 // correction rewrites them only while nobody has signed (see correctRecipient).
@@ -91,11 +92,22 @@ export const nativeProvider: EsignProvider = {
     if (!env || !['sent', 'delivered'].includes(env.status)) return 0
     const due = (await loadRecipients(db, env.id)).filter((r) => r.status === 'sent' || r.status === 'delivered')
     if (!due.length) return 0
+    // S5: another tenant's envelope is chased only from that tenant's sender,
+    // never as Stellr. Without one, refuse before renewing any link or writing
+    // the audit row. Stellr's envelopes skip this and read nothing more.
+    // The sender read here is the one the reminder goes out with, so the outbox
+    // does not read it again and cannot find none part-way through.
+    let senders: Map<string, EventSender> | undefined
+    if (isTenantRow(env.tenant_id)) {
+      const sender = await loadTenantSender(db, env.tenant_id)
+      if (!sender) throw new TenantSenderRequiredError()
+      senders = new Map([[env.tenant_id, sender]])
+    }
     // A reminder renews the link's life: a parent chased on day 28 must not
     // get a link that dies on day 30.
     const expires = new Date(Date.now() + SIGN_LINK_TTL_SECONDS * 1000).toISOString()
     await db.from('agreement_recipients').update({ token_expires_at: expires }).in('id', due.map((r) => r.id))
-    const result = await sendInvites(db, due.map((r) => ({ ...r, token_expires_at: expires })), { reminder: true })
+    const result = await sendInvites(db, due.map((r) => ({ ...r, token_expires_at: expires })), { reminder: true, ...(senders ? { senders } : {}) })
     await appendAudit(db, { envelopeRow: env.id, event: 'reminded', detail: { recipients: due.length, sent: result.sent } })
     return due.length
   },

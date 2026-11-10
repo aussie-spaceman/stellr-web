@@ -108,7 +108,7 @@ the dimension and wonders where the other value went.
 Its decision 2 reads "Two-step booking panel". That was reversed on 3 Sep: the
 form now redirects automatically and the panel is the **failure path only**. The
 rest of the plan is still accurate. The published artifact
-(`claude.ai/code/artifact/e8e79733-e629-4b1c-97c8-fa3703630544`, revision 3)
+(on the old Claude account (closed Nov 2026); saved copy in the owner's restricted handover archive, `artifacts/15-audience-landing-pages/`)
 also still says "two follow-ups remain", which is out of date.
 
 ### e) Photo credit is not shown on the hero card

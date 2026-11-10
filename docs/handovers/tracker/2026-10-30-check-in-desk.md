@@ -3,7 +3,7 @@
 Slug: `check-in-desk`. Handover: `HANDOVER-check-in-desk-2026-10-30.md`. Doc snapshot: `1rGKRUybEigGLUD-xoVteQcy-mfAgbrpHc_RsLeKZxDI`.
 PR #484 → `dev` as `2b6970f3`. Promoted in #485 (`185e3356`, production `dpl_BwZabiv7uEgRqQ7n1aWNhTFc5aHU`). Record PR #487. Migration: none.
 
-No native iOS app (report: https://claude.ai/artifact/LkvVkPCdkUeEpVvduhEcXS). Instead, the web desk now:
+No native iOS app (report: a private artifact on the old Claude account (closed Nov 2026); saved copy in the owner's restricted handover archive, `artifacts/06-check-in-app-review/`). Instead, the web desk now:
 - checks in a school group as a unit (untick who isn't here, Undo);
 - scans signed participant and group codes with the camera;
 - keeps working offline (queue and list on the device; a service worker for the page in desk mode);

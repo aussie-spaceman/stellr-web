@@ -1,0 +1,41 @@
+{
+  "projectId": "065fd3f0-4974-442f-8482-b6c6d6dbb2a2",
+  "shape": "storybook",
+  "storybookConfigDir": ".storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "pkg": "@stellr/web-ui",
+  "globalName": "StellrWebUI",
+  "entry": "packages/web-ui/src/index.ts",
+  "tsconfig": "../../tsconfig.json",
+  "extraEntries": [
+    "../../.design-sync/entries/process-env.ts",
+    "../../.design-sync/entries/media.ts",
+    "../../.design-sync/entries/font-vars.ts"
+  ],
+  "buildCmd": "npm run build:tokens && npx --no-install storybook build -c .storybook -o .design-sync/sb-reference",
+  "titleMap": {
+    "AppSidebar": null,
+    "Eventteamprofiles": null,
+    "Form": null
+  },
+  "extraFonts": [
+    "../../.design-sync/fonts/brand-fonts.css"
+  ],
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "primaryStory": "WithForm"
+    },
+    "ConfirmDialog": {
+      "cardMode": "single",
+      "primaryStory": "Confirm"
+    },
+    "PullQuoteWall": {
+      "cardMode": "column"
+    },
+    "TierCard": {
+      "viewport": "1000x700"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

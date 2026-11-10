@@ -22,7 +22,7 @@ The earlier regex sweeps (`test/route-guards.test.ts`, `test/admin-page-guards.t
 |---|---|---|
 | `platform_admin` | Stellr platform staff, across tenants | `lib/authz`'s platform check (`assertPlatformAdmin`). A legacy admin guard does not count |
 | `platform_destined` | a platform function by nature, waiting on the owner's choice (C15) | an admin check, the same as `stellr_only` |
-| `tenant_staff` | a tenant's own staff, inside that tenant | a `lib/authz` tenant check: `requireTenantStaff`, `requireEventStaff`, `requireEventRoute`, `requireEventAccess` naming the event, or the `requireTenantAdmin` page adapter. A legacy admin guard does not count |
+| `tenant_staff` | a tenant's own staff, inside that tenant | a `lib/authz` tenant check: `assertTenantRole`, `requireTenantStaff`, `requireEventStaff`, `requireEventRoute`, `requireEventAccess` naming the event, or the `requireTenantAdmin` page adapter. A legacy admin guard does not count |
 | `stellr_only` | Stellr's own admin portal and the `/api/admin` routes behind it | an admin check |
 | `participant` | a signed-in member, on their own records | a session check (an admin check also counts) |
 | `public` | anyone, no session | API: a rate limit, or an allow-listed reason. Pages: nothing |
@@ -107,7 +107,7 @@ The route manifest says *who* may call a route. The IDOR suite checks *which rec
 | `honey_write` | a write touched or referenced a Canary row, or an `rpc()` got a Canary value (its SQL is not modelled) | fails, unless the snapshot records a reviewed reason |
 | `oracle` | a 2xx whose status or body changes when the Canary row is removed (a second, differential run): an existence oracle such as `{ exists: !!row }` | fails, unless the snapshot records a reviewed reason |
 | `refused` | 4xx, a redirect, `notFound()` | passes |
-| `unexercised` | 400, 405, 413, 415 or 422 and no Canary value ever reached the database: validation refused before the id was used, so the case proved nothing | pinned in the snapshot and capped (`MAX_UNEXERCISED`, 5 since wave 2; lower it, never raise it) |
+| `unexercised` | 400, 405, 413, 415 or 422 and no Canary value ever reached the database: validation refused before the id was used, so the case proved nothing | pinned in the snapshot and capped (`MAX_UNEXERCISED`, 5 since wave 1, #528; lower it, never raise it) |
 | `ok` | 2xx with none of tenant B's data, no honey write, and the same response without the Canary row | passes |
 | `error` | 5xx, a throw, or no answer in 5 s (the harness could not model the path) | pinned in the snapshot and capped (`MAX_ERROR`, 3) |
 

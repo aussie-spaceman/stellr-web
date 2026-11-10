@@ -10,7 +10,7 @@ Sibling records: `docs/AUTHZ.md` (`AUTHZ_SOURCE`), `docs/TENANCY-S5-routing.md` 
 
 | Variable | Read by | Unset | Other values | Reaches today |
 |---|---|---|---|---|
-| `LOADSCOPED_MODE` | `lib/tenancy/load-scoped-mode.ts`, through `loadRecord` and `loadEventRecord` in `lib/tenancy/load-scoped.ts` | `off`: today's query by id, nothing else | `shadow`, `enforce`. Anything else is `off`, reported once per instance to `app_errors` | The `tenant_staff` routes that load a record by id: C16's, C17's under `events/[slug]`, the refund preview (`lib/refunds/preview.ts`), and in wave 5 the admin group payment-method route |
+| `LOADSCOPED_MODE` | `lib/tenancy/load-scoped-mode.ts`, through `loadRecord` and `loadEventRecord` in `lib/tenancy/load-scoped.ts` | `off`: today's query by id, nothing else | `shadow`, `enforce`. Anything else is `off`, reported once per instance to `app_errors` | The `tenant_staff` routes that load a record by id: C16's, C17's under `events/[slug]`, the refund preview (`lib/refunds/preview.ts`), the bounced-signer email change and the saved event email templates (both added straight to `tenant_staff` on 9 Nov 2026), and in wave 5 the admin group payment-method route |
 | `TENANT_DB_ENABLED` | `lib/tenancy/db.ts`, and the area switch in `lib/tenancy/area-switch.ts` | `tenantDb` throws before anything connects; every area answers `service` | Exactly `true` | Nothing: no route calls `tenantDb`, `readArea` or `writeArea` |
 | `TENANT_DB_AREAS` | `lib/tenancy/area-switch.ts` | Every area `service` | Comma-separated `<area>:shadow`, `<area>:shadow:<rate>` (0 to 1, default 1), `<area>:tenant`. Only `events-config` is declared | Nothing until C18 |
 | `TENANT_DATABASE_URL` | `lib/tenancy/driver.ts`, loaded by `db.ts` only when `TENANT_DB_ENABLED` is `true` and no test driver is registered | With the flag on, `tenantDb` throws: there is no fallback connection | The `tenant_app_login` pooler URL (owner steps below) | Nothing until the flag is on and a caller exists |
@@ -24,7 +24,7 @@ Sibling records: `docs/AUTHZ.md` (`AUTHZ_SOURCE`), `docs/TENANCY-S5-routing.md` 
 - `shadow`: both queries run, the legacy result answers, and any difference (found against not found, or a different row) goes to `app_errors` with the route label `LOADSCOPED <route>` and the message `loadScoped shadow mismatch: <table> <reason>`. It never throws for the scope. Each converted call makes a second query.
 - `enforce`: the scoped query alone. In Stellr scope, while the S3 derivation runs in log mode, derived tables also match `tenant_id IS NULL`, so Stellr keeps every row it sees today.
 
-**Every other scope always runs as `enforce`, whatever the mode says:** another tenant's staff, and an event manager narrowed to their events. So an event manager naming another event's record already gets the route's own 404 on `dev` (wave 4, C16). Flipping the mode changes only what Stellr's admins get.
+**Every other scope always runs as `enforce`, whatever the mode says:** another tenant's staff, and an event manager narrowed to their events. So an event manager naming another event's record already gets the route's own 404, since wave 4 (C16). Flipping the mode changes only what Stellr's admins get.
 
 A missing row, a malformed id, another tenant's row and another event's row all get the route's own 404, built fresh each time. `GET /api/admin/health/integrations` reports the resolved mode as `loadScopedMode`.
 
@@ -50,7 +50,7 @@ An entry that does not parse, names an undeclared area, gives a rate to `tenant`
 
 ### `PLATFORM_AUDIT_ENABLED`
 
-With it on, each audited handler appends one row to `platform_audit_events`, the append-only, hash-chained table in `docs/PLATFORM-AUDIT.md`. Who is audited by now: the C7 mechanism; wave 3's A14, B12 (every cron) and B18; wave 4's B16 (54 member and community handlers), C13 (42), C15 (7), C16 and C17; and in wave 5 the 5 register routes (A7; pay and pay-seat record a payment start only when a Checkout was tried) and the admin group payment-method GET and POST (the POST records the method and, for "Invoice for some", a participant count, never ids). What is still unaudited is `test/baselines/unaudited-mutations.json`, regenerated at each merge: on `dev` at `b620a113`, 123 mutating handlers and 6 GET writers, with every one of the 24 crons audited.
+With it on, each audited handler appends one row to `platform_audit_events`, the append-only, hash-chained table in `docs/PLATFORM-AUDIT.md`. Who is audited by now: the C7 mechanism; wave 3's A14, B12 (every cron) and B18; wave 4's B16 (54 member and community handlers), C13 (42), C15 (7), C16 and C17; and in wave 5 the 5 register routes (A7; pay and pay-seat record no payment start for an answer given before a Checkout was tried, such as a tenant's 503 or any 4xx) and the admin group payment-method GET and POST (the POST records the method and, for "Invoice for some", a participant count, never ids). What is still unaudited is `test/baselines/unaudited-mutations.json`, regenerated at each merge: on `dev` at `b620a113`, 123 mutating handlers and 6 GET writers, with every one of the 24 crons audited.
 
 What it costs and what it cannot do:
 

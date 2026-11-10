@@ -15,7 +15,9 @@ import { eventManagerAudienceClerkIds } from '@/lib/authz/audiences'
 import { loadEventTenantId } from '@/lib/authz/principal'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { AudienceKey, RecipientRole } from './types'
-import type { PaymentLine, RecipientForRender } from './render'
+import { AWARD_TYPES, EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
+import { familyCertificateUrl, familyCredentialUrl } from '@/lib/credentials-link'
+import type { CredentialLine, PaymentLine, RecipientForRender } from './render'
 
 export interface ResolvedRecipient extends RecipientForRender {
   /** Display name for previews and history. */
@@ -347,6 +349,103 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
   return out
 }
 
+// ── {{certificate_links}} and {{credential_links}} ───────────────────────────
+
+export interface EventCredential {
+  id: string
+  number: string
+  award_type: string | null
+  award: string | null
+  title: string
+  participant_id: string | null
+  member_id: string | null
+}
+
+/** Every issued (not revoked, not erased) credential of this event. */
+export async function loadEventCredentials(db: SupabaseClient, slug: string): Promise<EventCredential[]> {
+  const { data, error } = await db
+    .from('credentials')
+    .select('id, number, award_type, award, title, participant_id, member_id')
+    .eq('event_slug', slug)
+    .eq('source', 'event')
+    .eq('status', 'issued')
+    .is('tombstoned_at', null)
+  if (error) {
+    console.error('[event-emails] credentials could not be read; certificate and credential links are left out:', error)
+    return []
+  }
+  return (data ?? []) as EventCredential[]
+}
+
+function credentialLabel(c: EventCredential): string {
+  if (isAwardType(c.award_type)) return EVENT_AWARDS[c.award_type].label
+  return c.award?.trim() || c.title.split(' — ')[0] || 'Certificate'
+}
+
+const awardRank = (c: EventCredential) => {
+  const i = isAwardType(c.award_type) ? AWARD_TYPES.indexOf(c.award_type) : -1
+  return i < 0 ? AWARD_TYPES.length : i
+}
+
+/**
+ * Adds each recipient's credential lines: a student's own, the ones of the
+ * minors they are the parent or guardian of, and a mentor's own (matched by
+ * the member's address). Links are the family links (no sign-in needed) on a
+ * real send, placeholders in a preview or test, so a family's working link
+ * never lands in a staff inbox.
+ */
+export function attachCredentialLines(
+  recipients: ResolvedRecipient[],
+  roster: EventRosterData,
+  credentials: EventCredential[],
+  memberEmails: Map<string, string>,
+  mint: boolean,
+): void {
+  if (!credentials.length) return
+  const byEmail = new Map(recipients.map((r) => [r.email.toLowerCase(), r]))
+  const sorted = [...credentials].sort((a, b) => awardRank(a) - awardRank(b))
+  const line = (c: EventCredential, participantName: string): CredentialLine => ({
+    participantName,
+    label: credentialLabel(c),
+    certificateUrl: mint ? familyCertificateUrl(c) ?? '[certificate link]' : '[certificate link]',
+    credentialUrl: mint ? familyCredentialUrl(c) : '[credential link]',
+  })
+  const push = (r: ResolvedRecipient | undefined, l: CredentialLine) => {
+    if (r) (r.credentials ??= []).push(l)
+  }
+
+  const byParticipant = new Map<string, EventCredential[]>()
+  for (const c of sorted) {
+    if (!c.participant_id) continue
+    const list = byParticipant.get(c.participant_id) ?? []
+    list.push(c)
+    byParticipant.set(c.participant_id, list)
+  }
+  for (const g of roster.groups) {
+    for (const p of g.participants) {
+      const creds = byParticipant.get(p.id)
+      if (!creds) continue
+      const own = byEmail.get(p.email?.trim().toLowerCase() ?? '')
+      const guardian = p.minor ? byEmail.get(p.emergency_contact_email?.trim().toLowerCase() ?? '') : undefined
+      for (const c of creds) {
+        push(own, line(c, own?.isParticipant && own.firstName === p.first_name ? 'your' : p.first_name))
+        if (guardian && guardian !== own) push(guardian, line(c, p.first_name))
+      }
+    }
+  }
+  // A mentor's Certificate of Appreciation: a member, with no participant row.
+  for (const c of sorted) {
+    if (c.participant_id || !c.member_id) continue
+    push(byEmail.get(memberEmails.get(c.member_id)?.trim().toLowerCase() ?? ''), line(c, 'your'))
+  }
+}
+
+async function loadMemberEmails(db: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map()
+  const { data } = await db.from('members').select('id, email').in('id', ids)
+  return new Map(((data ?? []) as { id: string; email: string | null }[]).filter((m) => m.email).map((m) => [m.id, m.email as string]))
+}
+
 export async function resolveAudience(
   db: SupabaseClient,
   event: { slug: string; date?: string | null },
@@ -378,6 +477,13 @@ export async function resolveAudience(
     const { outstandingProfileLinks } = await import('@/lib/team-profile/store')
     const links = await outstandingProfileLinks(db, event.slug, resolved.teamProfileParticipantIds, !!opts.mintPayLinks)
     attachTeamProfileLines(resolved.recipients, roster, links)
+  }
+
+  // {{certificate_links}} / {{credential_links}}: issued credentials, as family links on a real send.
+  const credentials = await loadEventCredentials(db, event.slug)
+  if (credentials.length) {
+    const memberEmails = await loadMemberEmails(db, [...new Set(credentials.filter((c) => !c.participant_id && c.member_id).map((c) => c.member_id as string))])
+    attachCredentialLines(resolved.recipients, roster, credentials, memberEmails, !!opts.mintPayLinks)
   }
   return resolved
 }

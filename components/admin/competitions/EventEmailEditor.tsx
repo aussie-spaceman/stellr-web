@@ -14,6 +14,7 @@ import {
   type EventEmailRow,
 } from '@/lib/event-emails/types'
 import { scheduledSendDate } from '@/lib/event-emails/schedule'
+import type { EventEmailTemplateRow } from '@/lib/event-emails/templates'
 import { EventEmailCatchUp } from './EventEmailCatchUp'
 
 interface Preview {
@@ -24,6 +25,7 @@ interface Preview {
   sampleEmail: string | null
   rendered: { subject: string; html: string } | null
   renderError: string | null
+  warnings?: string[]
 }
 
 const EDITABLE = ['draft', 'scheduled', 'cancelled']
@@ -43,6 +45,8 @@ export function EventEmailEditor({
   onChanged,
   onDeleted,
   onDuplicated,
+  templates,
+  onTemplateSaved,
 }: {
   eventSlug: string
   eventDate: string | null
@@ -50,6 +54,8 @@ export function EventEmailEditor({
   onChanged: (email: EventEmailRow, opts?: { refreshHistory?: boolean }) => void
   onDeleted: (id: string) => void
   onDuplicated: (email: EventEmailRow) => void
+  templates: EventEmailTemplateRow[]
+  onTemplateSaved: (template: EventEmailTemplateRow) => void
 }) {
   const editable = EDITABLE.includes(email.status)
   const [name, setName] = useState(email.name)
@@ -64,6 +70,7 @@ export function EventEmailEditor({
   const [preview, setPreview] = useState<Preview | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const name_ = () => name.replace(/\s*\(copy\)$/, '')
   const base = `/api/admin/events/${eventSlug}/emails/${email.id}`
   const touch = () => { setDirty(true); setPreview(null) }
 
@@ -132,7 +139,8 @@ export function EventEmailEditor({
     const docusign = resendDocusign && audiences.includes('docusign_outstanding') && pv.docusignOutstanding > 0
       ? `\n\nDocuSign will also be re-sent for ${pv.docusignOutstanding} participant${pv.docusignOutstanding === 1 ? '' : 's'} first.`
       : ''
-    if (!confirm(`Send “${subject}” to ${pv.count} ${pv.count === 1 ? 'person' : 'people'} now?${docusign}`)) return
+    const empty = pv.warnings?.length ? `\n\nCheck first:\n${pv.warnings.join('\n')}` : ''
+    if (!confirm(`Send “${subject}” to ${pv.count} ${pv.count === 1 ? 'person' : 'people'} now?${docusign}${empty}`)) return
     setMessage({ ok: true, text: `Sending to ${pv.count}… this can take up to a minute.` })
     const { ok: sent, data } = await call(`${base}/send`, { method: 'POST', body: '{}' })
     if (!sent) return setMessage({ ok: false, text: data?.error ?? 'Send failed.' })
@@ -166,6 +174,31 @@ export function EventEmailEditor({
     })
     if (!ok) return setMessage({ ok: false, text: data?.error ?? 'Could not duplicate.' })
     onDuplicated(data.email)
+  })
+
+  // Saves this email (as it is now) as a template every event can start from.
+  // Same name as an existing template → offer to update that one.
+  const saveAsTemplate = () => run('template', async () => {
+    if (dirty && !(await save({}, true))) return
+    const name = prompt('Save as a template for every event. Template name:', name_())?.replace(/\s+/g, ' ').trim()
+    if (!name) return
+    const existing = templates.find((t) => t.name.toLowerCase() === name.toLowerCase())
+    if (existing && !confirm(`A template called “${existing.name}” already exists. Update it with this email?`)) return
+    const { ok, data } = existing
+      ? await call(`/api/admin/events/${eventSlug}/email-templates/${existing.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ fromEmailId: email.id, name }),
+        })
+      : await call(`/api/admin/events/${eventSlug}/email-templates`, {
+          method: 'POST',
+          body: JSON.stringify({ fromEmailId: email.id, name }),
+        })
+    if (!ok) return setMessage({ ok: false, text: data?.error ?? 'Could not save the template.' })
+    onTemplateSaved(data.template)
+    setMessage({
+      ok: true,
+      text: `${existing ? 'Updated' : 'Saved'} template “${data.template.name}”. It’s in “+ Add email…” on every event${email.attachments.length ? ' (attachments aren’t included)' : ''}.`,
+    })
   })
 
   const attach = (file: File) => run('attach', async () => {
@@ -370,6 +403,9 @@ export function EventEmailEditor({
             <button type="button" className={link} disabled={busy !== null} onClick={sendTest}>
               {busy === 'test' ? 'Sending…' : 'Send test to me'}
             </button>
+            <button type="button" className={link} disabled={busy !== null} onClick={saveAsTemplate}>
+              {busy === 'template' ? 'Saving…' : 'Save as template'}
+            </button>
             <button type="button" className="ml-auto text-sm text-red-600 hover:text-red-800 disabled:opacity-50" disabled={busy !== null} onClick={remove}>
               Delete
             </button>
@@ -378,6 +414,9 @@ export function EventEmailEditor({
           <>
             <Button variant="softBlue" className="!py-2" disabled={busy !== null} onClick={duplicate}>Duplicate</Button>
             <button type="button" className={link} disabled={busy !== null} onClick={loadPreview}>Preview recipients</button>
+            <button type="button" className={link} disabled={busy !== null} onClick={saveAsTemplate}>
+              {busy === 'template' ? 'Saving…' : 'Save as template'}
+            </button>
           </>
         )}
       </div>
@@ -412,6 +451,11 @@ export function EventEmailEditor({
             )}
           </div>
           <div>
+            {!!preview.warnings?.length && (
+              <ul className="mb-2 space-y-0.5 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                {preview.warnings.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
             {preview.renderError ? (
               <p className="text-sm text-red-600">{preview.renderError}</p>
             ) : preview.rendered ? (

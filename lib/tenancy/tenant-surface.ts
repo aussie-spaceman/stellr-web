@@ -106,6 +106,7 @@ export const TENANT_SURFACE_ALLOW: readonly TenantSurfaceRule[] = [
   { match: 'app/api/check-in-desk/manifest/route.ts', reason: FLOW },
   { match: 'app/api/team-profile/[token]/route.ts', reason: FLOW },
   { match: 'app/api/email/unsubscribe/route.ts', reason: 'the marketing opt-out from an email link, no session (CAN-SPAM, CASL)' },
+  { match: 'app/api/credentials/[number]/certificate/route.ts', reason: CREDENTIAL },
   { match: 'app/api/credentials/[number]/events/route.ts', reason: CREDENTIAL },
   { match: 'app/api/credentials/[number]/pdf/route.ts', reason: CREDENTIAL },
   { match: 'app/api/credentials/[number]/visibility/route.ts', reason: CREDENTIAL },

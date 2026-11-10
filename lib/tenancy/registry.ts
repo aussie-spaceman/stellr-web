@@ -107,6 +107,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.tenant_memberships': own('roles inside a tenant'),
   'public.platform_admins': platform(),
   'public.events': own('mirror of Sanity events'),
+  'public.event_email_templates': own('saved event emails, shared across the tenant’s events'),
   'public.tenancy_settings': system('derivation mode'),
   'public.tenancy_derivation_log': system('derivation orphan counts'),
 

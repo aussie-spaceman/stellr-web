@@ -29,9 +29,10 @@ import {
 const MIGRATION = 'supabase/migrations/20261104200000_tenant_isolation_policies.sql'
 /** S5 C0b: the 10 child tables, and the guards that used to hold a key to them to NULL. */
 const CHILD_MIGRATION = 'supabase/migrations/20261106070726_via_parent_tenant_policies.sql'
-/** Child tables created after C0b, each writing its own policies (and carry) in its CREATE TABLE migration. */
+/** Tenant tables created after C0b, each writing its own policies (and, for a child, carry) in its CREATE TABLE migration. */
 const LATER_CHILD_MIGRATIONS: Record<string, string> = {
   'public.agreement_email_changes': 'supabase/migrations/20261109200000_agreement_email_changes.sql',
+  'public.event_email_templates': 'supabase/migrations/20261109230000_event_email_templates.sql',
 }
 const inheritedTenantTables = () => tenantTables().filter((t) => TABLE_REGISTRY[t].tenantColumn === 'inherited')
 /** The S4 file for a table it wrote, the C0b file for a child table, or the later child's own. */
@@ -52,7 +53,7 @@ describe('cross-tenant pgTAP matrix (S4)', () => {
 
   it('has a fixture for every own/derived/inherited tenant table, and none for anything else', () => {
     expect(fixtureProblems()).toEqual([])
-    expect(tenantTables().length).toBe(46)
+    expect(tenantTables().length).toBe(47)
     expect(inheritedTenantTables().length).toBe(11)
     expect(Object.keys(FIXTURES).sort()).toEqual(tenantTables())
   })

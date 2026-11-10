@@ -611,6 +611,54 @@ describe('branches: POST /api/register/group — the price', () => {
     expect(h.merch).not.toHaveBeenCalled()
   })
 
+  // A code typed on the form (9 Nov 2026): the first invoice carries it, so the
+  // teacher never has to forward an invoice at full price and ask for it again.
+  describe('a discount code typed for the invoice', () => {
+    const promoList = vi.fn()
+    const couponRetrieve = vi.fn()
+    beforeEach(() => {
+      h.stripe = { prices: { retrieve: h.priceRetrieve }, promotionCodes: { list: promoList }, coupons: { retrieve: couponRetrieve } }
+      promoList.mockImplementation(async ({ code }: { code: string }) => ({
+        data: code === 'STEMCAREERS' ? [{ code, coupon: 'co_15', active: true, customer: null, expires_at: null, max_redemptions: null, times_redeemed: 0 }] : [],
+      }))
+      couponRetrieve.mockImplementation(async (id: string) => {
+        if (id === 'co_15' || id === 'SCHOLARSHIP100') return { id, valid: true, percent_off: id === 'co_15' ? 15 : 100, amount_off: null, applies_to: null }
+        throw new Error('No such coupon')
+      })
+    })
+
+    it.each([['invoice', {}], ['invoice_some', { registrant_on_invoice: true, late_joiner_payer: 'self' }]])(
+      'is saved on a group paying by %s, so its first invoice carries it',
+      async (method, extra) => {
+        expect((await post(body({ payment_method: method, discount_code: ' STEMCAREERS ', ...extra }))).status).toBe(201)
+        expect(registrationRow()).toMatchObject({ invoice_requested: true, invoice_coupon_id: 'co_15', invoice_promotion_code: 'STEMCAREERS' })
+        expect(h.invoice).toHaveBeenCalled()
+      },
+    )
+
+    it('a code that isn’t a promotion code for this event is refused before anything is written', async () => {
+      for (const code of ['NOPE', 'SCHOLARSHIP100']) {
+        expect(await settle(await post(body({ payment_method: 'invoice', discount_code: code })))).toEqual(refused(
+          400,
+          'That discount code isn’t valid for this event. Check it, or leave it blank: you can add a code to your invoice later from your account.',
+        ))
+      }
+      nothingNew()
+    })
+
+    it('a lookup that fails is a retryable 503, before anything is written', async () => {
+      promoList.mockRejectedValue(new Error('stripe down'))
+      expect((await post(body({ payment_method: 'invoice', discount_code: 'STEMCAREERS' }))).status).toBe(503)
+      nothingNew()
+    })
+
+    it('is ignored for a card, which has Stripe’s own code box', async () => {
+      expect((await post(body({ payment_method: 'card', discount_code: 'NOPE' }))).status).toBe(201)
+      expect(registrationRow()).not.toHaveProperty('invoice_coupon_id')
+      expect(promoList).not.toHaveBeenCalled()
+    })
+  })
+
   it.each([
     ['an invoice', { payment_method: 'invoice' }],
     ['a card', { payment_method: 'card' }],

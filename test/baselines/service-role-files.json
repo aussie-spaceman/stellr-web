@@ -569,6 +569,14 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
+    "app/api/admin/events/[slug]/email-templates/[id]/route.ts": {
+      "class": "convert",
+      "reason": "saved event email templates: reads and writes event_email_templates by the route's tenant (requireEventRoute tenantId) and loads the source email through loadEventRecord; no tenantDb slice covers this table yet"
+    },
+    "app/api/admin/events/[slug]/email-templates/route.ts": {
+      "class": "convert",
+      "reason": "saved event email templates: reads and writes event_email_templates by the route's tenant (requireEventRoute tenantId) and loads the source email through loadEventRecord; no tenantDb slice covers this table yet"
+    },
     "app/api/admin/events/[slug]/emails/[id]/attachments/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
@@ -948,6 +956,10 @@
     "app/api/consent/request/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: agreements, members"
+    },
+    "app/api/credentials/[number]/certificate/route.ts": {
+      "class": "convert",
+      "reason": "family certificate link from an event email: no session (a guardian has no account), so the credential, its artwork and the D1 survey gate are read by service role after an HMAC token check, exactly as the credential page's ?k= link does"
     },
     "app/api/credentials/[number]/events/route.ts": {
       "class": "convert",

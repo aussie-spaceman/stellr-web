@@ -12,6 +12,7 @@ import { RESOURCES_BUCKET } from '@/lib/community'
 import { getEventBySlug } from '@/lib/events/repo'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
 import { resolveAudience, type ResolvedRecipient } from './audiences'
+import { AWARD_MERGE_TOKENS, loadAwardMergeVars } from './awards'
 import { alreadyTriedAddresses, missedRecipients } from './history'
 import {
   EVENT_EMAIL_FROM,
@@ -79,6 +80,22 @@ export async function loadEventForEmail(slug: string): Promise<EventForEmail | n
     | null
   if (!e) return null
   return { slug, title: e.title, date: e.date, venue: e.venue, city: e.city, state: e.state, startTime: e.startTime, endTime: e.endTime }
+}
+
+/**
+ * The event-level merge values for this email: the event's details, plus the
+ * award winners and champion company when the email uses them (read once per
+ * send, not per recipient).
+ */
+export async function eventVarsFor(
+  db: SupabaseClient,
+  email: Pick<EventEmailRow, 'subject' | 'body_json'>,
+  event: EventForEmail,
+): Promise<Record<string, string>> {
+  const vars = eventMergeVars(event)
+  const used = new Set([...extractTokens(email.subject), ...extractTokens(JSON.stringify(email.body_json ?? ''))])
+  if (AWARD_MERGE_TOKENS.some((t) => used.has(t))) Object.assign(vars, await loadAwardMergeVars(db, event.slug))
+  return vars
 }
 
 export async function loadAttachments(db: SupabaseClient, email: EventEmailRow) {
@@ -278,7 +295,7 @@ export async function deliver(
   },
 ): Promise<{ sendId: string; sent: number; failed: number; stoppedForQuota: boolean; stoppedForTime: boolean }> {
   const isTest = opts.trigger === 'test'
-  const eventVars = eventMergeVars(event)
+  const eventVars = await eventVarsFor(db, email, event)
   // History shows the subject as it went out (first recipient's rendering),
   // not the template with its {{fields}}.
   let sentSubject = email.subject

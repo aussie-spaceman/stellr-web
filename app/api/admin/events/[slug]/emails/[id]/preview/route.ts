@@ -4,8 +4,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { withAudit } from '@/lib/audit/route'
 import { resolveAudience } from '@/lib/event-emails/audiences'
-import { loadEventForEmail } from '@/lib/event-emails/send'
-import { eventMergeVars, recipientMergeVars, renderEventEmail, unknownTokens } from '@/lib/event-emails/render'
+import { eventVarsFor, loadEventForEmail } from '@/lib/event-emails/send'
+import { recipientMergeVars, renderEventEmail, unknownTokens } from '@/lib/event-emails/render'
+import { extractTokens } from '@/lib/email-render'
 import { MAX_RECIPIENTS_PER_SEND, type EventEmailRow } from '@/lib/event-emails/types'
 import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 
@@ -50,10 +51,11 @@ async function previewEmail(req: Request, { params }: Ctx) {
   const bad = unknownTokens(email.subject, email.body_json)
   let rendered: { subject: string; html: string } | null = null
   let renderError: string | null = bad.length ? `Unknown merge field: ${bad.map((t) => `{{${t}}}`).join(', ')}` : null
+  const eventVars = await eventVarsFor(db, email, event)
   if (!renderError) {
     try {
       const vars = {
-        ...eventMergeVars(event),
+        ...eventVars,
         ...recipientMergeVars(sample ?? { email: '', firstName: 'there', roles: [], participantNames: [], isParticipant: true, payments: [] }),
       }
       const out = renderEventEmail(email, vars)
@@ -63,7 +65,21 @@ async function previewEmail(req: Request, { params }: Ctx) {
     }
   }
 
+  // Fields this email uses that will come out empty, so the author sees it
+  // before sending ("And our overall champion company - !").
+  const used = new Set([...extractTokens(email.subject), ...extractTokens(JSON.stringify(email.body_json ?? ''))])
+  const warnings: string[] = []
+  for (const [token, value] of Object.entries(eventVars)) {
+    if (used.has(token) && !value) warnings.push(`{{${token}}} is empty for this event.`)
+  }
+  for (const token of ['certificate_links', 'credential_links']) {
+    if (!used.has(token)) continue
+    const without = recipients.filter((r) => !r.credentials?.length).length
+    if (without) warnings.push(`{{${token}}} is empty for ${without} of ${recipients.length} recipient${recipients.length === 1 ? '' : 's'} (no issued credentials).`)
+  }
+
   return NextResponse.json({
+    warnings,
     recipients: recipients.map((r) => ({ email: r.email, name: r.name, roles: r.roles, reasons: r.reasons })),
     count: recipients.length,
     max: MAX_RECIPIENTS_PER_SEND,

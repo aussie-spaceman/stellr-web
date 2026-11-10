@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@/lib/supabase', () => ({ supabaseServer: vi.fn() }))
 
-const { recipientsFor, placementFromParams, fullName } = await import('./event-certificates')
+const { recipientsFor, placementFromParams, fullName, attendees } = await import('./event-certificates')
 import type { AssignmentRow, EventCompany, EventStudent } from './event-certificates'
 import { DEFAULT_NAME_PLACEMENT } from './event-pdf'
 
@@ -34,6 +34,18 @@ describe('recipientsFor', () => {
   it('gives a judged award only to its assignees', () => {
     expect(recipientsFor('anita_gale', students, assignments, companies).map((s) => s.id)).toEqual(['s4', 's1'])
     expect(recipientsFor('dick_edwards', students, assignments, companies)).toEqual([])
+  })
+})
+
+describe('attendees', () => {
+  it('keeps only checked-in students when the event used check-in', () => {
+    const here = { ...students[0], checked_in_at: '2026-11-07T15:00:00Z' }
+    const noShow = { ...students[2], checked_in_at: null }
+    expect(attendees([here, noShow]).map((s) => s.id)).toEqual(['s1'])
+  })
+
+  it('keeps every student when nobody was checked in', () => {
+    expect(attendees(students).map((s) => s.id)).toEqual(['s1', 's2', 's3', 's4'])
   })
 })
 

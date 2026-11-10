@@ -63,12 +63,15 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
     setBusy(true); setMsg(null)
     try {
       const res = await fetch(`${base}/issue`, { method: 'POST' })
-      const d = (await res.json()) as { error?: string; issued: number; reinstated: number; revoked: number; unchanged: number; emailed: number; failures: string[] }
+      const d = (await res.json()) as { error?: string; issued: number; students: number; reinstated: number; revoked: number; unchanged: number; emailed: number; failures: string[] }
       if (!res.ok) throw new Error(d.error ?? 'Issue failed')
-      const bits = [`${d.issued} issued`]
-      if (d.reinstated) bits.push(`${d.reinstated} reinstated`)
-      if (d.revoked) bits.push(`${d.revoked} revoked`)
-      bits.push(`${d.unchanged} unchanged`, `${d.emailed} emailed`)
+      // Counts are awards, not people: a champion can also hold one individual
+      // award, so 12 awards can go to 8 students.
+      const n = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
+      const bits = [`${n(d.issued + d.reinstated, 'award')} to ${n(d.students, 'student')}`]
+      if (d.reinstated) bits.push(`${d.reinstated} of them reinstated`)
+      if (d.revoked) bits.push(`${n(d.revoked, 'award')} revoked`)
+      bits.push(`${d.unchanged} unchanged`, `${n(d.emailed, 'email')} sent`)
       if (d.failures.length) bits.push(`${d.failures.length} failed: ${d.failures.join('; ')}`)
       setMsg({ text: `Awards issued — ${bits.join(', ')}.`, error: d.failures.length > 0 })
       await load()

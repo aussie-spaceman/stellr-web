@@ -76,9 +76,12 @@ describe('one shared pool for Stellr and tenants', () => {
     const { email, tenantMail } = await load()
     const sender = tenantMail.tenantEventSender({ display_name: 'Rocket Club', branding: { reply_to: 'events@rocket.example.org' } })!
     await email.sendEmail({ to: 'a@example.org', ...msg, kind: 'marketing' })
-    await expect(
-      email.sendEmail({ to: 'b@example.org', ...msg, kind: 'marketing', from: sender.from, replyTo: sender.replyTo }),
-    ).rejects.toMatchObject({ isQuota: true })
+    // Held back, not sent: since 9 Nov the held-back blast waits in the email
+    // outbox for a later day (lib/email/outbox.ts) instead of being refused.
+    expect(
+      await email.sendEmail({ to: 'b@example.org', ...msg, kind: 'marketing', from: sender.from, replyTo: sender.replyTo }),
+    ).toEqual({ id: null, queued: true })
+    expect(fake.tables.email_outbox).toMatchObject([{ kind: 'marketing', reason: 'budget', message: { from: sender.from } }])
     // Transactional mail is never refused by the counter, for a tenant as for Stellr.
     expect(await tenantMail.sendTenantConfirmation(fake.client, { tenantId: TENANT, to: 'c@example.org', ...msg })).toMatchObject({ ok: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -89,9 +92,9 @@ describe('one shared pool for Stellr and tenants', () => {
     const fake = setup(8)
     const { email, tenantMail } = await load()
     const sender = tenantMail.tenantEventSender({ display_name: 'Rocket Club', branding: { reply_to: 'events@rocket.example.org' } })!
-    await expect(
-      email.sendEmail({ to: 'b@example.org', ...msg, kind: 'marketing', from: sender.from, replyTo: sender.replyTo }),
-    ).rejects.toMatchObject({ isQuota: true })
+    expect(
+      await email.sendEmail({ to: 'b@example.org', ...msg, kind: 'marketing', from: sender.from, replyTo: sender.replyTo }),
+    ).toEqual({ id: null, queued: true })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(fake.tables.email_send_quota).toEqual([{ day: DAY, sent: 8 }])
   })

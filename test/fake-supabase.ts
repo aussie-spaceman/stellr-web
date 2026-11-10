@@ -119,6 +119,7 @@ export function fakeSupabase(
     let action: 'select' | 'update' | 'delete' | 'insert' | 'upsert' = 'select'
     let payload: Row | Row[] | null = null
     let upsertConflict: string[] = []
+    let ignoreDuplicates = false
     let returning = false
     let countMode = false
     let head = false
@@ -140,8 +141,8 @@ export function fakeSupabase(
       insert(p: Row | Row[]) { action = 'insert'; payload = p; return b },
       update(p: Row) { action = 'update'; payload = p; return b },
       delete() { action = 'delete'; return b },
-      upsert(p: Row | Row[], o?: { onConflict?: string }) {
-        action = 'upsert'; payload = p; upsertConflict = (o?.onConflict ?? 'id').split(','); return b
+      upsert(p: Row | Row[], o?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+        action = 'upsert'; payload = p; upsertConflict = (o?.onConflict ?? 'id').split(','); ignoreDuplicates = !!o?.ignoreDuplicates; return b
       },
       eq(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] === v); return b },
       neq(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] !== v); return b },
@@ -246,7 +247,8 @@ export function fakeSupabase(
         const out: Row[] = []
         for (const p of items) {
           const existing = rows.find((r) => upsertConflict.every((k) => r[k] === p[k]))
-          if (existing) { Object.assign(existing, p); out.push(existing) }
+          // ON CONFLICT DO NOTHING: the existing row stays as it was.
+          if (existing) { if (!ignoreDuplicates) { Object.assign(existing, p); out.push(existing) } }
           else { const n = { id: p.id ?? fakeId(), ...p }; rows.push(n); out.push(n) }
         }
         return returning ? shape(out) : { data: null, error: null }

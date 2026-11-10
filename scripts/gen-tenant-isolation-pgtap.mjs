@@ -189,6 +189,7 @@ export const FIXTURES = {
   'public.event_participations': (c) => ({ member_id: lit(MEMBER), event_slug: lit(c.ev.slug) }),
   'public.event_refunds': (c) => ({ refund_type: lit('none'), event_slug: lit(c.ev.slug) }),
   'public.event_settings': (c) => ({ event_slug: lit(c.ev.slug) }),
+  'public.event_staff_check_ins': (c) => ({ event_slug: lit(c.ev.slug), staff_key: lit(`m.user_iso_${c.s}`), role: lit('event_manager') }),
   'public.event_store_offerings': (c) => ({ event_slug: lit(c.ev.slug), variant_id: lit(VARIANT), treatment: lit('included') }),
   'public.events': (c) => ({
     tenant_id: lit(c.t.id), slug: lit(`iso-own-${c.s}`), sanity_id: lit(`iso-own-sanity-${c.s}`), title: lit('Iso'),

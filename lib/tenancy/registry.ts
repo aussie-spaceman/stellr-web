@@ -129,6 +129,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.event_participations': slug(),
   'public.event_refunds': slug(),
   'public.event_settings': slug(),
+  'public.event_staff_check_ins': slug('desk check-ins of volunteer mentors and event managers'),
   'public.event_store_offerings': slug(),
   'public.group_invoices': slug(),
   'public.group_join_tokens': slug(),

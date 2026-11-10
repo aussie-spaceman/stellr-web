@@ -14,6 +14,13 @@ import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
 
 export const CHECK_IN_GROUP = 'E2E Lincoln MS'
 
+/**
+ * The volunteer mentor a `withMentor` event assigns: the event-manager
+ * fixture's members row (supabase/seed.sql), which has an email and no
+ * participant row on these events, so the desk lists it on the Mentors tab.
+ */
+export const CHECK_IN_MENTOR_MEMBER_ID = '00000000-0000-4000-a000-000000000006'
+
 function db(): SupabaseClient {
   const url = assertE2eSupabase()
   return createClient(url, supabaseSecretKey() as string, { auth: { persistSession: false }, global: { fetch: supabaseFetch } })
@@ -25,7 +32,7 @@ export function checkInConfigured(): boolean {
   return (supabaseSecretKey() ?? '').length > 0
 }
 
-export async function createCheckInEvent(): Promise<string> {
+export async function createCheckInEvent(opts: { withMentor?: boolean } = {}): Promise<string> {
   const client = db()
   const slug = `e2e-checkin-${randomBytes(4).toString('hex')}`
   const title = `E2E Check-in ${slug.slice(-8)}`
@@ -49,6 +56,19 @@ export async function createCheckInEvent(): Promise<string> {
       { ...base, registration_id: solo, first_name: 'Dee', last_name: 'Delta', email: `dee.${slug}@example.com`, school_name: 'E2E Westside High' },
     ])
     if (pErr) throw new Error(pErr.message)
+    if (opts.withMentor) {
+      // The event's volunteer container, as admin Volunteers assignment makes it.
+      const { data: cohort, error: cErr } = await client
+        .from('mentoring_cohorts')
+        .insert({ name: title, container_type: 'event_participation', campaign_ref: slug, parent_container_id: null })
+        .select('id')
+        .single()
+      if (cErr) throw new Error(cErr.message)
+      const { error: mErr } = await client
+        .from('cohort_members')
+        .insert({ cohort_id: cohort.id, member_id: CHECK_IN_MENTOR_MEMBER_ID, relationship: 'volunteer', status: 'active' })
+      if (mErr) throw new Error(mErr.message)
+    }
     return slug
   } catch (err) {
     await removeCheckInEvent(slug).catch(() => {})
@@ -64,4 +84,7 @@ export async function removeCheckInEvent(slug: string): Promise<void> {
   if (ids.length) await client.from('participants').delete().in('registration_id', ids)
   await client.from('registrations').delete().eq('event_slug', slug)
   await client.from('event_settings').delete().eq('event_slug', slug)
+  await client.from('event_staff_check_ins').delete().eq('event_slug', slug)
+  // Deleting the container removes its cohort_members rows (ON DELETE CASCADE).
+  await client.from('mentoring_cohorts').delete().eq('container_type', 'event_participation').eq('campaign_ref', slug)
 }

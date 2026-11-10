@@ -24,11 +24,15 @@ import {
   pendingFromQueue,
   queuedIds,
   readDeskStore,
+  staffSearchMatches,
   writeDeskStore,
+  STAFF_ROLE_LABEL,
   type ArrivalFilter,
   type DeskDetails,
   type DeskGroup,
   type DeskParticipant,
+  type DeskStaff,
+  type DeskStaffCheckIn,
   type GroupRow,
   type QueuedAction,
   bannerNotice,
@@ -41,13 +45,15 @@ interface LiveState {
   resourcesUrl: string | null
   participants: DeskParticipant[]
   groups: DeskGroup[]
+  /** Mentors and event managers checked in, by staff key; null when that couldn't be read. */
+  staffCheckIns?: Record<string, DeskStaffCheckIn> | null
   /** The check-in banner (/check-in) sends phones to this event; null when that couldn't be worked out. */
   bannerTarget: boolean | null
   /** Other in-person events with check-in open that the caller manages; opening this one closes them. */
   otherOpen: { slug: string; title: string }[]
 }
 
-type View = 'people' | 'groups'
+type View = 'people' | 'groups' | 'mentors'
 type Patches = Record<string, Partial<DeskParticipant>>
 
 // Each poll runs a function and the proxy on metered CPU. A tap or scan syncs at
@@ -168,7 +174,7 @@ export default function CheckInLive({
         if (mySeq < lastApplied.current || mySeq < minAccept.current) return
         lastApplied.current = mySeq
         const now = new Date()
-        setState(data)
+        setState((cur) => ({ ...data, staffCheckIns: data.staffCheckIns ?? cur?.staffCheckIns ?? null }))
         setFromCache(false)
         setAuthProblem(null)
         setOffline(false)
@@ -273,7 +279,7 @@ export default function CheckInLive({
     if (cachedDetails) setDetails((cur) => cur ?? cachedDetails)
     try {
       const savedView = window.localStorage.getItem(VIEW_PREF_KEY)
-      if (savedView === 'groups' || savedView === 'people') setView(savedView)
+      if (savedView === 'groups' || savedView === 'people' || savedView === 'mentors') setView(savedView)
     } catch {
       /* storage blocked: start on People */
     }
@@ -490,6 +496,19 @@ export default function CheckInLive({
     act({ action, participantId: p.id, at, label: `${p.firstName} ${p.lastName}` }, { [p.id]: patch })
   }
 
+  // A volunteer mentor or event manager, from the Mentors tab (lib/check-in-staff.ts).
+  function staffAction(checkIn: boolean, s: DeskStaff) {
+    if (checkIn && search) {
+      setSearch('')
+      searchRef.current?.focus()
+    }
+    const at = checkIn ? new Date().toISOString() : undefined
+    act(
+      { action: checkIn ? 'staff_check_in' : 'staff_undo', staffKey: s.id, at, label: `${s.firstName} ${s.lastName}` },
+      { [s.id]: checkIn ? { checkedInAt: at, checkInMethod: 'manual' } : { checkedInAt: null, checkInMethod: null } }
+    )
+  }
+
   function checkInGroup(row: GroupRow, ids: string[]) {
     setSheetGroupId(null)
     if (!ids.length) return
@@ -526,6 +545,13 @@ export default function CheckInLive({
     () => (state?.participants ?? []).map((p) => ({ ...p, ...pending[p.id] })).sort(compareByFirstName),
     [state, pending]
   )
+  const staff = useMemo<DeskStaff[]>(
+    () =>
+      (details?.staff ?? [])
+        .map((s) => ({ ...s, checkedInAt: null, checkInMethod: null, ...state?.staffCheckIns?.[s.id], ...pending[s.id] }))
+        .sort(compareByFirstName),
+    [details, state, pending]
+  )
   const groupById = useMemo(() => new Map((state?.groups ?? []).map((g) => [g.id, g])), [state])
   const groupRows = useMemo(() => buildGroupRows(state?.groups ?? [], participants), [state, participants])
   const flags = details?.flags ?? {}
@@ -553,10 +579,15 @@ export default function CheckInLive({
     return { tone: 'ok', title: who, detail: about || 'Checked in', flags: flags[p.id] }
   }
 
-  const arrived = participants.filter((p) => p.checkedInAt).length
-  const total = participants.length
   const hasGroups = groupRows.length > 0
+  const hasStaff = staff.length > 0
   const showGroups = view === 'groups' && hasGroups
+  const showMentors = view === 'mentors' && hasStaff
+  // The headline count is for the list on screen: students and roster people, or mentors.
+  const counted: { checkedInAt: string | null }[] = showMentors ? staff : participants
+  const arrived = counted.filter((p) => p.checkedInAt).length
+  const total = counted.length
+  const views: View[] = ['people', ...(hasGroups ? (['groups'] as const) : []), ...(hasStaff ? (['mentors'] as const) : [])]
 
   const visible = useMemo(
     () =>
@@ -566,6 +597,15 @@ export default function CheckInLive({
         return deskSearchMatches(p, search, groupById.get(p.registrationId))
       }),
     [participants, search, filter, groupById]
+  )
+  const visibleStaff = useMemo(
+    () =>
+      staff.filter((s) => {
+        if (filter === 'waiting' && s.checkedInAt) return false
+        if (filter === 'arrived' && !s.checkedInAt) return false
+        return staffSearchMatches(s, search)
+      }),
+    [staff, search, filter]
   )
   const visibleGroups = useMemo(
     () => groupRows.filter((r) => groupMatchesFilter(r, filter) && groupMatchesSearch(r, search)),
@@ -812,6 +852,36 @@ export default function CheckInLive({
     </ul>
   )
 
+  const staffList = (
+    <ul className="divide-y divide-line-light">
+      {visibleStaff.map((s) => (
+        <li key={s.id} className={cn('flex items-center gap-3 px-4 py-3 sm:gap-4', s.checkedInAt && 'bg-enviro-green-bg/40')}>
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-base font-semibold text-ink">
+              {s.firstName} {s.lastName}
+            </p>
+            <p className="text-sm text-content-muted">{STAFF_ROLE_LABEL[s.role]}</p>
+          </div>
+          {s.checkedInAt ? (
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className="inline-flex rounded-full bg-enviro-green-bg px-3 py-1 text-sm font-medium text-enviro-green-text">
+                ✓ {timeLabel(s.checkedInAt)} · desk
+              </span>
+              <button onClick={() => staffAction(false, s)} className="min-h-11 px-3 text-sm text-content-muted hover:text-danger">
+                Undo
+              </button>
+            </div>
+          ) : (
+            <Button onClick={() => staffAction(true, s)} className="min-h-12 shrink-0 px-4 py-2 text-base sm:px-5">
+              Check in
+            </Button>
+          )}
+        </li>
+      ))}
+      {visibleStaff.length === 0 && <li className="px-4 py-8 text-center text-sm text-content-muted">No one here.</li>}
+    </ul>
+  )
+
   const groupList = (
     <ul className="divide-y divide-line-light">
       {visibleGroups.map((row) => {
@@ -891,14 +961,14 @@ export default function CheckInLive({
           {syncChip}
           <div className="order-last flex w-full gap-2 sm:order-none sm:ml-auto sm:w-auto short:order-none short:w-auto short:flex-1">
             <label className="relative min-w-0 flex-1 sm:min-w-[16rem] sm:max-w-xs short:min-w-0">
-              <span className="sr-only">Search by name, school or teacher</span>
+              <span className="sr-only">{showMentors ? 'Search by name or role' : 'Search by name, school or teacher'}</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-content-faint" aria-hidden />
               <input
                 ref={searchRef}
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name, school or teacher…"
+                placeholder={showMentors ? 'Name or role…' : 'Name, school or teacher…'}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -912,9 +982,9 @@ export default function CheckInLive({
             </Button>
           </div>
         </div>
-        {hasGroups && (
+        {views.length > 1 && (
           <div role="tablist" aria-label="List by" className="flex gap-1 rounded-control bg-surface p-1">
-            {(['people', 'groups'] as const).map((v) => (
+            {views.map((v) => (
               <button
                 key={v}
                 role="tab"
@@ -925,7 +995,7 @@ export default function CheckInLive({
                   view === v ? 'bg-midnight text-white' : 'text-content-muted'
                 )}
               >
-                {v === 'people' ? 'People' : `Groups ${groupRows.length}`}
+                {v === 'people' ? 'People' : v === 'groups' ? `Groups ${groupRows.length}` : `Mentors ${staff.length}`}
               </button>
             ))}
           </div>
@@ -963,7 +1033,7 @@ export default function CheckInLive({
         )}
       </div>
 
-      {showGroups ? groupList : peopleList}
+      {showGroups ? groupList : showMentors ? staffList : peopleList}
     </div>
   )
 

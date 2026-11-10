@@ -57,10 +57,55 @@ export interface DeskContact {
   email: string | null
 }
 
+// ── Mentors and event managers ───────────────────────────────────────────────
+//
+// Nov 2026: volunteer mentors and event managers are not on the roster, so the
+// desk lists them on a Mentors tab and checks them in to event_staff_check_ins
+// (lib/check-in-staff.ts). The "All attendees" email group reads both.
+
+export type StaffRole = 'volunteer' | 'event_manager'
+
+/** How the desk names a mentor or event manager: v.<members.id> or m.<Clerk user id>. */
+export function staffKey(role: StaffRole, id: string): string {
+  return `${role === 'volunteer' ? 'v' : 'm'}.${id}`
+}
+
+/** The shape of a staff key; the server also checks the person is on this event. */
+export const STAFF_KEY = /^[vm]\.[A-Za-z0-9_-]{1,64}$/
+
+/** Who is on the Mentors tab. Names change rarely, so they come with the details. */
+export interface DeskStaffPerson {
+  /** The staff key. */
+  id: string
+  firstName: string
+  lastName: string
+  role: StaffRole
+}
+
+export interface DeskStaffCheckIn {
+  checkedInAt: string | null
+  checkInMethod: string | null
+}
+
+export type DeskStaff = DeskStaffPerson & DeskStaffCheckIn
+
+export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
+  volunteer: 'Mentor',
+  event_manager: 'Event manager',
+}
+
+/** A Mentors tab search: the person's name, or their role. */
+export function staffSearchMatches(s: DeskStaffPerson, query: string): boolean {
+  const q = fold(query).trim()
+  return !q || [`${s.firstName} ${s.lastName}`, STAFF_ROLE_LABEL[s.role]].some((v) => fold(v).includes(q))
+}
+
 /** Loaded once and every few minutes, not on every poll: these rarely change. */
 export interface DeskDetails {
   flags: Record<string, DeskFlags>
   contacts: Record<string, DeskContact>
+  /** Volunteer mentors and event managers, for the Mentors tab. */
+  staff?: DeskStaffPerson[]
 }
 
 export type ArrivalFilter = 'all' | 'waiting' | 'arrived'
@@ -93,7 +138,10 @@ export function codeFromScan(text: string): string | null {
 // ── Lists ────────────────────────────────────────────────────────────────────
 
 /** Fixed order: first name, then last name. Never by arrival time, so rows don't move under a finger. */
-export function compareByFirstName(a: DeskParticipant, b: DeskParticipant): number {
+export function compareByFirstName(
+  a: Pick<DeskParticipant, 'firstName' | 'lastName' | 'id'>,
+  b: Pick<DeskParticipant, 'firstName' | 'lastName' | 'id'>,
+): number {
   return (
     a.firstName.localeCompare(b.firstName, 'en', { sensitivity: 'base' }) ||
     a.lastName.localeCompare(b.lastName, 'en', { sensitivity: 'base' }) ||
@@ -237,6 +285,8 @@ export interface QueuedAction {
   action: string
   participantId?: string
   participantIds?: string[]
+  /** A mentor or event manager (staff_check_in / staff_undo). */
+  staffKey?: string
   code?: string
   /** When the tap happened (ISO). */
   at?: string
@@ -252,12 +302,13 @@ export const deskQueueKey = (slug: string) => `stellr_checkin_queue:${slug}`
 export function queuedIds(item: QueuedAction): string[] {
   if (item.participantIds) return item.participantIds
   if (item.participantId) return [item.participantId]
+  if (item.staffKey) return [item.staffKey]
   const code = parseCheckInCode(item.code)
   return code?.kind === 'p' ? [code.id] : []
 }
 
-const CHECK_INS = new Set(['manual', 'scan', 'group_check_in'])
-const UNDOS = new Set(['undo', 'group_undo'])
+const CHECK_INS = new Set(['manual', 'scan', 'group_check_in', 'staff_check_in'])
+const UNDOS = new Set(['undo', 'group_undo', 'staff_undo'])
 
 /**
  * What the rows should show for taps still waiting to send, so a reloaded desk
@@ -306,5 +357,5 @@ export function flagsForStorage(details: DeskDetails): DeskDetails {
   for (const [id, f] of Object.entries(details.flags)) {
     flags[id] = { ...f, medical: f.medical ? 'See the roster' : null, dietary: f.dietary.length ? ['See the roster'] : [] }
   }
-  return { flags, contacts: details.contacts }
+  return { flags, contacts: details.contacts, staff: details.staff }
 }

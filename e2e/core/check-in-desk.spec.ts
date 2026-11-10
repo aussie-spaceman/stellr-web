@@ -16,8 +16,9 @@ test.use({ storageState: storageStatePath('admin') })
 test.skip(!checkInConfigured(), 'needs the dev Supabase service key')
 
 let slug = ''
-test.beforeEach(async () => {
-  slug = await createCheckInEvent()
+test.beforeEach(async ({}, testInfo) => {
+  // The Mentors tab test also assigns a volunteer mentor to its event.
+  slug = await createCheckInEvent({ withMentor: testInfo.title.startsWith('mentors') })
 })
 test.afterEach(async () => {
   if (slug) await removeCheckInEvent(slug)
@@ -84,4 +85,28 @@ test('the people list keeps its order when someone checks in, and search finds a
   await main.getByRole('searchbox').fill('hopper')
   // The teacher's name finds their whole group.
   await expect.poll(names).toEqual(['Ana Alpha', 'Ben Bravo', 'Cal Charlie', 'Grace Hopper'])
+})
+
+// Nov 2026: volunteer mentors and event managers aren't on the roster, so the
+// desk checks them in on a Mentors tab, for the "All attendees" email group.
+test('mentors: checks in a volunteer mentor on the Mentors tab, apart from the student count', async ({ page }) => {
+  await openDesk(page)
+  const main = page.getByRole('main')
+  await main.getByRole('tab', { name: /^Mentors/ }).click({ timeout: 20_000 })
+  await expect(main.getByLabel('0 of 1 arrived')).toBeVisible()
+
+  const row = main.getByRole('listitem').filter({ hasText: 'Mentor' })
+  await row.getByRole('button', { name: 'Check in' }).click()
+  await expect(main.getByLabel('1 of 1 arrived')).toBeVisible()
+
+  // It's on the server, and the People count is still students and the teacher only.
+  await page.reload()
+  await main.getByRole('tab', { name: /^Mentors/ }).click({ timeout: 20_000 })
+  await expect(main.getByLabel('1 of 1 arrived')).toBeVisible({ timeout: 20_000 })
+  await main.getByRole('tab', { name: 'People' }).click()
+  await expect(main.getByLabel('0 of 5 arrived')).toBeVisible()
+
+  await main.getByRole('tab', { name: /^Mentors/ }).click()
+  await row.getByRole('button', { name: 'Undo' }).click()
+  await expect(main.getByLabel('0 of 1 arrived')).toBeVisible()
 })

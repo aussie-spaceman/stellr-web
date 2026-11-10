@@ -13,7 +13,7 @@ On 10-Nov-2026 Claude-assisted work moved from a personal Claude account to Stel
 | account-migration.4 | Claude Code memory curated for the Team account | Originals archived 10-Nov | Curate in place; update connector IDs | ☐ |
 | account-migration.5 | Local-only git work archived (bundle + dirty-worktree patches) | Archive made 10-Nov | `git bundle verify`, then sweep merged/dead worktrees | ☐ |
 | account-migration.6 | Team account set-up: seats include Code + Cowork, retention, org skills, plugins, connectors re-added with least privilege | Owner | Smoke-test each connector with one read-only call | ☐ |
-| account-migration.7 | Recreate the weekly scorecard routine and the AEO monthly task; transcript-purge reminder for 08-Feb-2027 | After sign-in | One test run of each | ☐ |
+| account-migration.7 | Recreate the weekly scorecard routine; re-approve the 8 local scheduled tasks (AEO monthly panel, `ad-grants-first-serve-check` on 13-Nov, `ad-grants-weekly-review`, `ad-grants-monthly-review`) with "Run now"; transcript-purge reminder for 08-Feb-2027 | After sign-in | One test run of each; the first-serve check must run on 13-Nov | ☐ |
 | account-migration.8 | Republish living artifacts on the Team account; fix docs that link old artifact or session URLs | After sign-in | | ☐ |
 | account-migration.9 | Gate passed, old account closed, third-party grants revoked at each provider | Owner | Record the date in the private handover | ☐ |
 | account-migration.10 | Rotate credentials with proven exposure | Owner decision 10-Nov: rotate proven exposures only | Staged, one at a time, site verified after each; log is private | ☐ |
@@ -28,3 +28,5 @@ On 10-Nov-2026 Claude-assisted work moved from a personal Claude account to Stel
 | account-migration.19 | Remaining services; registrar and DNS last | After .18 | | ☐ |
 | account-migration.20 | Second admin and break-glass on critical accounts; org password manager | Owner decision | | ☐ |
 | account-migration.21 | Fill governance slots: incident-response deputy, counsel, insurer; leaver procedure; program owner | Owner decision | Update `docs/compliance/*` | ☐ |
+| account-migration.22 | Continue the S5 multi-tenant build on the Team account from its transfer handover (wave 6: restore the bundle, Lane A reviews and fixes, ship A → C → D) | Session idle at the switch; bundle verified and archived | Read the private copy of the S5 handover first | ☐ |
+| account-migration.23 | Continue the Ad Grants follow-ups on the Team account (`ad-grants-rebuild.1`–`.11`) | Session idle at the switch; close-out merged (#609) | First-serve check on 13-Nov | ☐ |

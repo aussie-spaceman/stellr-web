@@ -70,6 +70,8 @@ The design system, V2, is the default on every surface. Tokens come from `design
 | Runbooks | `docs/RUNBOOK-*` and setup guides | |
 | Workflow skills | `.claude/skills/` (ship, promote, close-out) | Skills load from the **main checkout**, so pull it before trusting a skill change |
 | Claude Code memory | On the development Mac, under Claude Code's per-project memory folder | Curated 10-Nov-2026; originals archived privately |
+| Sessions open at the switch | §9 B5: the S5 multi-tenant and Ad Grants handovers | Each has its own handover and tracker |
+| Scheduled tasks | Claude desktop app on the development Mac (8 tasks: AEO monthly panel, three Ad Grants reviews, older one-offs) | Local files. Re-approve each once ("Run now") after the account switch |
 | Names, account ownership, secrets inventory, incidents, per-session Doc snapshots | Owner-only private handover and Docs in Stellr's Google Drive | Never in the repo |
 | Exports from the closed personal Claude account | Owner-only, encrypted, in Stellr's Google Drive | Chats are kept encrypted with a delete-by date |
 
@@ -222,7 +224,7 @@ Each piece of work runs in its own Claude Code session and its own git worktree 
 
 No migration must reach production first. The next promotion carries #610's runtime change, so it goes through the full `promote` skill.
 
-Not pushed: S5 wave 6 Lanes A, C and D, and the integration branch, exist only as local branches. A backup is held with the owner's private handover. Lane A carries migration `20261110164339_tenant_guardian_consent`. It goes to the dev database after its PR's `db` job passes, and to production before any promotion that includes it.
+Not pushed: S5 wave 6 Lanes A, C and D, and the integration branch, exist only as local branches. Lane A is squashed and merged with #605 on a local branch; its consent-safety review, regression review and fix pass are still owed. A verified backup bundle is held with the owner's private handover. Lane A carries migration `20261110164339_tenant_guardian_consent`. It goes to the dev database after its PR's `db` job passes, and to production before any promotion that includes it.
 
 ### B2. Work in flight
 
@@ -234,7 +236,7 @@ Not pushed: S5 wave 6 Lanes A, C and D, and the integration branch, exist only a
 | 3 | Production (#561) | Four tenant migrations applied just after the merge, on the owner's instruction |
 | 4 | Production (#587) | Includes the community CHECK rule the owner approved |
 | 5 | Production (#600) | No migrations. `tenant-db` CI job report-only after one green run |
-| 6 | Lane B in #610; A, C, D local only | Integration run and cross-review were running at handover |
+| 6 | Lane B on `dev` (#610); A, C, D local only | Integration run and cross-review done; Lane A's reviews and fix pass owed. See B5 |
 
 Wave 6, still owed: the integration run and cross-review, fixes for confirmed findings, shipping lane by lane (B, then A as a diff against B, then C, then D), A16's migration on the dev database, and the owner adding `tenant-db` to branch protection after its first green run on the Lane C PR. Owner decisions wave 6 raised, all proposals until approved: the CA for the tenant connection secret, the guardian identity assurance level, guardian-invitation caps, new copy (cap message, desk consent-pending message, student bounce notice, guardian-consent document), and whether moving a participant needs a fresh guardian signature.
 
@@ -324,6 +326,17 @@ Production state and platform:
 - **One person.** `docs/compliance/information-security-program.md` notes that the program owner and the developer are, today, the same person, working with AI coding tools. Wave 6 branches and the full S5 handover sit on that person's machine.
 
 ---
+
+### B5. Sessions open at the switch, and their handovers
+
+Two other Claude Code sessions were working when the account switched. Both stopped at a safe point and wrote their own handover. **Read each before continuing its work on the Team account.**
+
+| Session | State at the switch | Its handover | What the next session picks up |
+|---|---|---|---|
+| **S5 multi-tenant build** | Idle. #606 promoted and recorded (#607). Wave 6 Lane B merged to `dev` (#610). Lanes A, C and D local only, backed up in a verified bundle. | Public copy: [`HANDOVER-s5-session-transfer-2026-11-10.md`](HANDOVER-s5-session-transfer-2026-11-10.md). A newer, fuller private copy and the wave 6 bundle are with the owner's private handover; where they differ, the private copy wins. | Restore the wave 6 branches from the bundle. Finish Lane A's consent-safety and regression reviews and its fix pass. Ship A (as a diff against B), then C, then D. Apply Lane A's migration to the dev database after its PR's `db` job passes. Owner decisions are listed in the private copy. |
+| **Google Ad Grants rebuild** | Idle. No repo code changed. Close-out merged (#609). Four Search campaigns live from 10-Nov-2026. | [`HANDOVER-ad-grants-rebuild-2026-11-10.md`](HANDOVER-ad-grants-rebuild-2026-11-10.md), tracker [`tracker/2026-11-10-ad-grants-rebuild.md`](tracker/2026-11-10-ad-grants-rebuild.md) (rows `ad-grants-rebuild.1`–`.11`) | The first-serve check on 13-Nov-2026, the weekly review (Mondays) and the monthly review (1st). These are scheduled tasks in the Claude desktop app on the development Mac. After signing in to the Team account, open each `ad-grants-*` task and click "Run now" once so it can run unattended. The conversion-tag fix and advertiser verification need the owner. |
+
+The cloud routine "Weekly scorecard numbers" died with the personal account. Its prompt was saved privately; recreate it on the Team account (tracker row `account-migration.7`).
 
 ### Known gaps in this record
 

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
+import { Collapsible } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import type { AdminSurveyView, CompletionRow } from '@/lib/survey/admin'
 import { versionName } from '@/lib/survey/definition'
 import { formatDateInZone, formatInZone, zonedTimeToUtc } from '@/lib/survey/timezone'
@@ -98,8 +100,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
     const lateTz = late.timeZone
     const invitable = acceptOlder ? late.invitable : late.invitable - late.olderAgreements
     return (
-      <section className="space-y-3 rounded-xl border border-brand-border bg-white p-4" aria-labelledby="survey-late-heading">
-        <h2 id="survey-late-heading"className="text-sm font-semibold text-brand-muted">Post-event survey</h2>
+      <Collapsible id="survey-schedule" title="Post-event survey" summary="Not opened" bodyClassName="space-y-3 p-4">
         <p className="text-sm text-ink">
           This event ended on {formatDateInZone(zonedTimeToUtc(late.lastDay, lateTz, 12), lateTz)} without a survey. You can open one until <strong>{when(late.deadline, lateTz)}</strong>. It stays open for 30 days from when you open it.
         </p>
@@ -152,7 +153,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
             )}
           </>
         )}
-      </section>
+      </Collapsible>
     )
   }
 
@@ -161,19 +162,32 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
   const auto = view.autoOpensAt ? new Date(view.autoOpensAt) : null
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Schedule */}
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold text-brand-muted">Post-event survey</h2>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.className}`}>{pill.label}</span>
-          {view.definition && (
+      <Collapsible
+        id="survey-schedule"
+        title="Post-event survey"
+        summary={
+          <>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.className}`}>{pill.label}</span>
+            {' '}
+            {status === 'closed'
+              ? `Closed ${when(d.closed_at ?? d.closes_at, tz)}`
+              : status === 'open'
+                ? `Closes ${when(d.closes_at, tz)}`
+                : `Goes live ${when(d.opens_at, tz)}`}
+          </>
+        }
+        bodyClassName="space-y-3 p-4"
+      >
+        {view.definition && (
+          <p>
             <a className="text-xs text-brand-muted-soft underline hover:text-primary" href={`/admin/surveys/questions?id=${d.definition_id}`}>
               {view.definition.key} {versionName(view.definition.version, view.definition.versionLabel)}
               {view.definition.status === 'draft' && ' (draft — dev only)'}
             </a>
-          )}
-        </div>
+          </p>
+        )}
         {d.schedule_flag === 'event_date_changed' && (
           <p className="rounded-lg bg-pathway-amber-bg px-3 py-2 text-sm text-brand-gold-ink">
             The event date changed after go-live was set by hand. The manual time was kept: check it, or reset to automatic.
@@ -276,12 +290,11 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
             </div>
           </div>
         )}
-      </section>
+      </Collapsible>
 
       {/* D1 certificate gate — admins only, default off */}
       {view.isAdmin && (
-        <section className="space-y-2" aria-labelledby="survey-gate-heading">
-          <h2 id="survey-gate-heading"className="text-sm font-semibold text-brand-muted">Certificate gate</h2>
+        <Collapsible id="survey-gate" title="Certificate gate" summary={d.gate_certificate ? 'On' : 'Off'} bodyClassName="space-y-2 p-4">
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -311,13 +324,17 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
               </div>
             </div>
           )}
-        </section>
+        </Collapsible>
       )}
 
       {/* Pre-V2.3 minor agreements — admins only, per event (David, 6 Oct 2026) */}
       {view.isAdmin && (d.minor_agreement_override || (view.preview?.awaitingConsent.some((a) => a.reason === 'older_version') ?? false)) && (
-        <section className="space-y-2" aria-labelledby="survey-override-heading">
-          <h2 id="survey-override-heading"className="text-sm font-semibold text-brand-muted">Minors’ agreements</h2>
+        <Collapsible
+          id="survey-minors"
+          title="Minors’ agreements"
+          summary={d.minor_agreement_override ? 'Earlier agreements accepted' : 'V2.3 or later only'}
+          bodyClassName="space-y-2 p-4"
+        >
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -347,13 +364,17 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
               </div>
             </div>
           )}
-        </section>
+        </Collapsible>
       )}
 
       {/* Audiences + preview */}
       {view.preview && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-brand-muted">Who it reaches</h2>
+        <Collapsible
+          id="survey-audience"
+          title="Who it reaches"
+          summary={`${view.preview.invitable} to be invited${view.preview.unreachable.length ? ` · ${view.preview.unreachable.length} without a deliverable email` : ''}`}
+          bodyClassName="space-y-3 p-4"
+        >
           <div className="flex flex-wrap gap-4 text-sm">
             {(['student', 'mentor', 'adult'] as const).map((a) => (
               <label key={a} className="flex items-center gap-2 text-ink">
@@ -387,7 +408,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
               <ul className="mt-2 space-y-1 text-sm text-brand-muted">
                 {view.preview.awaitingConsent.map((a, i) => (
                   <li key={i}>
-                    {a.name} — {a.reason === 'no_agreement' ? 'no signed agreement' : a.reason === 'restricted' ? 'consent withdrawn' : `signed ${a.agreementVersion ?? 'an earlier version'}`}
+                    <MemberLink memberId={a.memberId}>{a.name}</MemberLink> — {a.reason === 'no_agreement' ? 'no signed agreement' : a.reason === 'restricted' ? 'consent withdrawn' : `signed ${a.agreementVersion ?? 'an earlier version'}`}
                   </li>
                 ))}
               </ul>
@@ -399,18 +420,22 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
               <ul className="mt-2 space-y-1 text-sm text-brand-muted">
                 {view.preview.unreachable.map((u, i) => (
                   <li key={i}>
-                    {u.name} ({u.role}{u.reason === 'no_guardian_email' ? ', no guardian email' : ''})
+                    <MemberLink memberId={u.memberId}>{u.name}</MemberLink> ({u.role}{u.reason === 'no_guardian_email' ? ', no guardian email' : ''})
                   </li>
                 ))}
               </ul>
             </details>
           )}
-        </section>
+        </Collapsible>
       )}
 
       {/* Completion */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-brand-muted">Responses</h2>
+      <Collapsible
+        id="survey-responses"
+        title="Responses"
+        summary={`${view.totals.submitted} of ${view.totals.invited} submitted`}
+        bodyClassName="space-y-3 p-4"
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {(
             [
@@ -450,12 +475,12 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
         ) : (
           <p className="text-sm text-brand-muted-soft">No invitations yet. They’re created when the survey goes live.</p>
         )}
-      </section>
+      </Collapsible>
 
       {/* Exports + QR */}
-      <section className="grid gap-6 lg:grid-cols-2">
+      <Collapsible id="survey-exports" title="Exports and event-day QR code" bodyClassName="grid gap-6 p-4 lg:grid-cols-2">
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-brand-muted">Exports</h2>
+          <h3 className="text-sm font-semibold text-brand-muted">Exports</h3>
           {view.isAdmin ? (
             <div className="flex flex-wrap gap-2 text-sm">
               <a className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-brand-muted" href={`/api/admin/surveys/export?format=long&event=${eventSlug}`}>Answers CSV (long)</a>
@@ -468,7 +493,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           <p className="text-xs text-brand-muted-soft">Downloads are logged. Quotable answers apply each person’s current quoting permissions.</p>
         </div>
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-brand-muted">Event-day QR code</h2>
+          <h3 className="text-sm font-semibold text-brand-muted">Event-day QR code</h3>
           <p className="text-xs text-brand-muted-soft">Signed-in members go straight to their survey. Everyone else enters their email and gets their own link. Never a shared survey.</p>
           {qr && (
             <a href={qr} download={`survey-qr-${eventSlug}.png`} className="inline-block">
@@ -478,7 +503,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           )}
           <p className="break-all text-xs text-brand-muted-soft">{qrUrl}</p>
         </div>
-      </section>
+      </Collapsible>
     </div>
   )
 }
@@ -488,7 +513,9 @@ function Row({ r, tz, canResend, busy, onResend }: { r: CompletionRow; tz: strin
   return (
     <tr>
       <td className="px-3 py-2">
-        <p className="font-medium text-ink">{r.name}</p>
+        <p className="font-medium text-ink">
+          <MemberLink memberId={r.memberId}>{r.name}</MemberLink>
+        </p>
         <p className="text-xs text-brand-muted-soft">
           {r.email}
           {r.sendVia === 'guardian' && ' (guardian)'}

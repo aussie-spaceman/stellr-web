@@ -31,7 +31,7 @@ export default async function AdminMembersPage({
       id, member_code, first_name, last_name, email, phone,
       age_bracket, event_role, grade, is_active, created_at,
       member_memberships(renewal_status, membership_tiers(name)),
-      member_schools(is_current, schools(name))${memberFilterEmbeds(filters)}
+      member_schools(is_current, school_id, schools(name))${memberFilterEmbeds(filters)}
     `, { count: 'exact' })
     .eq('is_active', true)
     .range((page - 1) * pageSize, page * pageSize - 1)

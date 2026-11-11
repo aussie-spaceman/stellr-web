@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Mail, MessageSquare, Send } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import { formatDateShort } from '@/lib/utils'
 import type { TrainableObject, EventTracking, TrackStatus } from '@/lib/training-admin'
 
@@ -222,7 +223,7 @@ export function EventTrackingTab({
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2.5">
                       <Avatar name={r.name} id={r.memberId} size="sm" />
-                      <span className="font-medium text-brand-blue-dark">{r.name}</span>
+                      <MemberLink memberId={r.memberId} className="font-medium text-brand-blue-dark">{r.name}</MemberLink>
                     </div>
                   </td>
                   <td className="px-3 py-3 text-brand-muted">{r.ageBracket ? BRACKET_LABEL[r.ageBracket] ?? r.ageBracket : '—'}</td>

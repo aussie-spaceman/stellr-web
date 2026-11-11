@@ -23,6 +23,8 @@ interface Props {
   membershipId: string | null
   tiers: Tier[]
   memberships: Membership[]
+  /** Inside a Collapsible that supplies the card and title. */
+  embedded?: boolean
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -43,7 +45,7 @@ function tierName(m: Membership): string {
   return m.membership_tiers?.name ?? 'Membership'
 }
 
-export function MemberMembershipManager({ memberId, membershipId, tiers, memberships }: Props) {
+export function MemberMembershipManager({ memberId, membershipId, tiers, memberships, embedded = false }: Props) {
   const router = useRouter()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -130,9 +132,9 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
   })
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-brand-muted-soft">Membership</h2>
+    <div className={embedded ? undefined : 'bg-white rounded-xl border border-brand-border p-5'}>
+      <div className={`flex items-center mb-3 ${embedded ? 'justify-end' : 'justify-between'}`}>
+        {!embedded && <h2 className="text-sm font-semibold text-brand-muted-soft">Membership</h2>}
         <button
           onClick={() => setShowAssign((s) => !s)}
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-blue"

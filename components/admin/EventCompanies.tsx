@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Input } from '@stellr/web-ui'
+import { Collapsible, Input } from '@stellr/web-ui'
 
 export interface CompanyRow {
   id: string
@@ -60,11 +60,13 @@ export default function EventCompanies({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-semibold text-brand-muted">Companies</h3>
-        <span className="text-xs text-brand-muted-soft">{studentCount} students to assign</span>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+    <Collapsible
+      id="companies"
+      title="Companies"
+      summary={`${companies.length} compan${companies.length === 1 ? 'y' : 'ies'} · ${studentCount} students to assign`}
+      bodyClassName="space-y-4 p-4"
+      actions={
+        <>
           <label htmlFor={countId} className="text-sm text-brand-muted">
             Number of companies
           </label>
@@ -102,8 +104,9 @@ export default function EventCompanies({
           >
             Auto-Assign Students
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
 
       {error && <p className="text-xs text-red-600">{error}</p>}
       {info && <p className="text-xs text-green-700">{info}</p>}
@@ -134,6 +137,6 @@ export default function EventCompanies({
           ))}
         </div>
       )}
-    </div>
+    </Collapsible>
   )
 }

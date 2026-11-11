@@ -12,6 +12,8 @@ import { buildRecipientPlan, type RecipientPlan } from './recipients'
 export interface CompletionRow {
   invitationId: string
   name: string
+  /** The member behind the invitation (directly, or through the participant), for the admin link. */
+  memberId: string | null
   role: 'student' | 'mentor' | 'adult'
   relationship: string | null
   email: string
@@ -114,13 +116,14 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
   const { data: invs, error } = await db
     .from('survey_invitations')
     .select(
-      'id, first_name, respondent_role, adult_relationship, email, send_via, status, sent_at, first_opened_at, opened_from, last_activity_at, reminder_count, resume_reminder_count, reminders_opted_out_at, last_send_error, participants(first_name, last_name), members(first_name, last_name), survey_responses(started_at, submitted_at)',
+      'id, member_id, first_name, respondent_role, adult_relationship, email, send_via, status, sent_at, first_opened_at, opened_from, last_activity_at, reminder_count, resume_reminder_count, reminders_opted_out_at, last_send_error, participants(first_name, last_name, member_id), members(first_name, last_name), survey_responses(started_at, submitted_at)',
     )
     .eq('distribution_id', d.id)
   if (error) throw new Error(`Reading invitations failed: ${error.message}`)
 
   type Inv = {
     id: string
+    member_id: string | null
     first_name: string | null
     respondent_role: CompletionRow['role']
     adult_relationship: string | null
@@ -135,7 +138,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     resume_reminder_count: number
     reminders_opted_out_at: string | null
     last_send_error: string | null
-    participants: { first_name: string | null; last_name: string | null } | null
+    participants: { first_name: string | null; last_name: string | null; member_id?: string | null } | null
     members: { first_name: string | null; last_name: string | null } | null
     survey_responses: { started_at: string | null; submitted_at: string | null } | { started_at: string | null; submitted_at: string | null }[] | null
   }
@@ -146,6 +149,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     return {
       invitationId: i.id,
       name,
+      memberId: i.member_id ?? i.participants?.member_id ?? null,
       role: i.respondent_role,
       relationship: i.adult_relationship,
       email: i.email,

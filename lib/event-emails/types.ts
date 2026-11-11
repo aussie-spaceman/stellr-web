@@ -71,7 +71,8 @@ export interface EventEmailSendRow {
   sent_count: number
   failed_count: number
   docusign_resent: number
-  recipients: { email: string; name: string; roles: RecipientRole[]; status: 'sent' | 'failed'; error?: string }[]
+  /** memberId: the recipient's own members row, on sends recorded since Nov 2026 (admin link). */
+  recipients: { email: string; name: string; memberId?: string | null; roles: RecipientRole[]; status: 'sent' | 'failed'; error?: string }[]
   started_at: string
   finished_at: string | null
 }

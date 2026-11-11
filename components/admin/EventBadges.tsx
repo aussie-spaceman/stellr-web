@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Collapsible } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { BADGE_FORMATS, DEFAULT_BADGE_FORMAT, type BadgeAudience, type BadgeFormat } from '@/lib/badge-layout'
 import { ARTWORK_THEME_LABEL, type ArtworkTheme } from '@/lib/artwork-theme'
@@ -154,11 +155,11 @@ export default function EventBadges({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-brand-muted">Name badges</h3>
-          <p className="text-xs text-brand-muted-soft mt-1">
+    <Collapsible
+      id="badges"
+      title="Name badges"
+      description={
+          <p>
             {eventSlug ? (
               <>
                 One badge for every student and volunteer mentor, full name on one line, then blank spares on the
@@ -183,16 +184,19 @@ export default function EventBadges({
               </>
             )}
           </p>
-        </div>
-        {eventSlug && (
+      }
+      actions={
+        eventSlug && (
           <a
             href={downloadHref}
             className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
           >
             Download {spec.label} PDF
           </a>
-        )}
-      </div>
+        )
+      }
+    >
+      <div className="space-y-4">
 
       <div className="flex flex-wrap items-center gap-3">
         <div role="radiogroup" aria-label="Avery product" className="inline-flex rounded-lg border border-brand-border p-0.5">
@@ -318,7 +322,8 @@ export default function EventBadges({
         {eventSlug && companies.length === 0 && ' Add companies on the Companies tab to give each its own background.'} Print at 100%
         (actual size), not &ldquo;fit to page&rdquo;.
       </p>
-    </div>
+      </div>
+    </Collapsible>
   )
 }
 

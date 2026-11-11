@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import { SCHOLARSHIP_LEVELS, discountedCents, formatUsd, type ScholarshipStage } from '@/lib/scholarship-levels'
 
 // The decision panel on /admin/scholarships/[id]: event, member, level, then
@@ -313,7 +314,13 @@ export function ScholarshipReview({
               {percent === 100 ? ' — nothing to pay' : ''}.
             </li>
             <li>
-              {memberChoice === NEW_MEMBER ? `A new member is created for ${applicantEmail}.` : `Linked to ${chosenMember?.name}.`}{' '}
+              {memberChoice === NEW_MEMBER ? (
+                `A new member is created for ${applicantEmail}.`
+              ) : (
+                <>
+                  Linked to <MemberLink memberId={chosenMember?.id}>{chosenMember?.name}</MemberLink>.
+                </>
+              )}{' '}
               {existing ? 'Their existing registration is used.' : 'Their place is reserved; they complete their details from email 2, and DocuSign follows.'}
             </li>
             {refunding && (

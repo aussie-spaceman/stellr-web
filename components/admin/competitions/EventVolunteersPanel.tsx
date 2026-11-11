@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { X, HandHeart, UserCheck, FileDown } from 'lucide-react'
+import { X, UserCheck, FileDown } from 'lucide-react'
+import { Collapsible } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 interface VolunteerRow {
@@ -104,7 +106,9 @@ export function EventVolunteersPanel({ slug, isAdmin }: { slug: string; isAdmin:
       className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-hairline px-3 py-1.5 text-sm"
     >
       <span className="min-w-0">
-        <span className="font-medium text-brand-blue-dark">{name(m)}</span>
+        <MemberLink memberId={m.memberId} className="font-medium text-brand-blue-dark">
+          {name(m)}
+        </MemberLink>
         {m.email && <span className="ml-2 text-xs text-brand-muted-soft">{m.email}</span>}
       </span>
       <span className="flex items-center gap-1.5">
@@ -116,16 +120,18 @@ export function EventVolunteersPanel({ slug, isAdmin }: { slug: string; isAdmin:
   )
 
   return (
-    <div className="rounded-xl border border-brand-border bg-white p-5">
-      <div className="mb-1 flex items-center gap-2">
-        <HandHeart className="h-4 w-4 text-brand-blue" />
-        <h2 className="font-semibold text-brand-blue-dark">Volunteers</h2>
-      </div>
-      <p className="mb-3 text-xs text-brand-muted-soft">
-        Volunteers who offered to support this event, and those you&apos;ve assigned. Assigning someone
-        sends the Volunteer Agreement if they don&apos;t already have one. Red pills flag missing paperwork
-        or clearance — they warn, but don&apos;t block assignment.
-      </p>
+    <Collapsible
+      id="volunteers"
+      title="Volunteers"
+      summary={loaded ? `${data.assigned.length} assigned · ${data.interested.length} offered to help` : undefined}
+      description={
+        <>
+          Volunteers who offered to support this event, and those you&apos;ve assigned. Assigning someone
+          sends the Volunteer Agreement if they don&apos;t already have one. Red pills flag missing paperwork
+          or clearance — they warn, but don&apos;t block assignment.
+        </>
+      }
+    >
 
       <MemberPicker onPick={(m: PickedMember) => post('POST', m.id)} disabled={busy} placeholder="Assign any member as a volunteer…" />
       {notice && <p role="status" className="mt-2 text-xs text-brand-muted">{notice}</p>}
@@ -184,6 +190,6 @@ export function EventVolunteersPanel({ slug, isAdmin }: { slug: string; isAdmin:
           ),
         )}
       </ul>
-    </div>
+    </Collapsible>
   )
 }

@@ -28,10 +28,13 @@ const OPEN = new Set(['created', 'sent', 'delivered'])
 export function MemberAgreementPanel({
   memberId,
   agreement,
+  embedded = false,
 }: {
   memberId: string
   /** Null when the member is not a mentor or volunteer (panel hidden). */
   agreement: MemberAgreement | null
+  /** Inside a Collapsible that supplies the card and title. */
+  embedded?: boolean
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -60,9 +63,9 @@ export function MemberAgreementPanel({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-brand-muted-soft">Volunteer Agreement</h2>
+    <div className={embedded ? undefined : 'bg-white rounded-xl border border-brand-border p-5'}>
+      <div className={`flex items-center mb-3 ${embedded ? '' : 'justify-between'}`}>
+        {!embedded && <h2 className="text-sm font-semibold text-brand-muted-soft">Volunteer Agreement</h2>}
         <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
       </div>
 

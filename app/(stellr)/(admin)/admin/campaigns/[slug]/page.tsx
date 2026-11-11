@@ -5,6 +5,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/events/repo'
 import { themeFromType, THEME_META, deadlineInfo, seasonLabel } from '@/lib/campaigns'
 import { CampaignEmailComposer } from '@/components/admin/campaigns/CampaignEmailComposer'
+import { Collapsible, CollapsibleGroup } from '@stellr/web-ui'
+import { MemberLink, SchoolLink } from '@/components/admin/RecordLinks'
+import { resolveSchoolIds } from '@/lib/school-ids'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -13,6 +16,8 @@ interface PageProps {
 interface RegRow {
   id: string
   group_name: string | null
+  school_name: string | null
+  teacher_member_id: string | null
   teacher_first_name: string | null
   teacher_last_name: string | null
   student_count: number | null
@@ -30,11 +35,17 @@ export default async function AdminCampaignPage({ params }: PageProps) {
   const db = supabaseServer()
   const { data } = await db
     .from('registrations')
-    .select('id, group_name, teacher_first_name, teacher_last_name, student_count, proposal_submitted_at')
+    .select(
+      'id, group_name, school_name, teacher_member_id, teacher_first_name, teacher_last_name, student_count, proposal_submitted_at',
+    )
     .eq('type', 'campaign')
     .eq('event_slug', slug)
     .order('created_at', { ascending: true })
   const rows = (data as RegRow[] | null) ?? []
+  const schoolIds = await resolveSchoolIds(
+    db,
+    rows.map((r) => ({ memberId: r.teacher_member_id, schoolName: r.school_name })),
+  )
 
   const theme = themeFromType(campaign.type)
   const meta = THEME_META[theme]
@@ -78,11 +89,13 @@ export default async function AdminCampaignPage({ params }: PageProps) {
       </div>
 
       {/* Registered teams */}
-      <section className="overflow-hidden rounded-panel border border-line bg-white">
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <h2 className="font-heading text-ds-h3 font-bold text-ink">Registered teams</h2>
-          <span className="text-xs text-content-muted">{rows.length} groups</span>
-        </div>
+      <CollapsibleGroup storageKey={`admin.campaign.${slug}`}>
+      <Collapsible
+        id="teams"
+        title="Registered teams"
+        summary={`${rows.length} groups · ${submittedCount} submitted`}
+        bodyClassName="p-0"
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -94,11 +107,24 @@ export default async function AdminCampaignPage({ params }: PageProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line-light">
-              {visible.map((r) => (
+              {visible.map((r, i) => (
                 <tr key={r.id}>
-                  <td className="px-5 py-3 font-semibold text-content">{r.group_name ?? '—'}</td>
+                  <td className="px-5 py-3">
+                    <span className="font-semibold text-content">{r.group_name ?? '—'}</span>
+                    {r.school_name && (
+                      <p className="text-xs text-content-muted">
+                        <SchoolLink schoolId={schoolIds[i]}>{r.school_name}</SchoolLink>
+                      </p>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-content-secondary">
-                    {[r.teacher_first_name, r.teacher_last_name].filter(Boolean).join(' ') || '—'}
+                    {[r.teacher_first_name, r.teacher_last_name].filter(Boolean).join(' ') ? (
+                      <MemberLink memberId={r.teacher_member_id}>
+                        {[r.teacher_first_name, r.teacher_last_name].filter(Boolean).join(' ')}
+                      </MemberLink>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-5 py-3 text-content-secondary">{r.student_count ?? '—'}</td>
                   <td className="px-5 py-3">
@@ -129,7 +155,8 @@ export default async function AdminCampaignPage({ params }: PageProps) {
             <span className="text-content-muted">Showing {visible.length} of {rows.length} groups</span>
           </div>
         )}
-      </section>
+      </Collapsible>
+      </CollapsibleGroup>
     </div>
   )
 }

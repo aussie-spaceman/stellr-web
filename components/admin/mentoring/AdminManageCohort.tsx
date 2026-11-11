@@ -11,6 +11,7 @@ import { MemberSearchField, type PickedPerson } from '@/components/community/men
 import { ModalShell, ModalField, ScheduleAllModal, ScheduleOneModal } from '@/components/community/mentoring/ScheduleModals'
 import { formatSessionTime, themeTile, type CohortTheme } from '@/lib/mentoring-format'
 import type { RosterMember } from '@/lib/mentoring'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import Link from 'next/link'
 
 type Tab = 'members' | 'schedule' | 'resources' | 'chat' | 'settings'
@@ -111,7 +112,7 @@ export function AdminManageCohort(props: {
                 <li key={m.memberId} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-[12px] font-semibold text-white">{m.name.charAt(0).toUpperCase()}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-ink">{m.name}</p>
+                    <p className="text-sm font-medium text-ink"><MemberLink memberId={m.memberId}>{m.name}</MemberLink></p>
                     <p className="text-[12.5px] text-content-muted">{m.email}</p>
                   </div>
                   <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${m.status === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>{m.status === 'active' ? 'Active' : 'Invited'}</span>

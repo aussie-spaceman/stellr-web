@@ -25,6 +25,8 @@ import {
   type ReviewRegistration,
 } from '@/components/admin/ScholarshipReview'
 import { ScholarshipNotes } from '@/components/admin/ScholarshipNotes'
+import { SchoolLink } from '@/components/admin/RecordLinks'
+import { resolveSchoolIds } from '@/lib/school-ids'
 import { scholarshipRefundFor } from '@/lib/scholarship-refund'
 import { formatUsd } from '@/lib/scholarship-levels'
 
@@ -154,6 +156,8 @@ export default async function ScholarshipApplicationPage({ params }: { params: P
     dueAfterCancel = (reg as { amount_due_cents: number | null } | null)?.amount_due_cents ?? null
   }
 
+  const [schoolId] = await resolveSchoolIds(supabaseServer(), [{ memberId: app.member_id, schoolName: app.school }])
+
   const received = new Date(app.created_at).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   })
@@ -182,7 +186,9 @@ export default async function ScholarshipApplicationPage({ params }: { params: P
             <dt className="text-content-body">Activity</dt>
             <dd className="text-ink">{app.activity || '—'}</dd>
             <dt className="text-content-body">School</dt>
-            <dd className="text-ink">{app.school || '—'}</dd>
+            <dd className="text-ink">
+              {app.school ? <SchoolLink schoolId={schoolId}>{app.school}</SchoolLink> : '—'}
+            </dd>
           </dl>
           <div>
             <p className="text-sm text-content-body mb-1">Application brief</p>

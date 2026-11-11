@@ -13,6 +13,7 @@ const { default: EventTeamProfiles } = await import('./EventTeamProfiles')
 
 const student = (participantId: string, firstName: string, over: Partial<PlanningStudent> = {}): PlanningStudent => ({
   participantId,
+  memberId: null,
   firstName,
   lastName: 'Test',
   school: null,

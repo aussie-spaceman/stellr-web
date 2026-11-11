@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { Collapsible } from '@stellr/web-ui'
 import { EVENT_EMAIL_DEFAULTS } from '@/lib/event-emails/defaults'
 import { scheduledSendDate } from '@/lib/event-emails/schedule'
 import type { EventEmailTemplateRow } from '@/lib/event-emails/templates'
@@ -94,19 +95,22 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
   }
 
   const current = emails.find((e) => e.id === selected) ?? null
+  const scheduledCount = emails.filter((e) => e.status === 'scheduled').length
+  const sentCount = emails.filter((e) => e.status === 'sent').length
+  const emailsSummary = [`${emails.length} email${emails.length === 1 ? '' : 's'}`, scheduledCount && `${scheduledCount} scheduled`, sentCount && `${sentCount} sent`]
+    .filter(Boolean)
+    .join(' · ')
 
   if (loading) return <p className="text-sm text-brand-muted-soft">Loading…</p>
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-brand-muted">Emails</h2>
-            <p className="mt-0.5 text-xs text-brand-muted-soft">
-              One email per person, filled in with their details. Schedule relative to the event date, or send now.
-            </p>
-          </div>
+    <div className="space-y-4">
+      <Collapsible
+        id="emails"
+        title="Emails"
+        summary={emailsSummary}
+        description="One email per person, filled in with their details. Schedule relative to the event date, or send now."
+        actions={
           <select
             value=""
             disabled={adding}
@@ -129,7 +133,9 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
               <option value="blank">Blank email</option>
             </optgroup>
           </select>
-        </div>
+        }
+        bodyClassName="space-y-3 p-4"
+      >
 
         {templates.length > 0 && (
           <div className="text-xs text-brand-muted-soft">
@@ -222,12 +228,16 @@ export function EventEmailsPanel({ eventSlug, eventDate }: { eventSlug: string; 
             onTemplateSaved={(t) => setTemplates((cur) => sortTemplates([...cur.filter((x) => x.id !== t.id), t]))}
           />
         )}
-      </section>
+      </Collapsible>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-brand-muted">History</h2>
+      <Collapsible
+        id="emails-history"
+        title="History"
+        summary={`${history.length} send${history.length === 1 ? '' : 's'}`}
+        bodyClassName="p-4"
+      >
         <EventEmailHistory history={history} />
-      </section>
+      </Collapsible>
     </div>
   )
 }

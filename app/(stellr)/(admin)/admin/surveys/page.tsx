@@ -8,6 +8,7 @@ import { computeStats, type InvitationCount, type Nps, type Pct } from '@/lib/su
 import { logSurveyAccess } from '@/lib/survey/audit'
 import { formatInZone } from '@/lib/survey/timezone'
 import { WithdrawQuoteForm } from '@/components/admin/surveys/WithdrawQuoteForm'
+import { Collapsible, CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
 import { usableDefinition } from '@/lib/survey/distributions'
 import { normaliseDefinition, questionsFor, ROLES, versionName } from '@/lib/survey/definition'
 
@@ -143,7 +144,16 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
         <Stat label="Via dashboard" value={fmt(stats.responses.viaDashboard)} sub="app adoption" />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <CollapsibleGroup storageKey="admin.surveys">
+      <div className="space-y-6">
+      <CollapseAllControls className="justify-end" />
+      <Collapsible
+        id="breakdowns"
+        title="Breakdowns"
+        summary="NPS, first-gen, mentor hours, interests, response rates"
+        bodyClassName="p-4 space-y-3"
+      >
+      <div className="grid gap-6 lg:grid-cols-2">
         <Table title="NPS by role" rows={Object.entries(stats.nps.byRole).map(([k, v]) => [k, fmtNps(v)])} />
         <Table title="NPS by event" rows={Object.entries(stats.nps.byEvent).map(([k, v]) => [k, fmtNps(v)])} />
         <Table title="First-gen by gender" rows={Object.entries(stats.firstGen.byGender).map(([k, v]) => [k, `${fmt(v)} (n=${v.of})`])} />
@@ -160,12 +170,12 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
           title="Response rate by event and role"
           rows={stats.responseRate.byEventRole.map((r) => [`${r.event_slug} · ${r.role}`, `${fmt(r.rate)} (${r.rate.n}/${r.rate.of})`])}
         />
-      </section>
+      </div>
       <p className="text-xs text-brand-muted-soft">Title I breakdown needs NCES school IDs on schools — a follow-up (not yet collected).</p>
+      </Collapsible>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-brand-muted">Event surveys</h2>
-        <div className="overflow-x-auto rounded-xl border border-brand-border bg-white">
+      <Collapsible id="event-surveys" title="Event surveys" summary={`${distributions.length} scheduled`} bodyClassName="p-0">
+        <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-surface text-left text-xs uppercase tracking-wide text-brand-muted-soft">
               <tr>
@@ -206,15 +216,16 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
             </tbody>
           </table>
         </div>
-      </section>
+      </Collapsible>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-brand-muted">Withdraw a quote</h2>
+      <Collapsible id="withdraw-quote" title="Withdraw a quote" bodyClassName="p-4 space-y-2">
         <p className="text-sm text-brand-muted-soft">
           On a request from a student, parent or school: paste the response ID from the quotable-answers export. The quote is excluded from every later export. This can’t be undone, and it is logged.
         </p>
         <WithdrawQuoteForm />
-      </section>
+      </Collapsible>
+      </div>
+      </CollapsibleGroup>
     </div>
   )
 }

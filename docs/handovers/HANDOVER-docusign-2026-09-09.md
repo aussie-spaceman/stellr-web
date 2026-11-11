@@ -118,7 +118,7 @@ Key modules: `lib/docusign-status.ts` (`describeEnvelope()` — the single vocab
 
 ## 5. Proven end to end — with real signatures
 
-The Buk family **fully signed the re-issued production consent form on 9 Sept**, and the whole stack
+Family 1 (REC §4) **fully signed the re-issued production consent form on 9 Sept**, and the whole stack
 recorded it correctly:
 
 - Envelope `completed`, `2/2` signers, `completed_at` populated
@@ -128,7 +128,7 @@ recorded it correctly:
 - Connect `21769859` delivering, HMAC verifying, `recipient-completed` and `recipient-delivered`
   both flowing
 
-The Guggino envelope is live proof of the distinction we built: Guardian **`delivered`** (opened
+The family 2 envelope is live proof of the distinction we built: Guardian **`delivered`** (opened
 9 Sep 16:26, not signed), Minor **`sent` [never opened]**.
 
 > ⚠️ Still unproven: the **registration path**. Both re-issues went through the remediation script,
@@ -141,7 +141,7 @@ The Guggino envelope is live proof of the distinction we built: Guardian **`deli
 
 | # | Item | Notes |
 |---|---|---|
-| 1 | **Guggino consent outstanding** | Guardian opened 9 Sep, never signed; student copy never opened. The cron will not chase until ~16 Sept (7 days from issue). A manual nudge is likely needed. |
+| 1 | **Family 2 consent outstanding** | Guardian opened 9 Sep, never signed; student copy never opened. The cron will not chase until ~16 Sept (7 days from issue). A manual nudge is likely needed. |
 | 2 | **Stripe/Clerk sandbox guards are NOT enforced** | `lib/env-guards.ts` detects all three and `/admin` reports all three, but `assertLiveCredentials()` is only *called* for DocuSign. A production deployment on `sk_test_` keys is visible but not blocked. PR #27's description over-claimed this. |
 | 3 | **Bill Allen's adult agreement** | Completed in the sandbox 6 Aug with **no DB row** (issued from a dev server), so no script will find it. Must be re-collected by hand. Owner: David, offline. |
 | 4 | **Sender name on parent emails** | Production account still reads "David Shaw". The "From" name comes from the **sending user's display name / branding**, not the account profile — check Admin → Users and Admin → Branding. |

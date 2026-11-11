@@ -54,3 +54,12 @@ supabase/.temp/
 # Stryker mutation testing (stryker.config.mjs): sandbox and reports.
 /.stryker-tmp/
 /reports/
+
+# design-sync (Claude Design) build + verification state
+.design-sync/sb-reference/
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules
+.design-sync/.*.log
+.ds-sync/
+ds-bundle/

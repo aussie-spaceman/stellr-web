@@ -2,8 +2,8 @@
 
 **For:** whoever next touches event registration, Stripe checkout, or the
 "complete your payment" emails.
-**Prompted by:** Gloria Ahaiwe's email of 14 Sept. She started registering her
-son Daniel for the Colorado Space Design Challenge (3 Oct), closed the tab
+**Prompted by:** a guardian's email of 14 Sept. They started registering their
+child for the Colorado Space Design Challenge (3 Oct), closed the tab
 before finishing Stripe Checkout, and could not get back in: resubmitting the
 form returned *"This email address is already registered for this event."*
 User story: *as a parent (or teacher, for a group) I may get interrupted and
@@ -16,7 +16,7 @@ Clerk user, DocuSign envelope — **before** payment, but the only route to
 payment was the one-time browser redirect at the end of the form.
 
 1. Nothing was emailed at submission (the individual confirmation email is
-   sent by the Stripe webhook, after payment). Daniel's registration
+   sent by the Stripe webhook, after payment). The student's registration
    (`98f623e4…`, `pending`, $75) had produced no email at all.
 2. Stripe's `cancel_url` returned to the blank form; nothing read `?cancelled`.
 3. The duplicate check refused any participant on the event regardless of
@@ -39,7 +39,7 @@ payment was the one-time browser redirect at the end of the form.
 not a table: 1:1 with the registration, no expiry — the link is only honoured
 while `status = 'pending'` and the event's registration window is open. Minted
 at insert for individual and group-card registrations; `ensurePayToken()`
-mints lazily for rows that predate the column (Daniel's).
+mints lazily for rows that predate the column (the student's).
 
 **One checkout builder.** `lib/registration-checkout.ts` —
 `createRegistrationCheckout(db, stripe, registrationId, { successUrl,
@@ -113,14 +113,14 @@ logged as `billing/payment_link_sent`. The bulk reminder now carries the link
   `/admin/competitions/seed-regional-challenge` 404s) — the route is
   unit-tested and the button is a fetch + label.
 
-## 4. Remediation for Daniel Ahaiwe (after promote)
+## 4. Remediation for the student (after promote)
 
 1. `promote` applies the migration to production **before** the code merges.
-2. Admin → Competitions → Colorado Space Design Challenge → roster → Daniel's
-   row → **Send pay link**. Recipients resolve to `dan.ahaiwe@gmail.com` +
-   `glo.ahaiwe@gmail.com` (the emergency contact on the participant row); the
+2. Admin → Competitions → Colorado Space Design Challenge → roster → the student's
+   row → **Send pay link**. Recipients resolve to the student's address +
+   the guardian's (the emergency contact on the participant row); the
    prompt accepts extra addresses if needed.
-3. Reply to Gloria's thread. The link works until registration closes; the
+3. Reply to the guardian's thread. The link works until registration closes; the
    Stripe session it opens is fresh each click.
 
 ## 5. Left open / deferred
@@ -141,7 +141,7 @@ logged as `billing/payment_link_sent`. The bulk reminder now carries the link
 
 Shipped as #111 → `dev` (`2473e5a`), promoted as #113 → `main` (`481c40c`,
 production `dpl_FkuJSHMkbwCVtBc3ojzEkG1miepK`); record
-`.claude/releases/promote-2026-09-18.md`. Daniel's pay link was sent from the
+`.claude/releases/promote-2026-09-18.md`. The student's pay link was sent from the
 production roster at 16:58Z (both recipients; DB stamped).
 
 Google Doc snapshot of the tracker rows below:
@@ -152,13 +152,13 @@ https://docs.google.com/document/d/1KW07VlAtVQCvml89b9Ai7r8D-gpcyiIP0qFRGhDV-rg/
 
 | Asked | State |
 |---|---|
-| Review Gloria's email and Daniel's registration | Done — §1; pending row `98f623e4…` confirmed in production. |
+| Review the guardian's email and the student's registration | Done — §1; pending row `98f623e4…` confirmed in production. |
 | Recommend a fix | Done — plan approved 17 Sept; built, shipped, promoted. |
 | Parent can come back to an interrupted registration | Done — pay page + email at submission + resume-on-resubmit. |
 | Same for a teacher's group | Done for the card path (organiser resume / email link; false "processed" email fixed). Invoice and members-pay-individually were already resumable. **Not browser-verified** (8.7). |
 | Immediate email at submission (owner decision) | Done. |
 | Defer form draft persistence (owner decision) | Not built, by decision (8.4). |
-| Remediate Daniel via the admin button, no interim script (owner decision) | Done (8.2). |
+| Remediate the student via the admin button, no interim script (owner decision) | Done (8.2). |
 
 ### Nothing was skipped that was asked for. What was inferred but not proven
 
@@ -166,7 +166,7 @@ https://docs.google.com/document/d/1KW07VlAtVQCvml89b9Ai7r8D-gpcyiIP0qFRGhDV-rg/
   `createRegistrationCheckout`** — every checkout in this session was a
   mocked Stripe. Read-only pre-checks all pass (live key, Colorado price
   livemode/active/$75, registration open) and the params match the retired
-  inline code. Gloria's click is the first real one (8.6).
+  inline code. The guardian's click is the first real one (8.6).
 - The group form's resume / info-panel branch is tsc + unit-tested only (8.7).
 - `verify:prod` was not run as part of `promote` Step 7; run at close-out
   instead. Stripe ✅; the DocuSign ❌ it prints is the LOCAL `.env.local`
@@ -175,9 +175,9 @@ https://docs.google.com/document/d/1KW07VlAtVQCvml89b9Ai7r8D-gpcyiIP0qFRGhDV-rg/
 ### Recommended next steps
 
 1. Watch `98f623e4…` — `status='confirmed'` + `stripe_payment_intent_id` set
-   proves the whole path in production. If Gloria reports "Payment could not
+   proves the whole path in production. If the guardian reports "Payment could not
    be started", Vercel runtime logs for `[register/pay]` will say why (8.6).
-2. Reply to Gloria (8.2 Next).
+2. Reply to the guardian (8.2 Next).
 3. 8.7 group-form browser pass on dev, one sitting.
 4. Decide 8.3 (free individual registrations left `pending`) and 8.9 (dead
    `/community?registered=1` flag) — both small, both pre-existing.

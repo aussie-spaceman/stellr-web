@@ -87,7 +87,7 @@ The new wording asserts these. Each was read from code at `88fb830`; re-check, b
 - **Participation Agreement V2.3 §2.5** says pages are "Private by default" and doesn't mention the emailed link. It is not contradicted for minors: the signer is the guardian who receives the link. For the next agreement revision, add one sentence matching Privacy §7.4. Do not change the signed V2.3.
 - **No per-credential revocation.** A forwarded link works until the secret changes, and changing the secret breaks every link already sent. Options: add a per-credential nonce (DB column) so one link can be killed, or accept it as is. The policy text is written for the current behavior.
 - **Secret coupling.** Prod signs family links with `SURVEY_TOKEN_SECRET` (`CREDENTIAL_LINK_SECRET` is unset). Rotating the survey secret silently breaks every credential link. Setting `CREDENTIAL_LINK_SECRET` now would also break every link already emailed. Recommendation: leave it, and record the coupling in `docs/ENV-MATRIX.md`.
-- The two guardian emails from 6 Oct (Davidson; Lily Nylund's parent) are still unanswered. See tracker `educator-pd.11`.
+- The two guardian emails from 6 Oct (two guardians) are still unanswered. See tracker `educator-pd.11`.
 - Counsel review is still outstanding for the 02-Oct legal changes. This update should go to counsel in the same review.
 
 🤖 Prepared with Claude (claude.ai)

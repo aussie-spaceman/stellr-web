@@ -51,7 +51,7 @@ Decisions (David, 28 Sept):
 - The mentor's own `/account` view.
 
 ## Retro issue for Colorado SDC: what happened
-1. The first attempt failed. At 17:51 and 17:52Z, David issued to Patrick and Pauline, and DocuSign rejected both with
+1. The first attempt failed. At 17:51 and 17:52Z, David issued to mentors A and B, and DocuSign rejected both with
    `ACCOUNT_LACKS_EXTENSIONS_PERMISSIONS`.
    - **Cause:** the prod Mentor template's signer carried DocuSign's **Verify Postal Address**
      extension. It had five address fields bound to `postal-address-verify`, in `extensionData`.
@@ -62,7 +62,7 @@ Decisions (David, 28 Sept):
      fixed that: a rejection now returns 502 with a message on the card, and activity is logged
      only for issued or on-file.
    - The admin alert reached nobody, because `staff_roles` was empty (see below).
-   - Patrick and Pauline each still carry **one false "issued" activity row** from 17:51/17:52.
+   - Mentors A and B each still carry **one false "issued" activity row** from 17:51/17:52.
 3. David fixed the template. He removed the Address extension and replaced it with one plain
    required text field on page 1.
    - `node scripts/check-docusign-template.mjs mentor <download>` passed.
@@ -70,9 +70,9 @@ Decisions (David, 28 Sept):
    - The roles are unchanged: `Mentor` and `StellrRepresentative`, both routingOrder 1.
 4. The re-issue succeeded at about 18:20Z. Each mentor has a `volunteer`/`sent` envelope with
    `signers_total=2`:
-   - Pauline `1be0cc47`
-   - Sophie `2dc9a87f`
-   - Patrick `71e45978`
+   - Mentor B `1be0cc47`
+   - Mentor C `2dc9a87f`
+   - Mentor A `71e45978`
 5. By close-out, the StellrRepresentative had signed all three, and Connect recorded it
    (`signers_completed=1`). No mentor had opened theirs yet.
 
@@ -117,12 +117,12 @@ This list mirrors TRACKER Session 22.
     - the admin card reads Complete, with a valid-until date 3 years out,
     - the event panel reads "Agreement signed".
 - **22.3 The mentor's own `/account` view is unverified.**
-  - Use admin view-as on Pauline.
+  - Use admin view-as on mentor B.
   - `DocusignsSection` should list "Mentor Participation Agreement".
   - The `VolunteeringSection` agreement pill should read "Awaiting your signature".
 - **22.4 The app's heads-up email (`docusignSentToSignerEmail`) is unconfirmed** for the three
   18:20Z sends. Check the Resend log.
-- **22.5 Two false activity rows.** Patrick and Pauline each have a `volunteer_agreement_issued`
+- **22.5 Two false activity rows.** Mentors A and B each have a `volunteer_agreement_issued`
   row at 17:51/17:52Z for a send DocuSign rejected. David to decide: leave them as history, or
   delete them. Either way, don't read those rows as sends.
 - **22.6 The admin failure-alert copy is wrong for this path.** `dispatchAgreement`'s catch says
@@ -136,8 +136,8 @@ This list mirrors TRACKER Session 22.
   - After any edit, re-run the checker.
 - **22.8 Guard against extension drift.** Make `scripts/check-docusign-template.mjs` fail on any
   `extensionData`. A field like that passes every sandbox test and fails every prod send.
-- **22.9 Patrick Eaton is not cleared.** His Checkr check has been `invited` since before
-  28 Sept, and he has not onboarded (DOB null). Sophie has not onboarded either. Both need a nudge
+- **22.9 Mentor A is not cleared.** Their Checkr check has been `invited` since before
+  28 Sept, and they have not onboarded (DOB null). Mentor C has not onboarded either. Both need a nudge
   before 3 Oct.
 - **22.10 #221 (CSV formula escaping) is in production, but this session never read its diff.**
   The classifier blocked the read. It rests on its CI and its PR. Low risk; it is admin-only.

@@ -11,8 +11,8 @@ https://docs.google.com/document/d/123IHsjY0jadCJ499wPYQdqu8lUWQCcy7mT3v5Fveb5o/
 
 ## 1. What triggered this
 
-Three new members — teachers `scottc3@nv.ccsd.net` and `mmmatlock@wcpss.net`, mentor
-`elizabethcobian094@gmail.com` — appeared to have no Space access, and no Space showed any
+Three new members — two teachers (educator `2561d6c5…` and one at Clark County SD) and one
+mentor — appeared to have no Space access, and no Space showed any
 members at all.
 
 **The grants were never broken.** All three held the correct tier and role in prod the whole
@@ -102,7 +102,7 @@ link has therefore never actually rostered a human.
 
 Full tick-off table in the Google Doc. The ones that matter most:
 
-1. **`mmmatlock@wcpss.net` and `elizabethcobian094@gmail.com` have blank `first_name` and
+1. **Educator `2561d6c5…` and the new mentor have blank `first_name` and
    `last_name`** — they render as the literal word "Member" in the Members tab this session
    fixed. Both have a `clerk_user_id`; check Clerk before asking the humans.
 2. **Every teacher can enter every state Challenge Space.** All 6 grant the global `teacher`

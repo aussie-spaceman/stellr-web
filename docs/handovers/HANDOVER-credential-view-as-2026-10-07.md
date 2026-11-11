@@ -4,7 +4,7 @@ Tracker: `docs/handovers/tracker/2026-10-07-credential-view-as.md` (rows `creden
 Code: #317 → `dev` as `ead6b79`. Promoted in #318 (`ee441ad`, deployment `dpl_Ci3UB3WCSUbtvr1FPD25wDiSa8bB`), with e-sign #316 and #319 from other sessions. Release record: `.claude/releases/promote-2026-10-07.md` (#321). Migration: none.
 
 ## The report
-David, viewing as Lily Nylund (Colorado SDC), saw her three credentials and could download each PDF, but could not open a credential.
+David, viewing as a student (Colorado SDC), saw their three credentials and could download each PDF, but could not open a credential.
 
 ## Cause
 - The view-as cookie `stellr_impersonate` is set host-only on `app.` (no `domain`, in `app/api/admin/impersonation/route.ts`).
@@ -26,7 +26,7 @@ Writes stay blocked. The visibility route already calls `assertNotImpersonating(
 - CI on #317: `verify` and `e2e` passed.
 - Locally: tsc clean on the touched files, and `lib/impersonation.test.ts` 6/6.
 - **Prod, after deploy, signed out:**
-  - `app./credentials/STL-2026-SHDA0N63` with no cookie: 308 to www (unchanged).
+  - `app./credentials/<number>` (a real credential) with no cookie: 308 to www (unchanged).
   - Same URL with a forged cookie: 200 on app, "This credential is private" only, no holder details and no banner.
   - www: 200, private page.
 

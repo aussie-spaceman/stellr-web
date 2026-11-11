@@ -42,7 +42,7 @@ Every page of an executed envelope carries, in red:
 |---|---|---|
 | Test / voided (David's own + `tim@smith.com`) | 8 | Ignore |
 | Real staff — Bill Allen, Adult Participation Agreement, **completed** 6 Aug 2026 | 1 | Must be re-executed |
-| Real families — Buk + Guggino minor consents, **1 of 2 signed**, in flight | 2 | Must be voided + re-issued |
+| Real families — two minor consents (families 1 and 2), **1 of 2 signed**, in flight | 2 | Must be voided + re-issued |
 
 **Templates** (account-scoped, will not exist in a prod account):
 `92433f1d…` Minors · `c3e40b62…` Adults · `2af13604…` Mentors.
@@ -78,8 +78,8 @@ Two further blind spots, both proven in the account:
 - **Bounces are invisible.** The `tim@smith.com` envelope shows recipient status
   `autoresponded` — DocuSign told us the address bounced and we discarded it. A guardian
   whose email hard-bounces is indistinguishable from one who is merely slow.
-- **"Opened" is lost.** DocuSign tracks `deliveredDateTime` per recipient. Tamara Buk has
-  none — she has *never opened it* in 9 days, which is a completely different problem from
+- **"Opened" is lost.** DocuSign tracks `deliveredDateTime` per recipient. The family 1 guardian has
+  none — they have *never opened it* in 9 days, which is a completely different problem from
   "opened and hasn't got round to it". We collapse both into `sent`.
 
 And structurally: **the guardian never hears from Stellr at all.** `dispatchAgreement()`
@@ -127,7 +127,7 @@ export function describeEnvelope(env, recipients): {
 
 Delete the three local mappings and have `EventRoster`, `DocusignTable` and
 `DocusignsSection` all render from this. Roster pill becomes
-`Partially Complete — awaiting Tamara Buk (guardian)`; the admin table gains a
+`Partially Complete — awaiting <guardian name> (guardian)`; the admin table gains a
 `Waiting on` column and stops under-reporting partials.
 
 **1.4 — Surface bounces as work.** A `bounced` recipient gets a red pill and fires
@@ -136,10 +136,10 @@ Delete the three local mappings and have `EventRoster`, `DocusignTable` and
 **1.5 — Email the guardian directly.** Add `docusignSentToGuardianEmail` /
 `docusignReminderToGuardianEmail`, sent from Stellr to `guardianEmail` at issue and chase
 time, saying plainly: a DocuSign email is coming from `dse@docusign.net`, check spam, here
-is who to reply to. This alone would have prevented the Buk case.
+is who to reply to. This alone would have prevented the family 1 case.
 
-**1.6 — Fix the one-inbox trap.** When `guardianEmail === participant email` (Guggino:
-both recipients are `emilyguggino@gmail.com`), DocuSign sends two near-identical emails to
+**1.6 — Fix the one-inbox trap.** When `guardianEmail === participant email` (family 2:
+both recipients are the same address), DocuSign sends two near-identical emails to
 one inbox and signing one looks like finishing. Either collapse to a single signer when
 the addresses match, or make the two subject lines unmistakably different
 ("**Parent/guardian** signature required" vs "**Student** signature required").
@@ -159,7 +159,7 @@ templates → Connect + HMAC). Do not re-derive them; follow them. What that run
   buying? The DocuSign account currently connected to Claude is `david.shaw@insimeducation.com`
   on `na4.docusign.net` — a *production* account, but under the wrong org. Promotion is
   blocked on this answer, so resolve it first.
-- Hold the Buk and Guggino families with a human reply (see §4). Do not chase them into a
+- Hold families 1 and 2 with a human reply (see §4). Do not chase them into a
   demo envelope we are about to void.
 - No other real envelopes are in flight, so no kill-switch is warranted.
 
@@ -226,7 +226,7 @@ not a control. D1 and D3 are the controls; the doc is the instructions.
 
 The cron selects on envelope status only and always sends `docusignReminderToMinorEmail`,
 whose copy is hard-coded to *"We haven't received a signed consent form from
-**{guardianName}**"*. It never checks who is actually outstanding. In the Buk case that
+**{guardianName}**"*. It never checks who is actually outstanding. In the family 1 case that
 happened to be true; in the mirror case (guardian signed, student hasn't) it tells a family
 their parent is the holdup when the parent has already signed.
 
@@ -246,7 +246,7 @@ answering a parent required a DB query and a DocuSign API call.
 
 The cron filters `.is('reminder_sent_at', null)`, and both the cron *and* the admin resend
 route set `reminder_sent_at`. So **every envelope is chased at most once, ever** — and an
-admin manually resending permanently removes that envelope from automated chasing. The Buk
+admin manually resending permanently removes that envelope from automated chasing. The family 1
 envelope was issued 26 Aug, reminded once on 3 Sep, and would never have been chased again.
 
 **Fix:** replace the `is null` filter with `reminder_sent_at < now() - interval '7 days'`
@@ -260,11 +260,11 @@ of chases rather than allowing exactly one. Have the admin resend write a separa
 
 Independent of everything above:
 
-- **Buk** — Tamara (`tamarabuk7@gmail.com`) has never opened the envelope in 9 days. Leon's
-  student signature is done. Confirm that address is right and monitored before resending;
+- **Family 1** — the guardian has never opened the envelope in 9 days. The student's
+  signature is done. Confirm that address is right and monitored before resending;
   if it is wrong, the envelope needs voiding and re-issuing with a corrected guardian email.
-- **Guggino** — Emily has two DocuSign emails in one inbox and has signed the student one.
-  Point her at the *other* email, the one whose signature block is headed
+- **Family 2** — one inbox has two DocuSign emails and the student one is signed.
+  Point the guardian at the *other* email, the one whose signature block is headed
   "Parent / Legal Guardian".
 
 Both will need re-signing after the production cutover, so it may be worth holding the
@@ -314,7 +314,7 @@ direction (added table, added nullable/defaulted columns; nothing renamed or dro
 | `lib/event-admin.ts`, `components/admin/EventRoster.tsx`, `components/admin/DocusignTable.tsx`, `components/member/DocusignsSection.tsx` | all four now render from `describeEnvelope()`; their three private vocabularies are deleted. The admin table was not even selecting the signer counts — it is now |
 | `lib/email.ts`, `lib/docusign-agreements.ts` | `docusignSentToGuardianEmail` — Stellr now writes to the guardian directly at issue and chase time, instead of leaving DocuSign as their only channel |
 
-The roster pill now reads **"Partially Complete · 1 of 2"** with **"Awaiting Tamara Buk
+The roster pill now reads **"Partially Complete · 1 of 2"** with **"Awaiting <guardian name>
 (parent/guardian) — never opened"** underneath.
 
 ### Both defects, plus the third (§3)

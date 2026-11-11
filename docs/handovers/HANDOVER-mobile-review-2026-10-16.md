@@ -2,8 +2,8 @@
 
 Tracker: `tracker/2026-10-16-mobile-review.md` (rows `mobile-review.1–12`).
 Review: a private Artifact with 49 findings, a five-phase plan and decisions
-D1–D5 (https://claude.ai/artifact/TBCQfaWrW3Y712V8bgKvC8). Its status section
-is kept current with the results below.
+D1–D5. It was on the old Claude account (closed Nov 2026); saved copy in the owner's restricted handover archive, `artifacts/09-mobile-review/`,
+and its status section was last updated before that account closed.
 
 ## Context
 

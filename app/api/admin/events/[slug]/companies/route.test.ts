@@ -17,6 +17,8 @@ const { requireEventRoute, writes, state } = vi.hoisted(() => ({
     companyEvent: {} as Record<string, string>,
     // participantIds with a submitted team profile
     submitted: [] as string[],
+    // the companies list read fails, with a SQLSTATE and a message that must not be logged
+    failList: false,
   },
 }))
 
@@ -57,8 +59,12 @@ vi.mock('@/lib/supabase', () => ({
           }
           return { data: null, error: null }
         },
-        then: (resolve: (v: { error: null }) => void) => {
+        then: (resolve: (v: unknown) => void) => {
           if (rec.op === 'update') writes.push(rec)
+          if (rec.op === 'select' && table === 'event_companies' && state.failList) {
+            resolve({ data: null, error: { code: '57014', message: 'canceling statement for event-a' } })
+            return
+          }
           resolve({ error: null })
         },
       }
@@ -67,7 +73,7 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 
-const { POST } = await import('./route')
+const { GET, POST } = await import('./route')
 const { eventRouteFor, eventRouteRefused } = await import('@/test/fixtures/event-route')
 const admin = (slug: string) => ({ ...eventRouteFor(slug), userId: 'user_admin' })
 
@@ -89,6 +95,26 @@ beforeEach(() => {
   state.participantEvent = { pA: 'event-a', pB: 'event-b' }
   state.companyEvent = { cA: 'event-a', cB: 'event-b' }
   state.submitted = []
+  state.failList = false
+})
+
+describe('GET /api/admin/events/[slug]/companies — a failed read', () => {
+  it("answers today's 500 and logs the failure's code only, never its message", async () => {
+    state.failList = true
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const res = await GET(new Request('https://app.stellreducation.org/api/admin/events/event-a/companies'), {
+        params: Promise.resolve({ slug: 'event-a' }),
+      })
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({ error: 'Database error' })
+      // The service path wraps the read's error, so its class name is the code.
+      expect(logged).toHaveBeenCalledWith('[companies] list failed:', 'EventConfigReadError')
+      expect(JSON.stringify(logged.mock.calls)).not.toContain('canceling statement')
+    } finally {
+      logged.mockRestore()
+    }
+  })
 })
 
 describe('POST /api/admin/events/[slug]/companies — move', () => {

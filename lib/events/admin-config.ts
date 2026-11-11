@@ -28,7 +28,7 @@
 // (offerings and the merch batch), which a tenant's staff cannot reach (the routes answer
 // refuseOutsideStellr first) and which take a StellrOnlyDb for that reason.
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { readArea, writeArea } from '@/lib/tenancy/area-switch'
+import { errorCodeOf, readArea, writeArea } from '@/lib/tenancy/area-switch'
 import type { TenantDb } from '@/lib/tenancy/db'
 import type { StellrOnlyDb } from '@/lib/events/admin-records'
 
@@ -137,11 +137,11 @@ export function setEventCompanyCount(db: SupabaseClient, tenantId: string, slug:
       try {
         await tenantSetCompanyCount(tdb, slug, count)
       } catch (err) {
-        console.error('[events-config] company count write refused:', codeOf(err))
+        console.error('[events-config] company count write refused:', errorCodeOf(err))
         return false
       }
       await tenantSetSettingsCompanyCount(tdb, slug, count).catch((err) => {
-        console.error('[events-config] settings count write failed:', codeOf(err))
+        console.error('[events-config] settings count write failed:', errorCodeOf(err))
       })
       return true
     },
@@ -177,19 +177,18 @@ export function renameEventCompany(
         await tenantRenameCompany(tdb, slug, companyId, name)
         return true
       } catch (err) {
-        console.error('[events-config] company rename refused:', codeOf(err))
+        console.error('[events-config] company rename refused:', errorCodeOf(err))
         return false
       }
     },
   })
 }
 
-/** A SQLSTATE or an error class name for the log, never the message (it can carry values). */
-function codeOf(err: unknown): string {
-  const code = (err as { code?: unknown } | null)?.code
-  if (typeof code === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(code)) return code
-  return err instanceof Error && /^[A-Za-z0-9_]{1,40}$/.test(err.name) ? err.name : 'unknown'
-}
+/**
+ * A SQLSTATE or an error class name for the log, never the message (it can carry values).
+ * Re-exported for the routes, which reach the area switch only through this module.
+ */
+export { errorCodeOf }
 
 // ── Companies: service path only ────────────────────────────────────────────
 // Placement on a participant row, by id, confined to the event first (deep review AUTH-3).

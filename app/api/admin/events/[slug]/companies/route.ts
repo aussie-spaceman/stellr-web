@@ -5,6 +5,7 @@ import { actorFromAuth } from '@/lib/activity-log'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { withAudit } from '@/lib/audit/route'
 import {
+  errorCodeOf,
   findEventCompany,
   findEventParticipant,
   loadEventCompanies,
@@ -48,7 +49,11 @@ export async function GET(_req: Request, { params }: Params) {
   try {
     const companies = await loadEventCompanies(supabaseServer(), staff.tenantId, slug)
     return NextResponse.json({ companies })
-  } catch {
+  } catch (err) {
+    // The code only (a SQLSTATE or an error class name, never the message), so a
+    // tenantDb that cannot start (TenantContextError: no CA, or a URL that is not
+    // verify-full) shows in the logs, as the write paths' failures do.
+    console.error('[companies] list failed:', errorCodeOf(err))
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 }

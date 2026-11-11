@@ -77,6 +77,20 @@ afterEach(() => {
 })
 
 describe('Stellr’s signing mail is unchanged', () => {
+  // The two sends must see the same clock. signer() stamps token_expires_at
+  // from Date.now(), and the link's expiry is `now` plus the whole seconds left
+  // until then, so if the real clock crosses a second boundary between the two
+  // passes the expiry (and its HMAC) differs by one second. Freeze Date only;
+  // timers and promises stay real.
+  const NOW = new Date('2026-11-10T12:00:00Z')
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it.each([[null], [STELLR_TENANT_ID], [undefined]])('envelope tenant %s: same message with the flag off and on, no sender keys, no tenants read', async (tenant) => {
     const messages: unknown[] = []
     for (const on of [false, true]) {
@@ -84,7 +98,7 @@ describe('Stellr’s signing mail is unchanged', () => {
       flag(on)
       sendEmail.mockClear()
       const { db, claims } = setup([envelope('e1', tenant)], [signer('e1')])
-      const result = await sendInvites(db.client, db.table('agreement_recipients') as never, { now: new Date('2026-11-10T12:00:00Z') })
+      const result = await sendInvites(db.client, db.table('agreement_recipients') as never, { now: NOW })
       expect(result).toEqual({ sent: 1, deferred: 0, failed: 0 })
       expect(claims.n).toBe(1)
       const msg = sendEmail.mock.calls[0][0]

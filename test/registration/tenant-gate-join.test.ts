@@ -212,6 +212,19 @@ describe('S5 A7: register/group-join on a tenant’s group', () => {
     expect(h.tenantConfirmation).not.toHaveBeenCalled()
   })
 
+  it('S5 wave 6: with the guardian-consent flag on, a 15-year-old joiner is still refused (the flow is individual-only)', async () => {
+    vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+    try {
+      expect(await settle(await post({ ...DETAILS, date_of_birth: dateBefore(15) }))).toEqual({
+        status: 400,
+        body: { code: 'under_minimum_age', error: 'You must be 18 or older to register for this event online. Please contact the event organiser.' },
+      })
+      expect(writes()).toEqual([])
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   describe('signed in', () => {
     const MEMBER = {
       id: 'm-1', first_name: 'Stored', last_name: 'Profile', email: 'stored@example.com', date_of_birth: dateBefore(30),

@@ -54,7 +54,7 @@ export interface GatedGroup {
   isCampaign: boolean
   /** The registrant, with their address settled and their date of birth checked. */
   teacher: TeacherPayload
-  /** Signed in as a member: they have a login already and need none provisioned. */
+  /** Signed in as a member: they have a login already and need none provisioned. Always false on a tenant's event. */
   hasSession: boolean
   linkedSlotNames: LinkedSlotNames
   /** Absolute totals: adults + students is everyone, whatever the registrant's role. */
@@ -72,7 +72,14 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
     details_method, additional_adults, students, school_dpa_agreed,
   } = body
 
-  const sessionMember = await getCurrentMember().catch(() => null)
+  // S5 A7 follow-up (owner decision, 10 Nov 2026): a Stellr member's profile is not
+  // used at a tenant's event until S7's consent grant exists. On a tenant's host the
+  // event can only go ahead as that tenant's (lib/registration/event-context), so the
+  // organiser's Stellr record is not read: the address they type stands, as on the
+  // tenant join page, a sign-in is not taken as an identity, and no member is linked
+  // (persist). Every answer below is the one an organiser not signed in gets.
+  const tenantHost = deps.requestTenantId !== STELLR_TENANT_ID
+  const sessionMember = tenantHost ? null : await getCurrentMember().catch(() => null)
   settleAddresses(body, sessionMember?.email)
 
   if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
@@ -182,7 +189,7 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
       route: 'register/group',
     }, () => NextResponse.json({ error: 'Event not found' }, { status: 404 }))
   let context: RegistrationEventContext | null = null
-  if (deps.requestTenantId !== STELLR_TENANT_ID) {
+  if (tenantHost) {
     const owned = await ownerCheck()
     if (!owned.ok) return refuse(owned.response)
     context = owned.context

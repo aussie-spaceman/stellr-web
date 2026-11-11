@@ -15,5 +15,5 @@ export default async function TenantConfirmationPage({
   const { slug } = await params
   await requireTenantEvent(tenant, slug)
   const query = await searchParams
-  return confirmationBody({ slug, query: { ...query, spreadsheet: googleSheetParam(query.spreadsheet) } })
+  return confirmationBody({ slug, query: { ...query, spreadsheet: googleSheetParam(query.spreadsheet) }, tenantEvent: true })
 }

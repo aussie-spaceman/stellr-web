@@ -1,5 +1,7 @@
 import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { rowTenant, TENANT_PAYMENTS_UNAVAILABLE } from '@/lib/registration/event-context'
 import {
   alertStaff,
   billableSeats,
@@ -443,7 +445,8 @@ export interface PaymentChangeActor {
 
 export type PaymentChangeResult =
   | { ok: true; method: GroupPaymentMethod; message: string; payUrl: string | null }
-  | { ok: false; status: number; error: string }
+  /** `code` is set only on the tenant payments answer (S5 A8). */
+  | { ok: false; status: number; error: string; code?: string }
 
 const refuse = (status: number, error: string): PaymentChangeResult => ({ ok: false, status, error })
 const stripeDetail = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/\.+$/, '')
@@ -524,6 +527,9 @@ async function applyChange(
   const to = request.method
   const reg = await loadRegistration(db, registrationId)
   if (!reg || reg.type !== 'group') return refuse(404, 'Group registration not found')
+  // S5 A8: nothing is billed for another tenant until S9. Refused here, before the
+  // facts below ask Stripe anything; whoever called (organiser or staff) checked access.
+  if (rowTenant(reg.tenant_id) !== STELLR_TENANT_ID) return { ok: false, status: 503, error: TENANT_PAYMENTS_UNAVAILABLE.error, code: TENANT_PAYMENTS_UNAVAILABLE.code }
   const roster = await loadRoster(db, registrationId)
   const facts = await loadFacts(db, stripe, reg, roster)
   const blocked = changeBlockReason(facts)

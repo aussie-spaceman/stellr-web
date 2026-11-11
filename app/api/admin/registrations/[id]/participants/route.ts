@@ -4,7 +4,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { addParticipantToGroup, GROUP_FOR_ADD_COLUMNS, type GroupForAdd } from '@/lib/group-participant-add'
 import { withAudit } from '@/lib/audit/route'
-import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadEventRecord } from '@/lib/tenancy/load-scoped'
+import { rowTenant } from '@/lib/registration/event-context'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
@@ -53,10 +54,13 @@ async function addParticipant(req: Request, { params }: { params: Promise<{ id: 
   if (!loaded.ok) return loaded.response
   const reg = loaded.row
   if (reg.type !== 'group') return notFound()
-  // The add looks members up across every tenant, writes their event history and activity
-  // log, and bills through Stellr's Stripe account.
-  const refused = refuseOutsideStellr(staff.scope)
-  if (refused) return refused
+  // S5 A8: a tenant's staff add to their own tenant's group. The shared add then takes
+  // that tenant's path (lib/group-participant-add.ts): the tenant's age rules, no Member
+  // ID lookup, no member row, event history or activity log entry, and the tenant
+  // payments answer, before any Stripe call, for a group that takes money. A group
+  // stamped with any other tenant answers as missing, in every LOADSCOPED_MODE, Stellr's
+  // staff included (as the payment-method route does).
+  if (rowTenant(reg.tenant_id) !== staff.tenantId) return notFound()
   audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId, eventSlug: reg.event_slug })
 
   const body = await req.json().catch(() => null)

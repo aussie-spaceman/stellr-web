@@ -95,6 +95,20 @@ export async function executeDeletion(
       .maybeSingle()
     if (!pending) throw new Error('Not an account awaiting guardian consent; delete it as a member instead')
   }
+  // Likewise, the archive-free registration delete is only for a tenant event's
+  // registration whose every participant's guardian declined or never signed.
+  if (ownDef.type === 'pending_guardian_consent_registration') {
+    const [{ data: parts, error: partsErr }, { data: refused, error: refusedErr }] = await Promise.all([
+      db.from('participants').select('id').eq('registration_id', id),
+      db.from('tenant_guardian_consents').select('participant_id').eq('registration_id', id).in('status', ['declined', 'expired']),
+    ])
+    if (partsErr || refusedErr) throw new Error('Could not confirm the registration is awaiting guardian consent')
+    const refusedIds = new Set(((refused ?? []) as Array<{ participant_id: string }>).map((r) => r.participant_id))
+    const all = (parts ?? []) as Array<{ id: string }>
+    if (!all.length || all.some((p) => !refusedIds.has(p.id))) {
+      throw new Error('Not a registration whose guardian consent was declined or expired; delete it as a registration instead')
+    }
+  }
 
   // A withdrawn student's scholarship offer ends with their registration
   // (lib/scholarship-cancel.ts). Read the offers now: a hard delete nulls

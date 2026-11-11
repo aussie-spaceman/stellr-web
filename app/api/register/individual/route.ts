@@ -97,7 +97,11 @@ export async function POST(req: NextRequest) {
     const { userId } = await Promise.resolve().then(() => auth()).catch(() => ({ userId: null }))
     note.userId = userId
     const { tenantId } = await requestTenant()
-    if (userId) {
+    // Only on Stellr's host. A tenant's event never asks an email on file to sign in,
+    // and its gate takes no sign-in as an identity (S5 A7 follow-up), so a signed-in
+    // caller there counts against the same allowance as anyone else.
+    const sessionUserId = tenantId === STELLR_TENANT_ID ? userId : null
+    if (sessionUserId) {
       const eventCapped = await rateLimit(req, 'register-individual-session', { limit: 30, windowMs: HOUR_MS, tenantId }, eventKey)
       if (eventCapped) {
         note.status = eventCapped.status
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
       req,
       'register-individual',
       { limit: 3, windowMs: HOUR_MS, tenantId },
-      userId ? `${eventKey}:${userId}` : eventKey,
+      sessionUserId ? `${eventKey}:${sessionUserId}` : eventKey,
     )
     if (rateLimited) {
       note.status = rateLimited.status
@@ -127,8 +131,8 @@ export async function POST(req: NextRequest) {
     if (!saved.ok) return answer(saved.response)
     note.registrationId = saved.row.regId
 
-    const signInToken = await runIndividualHooks(gate.registration, saved.row, fields)
-    return answer(await respondToIndividualRegistration(gate.registration, saved.row, signInToken, fields, getEventBySlug))
+    const hooks = await runIndividualHooks(gate.registration, saved.row, fields)
+    return answer(await respondToIndividualRegistration(gate.registration, saved.row, hooks, fields, getEventBySlug))
   } catch (e) {
     console.error('Individual registration error:', e)
     note.status = 500

@@ -102,6 +102,13 @@ describe('sendEventEmail and a tenant row', () => {
     expect(await sendEventEmail(db as never, 'e1', { trigger: 'schedule', spacingMs: 0, sender: SENDER })).toMatchObject({ ok: true, sent: 1 })
     expect(sendEmail.mock.calls[0][0]).toMatchObject({ from: SENDER.from, replyTo: SENDER.replyTo })
   })
+
+  it('S5 wave 6: a tenant’s email resolves its audience with the tenant, so consent-pending participants are left out; Stellr’s without', async () => {
+    await sendEventEmail(fakeDb({ ...EMAIL, tenant_id: TENANT }) as never, 'e1', { trigger: 'schedule', spacingMs: 0, sender: SENDER })
+    expect(resolveAudience.mock.calls.at(-1)?.[3]).toMatchObject({ tenantId: TENANT })
+    await sendEventEmail(fakeDb({ ...EMAIL, tenant_id: null }) as never, 'e1', { trigger: 'schedule', spacingMs: 0 })
+    expect(resolveAudience.mock.calls.at(-1)?.[3]).not.toHaveProperty('tenantId')
+  })
 })
 
 describe('a tenant send and its cron slice', () => {
@@ -141,6 +148,8 @@ describe('sendCatchUp and a tenant row', () => {
     expect(sendEmail).not.toHaveBeenCalled()
     expect(await sendCatchUp(fakeDb(sent) as never, 'e1', { spacingMs: 0, today: '2026-01-01', sender: SENDER })).toMatchObject({ ok: true, sent: 1 })
     expect(sendEmail.mock.calls[0][0]).toMatchObject({ from: SENDER.from, replyTo: SENDER.replyTo })
+    // S5 wave 6: with the tenant, so its consent-pending participants are left out.
+    expect(resolveAudience.mock.calls.at(-1)?.[3]).toEqual({ tenantId: TENANT })
   })
 })
 

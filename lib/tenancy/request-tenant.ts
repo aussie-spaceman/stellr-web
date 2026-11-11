@@ -16,6 +16,11 @@
 //
 // Identity helpers must not depend on it: a session is the same person on any host,
 // and treating them as signed out lets a submitted email stand in for the session's.
+// One deliberate exception: the registration gates (lib/registration/individual and
+// group) read no session on a tenant's host, by owner decision (10 Nov 2026) until
+// S7's consent grant, so the typed address stands there. That is safe only because
+// those registrations link no member and write no members row (persist), and their
+// hasSession is false: nothing may treat their email as the session's.
 //
 // proxy.ts must not import this file: it pulls in next/headers.
 

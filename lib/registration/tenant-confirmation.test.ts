@@ -32,3 +32,16 @@ describe('tenant registration confirmation (S5 A7)', () => {
     errors.mockRestore()
   })
 })
+
+describe('guardian-consent notices (S5 wave 6)', () => {
+  it('each kind has its own fixed subject and lead, with row values escaped', () => {
+    const pending = tenantConfirmationContent({ firstName: 'Kit', eventTitle: 'Cup <b>', kind: 'consent_pending' })
+    expect(pending.subject).toBe('Waiting for your parent or guardian: Cup <b>')
+    expect(pending.html).toContain('Cup &lt;b&gt;')
+    expect(pending.html).not.toContain('<b>')
+    expect(pending.text).toContain('Your place is confirmed once they sign.')
+    expect(tenantConfirmationContent({ firstName: 'Kit', eventTitle: 'Cup', kind: 'consent_signed' }).text).toContain("so you're registered for Cup.")
+    expect(tenantConfirmationContent({ firstName: 'Kit', eventTitle: 'Cup', kind: 'consent_declined' }).subject).toBe('Registration cancelled: Cup')
+    expect(tenantConfirmationContent({ firstName: 'Kit', eventTitle: 'Cup', kind: 'consent_expired' }).text).toContain('in time')
+  })
+})

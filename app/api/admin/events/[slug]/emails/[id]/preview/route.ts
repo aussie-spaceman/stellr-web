@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { withAudit } from '@/lib/audit/route'
 import { resolveAudience } from '@/lib/event-emails/audiences'
+import { isTenantRow } from '@/lib/event-emails/tenant-mail'
 import { eventVarsFor, loadEventForEmail } from '@/lib/event-emails/send'
 import { recipientMergeVars, renderEventEmail, unknownTokens } from '@/lib/event-emails/render'
 import { extractTokens } from '@/lib/email-render'
@@ -44,7 +45,15 @@ async function previewEmail(req: Request, { params }: Ctx) {
   const event = await loadEventForEmail(slug)
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
-  const { recipients, docusignParticipantIds } = await resolveAudience(db, event, email.audiences)
+  // S5 wave 6: as the send does (lib/event-emails/send.ts), another tenant's email
+  // leaves out its consent-pending participants, All attendees included. Stellr's
+  // emails pass nothing. Refused outside Stellr above until B14 opens this route.
+  const { recipients, docusignParticipantIds } = await resolveAudience(
+    db,
+    event,
+    email.audiences,
+    isTenantRow(email.tenant_id) ? { tenantId: email.tenant_id } : {},
+  )
   const as = new URL(req.url).searchParams.get('as')?.toLowerCase()
   const sample = recipients.find((r) => r.email === as) ?? recipients[0] ?? null
 

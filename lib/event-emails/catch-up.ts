@@ -52,6 +52,14 @@ export interface CatchUpStatus {
   pending: { email: string; name: string; roles: RecipientRole[] }[]
 }
 
+/**
+ * S5 wave 6: another tenant's email passes its tenant, so its consent-pending
+ * participants are left out. Stellr's call is unchanged: no extra argument.
+ */
+function tenantAudience(email: EventEmailRow): [] | [{ tenantId: string }] {
+  return isTenantRow(email.tenant_id) ? [{ tenantId: email.tenant_id }] : []
+}
+
 /** Who a catch-up would reach right now, for the tab. Read-only. */
 export async function catchUpStatus(db: SupabaseClient, email: EventEmailRow): Promise<CatchUpStatus> {
   const audiences = catchUpAudiences(email.audiences)
@@ -63,7 +71,7 @@ export async function catchUpStatus(db: SupabaseClient, email: EventEmailRow): P
   if (!event || !open) return { ...base, open: false, pending: [] }
 
   const [{ recipients }, tried] = await Promise.all([
-    resolveAudience(db, event, audiences),
+    resolveAudience(db, event, audiences, ...tenantAudience(email)),
     alreadyTriedAddresses(db, email.id),
   ])
   const pending = missedRecipients(recipients, tried).map((r) => ({ email: r.email, name: r.name, roles: r.roles }))
@@ -116,7 +124,7 @@ export async function sendCatchUp(
 
   try {
     const [{ recipients }, tried] = await Promise.all([
-      resolveAudience(db, event, audiences),
+      resolveAudience(db, event, audiences, ...tenantAudience(email)),
       alreadyTriedAddresses(db, email.id),
     ])
     const owed = missedRecipients(recipients, tried).slice(0, MAX_RECIPIENTS_PER_SEND)

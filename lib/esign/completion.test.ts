@@ -20,6 +20,12 @@ vi.mock('@/lib/esign/archive', () => ({ archiveEnvelope }))
 vi.mock('@/lib/docusign-agreements', () => ({
   AGREEMENT_LABEL: { minor: 'Parental Consent Form', adult: 'Participation Agreement' },
 }))
+const { settleSigned, dispatchTeamProfiles } = vi.hoisted(() => ({
+  settleSigned: vi.fn(async (_db: unknown, _env: unknown) => true),
+  dispatchTeamProfiles: vi.fn(async (_db: unknown, _o: unknown) => {}),
+}))
+vi.mock('@/lib/registration/tenant-guardian-consent', () => ({ settleTenantGuardianConsentSigned: settleSigned }))
+vi.mock('@/lib/team-profile/store', () => ({ dispatchTeamProfiles }))
 
 import { mayTransition, onEnvelopeCompleted, type CompletedEnvelope } from './completion'
 
@@ -152,5 +158,34 @@ describe('onEnvelopeCompleted, Stellr signing, by tenant', () => {
     vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', value)
     expect(await onEnvelopeCompleted(db().client, native(tenant))).toEqual({ notified: true })
     expect(sendEmail).not.toHaveBeenCalled()
+  })
+})
+
+// S5 wave 6: a guardian's consent for another organiser's event.
+describe('onEnvelopeCompleted, tenant guardian consent', () => {
+  const ROCKET = '11111111-1111-4111-8111-111111111111'
+  const consent: CompletedEnvelope = {
+    ...envelope, provider: 'native', envelope_type: 'tenant_guardian_consent', member_id: null, participant_id: 'p-tgc', tenant_id: ROCKET,
+  }
+  const db = () => fakeSupabase({ agreements: [{ id: 'row-1', completion_notified_at: null }], agreement_recipients: [], tenants: [] })
+
+  it('settles the consent (the participant becomes registered) and opens no team profile', async () => {
+    await onEnvelopeCompleted(db().client, consent)
+    expect(settleSigned).toHaveBeenCalledTimes(1)
+    expect(settleSigned.mock.calls[0][1]).toMatchObject({ id: 'row-1', participant_id: 'p-tgc', envelope_type: 'tenant_guardian_consent' })
+    expect(dispatchTeamProfiles).not.toHaveBeenCalled()
+  })
+
+  it('a Stellr minor agreement settles no tenant consent and still opens the team profile', async () => {
+    await onEnvelopeCompleted(db().client, { ...envelope, participant_id: 'p1' })
+    expect(settleSigned).not.toHaveBeenCalled()
+    expect(dispatchTeamProfiles).toHaveBeenCalledWith(expect.anything(), { participantIds: ['p1'] })
+  })
+
+  it('a failed settle does not fail the completion', async () => {
+    settleSigned.mockRejectedValueOnce(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await onEnvelopeCompleted(db().client, consent)).toEqual({ notified: true })
+    vi.restoreAllMocks()
   })
 })

@@ -177,7 +177,11 @@ export async function sendEventEmail(
   }
 
   try {
-    const audience = await resolveAudience(db, event, email.audiences, { mintPayLinks: !isTest })
+    const audience = await resolveAudience(db, event, email.audiences, {
+      mintPayLinks: !isTest,
+      // S5 wave 6: another tenant's email leaves out its consent-pending participants.
+      ...(isTenantRow(email.tenant_id) ? { tenantId: email.tenant_id } : {}),
+    })
     let recipients: ResolvedRecipient[] = audience.recipients
 
     // deep review INT-1: skip anyone a prior (non-test) send of this email

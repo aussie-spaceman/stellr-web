@@ -7,6 +7,7 @@ import { confirmRegistration } from '@/lib/registration-confirm'
 import type { GateDeps, GatedRegistration } from './gate'
 import type { IndividualBody } from './parse'
 import type { PersistedRegistration } from './persist'
+import type { IndividualHookResult } from './stellr-hooks'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
@@ -17,19 +18,31 @@ export const POST_REGISTER_URL = `${APP_URL}/community?registered=1&type=individ
 export async function respondToIndividualRegistration(
   gated: GatedRegistration,
   row: PersistedRegistration,
-  signInToken: string | null,
+  hooks: IndividualHookResult,
   body: IndividualBody,
   getEvent: GateDeps['getEvent'],
 ): Promise<Response> {
   const { db, email, scholarship } = gated
   const { regId, payToken, memberId } = row
   const { event_slug } = body
+  const { signInToken } = hooks
 
   // S5 A7: a tenant's event takes no money (the gate refused a fee, add-ons and an
   // offer), so there is no checkout, pay link or add-on order, and nothing is asked
   // of Stellr's Stripe account.
+  // S5 wave 6: a consent-pending registration says so, for the form to tell the
+  // registrant their place waits on a guardian's signature, and whether the
+  // guardian's invitation went, so the page claims it only when it did.
   if (!gated.context.isPlatformOwner) {
-    return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken: null }, { status: 201 })
+    return NextResponse.json(
+      {
+        registrationId: regId,
+        checkoutUrl: null,
+        signInToken: null,
+        ...(row.consent ? { consentPending: true, guardianInvited: hooks.guardianInvited === true } : {}),
+      },
+      { status: 201 },
+    )
   }
 
   // Price any merch add-ons selected — validated + persisted as pending items

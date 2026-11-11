@@ -484,6 +484,31 @@ export function attachCredentialLines(
   }
 }
 
+/**
+ * The roster without a tenant's consent-pending participants (S5 wave 6), and
+ * without a group left empty by that. Unchanged, with no read, for Stellr. A failed
+ * read throws, so the send fails and is retried rather than reaching them.
+ */
+async function withoutUnconsented(
+  db: SupabaseClient,
+  roster: EventRosterData,
+  tenantId: string | undefined,
+): Promise<{ roster: EventRosterData; left: ReadonlySet<string> }> {
+  if (!tenantId || tenantId === STELLR_TENANT_ID) return { roster, left: new Set() }
+  const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
+  const left = await unconsentedParticipantIds(db, tenantId)
+  if (!left.size) return { roster, left }
+  return {
+    roster: {
+      ...roster,
+      groups: roster.groups
+        .map((g) => ({ ...g, participants: g.participants.filter((p) => !left.has(p.id)) }))
+        .filter((g) => g.participants.length > 0),
+    },
+    left,
+  }
+}
+
 async function loadMemberEmails(db: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map()
   const { data } = await db.from('members').select('id, email').in('id', ids)
@@ -494,9 +519,22 @@ export async function resolveAudience(
   db: SupabaseClient,
   event: { slug: string; date?: string | null },
   audiences: AudienceKey[],
-  opts: { mintPayLinks?: boolean } = {},
+  opts: {
+    mintPayLinks?: boolean
+    /**
+     * S5 wave 6: the owning tenant, passed only for another tenant's email. Its
+     * participants whose guardian has not signed the consent form are left out,
+     * with their guardians' and signers' lines. Stellr's sends pass nothing and
+     * read nothing more.
+     */
+    tenantId?: string
+  } = {},
 ): Promise<ResolvedAudience> {
-  const roster = await getEventRoster(event.slug, event.date ?? undefined)
+  // Every roster-based group, All attendees included, reads this filtered roster:
+  // a tenant's consent-pending participant is not on it, so cannot be reached.
+  const { roster, left } = await withoutUnconsented(db, await getEventRoster(event.slug, event.date ?? undefined), opts.tenantId)
+  // Volunteer mentors and event managers are staff, not roster participants: the
+  // consent rule does not apply to them.
   const attendees = audiences.includes('attendees')
   const mentors = audiences.includes('mentors') || attendees ? await loadMentorContacts(db, event.slug) : []
   if (attendees && mentors.length) {
@@ -519,7 +557,9 @@ export async function resolveAudience(
 
   // {{agreement_link}}: each address's own signing links (minted on a real send only).
   const firstNames = new Map(roster.groups.flatMap((g) => g.participants.map((p) => [p.id, p.first_name] as const)))
-  const signers = await loadOutstandingSigners(db, event.slug, { mintLinks: !!opts.mintPayLinks })
+  const signers = (await loadOutstandingSigners(db, event.slug, { mintLinks: !!opts.mintPayLinks }))
+    // A left-out participant's signers (the guardian's consent link) are left out too.
+    .filter((s) => !s.participantId || !left.has(s.participantId))
   resolved.nativeParticipantIds = attachAgreementLines(resolved.recipients, signers, (id) => firstNames.get(id) ?? undefined)
 
   // {{team_profile_link}}: minting creates the student's profile row, so only on a real send.

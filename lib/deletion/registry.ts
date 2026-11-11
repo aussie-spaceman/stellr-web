@@ -143,6 +143,26 @@ const ENTITIES: Record<string, EntityDef> = {
     dependents: [],
   },
 
+  // A 14-17-year-old's registration for another organiser's event whose guardian
+  // declined the consent form, or never signed it in time (S5 wave 6,
+  // lib/registration/tenant-guardian-consent.ts). Runs as a registration hard
+  // delete (in-flight consent envelope voided, participant and consent row
+  // cascaded) but keeps NO archive snapshot: the participant row was held only
+  // until a guardian answered. executeDeletion refuses any registration with a
+  // participant whose consent was not declined or expired.
+  pending_guardian_consent_registration: {
+    type: 'pending_guardian_consent_registration',
+    table: 'registrations',
+    label: 'Registration awaiting guardian consent',
+    pk: 'id',
+    keyType: 'uuid',
+    softDelete: null,
+    external: ['docusign'],
+    actsAs: 'registration',
+    archive: false,
+    dependents: [],
+  },
+
   // A single participant within a registration ("delete a participant from an
   // event"). No soft-delete column exists, so only hard delete applies. The
   // participant's in-flight envelopes are voided upstream and removed; signed

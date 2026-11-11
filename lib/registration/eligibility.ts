@@ -35,7 +35,7 @@
 // The participants trigger (A3) enforces the same tenant rule in Postgres as
 // a backstop; this is the check that gives the registrant a message first.
 
-import { checkRegistrationAge, type RegistrationAgeResult } from '@/lib/registration-eligibility'
+import { checkRegistrationAge, type RegistrationAgeOk, type RegistrationAgeRefused, type RegistrationAgeResult } from '@/lib/registration-eligibility'
 import { onDate } from '@/lib/age'
 import { isValidTimeZone, localDate } from '@/lib/survey/timezone'
 import { STELLR_TENANT_ID, TENANT_MIN_PARTICIPANT_AGE } from '@/lib/tenancy/constants'
@@ -103,6 +103,28 @@ export type EligibilityResult = RegistrationAgeResult | EligibilityUnavailable
 export interface AssertEligibleOptions {
   /** Whose date of birth, for the message ("for Sam Lee"). Omit when it is the registrant's own. */
   name?: string
+}
+
+export interface AssertRegistrableOptions extends AssertEligibleOptions {
+  /**
+   * The route can collect a parent's or guardian's name and email and run the
+   * tenant guardian-consent flow (S5 wave 6). Only register/individual does.
+   * Has no effect unless TENANT_GUARDIAN_CONSENT_ENABLED is exactly "true".
+   */
+  guardianConsent?: boolean
+}
+
+/** assertEligible's admission, marked when it holds only once a guardian signs. */
+export type RegistrableResult = EligibilityResult | (RegistrationAgeOk & { guardianConsentRequired: true })
+
+/**
+ * The tenant guardian-consent flow (S5 wave 6, owner decision 10 Nov 2026). Off
+ * unless exactly "true": with it off, under-18s are refused at tenant events as
+ * before. Read at call time, so a flip needs a redeploy only.
+ */
+export const TENANT_GUARDIAN_CONSENT_FLAG = 'TENANT_GUARDIAN_CONSENT_ENABLED'
+export function tenantGuardianConsentEnabled(): boolean {
+  return process.env[TENANT_GUARDIAN_CONSENT_FLAG] === 'true'
 }
 
 /** Safe to show the person filling in the form. Wording is a proposal for the owner (S5 A7). */
@@ -198,15 +220,33 @@ export function assertEligible(
  *
  * assertEligible itself stays the age floor the A3 trigger mirrors. The refusal keeps
  * the `under_minimum_age` reason so every route answers it as it does an age refusal.
- * Wording is a proposal.
+ * Wording approved by the owner on 10 Nov 2026.
+ *
+ * S5 wave 6: with TENANT_GUARDIAN_CONSENT_ENABLED on and `guardianConsent` passed, a
+ * minor who passes assertEligible is admitted with `guardianConsentRequired`, and the
+ * route must save them consent-pending (lib/registration/tenant-guardian-consent.ts).
+ * Group and group-join pass no `guardianConsent`, so they still refuse every minor.
  */
 export function assertRegistrable(
   dateOfBirth: unknown,
   ctx: EligibilityContext,
-  opts: AssertEligibleOptions = {},
-): EligibilityResult {
+  opts: AssertRegistrableOptions = {},
+): RegistrableResult {
   const result = assertEligible(dateOfBirth, ctx, opts)
   if (!result.ok || ctx.kind === 'platform_owner' || !result.isMinor) return result
+  // S5 wave 6 (owner decision, 10 Nov 2026): a minor who passed assertEligible is
+  // 14 or older on the day and 13 or older today. Where the route can take a
+  // guardian and the flag is on, they may register pending a guardian's consent.
+  if (opts.guardianConsent && tenantGuardianConsentEnabled()) return { ...result, guardianConsentRequired: true }
+  return minorRefusal(opts)
+}
+
+/**
+ * The refusal for a minor on a tenant's event (owner-approved wording, 10 Nov 2026).
+ * Exported so a route that offered guardian consent can still refuse in these words
+ * when the consent flow cannot run for this event.
+ */
+export function minorRefusal(opts: AssertEligibleOptions = {}): RegistrationAgeRefused {
   const whose = opts.name?.trim()
   const age = TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT
   return {

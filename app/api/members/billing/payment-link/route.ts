@@ -10,6 +10,8 @@ import { GUARANTEE_CHECKOUT_TEXT } from '@/lib/guarantee'
 import { ensureSeatPayToken, seatDiscount, seatPayPageUrl } from '@/lib/individual-payment'
 import { auditMutation } from '@/lib/audit/route'
 import { noteAudit, selfServiceEvent, type SelfServiceAudit } from '@/lib/community/self-service-audit'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { rowTenant, tenantPaymentsUnavailable } from '@/lib/registration/event-context'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -46,7 +48,7 @@ async function createPaymentLink(req: NextRequest) {
 
   const { data: registration } = await db
     .from('registrations')
-    .select('event_slug, event_title, type, status, member_pays_individually, invoice_coupon_id, share_estimate')
+    .select('event_slug, event_title, type, status, member_pays_individually, invoice_coupon_id, share_estimate, tenant_id')
     .eq('id', registrationId)
     .maybeSingle()
   if (!registration) return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
@@ -61,6 +63,11 @@ async function createPaymentLink(req: NextRequest) {
   // On Stellr's chain, as every member route's row is (docs/TENANCY-S5.md, B16). The
   // registration id leads to the event and its tenant.
   noteAudit(req, { targetId: registrationId })
+  // S5 A8: no Checkout is made on Stellr's Stripe account for another tenant's
+  // registration until S9. It gets the tenant payments answer before Stripe is asked.
+  if (rowTenant((registration as { tenant_id?: string | null }).tenant_id) !== STELLR_TENANT_ID) {
+    return tenantPaymentsUnavailable()
+  }
 
   // Only the member's OWN outstanding payment is payable here.
   const isIndividual = registration.type === 'individual'

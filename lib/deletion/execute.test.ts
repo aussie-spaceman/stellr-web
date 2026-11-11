@@ -47,6 +47,8 @@ const readErrors: Record<string, unknown> = {}
 // The registration's type for the "is this an individual registration left
 // empty?" read. Mutated per-test; reset in beforeEach.
 let registrationType = 'group'
+// S5 wave 6: the declined or expired tenant guardian consents on the registration.
+let refusedConsents: Record<string, unknown>[] = []
 
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
@@ -79,6 +81,7 @@ vi.mock('@/lib/supabase', () => ({
 function list(table: string, cols: string): Record<string, unknown>[] {
   if (table === 'participants' && cols === 'id') return participantsById
   if (table === 'participants' && cols === 'member_id') return participantMembers
+  if (table === 'tenant_guardian_consents' && cols === 'participant_id') return refusedConsents
   return []
 }
 function single(table: string, cols: string): Record<string, unknown> | null {
@@ -99,6 +102,7 @@ beforeEach(() => {
     liveScholarshipOffers, cancelScholarshipsOnWithdrawal]) fn.mockClear()
   for (const k of Object.keys(readErrors)) delete readErrors[k]
   registrationType = 'group'
+  refusedConsents = []
   deletedTables.length = 0
   loadEventAssignees.mockClear()
   syncEventManagerUnassigned.mockClear()
@@ -222,5 +226,32 @@ describe('executeDeletion — scholarship offers end with the registration', () 
     readErrors.registrations = { message: 'pool exhausted' }
     await expect(executeDeletion('registration', 'r1', { mode: 'hard' })).rejects.toThrow()
     expect(cancelScholarshipsOnWithdrawal).not.toHaveBeenCalled()
+  })
+})
+
+// S5 wave 6: the archive-free removal of a tenant event's registration whose
+// guardian declined the consent form or never signed it.
+describe('executeDeletion — pending_guardian_consent_registration', () => {
+  it('removes the registration as a registration hard delete, with no archive snapshot', async () => {
+    refusedConsents = [{ participant_id: 'p1' }, { participant_id: 'p2' }]
+    const result = await executeDeletion('pending_guardian_consent_registration', 'r1', { mode: 'hard', deletedBy: null })
+    expect(result).toMatchObject({ entity: 'pending_guardian_consent_registration', deleted: true, mode: 'hard' })
+    expect(archiveEntity).not.toHaveBeenCalled()
+    expect(retainSignedRecords).toHaveBeenCalledWith(expect.anything(), { kind: 'registration', id: 'r1' })
+    expect((runExternalCleanup.mock.calls[0] as unknown[])[0]).toMatchObject({ type: 'registration', external: ['docusign'] })
+    expect(deletedTables).toContain('registrations')
+  })
+
+  it('refuses a registration with any participant whose consent was not declined or expired', async () => {
+    refusedConsents = [{ participant_id: 'p1' }]
+    await expect(executeDeletion('pending_guardian_consent_registration', 'r1', { mode: 'hard' })).rejects.toThrow(/guardian consent/)
+    expect(deletedTables).toEqual([])
+    expect(runExternalCleanup).not.toHaveBeenCalled()
+  })
+
+  it('refuses when the consent read fails', async () => {
+    readErrors.tenant_guardian_consents = { message: 'down' }
+    await expect(executeDeletion('pending_guardian_consent_registration', 'r1', { mode: 'hard' })).rejects.toThrow(/awaiting guardian consent/)
+    expect(deletedTables).toEqual([])
   })
 })

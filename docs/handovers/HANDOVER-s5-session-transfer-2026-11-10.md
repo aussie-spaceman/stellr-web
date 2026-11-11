@@ -15,7 +15,7 @@ The Claude Code session that built Stage 5 waves 3 to 6 is ending because the ow
 >
 > - **Production (`main`) is `3d90a6dd`** (#612, promoted 10 Nov 2026, `.claude/releases/promote-2026-11-10b.md`). It carries wave 6 Lane B: B14b, squashed to `dev` as #610 (`b4329149`).
 > - **`dev` is `66a06f8b`**, with docs, a dependency bump and the design-system sync since #612, and no S5 code. Promotion #620 (`dev` to `main`) is open and carries no S5 code.
-> - **Wave 6 Lanes A and C** are reviewed, with their PRs pending: Lane A's interrupted consent-safety and regression reviews were completed on 11 Nov, and a fix pass is owed. **Lane D** is to be rebuilt after A and C land.
+> - **Wave 6 Lanes A and C** are reviewed, with their PRs pending: Lane A's interrupted consent-safety and regression reviews were completed on 11 Nov, and the lane branch has since merged current `dev` and taken the fix pass from them (on the lane branch only, not on `dev`). **Lane D** is to be rebuilt after A and C land.
 > - Current status: `docs/TENANCY-S5.md`, [Wave 6 status](../TENANCY-S5.md#wave-6-status). Open items: `tracker/2026-11-11-s5-programme.md`.
 
 ## Wave 6, for the next session

@@ -227,6 +227,13 @@ export const AUDIT_ACTIONS = [
   'survey.distribution.change',
   'survey.distribution.read',
   'team_profile.invite.send',
+
+  // Events admin: configuration under an event, the first tenantDb area (C18)
+  'event_company.count.set',
+  'event_company.placement.change',
+  'event_offering.record.create',
+  'event_offering.record.delete',
+  'merch.batch.commit',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

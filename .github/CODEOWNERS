@@ -24,6 +24,7 @@
 /app/api/community/write-restrictions.test.ts @aussie-spaceman
 /test/ci-e2e-fail-closed.test.ts    @aussie-spaceman
 /test/ci-supabase-keys.test.ts      @aussie-spaceman
+/test/ci-tenant-db-required.test.ts @aussie-spaceman
 /test/critical-email-senders.test.ts @aussie-spaceman
 /test/cron-scope.test.ts            @aussie-spaceman
 /test/cron-audit.test.ts            @aussie-spaceman
@@ -98,6 +99,7 @@
 /test/platform-destined-c15.test.ts @aussie-spaceman
 /test/events-admin-records-c16.test.ts @aussie-spaceman
 /test/events-admin-paperwork-c17.test.ts @aussie-spaceman
+/test/events-admin-config-c18.test.ts @aussie-spaceman
 /test/training-tracking-stellr-scope.test.ts @aussie-spaceman
 /test/fixtures/authz-legacy.ts      @aussie-spaceman
 /scripts/authz-idioms.mjs           @aussie-spaceman
@@ -213,3 +215,4 @@
 
 # The per-area data-path switch (S5 C12)
 /lib/tenancy/area-switch.ts         @aussie-spaceman
+/lib/events/admin-config.ts         @aussie-spaceman

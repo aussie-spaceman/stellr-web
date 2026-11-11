@@ -821,14 +821,16 @@ jobs:
   # rows, and a write naming the other tenant refused. It never touches the dev
   # or production projects and holds no secret.
   #
-  # Report-only (continue-on-error): making it required, like DB_CI_ENFORCE for
-  # `db`, is the owner's decision. It connects directly, not through the
-  # pooler, which the local database does not start.
+  # Required (owner decision, 10 Nov 2026, with C18, the first live area on
+  # tenantDb): no continue-on-error on the job or any step, so a failure fails
+  # the run. The owner adds `tenant-db` to branch protection. A PR the scope
+  # step skips finishes green without running the tests, as `db` does. It
+  # connects directly, not through the pooler, which the local database does
+  # not start.
   tenant-db:
     name: tenant-db
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     env:
       SUPABASE_CLI_VERSION: 2.105.0
       DB_CONTAINER: supabase_db_stellr-web
@@ -841,7 +843,10 @@ jobs:
           filter: blob:none
 
       # A PR that touches none of what this job tests finishes green in seconds.
-      # Pushes to dev/main and manual runs always run it.
+      # Pushes to dev/main and manual runs always run it. A converted area's
+      # module (lib/tenancy/db-callers.ts names each) is listed here with it,
+      # and so is every route that imports that module, since a route chooses
+      # the tenantId it passes (test/ci-tenant-db-required.test.ts holds both).
       - id: scope
         env:
           EVENT: ${{ github.event_name }}
@@ -849,7 +854,7 @@ jobs:
           run=true
           if [ "$EVENT" = pull_request ]; then
             files=$(git diff --name-only --no-renames HEAD^1 HEAD || true)
-            if [ -n "$files" ] && ! echo "$files" | grep -qE '^supabase/|^lib/tenancy/|^test/integration/|^scripts/ci-db-build\.sh$|^vitest\.integration\.config\.mts$|^package(-lock)?\.json$|^\.github/workflows/ci\.yml$'; then
+            if [ -n "$files" ] && ! echo "$files" | grep -qE '^supabase/|^lib/tenancy/|^lib/events/admin-config\.ts$|^app/api/admin/events/\[slug\]/(companies|offerings|merch/commit)/route\.ts$|^test/integration/|^scripts/ci-db-build\.sh$|^vitest\.integration\.config\.mts$|^package(-lock)?\.json$|^\.github/workflows/ci\.yml$'; then
               run=false
               echo "No change to the database, lib/tenancy or this job: tenant-db skipped." >> "$GITHUB_STEP_SUMMARY"
             fi

@@ -60,19 +60,78 @@ const pg = vi.hoisted(() => {
 })
 vi.mock('postgres', () => ({ default: pg.factory }))
 
+// The real X509Certificate, counted, so a test can see how often the CA is parsed.
+const x509 = vi.hoisted(() => ({ parsed: 0 }))
+vi.mock('node:crypto', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:crypto')>()
+  class CountedX509Certificate extends real.X509Certificate {
+    constructor(...args: ConstructorParameters<typeof real.X509Certificate>) {
+      super(...args)
+      x509.parsed++
+    }
+  }
+  return { ...real, default: real, X509Certificate: CountedX509Certificate }
+})
+
 import {
   createPostgresTenantDriver,
   endTenantDrivers,
   parsePostgresUrl,
+  parseTenantCaCert,
   parseTenantDatabaseUrl,
   tenantDriverFromEnv,
+  tenantTlsOptions,
   TENANT_POOL_DEFAULTS,
 } from './driver'
 import { setTenantDbDriver, tenantDb, TenantContextError, TENANT_DB_FLAG } from './db'
 
 const CANARY = 'c0ffee00-0000-4000-8000-0000000000b2'
 const POOLER = 'postgres://tenant_app_login.abcdefghijklmnop:pw-not-real@aws-0-us-east-1.pooler.supabase.com:6543/postgres'
+const POOLER_VF = `${POOLER}?sslmode=verify-full`
 const LOCAL = 'postgres://tenant_app_login:pw-not-real@127.0.0.1:54322/postgres'
+
+// A throwaway self-signed root made for these tests (CA:TRUE; its key was
+// discarded). Public test material, like any root certificate.
+const TEST_CA = `-----BEGIN CERTIFICATE-----
+MIIBgjCCASigAwIBAgIUALfgo5LYX5L0C3UWJPyP7b0uS08wCgYIKoZIzj0EAwIw
+HjEcMBoGA1UEAwwTc3RlbGxyLXRlc3Qtcm9vdC1jYTAgFw0yNjExMTAxNTM1NTNa
+GA8yMTI2MTAxNzE1MzU1M1owHjEcMBoGA1UEAwwTc3RlbGxyLXRlc3Qtcm9vdC1j
+YTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABA0xyYAYw+X/pdt8y4KvJM30LISZ
+bj1pDUsSG+WBai7YkxDcO34BUY248lJFBy770jim37+3IdyaClHH/2wI8mWjQjBA
+MB0GA1UdDgQWBBTNi5qtSkN1FNswBXKqpxSSXht35zAPBgNVHRMBAf8EBTADAQH/
+MA4GA1UdDwEB/wQEAwIBBjAKBggqhkjOPQQDAgNIADBFAiBJ1s59a959QUA5MjTt
+Nc9/XyTikoqN6z/yEPa9ipIQZwIhALMguIhzXmmwVL4G1MGd3fv2kqAVQw9tDRxr
+qwTU41My
+-----END CERTIFICATE-----
+`
+// A throwaway self-signed server certificate (CA:FALSE), which must be refused as the CA.
+const TEST_LEAF = `-----BEGIN CERTIFICATE-----
+MIIBZzCCAQ2gAwIBAgIUKGvHsUKj6kpEDOJiZGcLcfTaT4kwCgYIKoZIzj0EAwIw
+GjEYMBYGA1UEAwwPZGIuZXhhbXBsZS50ZXN0MCAXDTI2MTExMDE1MzU1M1oYDzIx
+MjYxMDE3MTUzNTUzWjAaMRgwFgYDVQQDDA9kYi5leGFtcGxlLnRlc3QwWTATBgcq
+hkjOPQIBBggqhkjOPQMBBwNCAARKX7Dmraj08Q6k1trNreoe0urcfuFoniBssGAT
+ToxHGbOdHH7bvpF2vYAJmtl+OkhFphaQ+l2VEjjf0V3vMtMloy8wLTAdBgNVHQ4E
+FgQUNeOXhyTlrN/tndIakzJ+bC99s5gwDAYDVR0TAQH/BAIwADAKBggqhkjOPQQD
+AgNIADBFAiA9G7nIKVaNQ26KgPpp2HooQ/cGYgWUUxV0w/pOTOwxfwIhAMbnP1YJ
+fwR7M47r0Gw/MsJUCk+Wxwz1Ewka8adXvndC
+-----END CERTIFICATE-----
+`
+const VERIFIED_SSL = {
+  ca: TEST_CA,
+  rejectUnauthorized: true,
+  servername: 'aws-0-us-east-1.pooler.supabase.com',
+  minVersion: 'TLSv1.2',
+}
+
+/** The error a thunk throws, so its message can be checked for leaks. */
+function thrown(fn: () => unknown): Error {
+  try {
+    fn()
+  } catch (e) {
+    return e as Error
+  }
+  throw new Error('expected a throw')
+}
 
 beforeEach(() => {
   pg.state.pools.length = 0
@@ -142,9 +201,165 @@ describe('parseTenantDatabaseUrl: fails closed, never echoes the URL', () => {
   })
 
   it('accepts the login, plain or as the pooler spells it', () => {
-    expect(parseTenantDatabaseUrl(POOLER)).toMatchObject({ local: false, verifyFull: false })
-    expect(parseTenantDatabaseUrl(LOCAL)).toMatchObject({ local: true })
-    expect(parseTenantDatabaseUrl(`${POOLER}?sslmode=verify-full`)).toMatchObject({ verifyFull: true })
+    expect(parseTenantDatabaseUrl(POOLER_VF)).toMatchObject({ local: false, sslmode: 'verify-full', verifyFull: true })
+    expect(parseTenantDatabaseUrl(LOCAL)).toMatchObject({ local: true, sslmode: null })
+  })
+})
+
+describe('TLS for a host that is not this machine: sslmode=verify-full and the root CA, or refused (owner decision, 10 Nov 2026)', () => {
+  it.each([
+    ['no sslmode', POOLER],
+    ['sslmode=require', `${POOLER}?sslmode=require`],
+    ['sslmode=prefer', `${POOLER}?sslmode=prefer`],
+    ['sslmode=allow', `${POOLER}?sslmode=allow`],
+    ['sslmode=disable', `${POOLER}?sslmode=disable`],
+    ['sslmode=verify-ca', `${POOLER}?sslmode=verify-ca`],
+    ['sslmode=VERIFY-FULL (libpq is case-sensitive)', `${POOLER}?sslmode=VERIFY-FULL`],
+    ['an empty sslmode', `${POOLER}?sslmode=`],
+    ['a non-local IPv4 host with sslmode=require', 'postgres://tenant_app_login:pw-not-real@10.0.0.5:5432/postgres?sslmode=require'],
+  ])('refuses %s, naming the rule and not the URL', (_label, raw) => {
+    const err = thrown(() => parseTenantDatabaseUrl(raw))
+    expect(err).toBeInstanceOf(TenantContextError)
+    expect(err.message).toMatch(/must end in \?sslmode=verify-full/)
+    expect(err.message).not.toMatch(/pw-not-real|pooler|supabase|abcdefghijklmnop/)
+  })
+
+  it('refuses sslmode given twice, whichever comes first', () => {
+    expect(() => parseTenantDatabaseUrl(`${POOLER}?sslmode=require&sslmode=verify-full`)).toThrow(/sslmode once/)
+    expect(() => parseTenantDatabaseUrl(`${POOLER}?sslmode=verify-full&sslmode=require`)).toThrow(/sslmode once/)
+  })
+
+  it('refuses each of them before creating a pool, with or without a CA', () => {
+    for (const raw of [POOLER, `${POOLER}?sslmode=require`, `${POOLER}?sslmode=prefer`, `${POOLER}?sslmode=disable`]) {
+      expect(() => createPostgresTenantDriver(raw, { caCert: TEST_CA })).toThrow(TenantContextError)
+      expect(() => tenantDriverFromEnv({ TENANT_DATABASE_URL: raw, TENANT_DATABASE_CA_CERT: TEST_CA })).toThrow(TenantContextError)
+    }
+    expect(pg.factory).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined, /TENANT_DATABASE_CA_CERT is not set/],
+    ['blank', '  \n ', /TENANT_DATABASE_CA_CERT is not set/],
+    ['not a PEM', 'not a certificate', /one or more PEM CA certificates/],
+    ['a PEM with junk around it', `junk\n${TEST_CA}`, /one or more PEM CA certificates/],
+    ['a damaged PEM', TEST_CA.replace('MIIBgjCC', 'MIIBgjXX'), /one or more PEM CA certificates/],
+    ['a server certificate instead of the root', TEST_LEAF, /the root CA, not a server certificate/],
+    ['a bundle with a server certificate in it', TEST_CA + TEST_LEAF, /the root CA, not a server certificate/],
+  ])('with sslmode=verify-full, refuses a CA that is %s, before creating a pool and without echoing it', (_label, ca, why) => {
+    const err = thrown(() => createPostgresTenantDriver(POOLER_VF, { caCert: ca as string | undefined }))
+    expect(err).toBeInstanceOf(TenantContextError)
+    expect(err.message).toMatch(why)
+    expect(err.message).not.toMatch(/BEGIN CERTIFICATE|MIIB|pw-not-real|pooler/)
+    const fromEnv = thrown(() => tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: ca as string | undefined }))
+    expect(fromEnv.message).toMatch(why)
+    expect(pg.factory).not.toHaveBeenCalled()
+  })
+
+  it('does not fall back to process.env when tenantDriverFromEnv is given an environment without a CA', () => {
+    const before = process.env.TENANT_DATABASE_CA_CERT
+    process.env.TENANT_DATABASE_CA_CERT = TEST_CA
+    try {
+      expect(() => tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF })).toThrow(/TENANT_DATABASE_CA_CERT is not set/)
+      expect(pg.factory).not.toHaveBeenCalled()
+    } finally {
+      if (before === undefined) delete process.env.TENANT_DATABASE_CA_CERT
+      else process.env.TENANT_DATABASE_CA_CERT = before
+    }
+  })
+
+  it('with sslmode=verify-full and the CA, checks the chain against that CA and the name against the host', () => {
+    createPostgresTenantDriver(POOLER_VF, { caCert: TEST_CA })
+    expect(pg.state.pools[0].options.ssl).toEqual(VERIFIED_SSL)
+  })
+
+  it('reads the CA from process.env when the caller passes none', () => {
+    const before = process.env.TENANT_DATABASE_CA_CERT
+    process.env.TENANT_DATABASE_CA_CERT = TEST_CA
+    try {
+      createPostgresTenantDriver(POOLER_VF)
+      expect(pg.state.pools[0].options.ssl).toEqual(VERIFIED_SSL)
+    } finally {
+      if (before === undefined) delete process.env.TENANT_DATABASE_CA_CERT
+      else process.env.TENANT_DATABASE_CA_CERT = before
+    }
+  })
+
+  it('prefers the CA the caller passes over process.env', () => {
+    const before = process.env.TENANT_DATABASE_CA_CERT
+    // A different, valid value (a two-certificate bundle), so a swapped precedence shows.
+    process.env.TENANT_DATABASE_CA_CERT = `${TEST_CA}${TEST_CA}`
+    try {
+      createPostgresTenantDriver(POOLER_VF, { caCert: TEST_CA })
+      expect(pg.state.pools[0].options.ssl).toEqual(VERIFIED_SSL)
+    } finally {
+      if (before === undefined) delete process.env.TENANT_DATABASE_CA_CERT
+      else process.env.TENANT_DATABASE_CA_CERT = before
+    }
+  })
+
+  it('parses a given CA value once, however many transactions ask for the driver, and still refuses a bad value every time', () => {
+    // A value no other test uses, so nothing earlier has parsed it.
+    const value = `${TEST_CA}\n\n\n`
+    const env = { TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: value }
+    x509.parsed = 0
+    const first = tenantDriverFromEnv(env)
+    expect(x509.parsed).toBe(1)
+    for (let i = 0; i < 5; i++) expect(tenantDriverFromEnv(env)).toBe(first)
+    expect(x509.parsed).toBe(1)
+    expect(pg.factory).toHaveBeenCalledTimes(1)
+    // A refused value is not remembered: it throws on each call, and the good value still works after it.
+    for (let i = 0; i < 2; i++) {
+      expect(() => tenantDriverFromEnv({ ...env, TENANT_DATABASE_CA_CERT: TEST_LEAF })).toThrow(/not a server certificate/)
+    }
+    expect(tenantDriverFromEnv(env)).toBe(first)
+  })
+
+  it('reads a CA stored with literal \\n escapes, and a bundle of CA certificates', () => {
+    const escaped = TEST_CA.trim().replace(/\n/g, '\\n')
+    expect(parseTenantCaCert(escaped)).toBe(TEST_CA)
+    expect(parseTenantCaCert(`${TEST_CA}\n${TEST_CA}`)).toBe(`${TEST_CA.trim()}\n${TEST_CA}`)
+    tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: escaped })
+    expect(pg.state.pools[0].options.ssl).toEqual(VERIFIED_SSL)
+  })
+
+  it('sends no server name for an IPv4 host (SNI takes names only); the address goes as host, for the certificate check', () => {
+    const parsed = parseTenantDatabaseUrl('postgres://tenant_app_login:pw-not-real@10.0.0.5:5432/postgres?sslmode=verify-full')
+    expect(tenantTlsOptions(parsed, TEST_CA)).toEqual({ ca: TEST_CA, rejectUnauthorized: true, host: '10.0.0.5', minVersion: 'TLSv1.2' })
+  })
+
+  it('keeps one pool per URL and CA', () => {
+    const a = tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: TEST_CA })
+    const b = tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: `${TEST_CA}\n` })
+    expect(a).toBe(b)
+    const c = tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: `${TEST_CA}${TEST_CA}` })
+    expect(c).not.toBe(a)
+    expect(pg.factory).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['127.0.0.1, no sslmode', LOCAL],
+    ['localhost, no sslmode', 'postgres://tenant_app_login:pw-not-real@localhost:54322/postgres'],
+    ['127.0.0.1, sslmode=disable', `${LOCAL}?sslmode=disable`],
+    ['127.0.0.1, sslmode=require', `${LOCAL}?sslmode=require`],
+  ])('leaves a local host as it was: %s, no CA, no TLS', (_label, raw) => {
+    expect(() => parseTenantDatabaseUrl(raw)).not.toThrow()
+    tenantDriverFromEnv({ TENANT_DATABASE_URL: raw })
+    expect(pg.state.pools.at(-1)?.options.ssl).toBe(false)
+  })
+
+  it('ignores an unreadable CA for a local host, which uses no TLS', () => {
+    createPostgresTenantDriver(LOCAL, { caCert: 'not a certificate' })
+    expect(pg.state.pools[0].options.ssl).toBe(false)
+  })
+
+  it('tenantDb over a refused remote URL refuses without creating a pool', async () => {
+    for (const env of [
+      { [TENANT_DB_FLAG]: 'true', TENANT_DATABASE_URL: `${POOLER}?sslmode=require`, TENANT_DATABASE_CA_CERT: TEST_CA },
+      { [TENANT_DB_FLAG]: 'true', TENANT_DATABASE_URL: POOLER_VF },
+    ]) {
+      await expect(tenantDb(CANARY, { env }).sql`SELECT 1`).rejects.toThrow(TenantContextError)
+    }
+    expect(pg.factory).not.toHaveBeenCalled()
   })
 })
 
@@ -188,7 +403,7 @@ describe('parsePostgresUrl: the same checks for another connection (the two-tena
 
 describe('createPostgresTenantDriver', () => {
   it('opens nothing until the first transaction is asked for, and then uses transaction-mode settings', () => {
-    createPostgresTenantDriver(POOLER)
+    createPostgresTenantDriver(POOLER_VF, { caCert: TEST_CA })
     expect(pg.factory).toHaveBeenCalledTimes(1)
     const options = pg.state.pools[0].options
     expect(options).toMatchObject({
@@ -197,7 +412,7 @@ describe('createPostgresTenantDriver', () => {
       idle_timeout: TENANT_POOL_DEFAULTS.idleTimeoutSeconds,
       connect_timeout: TENANT_POOL_DEFAULTS.connectTimeoutSeconds,
       max_lifetime: TENANT_POOL_DEFAULTS.maxLifetimeSeconds,
-      ssl: 'require',
+      ssl: VERIFIED_SSL,
       debug: false,
     })
     expect(typeof options.onnotice).toBe('function')
@@ -205,7 +420,7 @@ describe('createPostgresTenantDriver', () => {
   })
 
   it('hands postgres.js the checked parts, never the raw connection string', () => {
-    createPostgresTenantDriver(POOLER)
+    createPostgresTenantDriver(POOLER_VF, { caCert: TEST_CA })
     createPostgresTenantDriver('postgres://tenant_app_login:pw%40not%2Creal@LOCALHOST/tenant%20db')
     const [pooler, local] = pg.state.pools
     expect(typeof pooler.url).not.toBe('string')
@@ -216,7 +431,7 @@ describe('createPostgresTenantDriver', () => {
       user: 'tenant_app_login.abcdefghijklmnop',
       pass: 'pw-not-real',
       database: 'postgres',
-      ssl: 'require',
+      ssl: VERIFIED_SSL,
     })
     expect(local.options).toMatchObject({ host: 'localhost', port: 5432, pass: 'pw@not,real', database: 'tenant db', ssl: false })
   })
@@ -255,10 +470,10 @@ describe('createPostgresTenantDriver', () => {
     ])
   })
 
-  it('requires TLS off this machine, checks the chain on sslmode=verify-full, and skips it on localhost', () => {
-    createPostgresTenantDriver(`${POOLER}?sslmode=verify-full`)
+  it('checks the chain against the CA off this machine, and uses no TLS on localhost', () => {
+    createPostgresTenantDriver(POOLER_VF, { caCert: TEST_CA })
     createPostgresTenantDriver(LOCAL, { max: 1 })
-    expect(pg.state.pools.map((p) => p.options.ssl)).toEqual(['verify-full', false])
+    expect(pg.state.pools.map((p) => p.options.ssl)).toEqual([VERIFIED_SSL, false])
     expect(pg.state.pools[1].options.max).toBe(1)
   })
 

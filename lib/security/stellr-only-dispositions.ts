@@ -47,14 +47,13 @@ interface DispositionGroup {
 const GROUPS: readonly DispositionGroup[] = [
   {
     disposition: 'tenant_destined',
-    convertedBy: 'C18 to C19',
-    reason: 'event operations by slug: a tenant runs its own events',
+    convertedBy: 'C19',
+    reason: 'event operations by slug: a tenant runs its own events. C18 moved companies, offerings and merch/commit',
     routes: [
       'events/[slug]/awards', 'events/[slug]/awards/issue',
       'events/[slug]/badge-templates', 'events/[slug]/badge-templates/preview', 'events/[slug]/badges',
       'events/[slug]/certificate-templates', 'events/[slug]/certificate-templates/preview', 'events/[slug]/certificates',
-      'events/[slug]/check-in', 'events/[slug]/companies', 'events/[slug]/credentials',
-      'events/[slug]/merch/commit', 'events/[slug]/offerings',
+      'events/[slug]/check-in', 'events/[slug]/credentials',
     ],
   },
   {

@@ -56,7 +56,9 @@
 // driver lands, and is added to lib/tenancy/db-callers.ts then — this module
 // does not import db.ts.
 
-import type { DerivationMode } from './constants'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadEventTenantId } from '@/lib/authz/principal'
+import { STELLR_TENANT_ID, type DerivationMode } from './constants'
 import { loadScopedMode, reportUnrecognisedMode, type LoadScopedMode } from './load-scoped-mode'
 import { TABLE_REGISTRY, type TableEntry } from './registry'
 import { assertMadeScope, isStellrScope, type ScopeContext } from './scope-context'
@@ -490,6 +492,32 @@ function modeFor(scope: ScopeContext, requested: LoadScopedMode | undefined): Lo
 export function refuseOutsideStellr(scope: ScopeContext): Response | null {
   if (isStellrScope(scope)) return null
   return Response.json({ error: "This isn't available for your organisation yet." }, { status: 503 })
+}
+
+/**
+ * refuseOutsideStellr checks who is asking; this checks whose event it is. For a route under
+ * events/[slug] that acts only on Stellr's accounts and records (its signing accounts, its
+ * sender, its store, shared members): another tenant's event is refused for everyone, a Stellr admin
+ * included, in every LOADSCOPED_MODE, because off and shadow do not narrow the reads that
+ * follow. The owner comes from the events mirror by slug, an unmirrored slug counting as
+ * Stellr's (loadEventTenantId). A tenant's event gets the answer requireEventRoute gives an
+ * event outside the caller's reach; a failed owner read is a retryable 503, never Stellr's.
+ * Null for Stellr's own events, which go on as ever. Ask it before any read about a person,
+ * any email and any envelope.
+ */
+export async function refuseUnlessStellrEvent(db: SupabaseClient, slug: string, label: string): Promise<Response | null> {
+  let owner: string
+  try {
+    owner = await loadEventTenantId(db, slug)
+  } catch (err) {
+    console.error(`[${label}] event owner lookup failed:`, err instanceof Error ? err.message : err)
+    return Response.json(
+      { error: 'This is temporarily unavailable. Please try again shortly.' },
+      { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
+    )
+  }
+  if (owner === STELLR_TENANT_ID) return null
+  return Response.json({ error: 'Not found' }, { status: 404 })
 }
 
 export type LoadedRecord<T> = { ok: true; row: T } | { ok: false; response: Response }

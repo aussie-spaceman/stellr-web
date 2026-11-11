@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // deep review AUTH-3: the companies `move` action writes participants.company_id
-// by participant id. requireEventAccess(slug) only proves the caller may manage
+// by participant id. requireEventRoute(slug) only proves the caller may manage
 // `slug`, so the route must also confirm the participant belongs to `slug` before
 // writing — otherwise an event manager assigned to event A could retarget event
 // B's placement. These tests pin that gate with the data layer mocked: every
 // participants update is recorded, none is performed.
 
-const { requireEventAccess, writes, state } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(
-    async (_slug: string): Promise<{ ok: boolean; status: number; userId?: string }> => ({ ok: true, status: 200, userId: 'user_admin' }),
-  ),
+const { requireEventRoute, writes, state } = vi.hoisted(() => ({
+  requireEventRoute: vi.fn(async (_slug: string, _opts?: unknown): Promise<unknown> => null),
   writes: [] as { op: string; table: string; payload?: unknown; filters: [string, unknown][] }[],
   state: {
     // participantId -> the event_slug of its registration
@@ -19,10 +17,12 @@ const { requireEventAccess, writes, state } = vi.hoisted(() => ({
     companyEvent: {} as Record<string, string>,
     // participantIds with a submitted team profile
     submitted: [] as string[],
+    // the companies list read fails, with a SQLSTATE and a message that must not be logged
+    failList: false,
   },
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess }))
+vi.mock('@/lib/authz', () => ({ requireEventRoute }))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'admin', actorLabel: 'Staff Admin' }) }))
 vi.mock('@/lib/survey/events', () => ({ loadSurveyEvent: async () => null }))
 vi.mock('@/lib/team-profile/assign', () => ({
@@ -59,8 +59,12 @@ vi.mock('@/lib/supabase', () => ({
           }
           return { data: null, error: null }
         },
-        then: (resolve: (v: { error: null }) => void) => {
+        then: (resolve: (v: unknown) => void) => {
           if (rec.op === 'update') writes.push(rec)
+          if (rec.op === 'select' && table === 'event_companies' && state.failList) {
+            resolve({ data: null, error: { code: '57014', message: 'canceling statement for event-a' } })
+            return
+          }
           resolve({ error: null })
         },
       }
@@ -69,7 +73,9 @@ vi.mock('@/lib/supabase', () => ({
   }),
 }))
 
-const { POST } = await import('./route')
+const { GET, POST } = await import('./route')
+const { eventRouteFor, eventRouteRefused } = await import('@/test/fixtures/event-route')
+const admin = (slug: string) => ({ ...eventRouteFor(slug), userId: 'user_admin' })
 
 function move(slug: string, body: unknown) {
   return POST(
@@ -84,11 +90,31 @@ function move(slug: string, body: unknown) {
 
 beforeEach(() => {
   writes.length = 0
-  requireEventAccess.mockClear()
-  requireEventAccess.mockResolvedValue({ ok: true, status: 200, userId: 'user_admin' })
+  requireEventRoute.mockReset()
+  requireEventRoute.mockImplementation(async (slug: string) => admin(slug))
   state.participantEvent = { pA: 'event-a', pB: 'event-b' }
   state.companyEvent = { cA: 'event-a', cB: 'event-b' }
   state.submitted = []
+  state.failList = false
+})
+
+describe('GET /api/admin/events/[slug]/companies — a failed read', () => {
+  it("answers today's 500 and logs the failure's code only, never its message", async () => {
+    state.failList = true
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const res = await GET(new Request('https://app.stellreducation.org/api/admin/events/event-a/companies'), {
+        params: Promise.resolve({ slug: 'event-a' }),
+      })
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({ error: 'Database error' })
+      // The service path wraps the read's error, so its class name is the code.
+      expect(logged).toHaveBeenCalledWith('[companies] list failed:', 'EventConfigReadError')
+      expect(JSON.stringify(logged.mock.calls)).not.toContain('canceling statement')
+    } finally {
+      logged.mockRestore()
+    }
+  })
 })
 
 describe('POST /api/admin/events/[slug]/companies — move', () => {
@@ -124,7 +150,7 @@ describe('POST /api/admin/events/[slug]/companies — move', () => {
   })
 
   it('refuses an event manager not assigned to the event (no write)', async () => {
-    requireEventAccess.mockResolvedValueOnce({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValueOnce(eventRouteRefused(403))
     const res = await move('event-a', { action: 'move', participantId: 'pA', companyId: 'cA' })
     expect(res.status).toBe(403)
     expect(writes).toHaveLength(0)
@@ -174,7 +200,7 @@ describe('POST /api/admin/events/[slug]/companies — override', () => {
   })
 
   it('refuses an event manager not assigned to the event (no write)', async () => {
-    requireEventAccess.mockResolvedValueOnce({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValueOnce(eventRouteRefused(403))
     const res = await move('event-a', { action: 'override_all' })
     expect(res.status).toBe(403)
     expect(writes).toHaveLength(0)

@@ -69,7 +69,13 @@ describe('the tenant database driver stays server-side and off by default', () =
       .filter((f) => f.src.includes('postgres') && runtimeImports(f.path, f.src).some((s) => PG.test(s)))
       .map((f) => f.path)
     // The two-tenant kit (C12) is CI-only like the integration test: its owner connection for fixtures.
-    expect(importers.sort()).toEqual([DRIVER, 'test/integration/tenant-db.int.test.ts', 'test/integration/two-tenant/kit.ts'])
+    // driver-tls.test.ts runs real postgres.js against a local TLS stand-in to exercise the certificate check.
+    expect(importers.sort()).toEqual([
+      'lib/tenancy/driver-tls.test.ts',
+      DRIVER,
+      'test/integration/tenant-db.int.test.ts',
+      'test/integration/two-tenant/kit.ts',
+    ])
   })
 
   it('the driver is loaded only by lib/tenancy/db.ts, and only with a dynamic import', { timeout: 30_000 }, () => {
@@ -79,6 +85,7 @@ describe('the tenant database driver stays server-side and off by default', () =
     // The kit (C12) imports it only to close the pools after a run.
     expect(importers.sort()).toEqual([
       DB,
+      'lib/tenancy/driver-tls.test.ts',
       'lib/tenancy/driver.test.ts',
       'test/integration/tenant-db.int.test.ts',
       'test/integration/two-tenant/kit.ts',
@@ -102,5 +109,18 @@ describe('the tenant database driver stays server-side and off by default', () =
     expect(readers).toEqual([DRIVER])
     const everywhere = [...files.filter((f) => f.path !== 'lib/tenancy/driver-wiring.test.ts').map((f) => f.src),readFileSync('.env.local.example', 'utf8'), readFileSync('.github/workflows/ci.yml', 'utf8')]
     expect(everywhere.filter((s) => /NEXT_PUBLIC_TENANT_DATABASE/.test(s))).toEqual([])
+  })
+
+  // The root CA for verify-full (owner decision, 10 Nov 2026). Cheap substring
+  // first; only files naming it have their comments stripped.
+  it('TENANT_DATABASE_CA_CERT is read by the driver alone, never as a public variable, and never logged there', () => {
+    const readers = files
+      .filter((f) => !/\.(test|spec)\.|^test\//.test(f.path) && f.src.includes('TENANT_DATABASE_CA_CERT') && /TENANT_DATABASE_CA_CERT/.test(withoutComments(f.src)))
+      .map((f) => f.path)
+    expect(readers).toEqual([DRIVER])
+    const driver = withoutComments(readFileSync(DRIVER, 'utf8'))
+    expect(driver).not.toMatch(/\bconsole\.|\blogger\b|\bcaptureException\b/)
+    const everywhere = [...files.filter((f) => f.path !== 'lib/tenancy/driver-wiring.test.ts').map((f) => f.src), readFileSync('.env.local.example', 'utf8'), readFileSync('.github/workflows/ci.yml', 'utf8')]
+    expect(everywhere.filter((s) => s.includes('NEXT_PUBLIC_TENANT_DATABASE_CA'))).toEqual([])
   })
 })

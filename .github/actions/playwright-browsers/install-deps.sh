@@ -90,9 +90,10 @@ save_lists() {
 # A cache is written by this repo's own workflow runs, but treat what it restores
 # as untrusted: each InRelease must carry a good signature from the Ubuntu archive
 # key, and each Packages file must match the size and SHA256 that signed text
-# gives it. That is what `apt-get update` checks. A list past its Valid-Until or
-# over two weeks old is refused too (the cache key turns over weekly), which apt
-# would not refuse, so a stale cache cannot hold packages back. apt then checks every cached deb against the hashes in these
+# gives it. That is what `apt-get update` checks. A list past its Valid-Until,
+# or both older than the image's own copy and over two weeks old (the cache key
+# turns over weekly), is refused too, which apt would not do, so a stale cache
+# cannot hold packages back. apt then checks every cached deb against the hashes in these
 # lists before installing it, as it does for a download.
 load_saved_lists() {
   if [ ! -d "$saved_lists" ]; then
@@ -104,7 +105,7 @@ load_saved_lists() {
     return 1
   fi
 
-  local work staged=0 release name prefix signed date until list path sum size packages
+  local work staged=0 release name prefix signed date image_date until list path sum size packages
   work=$(mktemp -d)
   mkdir -p "$work/ok"
   for release in "$saved_lists"/*_InRelease; do
@@ -118,8 +119,11 @@ load_saved_lists() {
       continue
     fi
     date=$(date -u -d "$(sed -n 's/^Date: //p' "$signed" | head -n 1)" +%s 2> /dev/null) || continue
-    if [ "$date" -lt "$(($(date -u +%s) - max_age_days * 86400))" ]; then
-      echo "Saved $name is over $max_age_days days old; not using it."
+    # The release pocket is frozen at release, so a list the image itself has
+    # (or a newer one) is fine at any age.
+    image_date=$(date -u -d "$(sed -n 's/^Date: //p' "$apt_lists/$name" 2> /dev/null | head -n 1)" +%s 2> /dev/null || echo 0)
+    if [ "$date" -lt "$image_date" ] && [ "$date" -lt "$(($(date -u +%s) - max_age_days * 86400))" ]; then
+      echo "Saved $name is older than the image's and over $max_age_days days old; not using it."
       continue
     fi
     until=$(sed -n 's/^Valid-Until: //p' "$signed" | head -n 1)

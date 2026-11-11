@@ -116,6 +116,8 @@ interface Attempt {
 
 async function attempt(ssl: TenantTlsOptions | 'require', server: Made): Promise<Attempt> {
   let secured = false
+  let markSecured!: () => void
+  const securedSeen = new Promise<void>((resolve) => (markSecured = resolve))
   const sockets = new Set<Socket>()
   const listener = createServer((socket) => {
     sockets.add(socket)
@@ -127,6 +129,7 @@ async function attempt(ssl: TenantTlsOptions | 'require', server: Made): Promise
       tls.on('error', () => {})
       tls.on('secure', () => {
         secured = true
+        markSecured()
         tls.destroy()
       })
     })
@@ -145,13 +148,20 @@ async function attempt(ssl: TenantTlsOptions | 'require', server: Made): Promise
     onnotice: () => {},
   })
   let code: string | undefined
-  try {
-    await sql`select 1`
-  } catch (e) {
-    code = String((e as { code?: unknown }).code ?? e)
-  }
-  await sql.end({ timeout: 0 })
+  // The attempt is over when either side has its answer: the server saw a
+  // completed handshake, or postgres.js reported an error (a refused
+  // certificate). After a completed handshake the stand-in hangs up, and how
+  // quickly postgres.js notices a hang-up mid-startup differs by platform (on
+  // Linux CI it outlasted the test timeout), so this does not wait for it.
+  const query = sql`select 1`.then(
+    () => undefined,
+    (e: unknown) => {
+      code = String((e as { code?: unknown }).code ?? e)
+    },
+  )
+  await Promise.race([query, securedSeen])
   for (const s of sockets) s.destroy()
+  await Promise.race([sql.end({ timeout: 0 }).catch(() => {}), new Promise((resolve) => setTimeout(resolve, 1000))])
   await new Promise((resolve) => listener.close(resolve))
   return { secured, code }
 }

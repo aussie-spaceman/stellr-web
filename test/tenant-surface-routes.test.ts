@@ -43,12 +43,13 @@ const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
   platform_destined: 9,
   // +1 tenant_staff, -1 stellr_only: admin registrations/[id]/payment-method (C16 follow-up)
-  tenant_staff: 35,
+  // +3 tenant_staff, -3 stellr_only: admin events/[slug]/{companies,offerings,merch/commit} (C18)
+  tenant_staff: 38,
   participant: 131,
   public: 132,
   webhook: 12,
   cron: 24,
-  stellr_only: 165,
+  stellr_only: 162,
 }
 // +3 on 9 Nov 2026: members/compliance/external-check (participant) and the
 // admin members/[id]/event-manager and members/[id]/external-check (stellr_only).

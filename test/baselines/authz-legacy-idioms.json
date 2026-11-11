@@ -20,8 +20,8 @@
     "roleTableRead"
   ],
   "totals": {
-    "files": 138,
-    "sites": 198,
+    "files": 135,
+    "sites": 190,
     "byIdiom": {
       "STAFF_CLERK_ROLES": 1,
       "adminName": 5,
@@ -35,7 +35,7 @@
       "isStaffRole": 1,
       "pageRequireAdmin": 1,
       "requireAdminPage": 17,
-      "requireEventAccess": 36,
+      "requireEventAccess": 28,
       "requireScholarshipAdmin": 7,
       "requireSurveyAdmin": 2,
       "roleTableRead": 2
@@ -286,16 +286,7 @@
     "app/api/admin/events/[slug]/check-in/route.ts": {
       "requireEventAccess": 2
     },
-    "app/api/admin/events/[slug]/companies/route.ts": {
-      "requireEventAccess": 3
-    },
     "app/api/admin/events/[slug]/credentials/route.ts": {
-      "requireEventAccess": 3
-    },
-    "app/api/admin/events/[slug]/merch/commit/route.ts": {
-      "requireEventAccess": 2
-    },
-    "app/api/admin/events/[slug]/offerings/route.ts": {
       "requireEventAccess": 3
     },
     "app/api/admin/events/slug-guard/route.ts": {

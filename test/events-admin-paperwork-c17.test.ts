@@ -1303,3 +1303,101 @@ describe('audit, behind its flag', () => {
     expect(state.audits).toEqual([])
   })
 })
+
+// The routes that send through Stellr's own sender and signing accounts check whose event
+// it is, not only who is asking. With LOADSCOPED_MODE off or shadow nothing narrows the reads
+// that follow, so a Stellr admin on another tenant's event must stop at the event, before any
+// roster read, email, record write or envelope.
+describe("Stellr-only routes on another tenant's event", () => {
+  const ROSTER = {
+    groups: [
+      {
+        registrationId: ID,
+        type: 'individual',
+        payLinkSendable: false,
+        participants: [{ first_name: 'A', email: 'a@example.invalid', paid: false, docusign: 'outstanding', payment_pill: 'link', minor: true, emergency_contact_email: 'g@example.invalid' }],
+      },
+    ],
+  }
+  const PARTICIPANT = {
+    id: ID,
+    member_id: 'm',
+    emergency_contact_email: 'old@example.invalid',
+    event_role: 'student',
+    date_of_birth: '2012-01-01',
+    registrations: { event_slug: SLUG, school_address_state: 'NV' },
+  }
+  const ROUTES: [string, () => Promise<Response>][] = [
+    ['send reminders', async () => (await import('@/app/api/admin/events/[slug]/remind/route')).POST(req({ payment: true, docusign: true }), slugCtx())],
+    ['reissue an agreement', async () => (await import('@/app/api/admin/events/[slug]/docusign-reissue/route')).POST(req({ participantId: ID, confirmNewEnvelope: true }), slugCtx())],
+    [
+      'correct a guardian',
+      async () =>
+        (await import('@/app/api/admin/events/[slug]/participants/[pid]/guardian/route')).POST(req({ email: 'new@example.invalid' }), {
+          params: Promise.resolve({ slug: SLUG, pid: ID }),
+        }),
+    ],
+  ]
+  let logged: { mockRestore(): void } | null = null
+  beforeEach(async () => {
+    state.sanityEvent = { title: 'Nevada', date: '2026-12-01' }
+    state.getEventRoster.mockResolvedValue(ROSTER)
+    state.reissue.mockResolvedValue({ kind: 'reissued', outcome: 'issued' })
+    const errors = await import('@/lib/app-errors')
+    logged = vi.spyOn(errors, 'captureRequestError').mockResolvedValue(undefined as never)
+  })
+  afterEach(() => {
+    logged?.mockRestore()
+  })
+  const actedOn = () => ({
+    roster: state.getEventRoster.mock.calls.length,
+    emails: state.sendEmail.mock.calls.length,
+    envelopes: state.reissue.mock.calls.length,
+    activity: state.logActivity.mock.calls.length,
+    participantReads: queries('participants').length,
+    writes: (state.queries as Query[]).filter((q) => q.op !== 'select').length,
+  })
+  const NOTHING = { roster: 0, emails: 0, envelopes: 0, activity: 0, participantReads: 0, writes: 0 }
+
+  describe.each(['', 'shadow', 'enforce'])('LOADSCOPED_MODE=%s', (mode) => {
+    beforeEach(() => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+    })
+
+    it.each(ROUTES)("%s refuses a Stellr admin on a tenant's event, as a missing event, and acts on nothing", async (_name, run) => {
+      state.rows.events = [{ slug: SLUG, tenant_id: TENANT }]
+      state.rows.participants = [{ ...PARTICIPANT, tenant_id: TENANT }]
+      const res = await run()
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: 'Not found' })
+      expect(actedOn()).toEqual(NOTHING)
+    })
+  })
+
+  describe.each(['', 'shadow'])('LOADSCOPED_MODE=%s, the owner read failing', (mode) => {
+    beforeEach(() => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+    })
+
+    it.each(ROUTES)('%s answers a retryable 503 and acts on nothing', async (_name, run) => {
+      state.rows.participants = [{ ...PARTICIPANT, tenant_id: STELLR_TENANT_ID }]
+      state.failEvents = true
+      const res = await run()
+      expect(res.status).toBe(503)
+      expect(res.headers.get('Retry-After')).toBeTruthy()
+      expect(actedOn()).toEqual(NOTHING)
+    })
+  })
+
+  it.each(ROUTES)("%s on Stellr's own event, mirrored or not, still acts, with LOADSCOPED_MODE off", async (_name, run) => {
+    vi.stubEnv('LOADSCOPED_MODE', '')
+    for (const events of [[{ slug: SLUG, tenant_id: STELLR_TENANT_ID }], []]) {
+      state.rows.events = events
+      state.rows.participants = [{ ...PARTICIPANT, tenant_id: STELLR_TENANT_ID }]
+      state.queries = []
+      const res = await run()
+      expect(res.status).toBe(200)
+    }
+    expect(state.sendEmail.mock.calls.length + state.reissue.mock.calls.length).toBeGreaterThan(0)
+  })
+})

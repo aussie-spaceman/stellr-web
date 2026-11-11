@@ -890,7 +890,7 @@
       }
     },
     "app/api/admin/events/[slug]/companies/route.ts": {
-      "class": "stellr_only",
+      "class": "tenant_staff",
       "segments": [
         "slug"
       ],
@@ -1062,7 +1062,7 @@
       }
     },
     "app/api/admin/events/[slug]/merch/commit/route.ts": {
-      "class": "stellr_only",
+      "class": "tenant_staff",
       "segments": [
         "slug"
       ],
@@ -1074,7 +1074,7 @@
       }
     },
     "app/api/admin/events/[slug]/offerings/route.ts": {
-      "class": "stellr_only",
+      "class": "tenant_staff",
       "segments": [
         "slug"
       ],

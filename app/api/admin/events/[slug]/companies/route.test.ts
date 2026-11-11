@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // deep review AUTH-3: the companies `move` action writes participants.company_id
-// by participant id. requireEventAccess(slug) only proves the caller may manage
+// by participant id. requireEventRoute(slug) only proves the caller may manage
 // `slug`, so the route must also confirm the participant belongs to `slug` before
 // writing — otherwise an event manager assigned to event A could retarget event
 // B's placement. These tests pin that gate with the data layer mocked: every
 // participants update is recorded, none is performed.
 
-const { requireEventAccess, writes, state } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(
-    async (_slug: string): Promise<{ ok: boolean; status: number; userId?: string }> => ({ ok: true, status: 200, userId: 'user_admin' }),
-  ),
+const { requireEventRoute, writes, state } = vi.hoisted(() => ({
+  requireEventRoute: vi.fn(async (_slug: string, _opts?: unknown): Promise<unknown> => null),
   writes: [] as { op: string; table: string; payload?: unknown; filters: [string, unknown][] }[],
   state: {
     // participantId -> the event_slug of its registration
@@ -22,7 +20,7 @@ const { requireEventAccess, writes, state } = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/event-access', () => ({ requireEventAccess }))
+vi.mock('@/lib/authz', () => ({ requireEventRoute }))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'admin', actorLabel: 'Staff Admin' }) }))
 vi.mock('@/lib/survey/events', () => ({ loadSurveyEvent: async () => null }))
 vi.mock('@/lib/team-profile/assign', () => ({
@@ -70,6 +68,8 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 const { POST } = await import('./route')
+const { eventRouteFor, eventRouteRefused } = await import('@/test/fixtures/event-route')
+const admin = (slug: string) => ({ ...eventRouteFor(slug), userId: 'user_admin' })
 
 function move(slug: string, body: unknown) {
   return POST(
@@ -84,8 +84,8 @@ function move(slug: string, body: unknown) {
 
 beforeEach(() => {
   writes.length = 0
-  requireEventAccess.mockClear()
-  requireEventAccess.mockResolvedValue({ ok: true, status: 200, userId: 'user_admin' })
+  requireEventRoute.mockReset()
+  requireEventRoute.mockImplementation(async (slug: string) => admin(slug))
   state.participantEvent = { pA: 'event-a', pB: 'event-b' }
   state.companyEvent = { cA: 'event-a', cB: 'event-b' }
   state.submitted = []
@@ -124,7 +124,7 @@ describe('POST /api/admin/events/[slug]/companies — move', () => {
   })
 
   it('refuses an event manager not assigned to the event (no write)', async () => {
-    requireEventAccess.mockResolvedValueOnce({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValueOnce(eventRouteRefused(403))
     const res = await move('event-a', { action: 'move', participantId: 'pA', companyId: 'cA' })
     expect(res.status).toBe(403)
     expect(writes).toHaveLength(0)
@@ -174,7 +174,7 @@ describe('POST /api/admin/events/[slug]/companies — override', () => {
   })
 
   it('refuses an event manager not assigned to the event (no write)', async () => {
-    requireEventAccess.mockResolvedValueOnce({ ok: false, status: 403 })
+    requireEventRoute.mockResolvedValueOnce(eventRouteRefused(403))
     const res = await move('event-a', { action: 'override_all' })
     expect(res.status).toBe(403)
     expect(writes).toHaveLength(0)

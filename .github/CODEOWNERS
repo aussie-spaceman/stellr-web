@@ -107,12 +107,16 @@
 /test/registration/participants-eligibility-sql.test.ts @aussie-spaceman
 /test/registration/tenant-guardian-consent-sql.test.ts @aussie-spaceman
 # S5 wave 6: whose rules a roster writer applies, the tenant guardian-consent
-# envelope and check-in refusal, the team-route audit spec, and the tests that
-# pin consent and tenant safety
+# envelope and check-in refusal, the team-route audit spec, the production code
+# that applies consent (the tenant mail-audience filter and the e-sign signed and
+# declined hooks), and the tests that pin consent and tenant safety
 /lib/registration/roster-context.ts @aussie-spaceman
 /lib/registration/team-audit.ts     @aussie-spaceman
 /lib/esign/tenant-guardian-consent.ts @aussie-spaceman
 /lib/check-in-consent.ts            @aussie-spaceman
+/lib/event-emails/audiences.ts      @aussie-spaceman
+/lib/esign/completion.ts            @aussie-spaceman
+/lib/esign/native/flow.ts           @aussie-spaceman
 /lib/event-emails/audiences-consent.test.ts @aussie-spaceman
 /lib/registration/tenant-guardian-consent.test.ts @aussie-spaceman
 /test/registration/tenant-guardian-consent.test.ts @aussie-spaceman

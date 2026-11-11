@@ -1,6 +1,6 @@
 # Handover: S5 multi-tenant session transfer, 10 Nov 2026
 
-The Claude Code session that built Stage 5 waves 3 to 6 is ending because the owner is moving to a new Claude account. This is the public-safe copy of its handover. **The full handover is private, on the owner's Mac at `~/Documents/stellr-handover-2026-11-10/HANDOVER.md`**, next to a backup of the unpushed wave 6 branches, the workflow scripts and their results. Read that one first; it is newer than this file if they disagree.
+The Claude Code session that built Stage 5 waves 3 to 6 is ending because the owner is moving to a new Claude account. This is the public-safe copy of its handover. **The full handover is private, on the owner's Mac at `~/Documents/Claude/Handover/s5-transfer-2026-11-10/HANDOVER.md`**, next to a backup of the unpushed wave 6 branches, the workflow scripts and their results. Read that one first; it is newer than this file if they disagree.
 
 ## State at handover
 

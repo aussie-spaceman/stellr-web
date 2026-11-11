@@ -8,13 +8,13 @@ Earlier credential work: `stellr-credentials-linkedin` (22 Sept), `HANDOVER-cred
 ## Context
 
 Two parents replied to the "credential issued" email on 6 Oct, saying the credential would not open:
-- **Jess Nylund**, for Lily (the creative-vision award, CO SDC). Jess says it happens for all of Lily's awards.
-- **LaResa Davidson**, for Brooks (2027 CO SDC Participant).
+- **The guardian of student A**, for student A (an award, CO SDC). The guardian says it happens for all of student A's awards.
+- **The guardian of student B**, for student B (2027 CO SDC Participant).
 
 **Cause.** The email for a minor goes to the guardian (`ec_email` / `emergency_contact_email`). Its button linked to `/credentials/<number>`, but a private credential renders only for its owner, signed in. Everyone else gets "This credential is private … ask them to turn on sharing". Guardians have no Stellr account linked to the child (no guardian-member relation exists in the schema), so every guardian hit a dead end.
 - Both students do have logins, and both credentials are private (prod read, 6 Oct).
 - 35 of the 40 live credentials are private minor ones, all issued around 18:18Z on 6 Oct, so every one of those families got the same email.
-- I did not open Jess's screenshot (the Gmail connector can't download attachments). The diagnosis comes from the code and the data.
+- I did not open the first guardian's screenshot (the Gmail connector can't download attachments). The diagnosis comes from the code and the data.
 
 **Decision.** David chose the signed link ("Build the signed-link fix and draft both replies"). He was told the trade-off: a forwarded email lets whoever receives it see the credential. That's no more than the email body already says, and nothing becomes public or indexed. He did not choose the alternative (attach the PDF instead).
 
@@ -61,14 +61,14 @@ See the tracker file. In short:
 1. Prove the family link on prod.
 2. Resend to the 35 families (per-credential Resend in admin event credentials, or a bulk action with a "new link" subject).
 3. Send the two drafted replies once (1) holds.
-4. Brooks can't make the credential public (the email took the `canShare: false` branch); the cause was not investigated.
+4. Student B can't make the credential public (the email took the `canShare: false` branch); the cause was not investigated.
 5. The guardian copy for that branch ("covered by the consent form signed at registration — there is no separate step") is unchanged and probably misleading when consent isn't on file.
 
 ## Session notes
 
 - Replies are drafted in Gmail on the original threads (not sent):
-  - Nylund: draft `r-9016953501130390679`, cc Lily.
-  - Davidson: draft `r5262293621355939756`.
+  - Guardian of student A: draft in Gmail, cc the student.
+  - Guardian of student B: draft in Gmail.
   - Both promise new links "once that's live".
 - I first wrote both drafts with gendered pronouns for the students, inferred from their names, then removed them. Use names, not guessed pronouns, in family emails.
 - The session worktree (`.claude/worktrees/credential-family-link`, with a copied `.env.local`) and its branch were removed at close-out.

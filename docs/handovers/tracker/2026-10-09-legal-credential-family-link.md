@@ -21,4 +21,4 @@ The Privacy Policy and Terms (Last Updated 09-Oct-2026) now say who can open a p
 
 ## Closes
 
-- None. The two unanswered guardian emails (Davidson; Lily Nylund's parent) stay with `educator-pd.11`.
+- None. The two unanswered guardian emails (two guardians) stay with `educator-pd.11`.

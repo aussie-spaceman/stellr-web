@@ -1,9 +1,9 @@
 # Handover — refunds made in Stripe, and "No refund — remove only" (23 Sept 2026)
 
 ## Why
-Daksha Rayana (Colorado Space Design Challenge) was refunded in full by hand in
+A student (Colorado Space Design Challenge) was refunded in full by hand in
 the Stripe dashboard. The app never heard about it: no webhook handled refunds,
-and "already refunded" only read `event_refunds`. Deleting her registration
+and "already refunded" only read `event_refunds`. Deleting their registration
 would have issued a second refund (an 18.75 USD account credit), with no error
 anywhere. The dialog also had no way to delete without refunding.
 
@@ -40,9 +40,9 @@ the session (production reads blocked) — check before applying:
 ## Closed (24 Sept 2026)
 1. `charge.refunded` added to the production Stripe webhook endpoint (maintainer). Not yet exercised
    by a real dashboard refund; the first one should add a `stripe_external` cash row and a roster line.
-2. The dialog was first exercised live on Daksha's removal (below), which also closes the browser-check gap
+2. The dialog was first exercised live on that student's removal (below), which also closes the browser-check gap
    for the external-full path. The partial-refund and "No refund" paths are not yet used live.
-3. Daksha removed 24 Sept 15:26Z. The Stripe check detected the manual refund, and one `event_refunds` row
+3. The student was removed 24 Sept 15:26Z. The Stripe check detected the manual refund, and one `event_refunds` row
    was written (`none`, `stripe_external`, 0 cents, note "Refunded 75.00 USD in Stripe outside the app —
    Refunded in full in Stripe"). No account credit was issued.
 

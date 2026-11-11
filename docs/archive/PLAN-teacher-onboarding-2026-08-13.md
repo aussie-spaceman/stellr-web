@@ -21,10 +21,10 @@
 > as the upstream source).
 
 **Date:** 13 Aug 2026
-**Trigger:** first real teacher registration — `mmmatlock@wcpss.net` (Wake STEM ECHS), 10 Aug 2026.
+**Trigger:** first real teacher registration — educator `2561d6c5-8d83-4379-bd16-87c059efc437` (Wake STEM ECHS), 10 Aug 2026.
 **Scope:** the teacher self-serve signup journey, reviewed against the four user-story requirements.
 
-> Note on the address: the registration is `mmmatlock@wcpss.net` (three `m`s), not `mmamatlock@`.
+> Note on the address: the registration's address differs by one letter from the one first reported.
 > Member id `2561d6c5-8d83-4379-bd16-87c059efc437`, membership `0000127`.
 
 ---
@@ -136,9 +136,9 @@ same:
 
 | Member | event_role | member_roles |
 |---|---|---|
-| janetsplanetofficial@gmail.com (13 Aug) | teacher | **(none)** |
-| mmmatlock@wcpss.net (10 Aug) | teacher | **(none)** |
-| mark.shaw@neoshr.com.au (9 Jul) | mentor | **(none)** |
+| Janet Ivey-Duensing (advisory board) (13 Aug) | teacher | **(none)** |
+| educator `2561d6c5…` (10 Aug) | teacher | **(none)** |
+| a mentor (9 Jul) | mentor | **(none)** |
 | bill.allen@stellreducation.org (8 Jul) | teacher | **(none)** |
 | david.michael.shaw+em@gmail.com (8 Jul) | teacher | **(none)** |
 | david.michael.shaw+rudi@gmail.com (7 Jul) | adult | **(none)** |
@@ -282,11 +282,11 @@ the first large send.
 
 - [ ] Create the welcome template + `member.created` campaign in `/admin/email`, so the **next**
       teacher is covered immediately. (Won't retro-send: the event already passed for these two.)
-- [ ] Manually welcome `mmmatlock@wcpss.net` and `janetsplanetofficial@gmail.com` — a one-off
+- [ ] Manually welcome educator `2561d6c5…` and Janet Ivey-Duensing — a one-off
       scheduled campaign scoped to those two members, or a personal email. Recommend personal:
       first two teachers deserve it, and it's a chance to ask how the signup felt.
 - [ ] Backfill `member_roles` for the seven affected members (see §3 table).
-- [ ] Backfill the empty `first_name` / `last_name` on `mmmatlock@wcpss.net`.
+- [ ] Backfill the empty `first_name` / `last_name` on educator `2561d6c5…`.
 
 ### Phase 1 — one small PR
 

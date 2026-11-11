@@ -19,7 +19,7 @@ emails.
 | 1 | Backfill `member_roles` | **Done** — 10 rows, 5 members, verified |
 | 2 | Create the drip templates + campaigns | **Done** — 4 + 4 created as **drafts** |
 | 2b | Test and activate the four campaigns | **You** — 10 min |
-| 3 | Email Michelle and Janet | **You** |
+| 3 | Email the two teachers | **You** |
 
 ---
 
@@ -31,7 +31,7 @@ Two problems with the earlier hand-run instructions, both real:
   a transaction across separate runs, so a `BEGIN` in one execution and a
   `COMMIT` in another would not have done what the runbook claimed.
 - **The row count was already stale.** The instructions said "expect 13 rows / 7
-  members". By the time it ran, two of those members (`mark.shaw@neoshr.com.au`
+  members". By the time it ran, two of those members (a mentor's address
   and `david.michael.shaw+rudi@gmail.com`) had been hard-deleted, so the correct
   answer was 10 rows / 5 members — and following the runbook would have meant
   rolling back a correct result.
@@ -61,8 +61,8 @@ insert-or-ignore, so re-running is safe.
 **Result (applied 13 Aug):**
 
 ```
-janetsplanetofficial@gmail.com         teacher      adult        → member, teacher
-mmmatlock@wcpss.net                    teacher      adult        → member, teacher
+<teacher 2 email>                      teacher      adult        → member, teacher
+<teacher 1 email>                      teacher      adult        → member, teacher
 bill.allen@stellreducation.org         teacher      adult        → member, teacher
 david.michael.shaw+em@gmail.com        teacher      adult        → member, teacher
 david.michael.shaw+william@gmail.com   participant  high_school  → member, participant
@@ -77,7 +77,7 @@ marker, so target the members rather than the source):
 ```sql
 DELETE FROM member_roles WHERE member_id IN (
   SELECT id FROM members WHERE email IN (
-    'janetsplanetofficial@gmail.com', 'mmmatlock@wcpss.net',
+    '<teacher 2 email>', '<teacher 1 email>',
     'bill.allen@stellreducation.org', 'david.michael.shaw+em@gmail.com',
     'david.michael.shaw+william@gmail.com'
   )
@@ -149,11 +149,11 @@ week one stops the rest.
 Activating the drip will **not** reach them: `member.created` fired at their
 registration and there is no retro-send.
 
-- **Michelle Matlock** — `mmmatlock@wcpss.net`, Wake STEM ECHS, registered 10 Aug
-- **Janet Ivey-Duensing** — `janetsplanetofficial@gmail.com`, registered 13 Aug
+- **Teacher 1** (educator `2561d6c5-8d83-4379-bd16-87c059efc437`) — Wake STEM ECHS, registered 10 Aug
+- **Janet Ivey-Duensing** (advisory board) — registered 13 Aug
 
-> Michelle's member record has an **empty first and last name** — Clerk captured
-> none at signup. Until it's set, her drip emails open "Hi there,". Set it on her
+> Teacher 1's member record has an **empty first and last name** — Clerk captured
+> none at signup. Until it's set, their drip emails open "Hi there,". Set it on their
 > Person 360: `/admin/members/2561d6c5-8d83-4379-bd16-87c059efc437`.
 
 ---

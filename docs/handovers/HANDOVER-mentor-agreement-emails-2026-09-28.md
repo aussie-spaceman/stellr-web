@@ -4,7 +4,7 @@ Slug: `mentor-agreement-emails`. Tracker: `tracker/2026-09-28-mentor-agreement-e
 Shipped: #241 → `dev` `ed475c9`; promoted in #242 (`4b197c7`, `dpl_HzM333Uc1YAxacFPGwSpCBYgTRW4`); record #244 (`e86cf53`). Migration: none.
 
 ## What was reported
-David added himself as a mentor for Colorado SDC (3 Oct) so he could do his own background check. He received "the Stellr part" of the DocuSign but nothing personal, even though both should go to his address. None of the other three mentors (Pauline Davila, Sophie Fleck, Patrick Eaton) had acted either.
+David added himself as a mentor for Colorado SDC (3 Oct) so he could do his own background check. He received "the Stellr part" of the DocuSign but nothing personal, even though both should go to his address. None of the other three mentors had acted either.
 
 ## What was actually wrong
 It was not a delivery failure.
@@ -27,7 +27,7 @@ It was not a delivery failure.
 
 ## Not verified
 - **The new per-role subjects have not been seen in a real inbox.** No mentor envelope has been issued since the deploy; the first one is the proof.
-- **DocuSign's own audit trail** (`/audit_events`) for the three other envelopes was never read. The DocuSign MCP is bound to a different, empty account, and pulling prod credentials was blocked by auto mode. So whether Pauline, Sophie and Patrick received their emails is inferred (the Mentor role demonstrably emails), not observed.
+- **DocuSign's own audit trail** (`/audit_events`) for the three other envelopes was never read. The DocuSign MCP is bound to a different, empty account, and pulling prod credentials was blocked by auto mode. So whether the three other mentors received their emails is inferred (the Mentor role demonstrably emails), not observed.
 
 ## Open items
 - `mentor-agreement-emails.1`: the three mentors are still at 1 of 2, with the old identical subjects. **David is chasing them manually** before 3 Oct.

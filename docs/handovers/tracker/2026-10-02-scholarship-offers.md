@@ -7,9 +7,9 @@ Scholarship applications are stored and reviewed at `/admin/scholarships`. "Offe
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| scholarship-offers.1 | Shreyas Shankar backfill (100%, record only) | Application `57209595…` submitted in prod; **no Colorado registration** as of 2 Oct ~21:20Z (event 3 Oct) | After he registers: offer 100% with "Email … now" unticked; check the page says nothing to reimburse | ☐ |
-| scholarship-offers.2 | Ethan Lawrence backfill (50%) | Offered 21:14Z; registration `26b91fee…` pending, 8250 due; 3 emails logged to both addresses | Watch for his payment: the Stripe charge should be $82.50 with coupon `SCHOLARSHIP50`, and the registration should flip to `confirmed` | ☐ |
-| scholarship-offers.3 | Gmail drafts to both families | Drafts in each thread (`r3592371518100805468`, `r5838390070885391865`); send unconfirmed | David sends Ethan's now and Shreyas's after .1 | ☐ |
+| scholarship-offers.1 | Student B backfill (100%, record only) | Application `57209595…` submitted in prod; **no Colorado registration** as of 2 Oct ~21:20Z (event 3 Oct) | After they register: offer 100% with "Email … now" unticked; check the page says nothing to reimburse | ☐ |
+| scholarship-offers.2 | Student A backfill (50%) | Offered 21:14Z; registration `26b91fee…` pending, 8250 due; 3 emails logged to both addresses | Watch for their payment: the Stripe charge should be $82.50 with coupon `SCHOLARSHIP50`, and the registration should flip to `confirmed` | ☐ |
+| scholarship-offers.3 | Gmail drafts to both families | Drafts in each thread; send unconfirmed | David sends student A's now and student B's after .1 | ☐ |
 | scholarship-offers.4 | Live coupons 33/67/100 resolve | Only 50% implicitly confirmed (no flag on the review page) | Open any "To review" application in prod and select 33/67/100. Any red "Stripe problem" note means fix the coupon in live Stripe | ☐ |
 | scholarship-offers.5 | Public `SCHOLARSHIP*` promotion codes still active | Anyone with a code gets the discount on any event checkout | Deactivate the promotion codes in Stripe; keep the coupons (the app applies coupons directly) | ☐ |
 | scholarship-offers.6 | Coupons discount merch add-ons | Seen in test mode ($15 → $7.50 at 50%); retrospective refund is fee-only | Owner decision: restrict each coupon to the event-fee products in Stripe, or accept | ☐ |

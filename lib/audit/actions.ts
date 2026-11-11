@@ -37,6 +37,10 @@ export const AUDIT_ACTIONS = [
   'registration.guardian_consent.sign',
   'registration.guardian_consent.decline',
   'registration.guardian_consent.expire',
+  // A date-of-birth correction lifted a pending consent; its open envelope was voided.
+  'registration.guardian_consent.lift',
+  // A consent envelope from an earlier registration was voided.
+  'registration.guardian_consent.void',
 
   // Consent and uploads (A14)
   'consent.request.send',

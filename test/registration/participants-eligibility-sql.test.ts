@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MAX_AGE } from '@/lib/registration-eligibility'
 import { TENANT_MIN_AGE_TODAY } from '@/lib/registration/eligibility'
+import { ELIGIBILITY_REFUSAL_PREFIX } from '@/lib/registration/roster-context'
 import { STELLR_TENANT_ID, TENANT_MIN_PARTICIPANT_AGE } from '@/lib/tenancy/constants'
 
 const MIGRATIONS = join(process.cwd(), 'supabase/migrations')
@@ -67,6 +68,8 @@ describe('participants eligibility SQL matches the TypeScript rule', () => {
     expect(raises).toHaveLength(4)
     for (const line of raises) {
       expect(line).toBe(`RAISE EXCEPTION 'participant eligibility: %', refusal USING ERRCODE = '23514';`)
+      // The roster writers tell this refusal from any other CHECK by its message.
+      expect(line).toContain(`'${ELIGIBILITY_REFUSAL_PREFIX} %'`)
     }
   })
 

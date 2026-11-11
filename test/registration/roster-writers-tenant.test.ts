@@ -206,6 +206,25 @@ describe('the roster sheet import', () => {
     expect(s.dispatchAgreement).not.toHaveBeenCalled()
   })
 
+  it('on Stellr’s group, an update failing another CHECK (not the eligibility trigger) keeps its old path: counted, with its paperwork', async () => {
+    db.fake.tables.participants = [{ id: 'p-old', registration_id: stellrGroup.id, email: 'kid@example.com', details_from_member: false }]
+    db.refuse = (op) => (op === 'update' ? { code: '23514', message: 'new row for relation "participants" violates check constraint "participants_payer_check"' } : false)
+    s.readSheet.mockResolvedValue([sheetRow(ADULT, 'kid@example.com')])
+    const res = await syncParticipantsFromSheet(db.client, stellrGroup)
+    expect(res).toMatchObject({ created: 0, updated: 1, skippedForDateOfBirth: [] })
+    expect(s.dispatchAgreement).toHaveBeenCalledTimes(1)
+  })
+
+  it('isEligibilityRefusal is the eligibility trigger’s message only, not any 23514', async () => {
+    const { isEligibilityRefusal } = await import('@/lib/registration/roster-context')
+    expect(isEligibilityRefusal({ code: '23514', message: 'participant eligibility: under_minimum_age' })).toBe(true)
+    expect(isEligibilityRefusal({ code: '23514', message: 'violates check constraint "participants_individual_payment_status_check"' })).toBe(false)
+    expect(isEligibilityRefusal({ code: '23514', message: 'guardian_consent_pending' })).toBe(false)
+    expect(isEligibilityRefusal({ code: '23505', message: 'participant eligibility: x' })).toBe(false)
+    expect(isEligibilityRefusal({ code: '23514' })).toBe(false)
+    expect(isEligibilityRefusal(null)).toBe(false)
+  })
+
   it('on Stellr’s group, an insert the eligibility check refuses is reported, never taken for the duplicate race', async () => {
     db.refuse = (op) => op === 'insert'
     s.readSheet.mockResolvedValue([sheetRow(ADULT, 'new@example.com')])

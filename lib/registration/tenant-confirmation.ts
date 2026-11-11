@@ -40,18 +40,20 @@ export interface TenantConfirmationInput {
 function consentNotice(kind: TenantConfirmationKind, title: string): { subject: string; lead: string; next: string } | null {
   const contact = 'If you have questions, reply to this email to reach the event organiser.'
   switch (kind) {
+    // The guardian's invitation was sent, or is queued to send: "will", not "have".
     case 'consent_pending':
       return {
         subject: `Waiting for your parent or guardian: ${title}`,
-        lead: `Thanks for registering for ${title}. Because you're under 18, we've emailed your parent or guardian a consent form to sign. Your place is confirmed once they sign.`,
+        lead: `Thanks for registering for ${title}. Because you're under 18, we'll email your parent or guardian a consent form to sign. Your place is confirmed once they sign.`,
         next: `If it isn't signed within 14 days, or before the event if that's sooner, the registration is cancelled. ${contact}`,
       }
     // The guardian's invitation could not be sent when the registration was saved.
+    // Nothing tells the organiser yet, so the registrant is not told they will be in touch.
     case 'consent_pending_unsent':
       return {
         subject: `Waiting for your parent or guardian: ${title}`,
-        lead: `Thanks for registering for ${title}. Because you're under 18, your parent or guardian needs to sign a consent form. We couldn't send it to them just now, so the event organiser will be in touch. Your place is confirmed once they sign.`,
-        next: `If it isn't signed within 14 days, or before the event if that's sooner, the registration is cancelled. ${contact}`,
+        lead: `Thanks for registering for ${title}. Because you're under 18, your parent or guardian needs to sign a consent form. We couldn't send it to them just now. Your place is confirmed once they sign.`,
+        next: `If it isn't signed within 14 days, or before the event if that's sooner, the registration is cancelled. Please reply to this email to reach the event organiser about the consent form.`,
       }
     case 'consent_signed':
       return {

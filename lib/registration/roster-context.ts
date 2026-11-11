@@ -149,7 +149,17 @@ export function withoutTenantId<T extends Record<string, unknown>>(row: T): Omit
   return rest
 }
 
-/** True when a write error is the participants eligibility trigger's refusal (A3, SQLSTATE 23514). */
+/** The start of every refusal the participants eligibility trigger raises (A3, zzz_participants_assert_eligible). */
+export const ELIGIBILITY_REFUSAL_PREFIX = 'participant eligibility:'
+
+/**
+ * True when a write error is the participants eligibility trigger's refusal (A3):
+ * SQLSTATE 23514 with the trigger's own message, 'participant eligibility: <reason>'.
+ * Any other CHECK violation (23514 too: a column CHECK, or the guardian-consent
+ * check-in refusal) is not one, and keeps its caller's ordinary error path.
+ */
 export function isEligibilityRefusal(error: unknown): boolean {
-  return !!error && typeof error === 'object' && (error as { code?: unknown }).code === '23514'
+  if (!error || typeof error !== 'object') return false
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  return code === '23514' && typeof message === 'string' && message.startsWith(ELIGIBILITY_REFUSAL_PREFIX)
 }

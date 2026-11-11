@@ -18,11 +18,14 @@
 --      Stellr's minors keep Stellr's own consent forms.
 --
 --   2. agreements.envelope_type also accepts 'tenant_guardian_consent'. The
---      CHECK is dropped and added again, wider, in this one transaction. Adding
---      it scans every agreements row under the ACCESS EXCLUSIVE lock the DROP
---      already took, so reads and writes of agreements wait for the length of
---      that scan (agreements is small today). lock_timeout below bounds only the
---      wait to take the lock, not the scan.
+--      CHECK is dropped and added again, wider, in this one transaction. The DROP
+--      takes an ACCESS EXCLUSIVE lock on agreements, and adding the CHECK scans
+--      every agreements row under it. That lock is held until the transaction
+--      commits, not just for the scan: it covers the trigger steps that follow
+--      (3 and 4, which may each wait up to lock_timeout for participants), so
+--      reads and writes of agreements wait for the rest of the migration
+--      (agreements is small today). lock_timeout below bounds only each wait to
+--      take a lock, not how long a lock is held.
 --
 --   3. A trigger refuses to set participants.checked_in_at while that
 --      participant's consent is not signed. Every check-in writer goes through
@@ -45,10 +48,12 @@
 -- they see and write the row whatever role writes the participant, with a pinned
 -- search_path and EXECUTE revoked from PUBLIC, anon and authenticated.
 --
--- Locks: creating the table locks nothing live. The triggers take short locks on
--- participants; the CHECK holds agreements' ACCESS EXCLUSIVE lock for its scan
--- (2 above). lock_timeout makes a held lock fail fast instead of queueing live
--- writers behind it. Apply outside event hours.
+-- Locks: creating the table locks nothing live. The triggers take locks on
+-- participants that are held until commit; the CHECK's ACCESS EXCLUSIVE lock on
+-- agreements (2 above) is taken first and is also held until commit, so
+-- agreements is unavailable from step 2 to the end of the migration.
+-- lock_timeout makes a lock that is already held elsewhere fail fast instead of
+-- queueing live writers behind it. Apply outside event hours.
 
 SET LOCAL lock_timeout = '5s';
 

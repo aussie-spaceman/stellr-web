@@ -265,6 +265,28 @@ export async function openTenantGuardianConsent(
   return { consentId, agreementId }
 }
 
+// ── The guardian's invitation ───────────────────────────────────────────────
+
+/** What B14's checked call answered for the invitation (lib/event-emails/tenant-signing.ts). */
+export type GuardianInvite =
+  | { ok: true; result: { sent: number; deferred: number; failed: number } }
+  | { ok: false; reason: string }
+
+/**
+ * What became of the guardian's invitation, for the request audit, and whether it
+ * is out: sent, or waiting in the signing outbox's daily allowance (deferred), which
+ * sends it later. A failure, a refusal, or a result that sent and deferred nothing
+ * (no signer was waiting) is not out, so the registrant is never told it went.
+ */
+export function guardianInvitationOutcome(invite: GuardianInvite): { invitation: string; out: boolean } {
+  if (!invite.ok) return { invitation: invite.reason, out: false }
+  const { sent, deferred, failed } = invite.result
+  if (failed > 0) return { invitation: 'failed', out: false }
+  if (sent > 0) return { invitation: 'sent', out: true }
+  if (deferred > 0) return { invitation: 'deferred', out: true }
+  return { invitation: 'not_sent', out: false }
+}
+
 // ── Audit ───────────────────────────────────────────────────────────────────
 
 interface ConsentRow {
@@ -274,9 +296,11 @@ interface ConsentRow {
   participant_id: string
   status: string
   removal_attempts?: number | null
+  /** The consent envelope the row was opened with; NULL until linked, and again after a move. */
+  agreement_id?: string | null
 }
 
-const CONSENT_COLUMNS = 'id, tenant_id, registration_id, participant_id, status, removal_attempts'
+const CONSENT_COLUMNS = 'id, tenant_id, registration_id, participant_id, status, removal_attempts, agreement_id'
 
 /**
  * One platform audit event per step (C7), off unless PLATFORM_AUDIT_ENABLED=true.
@@ -286,7 +310,7 @@ const CONSENT_COLUMNS = 'id, tenant_id, registration_id, participant_id, status,
  */
 export async function recordConsentAudit(
   action: Extract<AuditAction, `registration.guardian_consent.${string}`>,
-  row: { id: string; tenant_id: string },
+  row: { id: string; tenant_id: string; table?: 'tenant_guardian_consents' | 'agreements' },
   metadata: Record<string, unknown> = {},
   opts: { afterResponse?: boolean; db?: SupabaseClient } = {},
 ): Promise<void> {
@@ -295,7 +319,7 @@ export async function recordConsentAudit(
       action,
       actor: { system: true },
       tenant: { stellr: true },
-      target: { table: 'tenant_guardian_consents', id: row.id },
+      target: { table: row.table ?? 'tenant_guardian_consents', id: row.id },
       metadata: { event_tenant_id: row.tenant_id, ...metadata },
     },
     { afterResponse: opts.afterResponse ?? false, ...(opts.db ? { db: opts.db as never } : {}) },
@@ -354,27 +378,97 @@ export interface ConsentEnvelope {
   envelope_type?: string | null
   participant_id: string | null
   tenant_id?: string | null
+  /** The event the envelope was issued for; read from the row when absent. */
+  event_slug?: string | null
 }
 
 const isConsentEnvelope = (e: ConsentEnvelope) =>
   (e.envelope_type ?? '') === TENANT_GUARDIAN_CONSENT_ENVELOPE_TYPE && !!e.participant_id && isTenantRow(e.tenant_id)
 
 /**
+ * Whether a consent envelope is the one for the consent row's current registration.
+ * A consent is for one event: when the participant moves to another registration,
+ * the database resets the row to pending and clears its agreement_id, and the old
+ * envelope must not settle the new one. A linked row takes only its own envelope.
+ * An unlinked row (the link write is best-effort, and a move clears it) takes an
+ * envelope issued for the event of the row's registration. `eventSlugs` maps
+ * registration ids to their event, when the caller has already read them.
+ * Throws on a failed read.
+ */
+async function envelopeBelongsToConsent(
+  db: SupabaseClient,
+  row: Pick<ConsentRow, 'registration_id' | 'agreement_id'>,
+  envelope: { id: string; event_slug?: string | null },
+  eventSlugs?: Map<string, string | null>,
+): Promise<boolean> {
+  if (row.agreement_id) return envelope.id === row.agreement_id
+  let envelopeEvent = envelope.event_slug
+  if (envelopeEvent === undefined) {
+    const { data, error } = await db.from('agreements').select('event_slug').eq('id', envelope.id).maybeSingle()
+    if (error) throw new Error(`Reading the consent envelope failed: ${error.message}`)
+    envelopeEvent = (data as { event_slug?: string | null } | null)?.event_slug ?? null
+  }
+  let registrationEvent = eventSlugs?.get(row.registration_id)
+  if (registrationEvent === undefined) {
+    const { data, error } = await db.from('registrations').select('event_slug').eq('id', row.registration_id).maybeSingle()
+    if (error) throw new Error(`Reading the consent's registration failed: ${error.message}`)
+    registrationEvent = (data as { event_slug?: string | null } | null)?.event_slug ?? null
+    eventSlugs?.set(row.registration_id, registrationEvent)
+  }
+  return !!envelopeEvent && envelopeEvent === registrationEvent
+}
+
+/**
+ * Moves the participant's pending consent to `status`, but only when `envelope` is
+ * the consent for their current registration (envelopeBelongsToConsent). The update
+ * is keyed on what was checked, so a move between the read and the write settles
+ * nothing. Returns the settled row, or null when nothing moved: already settled, no
+ * consent, or an envelope from an earlier registration (left alone; the sweep voids
+ * it while it is still open). Throws on a failed read or write.
+ */
+async function settlePendingConsent(
+  db: SupabaseClient,
+  envelope: ConsentEnvelope,
+  status: 'signed' | 'declined',
+  now: Date,
+): Promise<ConsentRow | null> {
+  const participantId = envelope.participant_id as string
+  const { data: current, error: readError } = await db
+    .from('tenant_guardian_consents')
+    .select(CONSENT_COLUMNS)
+    .eq('participant_id', participantId)
+    .eq('status', 'pending')
+    .maybeSingle()
+  if (readError) throw new Error(`Reading the consent failed: ${readError.message}`)
+  const pending = current as ConsentRow | null
+  if (!pending) return null
+  if (!(await envelopeBelongsToConsent(db, pending, envelope))) {
+    console.warn('[tenant-guardian-consent] envelope', envelope.id, 'is not the consent for the current registration of consent', pending.id)
+    return null
+  }
+  let update = db
+    .from('tenant_guardian_consents')
+    .update({ status, settled_at: now.toISOString() })
+    .eq('id', pending.id)
+    .eq('participant_id', participantId)
+    .eq('status', 'pending')
+    .eq('registration_id', pending.registration_id)
+  update = pending.agreement_id ? update.eq('agreement_id', pending.agreement_id) : update.is('agreement_id', null)
+  const { data, error } = await update.select(CONSENT_COLUMNS)
+  if (error) throw new Error(`Settling the consent failed: ${error.message}`)
+  return ((data ?? []) as ConsentRow[])[0] ?? null
+}
+
+/**
  * The guardian signed: the participant is registered. Called when the consent
  * envelope completes (lib/esign/completion.ts), and by the sweep as a backstop for
  * a missed completion. Idempotent: only a pending consent moves, so a replay sends
- * nothing twice. Returns true when this call settled it.
+ * nothing twice. Only the envelope for the participant's current registration
+ * settles it. Returns true when this call settled it.
  */
 export async function settleTenantGuardianConsentSigned(db: SupabaseClient, envelope: ConsentEnvelope, now = new Date()): Promise<boolean> {
   if (!isConsentEnvelope(envelope)) return false
-  const { data, error } = await db
-    .from('tenant_guardian_consents')
-    .update({ status: 'signed', settled_at: now.toISOString() })
-    .eq('participant_id', envelope.participant_id as string)
-    .eq('status', 'pending')
-    .select(CONSENT_COLUMNS)
-  if (error) throw new Error(`Settling the consent failed: ${error.message}`)
-  const row = ((data ?? []) as ConsentRow[])[0]
+  const row = await settlePendingConsent(db, envelope, 'signed', now)
   if (!row) return false
   await recordConsentAudit('registration.guardian_consent.sign', row, { envelope_id: envelope.id }, { db })
   await sendNotice(db, row.tenant_id, 'consent_signed', await noticeFor(db, row.participant_id))
@@ -383,8 +477,10 @@ export async function settleTenantGuardianConsentSigned(db: SupabaseClient, enve
 
 /**
  * The guardian declined: the consent is marked declined and the registration is
- * removed. Called from the decline (lib/esign/native/flow.ts). A removal that fails
- * is left for the sweep. Never throws.
+ * removed. Called from the decline (lib/esign/native/flow.ts). Only the envelope for
+ * the participant's current registration settles it, so declining an earlier
+ * registration's form never removes the current one. A removal that fails is left
+ * for the sweep. Never throws.
  */
 export async function settleTenantGuardianConsentDeclined(
   db: SupabaseClient,
@@ -394,14 +490,7 @@ export async function settleTenantGuardianConsentDeclined(
   try {
     if (!isConsentEnvelope(envelope)) return
     const now = opts.now ?? new Date()
-    const { data, error } = await db
-      .from('tenant_guardian_consents')
-      .update({ status: 'declined', settled_at: now.toISOString() })
-      .eq('participant_id', envelope.participant_id as string)
-      .eq('status', 'pending')
-      .select(CONSENT_COLUMNS)
-    if (error) throw new Error(error.message)
-    const row = ((data ?? []) as ConsentRow[])[0]
+    const row = await settlePendingConsent(db, envelope, 'declined', now)
     if (!row) return
     await recordConsentAudit('registration.guardian_consent.decline', row, { envelope_id: envelope.id }, { db })
     await removeUnconsentedRegistration(db, row, 'declined', { ...opts, now })
@@ -467,7 +556,8 @@ export interface ConsentSweepResult {
  * its registration removed, unless the guardian signed (a missed completion, which
  * settles it signed) or is part-way through finalising (held). A declined or
  * expired consent whose removal failed is tried again. A consent envelope left open
- * after a correction to 18 or over removed its pending row is voided. Run daily, behind the flag,
+ * after a correction to 18 or over removed its pending row, or left from an earlier
+ * registration, is voided. Run daily, behind the flag,
  * from the membership-expiry cron.
  */
 export async function sweepTenantGuardianConsents(
@@ -511,9 +601,9 @@ export async function sweepTenantGuardianConsents(
   for (const row of (due ?? []) as ConsentRow[]) {
     result.scanned += 1
     try {
-      const envelope = await consentEnvelopeState(db, row.participant_id)
+      const envelope = await consentEnvelopeState(db, row)
       if (envelope.state === 'completed') {
-        if (await settleTenantGuardianConsentSigned(db, { id: envelope.id, envelope_type: TENANT_GUARDIAN_CONSENT_ENVELOPE_TYPE, participant_id: row.participant_id, tenant_id: row.tenant_id }, now)) {
+        if (await settleTenantGuardianConsentSigned(db, { id: envelope.id, envelope_type: TENANT_GUARDIAN_CONSENT_ENVELOPE_TYPE, participant_id: row.participant_id, tenant_id: row.tenant_id, event_slug: envelope.eventSlug }, now)) {
           result.signed.push(row.id)
         }
         continue
@@ -558,11 +648,21 @@ async function engineVoid(db: SupabaseClient, row: { envelope_id: string; provid
 }
 
 /**
- * Voids a consent envelope still out for signature whose participant has no
- * consent row any more: a date-of-birth correction made them 18 or over, and the
- * database removed the still-pending row (zzz_participants_open_tenant_guardian_consent),
- * so the guardian is not left with a form to sign. Every consent envelope is issued
- * after its participant's row exists, so an envelope with no row is one of these.
+ * Voids a consent envelope still out for signature that no consent needs, so the
+ * guardian is not left with a form to sign:
+ *
+ *   - lifted: its participant has no consent row any more. A date-of-birth
+ *     correction made them 18 or over, and the database removed the still-pending
+ *     row (zzz_participants_open_tenant_guardian_consent). Every consent envelope is
+ *     issued after its participant's row exists, so an envelope with no row is one of
+ *     these. The database records nothing when it lifts a consent, so the void is
+ *     audited (registration.guardian_consent.lift): the trace that the hold was
+ *     lifted, and which envelope it left.
+ *   - superseded: the participant's consent row is for another registration (the
+ *     participant moved, and the database started a new consent), so this envelope
+ *     is not the row's (envelopeBelongsToConsent). Audited as
+ *     registration.guardian_consent.void.
+ *
  * A failed read voids nothing and is recorded. At most `limit` voids a run.
  */
 async function voidOrphanedConsentEnvelopes(
@@ -575,7 +675,7 @@ async function voidOrphanedConsentEnvelopes(
     while (result.voided.length < opts.limit) {
       let query = db
         .from('agreements')
-        .select('id, envelope_id, provider, participant_id')
+        .select('id, envelope_id, provider, participant_id, tenant_id, event_slug')
         .eq('envelope_type', TENANT_GUARDIAN_CONSENT_ENVELOPE_TYPE)
         .in('status', ['created', 'sent', 'delivered'])
         .not('participant_id', 'is', null)
@@ -583,7 +683,14 @@ async function voidOrphanedConsentEnvelopes(
       // A small page, so the participant ids below fit in one request's URL.
       const { data, error } = await query.order('id', { ascending: true }).limit(OPEN_ENVELOPE_PAGE)
       if (error) throw new Error(`Reading open consent envelopes failed: ${error.message}`)
-      const envelopes = (data ?? []) as Array<{ id: string; envelope_id: string; provider: string | null; participant_id: string }>
+      const envelopes = (data ?? []) as Array<{
+        id: string
+        envelope_id: string
+        provider: string | null
+        participant_id: string
+        tenant_id: string | null
+        event_slug: string | null
+      }>
       if (!envelopes.length) return
       const last = envelopes[envelopes.length - 1].id
       if (after && !(last > after)) throw new Error('Reading open consent envelopes did not advance')
@@ -592,13 +699,22 @@ async function voidOrphanedConsentEnvelopes(
       const participants = [...new Set(envelopes.map((e) => e.participant_id))]
       const { data: rows, error: rowError } = await db
         .from('tenant_guardian_consents')
-        .select('participant_id')
+        .select('participant_id, registration_id, agreement_id')
         .in('participant_id', participants)
       if (rowError) throw new Error(`Reading consents for open envelopes failed: ${rowError.message}`)
-      const withConsent = new Set(((rows ?? []) as Array<{ participant_id: string }>).map((r) => r.participant_id))
+      const consentFor = new Map(
+        ((rows ?? []) as Array<{ participant_id: string; registration_id: string; agreement_id: string | null }>).map((r) => [r.participant_id, r]),
+      )
+      const eventSlugs = new Map<string, string | null>()
 
       for (const e of envelopes) {
-        if (withConsent.has(e.participant_id)) continue
+        const consent = consentFor.get(e.participant_id)
+        const reason = !consent
+          ? 'lifted'
+          : (await envelopeBelongsToConsent(db, consent, { id: e.id, event_slug: e.event_slug ?? null }, eventSlugs))
+            ? null
+            : 'superseded'
+        if (!reason) continue
         if (result.voided.length >= opts.limit) return
         try {
           const row = { envelope_id: e.envelope_id, provider: e.provider }
@@ -606,7 +722,14 @@ async function voidOrphanedConsentEnvelopes(
           result.voided.push(e.id)
         } catch (err) {
           result.errors.push({ consentId: `agreement:${e.id}`, error: err instanceof Error ? err.message : String(err) })
+          continue
         }
+        await recordConsentAudit(
+          reason === 'lifted' ? 'registration.guardian_consent.lift' : 'registration.guardian_consent.void',
+          { id: e.id, tenant_id: e.tenant_id ?? '', table: 'agreements' },
+          { participant_id: e.participant_id, reason },
+          { db },
+        )
       }
     }
   } catch (err) {
@@ -621,17 +744,27 @@ async function voidOrphanedConsentEnvelopes(
  */
 async function consentEnvelopeState(
   db: SupabaseClient,
-  participantId: string,
-): Promise<{ state: 'completed'; id: string } | { state: 'guardian_signed' | 'open' | 'none' | 'unknown' }> {
+  row: ConsentRow,
+): Promise<{ state: 'completed'; id: string; eventSlug: string | null } | { state: 'guardian_signed' | 'open' | 'none' | 'unknown' }> {
   const { data, error } = await db
     .from('agreements')
-    .select('id, status')
-    .eq('participant_id', participantId)
+    .select('id, status, event_slug')
+    .eq('participant_id', row.participant_id)
     .eq('envelope_type', TENANT_GUARDIAN_CONSENT_ENVELOPE_TYPE)
   if (error) return { state: 'unknown' }
-  const rows = (data ?? []) as Array<{ id: string; status: string }>
+  // Only the envelope for the row's current registration counts: one left from an
+  // earlier registration neither settles this consent nor holds it back.
+  const rows: Array<{ id: string; status: string; event_slug: string | null }> = []
+  const eventSlugs = new Map<string, string | null>()
+  try {
+    for (const r of (data ?? []) as Array<{ id: string; status: string; event_slug: string | null }>) {
+      if (await envelopeBelongsToConsent(db, row, { id: r.id, event_slug: r.event_slug ?? null }, eventSlugs)) rows.push(r)
+    }
+  } catch {
+    return { state: 'unknown' }
+  }
   const done = rows.find((r) => r.status === 'completed')
-  if (done) return { state: 'completed', id: done.id }
+  if (done) return { state: 'completed', id: done.id, eventSlug: done.event_slug ?? null }
   const live = rows.filter((r) => r.status === 'sent' || r.status === 'delivered').map((r) => r.id)
   if (!live.length) return { state: rows.length ? 'open' : 'none' }
   const { count, error: rErr } = await db

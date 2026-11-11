@@ -131,8 +131,8 @@ export async function POST(req: NextRequest) {
     if (!saved.ok) return answer(saved.response)
     note.registrationId = saved.row.regId
 
-    const signInToken = await runIndividualHooks(gate.registration, saved.row, fields)
-    return answer(await respondToIndividualRegistration(gate.registration, saved.row, signInToken, fields, getEventBySlug))
+    const hooks = await runIndividualHooks(gate.registration, saved.row, fields)
+    return answer(await respondToIndividualRegistration(gate.registration, saved.row, hooks, fields, getEventBySlug))
   } catch (e) {
     console.error('Individual registration error:', e)
     note.status = 500

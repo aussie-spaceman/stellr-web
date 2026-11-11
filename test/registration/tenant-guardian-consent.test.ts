@@ -173,7 +173,7 @@ describe('S5 wave 6: a 14-17-year-old on a tenant event', () => {
 
   it('flag on: a 15-year-old is saved consent-pending, the guardian is invited from the tenant sender, and the registrant is told', async () => {
     const res = await settle(await post())
-    expect(res).toEqual({ status: 201, body: { registrationId: 'reg-1', checkoutUrl: null, signInToken: null, consentPending: true } })
+    expect(res).toEqual({ status: 201, body: { registrationId: 'reg-1', checkoutUrl: null, signInToken: null, consentPending: true, guardianInvited: true } })
 
     // Registration, participant, the consent row, the envelope, and the envelope linked to the row.
     expect(writes()).toEqual([
@@ -234,22 +234,28 @@ describe('S5 wave 6: a 14-17-year-old on a tenant event', () => {
     ['refused for want of a sender', { ok: false, reason: 'no_sender', error: 'x' }, 'no_sender'],
     ['a failed send', { ok: false, reason: 'failed', error: 'x' }, 'failed'],
     ['an outbox send that failed', { ok: true, result: { sent: 0, deferred: 0, failed: 1 } }, 'failed'],
+    ['a result that sent nothing', { ok: true, result: { sent: 0, deferred: 0, failed: 0 } }, 'not_sent'],
   ])('flag on: when the guardian invitation is %s, the registrant is not told their guardian was emailed', async (_l, outcome, recorded) => {
     h.invite.mockResolvedValue(outcome)
-    expect(await settle(await post())).toMatchObject({ status: 201, body: { consentPending: true } })
+    // The form sends the registrant to the page that says consent is still needed.
+    expect(await settle(await post())).toMatchObject({ status: 201, body: { consentPending: true, guardianInvited: false } })
     expect(h.tenantConfirmation).toHaveBeenCalledTimes(1)
     const notice = h.tenantConfirmation.mock.calls[0][1] as { text: string }
-    expect(notice.text).not.toMatch(/we've emailed your parent or guardian/i)
-    expect(notice.text).toContain("We couldn't send it to them just now, so the event organiser will be in touch.")
+    expect(notice.text).not.toMatch(/(we've|we'll) email(ed)? your parent or guardian/i)
+    expect(notice.text).toContain("We couldn't send it to them just now.")
+    // Nothing tells the organiser, so the notice does not say they will be in touch.
+    expect(notice.text).not.toMatch(/will be in touch/)
     // Recorded where staff can see it: the request audit carries the outcome.
     const request = h.audit.mock.calls.find(([m]) => m.action === 'registration.guardian_consent.request')
     expect(request?.[0]).toMatchObject({ metadata: { invitation: recorded } })
   })
 
-  it('flag on: an invitation waiting in the signing outbox counts as sent', async () => {
+  it('flag on: an invitation waiting in the signing outbox counts as out, and the wording does not say it has gone', async () => {
     h.invite.mockResolvedValue({ ok: true, result: { sent: 0, deferred: 1, failed: 0 } })
-    await settle(await post())
-    expect((h.tenantConfirmation.mock.calls[0][1] as { text: string }).text).toMatch(/we've emailed your parent or guardian/i)
+    expect(await settle(await post())).toMatchObject({ status: 201, body: { consentPending: true, guardianInvited: true } })
+    const text = (h.tenantConfirmation.mock.calls[0][1] as { text: string }).text
+    expect(text).toMatch(/we'll email your parent or guardian a consent form/i)
+    expect(text).not.toMatch(/we've emailed/i)
     const request = h.audit.mock.calls.find(([m]) => m.action === 'registration.guardian_consent.request')
     expect(request?.[0]).toMatchObject({ metadata: { invitation: 'deferred' } })
   })

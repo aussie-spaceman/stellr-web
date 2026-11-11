@@ -25,10 +25,13 @@ const {
   unconsentedParticipantIds,
   consentWindowEnd,
   guardianFromForm,
+  guardianInvitationOutcome,
 } = await import('./tenant-guardian-consent')
 
 const CANARY = 'c0000000-0000-4000-8000-0000000000aa'
-const ROW = { id: 'tgc-1', tenant_id: CANARY, registration_id: 'reg-1', participant_id: 'p-1', status: 'pending', removal_attempts: 0 }
+const ROW = { id: 'tgc-1', tenant_id: CANARY, registration_id: 'reg-1', participant_id: 'p-1', status: 'pending', removal_attempts: 0, agreement_id: 'agr-1' as string | null }
+/** The row after the participant moved to a registration on another event: reset to pending, unlinked. */
+const MOVED = { ...ROW, registration_id: 'reg-2', agreement_id: null }
 const ENVELOPE = { id: 'agr-1', envelope_type: 'tenant_guardian_consent', participant_id: 'p-1', tenant_id: CANARY }
 const PARTICIPANT = { email: 'kid@example.com', first_name: 'Kit', registrations: { event_title: 'Canary Cup' } }
 
@@ -49,10 +52,24 @@ function arrange(opts: {
   openEnvelopes?: unknown[]
   openEnvelopesError?: boolean
   consentsFor?: unknown[]
+  /** The participant's pending consent, as a settle reads it first (null: none). */
+  current?: unknown
+  /** The event an envelope read by id was issued for, and the event of a registration read by id. */
+  envelopeEvent?: string
+  registrationEvent?: string
 } = {}) {
   rec.respond((c: DbCall): DbResult | undefined => {
     if (c.table === 'tenant_guardian_consents' && c.op === 'update' && (c.payload as Record<string, unknown>).status) {
       return { data: opts.moved ?? [ROW], error: null }
+    }
+    if (c.table === 'tenant_guardian_consents' && c.op === 'select' && c.single === 'maybe') {
+      return { data: opts.current === undefined ? ROW : opts.current, error: null }
+    }
+    if (c.table === 'agreements' && c.op === 'select' && c.single === 'maybe') {
+      return { data: { event_slug: opts.envelopeEvent ?? 'canary-cup' }, error: null }
+    }
+    if (c.table === 'registrations' && c.op === 'select' && c.single === 'maybe') {
+      return { data: { event_slug: opts.registrationEvent ?? 'canary-cup' }, error: null }
     }
     if (c.table === 'agreements' && c.op === 'select' && c.filters.some((f) => f[0] === 'eq' && f[1] === 'envelope_type' && !c.filters.some((g) => g[1] === 'participant_id' && g[0] === 'eq'))) {
       if (opts.openEnvelopesError) return { data: null, error: { message: 'down' } as never }
@@ -109,6 +126,36 @@ describe('the guardian signs', () => {
     expect(await settleTenantGuardianConsentSigned(db, envelope)).toBe(false)
     expect(rec.calls).toEqual([])
   })
+
+  it('the update is keyed on the envelope the row was checked against, so a move in between settles nothing', async () => {
+    arrange()
+    await settleTenantGuardianConsentSigned(db, ENVELOPE)
+    const update = rec.calls.find((c) => c.op === 'update')!
+    expect(update.filters).toEqual(expect.arrayContaining([['eq', 'id', 'tgc-1'], ['eq', 'registration_id', 'reg-1'], ['eq', 'agreement_id', 'agr-1']]))
+  })
+
+  it('a linked consent is not settled by another envelope', async () => {
+    arrange({ current: { ...ROW, agreement_id: 'agr-9' } })
+    expect(await settleTenantGuardianConsentSigned(db, ENVELOPE)).toBe(false)
+    expect(writes()).toEqual([])
+    expect(h.audit).not.toHaveBeenCalled()
+    expect(h.confirmation).not.toHaveBeenCalled()
+  })
+
+  it('LA-1: after a move to another event, the old registration’s envelope does not settle the new consent', async () => {
+    arrange({ current: MOVED, envelopeEvent: 'canary-cup', registrationEvent: 'other-cup' })
+    expect(await settleTenantGuardianConsentSigned(db, ENVELOPE)).toBe(false)
+    expect(writes()).toEqual([])
+    expect(h.audit).not.toHaveBeenCalled()
+    expect(h.confirmation).not.toHaveBeenCalled()
+  })
+
+  it('an unlinked consent (the link write failed) is settled by its own event’s envelope, keyed on the unlinked row', async () => {
+    arrange({ current: { ...ROW, agreement_id: null } })
+    expect(await settleTenantGuardianConsentSigned(db, ENVELOPE)).toBe(true)
+    const update = rec.calls.find((c) => c.op === 'update')!
+    expect(update.filters).toEqual(expect.arrayContaining([['eq', 'registration_id', 'reg-1'], ['is', 'agreement_id', null]]))
+  })
 })
 
 describe('the guardian declines', () => {
@@ -123,6 +170,16 @@ describe('the guardian declines', () => {
     expect(order).toEqual(['delete reg-1', 'notice'])
     expect(subjects()).toEqual(['Registration cancelled: Canary Cup'])
     expect(actions()).toEqual(['registration.guardian_consent.decline'])
+  })
+
+  it('LA-1: declining the old registration’s envelope after a move neither declines nor removes the new registration', async () => {
+    arrange({ current: MOVED, envelopeEvent: 'canary-cup', registrationEvent: 'other-cup' })
+    const deleteRegistration = vi.fn(async () => {})
+    await settleTenantGuardianConsentDeclined(db, ENVELOPE, { deleteRegistration })
+    expect(writes()).toEqual([])
+    expect(deleteRegistration).not.toHaveBeenCalled()
+    expect(h.confirmation).not.toHaveBeenCalled()
+    expect(h.audit).not.toHaveBeenCalled()
   })
 
   it('a removal that fails tells nobody and is left for the sweep', async () => {
@@ -171,6 +228,19 @@ describe('the daily sweep', () => {
     expect(subjects()).toEqual(['Registered: Canary Cup'])
   })
 
+  it('LA-1: after a move, a completed envelope from the old registration neither settles nor holds the new consent: it expires', async () => {
+    arrange({
+      pending: [MOVED],
+      agreements: [{ id: 'agr-1', status: 'completed', event_slug: 'canary-cup' }],
+      registrationEvent: 'other-cup',
+    })
+    const deleteRegistration = vi.fn(async () => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration })
+    expect(r).toMatchObject({ signed: [], held: [], expired: ['tgc-1'], removed: ['tgc-1'] })
+    expect(deleteRegistration).toHaveBeenCalledWith('reg-2')
+    expect(subjects()).toEqual(['Registration cancelled: Canary Cup'])
+  })
+
   it('a guardian who has signed while the envelope is finalising is held', async () => {
     arrange({ pending: [ROW], agreements: [{ id: 'agr-1', status: 'sent' }], guardianSigned: 1 })
     const deleteRegistration = vi.fn(async () => {})
@@ -192,9 +262,9 @@ describe('the daily sweep', () => {
     arrange({
       openEnvelopes: [
         { id: 'agr-1', envelope_id: 'native-1', provider: 'native', participant_id: 'p-1' },
-        { id: 'agr-2', envelope_id: 'native-2', provider: 'native', participant_id: 'p-2' },
+        { id: 'agr-2', envelope_id: 'native-2', provider: 'native', participant_id: 'p-2', tenant_id: CANARY },
       ],
-      consentsFor: [{ participant_id: 'p-1' }],
+      consentsFor: [{ participant_id: 'p-1', registration_id: 'reg-1', agreement_id: 'agr-1' }],
     })
     const voidEnvelope = vi.fn(async (_row: { envelope_id: string; provider: string | null }) => {})
     const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: vi.fn(), voidEnvelope })
@@ -206,6 +276,50 @@ describe('the daily sweep', () => {
       ['in', 'status', ['created', 'sent', 'delivered']],
     ]))
     // The registrant hears nothing about it.
+    expect(h.confirmation).not.toHaveBeenCalled()
+    // LA-4: the lifted hold leaves a trace, ids only, on the voided envelope.
+    expect(h.audit.mock.calls.map(([m]) => m)).toEqual([
+      expect.objectContaining({
+        action: 'registration.guardian_consent.lift',
+        actor: { system: true },
+        target: { table: 'agreements', id: 'agr-2' },
+        metadata: { event_tenant_id: CANARY, participant_id: 'p-2', reason: 'lifted' },
+      }),
+    ])
+  })
+
+  it('a lifted consent whose envelope cannot be voided is not recorded as lifted yet: the next run tries again', async () => {
+    arrange({ openEnvelopes: [{ id: 'agr-2', envelope_id: 'native-2', provider: 'native', participant_id: 'p-2', tenant_id: CANARY }] })
+    const voidEnvelope = vi.fn(async () => { throw new Error('engine down') })
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: vi.fn(), voidEnvelope })
+    expect(r).toMatchObject({ voided: [], errors: [{ consentId: 'agreement:agr-2', error: 'engine down' }] })
+    expect(h.audit).not.toHaveBeenCalled()
+  })
+
+  it('LA-1: an open envelope from a registration the participant has left is voided, and audited as superseded', async () => {
+    arrange({
+      openEnvelopes: [
+        // The old event's envelope: the row now belongs to reg-2, on another event, unlinked.
+        { id: 'agr-1', envelope_id: 'native-1', provider: 'native', participant_id: 'p-1', tenant_id: CANARY, event_slug: 'canary-cup' },
+        // A linked row's own envelope stays out for signature.
+        { id: 'agr-3', envelope_id: 'native-3', provider: 'native', participant_id: 'p-3', tenant_id: CANARY, event_slug: 'canary-cup' },
+        // A linked row's other envelope is voided.
+        { id: 'agr-4', envelope_id: 'native-4', provider: 'native', participant_id: 'p-3', tenant_id: CANARY, event_slug: 'canary-cup' },
+      ],
+      consentsFor: [
+        { participant_id: 'p-1', registration_id: 'reg-2', agreement_id: null },
+        { participant_id: 'p-3', registration_id: 'reg-3', agreement_id: 'agr-3' },
+      ],
+      registrationEvent: 'other-cup',
+    })
+    const voidEnvelope = vi.fn(async (_row: { envelope_id: string; provider: string | null }) => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: vi.fn(), voidEnvelope })
+    expect(voidEnvelope.mock.calls.map(([row]) => row.envelope_id)).toEqual(['native-1', 'native-4'])
+    expect(r).toMatchObject({ voided: ['agr-1', 'agr-4'], errors: [] })
+    expect(h.audit.mock.calls.map(([m]) => [m.action, (m.target as { id: string }).id, (m.metadata as { reason: string }).reason])).toEqual([
+      ['registration.guardian_consent.void', 'agr-1', 'superseded'],
+      ['registration.guardian_consent.void', 'agr-4', 'superseded'],
+    ])
     expect(h.confirmation).not.toHaveBeenCalled()
   })
 
@@ -252,6 +366,14 @@ describe('helpers', () => {
         : { data: [{ participant_id: 'p-1' }], error: null }
     })
     await expect(unconsentedParticipantIds(db, CANARY)).rejects.toThrow('Reading guardian consents failed: down')
+  })
+
+  it('guardianInvitationOutcome: out only when sent or queued; a result that sent nothing is not out', () => {
+    expect(guardianInvitationOutcome({ ok: true, result: { sent: 1, deferred: 0, failed: 0 } })).toEqual({ invitation: 'sent', out: true })
+    expect(guardianInvitationOutcome({ ok: true, result: { sent: 0, deferred: 1, failed: 0 } })).toEqual({ invitation: 'deferred', out: true })
+    expect(guardianInvitationOutcome({ ok: true, result: { sent: 1, deferred: 0, failed: 1 } })).toEqual({ invitation: 'failed', out: false })
+    expect(guardianInvitationOutcome({ ok: true, result: { sent: 0, deferred: 0, failed: 0 } })).toEqual({ invitation: 'not_sent', out: false })
+    expect(guardianInvitationOutcome({ ok: false, reason: 'no_sender' })).toEqual({ invitation: 'no_sender', out: false })
   })
 
   it('consentWindowEnd: 14 days, or the event start if sooner, or none once it has started', () => {

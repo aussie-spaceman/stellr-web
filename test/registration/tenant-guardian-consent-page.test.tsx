@@ -22,6 +22,19 @@ describe('confirmation page, guardian consent pending', () => {
     expect(page).toContain('Your place is confirmed once they sign')
     expect(page).not.toContain('Registration Submitted!')
     expect(page).not.toMatch(/money-back|Payment processed|DocuSign/)
+    // Sent or queued: "will", never "have".
+    expect(page).toContain('We’ll email your parent or guardian a consent form.')
+    expect(page).not.toMatch(/We’ve emailed/)
+  })
+
+  it('when the invitation did not go: says consent is still needed, never that the guardian was emailed', async () => {
+    const page = await html({ id: 'reg-1', type: 'individual', consent: 'unsent' }, true)
+    expect(page).toContain('Waiting for your parent or guardian')
+    expect(page).toContain('needs to sign a consent form before your place is confirmed')
+    expect(page).not.toMatch(/We’ll email your parent|We’ve emailed/)
+    expect(page).not.toContain('What happens next?')
+    // Stellr's page ignores it.
+    expect(await html({ id: 'reg-1', type: 'individual', consent: 'unsent' })).toBe(await html({ id: 'reg-1', type: 'individual' }))
   })
 
   it('is unchanged without the query, and for a group', async () => {

@@ -17,7 +17,7 @@ export interface ConfirmationQuery {
   spreadsheet?: string
   remaining?: string
   campaign?: string
-  /** S5 wave 6: 'pending' after a 14-17-year-old registers for another organiser's event. */
+  /** S5 wave 6, after a 14-17-year-old registers for another organiser's event: 'pending' when the guardian was invited, 'unsent' when the invitation did not go. */
   consent?: string
 }
 
@@ -41,7 +41,10 @@ export async function confirmationBody({
   const { id, type, spreadsheet, remaining, campaign } = query
   const isGroup = type === 'group'
   // Only an individual registration can wait on a guardian; the words are a proposal.
-  const consentPending = tenantEvent && !isGroup && query.consent === 'pending'
+  // 'pending': the guardian's invitation went (sent, or queued to send). 'unsent': it
+  // did not, so the page says only that consent is still needed.
+  const consentPending = tenantEvent && !isGroup && (query.consent === 'pending' || query.consent === 'unsent')
+  const guardianInvited = consentPending && query.consent === 'pending'
   const isCampaign = campaign === '1'
   const sheetLink = googleSheetParam(spreadsheet)
   const spreadsheetUrl = sheetLink ? decodeURIComponent(sheetLink) : null
@@ -67,7 +70,9 @@ export async function confirmationBody({
 
         <p className="text-content-body mb-6">
           {consentPending
-            ? 'We’ve emailed your parent or guardian a consent form. Your place is confirmed once they sign, and we’ll email you when they do.'
+            ? guardianInvited
+              ? 'We’ll email your parent or guardian a consent form. Your place is confirmed once they sign, and we’ll email you when they do.'
+              : 'Because you’re under 18, your parent or guardian needs to sign a consent form before your place is confirmed. We couldn’t send it to them just now, so please contact the event organiser.'
             : isCampaign
             ? 'Your group is registered — Campaigns are free. A confirmation email has been sent to you.'
             : isGroup

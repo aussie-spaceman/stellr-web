@@ -4,16 +4,29 @@ import { autoGrantBaseMembership, recordParticipation } from '@/lib/community/ev
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { attachOfferToRegistration } from '@/lib/scholarships'
 import { sendTenantRegistrationConfirmation } from '../tenant-confirmation'
-import { recordConsentAudit, sendConsentPendingNotice } from '../tenant-guardian-consent'
+import { guardianInvitationOutcome, recordConsentAudit, sendConsentPendingNotice } from '../tenant-guardian-consent'
 import { sendTenantSigningInvitation } from '@/lib/event-emails/tenant-signing'
 import type { GatedRegistration } from './gate'
 import type { IndividualBody } from './parse'
 import type { PersistedRegistration } from './persist'
 
+/** What the hooks hand the answer. */
+export interface IndividualHookResult {
+  /** The sign-in token, when one was minted (Stellr's events only). */
+  signInToken: string | null
+  /**
+   * S5 wave 6, a consent-pending registration only: whether the guardian's
+   * invitation went (sent, or queued in the signing outbox), so the page never says
+   * it did when it did not.
+   */
+  guardianInvited?: boolean
+}
+
 /**
  * POST /api/register/individual, what follows the rows: the scholarship link,
  * event activity, membership, the agreement and the login. Run in this order on
- * every registration today. Returns the sign-in token, when one was minted.
+ * every registration today. Returns the sign-in token, when one was minted, and
+ * for a consent-pending registration whether the guardian was invited.
  *
  * S5 A7: all of it is Stellr's, so a tenant's event gets none of it. The
  * registrant gets the tenant's confirmation email instead (B14's tenant share).
@@ -25,7 +38,7 @@ export async function runIndividualHooks(
   gated: GatedRegistration,
   row: PersistedRegistration,
   body: IndividualBody,
-): Promise<string | null> {
+): Promise<IndividualHookResult> {
   const { db, email, scholarship, amountDueCents, eventTitle, dateOfBirth: dob } = gated
   const { regId, memberId, memberIsNew, participantId, resolvedRole, schoolState } = row
   const { event_slug, first_name, last_name, phone, grade, school_name, school_address_state } = body
@@ -38,15 +51,9 @@ export async function runIndividualHooks(
       const tenantId = gated.context.tenantId
       const invite = await sendTenantSigningInvitation(db, { tenantId, envelopeRowId: row.consent.agreementId })
       // Sent, or waiting in the signing outbox's daily allowance (deferred), which
-      // sends it later. Anything else did not go: the registrant is not told it did.
-      const invitation = !invite.ok
-        ? invite.reason
-        : invite.result.failed > 0
-          ? 'failed'
-          : invite.result.deferred > 0 && invite.result.sent === 0
-            ? 'deferred'
-            : 'sent'
-      const invitationOut = invitation === 'sent' || invitation === 'deferred'
+      // sends it later. Anything else did not go, a result that sent nothing
+      // included: the registrant is not told it did.
+      const { invitation, out: invitationOut } = guardianInvitationOutcome(invite)
       if (!invitationOut) console.error(`[register/individual] guardian invitation not sent: ${invitation}`)
       // The platform audit is where staff see an invitation that did not go.
       await recordConsentAudit(
@@ -56,7 +63,7 @@ export async function runIndividualHooks(
         { afterResponse: true },
       )
       await sendConsentPendingNotice(db, { tenantId, to: email, firstName: first_name ?? '', eventTitle, invitationSent: invitationOut })
-      return null
+      return { signInToken: null, guardianInvited: invitationOut }
     }
     await sendTenantRegistrationConfirmation(db, {
       tenantId: gated.context.tenantId,
@@ -65,7 +72,7 @@ export async function runIndividualHooks(
       eventTitle,
       kind: 'individual',
     })
-    return null
+    return { signInToken: null }
   }
 
   // A scholarship offer now has its registration: link it, and record the
@@ -136,5 +143,5 @@ export async function runIndividualHooks(
       console.error('Clerk provisioning (non-fatal):', clerkErr)
     }
   }
-  return signInToken
+  return { signInToken }
 }

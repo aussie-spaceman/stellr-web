@@ -7,7 +7,7 @@ import { recordOnHost, recordTenant } from '@/lib/tenancy/host-record'
 import { withAudit } from '@/lib/audit/route'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { distributionForEvent, loadDefinition, statusNow } from '@/lib/survey/distributions'
-import { sendLinkEmail, type InvitationRow } from '@/lib/survey/send'
+import { heldForConsent, sendLinkEmail, type InvitationRow } from '@/lib/survey/send'
 
 // POST /api/survey/event/[slug]/link { email } — the QR page's "email me my
 // link". Sends only to the address the invitation was issued to, and answers
@@ -46,9 +46,11 @@ export const POST = withAudit(
         .limit(5)
       if (data?.length) {
         const { def } = await loadDefinition(db, d.definition_id)
-        // A guardian address can hold several students' invitations: send each.
+        // A guardian address can hold several students' invitations: send each, except one
+        // held for guardian consent (decision W7-13), read once for them all.
+        const held = await heldForConsent(db, d)
         let sent = 0
-        for (const inv of data as InvitationRow[]) if (await sendLinkEmail(db, inv, d, def)) sent++
+        for (const inv of data as InvitationRow[]) if (await sendLinkEmail(db, inv, d, def, held)) sent++
         noteAuditSubject(req, { detail: { sent } })
       }
     }

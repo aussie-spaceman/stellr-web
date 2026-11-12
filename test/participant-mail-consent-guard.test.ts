@@ -17,7 +17,9 @@
 // student, and their guardian, out of the plan, and re-checks when it sends, so an
 // invitation made before is never sent (decision W7-13); Stellr's surveys read no
 // guardian consent and plan and send exactly as before. (Volunteer interest sends no
-// mail, and is refused for another tenant's event: app/api/volunteer/interest.)
+// mail, and is refused for another tenant's event: app/api/volunteer/interest.) The same
+// re-check holds for an admin's resend and the QR page's "email me my link", and the
+// admin's late-open preview counts the people the plan would.)
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STELLR_TENANT_ID as STELLR } from '@/lib/tenancy/constants'
 import { fakeChainDb, type Answer, type ChainCall, type Row } from '@/test/helpers/fake-chain-db'
@@ -68,7 +70,8 @@ vi.mock('@/lib/event-emails/render', () => ({
 const { sendCredentialIssuedEmail, credentialIsStellrs } = await import('@/lib/credentials-notify')
 const { dispatchTeamProfiles, resendTeamProfile, resendOutstanding, HELD_FOR_TENANT } = await import('@/lib/team-profile/store')
 const { planFor } = await import('@/lib/survey/distributions')
-const { sendQueued, sendReminders, emptyTally } = await import('@/lib/survey/send')
+const { sendQueued, sendReminders, emptyTally, sendLinkEmail, resendInvitation, heldForConsent, HELD_FOR_CONSENT } = await import('@/lib/survey/send')
+const { adminSurveyView } = await import('@/lib/survey/admin')
 
 const consentReads = () => h.unconsented.mock.calls.length
 const sentTo = () => h.sendEmail.mock.calls.map((c) => (c[0] as { to: string }).to)
@@ -344,6 +347,8 @@ const INVITATIONS = (status = 'queued') => [
 function surveyDb(invitations: Row[] = []) {
   return fakeChainDb(
     (call: ChainCall) => {
+      // No distribution yet (the late-open preview reads for one).
+      if (call.table === 'survey_distributions') return { data: null, error: null }
       if (call.table === 'registrations') {
         return { data: [{ id: 'reg-1', status: 'confirmed', teacher_first_name: 'Tess', teacher_last_name: 'Teacher', teacher_email: 'tess@example.test', teacher_member_id: null, teacher_poc_first_name: null, teacher_poc_last_name: null, teacher_poc_email: null, school_address_state: 'CO', adult_count: 1 }], error: null }
       }
@@ -442,5 +447,99 @@ describe('survey invitations', () => {
     expect(consentReads()).toBe(0)
     const once = ['p-pending@example.test', GUARDIAN, 'p-signed@example.test']
     expect(sentTo()).toEqual([...once, ...once, ...once, ...once])
+  })
+})
+
+// ── The survey's other mail paths, and the late-open preview ─────────────────
+
+/** One invitation of each kind, by id. */
+const byId = (status: string) => Object.fromEntries(INVITATIONS(status).map((i) => [i.id as string, i as unknown as Parameters<typeof sendLinkEmail>[1]]))
+const invitationUpdates = (calls: ChainCall[]) => calls.filter((c) => c.table === 'survey_invitations' && c.op === 'update')
+
+describe("the survey's other mail paths", () => {
+  // `expired` is what sendQueued leaves a held invitation as; `sent` is one made and sent
+  // before its student's consent lapsed.
+  for (const status of ['expired', 'sent']) {
+    it(`"email me my link" never sends another tenant's held invitation (${status}), and reads the consent once for several`, async () => {
+      const { db } = surveyDb()
+      const d = asDistribution(distribution(CANARY))
+      const inv = byId(status)
+      const held = await heldForConsent(db, d)
+      const answers = []
+      for (const id of ['inv-pending', 'inv-pending-guardian', 'inv-signed']) answers.push(await sendLinkEmail(db, inv[id], d, DEF, held))
+      expect(answers).toEqual([false, false, true])
+      expect(sentTo()).toEqual(['p-signed@example.test'])
+      expect(consentReads()).toBe(1)
+      // Left to read it itself, it reads it, and still holds the invitation.
+      expect(await sendLinkEmail(db, inv['inv-pending-guardian'], d, DEF)).toBe(false)
+      expect(consentReads()).toBe(2)
+      expect(sentTo()).toEqual(['p-signed@example.test'])
+    })
+
+    it(`an admin's resend never sends another tenant's held invitation (${status}), and leaves its status alone`, async () => {
+      const { db, calls } = surveyDb()
+      const d = asDistribution(distribution(CANARY))
+      const inv = byId(status)
+      for (const id of ['inv-pending', 'inv-pending-guardian']) {
+        expect(await resendInvitation(db, inv[id], d, DEF)).toEqual({ ok: false, error: HELD_FOR_CONSENT })
+      }
+      expect(invitationUpdates(calls)).toEqual([])
+      expect(sentTo()).toEqual([])
+      expect(await resendInvitation(db, inv['inv-signed'], d, DEF)).toEqual({ ok: true })
+      expect(sentTo()).toEqual(['p-signed@example.test'])
+    })
+  }
+
+  it('neither sends when the consent cannot be read', async () => {
+    const { db } = surveyDb()
+    const d = asDistribution(distribution(CANARY))
+    const inv = byId('expired')
+    h.unconsented.mockRejectedValueOnce(new Error('Reading guardian consents failed: down'))
+    await expect(sendLinkEmail(db, inv['inv-signed'], d, DEF)).rejects.toThrow('down')
+    h.unconsented.mockRejectedValueOnce(new Error('Reading guardian consents failed: down'))
+    await expect(resendInvitation(db, inv['inv-signed'], d, DEF)).rejects.toThrow('down')
+    expect(h.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("Stellr's, a NULL tenant included, send every invitation as before, with no consent read", async () => {
+    for (const tenant of [STELLR, null]) {
+      const d = asDistribution(distribution(tenant))
+      const inv = byId('expired')
+      const link = surveyDb()
+      expect(await heldForConsent(link.db, d)).toBeNull()
+      for (const id of ['inv-pending', 'inv-pending-guardian', 'inv-signed']) expect(await sendLinkEmail(link.db, inv[id], d, DEF)).toBe(true)
+      expect(tables(link.calls)).toEqual([])
+      const resend = surveyDb()
+      for (const id of ['inv-pending', 'inv-pending-guardian', 'inv-signed']) expect(await resendInvitation(resend.db, inv[id], d, DEF)).toEqual({ ok: true })
+      expect(tables(resend.calls)).toEqual(['survey_invitations'])
+      expect(invitationUpdates(resend.calls).map((c) => (c.payload as Row).status)).toEqual(['sent', 'sent', 'sent'])
+    }
+    expect(consentReads()).toBe(0)
+    const once = ['p-pending@example.test', GUARDIAN, 'p-signed@example.test']
+    expect(sentTo()).toEqual([...once, ...once, ...once, ...once])
+  })
+})
+
+describe("the admin's late-open preview", () => {
+  it("another tenant's counts leave out the consent-pending student and their guardian, as the plan made on opening does", async () => {
+    const { db } = surveyDb()
+    const asked: string[] = []
+    const view = await adminSurveyView(db, 'the-event', NOW, async () => {
+      asked.push('the-event')
+      return CANARY
+    })
+    expect(asked).toEqual(['the-event'])
+    expect(view.distribution).toBeNull()
+    expect(view.lateOpen).toMatchObject({ invitable: 3, byRole: { student: 2, mentor: 0, adult: 1 }, awaitingConsent: 0 })
+    expect(h.unconsented.mock.calls.map((c) => c[1])).toEqual([CANARY])
+  })
+
+  it("Stellr's, the default, reads no guardian consent and counts everyone as before", async () => {
+    const { db, calls } = surveyDb()
+    const view = await adminSurveyView(db, 'the-event', NOW)
+    expect(view.lateOpen).toMatchObject({ invitable: 5, byRole: { student: 3, mentor: 0, adult: 2 }, awaitingConsent: 0 })
+    expect(consentReads()).toBe(0)
+    expect(consentTableReads(calls)).toEqual([])
+    expect(tables(calls)).toEqual(['event_participations', 'member_schools', 'members', 'participants', 'registrations', 'survey_distributions'])
   })
 })

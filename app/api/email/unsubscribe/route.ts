@@ -40,7 +40,10 @@ import { recordOnHost } from '@/lib/tenancy/host-record'
 // link gets, straight after the read, and neither the address nor the write is reached.
 // A members row carries no tenant (an identity record, lib/tenancy/registry.ts), so the
 // record checked is the list. On Stellr's host the token is the holder's own capability,
-// whichever other organisations they also belong to.
+// whichever other organisations they also belong to: refusing it there would answer
+// "unsubscribed" while Stellr's campaigns kept coming. That is open as decision W7-15
+// (docs/S5-DECISION-REGISTER.md), and the tenant-host baseline keeps those cases until
+// the owner answers.
 
 /** The list being left: Stellr's own, whoever the member is. */
 const STELLR_LIST = { tenant_id: STELLR_TENANT_ID }

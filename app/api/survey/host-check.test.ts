@@ -21,7 +21,9 @@ const h = vi.hoisted(() => ({
   wrongMember: false,
   wrongMemberAsked: 0,
   calls: [] as unknown[],
-  sendLink: vi.fn(async () => true),
+  sendLink: vi.fn(async (..._a: unknown[]) => true),
+  // The survey's consent hold (lib/survey/send.ts, tested in test/participant-mail-consent-guard.test.ts).
+  held: vi.fn(async (..._a: unknown[]): Promise<Set<string> | null> => null),
 }))
 
 vi.mock('next/headers', () => ({ headers: async () => h.headers }))
@@ -55,7 +57,7 @@ vi.mock('@/lib/survey/distributions', () => ({
   statusNow: () => 'open',
   loadDefinition: async () => ({ def: {} }),
 }))
-vi.mock('@/lib/survey/send', () => ({ sendLinkEmail: h.sendLink }))
+vi.mock('@/lib/survey/send', () => ({ sendLinkEmail: h.sendLink, heldForConsent: h.held }))
 // The audit wrapper is tested on its own; here it only passes the call through.
 vi.mock('@/lib/audit/route', () => ({ withAudit: (_spec: unknown, fn: unknown) => fn }))
 
@@ -88,6 +90,7 @@ beforeEach(() => {
   h.wrongMemberAsked = 0
   h.calls = []
   h.sendLink.mockClear()
+  h.held.mockClear()
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -194,10 +197,16 @@ describe('"email me my link": only this host’s survey sends', () => {
     h.inv = invitation(null)
     await ask()
     expect(h.sendLink).not.toHaveBeenCalled()
+    expect(h.held).not.toHaveBeenCalled()
     h.dist = distribution(CANARY)
     h.inv = invitation(CANARY)
+    const hold = new Set(['p-held'])
+    h.held.mockResolvedValueOnce(hold)
     await ask()
     expect(h.sendLink).toHaveBeenCalledTimes(1)
+    // The consent hold is read once for the request, and the send is given it.
+    expect(h.held).toHaveBeenCalledTimes(1)
+    expect(h.sendLink.mock.calls[0][4]).toBe(hold)
   })
 
   it('answers the same when there is no survey at all', async () => {

@@ -176,7 +176,7 @@ WHERE e.starts_at IS NOT NULL
 6. **Before the first tenant event:** the sync fix above, and the owner's decision below.
 7. **Owner's manual test on a tenant event:** a 13-year-old, a NULL date of birth, a future date and an over-120 date refused by the API and by the database. With `TENANT_GUARDIAN_CONSENT_ENABLED` off, a 15-year-old is refused by the API too; with it on and the flow ready, a 15-year-old with a guardian named is saved pending, cannot be checked in, and is confirmed only once the guardian signs. A Stellr 12-year-old still registers.
 
-`docs/THREAT-MODEL.md` lowers "Age-gate bypass" from M to L only once A3 and A7 are both on production. Both now are (A3 on 5 Nov 2026, A7 in #600); whether the rating moves is the owner's decision (tracker `s5-programme.19`).
+`docs/THREAT-MODEL.md` rates "Age-gate bypass" L, down from M: its condition, A3 and A7 both on production, was met (A3 on 5 Nov 2026, A7 in #600), and the owner made the move on 11 Nov 2026 (tracker `s5-programme.19`).
 
 ## The fail-closed work beside it (A0)
 

@@ -7,6 +7,7 @@ import { supabaseKeySlots } from '@/lib/supabase-keys'
 import { resolveDerivationMode, tenancyReport, type DerivationModeReport } from '@/lib/tenancy/flags'
 import { tenantRoutingConfig } from '@/lib/tenancy/host'
 import { loadScopedMode } from '@/lib/tenancy/load-scoped'
+import { isTenantDbEnabled } from '@/lib/tenancy/tenant-db-config'
 
 /** The derivation-mode read gives up after this, and reports 'unavailable'. */
 const DERIVATION_READ_TIMEOUT_MS = 2_000
@@ -60,6 +61,11 @@ async function readDerivationMode(): Promise<DerivationModeReport> {
 // back to the default; `invalidCombinations` lists switches set without what they
 // need. The derivation mode costs one service-role read. Informational: it does not
 // feed `ok`. Each dev flip checks it after the redeploy (docs/TENANCY-S5.md).
+//
+// `tenancy.tenantDb.config` (S5 wave 7, O3) appears only when TENANT_DB_ENABLED is
+// 'true': whether TENANT_DATABASE_URL and its CA pass the driver's checks, each 'ok'
+// or a fixed reason, never a value. The driver module is loaded for it by dynamic
+// import, so with the flag off nothing more is imported and the response is unchanged.
 export async function GET() {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -82,7 +88,10 @@ export async function GET() {
     : []
 
   const routing = tenantRoutingConfig()
-  const tenancy = tenancyReport(await readDerivationMode())
+  const report = tenancyReport(await readDerivationMode())
+  const tenancy = isTenantDbEnabled()
+    ? { ...report, tenantDb: { ...report.tenantDb, config: (await import('@/lib/tenancy/driver')).tenantDbConfigStatus() } }
+    : report
 
   return NextResponse.json({
     deployment,

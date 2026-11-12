@@ -73,16 +73,37 @@ vi.mock('node:crypto', async (importOriginal) => {
   return { ...real, default: real, X509Certificate: CountedX509Certificate }
 })
 
+// The 'TENANTDB config' row (O3): lib/after-response and lib/app-errors are
+// stood in for, so a refusal's row is recorded here instead of written.
+const rows = vi.hoisted(() => ({ written: [] as { route: string; message: string; digest: string }[], tasks: [] as Promise<unknown>[] }))
+vi.mock('@/lib/after-response', () => ({
+  runAfterResponse: (_label: string, task: () => Promise<unknown>) => void rows.tasks.push(task()),
+}))
+vi.mock('@/lib/app-errors', () => ({
+  routeLabel: (method: string, routePath: string) => `${method} ${routePath}`,
+  errorDigest: (route: string, message: string) => `digest:${route}:${message}`,
+  recordBuiltAppError: async (route: string, message: string, digest: string) => {
+    rows.written.push({ route, message, digest })
+    return true
+  },
+}))
+
 import {
   createPostgresTenantDriver,
   endTenantDrivers,
   parsePostgresUrl,
   parseTenantCaCert,
   parseTenantDatabaseUrl,
+  resetTenantDbConfigRow,
+  TENANT_APPLICATION_NAME,
+  tenantDbConfigMessage,
+  tenantDbConfigStatus,
+  TenantDbConfigError,
   tenantDriverFromEnv,
   tenantTlsOptions,
   TENANT_POOL_DEFAULTS,
 } from './driver'
+import { errorCodeOf } from './area-switch'
 import { setTenantDbDriver, tenantDb, TenantContextError, TENANT_DB_FLAG } from './db'
 
 const CANARY = 'c0ffee00-0000-4000-8000-0000000000b2'
@@ -138,7 +159,18 @@ beforeEach(() => {
   pg.state.rows = []
   pg.factory.mockClear()
   setTenantDbDriver(null)
+  rows.written.length = 0
+  rows.tasks.length = 0
+  resetTenantDbConfigRow()
 })
+
+/** Let the dynamic imports and the registered task settle. */
+async function settled(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((r) => setTimeout(r, 0))
+    await Promise.all(rows.tasks)
+  }
+}
 afterEach(async () => {
   await endTenantDrivers()
 })
@@ -407,6 +439,8 @@ describe('createPostgresTenantDriver', () => {
     expect(pg.factory).toHaveBeenCalledTimes(1)
     const options = pg.state.pools[0].options
     expect(options).toMatchObject({
+      // So the pooler's tenantDb connections can be counted (O3; supabase/tests/s5_watch_only.sql).
+      connection: { application_name: 'stellr-tenantdb' },
       prepare: false,
       max: TENANT_POOL_DEFAULTS.max,
       idle_timeout: TENANT_POOL_DEFAULTS.idleTimeoutSeconds,
@@ -570,5 +604,107 @@ describe('tenantDb over the Postgres driver', () => {
     await tenantDb(CANARY, { env: { [TENANT_DB_FLAG]: 'true', TENANT_DATABASE_URL: LOCAL } }).sql`SELECT 1`
     expect(calls).toContain('SELECT 1')
     expect(pg.factory).not.toHaveBeenCalled()
+  })
+})
+
+describe('a refused setting is visible: its reason, the health status and one app_errors row (S5 wave 7, O3)', () => {
+  const SECRETS = /pw-not-real|abcdefghijklmnop|pooler|supabase|BEGIN CERTIFICATE|MIIB/
+
+  it('names the connection by application_name stellr-tenantdb', () => {
+    expect(TENANT_APPLICATION_NAME).toBe('stellr-tenantdb')
+    createPostgresTenantDriver(LOCAL)
+    expect(pg.state.pools[0].options.connection).toEqual({ application_name: 'stellr-tenantdb' })
+  })
+
+  it.each([
+    ['unset', undefined, 'missing'],
+    ['not a URL', 'not a url', 'not-a-url'],
+    ['not postgres', 'mysql://tenant_app_login:pw-not-real@db.example.com/x', 'not-postgres'],
+    ['the owner login', 'postgres://postgres:pw-not-real@db.example.com/postgres?sslmode=verify-full', 'wrong-login'],
+    ['no sslmode', POOLER, 'not-verify-full'],
+    ['sslmode=require', `${POOLER}?sslmode=require`, 'not-verify-full'],
+    ['sslmode twice', `${POOLER_VF}&sslmode=verify-full`, 'sslmode-repeated'],
+    ['another query parameter', `${POOLER_VF}&application_name=x`, 'query-parameter'],
+    ['a host list', 'postgres://tenant_app_login:pw-not-real@a.example.com,b.example.com/postgres?sslmode=verify-full', 'ambiguous'],
+    ['an IPv6 host', 'postgres://tenant_app_login:pw-not-real@[::1]:5432/postgres', 'ipv6-host'],
+    ['a bad port', 'postgres://tenant_app_login:pw-not-real@db.example.com:0/postgres?sslmode=verify-full', 'bad-port'],
+  ])('a refused URL (%s) throws a TenantContextError whose code is the fixed reason', (_label, raw, reason) => {
+    const err = thrown(() => parseTenantDatabaseUrl(raw))
+    expect(err).toBeInstanceOf(TenantContextError)
+    expect(err).toBeInstanceOf(TenantDbConfigError)
+    expect((err as TenantDbConfigError).reason).toBe(reason)
+    expect(errorCodeOf(err)).toBe(`tenantdb_config_${reason.replace(/-/g, '_')}`)
+    expect(err.name).toBe('TenantContextError')
+  })
+
+  it.each([
+    ['unset', undefined, 'missing'],
+    ['not a PEM', 'not a certificate', 'unreadable'],
+    ['a server certificate', TEST_LEAF, 'not-a-ca'],
+  ])('a refused CA (%s) throws with the fixed reason as its code', (_label, ca, reason) => {
+    const err = thrown(() => parseTenantCaCert(ca))
+    expect((err as TenantDbConfigError).reason).toBe(reason)
+    expect(errorCodeOf(err)).toBe(`tenantdb_config_${reason.replace(/-/g, '_')}`)
+  })
+
+  it('tenantDbConfigStatus reports each check as ok or a fixed reason, never a value, and opens nothing', () => {
+    const cases: [Record<string, string | undefined>, ReturnType<typeof tenantDbConfigStatus>][] = [
+      [{}, { url: 'missing', ca: 'missing' }],
+      [{ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: TEST_CA }, { url: 'ok', ca: 'ok' }],
+      [{ TENANT_DATABASE_URL: POOLER_VF }, { url: 'ok', ca: 'missing' }],
+      [{ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: TEST_LEAF }, { url: 'ok', ca: 'not-a-ca' }],
+      [{ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: 'not a certificate' }, { url: 'ok', ca: 'unreadable' }],
+      [{ TENANT_DATABASE_URL: `${POOLER}?sslmode=require`, TENANT_DATABASE_CA_CERT: TEST_CA }, { url: 'not-verify-full', ca: 'ok' }],
+      [{ TENANT_DATABASE_URL: LOCAL }, { url: 'ok', ca: 'not-needed' }],
+      [{ TENANT_DATABASE_URL: LOCAL, TENANT_DATABASE_CA_CERT: 'not a certificate' }, { url: 'ok', ca: 'not-needed' }],
+    ]
+    for (const [env, want] of cases) {
+      const status = tenantDbConfigStatus(env)
+      expect(status).toEqual(want)
+      expect(JSON.stringify(status)).not.toMatch(SECRETS)
+    }
+    expect(pg.factory).not.toHaveBeenCalled()
+  })
+
+  it('a refusal in tenantDriverFromEnv writes one TENANTDB config row per instance, with fixed words only', async () => {
+    expect(() => tenantDriverFromEnv({ TENANT_DATABASE_URL: `${POOLER}?sslmode=require`, TENANT_DATABASE_CA_CERT: TEST_CA })).toThrow(
+      TenantContextError,
+    )
+    // Another refusal, for another reason, on the same instance: no second row.
+    expect(() => tenantDriverFromEnv({ TENANT_DATABASE_URL: POOLER_VF, TENANT_DATABASE_CA_CERT: TEST_LEAF })).toThrow(
+      /not a server certificate/,
+    )
+    expect(() => tenantDriverFromEnv({})).toThrow(/is not set/)
+    await settled()
+    expect(rows.written).toEqual([
+      {
+        route: 'TENANTDB config',
+        message: 'tenantdb_config_refused url=not-verify-full ca=ok',
+        digest: 'digest:TENANTDB config:tenantdb_config_refused url=not-verify-full ca=ok',
+      },
+    ])
+    expect(JSON.stringify(rows.written)).not.toMatch(SECRETS)
+    expect(pg.factory).not.toHaveBeenCalled()
+  })
+
+  it('writes the row through tenantDb too, and none for a setting that passes', async () => {
+    const ok = { [TENANT_DB_FLAG]: 'true', TENANT_DATABASE_URL: LOCAL }
+    await tenantDb(CANARY, { env: ok }).sql`SELECT 1`
+    await settled()
+    expect(rows.written).toEqual([])
+    await expect(tenantDb(CANARY, { env: { [TENANT_DB_FLAG]: 'true' } }).sql`SELECT 1`).rejects.toThrow(TenantContextError)
+    await settled()
+    expect(rows.written.map((r) => r.message)).toEqual(['tenantdb_config_refused url=missing ca=missing'])
+  })
+
+  it('with the flag off, a tenantDb call writes no row and loads nothing', async () => {
+    await expect(tenantDb(CANARY, { env: { TENANT_DATABASE_URL: 'garbage' } }).sql`SELECT 1`).rejects.toThrow(/is off/)
+    await settled()
+    expect(rows.written).toEqual([])
+    expect(rows.tasks).toEqual([])
+  })
+
+  it('tenantDbConfigMessage is fixed words', () => {
+    expect(tenantDbConfigMessage({ url: 'wrong-login', ca: 'not-needed' })).toBe('tenantdb_config_refused url=wrong-login ca=not-needed')
   })
 })

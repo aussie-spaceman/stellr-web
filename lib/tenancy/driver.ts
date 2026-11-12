@@ -36,7 +36,13 @@
 //   * every statement goes on the extended protocol, so the server runs one
 //     statement per call;
 //   * the connection string and the CA never appear in an error or a log
-//     line, and postgres.js notices are dropped rather than printed.
+//     line, and postgres.js notices are dropped rather than printed;
+//   * a refused URL or CA leaves one 'TENANTDB config' row in app_errors per
+//     server instance, naming the fixed reason (tenantDbConfigStatus), and
+//     every refusal carries that reason as its error code (S5 wave 7, O3).
+//
+// Every connection carries application_name 'stellr-tenantdb', so the pooler's
+// connections can be counted in pg_stat_activity (supabase/tests/s5_watch_only.sql).
 
 import 'server-only'
 import { X509Certificate } from 'node:crypto'
@@ -64,6 +70,46 @@ export const TENANT_LOGIN_ROLE = 'tenant_app_login'
 
 const LOGIN_USER = /^tenant_app_login(?:\.[a-z0-9]{1,64})?$/
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
+
+/** The application_name every tenantDb connection carries, so pg_stat_activity can count them (S5 wave 7, O3). */
+export const TENANT_APPLICATION_NAME = 'stellr-tenantdb'
+
+/**
+ * Why the URL or the CA was refused, in fixed words. Never the value: the
+ * health route and the 'TENANTDB config' row report these and nothing else.
+ */
+export type TenantDbConfigReason =
+  | 'missing'
+  | 'not-a-url'
+  | 'not-postgres'
+  | 'ambiguous'
+  | 'ipv6-host'
+  | 'no-host'
+  | 'unreadable-part'
+  | 'wrong-login'
+  | 'query-parameter'
+  | 'sslmode-repeated'
+  | 'bad-port'
+  | 'not-verify-full'
+  | 'unreadable'
+  | 'not-a-ca'
+  | 'refused'
+
+/**
+ * A refused connection setting. Still a TenantContextError, with the same
+ * message as before. `code` is the reason as a fixed word, so errorCodeOf (the
+ * companies GET's log line, the shadow read's row) names it without the message.
+ */
+export class TenantDbConfigError extends TenantContextError {
+  readonly reason: TenantDbConfigReason
+  readonly code: string
+
+  constructor(message: string, reason: TenantDbConfigReason) {
+    super(message)
+    this.reason = reason
+    this.code = `tenantdb_config_${reason.replace(/-/g, '_')}`
+  }
+}
 
 /** Pool settings. Small: Hobby functions are short-lived and the pooler's client limit is shared. */
 export const TENANT_POOL_DEFAULTS = Object.freeze({
@@ -119,7 +165,7 @@ function decoded(part: string, what: string, name: string): string {
   try {
     return decodeURIComponent(part)
   } catch {
-    throw new TenantContextError(`${name} has an unreadable ${what}`)
+    throw new TenantDbConfigError(`${name} has an unreadable ${what}`, 'unreadable-part')
   }
 }
 
@@ -136,15 +182,17 @@ export function parseTenantDatabaseUrl(raw: string | undefined): ParsedUrl {
   const parsed = parsePostgresUrl(raw, TENANT_DATABASE_URL_VAR, {
     checkUser: (user) => {
       if (!LOGIN_USER.test(user)) {
-        throw new TenantContextError(
+        throw new TenantDbConfigError(
           `${TENANT_DATABASE_URL_VAR} must connect as ${TENANT_LOGIN_ROLE}; any other login is refused`,
+          'wrong-login',
         )
       }
     },
   })
   if (!parsed.local && parsed.sslmode !== TENANT_REQUIRED_SSLMODE) {
-    throw new TenantContextError(
+    throw new TenantDbConfigError(
       `${TENANT_DATABASE_URL_VAR} must end in ?sslmode=${TENANT_REQUIRED_SSLMODE} for a host that is not this machine; no other TLS mode is accepted`,
+      'not-verify-full',
     )
   }
   return parsed
@@ -180,21 +228,21 @@ export function parseTenantCaCert(raw: string | undefined): string {
 
 function readTenantCaCert(raw: string | undefined): string {
   const missing = `${TENANT_DATABASE_CA_CERT_VAR} is not set; a host that is not this machine needs the database's root CA to check its certificate`
-  if (typeof raw !== 'string' || raw.trim() === '') throw new TenantContextError(missing)
+  if (typeof raw !== 'string' || raw.trim() === '') throw new TenantDbConfigError(missing, 'missing')
   // Some secret stores keep a multi-line value with literal "\n" escapes.
   const pem = raw.replace(/\\r\\n|\\n/g, '\n').replace(/\r\n/g, '\n').trim()
   const blocks = pem.match(PEM_BLOCK) ?? []
   const unreadable = `${TENANT_DATABASE_CA_CERT_VAR} must hold one or more PEM CA certificates and nothing else`
-  if (blocks.length === 0 || pem.replace(PEM_BLOCK, '').trim() !== '') throw new TenantContextError(unreadable)
+  if (blocks.length === 0 || pem.replace(PEM_BLOCK, '').trim() !== '') throw new TenantDbConfigError(unreadable, 'unreadable')
   for (const block of blocks) {
     let cert: X509Certificate
     try {
       cert = new X509Certificate(block)
     } catch {
-      throw new TenantContextError(unreadable)
+      throw new TenantDbConfigError(unreadable, 'unreadable')
     }
     if (!cert.ca) {
-      throw new TenantContextError(`${TENANT_DATABASE_CA_CERT_VAR} must hold the root CA, not a server certificate`)
+      throw new TenantDbConfigError(`${TENANT_DATABASE_CA_CERT_VAR} must hold the root CA, not a server certificate`, 'not-a-ca')
     }
   }
   return blocks.join('\n') + '\n'
@@ -213,8 +261,9 @@ function readTenantCaCert(raw: string | undefined): string {
 export function tenantTlsOptions(parsed: ParsedUrl, caCert: string | undefined): TenantTlsOptions {
   if (parsed.local) return false
   if (parsed.sslmode !== TENANT_REQUIRED_SSLMODE) {
-    throw new TenantContextError(
+    throw new TenantDbConfigError(
       `${TENANT_DATABASE_URL_VAR} must end in ?sslmode=${TENANT_REQUIRED_SSLMODE} for a host that is not this machine; no other TLS mode is accepted`,
+      'not-verify-full',
     )
   }
   const ca = parseTenantCaCert(caCert)
@@ -238,10 +287,11 @@ export function parsePostgresUrl(
   opts: { checkUser?: (user: string) => void } = {},
 ): ParsedUrl {
   if (typeof raw !== 'string' || raw.trim() === '') {
-    throw new TenantContextError(
+    throw new TenantDbConfigError(
       name === TENANT_DATABASE_URL_VAR
         ? `tenantDb is on but ${TENANT_DATABASE_URL_VAR} is not set; it has no other connection to use`
         : `${name} is not set`,
+      'missing',
     )
   }
   const trimmed = raw.trim()
@@ -249,39 +299,40 @@ export function parsePostgresUrl(
   try {
     u = new URL(trimmed)
   } catch {
-    throw new TenantContextError(`${name} is not a valid connection URL`)
+    throw new TenantDbConfigError(`${name} is not a valid connection URL`, 'not-a-url')
   }
   if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') {
-    throw new TenantContextError(`${name} must be a postgres:// URL`)
+    throw new TenantDbConfigError(`${name} must be a postgres:// URL`, 'not-postgres')
   }
   const schemeEnd = trimmed.indexOf('://')
   const authority = schemeEnd < 0 ? '' : trimmed.slice(schemeEnd + 3).split(/[/?#]/)[0]
   const atCount = authority.split('@').length - 1
   const hostPart = authority.slice(authority.lastIndexOf('@') + 1)
   if (atCount > 1 || /[,%\\]/.test(hostPart) || /[,%]/.test(u.hostname)) {
-    throw new TenantContextError(
+    throw new TenantDbConfigError(
       `${name} must name one user and one host; encode any '@', ',' or '%' in the password`,
+      'ambiguous',
     )
   }
   // postgres.js splits a host string on ':' to find a port, so an IPv6
   // literal would not reach it intact. Neither the pooler nor CI uses one.
   if (u.hostname.includes(':') || u.hostname.startsWith('[')) {
-    throw new TenantContextError(`${name} must name its host by name or IPv4 address`)
+    throw new TenantDbConfigError(`${name} must name its host by name or IPv4 address`, 'ipv6-host')
   }
-  if (!u.hostname) throw new TenantContextError(`${name} has no host`)
+  if (!u.hostname) throw new TenantDbConfigError(`${name} has no host`, 'no-host')
   const user = decoded(u.username, 'user name', name)
   opts.checkUser?.(user)
   for (const key of u.searchParams.keys()) {
     if (!ALLOWED_QUERY_PARAMS.has(key)) {
-      throw new TenantContextError(`${name} may carry only sslmode as a query parameter`)
+      throw new TenantDbConfigError(`${name} may carry only sslmode as a query parameter`, 'query-parameter')
     }
   }
   const sslmodes = u.searchParams.getAll('sslmode')
-  if (sslmodes.length > 1) throw new TenantContextError(`${name} may give sslmode once`)
+  if (sslmodes.length > 1) throw new TenantDbConfigError(`${name} may give sslmode once`, 'sslmode-repeated')
   const host = u.hostname.toLowerCase()
   const port = u.port === '' ? 5432 : Number(u.port)
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new TenantContextError(`${name} has an invalid port`)
+    throw new TenantDbConfigError(`${name} has an invalid port`, 'bad-port')
   }
   return {
     url: trimmed,
@@ -319,7 +370,7 @@ export function createPostgresTenantDriver(rawUrl: string | undefined, opts: Ten
     ssl,
     onnotice: () => {},
     debug: false,
-    connection: { application_name: 'stellr-tenantdb' },
+    connection: { application_name: TENANT_APPLICATION_NAME },
   })
 
   return {
@@ -356,8 +407,15 @@ const cached = new Map<string, PostgresTenantDriver>()
  * or refused, or when a non-local host has no readable CA.
  */
 export function tenantDriverFromEnv(env: Record<string, string | undefined> = process.env): PostgresTenantDriver {
-  const parsed = parseTenantDatabaseUrl(env[TENANT_DATABASE_URL_VAR])
-  const ssl = tenantTlsOptions(parsed, env[TENANT_DATABASE_CA_CERT_VAR])
+  let parsed: ParsedUrl
+  let ssl: TenantTlsOptions
+  try {
+    parsed = parseTenantDatabaseUrl(env[TENANT_DATABASE_URL_VAR])
+    ssl = tenantTlsOptions(parsed, env[TENANT_DATABASE_CA_CERT_VAR])
+  } catch (err) {
+    if (err instanceof TenantDbConfigError) noteConfigRefusal(env)
+    throw err
+  }
   // A changed CA gets its own pool rather than reusing one built on the old one.
   const key = ssl ? `${parsed.url}\n${ssl.ca}` : parsed.url
   let driver = cached.get(key)
@@ -366,6 +424,79 @@ export function tenantDriverFromEnv(env: Record<string, string | undefined> = pr
     cached.set(key, driver)
   }
   return driver
+}
+
+/** The URL check and the CA check, each 'ok' or a fixed reason. The CA is 'not-needed' for a local host. */
+export interface TenantDbConfigStatus {
+  url: 'ok' | TenantDbConfigReason
+  ca: 'ok' | 'not-needed' | TenantDbConfigReason
+}
+
+const reasonOf = (err: unknown): TenantDbConfigReason => (err instanceof TenantDbConfigError ? err.reason : 'refused')
+
+/**
+ * Whether TENANT_DATABASE_URL and TENANT_DATABASE_CA_CERT pass the checks
+ * tenantDriverFromEnv makes, as 'ok' or a fixed reason: never a value, a host
+ * or a message. Opens nothing. The health route loads this module for it only
+ * when TENANT_DB_ENABLED is 'true' (S5 wave 7, O3).
+ */
+export function tenantDbConfigStatus(env: Record<string, string | undefined> = process.env): TenantDbConfigStatus {
+  let url: TenantDbConfigStatus['url'] = 'ok'
+  let local = false
+  try {
+    local = parseTenantDatabaseUrl(env[TENANT_DATABASE_URL_VAR]).local
+  } catch (err) {
+    url = reasonOf(err)
+  }
+  if (local) return { url, ca: 'not-needed' }
+  try {
+    parseTenantCaCert(env[TENANT_DATABASE_CA_CERT_VAR])
+    return { url, ca: 'ok' }
+  } catch (err) {
+    return { url, ca: reasonOf(err) }
+  }
+}
+
+/** The app_errors row for a refused setting: fixed words only. */
+export function tenantDbConfigMessage(status: TenantDbConfigStatus): string {
+  return `tenantdb_config_refused url=${status.url} ca=${status.ca}`
+}
+
+// One 'TENANTDB config' row per server instance: a refused setting refuses
+// every tenantDb call, and one row says so. The redeploy that fixes it starts
+// new instances.
+let configRowNoted = false
+
+/** Test hook: let this instance write its 'TENANTDB config' row again. */
+export function resetTenantDbConfigRow(): void {
+  configRowNoted = false
+}
+
+function noteConfigRefusal(env: Record<string, string | undefined>): void {
+  if (configRowNoted) return
+  configRowNoted = true
+  void recordConfigRow(tenantDbConfigMessage(tenantDbConfigStatus(env)))
+}
+
+/**
+ * lib/app-errors brings the mailer and the service-role client with it, so
+ * both it and lib/after-response load only when there is a row to write, as
+ * the limiter's rows do (O2). recordBuiltAppError, so the text is kept as
+ * built; the same per-instance limit as every app_errors write. Never throws.
+ * This module never logs, so a failed write is dropped (after-response logs a
+ * failed task itself).
+ */
+async function recordConfigRow(message: string): Promise<void> {
+  try {
+    const { runAfterResponse } = await import('@/lib/after-response')
+    runAfterResponse('tenant-db', async () => {
+      const { errorDigest, recordBuiltAppError, routeLabel } = await import('@/lib/app-errors')
+      const route = routeLabel('TENANTDB', 'config', undefined)
+      await recordBuiltAppError(route, message, errorDigest(route, message))
+    })
+  } catch {
+    // Nothing to do: the refusal itself still throws to the caller.
+  }
 }
 
 /** Close every pool this module opened (scripts and tests). */

@@ -14,15 +14,19 @@
  *                        frame-ancestors 'none'; base-uri 'none'; object-src 'none'
  *   with --stellr-base   the control: Stellr's own host never gets that fixed header
  *
- *   node scripts/canary/tenant-host-headers.mjs --base https://canary.<zone> [--stellr-base https://stellr-web-dev.vercel.app]
- *   node scripts/canary/tenant-host-headers.mjs --base http://canary.localhost:3000 --stellr-base http://localhost:3000
+ *   node scripts/canary/tenant-host-headers.mjs --zone <zone> --base https://canary.<zone> [--stellr-base https://stellr-web-dev.vercel.app]
+ *   node scripts/canary/tenant-host-headers.mjs --zone localhost --base http://canary.localhost:3000 --stellr-base http://localhost:3000
  *
- * --connect <address> sends every request to that address with the URL's Host (a
- * *.localhost host goes to 127.0.0.1 by default). VERCEL_AUTOMATION_BYPASS_SECRET,
- * when set, is sent as x-vercel-protection-bypass for the dev deployment's
- * protection. GET only, no sign-in, nothing written. Prints paths, status codes and
- * pass or fail, never a policy's nonce or a page body. Refuses Stellr's production
- * hosts. Exit 1 when any check fails.
+ * Targets, as the runner's (lib/testing/canary-flow-scenarios.ts canaryBases): --base
+ * must be canary.<zone>, and --stellr-base this machine or the stellr-web-dev
+ * deployment; Stellr's production hosts are refused. There is no override.
+ * --connect <address> sends every request to that address with the URL's Host, and
+ * must be this machine (127.0.0.1, ::1 or localhost); a *.localhost host goes to
+ * 127.0.0.1 by default. VERCEL_AUTOMATION_BYPASS_SECRET, when set, is sent as
+ * x-vercel-protection-bypass only on a request to a stellr-web-dev deployment, the
+ * only host its protection covers. GET only, no sign-in, nothing written. Prints
+ * paths, status codes and pass or fail, never a policy's nonce or a page body. Exit 1
+ * when any check fails.
  *
  * rawRequest is shared with scripts/canary-tenant-flow.ts: fetch will not set Host.
  */
@@ -41,6 +45,68 @@ export const FIXED_PATHS = ['/_next/canary-no-such-file', '/api/img/canary-no-su
 
 /** Stellr's production hosts (lib/testing/canary-flow-scenarios.ts PRODUCTION_HOSTS; the test holds them equal). */
 export const PRODUCTION_HOSTS = ['stellreducation.org', 'www.stellreducation.org', 'app.stellreducation.org', 'events.stellreducation.org']
+
+/** The stellr-web-dev Vercel project's deployments (the runner's DEV_DEPLOYMENT_HOST; the test holds them equal). */
+export const DEV_DEPLOYMENT_HOST = /^stellr-web-dev[a-z0-9-]*\.vercel\.app$/
+
+/** lib/testing/canary-flow-seed.ts CANARY_HOST_LABEL. */
+export const CANARY_HOST_LABEL = 'canary'
+
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]']
+const LOOPBACK_ADDRESSES = ['localhost', '127.0.0.1', '::1', '[::1]']
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+/**
+ * Is this hostname this machine: loopback, or a *.localhost name?
+ *
+ * @param {string} hostname
+ */
+export function isThisMachine(hostname) {
+  const h = hostname.toLowerCase()
+  return LOOPBACK_HOSTS.includes(h) || h.endsWith('.localhost')
+}
+
+/**
+ * The canary host for a zone, as K3's canaryHosts(zone).mapped (the test holds them equal).
+ *
+ * @param {string | undefined} raw
+ */
+export function canaryHostFor(raw) {
+  const zone = (raw ?? '').trim().toLowerCase().replace(/^\.+|\.+$/g, '')
+  if (!zone) throw new Error('--zone is required (for example --zone localhost for a local run)')
+  if (!zone.split('.').every((label) => DNS_LABEL.test(label))) throw new Error('--zone must be a DNS name: letters, digits, hyphens and dots')
+  return `${CANARY_HOST_LABEL}.${zone}`
+}
+
+/**
+ * The two origins the checks talk to, or a throw: --base is canary.<zone>, and
+ * --stellr-base (optional) this machine or the stellr-web-dev deployment.
+ *
+ * @param {{ base?: string, stellrBase?: string, zone?: string }} opts
+ * @returns {{ tenant: URL, stellr: URL | null }}
+ */
+export function headerBases({ base, stellrBase, zone }) {
+  const tenant = originOf(base, '--base')
+  if (tenant.hostname !== canaryHostFor(zone)) throw new Error(`--base must be the canary host for --zone (${canaryHostFor(zone)})`)
+  const stellr = stellrBase ? originOf(stellrBase, '--stellr-base') : null
+  if (stellr && !(isThisMachine(stellr.hostname) || DEV_DEPLOYMENT_HOST.test(stellr.hostname))) {
+    throw new Error('refusing: --stellr-base must be this machine or the stellr-web-dev deployment')
+  }
+  if (stellr && stellr.host === tenant.host) throw new Error('--base and --stellr-base name the same host')
+  return { tenant, stellr }
+}
+
+/**
+ * The --connect address, which must be this machine, or undefined when not given.
+ *
+ * @param {string | undefined} raw
+ */
+export function connectAddress(raw) {
+  const a = (raw ?? '').trim().toLowerCase()
+  if (!a) return undefined
+  if (!LOOPBACK_ADDRESSES.includes(a)) throw new Error('refusing: --connect must be this machine (127.0.0.1, ::1 or localhost)')
+  return a.replace(/^\[|\]$/g, '')
+}
 
 /**
  * The policies one header carries. Node joins a repeated header with ", " (or gives
@@ -124,16 +190,20 @@ export function originOf(raw, flag) {
 }
 
 /**
- * x-vercel-protection-bypass for the dev deployment, when the env carries it.
+ * x-vercel-protection-bypass for a request, when the env carries the secret and the
+ * request goes to a stellr-web-dev deployment. Vercel's protection covers only its
+ * own *.vercel.app URLs, so a custom domain or this machine never needs it, and no
+ * other host is sent it.
  *
+ * @param {string | URL} url
  * @param {Record<string, string | undefined>} [env]
  * @returns {Record<string, string>}
  */
-export function bypassHeaders(env = process.env) {
+export function bypassHeadersFor(url, env = process.env) {
   const secret = env.VERCEL_AUTOMATION_BYPASS_SECRET
   /** @type {Record<string, string>} */
   const out = {}
-  if (secret) out['x-vercel-protection-bypass'] = secret
+  if (secret && DEV_DEPLOYMENT_HOST.test(new URL(url).hostname.toLowerCase())) out['x-vercel-protection-bypass'] = secret
   return out
 }
 
@@ -185,16 +255,17 @@ export function rawRequest({ url, method = 'GET', headers = {}, body, connect, t
 /**
  * Every check, as printable lines (paths, statuses, pass or fail) and a verdict.
  *
- * @param {{ tenant: URL, stellr?: URL | null, connect?: string, headers?: Record<string, string>, request?: typeof rawRequest }} opts
+ * @param {{ tenant: URL, stellr?: URL | null, connect?: string, env?: Record<string, string | undefined>, request?: typeof rawRequest }} opts
  * @returns {Promise<{ ok: boolean, lines: string[] }>}
  */
-export async function runHeaderChecks({ tenant, stellr = null, connect, headers = {}, request = rawRequest }) {
+export async function runHeaderChecks({ tenant, stellr = null, connect, env = {}, request = rawRequest }) {
   const lines = []
   let ok = true
   const check = async (/** @type {URL} */ base, /** @type {string} */ path, /** @type {(r: RawResponse) => string[]} */ judge, /** @type {string} */ label) => {
     let res
     try {
-      res = await request({ url: new URL(path, base), headers, connect })
+      const url = new URL(path, base)
+      res = await request({ url, headers: bypassHeadersFor(url, env), connect })
     } catch {
       ok = false
       lines.push(`  FAIL  ${label} ${path}: no response`)
@@ -220,12 +291,10 @@ function flag(argv, name) {
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const tenant = originOf(flag(argv, '--base'), '--base')
-  const stellrRaw = flag(argv, '--stellr-base')
-  const stellr = stellrRaw ? originOf(stellrRaw, '--stellr-base') : null
-  if (stellr && stellr.host === tenant.host) throw new Error('--base and --stellr-base name the same host')
+  const { tenant, stellr } = headerBases({ base: flag(argv, '--base'), stellrBase: flag(argv, '--stellr-base'), zone: flag(argv, '--zone') })
+  const connect = connectAddress(flag(argv, '--connect'))
   console.log(`Tenant-host headers: ${tenant.host}${stellr ? ` (control: ${stellr.host})` : ''}`)
-  const { ok, lines } = await runHeaderChecks({ tenant, stellr, connect: flag(argv, '--connect'), headers: bypassHeaders() })
+  const { ok, lines } = await runHeaderChecks({ tenant, stellr, connect, env: process.env })
   for (const line of lines) console.log(line)
   if (!ok) process.exitCode = 1
 }

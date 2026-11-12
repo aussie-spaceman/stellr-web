@@ -22,9 +22,11 @@ import {
   judgeSigned,
   judgeStellrUnchanged,
   KNOWN_GAPS,
+  mintSessionToken,
   newRunId,
   parseRunState,
   participantHasConsentMarker,
+  personaSessionFrom,
   personalDataProblem,
   plusAddress,
   registrationBody,
@@ -36,8 +38,10 @@ import {
   safeOutput,
   scenariosFor,
   sessionEnvName,
+  sessionIdEnvName,
   sessionTokenProblem,
   skipped,
+  startMustStop,
   type ProbeContext,
   type ProbeOutcome,
   type RegistrationReadBack,
@@ -107,6 +111,7 @@ const CONTEXT: ProbeContext = {
   pendingParticipantId: uuid(21),
   adultParticipantId: uuid(22),
   stellrProbeBody: registrationBody(IDS['stellr-probe'], CANARY_FLOW_EVENT.slug, '2026-12-29'),
+  canaryHostProbeBody: registrationBody(IDS['canary-host-probe'], 'a-stellr-event', '2026-12-29'),
 }
 
 const mode = (authzSource: RunMode['authzSource'], loadScopedMode: RunMode['loadScopedMode']): RunMode => ({ authzSource, loadScopedMode })
@@ -198,6 +203,64 @@ describe("the personas' sessions", () => {
       'CANARY_SESSION_CANARY_ADMIN',
       'CANARY_SESSION_STELLR_PROBE_ADMIN',
     ])
+  })
+
+  it('may be a session id per persona instead, which wins, and needs the dev sk_test_ key', () => {
+    expect(CANARY_PERSONAS.map((p) => sessionIdEnvName(p.handle))).toEqual([
+      'CANARY_SESSION_ID_CANARY_MANAGER',
+      'CANARY_SESSION_ID_CANARY_ADMIN',
+      'CANARY_SESSION_ID_STELLR_PROBE_ADMIN',
+    ])
+    const key = { CLERK_SECRET_KEY: 'sk_test_placeholder' }
+    const tok = token({ iss: DEV_ISSUER, exp: live(300) })
+    expect(personaSessionFrom({ ...key, CANARY_SESSION_ID_CANARY_MANAGER: ' sess_placeholder1 ' }, 'canary-manager', NOW)).toEqual({
+      session: { kind: 'session-id', sessionId: 'sess_placeholder1' },
+      problem: null,
+    })
+    expect(personaSessionFrom({ ...key, CANARY_SESSION_ID_CANARY_MANAGER: 'sess_placeholder1', CANARY_SESSION_CANARY_MANAGER: tok }, 'canary-manager', NOW).session).toEqual({
+      kind: 'session-id',
+      sessionId: 'sess_placeholder1',
+    })
+    expect(personaSessionFrom({ CANARY_SESSION_CANARY_ADMIN: tok }, 'canary-admin', NOW)).toEqual({ session: { kind: 'token', token: tok }, problem: null })
+    expect(personaSessionFrom({ ...key, CANARY_SESSION_ID_CANARY_ADMIN: 'user_placeholder' }, 'canary-admin', NOW).problem).toMatch(/not a Clerk session id/)
+    expect(personaSessionFrom({ CANARY_SESSION_ID_CANARY_ADMIN: 'sess_placeholder1' }, 'canary-admin', NOW).problem).toMatch(/sk_test_/)
+    expect(personaSessionFrom({ CLERK_SECRET_KEY: 'sk_live_placeholder', CANARY_SESSION_ID_CANARY_ADMIN: 'sess_placeholder1' }, 'canary-admin', NOW).problem).toMatch(/sk_test_/)
+    expect(personaSessionFrom({}, 'stellr-probe-admin', NOW)).toEqual({ session: null, problem: 'not set' })
+  })
+
+  it("mint a fresh token from a session id through Clerk's Backend API, and refuse anything but a live dev token", async () => {
+    const minted = token({ iss: DEV_ISSUER, exp: live(60) })
+    const calls: { url: string; init: { method: string; headers: Record<string, string>; body: string } }[] = []
+    const fetchOk = (jwt: unknown, status = 200) => async (url: string, init: { method: string; headers: Record<string, string>; body: string }) => {
+      calls.push({ url, init })
+      return { ok: status < 300, status, json: async () => ({ object: 'token', jwt }) }
+    }
+    expect(await mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(minted))).toBe(minted)
+    expect(calls[0].url).toBe('https://api.clerk.com/v1/sessions/sess_placeholder1/tokens')
+    expect(calls[0].init.method).toBe('POST')
+    expect(calls[0].init.headers.Authorization).toBe('Bearer sk_test_placeholder')
+    // Nothing is asked of Clerk without a development key, or for something that is not a session id.
+    calls.length = 0
+    await expect(mintSessionToken('sess_placeholder1', 'sk_live_placeholder', () => NOW, fetchOk(minted))).rejects.toThrow(/sk_test_/)
+    await expect(mintSessionToken('sess_placeholder1', undefined, () => NOW, fetchOk(minted))).rejects.toThrow(/sk_test_/)
+    await expect(mintSessionToken('../users', 'sk_test_placeholder', () => NOW, fetchOk(minted))).rejects.toThrow(/session id/)
+    expect(calls).toEqual([])
+    // A refusal, a production instance's token, an expired one or no token at all.
+    const refused = mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(null, 404))
+    await expect(refused).rejects.toThrow(/\(404\)/)
+    await expect(mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: 'https://clerk.stellreducation.org', exp: live(60) })))).rejects.toThrow(
+      /development instance/,
+    )
+    await expect(mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: DEV_ISSUER, exp: live(5) })))).rejects.toThrow(/expire/)
+    await expect(mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(undefined))).rejects.toThrow(/not a session token/)
+    // No error names the id, the key or a token.
+    for (const p of [refused, mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: DEV_ISSUER, exp: live(5) })))]) {
+      const message = await p.then(
+        () => '',
+        (e: Error) => e.message,
+      )
+      expect(message).not.toMatch(/sess_|sk_test_|placeholder/)
+    }
   })
 
   it('must be live tokens from a Clerk development instance', () => {
@@ -303,6 +366,15 @@ describe('the run state', () => {
 })
 
 describe('S1 to S6 and S8', () => {
+  it("stops the start phase when S1's 201 is not in this env's database as dev-canary's", () => {
+    expect(startMustStop(created({}), readBack())).toBe(false)
+    expect(startMustStop(created({}), readBack({ registration: null, participants: [] }))).toBe(true)
+    expect(startMustStop(created({}), readBack({ registration: { id: uuid(1), tenant_id: STELLR_TENANT_ID, event_slug: CANARY_FLOW_EVENT.slug } }))).toBe(true)
+    expect(startMustStop(created({}), readBack({ registration: { id: uuid(1), tenant_id: null, event_slug: CANARY_FLOW_EVENT.slug } }))).toBe(true)
+    // Not a 201: nothing was written there either, and S1 fails on its own.
+    expect(startMustStop({ status: 404, json: null }, readBack({ registration: null, participants: [] }))).toBe(false)
+  })
+
   it('S1 passes for a dev-canary adult with no consent row, and fails otherwise', () => {
     expect(judgeAdultRegistered(created({}), readBack()).status).toBe('pass')
     expect(registrationIdOf(created({}))).toBe(uuid(1))
@@ -408,7 +480,7 @@ describe('S7: the isolation table', () => {
   })
 
   it('answers the same in every mode where no switch reaches the route', () => {
-    for (const id of ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P14', 'P15']) {
+    for (const id of ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P14', 'P15', 'P16', 'P17']) {
       const first = JSON.stringify(probe(id).expect(ALL_RUN_MODES[0]))
       for (const m of ALL_RUN_MODES) expect(JSON.stringify(probe(id).expect(m)), `${id} ${m.authzSource}/${m.loadScopedMode}`).toBe(first)
     }
@@ -426,9 +498,12 @@ describe('S7: the isolation table', () => {
       expect([status('P11', mode(a, 'off')), status('P11', mode(a, 'shadow')), status('P11', mode(a, 'enforce'))], `P11 ${a}`).toEqual([200, 200, 404])
       expect([status('P12', mode(a, 'off')), status('P12', mode(a, 'shadow')), status('P12', mode(a, 'enforce'))], `P12 ${a}`).toEqual([200, 200, 404])
     }
+    // lib/authz requireEventRoute under postgres: the host's tenant decides (P11, 403), and
+    // a Stellr admin is refused on another tenant's event with the route's 404 (P12).
+    // canary-flow-authz.test.ts drives the real guard for both.
     for (const l of ['off', 'shadow', 'enforce'] as const) {
-      expect(status('P11', mode('postgres', l)), `P11 postgres/${l}`).toBe(200)
-      expect(status('P12', mode('postgres', l)), `P12 postgres/${l}`).toBe(403)
+      expect(status('P11', mode('postgres', l)), `P11 postgres/${l}`).toBe(403)
+      expect(status('P12', mode('postgres', l)), `P12 postgres/${l}`).toBe(404)
     }
   })
 
@@ -456,6 +531,24 @@ describe('S7: the isolation table', () => {
     expect(probe('P9').request(CONTEXT)!.body).toEqual({ action: 'group_check_in', participantIds: [uuid(22), uuid(21)] })
     expect(probe('P5').request(CONTEXT)!.body).toBe(CONTEXT.stellrProbeBody)
     expect(probe('P8').request(CONTEXT)!.path).toBe('/api/admin/events/a-stellr-event/check-in')
+  })
+
+  it("probes the other direction: a Stellr event through dev-canary's host, as its own person", () => {
+    expect(probe('P16')).toMatchObject({ persona: 'anonymous', host: 'tenant' })
+    expect(probe('P16').request(CONTEXT)).toEqual({ method: 'GET', path: '/register/a-stellr-event' })
+    expect(probe('P17')).toMatchObject({ persona: 'anonymous', host: 'tenant' })
+    const req = probe('P17').request(CONTEXT)!
+    expect(req).toMatchObject({ method: 'POST', path: '/api/register/individual' })
+    expect((req.body as { event_slug: string }).event_slug).toBe('a-stellr-event')
+    expect((req.body as { email: string }).email).toBe(IDS['canary-host-probe'].email)
+    expect(IDS['canary-host-probe'].email).not.toBe(IDS['stellr-probe'].email)
+    expect(probe('P5').request(CONTEXT)!.body).toMatchObject({ event_slug: CANARY_FLOW_EVENT.slug })
+    for (const m of ALL_RUN_MODES) {
+      expect(probe('P16').expect(m)).toEqual({ status: 404 })
+      expect(probe('P17').expect(m)).toEqual({ status: 404 })
+    }
+    // S8 sees what P17 might write: its person is one of the run's addresses.
+    expect(runAddresses(IDS)).toContain(IDS['canary-host-probe'].email)
   })
 
   it('judges a probe as passing, a known gap, differing, skipped or not run', () => {

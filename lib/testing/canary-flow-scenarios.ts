@@ -1,5 +1,5 @@
 // The dev canary runner's scenarios (S5 wave 7, slice K8). Pure: no network, no
-// database, no clock of its own. scripts/canary-tenant-flow.ts drives these over
+// database, no clock of its own (mintSessionToken uses the fetch and clock it is given). scripts/canary-tenant-flow.ts drives these over
 // HTTP against the canary tenant K3 seeds (lib/testing/canary-flow-seed.ts) and
 // reads the evidence back from the database its env names; this module says what
 // each scenario sends, what it expects, and how a run is judged and printed.
@@ -97,7 +97,7 @@ export const CANARY_SCENARIOS: readonly ScenarioSpec[] = [
     title: 'an adult registers',
     phases: ['start'],
     personas: [],
-    evidence: "201; registrations and participants rows stamped dev-canary; no guardian-consent row",
+    evidence: "201; registrations and participants rows stamped dev-canary; no guardian-consent row. A 201 this env's database does not hold as dev-canary's stops the phase before S2",
   },
   {
     id: 'S2',
@@ -160,7 +160,8 @@ export function scenariosFor(phase: RunPhase): ScenarioSpec[] {
 export const PRODUCTION_HOSTS: readonly string[] = ['stellreducation.org', 'www.stellreducation.org', 'app.stellreducation.org', 'events.stellreducation.org']
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
-const DEV_DEPLOYMENT_HOST = /^stellr-web-dev[a-z0-9-]*\.vercel\.app$/
+/** The stellr-web-dev Vercel project's deployments (scripts/canary/tenant-host-headers.mjs holds the same; the test holds them equal). */
+export const DEV_DEPLOYMENT_HOST = /^stellr-web-dev[a-z0-9-]*\.vercel\.app$/
 
 export interface CanaryBases {
   /** The canary tenant's host: canary.<zone>. */
@@ -225,13 +226,83 @@ export function assertCanaryRunTarget(env: Record<string, string | undefined>, o
 // ── Personas' sessions ──────────────────────────────────────────────────────
 
 /**
- * Where the runner takes a persona's Clerk session token from. The runner never
- * signs in and never calls Clerk: the operator mints each token on the dev instance
- * (scripts/canary-tenant-flow.ts says how) and passes it here. A missing token
- * skips that persona's checks, and a skip is never a pass.
+ * Where the runner takes a persona's session from. The runner never signs in and
+ * never fetches a testing token. The operator signs each persona in on the dev
+ * instance once (scripts/canary-tenant-flow.ts says how) and passes either:
+ *   CANARY_SESSION_ID_<HANDLE>  the Clerk session id (sess_…). The runner mints a
+ *                               fresh session token from it just before each use
+ *                               (mintSessionToken), with the dev instance's sk_test_
+ *                               key, so a phase can run as long as it needs.
+ *   CANARY_SESSION_<HANDLE>     a session token copied by hand. It lives about a
+ *                               minute, so it rarely lasts a start phase: for a
+ *                               short check only.
+ * The id wins when both are set. A missing one skips that persona's checks, and a
+ * skip is never a pass.
  */
 export function sessionEnvName(handle: CanaryPersonaHandle): string {
   return `CANARY_SESSION_${handle.toUpperCase().replace(/-/g, '_')}`
+}
+
+export function sessionIdEnvName(handle: CanaryPersonaHandle): string {
+  return `CANARY_SESSION_ID_${handle.toUpperCase().replace(/-/g, '_')}`
+}
+
+/** A Clerk session id. */
+export const SESSION_ID_RE = /^sess_[A-Za-z0-9]+$/
+
+/** Clerk's Backend API. */
+export const CLERK_API = 'https://api.clerk.com/v1'
+
+export type PersonaSession = { kind: 'session-id'; sessionId: string } | { kind: 'token'; token: string }
+
+/** A persona's session from the env, or why there is none. Never echoes a value. */
+export function personaSessionFrom(
+  env: Record<string, string | undefined>,
+  handle: CanaryPersonaHandle,
+  now: Date,
+): { session: PersonaSession; problem: null } | { session: null; problem: string } {
+  const id = (env[sessionIdEnvName(handle)] ?? '').trim()
+  if (id) {
+    if (!SESSION_ID_RE.test(id)) return { session: null, problem: `${sessionIdEnvName(handle)} is not a Clerk session id (sess_…)` }
+    if (!(env.CLERK_SECRET_KEY ?? '').trim().startsWith('sk_test_')) return { session: null, problem: 'a session id needs the dev instance\'s sk_test_ CLERK_SECRET_KEY to mint tokens' }
+    return { session: { kind: 'session-id', sessionId: id }, problem: null }
+  }
+  const token = env[sessionEnvName(handle)]
+  const problem = sessionTokenProblem(token, now)
+  return problem ? { session: null, problem } : { session: { kind: 'token', token: (token as string).trim() }, problem: null }
+}
+
+/**
+ * A fresh session token for a session id, from Clerk's Backend API
+ * (POST /v1/sessions/{id}/tokens) with the caller's fetch. Only with a development
+ * (sk_test_) key, and the token must pass sessionTokenProblem: issued by a Clerk
+ * development instance, with time left. Errors carry a status code at most, never
+ * the id, the key or a token.
+ */
+export async function mintSessionToken(
+  sessionId: string,
+  secretKey: string | undefined,
+  now: () => Date,
+  fetchImpl: (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>,
+): Promise<string> {
+  const key = (secretKey ?? '').trim()
+  if (!key.startsWith('sk_test_')) throw new Error("refusing: minting a session token needs the dev instance's sk_test_ key")
+  if (!SESSION_ID_RE.test(sessionId)) throw new Error('not a Clerk session id')
+  const res = await fetchImpl(`${CLERK_API}/sessions/${sessionId}/tokens`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (!res.ok) throw new Error(`Clerk did not mint a session token (${res.status}); is the session still active?`)
+  let jwt: unknown
+  try {
+    jwt = ((await res.json()) as { jwt?: unknown } | null)?.jwt
+  } catch {
+    jwt = undefined
+  }
+  const problem = typeof jwt === 'string' ? sessionTokenProblem(jwt, now()) : 'not a session token'
+  if (problem) throw new Error(`the minted token is ${problem === 'not a session token' ? 'not a session token' : `refused: ${problem}`}`)
+  return (jwt as string).trim()
 }
 
 /** A Clerk development instance's issuer: https://<name>.clerk.accounts.dev. */
@@ -292,7 +363,7 @@ export function plusAddress(address: string, tag: string): string {
   return `${address.slice(0, at)}+${tag}${address.slice(at)}`
 }
 
-export type IdentityKey = 'adult' | 'minor-sign' | 'minor-decline' | 'stellr-probe'
+export type IdentityKey = 'adult' | 'minor-sign' | 'minor-decline' | 'stellr-probe' | 'canary-host-probe'
 
 export interface RunIdentity {
   key: IdentityKey
@@ -323,6 +394,7 @@ export function runIdentities(runId: string, mailbox: GuardianMailbox = 'example
     'minor-sign': person('minor-sign', 'Minor Sign', 15, { firstName: 'Canary', lastName: `Guardian Sign ${runId}`, email: guardianEmail('sign'), relationship: 'Parent' }),
     'minor-decline': person('minor-decline', 'Minor Decline', 16, { firstName: 'Canary', lastName: `Guardian Decline ${runId}`, email: guardianEmail('decline'), relationship: 'Legal Guardian' }),
     'stellr-probe': person('stellr-probe', 'Stellr Probe', 30, null),
+    'canary-host-probe': person('canary-host-probe', 'Canary Host Probe', 30, null),
   }
 }
 
@@ -446,6 +518,17 @@ export function skipped(id: ScenarioId, reason: string): ScenarioResult {
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
+
+/**
+ * After S1: must the start phase stop before it registers the minors? Yes when the
+ * target said 201 but the database this env names holds no such registration, or
+ * holds one not stamped dev-canary: the server is writing somewhere else, and each
+ * minor's registration would make it send a guardian invitation from its own mail
+ * account before the run could fail.
+ */
+export function startMustStop(answer: HttpAnswer, rb: RegistrationReadBack): boolean {
+  return answer.status === 201 && (!rb.registration || rb.registration.tenant_id !== CANARY_ID)
+}
 
 /** S1. */
 export function judgeAdultRegistered(answer: HttpAnswer, rb: RegistrationReadBack): ScenarioResult {
@@ -645,8 +728,10 @@ export interface ProbeContext {
   pendingAgreementId: string | null
   pendingParticipantId: string | null
   adultParticipantId: string | null
-  /** The register body for the run's stellr-probe person on dev-canary's event. */
+  /** The register body for the run's stellr-probe person on dev-canary's event (P5, on Stellr's host). */
   stellrProbeBody: RegistrationBody
+  /** The register body for the run's canary-host-probe person on the Stellr event (P17, on dev-canary's host). */
+  canaryHostProbeBody: RegistrationBody
 }
 
 export interface ProbeRequest {
@@ -824,9 +909,13 @@ export const ISOLATION_PROBES: readonly IsolationProbe[] = [
     persona: 'canary-manager',
     host: 'stellr',
     request: (c) => ({ method: 'GET', path: `/api/admin/events/${c.canarySlug}/emails` }),
-    // clerk and shadow decide as Stellr's event manager, with a Stellr-wide scope;
-    // postgres decides in the event's tenant, where the assignment holds.
-    expect: (m) => withAuthzShadowLog(m.authzSource === 'postgres' ? { status: 200 } : byLoadScoped(m, 200, EMAILS_ROUTE), m, EMAILS_ROUTE),
+    // lib/authz.ts requireEventRoute. clerk and shadow decide as Stellr's event manager
+    // (the Clerk claim, and an assignment read with no tenant counts as Stellr's), with a
+    // Stellr-wide scope. postgres passes no slug to requireEventAccess, so the host's
+    // tenant (Stellr) decides, and canary-manager is no event manager there, or holds
+    // only dev-canary's assignment: 403 either way, before the event is read.
+    // canary-flow-authz.test.ts drives requireEventRoute to hold this to the code.
+    expect: (m) => withAuthzShadowLog(m.authzSource === 'postgres' ? { status: 403 } : byLoadScoped(m, 200, EMAILS_ROUTE), m, EMAILS_ROUTE),
   },
   {
     id: 'P12',
@@ -834,8 +923,9 @@ export const ISOLATION_PROBES: readonly IsolationProbe[] = [
     persona: 'stellr-probe-admin',
     host: 'stellr',
     request: (c) => ({ method: 'GET', path: `/api/admin/events/${c.canarySlug}/emails` }),
-    // postgres: the event's tenant decides, and a Stellr admin holds nothing in dev-canary.
-    expect: (m) => withAuthzShadowLog(m.authzSource === 'postgres' ? { status: 403 } : byLoadScoped(m, 200, EMAILS_ROUTE), m, EMAILS_ROUTE),
+    // postgres: a Stellr admin covers every Stellr event, and requireEventRoute then reads
+    // the event's tenant, dev-canary, which is not the caller's: the route's own 404.
+    expect: (m) => withAuthzShadowLog(m.authzSource === 'postgres' ? { status: 404 } : byLoadScoped(m, 200, EMAILS_ROUTE), m, EMAILS_ROUTE),
   },
   {
     id: 'P13',
@@ -866,6 +956,26 @@ export const ISOLATION_PROBES: readonly IsolationProbe[] = [
       gap: 'A11',
       reason: "not probed: opening a signing link records a view on the guardian's envelope, and the runner never reads a signing token",
     }),
+  },
+  // The other direction of P4 and P5: a Stellr event through dev-canary's host. P17 is
+  // what S8's Stellr registration count watches. Its rate-limit bucket is dev-canary's
+  // host and the Stellr event (lib/rate-limit-async.ts tenantKey), so it does not use up
+  // the three registrations S1 and S2 make, and its person is its own.
+  {
+    id: 'P16',
+    what: "a Stellr event's register page is unknown on dev-canary's host",
+    persona: 'anonymous',
+    host: 'tenant',
+    request: (c) => ({ method: 'GET', path: `/register/${c.stellrSlug}` }),
+    expect: () => ({ status: 404 }),
+  },
+  {
+    id: 'P17',
+    what: "registering for a Stellr event through dev-canary's host answers as an unknown event, and writes nothing",
+    persona: 'anonymous',
+    host: 'tenant',
+    request: (c) => ({ method: 'POST', path: '/api/register/individual', body: c.canaryHostProbeBody }),
+    expect: () => ({ status: 404 }),
   },
 ]
 

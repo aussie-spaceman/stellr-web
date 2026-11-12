@@ -1677,13 +1677,17 @@
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: agreements"
     },
+    "scripts/canary-tenant-flow.ts": {
+      "class": "script",
+      "reason": "Operator script, run by hand (S5 wave 7 K8, the dev canary runner): SELECTs only, reading back the evidence its HTTP requests left (registrations, participants, tenant_guardian_consents, agreements, event_email_sends, events, app_errors) across dev-canary and Stellr, which RLS would hide. Refuses any database but the dev project or loopback (K3 assertCanaryFlowTarget). No browser or request reaches it."
+    },
     "scripts/docusign-resend-outstanding.ts": {
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: agreements"
     },
     "scripts/esign-dev-issue.ts": {
       "class": "script",
-      "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements"
+      "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements, esign_templates"
     },
     "scripts/esign-fallback-drill.ts": {
       "class": "script",

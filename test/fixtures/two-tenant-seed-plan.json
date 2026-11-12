@@ -1,0 +1,110 @@
+{
+  "tenants": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "slug": "stellr",
+      "legal_name": "Stellr Education",
+      "display_name": "Stellr Education",
+      "country": "US",
+      "payment_region": "US",
+      "currency": "usd",
+      "time_zone": "America/Denver",
+      "is_platform_owner": true,
+      "min_participant_age": 0,
+      "status": "active"
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000ca4a2",
+      "slug": "canary-academy",
+      "legal_name": "Canary Academy Honeytoken Ltd",
+      "display_name": "Canary Academy",
+      "country": "AU",
+      "payment_region": "AU",
+      "currency": "aud",
+      "abn": "00000000000",
+      "gst_registered": false,
+      "time_zone": "Australia/Sydney",
+      "is_platform_owner": false,
+      "min_participant_age": 14,
+      "status": "active",
+      "branding": {
+        "note": "two-tenant test fixture"
+      }
+    }
+  ],
+  "tenant_domains": [
+    {
+      "host": "canary-academy.localhost",
+      "tenant_id": "00000000-0000-4000-8000-0000000ca4a2",
+      "is_primary": true
+    },
+    {
+      "host": "stellr.localhost",
+      "tenant_id": "00000000-0000-4000-8000-000000000001",
+      "is_primary": false
+    }
+  ],
+  "events": [
+    {
+      "tenant_id": "00000000-0000-4000-8000-0000000ca4a2",
+      "slug": "honeytoken-canary-academy-event",
+      "sanity_id": "honeytoken-canary-sanity-event",
+      "title": "Canary Academy Honeytoken Event",
+      "activity_type": "live_event",
+      "starts_at": "2027-03-12T13:00:00.000Z",
+      "ends_at": "2027-03-14T13:00:00.000Z",
+      "time_zone": "Australia/Sydney",
+      "country": "AU",
+      "currency": "aud",
+      "grade_system": "au_years",
+      "min_participant_age": 14,
+      "status": "fixture",
+      "raw": {
+        "fixture": "two-tenant",
+        "note": "HONEYTOKEN-CANARY Canary Academy private record"
+      }
+    },
+    {
+      "tenant_id": "00000000-0000-4000-8000-000000000001",
+      "slug": "seed-two-tenant-stellr-event",
+      "sanity_id": "seed-two-tenant-stellr-event",
+      "title": "Two-tenant fixture event (Stellr)",
+      "activity_type": "live_event",
+      "starts_at": "2027-03-12T07:00:00.000Z",
+      "ends_at": "2027-03-14T07:00:00.000Z",
+      "time_zone": "America/Denver",
+      "country": "US",
+      "currency": "usd",
+      "grade_system": "us_grades",
+      "min_participant_age": null,
+      "status": "fixture",
+      "raw": {
+        "fixture": "two-tenant"
+      }
+    }
+  ],
+  "users": [
+    {
+      "handle": "stellr-participant",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "email": "stellr-participant+clerk_test@example.com",
+      "firstName": "Fixture",
+      "lastName": "StellrParticipant"
+    },
+    {
+      "handle": "canary-admin",
+      "tenantId": "00000000-0000-4000-8000-0000000ca4a2",
+      "email": "canary-admin+clerk_test@example.com",
+      "firstName": "Honeytoken",
+      "lastName": "CanaryAdmin",
+      "tenantRole": "tenant_admin"
+    },
+    {
+      "handle": "canary-participant",
+      "tenantId": "00000000-0000-4000-8000-0000000ca4a2",
+      "email": "canary-participant+clerk_test@example.com",
+      "firstName": "Honeytoken",
+      "lastName": "CanaryParticipant"
+    }
+  ]
+}

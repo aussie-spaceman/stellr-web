@@ -33,7 +33,7 @@ function fakeDb(
   const inList = vi.fn(async (_col: string, _ids: string[]) => ({ data: owners.data ?? [], error: owners.error ?? null }))
   const select = vi.fn((_cols: string) => ({ in: inList }))
   const from = vi.fn((_table: string) => ({ upsert, select }))
-  return { db: { from } as unknown as SupabaseClient, from, upsert, inList }
+  return { db: { from } as unknown as SupabaseClient, from, upsert, inList, select }
 }
 
 describe('toEventRow', () => {
@@ -153,6 +153,196 @@ describe('upsertEventRows / syncEventFromSanity', () => {
       const { db, upsert } = fakeDb(undefined, { error: { message: 'read failed' } })
       expect(await upsertEventRows(db, [row()])).toEqual({ error: 'read failed' })
       expect(upsert).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('a non-owner row keeps its minimum age and time zone (S5 K4)', () => {
+    const TENANT_B = '33333333-3333-4333-8333-333333333333'
+    const row = () => toEventRow(nevada, undefined, NOW)!
+    const written = (upsert: ReturnType<typeof fakeDb>['upsert']) => (upsert.mock.calls[0][0] as ReturnType<typeof row>[])[0]
+    /** An existing mirror row as the owner read returns it: Nevada, as last synced. */
+    const existing = (over: Record<string, unknown> = {}) => ({
+      sanity_id: 'evt-nevada',
+      tenant_id: TENANT_B,
+      currency: 'usd',
+      min_participant_age: 16,
+      time_zone: 'America/Los_Angeles',
+      country: 'US',
+      state: 'NV',
+      source_updated_at: '2026-10-20T09:00:00Z',
+      ...over,
+    })
+
+    it('reads the kept values in the one owner read of the batch', async () => {
+      const { db, select, inList, upsert } = fakeDb(undefined, { data: [existing()] })
+      await upsertEventRows(db, [row(), toEventRow({ ...nevada, _id: 'evt-2', slug: 'two' }, undefined, NOW)!])
+      expect(select).toHaveBeenCalledTimes(1)
+      expect(select.mock.calls[0][0]).toBe(
+        'sanity_id, tenant_id, currency, min_participant_age, time_zone, country, state:raw->>state, source_updated_at',
+      )
+      expect(inList).toHaveBeenCalledTimes(1)
+      expect(inList).toHaveBeenCalledWith('sanity_id', ['evt-nevada', 'evt-2'])
+      expect(upsert).toHaveBeenCalledTimes(1)
+    })
+
+    it('a Stellr row is written byte-identical to the mapped row, whatever the row held before', async () => {
+      const { db, upsert } = fakeDb(undefined, {
+        data: [existing({ tenant_id: STELLR_TENANT_ID, min_participant_age: 16, time_zone: 'America/Denver', state: 'NV' })],
+      })
+      const r = row()
+      await upsertEventRows(db, [r])
+      expect(written(upsert)).toBe(r)
+      expect(JSON.stringify(written(upsert))).toBe(JSON.stringify(toEventRow(nevada, undefined, NOW)))
+      expect(written(upsert)).toMatchObject({ min_participant_age: null, time_zone: 'America/Los_Angeles' })
+    })
+
+    it('keeps its minimum age across a republish', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing()] })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert)).toEqual({ ...row(), tenant_id: TENANT_B, min_participant_age: 16 })
+    })
+
+    it('keeps a NULL minimum as NULL', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing({ min_participant_age: null })] })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert).min_participant_age).toBeNull()
+    })
+
+    it('keeps it when the sync names the same tenant (the sync on a miss)', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing()] })
+      await upsertEventRows(db, [toEventRow(nevada, { tenantId: TENANT_B, currency: 'usd' }, NOW)!])
+      expect(written(upsert)).toMatchObject({ tenant_id: TENANT_B, min_participant_age: 16 })
+    })
+
+    it('keeps its own time zone while the state and country are unchanged, and dates the event in it', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing({ time_zone: 'America/Denver' })] })
+      await upsertEventRows(db, [row()])
+      // Local midnight 6 Nov in Denver (MST, UTC-7) and midnight after 7 Nov.
+      expect(written(upsert)).toEqual({
+        ...row(),
+        tenant_id: TENANT_B,
+        min_participant_age: 16,
+        time_zone: 'America/Denver',
+        starts_at: '2026-11-06T07:00:00.000Z',
+        ends_at: '2026-11-08T07:00:00.000Z',
+      })
+    })
+
+    it('treats a state written out in full as the same state', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing({ time_zone: 'America/Denver', state: ' Nevada ' })] })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert).time_zone).toBe('America/Denver')
+    })
+
+    it('recomputes the time zone as today when the state changed', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing({ time_zone: 'America/Denver', state: 'CO' })] })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert)).toEqual({ ...row(), tenant_id: TENANT_B, min_participant_age: 16 })
+      expect(written(upsert).time_zone).toBe('America/Los_Angeles')
+    })
+
+    it('recomputes the time zone as today when the country changed', async () => {
+      const { db, upsert } = fakeDb(undefined, {
+        data: [existing({ time_zone: 'Australia/Sydney', country: 'AU', state: 'NV', currency: 'aud' })],
+      })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert)).toEqual({ ...row(), tenant_id: TENANT_B, currency: 'aud', min_participant_age: 16 })
+    })
+
+    it('recomputes the time zone as today when a US state is filled in on a synced row', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing({ time_zone: 'America/Denver', state: null })] })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert)).toEqual({ ...row(), tenant_id: TENANT_B, min_participant_age: 16 })
+    })
+
+    describe('outside the US the state cannot move the zone, so a state edit keeps it', () => {
+      const sydney = (over: Record<string, unknown> = {}) =>
+        existing({ time_zone: 'Australia/Sydney', country: 'AU', state: 'NSW', currency: 'aud', ...over })
+      const auRow = (state: string | null) => toEventRow({ ...nevada, country: 'AU', state }, undefined, NOW)!
+      // Local midnight 6 Nov in Sydney (AEDT, UTC+11) and midnight after 7 Nov.
+      const inSydney = { time_zone: 'Australia/Sydney', starts_at: '2026-11-05T13:00:00.000Z', ends_at: '2026-11-07T13:00:00.000Z' }
+
+      it('keeps the zone when the state is written another way', async () => {
+        const { db, upsert } = fakeDb(undefined, { data: [sydney()] })
+        await upsertEventRows(db, [auRow('New South Wales')])
+        expect(written(upsert)).toEqual({ ...auRow('New South Wales'), tenant_id: TENANT_B, min_participant_age: 16, ...inSydney })
+      })
+
+      it('keeps the zone when a state is added', async () => {
+        const { db, upsert } = fakeDb(undefined, { data: [sydney({ state: null })] })
+        await upsertEventRows(db, [auRow('NSW')])
+        expect(written(upsert)).toMatchObject(inSydney)
+      })
+
+      it('still recomputes when the country changed', async () => {
+        const { db, upsert } = fakeDb(undefined, { data: [sydney({ country: 'NZ' })] })
+        await upsertEventRows(db, [auRow('NSW')])
+        expect(written(upsert)).toEqual({ ...auRow('NSW'), tenant_id: TENANT_B, min_participant_age: 16 })
+        expect(written(upsert).time_zone).toBe('America/Denver')
+      })
+    })
+
+    describe('a seeded row (never synced from Sanity, so no earlier state) keeps its zone on its first sync', () => {
+      it('a US row with no stored state keeps its zone and dates the event in it', async () => {
+        const { db, upsert } = fakeDb(undefined, {
+          data: [existing({ time_zone: 'America/Denver', state: null, source_updated_at: null })],
+        })
+        await upsertEventRows(db, [row()])
+        expect(written(upsert)).toEqual({
+          ...row(),
+          tenant_id: TENANT_B,
+          min_participant_age: 16,
+          time_zone: 'America/Denver',
+          starts_at: '2026-11-06T07:00:00.000Z',
+          ends_at: '2026-11-08T07:00:00.000Z',
+        })
+      })
+
+      it('an AU row seeded like the two-tenant fixture keeps its zone and minimum age', async () => {
+        const { db, upsert } = fakeDb(undefined, {
+          data: [
+            existing({
+              time_zone: 'Australia/Sydney',
+              country: 'AU',
+              state: null,
+              currency: 'aud',
+              min_participant_age: 14,
+              source_updated_at: null,
+            }),
+          ],
+        })
+        const au = toEventRow({ ...nevada, country: 'AU', state: 'NSW' }, undefined, NOW)!
+        await upsertEventRows(db, [au])
+        expect(written(upsert)).toMatchObject({
+          tenant_id: TENANT_B,
+          min_participant_age: 14,
+          time_zone: 'Australia/Sydney',
+          starts_at: '2026-11-05T13:00:00.000Z',
+          ends_at: '2026-11-07T13:00:00.000Z',
+        })
+      })
+
+      it('still recomputes when the seeded country differs from the document', async () => {
+        const { db, upsert } = fakeDb(undefined, {
+          data: [existing({ time_zone: 'Australia/Sydney', country: 'AU', state: null, currency: 'aud', source_updated_at: null })],
+        })
+        await upsertEventRows(db, [row()])
+        expect(written(upsert)).toEqual({ ...row(), tenant_id: TENANT_B, currency: 'aud', min_participant_age: 16 })
+      })
+    })
+
+    it('recomputes the time zone when the stored one is not a real zone', async () => {
+      const { db, upsert } = fakeDb(undefined, { data: [existing({ time_zone: 'Nowhere/Atlantis' })] })
+      await upsertEventRows(db, [row()])
+      expect(written(upsert).time_zone).toBe('America/Los_Angeles')
+      expect(written(upsert).starts_at).toBe(row().starts_at)
+    })
+
+    it('a brand-new row defaults to Stellr as today', async () => {
+      const { db, upsert } = fakeDb()
+      await syncEventFromSanity(db, { sanityId: 'evt-nevada' }, { fetcher: async () => nevada, now: NOW })
+      expect(written(upsert)).toEqual(toEventRow(nevada, undefined, NOW))
+      expect(written(upsert)).toMatchObject({ tenant_id: STELLR_TENANT_ID, min_participant_age: null, time_zone: 'America/Los_Angeles' })
     })
   })
 

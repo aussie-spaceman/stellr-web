@@ -34,7 +34,7 @@ vi.mock('next/navigation', () => ({
     throw new Error(`NEXT_REDIRECT ${url}`)
   },
 }))
-vi.mock('@/lib/community', () => ({ getSignedInMember: async () => ({ id: 'm-signed-in' }) }))
+vi.mock('@/lib/member-session', () => ({ getSignedInMember: async () => ({ id: 'm-signed-in' }) }))
 vi.mock('@/lib/survey/access', async (orig) => ({
   onPageTenant: (await orig<typeof import('@/lib/survey/access')>()).onPageTenant,
   invitationByToken: async () => h.inv,

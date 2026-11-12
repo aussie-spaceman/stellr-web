@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getSignedInMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/member-session'
 import { invitationByToken, isWrongMember, loadSession, onPageTenant } from '@/lib/survey/access'
 import { formatInZone } from '@/lib/survey/timezone'
 import { SurveyLoader } from '@/components/survey/SurveyLoader'

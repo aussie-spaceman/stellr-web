@@ -169,13 +169,13 @@
       "class": "convert",
       "reason": "The registration pay page's body, moved here from its page.tsx by S5 A7 so the tenant page can reuse it while Stellr's page refuses another tenant's registration. Reads the registration, its paid seats and scholarship offer for a payer who may not be signed in, by the pay token. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/survey/[token]/page.tsx": {
+    "app/(stellr)/(flow)/survey/[token]/survey-body.tsx": {
       "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
+      "reason": "The emailed survey link's page body, moved here from its page.tsx by S5 A10b so the tenant page can reuse it while Stellr's page refuses another tenant's link. Reads the invitation by its token hash, then its distribution, definition and response through lib/survey/access, for a respondent who may not be signed in. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/survey/event/[slug]/page.tsx": {
+    "app/(stellr)/(flow)/survey/event/[slug]/qr-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: survey_invitations"
+      "reason": "The event-day QR page's body, moved here from its page.tsx by S5 A10b so the tenant page can reuse it while Stellr's page refuses another tenant's survey. Reads the event's distribution and the signed-in member's own invitation (survey_invitations) to send them to it. Same access as before the move, for the area conversion to decide."
     },
     "app/(stellr)/(flow)/team-profile/[token]/page.tsx": {
       "class": "convert",
@@ -1683,7 +1683,7 @@
     },
     "scripts/esign-dev-issue.ts": {
       "class": "script",
-      "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements"
+      "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements, esign_templates"
     },
     "scripts/esign-fallback-drill.ts": {
       "class": "script",

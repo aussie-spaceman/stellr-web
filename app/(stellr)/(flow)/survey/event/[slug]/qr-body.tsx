@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getSignedInMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/member-session'
 import { supabaseServer } from '@/lib/supabase'
 import { distributionForEvent, statusNow } from '@/lib/survey/distributions'
 import { onPageTenant, participantIdsFor } from '@/lib/survey/access'

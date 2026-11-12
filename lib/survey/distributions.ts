@@ -14,6 +14,7 @@ import { hashToken, surveyToken } from './tokens'
 import { writeAudit } from './audit'
 import { isProd } from '@/lib/env'
 import { logActivities } from '@/lib/activity-log'
+import { recordTenant } from '@/lib/tenancy/host-record'
 
 export const SURVEY_KEY = 'post_event'
 
@@ -493,9 +494,18 @@ export async function materialiseInvitations(db: SupabaseClient, d: Distribution
   return created
 }
 
+/**
+ * The survey's tenant: its own, or Stellr's for NULL (S5 A10b). A row read without the
+ * column has no tenant, and nothing is planned or sent for it on a guess.
+ */
+export function distributionTenant(d: Pick<DistributionRow, 'tenant_id'>): string {
+  if (d.tenant_id === undefined) throw new Error('The survey distribution was read without its tenant_id')
+  return recordTenant(d.tenant_id)
+}
+
 /** Recipient plan for a distribution (the preview and the go-live job share it). */
 export function planFor(db: SupabaseClient, d: DistributionRow): Promise<RecipientPlan> {
-  return buildRecipientPlan(db, d.event_slug, d.event_date, d.audiences, { acceptOlderMinorAgreements: d.minor_agreement_override })
+  return buildRecipientPlan(db, d.event_slug, d.event_date, d.audiences, { acceptOlderMinorAgreements: d.minor_agreement_override }, distributionTenant(d))
 }
 
 /** Definition JSON → version row, publishing it if asked (scripts/survey-definition.ts). */

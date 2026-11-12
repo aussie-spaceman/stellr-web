@@ -7,11 +7,18 @@
  * send_attempts from the value read, a reminder by bumping its counter from
  * the value read. A second runner reading the same row loses the claim and
  * skips it, so nobody gets the same email twice.
+ *
+ * Another tenant's survey re-checks guardian consent when it sends (S5 A10b): an
+ * invitation of a participant whose guardian has not signed that tenant's consent form
+ * (the student's, or the guardian's on their behalf) is never sent for that event
+ * (decision W7-13, default), even if it was made before the plan left them out. Stellr's
+ * surveys read no guardian consent.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { EmailSendError, sendEmail } from '@/lib/email'
 import { AUTH_APP_URL } from '@/lib/env'
-import type { DistributionRow } from './distributions'
+import { distributionTenant, type DistributionRow } from './distributions'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { SurveyDefinition } from './definition'
 import { renderSurveyEmail, type SurveyEmailKind } from './emails'
 import { dueReminder, type ReminderKind } from './schedule'
@@ -98,6 +105,19 @@ async function deliver(inv: InvitationRow, d: DistributionRow, def: SurveyDefini
   })
 }
 
+/**
+ * The participants another tenant's survey may not send to, read once per pass. Null for
+ * Stellr's survey, which reads nothing. A failed read throws, so nothing is sent on a guess.
+ */
+async function heldForConsent(db: SupabaseClient, d: DistributionRow): Promise<Set<string> | null> {
+  const tenantId = distributionTenant(d)
+  if (tenantId === STELLR_TENANT_ID) return null
+  const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
+  return unconsentedParticipantIds(db, tenantId)
+}
+
+const isHeld = (held: Set<string> | null, inv: Pick<InvitationRow, 'participant_id'>) => !!held && !!inv.participant_id && held.has(inv.participant_id)
+
 export interface SendTally {
   invited: number
   reminded: number
@@ -131,6 +151,7 @@ export async function sendQueued(
     .order('created_at')
     .limit(200)
   if (error) throw new Error(`Reading queued invitations failed: ${error.message}`)
+  const held = data?.length ? await heldForConsent(db, d) : null
 
   for (const inv of (data ?? []) as InvitationRow[]) {
     if (tally.quotaHit) break
@@ -138,7 +159,7 @@ export async function sendQueued(
       tally.deferred++
       continue
     }
-    if (!stillInvitable.has(inv.recipient_key)) {
+    if (!stillInvitable.has(inv.recipient_key) || isHeld(held, inv)) {
       await db.from('survey_invitations').update({ status: 'expired' }).eq('id', inv.id).eq('status', 'queued')
       continue
     }
@@ -189,10 +210,11 @@ export async function sendReminders(
     .is('reminders_opted_out_at', null)
     .limit(1000)
   if (error) throw new Error(`Reading invitations for reminders failed: ${error.message}`)
+  const held = data?.length ? await heldForConsent(db, d) : null
 
   for (const row of (data ?? []) as (InvitationRow & { survey_responses: { last_saved_at: string | null }[] | { last_saved_at: string | null } | null })[]) {
     if (tally.quotaHit) break
-    if (!stillInvitable.has(row.recipient_key)) continue
+    if (!stillInvitable.has(row.recipient_key) || isHeld(held, row)) continue
     const resp = Array.isArray(row.survey_responses) ? row.survey_responses[0] : row.survey_responses
     const kind = dueReminder(row, d, now, resp?.last_saved_at ?? null)
     if (!kind) continue

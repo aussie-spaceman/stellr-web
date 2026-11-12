@@ -15,12 +15,20 @@
  * minor's invitation goes to the student, or to the guardian alone when the
  * guardian ticked §4 "no direct digital communications", or the student has no
  * address of their own. Never to both.
+ *
+ * Another tenant's event (S5 A10b): a participant whose guardian has not signed that
+ * tenant's consent form (A16) is left out altogether, with their guardian, so neither
+ * is invited (decision W7-13, default: such an invitation is never sent for that
+ * event). Their consent window closes before the event starts, and the survey opens
+ * on its last day, so one left out is never planned again. Stellr's events read no
+ * guardian consent.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { RespondentRole } from './definition'
 import type { AdultRelationship } from './branching'
 import { isMinorPerPolicy } from './minor'
 import { loadMinorConsents, NO_CONSENT, type MinorConsent } from './consent'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 export type Audience = RespondentRole
 
@@ -295,7 +303,22 @@ async function memberSchoolStates(db: SupabaseClient, memberIds: string[]): Prom
   return out
 }
 
-export async function loadEventPeople(db: SupabaseClient, slug: string): Promise<{ people: Person[]; headcountOnlyAdults: number }> {
+/**
+ * The participants another tenant's survey leaves out: those whose guardian has not
+ * signed the tenant's consent form. Null for Stellr's event, which reads nothing. A
+ * failed read throws, so nothing is planned on a guess.
+ */
+async function consentPendingParticipants(db: SupabaseClient, tenantId: string): Promise<Set<string> | null> {
+  if (tenantId === STELLR_TENANT_ID) return null
+  const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
+  return unconsentedParticipantIds(db, tenantId)
+}
+
+export async function loadEventPeople(
+  db: SupabaseClient,
+  slug: string,
+  tenantId: string = STELLR_TENANT_ID,
+): Promise<{ people: Person[]; headcountOnlyAdults: number }> {
   const { data: regs, error: regErr } = await db
     .from('registrations')
     .select('id, status, teacher_first_name, teacher_last_name, teacher_email, teacher_member_id, teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email, school_address_state, adult_count')
@@ -314,6 +337,19 @@ export async function loadEventPeople(db: SupabaseClient, slug: string): Promise
       .in('registration_id', regIds.slice(i, i + 200))
     if (error) throw new Error(`Reading participants failed: ${error.message}`)
     participants.push(...(data ?? []))
+  }
+  // Another tenant's consent-pending participants, and the people who would be reached in
+  // their place: the same member through another source, and their guardian.
+  const held = await consentPendingParticipants(db, tenantId)
+  const heldMembers = new Set<string>()
+  const heldGuardians = new Set<string>()
+  if (held) {
+    for (const p of participants) {
+      if (!held.has(p.id as string)) continue
+      if (p.member_id) heldMembers.add(p.member_id as string)
+      const guardian = cleanEmail(p.emergency_contact_email as string | null)
+      if (guardian) heldGuardians.add(guardian)
+    }
   }
 
   const { data: eps, error: epErr } = await db
@@ -342,6 +378,7 @@ export async function loadEventPeople(db: SupabaseClient, slug: string): Promise
   const people: Person[] = []
   const namedAdults = new Map<string, number>()
   for (const p of participants) {
+    if (held?.has(p.id as string)) continue
     const m = p.member_id ? members.get(p.member_id as string) : undefined
     const role = (p.event_role as string | null) ?? 'participant'
     if (pathForRole(role)?.role !== 'student') {
@@ -425,18 +462,22 @@ export async function loadEventPeople(db: SupabaseClient, slug: string): Promise
     })
   }
 
-  return { people, headcountOnlyAdults }
+  if (!held?.size) return { people, headcountOnlyAdults }
+  const reachesHeld = (p: Person) =>
+    (!!p.memberId && heldMembers.has(p.memberId)) || (pathForRole(p.eventRole)?.relationship === 'parent' && heldGuardians.has(cleanEmail(p.email) ?? ''))
+  return { people: people.filter((p) => !reachesHeld(p)), headcountOnlyAdults }
 }
 
-/** Everything the go-live job and the admin preview need. */
+/** Everything the go-live job and the admin preview need. `tenantId` is the event's: Stellr's unless given. */
 export async function buildRecipientPlan(
   db: SupabaseClient,
   slug: string,
   eventDay: string,
   audiences: Audience[],
   opts: PlanOptions = {},
+  tenantId: string = STELLR_TENANT_ID,
 ): Promise<RecipientPlan> {
-  const { people, headcountOnlyAdults } = await loadEventPeople(db, slug)
+  const { people, headcountOnlyAdults } = await loadEventPeople(db, slug, tenantId)
   const subjects = new Map<string, { key: string; memberId: string | null; participantId: string | null }>()
   for (const p of people) {
     if (pathForRole(p.eventRole)?.role !== 'student') continue

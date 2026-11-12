@@ -218,6 +218,9 @@
 /scripts/ci-db-build.sh             @aussie-spaceman
 /scripts/tenant-db-canary.ts        @aussie-spaceman
 
-# The per-area data-path switch (S5 C12)
+# The per-area data-path switch (S5 C12), and the pure module that reads its two
+# variables (TENANT_DB_ENABLED, TENANT_DB_AREAS), moved out of area-switch.ts and
+# db.ts in S5 wave 7 (O1) so the switch registry can resolve them
 /lib/tenancy/area-switch.ts         @aussie-spaceman
+/lib/tenancy/tenant-db-config.ts    @aussie-spaceman
 /lib/events/admin-config.ts         @aussie-spaceman

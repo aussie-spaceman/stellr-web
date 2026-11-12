@@ -6,7 +6,9 @@
 // holds their importers to lib/tenancy/db-callers.ts.
 //
 // Moved here unchanged in wave 7 (O1): nothing about how either variable is read
-// changed.
+// changed. Like area-switch.ts, this file is in .github/CODEOWNERS: a change to
+// which areas can be switched, how an entry parses, or what turns the tenant
+// database on needs the owner's review (lib/tenancy/flags.test.ts pins that).
 
 /** The env flag that turns the tenant database on. Anything but exactly 'true' is off. */
 export const TENANT_DB_FLAG = 'TENANT_DB_ENABLED'

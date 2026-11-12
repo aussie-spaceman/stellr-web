@@ -259,6 +259,22 @@ describe('where the registry may be reached', () => {
     for (const f of ['lib/tenancy/db.ts', 'lib/tenancy/area-switch.ts', 'lib/tenancy/driver.ts']) expect(closure.has(f), f).toBe(false)
   })
 
+  it('keeps the owner’s review on every file that decides the tenant database path', () => {
+    // The TENANT_DB_ENABLED gate and the TENANT_DB_AREAS parser moved out of
+    // area-switch.ts into tenant-db-config.ts, so the registry need not reach
+    // area-switch.ts. Moving them must not take them out of CODEOWNERS.
+    const owned = new Set(
+      readFileSync('.github/CODEOWNERS', 'utf8')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith('/') && /\s@\S/.test(l))
+        .map((l) => l.split(/\s+/)[0].slice(1)),
+    )
+    for (const f of [FLAGS, 'lib/tenancy/area-switch.ts', 'lib/tenancy/tenant-db-config.ts', 'lib/tenancy/driver.ts']) {
+      expect(owned.has(f), f).toBe(true)
+    }
+  })
+
   it('the health route does not load the driver statically', { timeout: 30_000 }, () => {
     const closure = importClosure('app/api/admin/health/integrations/route.ts', readRepoFile, { staticOnly: true })
     expect(closure.has(FLAGS)).toBe(true)

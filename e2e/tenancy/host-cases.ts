@@ -1,6 +1,6 @@
 import { signCheckInCode } from '../../lib/check-in-codes'
 import { HARNESS_BUILD_ENV } from './harness-env.mjs'
-import { type RecordOwner, credentialIssuer, eventTitle } from './harness-records'
+import { type RecordOwner, eventTitle } from './harness-records'
 
 /**
  * The URLs in the tenant-host allow-list that name a record, for check (c), S5 B10.
@@ -135,6 +135,9 @@ export const RECORD_PAGES: RecordPageCase[] = [
     missing: `/team-profile/${MISSING_TOKEN}`,
     // Past the record check the page needs the event from the CMS, so it says invalid.
     ownHost: { kind: 'shows', text: () => 'link isn’t valid' },
+    // Stellr's page answers another tenant's link as unknown straight after the row is
+    // read, before the CMS is asked (A10a); team-profile-body.test.ts runs it with a
+    // loadable event.
     onStellrHost: { kind: 'sameAsUnknown', owner: 'A10' },
   },
   {
@@ -142,7 +145,8 @@ export const RECORD_PAGES: RecordPageCase[] = [
     path: (o) => `/credentials/${o.credentialNumber}`,
     missing: `/credentials/${MISSING_CREDENTIAL}`,
     ownHost: { kind: 'noPage' },
-    onStellrHost: { kind: 'answers', owner: 'A10', text: credentialIssuer },
+    // Stellr's credentials only (A10a, decision W7-10).
+    onStellrHost: { kind: 'sameAsUnknown', owner: 'A10' },
   },
   // The harness's row is withdrawn, which is the generic image for any number, so for these
   // two "the same" says the row was read and nothing more. Past a public, live row is A10's.

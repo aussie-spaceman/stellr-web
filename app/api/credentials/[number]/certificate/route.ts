@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { rateLimit } from '@/lib/rate-limit-async'
 import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { recordOnHost } from '@/lib/tenancy/host-record'
 import { AUTH_APP_URL } from '@/lib/env'
 import { getCredentialByNumber } from '@/lib/credentials'
 import { FAMILY_LINK_PARAM, verifyCredentialPdfToken } from '@/lib/credentials-link'
@@ -28,7 +29,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
   const token = new URL(req.url).searchParams.get(FAMILY_LINK_PARAM)
   const db = supabaseServer()
   const cred = await getCredentialByNumber(db, decodeURIComponent(number))
-  if (!cred || cred.tombstoned_at || !verifyCredentialPdfToken(cred.id, token)) return notFound()
+  // Another host's credential answers as a number nobody holds, before the token is checked (S5 A10a).
+  if (!cred || !(await recordOnHost(cred)) || cred.tombstoned_at || !verifyCredentialPdfToken(cred.id, token)) return notFound()
   if (cred.status === 'revoked') return NextResponse.json({ error: 'This credential has been revoked.' }, { status: 410 })
 
   if (cred.source === 'event' && cred.event_slug && (await surveyFirst(db, cred))) {

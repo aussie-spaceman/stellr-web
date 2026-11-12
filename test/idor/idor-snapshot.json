@@ -2342,7 +2342,7 @@
       "query": [],
       "body": [],
       "methods": {
-        "POST": "unexercised"
+        "POST": "refused"
       }
     },
     "app/api/credentials/[number]/pdf/route.ts": {

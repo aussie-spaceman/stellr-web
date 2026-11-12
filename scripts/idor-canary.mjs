@@ -42,7 +42,9 @@ const hostLabels = (name) =>
   )
 
 /**
- * Each mutation deletes the lines of `file` that match `line`.
+ * Each mutation deletes the lines of `file` that match `line`: one line, or `removes` lines
+ * when a route answers the case through two guards, either of which alone still refuses it.
+ * A guard must be a complete statement on its own line, so the copy still compiles.
  *   fixture: the copy replaces test/idor/fixtures/handlers.ts (IDOR_FIXTURE_DIR)
  *   route:   the copy replaces one real route in the generated suite (IDOR_ROUTE_OVERRIDE)
  * `label` is the case that must record a failing outcome; `labels`, when given, every one.
@@ -62,13 +64,27 @@ export const MUTATIONS = [
   { name: 'fixture: admin guard removed', kind: 'fixture', file: FIXTURES, label: 'adminGuarded', line: /CANARY:admin-guard/ },
   { name: 'fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, label: 'tenantFiltered', line: /CANARY:tenant-filter/ },
   { name: 'fixture: owner filter removed from an update', kind: 'fixture', file: FIXTURES, label: 'scopedWrite', line: /CANARY:write-filter/ },
+  // Host B's credential reaches this route's write only past both its host check and its
+  // owner check (the participant does not own it), so removing either alone changes no
+  // case: the suite sees them only together. A host check alone is proved on the next route.
   {
-    name: 'real tenant-host route: owner check removed from POST /api/credentials/[number]/visibility',
+    name: 'real tenant-host route: host and owner checks removed from POST /api/credentials/[number]/visibility',
     kind: 'route',
     suite: HOST_SUITE,
     file: 'app/api/credentials/[number]/visibility/route.ts',
     label: 'app/api/credentials/[number]/visibility/route.ts',
-    line: /cred\.owner_member_id !== member\.id/,
+    line: /^\s*if \(!\(await recordOnHost\(cred\)\)\) return |^\s*if \(cred\.owner_member_id !== member\.id\) return /,
+    removes: 2,
+  },
+  // Share telemetry works signed out, so the host check is the only guard on another
+  // host's credential.
+  {
+    name: 'real tenant-host route: host check removed from POST /api/credentials/[number]/events',
+    kind: 'route',
+    suite: HOST_SUITE,
+    file: 'app/api/credentials/[number]/events/route.ts',
+    label: 'app/api/credentials/[number]/events/route.ts',
+    line: /^\s*if \(!\(await recordOnHost\(cred\)\)\) return /,
   },
   {
     name: 'real route: member filter removed from DELETE /api/members/event-participations/[id]',
@@ -155,8 +171,9 @@ function main() {
     const dir = mkdtempSync(path.join(base, 'm-'))
     try {
       const { text, removed } = mutate(readFileSync(path.join(ROOT, m.file), 'utf8'), m.line)
-      if (removed !== 1) {
-        console.error(`✗ ${m.name}: expected to remove 1 guard line from ${m.file}, removed ${removed}. Update MUTATIONS in scripts/idor-canary.mjs.`)
+      const expected = m.removes ?? 1
+      if (removed !== expected) {
+        console.error(`✗ ${m.name}: expected to remove ${expected} guard line(s) from ${m.file}, removed ${removed}. Update MUTATIONS in scripts/idor-canary.mjs.`)
         process.exit(2)
       }
       const copy = path.join(dir, path.basename(m.file))

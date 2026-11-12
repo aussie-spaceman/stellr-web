@@ -3,11 +3,11 @@
   "measuredBy": 2,
   "totals": {
     "mutatingHandlers": 286,
-    "unauditedMutations": 112,
+    "unauditedMutations": 109,
     "cronHandlers": 24,
     "unauditedCrons": 0,
     "getMutations": 18,
-    "unauditedGetMutations": 6
+    "unauditedGetMutations": 5
   },
   "mutations": [
     "app/api/admin/access/objects/[id]/contents/route.ts#DELETE",
@@ -88,8 +88,6 @@
     "app/api/check-in/route.ts#DELETE",
     "app/api/check-in/route.ts#POST",
     "app/api/contact/route.ts#POST",
-    "app/api/credentials/[number]/events/route.ts#POST",
-    "app/api/credentials/[number]/visibility/route.ts#POST",
     "app/api/csp-report/route.ts#POST",
     "app/api/host-event/route.ts#POST",
     "app/api/join-network/route.ts#POST",
@@ -110,7 +108,6 @@
     "app/api/survey/[token]/stop-reminders/route.ts#POST",
     "app/api/survey/[token]/submit/route.ts#POST",
     "app/api/survey/event/[slug]/link/route.ts#POST",
-    "app/api/team-profile/[token]/route.ts#POST",
     "app/api/volunteer/interest/route.ts#POST",
     "app/api/webhooks/apollo/route.ts#POST",
     "app/api/webhooks/background/route.ts#POST",
@@ -125,7 +122,6 @@
   ],
   "crons": [],
   "getMutations": [
-    "app/api/credentials/[number]/pdf/route.ts#GET",
     "app/api/members/teams/[id]/discount/route.ts#GET",
     "app/api/members/teams/[id]/payment-method/route.ts#GET",
     "app/api/members/teams/[id]/route.ts#GET",

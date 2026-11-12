@@ -1,12 +1,13 @@
 import { ImageResponse } from 'next/og'
 import { supabaseServer } from '@/lib/supabase'
 import { tokens } from '@/lib/tokens'
-import { credentialState, normaliseCredentialNumber } from '@/lib/credentials-core'
+import { credentialState, isStellrCredential, normaliseCredentialNumber } from '@/lib/credentials-core'
 import { badgeAccent, BadgeGlyph } from './glyph'
 
 // GET /credentials/[number]/badge — 600×600 PNG of the badge alone, for a feed
 // post image or (later, B-17) a download. Public credentials only; anything
-// else gets the generic badge so the URL never confirms a private page.
+// else gets the generic badge so the URL never confirms a private page. Another
+// tenant's credential is "anything else" too (S5 A10a, decision W7-10).
 // Edge for the same bundle-size reason as opengraph-image.tsx.
 export const runtime = 'edge'
 
@@ -20,10 +21,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
   if (n) {
     const { data } = await supabaseServer()
       .from('credentials')
-      .select('theme, status, expires_at, tombstoned_at, visibility')
+      .select('theme, status, expires_at, tombstoned_at, visibility, tenant_id')
       .eq('number', n)
       .maybeSingle()
-    if (data && data.visibility === 'public' && credentialState(data) === 'valid') theme = data.theme
+    if (data && isStellrCredential(data) && data.visibility === 'public' && credentialState(data) === 'valid') theme = data.theme
   }
 
   return new ImageResponse(

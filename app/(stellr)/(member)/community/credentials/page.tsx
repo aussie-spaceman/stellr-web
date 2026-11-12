@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { ArrowRight, Eye, EyeOff, Award, FileDown, ClipboardList } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
-import { listMemberCredentials, credentialState, type CredentialState } from '@/lib/credentials'
+import { listWalletCredentials, credentialState, type CredentialState } from '@/lib/credentials'
 import { formatDateShort } from '@/lib/utils'
 import { certificateGatesFor } from '@/lib/survey/certificate-gate'
 
@@ -16,6 +16,8 @@ export const metadata = { title: 'Credentials' }
 // page is public or not. An event can hold its certificate until the
 // holder's post-event survey is in (lib/survey/certificate-gate.ts, off unless
 // an admin turns it on for that event); that row links to the survey instead.
+// The wallet is Stellr's: another tenant's credentials are left out
+// (listWalletCredentials; S5 A10a, decision W7-10).
 
 const STATE_LABEL: Record<CredentialState, { text: string; className: string }> = {
   valid:     { text: 'Valid',     className: 'bg-enviro-green-bg text-enviro-green-text' },
@@ -29,7 +31,7 @@ export default async function CredentialsPage({ searchParams }: { searchParams: 
   if (!member) redirect('/sign-in')
 
   const db = supabaseServer()
-  const rows = await listMemberCredentials(db, member.id)
+  const rows = await listWalletCredentials(db, member.id)
   const gates = await certificateGatesFor(db, member.id, rows.filter((c) => c.source === 'event').map((c) => c.event_slug))
   const gateFor = (c: (typeof rows)[number]) => (c.source === 'event' && c.event_slug ? gates.get(c.event_slug) : undefined)
   const { survey_first: surveyFirst } = await searchParams

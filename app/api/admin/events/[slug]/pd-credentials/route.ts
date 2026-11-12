@@ -127,7 +127,9 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
     })
   }
 
-  return NextResponse.json({ ok: true, created: result.created, emailed, credential: result.row })
+  // The row carries its tenant for the email's check (S5 A10a); the response stays as it was.
+  const { tenant_id: _tenantId, ...credential } = result.row
+  return NextResponse.json({ ok: true, created: result.created, emailed, credential })
 }
 
 type EventFacts = { title?: string; type?: string; date?: string | null; venue?: string | null; city?: string | null; state?: string | null }

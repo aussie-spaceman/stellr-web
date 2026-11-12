@@ -18,6 +18,7 @@ import { loadOpenCheckInsForTenant, type OpenCheckIn } from '@/lib/check-in-bann
 import { supabaseServer } from '@/lib/supabase'
 import { hashToken, looksLikeToken } from '@/lib/survey/tokens'
 import type { TenantHostEntry } from './host'
+import type { ProfileSession } from '@/lib/team-profile/store'
 
 interface ReadResult {
   data: unknown
@@ -65,6 +66,17 @@ export async function requireTenantTeamProfile(tenant: TenantHostEntry, token: s
   if (!looksLikeToken(token)) notFound()
   const res = await supabaseServer().from('team_profiles').select('tenant_id').eq('token_hash', hashToken(token)).maybeSingle()
   assertOwned(tenant, rowOr404<Owned>('team profile', res))
+}
+
+/**
+ * The session behind this tenant's team profile link, for the shared page body (S5
+ * A10a). Stellr's page shows Stellr's links only, so the tenant page reads its own,
+ * with the same check as above: a link of any other tenant, or a NULL (Stellr) row,
+ * answers as one nobody holds. Call it after requireTenantTeamProfile.
+ */
+export async function tenantTeamProfileSession(tenant: TenantHostEntry, token: string): Promise<ProfileSession | null> {
+  const { sessionByToken } = await import('@/lib/team-profile/store')
+  return sessionByToken(supabaseServer(), token, { onHost: async (row) => row.tenant_id === tenant.tenantId })
 }
 
 /** A group's join link: the token, and the registration it opens, for this slug. */

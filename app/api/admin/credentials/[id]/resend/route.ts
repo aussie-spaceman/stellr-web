@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventStaff } from '@/lib/authz'
-import { CREDENTIAL_COLUMNS, credentialState, type CredentialRow } from '@/lib/credentials'
+import { CREDENTIAL_TENANT_COLUMNS, credentialState, type CredentialRow } from '@/lib/credentials'
 import { recipientForCredential, sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { withAudit } from '@/lib/audit/route'
 import { loadEventRecord } from '@/lib/tenancy/load-scoped'
@@ -35,7 +35,8 @@ async function resendCredential(req: Request, { params }: { params: Promise<{ id
   const db = supabaseServer()
   const loaded = await loadEventRecord<CredentialRow>(staff, 'credentials', id, {
     db,
-    select: CREDENTIAL_COLUMNS,
+    // With its tenant, so the email's Stellr-only check reads nothing more (S5 A10a).
+    select: CREDENTIAL_TENANT_COLUMNS,
     notFound: () => NextResponse.json({ error: 'Not found' }, { status: 404 }),
     label: ROUTE,
   })

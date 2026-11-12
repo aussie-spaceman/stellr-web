@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/events/repo'
-import { issueCredential, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
+import { issueCredential, eventTenantOnce, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { themeFromType } from '@/lib/campaigns'
 import { EVENT_AWARDS, mentorCredentialTitle } from '@/lib/event-awards'
@@ -170,6 +170,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   let existing = 0
   let emailed = 0
   const failures: string[] = []
+  // The event's owner, read once for the run (S5 A10a).
+  const eventTenant = eventTenantOnce(db, slug)
   for (const p of people) {
     try {
       const result = await issueCredential(db, {
@@ -187,6 +189,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         roleLabel:   ROLE_LABELS[p.event_role] ?? 'Participant',
         award:       p.award,
         theme,
+        eventTenant,
       })
       if (result.created) {
         created++
@@ -221,6 +224,7 @@ async function issueToMentors(
   let existing = 0
   let emailed = 0
   const failures: string[] = []
+  const eventTenant = eventTenantOnce(db, slug)
   for (const m of mentors) {
     try {
       const result = await issueCredential(db, {
@@ -236,6 +240,7 @@ async function issueToMentors(
         issuer:      'Stellr Education',
         roleLabel:   ROLE_LABELS.mentor,
         theme,
+        eventTenant,
       })
       if (result.created) {
         created++

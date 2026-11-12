@@ -1,6 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 vi.mock('@/lib/env', () => ({ SITE_URL: 'https://www.stellreducation.org' }))
+// S5 A10a: the consent read for another tenant's participant. Stellr's never call it.
+const consent = vi.hoisted(() => ({ unconsented: vi.fn(async (_db: unknown, _tenantId: string) => new Set<string>(['p-pending'])) }))
+vi.mock('@/lib/registration/tenant-guardian-consent', () => ({ unconsentedParticipantIds: consent.unconsented }))
 // docusign-agreements pulls in email/notify/docusign; only agreementExpiry is
 // needed here and it is pure.
 // Pre-V2.3 rows (no agreement_version) keep their 3 years; that is what these
@@ -32,6 +36,12 @@ import {
   issueCredential,
   holderIsMinor,
   holderMinorFacts,
+  isStellrCredential,
+  CredentialNotIssuedError,
+  CREDENTIAL_TENANT_COLUMNS,
+  eventTenantOnce,
+  reinstateCredential,
+  listWalletCredentials,
   type CredentialRow,
 } from './credentials'
 
@@ -395,15 +405,33 @@ describe('shareConsentFor', () => {
 // Educator PD (7 Oct 2026): one live PD credential per member per event. A
 // revoked one does not block a corrected re-issue, so the lookup filters on
 // status — the partial index credentials_pd_once does the same in the DB.
-function makeIssueDb(existing: Record<string, unknown> | null, people: People = {}) {
-  const calls: { filters: Record<string, unknown>; insert?: Record<string, unknown> }[] = []
+// The events mirror answers on its own (S5 A10a): the event's owner, Stellr's unless set.
+interface EventOwner {
+  tenantId?: string | null
+  error?: boolean
+}
+
+function eventsQuery(owner: EventOwner, reads: string[]) {
+  const q = {
+    select: () => q,
+    eq: (_k: string, v: unknown) => { reads.push(String(v)); return q },
+    maybeSingle: async () =>
+      owner.error ? { data: null, error: { message: 'mirror down' } } : { data: owner.tenantId === undefined ? null : { tenant_id: owner.tenantId }, error: null },
+  }
+  return q
+}
+
+function makeIssueDb(existing: Record<string, unknown> | null, people: People = {}, owner: EventOwner = {}) {
+  const calls: { filters: Record<string, unknown>; insert?: Record<string, unknown>; columns?: string }[] = []
+  const eventReads: string[] = []
   const db = {
     from(table: string) {
+      if (table === 'events') return eventsQuery(owner, eventReads)
       if (table !== 'credentials') return peopleQuery(table, people)
-      const call: { filters: Record<string, unknown>; insert?: Record<string, unknown> } = { filters: {} }
+      const call: { filters: Record<string, unknown>; insert?: Record<string, unknown>; columns?: string } = { filters: {} }
       calls.push(call)
       const q = {
-        select: () => q,
+        select: (columns?: string) => { call.columns = columns; return q },
         eq: (k: string, v: unknown) => { call.filters[k] = v; return q },
         maybeSingle: async () => ({ data: existing, error: null }),
         insert: (payload: Record<string, unknown>) => { call.insert = payload; return q },
@@ -412,8 +440,9 @@ function makeIssueDb(existing: Record<string, unknown> | null, people: People = 
       return q
     },
     calls,
+    eventReads,
   }
-  return db as unknown as Parameters<typeof issueCredential>[0] & { calls: typeof calls }
+  return db as unknown as Parameters<typeof issueCredential>[0] & { calls: typeof calls; eventReads: string[] }
 }
 
 describe('issueCredential — educator PD', () => {
@@ -619,5 +648,144 @@ describe('issueCredential — is_minor per the policy', () => {
   it('falls back to the DOB alone when the records cannot be read', async () => {
     expect(await issued({ error: true })).toBe(false)
     expect(await issued({ error: true }, { ...event, recipient: { ...event.recipient, dateOfBirth: bornYearsAgo(16) } })).toBe(true)
+  })
+})
+
+// S5 wave 7, A10a. A new credential for an event reads the event's owner first. Stellr's
+// events go ahead with no consent read; another tenant's event is refused (W7-9, by
+// default), and its participant whose guardian has not signed is skipped as such.
+describe('issueCredential — the event’s owner (S5 A10a)', () => {
+  const CANARY = 'c0000000-0000-4000-8000-0000000000aa'
+  const input = (participantId: string) => ({
+    source: 'event' as const,
+    participantId,
+    eventSlug: 'the-event',
+    recipient: { firstName: 'Sam', lastName: 'Example', dateOfBirth: '2010-01-01' },
+    title: 'The Event — Participant',
+  })
+  beforeEach(() => consent.unconsented.mockClear())
+
+  it('issues for Stellr’s event, and for an event the mirror does not hold, with no consent read', async () => {
+    for (const owner of [{ tenantId: STELLR_TENANT_ID }, { tenantId: null }, {}]) {
+      const db = makeIssueDb(null, {}, owner)
+      const { created } = await issueCredential(db, input('p-pending'))
+      expect(created).toBe(true)
+      expect(db.eventReads).toEqual(['the-event'])
+    }
+    expect(consent.unconsented).not.toHaveBeenCalled()
+  })
+
+  it('refuses another tenant’s event, writing nothing', async () => {
+    const db = makeIssueDb(null, {}, { tenantId: CANARY })
+    const err = await issueCredential(db, input('p-signed')).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CredentialNotIssuedError)
+    expect((err as CredentialNotIssuedError).reason).toBe('tenant_not_issuer')
+    expect(db.calls.some((c) => c.insert)).toBe(false)
+  })
+
+  it('skips that tenant’s participant whose guardian has not signed, as consent_pending', async () => {
+    const db = makeIssueDb(null, {}, { tenantId: CANARY })
+    const err = await issueCredential(db, input('p-pending')).catch((e: unknown) => e)
+    expect((err as CredentialNotIssuedError).reason).toBe('consent_pending')
+    expect(consent.unconsented).toHaveBeenCalledWith(db, CANARY)
+    expect(db.calls.some((c) => c.insert)).toBe(false)
+  })
+
+  it('refuses when the owner cannot be read, rather than issuing as Stellr', async () => {
+    const db = makeIssueDb(null, {}, { error: true })
+    await expect(issueCredential(db, input('p-signed'))).rejects.toThrow("reading the event's owner failed: mirror down")
+    expect(db.calls.some((c) => c.insert)).toBe(false)
+  })
+
+  it('reads the owner once for a batch that shares it, and refuses every issue in it when that read fails', async () => {
+    const db = makeIssueDb(null, {}, { tenantId: STELLR_TENANT_ID })
+    const eventTenant = eventTenantOnce(db, 'the-event')
+    for (const p of ['p-1', 'p-2', 'p-3']) expect((await issueCredential(db, { ...input(p), eventTenant })).created).toBe(true)
+    expect(db.eventReads).toEqual(['the-event'])
+
+    const down = makeIssueDb(null, {}, { error: true })
+    const shared = eventTenantOnce(down, 'the-event')
+    for (const p of ['p-1', 'p-2']) {
+      await expect(issueCredential(down, { ...input(p), eventTenant: shared })).rejects.toThrow("reading the event's owner failed")
+    }
+    expect(down.eventReads).toEqual(['the-event'])
+    expect(down.calls.some((c) => c.insert)).toBe(false)
+  })
+
+  it('selects the row with its tenant, new or already held, so the credential email reads nothing more', async () => {
+    const db = makeIssueDb(null)
+    await issueCredential(db, input('p-signed'))
+    expect(db.calls.map((c) => c.columns)).toEqual([CREDENTIAL_TENANT_COLUMNS, CREDENTIAL_TENANT_COLUMNS])
+  })
+
+  it('reads no owner for a course, or for a credential already held', async () => {
+    const course = makeIssueDb(null, {}, { tenantId: CANARY })
+    await issueCredential(course, { source: 'course', memberId: 'm1', moduleId: 'mod1', recipient: { firstName: 'A', lastName: 'B', dateOfBirth: null }, title: 'Course' })
+    expect(course.eventReads).toEqual([])
+    const held = makeIssueDb({ id: 'c1', number: 'STL-2026-AAAAAAAA' }, {}, { tenantId: CANARY })
+    expect((await issueCredential(held, input('p-signed'))).created).toBe(false)
+    expect(held.eventReads).toEqual([])
+  })
+})
+
+describe('reinstateCredential (W7-9: a reinstatement is an issue)', () => {
+  function updateDb() {
+    const updates: unknown[] = []
+    const q = {
+      update: (payload: unknown) => { updates.push(payload); return q },
+      eq: () => q,
+      is: () => q,
+      select: () => q,
+      maybeSingle: async () => ({ data: { id: 'c1', status: 'issued' }, error: null }),
+    }
+    return { db: { from: () => q } as unknown as Parameters<typeof reinstateCredential>[0], updates }
+  }
+
+  it('reinstates Stellr’s revoked credential, a NULL tenant included', async () => {
+    for (const tenant of [STELLR_TENANT_ID, null]) {
+      const { db, updates } = updateDb()
+      expect(await reinstateCredential(db, { id: 'c1', tenant_id: tenant })).toMatchObject({ status: 'issued' })
+      expect(updates).toHaveLength(1)
+    }
+  })
+
+  it('refuses another tenant’s, and one whose tenant was not selected, writing nothing', async () => {
+    for (const revoked of [{ id: 'c1', tenant_id: 'c0000000-0000-4000-8000-0000000000aa' }, { id: 'c1' }]) {
+      const { db, updates } = updateDb()
+      const err = await reinstateCredential(db, revoked).catch((e: unknown) => e)
+      expect((err as CredentialNotIssuedError).reason).toBe('tenant_not_issuer')
+      expect(updates).toEqual([])
+    }
+  })
+})
+
+describe('listWalletCredentials (W7-10: the wallet is Stellr’s)', () => {
+  it('lists Stellr’s credentials and NULL-tenant ones, and leaves another tenant’s out', async () => {
+    const rows = [
+      { ...row({ id: 'stellr' }), tenant_id: STELLR_TENANT_ID, members: { date_of_birth: '1990-01-01' }, participants: null },
+      { ...row({ id: 'backfill' }), tenant_id: null, members: null, participants: null },
+      { ...row({ id: 'canary' }), tenant_id: 'c0000000-0000-4000-8000-0000000000aa', members: null, participants: null },
+    ]
+    const selects: string[] = []
+    const q = {
+      select: (columns: string) => { selects.push(columns); return q },
+      eq: () => q,
+      or: () => q,
+      is: () => q,
+      order: async () => ({ data: rows, error: null }),
+      then: (done: (v: unknown) => void) => done({ data: [], error: null }),
+    }
+    const db = { from: () => q } as unknown as Parameters<typeof listWalletCredentials>[0]
+    expect((await listWalletCredentials(db, 'm1')).map((c) => c.id)).toEqual(['stellr', 'backfill'])
+    expect(selects.some((c) => c.startsWith(CREDENTIAL_TENANT_COLUMNS))).toBe(true)
+  })
+})
+
+describe('isStellrCredential (W7-10: public page, badge, card and wallet)', () => {
+  it('is Stellr’s for Stellr’s tenant and for NULL, and nobody’s otherwise', () => {
+    expect(isStellrCredential({ tenant_id: STELLR_TENANT_ID })).toBe(true)
+    expect(isStellrCredential({ tenant_id: null })).toBe(true)
+    expect(isStellrCredential({ tenant_id: 'c0000000-0000-4000-8000-0000000000aa' })).toBe(false)
+    expect(isStellrCredential({} as { tenant_id: string | null })).toBe(false)
   })
 })

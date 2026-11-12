@@ -234,6 +234,25 @@ export const AUDIT_ACTIONS = [
   'event_offering.record.create',
   'event_offering.record.delete',
   'merch.batch.commit',
+
+  // S5 wave 7, registered ahead of the slices that write them (A10a, A10b).
+  // Credentials by number (A10a): app/api/credentials/[number]/{events,visibility,pdf}
+  'credential.event.create',
+  'credential.visibility.set',
+  'credential.pdf.read',
+  // Team profiles by emailed link (A10a): app/api/team-profile/[token]
+  'team_profile.record.save',
+  // Surveys by emailed link (A10b): app/api/survey/[token]/** and survey/event/[slug]/link.
+  // The member's own routes keep their member.survey.* names.
+  'survey.response.open',
+  'survey.response.save',
+  'survey.response.submit',
+  'survey.reminder.stop',
+  'survey.link.send',
+  // A volunteer's interest in an event (A10b): app/api/volunteer/interest
+  'event_volunteer.interest.set',
+  // The unsubscribe update (A10b) keeps email.unsubscribe.apply, above: a second
+  // name for the same write would split its history.
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

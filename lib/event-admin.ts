@@ -6,6 +6,7 @@ import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { classifyAgreement } from '@/lib/docusign'
 import type { TenantFilter } from '@/lib/tenancy/load-scoped'
+import { resolveSchoolIds } from '@/lib/school-ids'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -77,6 +78,10 @@ export interface RosterParticipant {
   refund_detail: string | null
   /** A team profile has been submitted for this student (lib/team-profile). */
   team_profile_submitted?: boolean
+  /** The members row behind this participant, for the admin record link. */
+  member_id: string | null
+  /** lib/school-ids: set only when getEventRoster is asked to resolve schools. */
+  school_id?: string | null
 }
 
 export interface RosterGroup {
@@ -84,6 +89,12 @@ export interface RosterGroup {
   type: 'individual' | 'group'
   status: string
   groupLabel: string | null // teacher/school label for group registrations
+  /** The parts of groupLabel, so each can link to its record (group registrations). */
+  teacherName: string | null
+  teacherMemberId: string | null
+  schoolName: string | null
+  /** lib/school-ids: set only when getEventRoster is asked to resolve schools. */
+  schoolId?: string | null
   teacherEmail: string | null
   /** Organiser's first name, for greetings (group registrations). */
   teacherFirstName: string | null
@@ -112,6 +123,7 @@ export interface RosterGroup {
 export interface RosterScholarshipOffer {
   id: string
   name: string
+  memberId: string | null
   email: string
   percentOff: number
   offeredAt: string | null
@@ -127,7 +139,7 @@ export interface EventRosterData {
     groupRegistrations: number
     individualRegistrations: number
     dietary: { name: string; count: number }[]
-    healthIssues: { name: string; condition: string }[]
+    healthIssues: { name: string; condition: string; memberId: string | null }[]
     outstandingPayments: number
     outstandingDocusigns: number
     checkedIn: number
@@ -148,6 +160,12 @@ export async function getEventRoster(
   opts: {
     /** Only this tenant's rows of the event (lib/tenancy/load-scoped enforcedTenantFilter). Absent: every row, as today. */
     tenant?: TenantFilter | null
+    /**
+     * Resolve each participant's and group's typed school to a schools.id
+     * (lib/school-ids), for the admin record links. Two more queries, so only
+     * the roster page asks; check-in polling and exports don't.
+     */
+    resolveSchools?: boolean
   } = {},
 ): Promise<EventRosterData> {
   const db = supabaseServer()
@@ -164,7 +182,7 @@ export async function getEventRoster(
       db
         .from('registrations')
         .select(
-          `id, type, status, teacher_first_name, teacher_last_name, teacher_email, school_name,
+          `id, type, status, teacher_first_name, teacher_last_name, teacher_email, teacher_member_id, school_name,
          member_pays_individually, invoice_requested, invoice_paid_at,
          participants(id, member_id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
            school_name, event_role, dietary_requirements, health_conditions, company_id,
@@ -185,12 +203,12 @@ export async function getEventRoster(
     inTenant(
       db
         .from('scholarship_applications')
-        .select('id, first_name, last_name, email, percent_off, registration_id, offered_at')
+        .select('id, member_id, first_name, last_name, email, percent_off, registration_id, offered_at')
         .eq('event_slug', eventSlug),
     ).eq('status', 'offered'),
   ])
   const offerRows = (offers ?? []) as {
-    id: string; first_name: string; last_name: string; email: string
+    id: string; member_id: string | null; first_name: string; last_name: string; email: string
     percent_off: number; registration_id: string | null; offered_at: string | null
   }[]
   const offerByRegistration = new Map(offerRows.filter((o) => o.registration_id).map((o) => [o.registration_id as string, o]))
@@ -386,24 +404,22 @@ export async function getEventRoster(
         compliance_pill,
         refund_detail: refundDetail(p.id as string, reg.id as string),
         team_profile_submitted: profileSubmitted.has(p.id as string),
+        member_id: (p.member_id as string | null) ?? null,
       }
     })
 
-    const groupLabel =
-      reg.type === 'group'
-        ? [
-            [reg.teacher_first_name, reg.teacher_last_name].filter(Boolean).join(' '),
-            reg.school_name,
-          ]
-            .filter(Boolean)
-            .join(' — ') || 'Group'
-        : null
+    const teacherName = [reg.teacher_first_name, reg.teacher_last_name].filter(Boolean).join(' ') || null
+    const schoolName = (reg.school_name as string | null) || null
+    const groupLabel = reg.type === 'group' ? [teacherName, schoolName].filter(Boolean).join(' — ') || 'Group' : null
 
     return {
       registrationId: reg.id,
       type: reg.type as 'individual' | 'group',
       status: reg.status,
       groupLabel,
+      teacherName: reg.type === 'group' ? teacherName : null,
+      teacherMemberId: reg.type === 'group' ? ((reg.teacher_member_id as string | null) ?? null) : null,
+      schoolName: reg.type === 'group' ? schoolName : null,
       teacherEmail: (reg.teacher_email as string | null) || null,
       teacherFirstName: (reg.teacher_first_name as string | null) || null,
       invoiceRequested: !!reg.invoice_requested,
@@ -420,6 +436,20 @@ export async function getEventRoster(
       participants,
     }
   })
+
+  if (opts.resolveSchools) {
+    // One batch for every participant and group: participants by their member's
+    // current school, then the typed name; groups by the teacher's, then the name.
+    const participantRefs = groups.flatMap((g) => g.participants.map((p) => ({ memberId: p.member_id, schoolName: p.school_name })))
+    const groupRefs = groups.map((g) => ({ memberId: g.teacherMemberId, schoolName: g.schoolName }))
+    const ids = await resolveSchoolIds(db, [...participantRefs, ...groupRefs])
+    let i = 0
+    for (const g of groups) for (const p of g.participants) p.school_id = ids[i++]
+    for (const g of groups) {
+      const id = ids[i++]
+      g.schoolId = g.type === 'group' ? id : null
+    }
+  }
 
   const all = groups.flatMap((g) => g.participants)
   const dietaryCounts = new Map<string, number>()
@@ -438,6 +468,7 @@ export async function getEventRoster(
     .map((o) => ({
       id: o.id,
       name: `${o.first_name} ${o.last_name}`.trim(),
+      memberId: o.member_id ?? null,
       email: o.email,
       percentOff: o.percent_off,
       offeredAt: o.offered_at,
@@ -457,7 +488,7 @@ export async function getEventRoster(
         .sort((a, b) => b.count - a.count),
       healthIssues: all
         .filter((p) => p.health_conditions && p.health_conditions.toLowerCase() !== 'none')
-        .map((p) => ({ name: `${p.first_name} ${p.last_name}`, condition: p.health_conditions as string })),
+        .map((p) => ({ name: `${p.first_name} ${p.last_name}`, condition: p.health_conditions as string, memberId: p.member_id })),
       outstandingPayments: all.filter((p) => !p.paid).length,
       outstandingDocusigns: all.filter((p) => p.docusign === 'outstanding').length,
       checkedIn: all.filter((p) => p.checked_in_at).length,

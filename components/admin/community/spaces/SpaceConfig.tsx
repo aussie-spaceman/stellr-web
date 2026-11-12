@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import { useRouter } from 'next/navigation'
 import {
   ChevronLeft, Plus, Pencil, Trash2, Check, X, Upload, Flag, Search, FileText,
@@ -1003,7 +1004,7 @@ function MembersTab({
         {!loading && members.map((m) => (
           <div key={m.memberId} className={`flex items-center gap-2 px-3 py-2.5 ${m.revoked ? 'bg-red-50/40' : ''}`}>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-brand-blue-dark">{m.name}</p>
+              <p className="truncate text-sm text-brand-blue-dark"><MemberLink memberId={m.memberId}>{m.name}</MemberLink></p>
               {m.email && <p className="truncate text-xs text-brand-muted-soft">{m.email}</p>}
             </div>
             <GrantBadge m={m} />

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Choice, Field, Fieldset, Input, Select } from '@stellr/web-ui'
+import { Choice, Collapsible, CollapsibleGroup, CollapseAllControls, Field, Fieldset, Input, Select } from '@stellr/web-ui'
+import { SchoolLink } from '@/components/admin/RecordLinks'
 import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -70,6 +71,8 @@ interface Registration {
   event_title: string | null
   event_slug: string | null
   school_name: string | null
+  /** The school record behind school_name, when one matches surely (lib/school-ids). */
+  school_id?: string | null
   status: string | null
   created_at: string
   registrant_role: string | null
@@ -372,11 +375,12 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
       {error && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">{error}</p>}
 
+      <CollapsibleGroup storageKey="admin.member">
+      <CollapseAllControls className="justify-end" />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Identity — someone else's details, so autofill (the admin's own) is off throughout. */}
-          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
-            <h2 className="text-base font-semibold text-brand-blue-dark">Identity</h2>
+          <Collapsible id="identity" title="Identity" summary={member.email} bodyClassName="p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="First name">
                 <Input type="text" autoComplete="off" value={form.first_name} onChange={(e) => set('first_name', e.target.value)} />
@@ -408,11 +412,15 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 <Input type="text" autoComplete="off" value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)} />
               </Field>
             </div>
-          </div>
+          </Collapsible>
 
           {/* Classification */}
-          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
-            <h2 className="text-base font-semibold text-brand-blue-dark">Classification</h2>
+          <Collapsible
+            id="classification"
+            title="Classification"
+            summary={[form.age_bracket && label(form.age_bracket), form.event_role && label(form.event_role)].filter(Boolean).join(' · ')}
+            bodyClassName="p-6 space-y-4"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Age bracket">
                 <Select value={form.age_bracket} onChange={(e) => handleBracketChange(e.target.value)}>
@@ -489,11 +497,15 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 </div>
               </div>
             )}
-          </div>
+          </Collapsible>
 
           {/* Ethnicity & Allergies */}
-          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-5">
-            <h2 className="text-base font-semibold text-brand-blue-dark">Ethnicity & Dietary</h2>
+          <Collapsible
+            id="ethnicity-dietary"
+            title="Ethnicity & Dietary"
+            summary={`${selectedEthnicities.length} ethnicity · ${selectedAllergies.length} dietary`}
+            bodyClassName="p-6 space-y-5"
+          >
 
             {ethnicityOptions.length > 0 && (
               <Fieldset legend={<>Ethnicity <span className="text-content-muted">(select all that apply)</span></>}>
@@ -526,11 +538,15 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 </div>
               </Fieldset>
             )}
-          </div>
+          </Collapsible>
 
           {/* Emergency contact */}
-          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
-            <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
+          <Collapsible
+            id="emergency-contact"
+            title="Emergency contact"
+            summary={[form.ec_first_name, form.ec_last_name].filter(Boolean).join(' ') || 'None on file'}
+            bodyClassName="p-6"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="First name">
                 <Input type="text" autoComplete="off" value={form.ec_first_name} onChange={(e) => set('ec_first_name', e.target.value)} />
@@ -553,32 +569,54 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 </Select>
               </Field>
             </div>
-          </div>
+          </Collapsible>
 
           {/* Event Activity */}
-          <EventHistory
-            participations={member.event_participations ?? []}
-            editable
-            adminMemberId={member.id}
-          />
+          <Collapsible
+            id="event-activity"
+            title="Event Activity"
+            summary={countLabel(member.event_participations?.length ?? 0, 'event')}
+            bodyClassName="p-6"
+          >
+            <EventHistory
+              participations={member.event_participations ?? []}
+              editable
+              adminMemberId={member.id}
+              embedded
+            />
+          </Collapsible>
 
           {/* Scholarships — offered %, and whether they accepted / attended */}
-          <ScholarshipHistory items={scholarships} audience="admin" />
+          {scholarships.length > 0 && (
+            <Collapsible id="scholarships" title="Scholarships" summary={countLabel(scholarships.length, 'application')} bodyClassName="p-6">
+              <ScholarshipHistory items={scholarships} audience="admin" embedded />
+            </Collapsible>
+          )}
 
           {/* Post-event surveys — status per event, answers for submitted ones */}
-          {surveys && <MemberSurveysPanel memberId={member.id} items={surveys} />}
+          {surveys && (
+            <Collapsible id="surveys" title="Surveys" summary={countLabel(surveys.length, 'invitation')} bodyClassName="p-6">
+              <MemberSurveysPanel memberId={member.id} items={surveys} embedded />
+            </Collapsible>
+          )}
 
           {/* Group registrations (teacher / student manager) */}
           {registrations.length > 0 && (
-            <div className="bg-white rounded-xl border border-brand-border p-6">
-              <h2 className="text-base font-semibold text-brand-blue-dark mb-4">Group Registrations (Organiser)</h2>
+            <Collapsible
+              id="group-registrations"
+              title="Group Registrations (Organiser)"
+              summary={countLabel(registrations.length, 'registration')}
+              bodyClassName="p-6"
+            >
               <div className="space-y-3">
                 {registrations.map((reg) => (
                   <div key={reg.id} className="flex items-start justify-between py-3 border-b border-brand-hairline last:border-0">
                     <div>
                       <p className="text-sm font-medium text-brand-blue-dark">{reg.event_title ?? reg.event_slug ?? '—'}</p>
                       {reg.school_name && (
-                        <p className="text-xs text-brand-muted-soft mt-0.5">{reg.school_name}</p>
+                        <p className="text-xs text-brand-muted-soft mt-0.5">
+                          <SchoolLink schoolId={reg.school_id}>{reg.school_name}</SchoolLink>
+                        </p>
                       )}
                       {reg.registrant_role && (
                         <p className="text-xs text-brand-muted-soft mt-0.5 capitalize">{reg.registrant_role.replace(/_/g, ' ')}</p>
@@ -602,19 +640,25 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                   </div>
                 ))}
               </div>
-            </div>
+            </Collapsible>
           )}
 
           {/* Coaching/mentoring sessions hosted by this member. Live ones block a
               member delete, and this is the only admin surface that lists them —
               the mentoring calendar hides any session whose cohort is gone. */}
           {sessions.length > 0 && (
-            <div className="bg-white rounded-xl border border-brand-border p-6">
-              <h2 className="text-base font-semibold text-brand-blue-dark mb-1">Coaching &amp; Mentoring (as host)</h2>
-              <p className="text-xs text-brand-muted-soft mb-4">
-                Sessions still scheduled or requested block deleting this member. Cancelled and
-                completed sessions are history and don&apos;t.
-              </p>
+            <Collapsible
+              id="hosted-sessions"
+              title="Coaching & Mentoring (as host)"
+              summary={countLabel(sessions.length, 'session')}
+              description={
+                <>
+                  Sessions still scheduled or requested block deleting this member. Cancelled and
+                  completed sessions are history and don&apos;t.
+                </>
+              }
+              bodyClassName="p-6"
+            >
               <div className="space-y-3">
                 {sessions.map((s) => {
                   const blocking = !TERMINAL_SESSION_STATUSES.includes(s.status ?? '')
@@ -654,48 +698,62 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                   )
                 })}
               </div>
-            </div>
+            </Collapsible>
           )}
 
           {/* Activity log — the full audit trail for this member (shared with the member) */}
-          <div className="bg-white rounded-xl border border-brand-border p-6">
-            <h2 className="text-base font-semibold text-brand-blue-dark mb-1">Activity log</h2>
-            <p className="text-xs text-brand-muted-soft mb-4">
-              Every change recorded against this profile. The member sees this same history in their account.
-            </p>
+          <Collapsible
+            id="activity-log"
+            title="Activity log"
+            description="Every change recorded against this profile. The member sees this same history in their account."
+            bodyClassName="p-6"
+          >
             <ActivityTimeline
               items={activity}
               fetchUrl={`/api/admin/members/${member.id}/activity`}
               links={{ audience: 'admin', memberId: member.id }}
             />
-          </div>
+          </Collapsible>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-4">
-          <MemberMembershipManager
-            memberId={member.id}
-            membershipId={membershipId}
-            tiers={tiers}
-            memberships={member.member_memberships ?? []}
-          />
+          <Collapsible
+            id="membership"
+            title="Membership"
+            summary={activeMembership?.membership_tiers.name ?? 'No active tier'}
+            bodyClassName="p-5"
+          >
+            <MemberMembershipManager
+              memberId={member.id}
+              membershipId={membershipId}
+              tiers={tiers}
+              memberships={member.member_memberships ?? []}
+              embedded
+            />
+          </Collapsible>
 
-          <MemberCompliancePanel memberId={member.id} compliance={compliance} />
+          {compliance && (
+            <Collapsible id="background-check" title="Background Check" bodyClassName="p-5">
+              <MemberCompliancePanel memberId={member.id} compliance={compliance} embedded />
+            </Collapsible>
+          )}
 
-          <MemberAgreementPanel memberId={member.id} agreement={agreement} />
+          {agreement && (
+            <Collapsible id="volunteer-agreement" title="Volunteer Agreement" bodyClassName="p-5">
+              <MemberAgreementPanel memberId={member.id} agreement={agreement} embedded />
+            </Collapsible>
+          )}
 
-          <div className="bg-white rounded-xl border border-brand-border p-5">
-            <MemberAccessPanel memberId={member.id} />
-          </div>
+          <Collapsible id="access" title="Access (spaces & rosters)" bodyClassName="p-5">
+            <MemberAccessPanel memberId={member.id} embedded />
+          </Collapsible>
 
-          <div className="bg-white rounded-xl border border-brand-border p-5">
-            <MemberSpacesPanel memberId={member.id} />
-          </div>
+          <Collapsible id="spaces" title="Community spaces" bodyClassName="p-5">
+            <MemberSpacesPanel memberId={member.id} embedded />
+          </Collapsible>
 
-          <div className="bg-white rounded-xl border border-brand-border p-5">
-            <h2 className="text-sm font-semibold text-brand-muted-soft mb-3">
-              School
-            </h2>
+          <Collapsible id="school" title="School" summary={currentSchool?.schools.name ?? 'None linked'} bodyClassName="p-5">
             {currentSchool ? (
               <div className="text-sm">
                 <Link
@@ -713,12 +771,9 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             ) : (
               <p className="text-sm text-brand-muted-soft">No school linked.</p>
             )}
-          </div>
+          </Collapsible>
 
-          <div className="bg-white rounded-xl border border-brand-border p-5">
-            <h2 className="text-sm font-semibold text-brand-muted-soft mb-3">
-              Account
-            </h2>
+          <Collapsible id="account" title="Account" summary={member.is_active ? 'Active' : 'Deactivated'} bodyClassName="p-5">
             <dl className="text-sm space-y-1.5">
               <div className="flex justify-between">
                 <dt className="text-brand-muted-soft">Status</dt>
@@ -733,9 +788,14 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 </dd>
               </div>
             </dl>
-          </div>
+          </Collapsible>
         </div>
       </div>
+      </CollapsibleGroup>
     </div>
   )
+}
+
+function countLabel(n: number, noun: string) {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`
 }

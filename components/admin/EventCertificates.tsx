@@ -1,5 +1,6 @@
 'use client'
 
+import { Collapsible } from '@stellr/web-ui'
 import { useEffect, useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { AWARD_TYPES, EVENT_AWARDS, type AwardType } from '@/lib/event-awards'
@@ -108,11 +109,11 @@ export default function EventCertificates({
   const anyDefault = AWARD_TYPES.some((t) => defaults?.[t])
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-brand-muted">Certificates</h3>
-          <p className="text-xs text-brand-muted-soft mt-1">
+    <Collapsible
+      id="certificates"
+      title="Certificates"
+      description={
+          <p>
             {eventSlug ? (
               <>
                 {anyDefault
@@ -136,8 +137,9 @@ export default function EventCertificates({
               </>
             )}
           </p>
-        </div>
-        {eventSlug && (
+      }
+      actions={
+        eventSlug && (
           <div className="flex items-center gap-2">
             <select
               value={format}
@@ -152,9 +154,10 @@ export default function EventCertificates({
               Download all certificates
             </a>
           </div>
-        )}
-      </div>
-
+        )
+      }
+    >
+      <div className="space-y-4">
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
 
       <ul className="divide-y divide-brand-hairline border border-brand-border rounded-lg">
@@ -239,7 +242,8 @@ export default function EventCertificates({
         Artwork is best as a landscape PNG, 4:3 or wider. It is scaled to fill the page without stretching, so the
         outer edges may be trimmed slightly (the sides on US Letter, top and bottom on A4).
       </p>
-    </div>
+      </div>
+    </Collapsible>
   )
 }
 

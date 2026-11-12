@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { allRows } from '@/lib/db'
+import { MemberLink, SchoolLink } from '@/components/admin/RecordLinks'
+import { resolveSchoolIds } from '@/lib/school-ids'
 import { MEDIA_STATUS_LABEL, mediaDoNotUseList, mediaReasonDetail, type MediaStatus } from '@/lib/survey/media'
 
 // /admin/media — the media do-not-use list (privacy runbook Part C). Check it
@@ -45,6 +47,12 @@ export default async function MediaDoNotUsePage({ searchParams }: { searchParams
   ])
   const events = new Map<string, string>()
   for (const r of regs ?? []) if (r.event_slug && !events.has(r.event_slug as string)) events.set(r.event_slug as string, (r.event_title as string | null) ?? (r.event_slug as string))
+
+  // School is typed text on the participant: find the record behind it, if one matches surely.
+  const schoolIds = await resolveSchoolIds(
+    db,
+    rows.map((r) => ({ memberId: r.memberId, schoolName: r.school })),
+  )
 
   const no = rows.filter((r) => r.decision.status === 'no').length
   const check = rows.filter((r) => r.decision.status === 'check').length
@@ -108,15 +116,31 @@ export default async function MediaDoNotUsePage({ searchParams }: { searchParams
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-hairline">
-              {rows.map((r) => (
+              {rows.map((r, i) => (
                 <tr key={r.key}>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PILL[r.decision.status]}`}>{MEDIA_STATUS_LABEL[r.decision.status]}</span>
                   </td>
-                  <td className="px-3 py-2 font-medium text-ink">{`${r.firstName} ${r.lastName}`.trim() || '—'}</td>
+                  <td className="px-3 py-2 font-medium text-ink">
+                    {`${r.firstName} ${r.lastName}`.trim() ? (
+                      <MemberLink memberId={r.memberId}>{`${r.firstName} ${r.lastName}`.trim()}</MemberLink>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-brand-muted">{r.eventTitle ?? r.eventSlug ?? '—'}</td>
                   <td className="px-3 py-2 text-brand-muted">{r.age ?? '—'}</td>
-                  <td className="px-3 py-2 text-brand-muted">{[r.school, r.states.join(', ')].filter(Boolean).join(' · ') || '—'}</td>
+                  <td className="px-3 py-2 text-brand-muted">
+                    {r.school || r.states.length ? (
+                      <>
+                        {r.school && <SchoolLink schoolId={schoolIds[i]}>{r.school}</SchoolLink>}
+                        {r.school && r.states.length > 0 && ' · '}
+                        {r.states.join(', ')}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-brand-muted">{mediaReasonDetail(r)}</td>
                 </tr>
               ))}

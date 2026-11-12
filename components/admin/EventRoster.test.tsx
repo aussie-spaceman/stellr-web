@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
+import { RecordLinksProvider } from '@/components/admin/RecordLinks'
 import EventRoster from './EventRoster'
 import type { EventRosterData, RosterGroup, RosterParticipant } from '@/lib/event-admin'
 
@@ -63,6 +64,7 @@ const participant: RosterParticipant = {
   correctable_agreement_id: 'agr-1',
   compliance_pill: 'not_required',
   refund_detail: null,
+  member_id: 'mem-1',
 }
 
 const group: RosterGroup = {
@@ -70,6 +72,9 @@ const group: RosterGroup = {
   type: 'individual',
   status: 'pending',
   groupLabel: null,
+  teacherName: null,
+  teacherMemberId: null,
+  schoolName: null,
   teacherEmail: null,
   teacherFirstName: null,
   invoiceRequested: false,
@@ -98,26 +103,32 @@ const roster: EventRosterData = {
   },
 }
 
-function renderRoster() {
-  return render(
-    <EventRoster
-      roster={roster}
-      exportHref="/api/admin/events/demo/roster.csv"
-      eventSlug="demo"
-      companies={[{ id: 'co-1', number: 1, name: 'Apollo', count: 0 }]}
-      isAdmin
-    />,
+function renderRoster({ open = true, links = false }: { open?: boolean; links?: boolean } = {}) {
+  const result = render(
+    <RecordLinksProvider enabled={links}>
+      <EventRoster
+        roster={roster}
+        exportHref="/api/admin/events/demo/roster.csv"
+        eventSlug="demo"
+        companies={[{ id: 'co-1', number: 1, name: 'Apollo', count: 0 }]}
+        isAdmin
+      />
+    </RecordLinksProvider>,
   )
+  // Registrations start folded to their summary line; most tests read the rows.
+  if (open) fireEvent.click(screen.getByRole('button', { name: /^Individual: Avery Test/ }))
+  return result
 }
 
 // jsdom applies no CSS, so both layouts are in the document: the card list
 // (lg:hidden) and the table (hidden lg:block). Each is found by its role.
 function card() {
-  return screen.getByRole('heading', { name: 'Avery Test' }).closest('li') as HTMLElement
+  return screen.getByRole('heading', { name: /^Avery Test/ }).closest('li') as HTMLElement
 }
 
 describe('EventRoster: mobile review N3', () => {
   beforeEach(() => {
+    window.localStorage.clear()
     vi.clearAllMocks()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
   })
@@ -174,5 +185,67 @@ describe('EventRoster: mobile review N3', () => {
         companyId: 'co-1',
       })
     }
+  })
+
+  it('folds each registration to a summary line, remembered per browser', () => {
+    window.localStorage.clear()
+    renderRoster({ open: false })
+    const toggle = screen.getByRole('button', { name: /^Individual: Avery Test/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveTextContent('1 participant · 1 unpaid · 1 DocuSign open')
+    expect(screen.queryByRole('heading', { name: 'Avery Test' })).not.toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(window.localStorage.getItem('stellr.collapse.event.demo.groups:reg-1')).toBe('1')
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('links names and schools to their records for admins, opening a new tab', () => {
+    renderRoster({ links: true })
+    const name = within(card()).getByRole('link', { name: /Avery Test/ })
+    expect(name).toHaveAttribute('href', '/admin/members/mem-1')
+    expect(name).toHaveAttribute('target', '_blank')
+    // No school id resolved: plain text, never a guessed link.
+    expect(within(card()).queryByRole('link', { name: /Example High School/ })).not.toBeInTheDocument()
+  })
+
+  it("folds a group to its label and counts, and links the group's teacher and school", () => {
+    const schoolGroup: RosterGroup = {
+      ...group,
+      registrationId: 'reg-g',
+      type: 'group',
+      groupLabel: 'Pat Teacher — Example High School',
+      teacherName: 'Pat Teacher',
+      teacherMemberId: 'mem-t',
+      schoolName: 'Example High School',
+      schoolId: 'sch-1',
+      payLinkSendable: false,
+      participants: [{ ...participant, id: 'p-2', paid: true, school_id: 'sch-1' }],
+    }
+    render(
+      <RecordLinksProvider enabled>
+        <EventRoster
+          roster={{ ...roster, groups: [schoolGroup] }}
+          exportHref="/x.csv"
+          eventSlug="demo"
+          companies={[]}
+          isAdmin
+        />
+      </RecordLinksProvider>,
+    )
+    const toggle = screen.getByRole('button', { name: /^Group: Pat Teacher — Example High School/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveTextContent('1 participant · 1 DocuSign open')
+    // Folded: the body is in the DOM but hidden, so ask for hidden elements.
+    expect(screen.getByRole('link', { name: /^Pat Teacher/, hidden: true })).toHaveAttribute('href', '/admin/members/mem-t')
+    const schools = screen.getAllByRole('link', { name: /^Example High School/, hidden: true })
+    expect(schools.length).toBeGreaterThan(0)
+    for (const a of schools) expect(a).toHaveAttribute('href', '/admin/schools/sch-1')
+  })
+
+  it('shows plain names when record links are off (event managers)', () => {
+    renderRoster({ links: false })
+    expect(within(card()).queryByRole('link', { name: /Avery Test/ })).not.toBeInTheDocument()
   })
 })

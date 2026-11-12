@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Button } from '@stellr/web-ui'
+import { Button, Collapsible } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import { formatDateShort } from '@/lib/utils'
 import type { GapReason, PaperworkGap } from '@/lib/esign/needs-paperwork'
 
@@ -42,15 +43,17 @@ export function NeedsPaperwork({ gaps }: { gaps: PaperworkGap[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-line bg-white p-5 space-y-3" aria-labelledby="needs-paperwork-heading">
-      <div>
-        <h2 id="needs-paperwork-heading" className="font-heading text-lg font-semibold text-ink">Needs paperwork</h2>
-        <p className="text-sm text-content-muted mt-0.5">
-          {gaps.length
-            ? 'People at upcoming events with no agreement signed and none out for signature.'
-            : 'Everyone at an upcoming event has signed, or has an agreement out for signature.'}
-        </p>
-      </div>
+    <Collapsible
+      id="needs-paperwork"
+      title="Needs paperwork"
+      summary={gaps.length ? `${gaps.length} ${gaps.length === 1 ? 'person' : 'people'}` : 'All clear'}
+      bodyClassName="p-5 space-y-3"
+    >
+      <p className="text-sm text-content-muted">
+        {gaps.length
+          ? 'People at upcoming events with no agreement signed and none out for signature.'
+          : 'Everyone at an upcoming event has signed, or has an agreement out for signature.'}
+      </p>
       {gaps.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -67,7 +70,9 @@ export function NeedsPaperwork({ gaps }: { gaps: PaperworkGap[] }) {
                 const s = rows[g.participantId] ?? {}
                 return (
                   <tr key={g.participantId} className="border-b border-line last:border-0 align-top">
-                    <td className="py-2 pr-4 text-ink">{g.name}</td>
+                    <td className="py-2 pr-4 text-ink">
+                      <MemberLink memberId={g.memberId}>{g.name}</MemberLink>
+                    </td>
                     <td className="py-2 pr-4">
                       <Link href={`/admin/competitions/${encodeURIComponent(g.eventSlug)}`} className="text-primary underline">{g.eventTitle}</Link>
                       <span className="block text-xs text-content-muted">{formatDateShort(g.eventDate)}</span>
@@ -99,6 +104,6 @@ export function NeedsPaperwork({ gaps }: { gaps: PaperworkGap[] }) {
           </table>
         </div>
       )}
-    </section>
+    </Collapsible>
   )
 }

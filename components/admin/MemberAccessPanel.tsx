@@ -69,7 +69,7 @@ const SOURCE_TINT: Record<AccessSource['kind'], string> = {
   invited: 'bg-[#FFF7ED] text-[#9A3412]',
 }
 
-export function MemberAccessPanel({ memberId }: { memberId: string }) {
+export function MemberAccessPanel({ memberId, embedded = false }: { memberId: string; embedded?: boolean }) {
   const [data, setData] = useState<Summary | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -94,9 +94,11 @@ export function MemberAccessPanel({ memberId }: { memberId: string }) {
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold text-brand-muted-soft">
-        Access (spaces &amp; rosters)
-      </h2>
+      {!embedded && (
+        <h2 className="mb-3 text-sm font-semibold text-brand-muted-soft">
+          Access (spaces &amp; rosters)
+        </h2>
+      )}
       {failed ? (
         <p className="text-xs text-red-600">
           Couldn&apos;t load access. Reload before assuming this member has none.

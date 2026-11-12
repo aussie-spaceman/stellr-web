@@ -90,6 +90,7 @@ describe('overrideOutstanding', () => {
 
 const student = (participantId: string, over: Partial<PlanningStudent> = {}): PlanningStudent => ({
   participantId,
+  memberId: null,
   firstName: participantId,
   lastName: '',
   school: null,

@@ -24,6 +24,8 @@ export interface ResolvedRecipient extends RecipientForRender {
   /** Display name for previews and history. */
   name: string
   reasons: AudienceKey[]
+  /** The recipient's own members row (not a guardian's child's), for the admin link in history. */
+  memberId?: string | null
 }
 
 export interface ResolvedAudience {
@@ -144,6 +146,8 @@ interface Add {
   lastName?: string | null
   role: RecipientRole
   reason: AudienceKey
+  /** The recipient's own members row, when known. Never set for a guardian. */
+  memberId?: string | null
   participantName?: string
   isParticipant?: boolean
   payment?: PaymentLine & { key: string }
@@ -186,9 +190,11 @@ export function buildRecipients(
         isParticipant: false,
         payments: [],
         paymentKeys: new Set(),
+        memberId: a.memberId ?? null,
       }
       byEmail.set(email, r)
     }
+    if (!r.memberId && a.memberId) r.memberId = a.memberId
     // A participant's own name wins the greeting over a guardian's.
     if (a.isParticipant && !r.isParticipant) {
       r.isParticipant = true
@@ -219,7 +225,7 @@ export function buildRecipients(
 
     for (const p of g.participants) {
       const guardian = p.minor ? p.emergency_contact_email : null
-      const participant = { email: p.email, firstName: p.first_name, lastName: p.last_name, participantName: p.first_name, isParticipant: true }
+      const participant = { email: p.email, firstName: p.first_name, lastName: p.last_name, participantName: p.first_name, isParticipant: true, memberId: p.member_id }
       const parent = { email: guardian, firstName: p.emergency_contact_first_name, lastName: p.emergency_contact_last_name, participantName: p.first_name }
 
       if (want.has('participants')) add({ ...participant, role: 'participant', reason: 'participants' })
@@ -264,6 +270,7 @@ export function buildRecipients(
       add({
         email: g.teacherEmail,
         firstName: g.teacherFirstName,
+        memberId: g.teacherMemberId,
         role: 'teacher',
         reason: 'payment_outstanding',
         participantName: 'your group',
@@ -273,12 +280,12 @@ export function buildRecipients(
   }
 
   if (want.has('mentors')) {
-    for (const m of mentors) add({ email: m.email, firstName: m.firstName, lastName: m.lastName, role: m.role, reason: 'mentors' })
+    for (const m of mentors) add({ email: m.email, firstName: m.firstName, lastName: m.lastName, role: m.role, reason: 'mentors', memberId: m.memberId })
   }
   // Volunteer mentors and event managers checked in at the desk's Mentors tab.
   if (want.has('attendees')) {
     for (const m of mentors) {
-      if (m.checkedIn) add({ email: m.email, firstName: m.firstName, lastName: m.lastName, role: m.role, reason: 'attendees' })
+      if (m.checkedIn) add({ email: m.email, firstName: m.firstName, lastName: m.lastName, role: m.role, reason: 'attendees', memberId: m.memberId })
     }
   }
 

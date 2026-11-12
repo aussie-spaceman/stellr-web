@@ -8,6 +8,8 @@ import { formatDate } from '@/lib/utils'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
+import { Collapsible, CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
 import { EventEmailsPanel } from '@/components/admin/competitions/EventEmailsPanel'
@@ -76,7 +78,7 @@ export default async function AdminEventDetailPage({
 
   // ── Roster (only fetched when needed — it involves Clerk lookups) ──────────
   const needsRoster = tab === 'overview' || tab === 'roster'
-  const roster = needsRoster ? await getEventRoster(slug, event.date) : null
+  const roster = needsRoster ? await getEventRoster(slug, event.date, { resolveSchools: tab === 'roster' }) : null
   const { summary } = roster ?? { summary: null }
 
   // ── Company rows (roster tab, live events only) ───────────────────────────
@@ -106,10 +108,18 @@ export default async function AdminEventDetailPage({
       console.error('[competitions] team profile plan failed:', err)
       return null
     })
+    // The roster has already matched each participant's school to a record.
+    if (companyPlan && roster) {
+      const schoolIdOf = new Map(roster.groups.flatMap((g) => g.participants.map((p) => [p.id, p.school_id ?? null])))
+      companyPlan = {
+        ...companyPlan,
+        students: companyPlan.students.map((s) => ({ ...s, schoolId: schoolIdOf.get(s.participantId) ?? null })),
+      }
+    }
   }
 
   // ── Admin assignments (overview, admins only) ─────────────────────────────
-  let assignments: { id: string; clerk_user_id: string; email: string | null; expires_on: string | null; active: boolean }[] = []
+  let assignments: { id: string; clerk_user_id: string; email: string | null; member_id: string | null; expires_on: string | null; active: boolean }[] = []
   if (tab === 'overview' && access.isAdmin) {
     const { data: raw } = await db
       .from('event_manager_assignments')
@@ -130,7 +140,17 @@ export default async function AdminEventDetailPage({
         limit: rows.length,
       })
       const emailById = new Map(users.map((u) => [u.id, u.primaryEmailAddress?.emailAddress ?? null]))
-      assignments = rows.map((r) => ({ ...r, email: emailById.get(r.clerk_user_id) ?? null }))
+      // Their members row, so the name links to the record.
+      const { data: memberRows } = await db
+        .from('members')
+        .select('id, clerk_user_id')
+        .in('clerk_user_id', rows.map((r) => r.clerk_user_id))
+      const memberByClerk = new Map((memberRows ?? []).map((m) => [m.clerk_user_id as string, m.id as string]))
+      assignments = rows.map((r) => ({
+        ...r,
+        email: emailById.get(r.clerk_user_id) ?? null,
+        member_id: memberByClerk.get(r.clerk_user_id) ?? null,
+      }))
     }
   }
 
@@ -247,6 +267,7 @@ export default async function AdminEventDetailPage({
 
       {/* ── Overview ───────────────────────────────────────────────────────── */}
       {tab === 'overview' && summary && (
+        <CollapsibleGroup storageKey={`event.${slug}.overview`}>
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard label="Participants" value={summary.totalParticipants} />
@@ -257,9 +278,13 @@ export default async function AdminEventDetailPage({
             <StatCard label="DocuSigns Open" value={summary.outstandingDocusigns} accent={summary.outstandingDocusigns > 0 ? 'red' : undefined} />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl border border-brand-border p-4">
-              <h3 className="text-sm font-semibold text-brand-muted mb-2">Dietary Requirements</h3>
+          <CollapseAllControls className="justify-end" />
+          <div className="grid md:grid-cols-2 items-start gap-4">
+            <Collapsible
+              id="dietary"
+              title="Dietary requirements"
+              summary={summary.dietary.length === 0 ? 'None reported' : `${summary.dietary.reduce((n, d) => n + d.count, 0)} reported`}
+            >
               {summary.dietary.length === 0 ? (
                 <p className="text-sm text-brand-muted-soft">None reported.</p>
               ) : (
@@ -272,31 +297,40 @@ export default async function AdminEventDetailPage({
                   ))}
                 </ul>
               )}
-            </div>
-            <div className="bg-white rounded-xl border border-brand-border p-4">
-              <h3 className="text-sm font-semibold text-brand-muted mb-2">Health Issues</h3>
+            </Collapsible>
+            <Collapsible
+              id="health"
+              title="Health issues"
+              summary={summary.healthIssues.length === 0 ? 'None reported' : `${summary.healthIssues.length} reported`}
+            >
               {summary.healthIssues.length === 0 ? (
                 <p className="text-sm text-brand-muted-soft">None reported.</p>
               ) : (
                 <ul className="space-y-1 max-h-48 overflow-y-auto">
                   {summary.healthIssues.map((h, i) => (
                     <li key={i} className="text-sm">
-                      <span className="font-medium text-brand-blue-dark">{h.name}:</span>{' '}
+                      <MemberLink memberId={h.memberId} className="font-medium text-brand-blue-dark">
+                        {h.name}
+                      </MemberLink>
+                      :{' '}
                       <span className="text-brand-muted">{h.condition}</span>
                     </li>
                   ))}
                 </ul>
               )}
-            </div>
+            </Collapsible>
           </div>
 
           {access.isAdmin && <EventManagerAssignments eventSlug={slug} initialAssignments={assignments} />}
         </div>
+        </CollapsibleGroup>
       )}
 
       {/* ── Roster ─────────────────────────────────────────────────────────── */}
       {tab === 'roster' && (
-        <div className="space-y-6">
+        <CollapsibleGroup storageKey={`event.${slug}.roster`}>
+        <div className="space-y-4">
+          <CollapseAllControls className="justify-end" label="Expand or collapse roster sections" />
           <EventVolunteersPanel slug={slug} isAdmin={access.isAdmin} />
           {!isCampaign && roster && (
             <EventCompanies eventSlug={slug} companies={companies} studentCount={studentCount} />
@@ -312,25 +346,38 @@ export default async function AdminEventDetailPage({
             />
           )}
         </div>
+        </CollapsibleGroup>
       )}
 
       {/* ── Email Reminders (live events only) ─────────────────────────────── */}
       {tab === 'emails' && !isCampaign && (
-        <EventEmailsPanel eventSlug={slug} eventDate={event.date ?? null} />
+        <CollapsibleGroup storageKey={`event.${slug}.emails`}>
+          <div className="space-y-4">
+            <CollapseAllControls className="justify-end" />
+            <EventEmailsPanel eventSlug={slug} eventDate={event.date ?? null} />
+          </div>
+        </CollapsibleGroup>
       )}
 
       {/* ── Post-event survey (live events only) ─────────────────────────────── */}
-      {tab === 'survey' && !isCampaign && <EventSurveyPanel eventSlug={slug} appUrl={AUTH_APP_URL} />}
+      {tab === 'survey' && !isCampaign && (
+        <CollapsibleGroup storageKey={`event.${slug}.survey`}>
+          <div className="space-y-4">
+            <CollapseAllControls className="justify-end" />
+            <EventSurveyPanel eventSlug={slug} appUrl={AUTH_APP_URL} />
+          </div>
+        </CollapsibleGroup>
+      )}
 
       {/* ── Training ───────────────────────────────────────────────────────── */}
       {tab === 'training' && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-brand-muted">Assigned training courses</h2>
-            <p className="text-xs text-brand-muted-soft mt-0.5">
-              Modules assigned here appear for all participants of this event.
-            </p>
-          </div>
+        <CollapsibleGroup storageKey={`event.${slug}.training`}>
+        <Collapsible
+          id="training"
+          title="Assigned training courses"
+          summary={containerId ? `${containerContents.length} assigned` : undefined}
+          description="Modules assigned here appear for all participants of this event."
+        >
           {containerId ? (
             <ContainerTraining
               containerId={containerId}
@@ -342,19 +389,21 @@ export default async function AdminEventDetailPage({
               No container found for this event — register at least one participant first.
             </p>
           )}
-        </div>
+        </Collapsible>
+        </CollapsibleGroup>
       )}
 
       {/* ── Settings (live events only) ────────────────────────────────────── */}
       {tab === 'settings' && !isCampaign && (
-        <div className="space-y-8">
-          <section className="space-y-3">
-            <div>
-              <h2 className="text-sm font-semibold text-brand-muted">Merchandise</h2>
-              <p className="text-xs text-brand-muted-soft mt-1">
-                Included shirt (auto-allocated by size) and paid add-ons for this event.
-              </p>
-            </div>
+        <CollapsibleGroup storageKey={`event.${slug}.settings`}>
+        <div className="space-y-4">
+          <CollapseAllControls className="justify-end" label="Expand or collapse settings" />
+          <Collapsible
+            id="merchandise"
+            title="Merchandise"
+            description="Included shirt (auto-allocated by size) and paid add-ons for this event."
+            bodyClassName="space-y-3 p-4"
+          >
             <EventMerchandiseEditor eventSlug={slug} />
             <EventMerchBatch
               eventSlug={slug}
@@ -364,7 +413,7 @@ export default async function AdminEventDetailPage({
                 state: (event as { state?: string }).state ?? '',
               }}
             />
-          </section>
+          </Collapsible>
 
           <EventBadges eventSlug={slug} theme={artworkTheme} canEditDefaults={access.isAdmin} />
 
@@ -376,6 +425,7 @@ export default async function AdminEventDetailPage({
 
           <EventEducatorPd eventSlug={slug} theme={artworkTheme} />
         </div>
+        </CollapsibleGroup>
       )}
     </div>
   )

@@ -19,6 +19,8 @@ import { GroupPaymentMethod } from '@/components/registration/GroupPaymentMethod
 import { AdminAddParticipantButton } from '@/components/admin/AdminAddParticipantButton'
 import { displayEventRole } from '@/lib/member-enums'
 import { STUDENT_ROLES } from '@/lib/membership-rules'
+import { Collapsible, CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
+import { MemberLink, SchoolLink } from '@/components/admin/RecordLinks'
 
 // Pills with paperwork still to chase. 'issued'/'partial' resend the live
 // envelope; the rest need a new one (the server confirms before spending quota).
@@ -285,7 +287,15 @@ export default function EventRoster({
   const select = 'border border-brand-border rounded-lg px-3 py-1.5 text-sm bg-white text-brand-muted'
 
   return (
-    <div className="space-y-4">
+    <Collapsible
+      id="registrations"
+      title="Registrations"
+      summary={`${roster.summary.groupRegistrations} group${roster.summary.groupRegistrations === 1 ? '' : 's'} · ${roster.summary.individualRegistrations} individual · ${roster.summary.totalParticipants} participants`}
+      bodyClassName="space-y-4 p-4"
+    >
+    {/* Each registration folds to a summary line; the folds are remembered per
+        browser and event, and Expand all / Collapse all act on the groups only. */}
+    <CollapsibleGroup storageKey={`event.${eventSlug}.groups`}>
       <div className="flex flex-wrap items-center gap-3">
         <select value={payment} onChange={(e) => setPayment(e.target.value as PaymentFilter)} className={select}>
           <option value="all">Payment: All</option>
@@ -310,6 +320,7 @@ export default function EventRoster({
           <option value="all">Scholarship: All</option>
           <option value="holders">Scholarship: Holders only</option>
         </select>
+        <CollapseAllControls label="Expand or collapse registrations" />
         <span className="text-sm text-brand-muted-soft">
           {shown} of {roster.summary.totalParticipants} participants
           {roster.summary.scholarshipHolders > 0 && ` · ${roster.summary.scholarshipHolders} on scholarship`}
@@ -353,14 +364,20 @@ export default function EventRoster({
       {/* Offered, but the student hasn't completed their details — so there is
           no registration row yet. Shown here so the roster is the whole picture. */}
       {roster.scholarshipOffers.length > 0 && (
-        <div className="rounded-xl border border-line bg-white overflow-hidden">
-          <div className="px-4 py-2 bg-primary-soft text-xs font-subheading font-semibold uppercase tracking-wide text-primary-deep">
-            Scholarship offers — awaiting registration details ({roster.scholarshipOffers.length})
-          </div>
+        <Collapsible
+          id="scholarship-offers"
+          tone="primary"
+          headingLevel={3}
+          title="Scholarship offers awaiting registration details"
+          summary={`${roster.scholarshipOffers.length} offered`}
+          bodyClassName="p-0"
+        >
           <ul className="divide-y divide-brand-hairline text-sm">
             {roster.scholarshipOffers.map((o) => (
               <li key={o.id} className="px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span className="font-medium text-brand-blue-dark">{o.name}</span>
+                <MemberLink memberId={o.memberId} className="font-medium text-brand-blue-dark">
+                  {o.name}
+                </MemberLink>
                 <span className="text-xs text-brand-muted-soft">{o.email}</span>
                 <ScholarshipBadge percent={o.percentOff} />
                 {o.offeredAt && (
@@ -376,7 +393,7 @@ export default function EventRoster({
               </li>
             ))}
           </ul>
-        </div>
+        </Collapsible>
       )}
 
       {filtered.length === 0 ? (
@@ -384,34 +401,33 @@ export default function EventRoster({
           No participants match the current filters.
         </p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {filtered.map((group) => (
-            <div
+            <Collapsible
               key={group.registrationId}
-              className={`rounded-xl border overflow-hidden ${
-                group.type === 'group' ? 'border-brand-blue bg-brand-blue/5/30' : 'border-brand-border bg-white'
-              }`}
-            >
-              <div
-                className={`px-4 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs font-subheading font-semibold uppercase tracking-wide ${
-                  group.type === 'group' ? 'bg-brand-blue/5 text-brand-blue' : 'bg-brand-canvas text-brand-muted-soft'
-                }`}
-              >
-                <span className="flex flex-wrap items-center gap-2">
-                  {group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}
+              id={group.registrationId}
+              tone={group.type === 'group' ? 'primary' : 'muted'}
+              headingLevel={3}
+              defaultOpen={false}
+              bodyClassName="p-0"
+              title={
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  {group.type === 'group'
+                    ? `Group: ${group.groupLabel}`
+                    : `Individual: ${group.participants.map((p) => `${p.first_name} ${p.last_name}`).join(', ')}`}
                   {group.scholarship && (
                     <ScholarshipBadge percent={group.scholarship.percentOff} refundCents={group.scholarship.refundCents} />
                   )}
                 </span>
-                {/* Individual registrations need no header delete — the per-row
-                    "Delete Registration" removes the participant and auto-withdraws
-                    the emptied registration. */}
-                <span className="flex flex-wrap items-center gap-3">
-                  {/* Invoiced groups are settled offline — an admin records payment
-                      here so member/roster pills read truthfully and a receipt opens. */}
-                  {group.type === 'group' && group.invoiceRequested && (
-                    <span className="flex items-center gap-2 normal-case">
-                      {group.invoicePaidAt ? (
+              }
+              summary={groupSummary(group.participants)}
+              actions={
+                group.type === 'group' ? (
+                  <>
+                    {/* Invoiced groups are settled offline — an admin records payment
+                        here so member/roster pills read truthfully and a receipt opens. */}
+                    {group.invoiceRequested &&
+                      (group.invoicePaidAt ? (
                         <button
                           type="button"
                           onClick={() => markInvoicePaid(group.registrationId, false)}
@@ -429,49 +445,66 @@ export default function EventRoster({
                         >
                           {markingInvoice === group.registrationId ? 'Saving…' : 'Mark invoice paid'}
                         </button>
-                      )}
-                    </span>
-                  )}
-                  {group.type === 'group' && group.payLinkSendable && (
-                    <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} className="normal-case" />
-                  )}
-                  {group.type === 'group' && (
+                      ))}
+                    {group.payLinkSendable && <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} />}
                     <AdminAddParticipantButton registrationId={group.registrationId} />
-                  )}
-                  {group.type === 'group' && (
                     <FinishSetupButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
-                  )}
-                  {group.type === 'group' && group.invoiceRequested && (
-                    <GroupInvoiceButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
-                  )}
-                  {group.type === 'group' && (
+                    {group.invoiceRequested && (
+                      <GroupInvoiceButton registrationId={group.registrationId} groupLabel={group.groupLabel ?? 'This group'} />
+                    )}
                     <GroupPaymentMethod
                       endpoint={`/api/admin/registrations/${group.registrationId}/payment-method`}
                       groupLabel={group.groupLabel ?? 'This group'}
                       variant="link"
                     />
-                  )}
-                  {group.type === 'group' && (
                     <DeleteEntityButton
                       entity="registration"
                       id={group.registrationId}
                       name={`the group "${group.groupLabel}"`}
                       label="Delete group"
                       refundable
-                      className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
+                      className="text-xs font-medium text-red-600 hover:text-red-800"
                     />
+                  </>
+                ) : undefined
+                /* Individual registrations need no header actions — the per-row
+                   "Delete Registration" removes the participant and auto-withdraws
+                   the emptied registration. */
+              }
+            >
+              {/* The group's teacher and school, each linked to its record. The
+                  header can't hold links: the whole header is the fold button. */}
+              {group.type === 'group' && (group.teacherName || group.schoolName) && (
+                <p className="flex flex-wrap gap-x-4 gap-y-1 border-b border-line-light bg-white px-4 py-2 text-xs text-content-muted">
+                  {group.teacherName && (
+                    <span>
+                      Teacher:{' '}
+                      <MemberLink memberId={group.teacherMemberId} className="font-medium text-content-body">
+                        {group.teacherName}
+                      </MemberLink>
+                    </span>
                   )}
-                </span>
-              </div>
+                  {group.schoolName && (
+                    <span>
+                      School:{' '}
+                      <SchoolLink schoolId={group.schoolId} className="font-medium text-content-body">
+                        {group.schoolName}
+                      </SchoolLink>
+                    </span>
+                  )}
+                </p>
+              )}
               {/* Below lg: one card per participant. */}
               <ul className="divide-y divide-line-light bg-white lg:hidden">
                 {group.participants.map((p) => (
                   <li key={p.id} className="space-y-3 px-4 py-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="font-subheading text-base font-semibold text-ink">
-                          {p.first_name} {p.last_name}
-                        </h3>
+                        <h4 className="font-subheading text-base font-semibold text-ink">
+                          <MemberLink memberId={p.member_id}>
+                            {p.first_name} {p.last_name}
+                          </MemberLink>
+                        </h4>
                         <p className="truncate text-xs text-content-muted" title={p.email}>
                           {p.email}
                         </p>
@@ -480,7 +513,9 @@ export default function EventRoster({
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
                       <CardField label="Role">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</CardField>
-                      <CardField label="School">{p.school_name ?? '—'}</CardField>
+                      <CardField label="School">
+                        {p.school_name ? <SchoolLink schoolId={p.school_id}>{p.school_name}</SchoolLink> : '—'}
+                      </CardField>
                       <CardField label="Grade">{displayGrade(p.grade) ?? '—'}</CardField>
                       <CardField label="Shirt">{p.t_shirt_size ?? '—'}</CardField>
                       <CardField label="Payment">{paymentCell(p)}</CardField>
@@ -538,15 +573,17 @@ export default function EventRoster({
                     {group.participants.map((p) => (
                       <tr key={p.id} className="group hover:bg-brand-canvas">
                         <td className={`${TD} ${STICKY} bg-white group-hover:bg-brand-canvas`}>
-                          <span className="font-medium text-brand-blue-dark">
+                          <MemberLink memberId={p.member_id} className="font-medium text-brand-blue-dark">
                             {p.first_name} {p.last_name}
-                          </span>
+                          </MemberLink>
                           <p className="text-xs text-brand-muted-soft truncate" title={p.email}>
                             {p.email}
                           </p>
                         </td>
                         <td className={`${TD} text-brand-muted`}>{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
-                        <td className={`${TD} text-brand-muted`}>{p.school_name ?? '—'}</td>
+                        <td className={`${TD} text-brand-muted`}>
+                          {p.school_name ? <SchoolLink schoolId={p.school_id}>{p.school_name}</SchoolLink> : '—'}
+                        </td>
                         <td className={`${TD} text-brand-muted`}>{displayGrade(p.grade) ?? '—'}</td>
                         <td className={`${TD} text-brand-muted`}>{p.t_shirt_size ?? '—'}</td>
                         <td className={TD}>
@@ -575,12 +612,34 @@ export default function EventRoster({
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Collapsible>
           ))}
         </div>
       )}
-    </div>
+    </CollapsibleGroup>
+    </Collapsible>
   )
+}
+
+// The folded header line for one registration: what needs chasing, at a glance.
+function groupSummary(participants: RosterParticipant[]): string {
+  const n = participants.length
+  const unpaid = participants.filter((p) => !p.paid).length
+  const docusign = participants.filter((p) => p.docusign === 'outstanding').length
+  const background = participants.filter((p) => OUTSTANDING_STATES.includes(p.compliance_pill)).length
+  const checkedIn = participants.filter((p) => p.checked_in_at).length
+  const open = [
+    unpaid && `${unpaid} unpaid`,
+    docusign && `${docusign} DocuSign open`,
+    background && `${background} background open`,
+  ].filter(Boolean)
+  return [
+    `${n} participant${n === 1 ? '' : 's'}`,
+    ...(open.length ? open : ['all clear']),
+    checkedIn ? `${checkedIn} checked in` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 // One labelled value on a participant card.

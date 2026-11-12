@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from 'react'
 import { AUDIENCES, ROLE_LABEL, type EventEmailSendRow } from '@/lib/event-emails/types'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 const TRIGGER_LABEL: Record<EventEmailSendRow['trigger'], string> = {
   manual: 'Sent now',
@@ -84,7 +85,11 @@ export function EventEmailHistory({ history }: { history: EventEmailSendRow[] })
                       <ul className="grid gap-1 text-xs sm:grid-cols-2">
                         {h.recipients.map((r) => (
                           <li key={r.email} className={r.status === 'failed' ? 'text-red-600' : 'text-brand-muted'}>
-                            {r.name !== r.email && <span className="text-ink">{r.name} · </span>}
+                            {r.name !== r.email && (
+                              <span className="text-ink">
+                                <MemberLink memberId={r.memberId}>{r.name}</MemberLink> ·{' '}
+                              </span>
+                            )}
                             {r.email}
                             {r.roles.length > 0 && ` (${r.roles.map((x) => ROLE_LABEL[x] ?? x).join(', ')})`}
                             {r.status === 'failed' && ` — failed${r.error ? `: ${r.error}` : ''}`}

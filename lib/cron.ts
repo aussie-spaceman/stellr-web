@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { appEnv, isProd } from './env'
 import { safeStrEqual } from './secret-compare'
+import { cronJobOf, devCronOptInFor, devCronOptIns } from './cron-dev-opt-in'
 
 /**
  * Gate for every route under `app/api/cron/`. Returns a response to send back
@@ -30,6 +31,11 @@ export function guardCron(req: Request): NextResponse | null {
   }
 
   if (!isProd()) {
+    // S5 B26a: the one exception, on the hosted dev deployment only, for a step
+    // named in CRON_NON_PROD_JOBS from a short allowlist (lib/cron-dev-opt-in).
+    // Unset, or anywhere else, this is never true and the call declines as before.
+    if (devCronOptIns().length && devCronOptInFor(cronJobOf(req))) return null
+
     // 200, not an error status: the cron did the right thing by declining, and
     // a non-2xx would show up in Vercel as a failing job every single day.
     return NextResponse.json({ skipped: true, reason: `APP_ENV=${appEnv()}` })

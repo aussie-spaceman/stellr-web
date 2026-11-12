@@ -57,14 +57,17 @@
 /vitest.config.mts                  @aussie-spaceman
 
 # S5 wave 1: authorisation, tenant routing, scoped loads, the age gate, and
-# their gate tests (inert until later slices import them)
+# their gate tests (inert until later slices import them). Wave 7 adds the
+# switch registry (O1) and the host-record check (A10a) beside their neighbours.
 /lib/authz.ts                       @aussie-spaceman
 /lib/authz/**                       @aussie-spaceman
 /lib/tenancy/host.ts                @aussie-spaceman
 /lib/tenancy/host-pure.ts           @aussie-spaceman
+/lib/tenancy/host-record.ts         @aussie-spaceman
 /lib/tenancy/tenant-surface.ts      @aussie-spaceman
 /lib/tenancy/load-scoped.ts         @aussie-spaceman
 /lib/tenancy/load-scoped-mode.ts    @aussie-spaceman
+/lib/tenancy/flags.ts               @aussie-spaceman
 /lib/tenancy/event-in-scope.ts      @aussie-spaceman
 /lib/tenancy/scope-context.ts       @aussie-spaceman
 /lib/registration/eligibility.ts    @aussie-spaceman
@@ -206,12 +209,14 @@
 # Binding instructions for AI agents
 /CLAUDE.md                          @aussie-spaceman
 
-# tenantDb's Postgres driver, its wiring gate and its real-database test (S5 C11)
+# tenantDb's Postgres driver, its wiring gate and its real-database test (S5 C11),
+# and the pooler TLS canary the owner runs locally (S5 wave 7, O3)
 /lib/tenancy/driver.ts              @aussie-spaceman
 /lib/tenancy/driver-wiring.test.ts  @aussie-spaceman
 /test/integration/**                @aussie-spaceman
 /vitest.integration.config.mts      @aussie-spaceman
 /scripts/ci-db-build.sh             @aussie-spaceman
+/scripts/tenant-db-canary.ts        @aussie-spaceman
 
 # The per-area data-path switch (S5 C12)
 /lib/tenancy/area-switch.ts         @aussie-spaceman

@@ -9,8 +9,40 @@ vi.mock('@/lib/rate-limit-store', async (importOriginal) => ({
 }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => { throw new Error('the store must not be reached') } }))
 
+/** The app_errors writer and runAfterResponse, each noting when it is loaded. */
+const rows = vi.hoisted(() => {
+  const rows = {
+    loaded: new Set<string>(),
+    record: vi.fn(async (..._args: unknown[]) => true),
+    scheduled: [] as Promise<unknown>[],
+    async settle() {
+      await Promise.all(rows.scheduled)
+    },
+    appErrors() {
+      rows.loaded.add('app-errors')
+      return {
+        errorDigest: (route: string) => `digest of ${route}`,
+        routeLabel: (method: string, routePath: string) => `${method} ${routePath}`,
+        recordBuiltAppError: rows.record,
+      }
+    },
+    afterResponse() {
+      rows.loaded.add('after-response')
+      return {
+        runAfterResponse: (_label: string, task: () => Promise<unknown>) => {
+          rows.scheduled.push(task())
+        },
+      }
+    },
+  }
+  return rows
+})
+vi.mock('@/lib/app-errors', () => rows.appErrors())
+vi.mock('@/lib/after-response', () => rows.afterResponse())
+
 import { rateLimitGuard } from './rate-limit'
 import { limit, rateLimit, type LimitOptions } from './rate-limit-async'
+import { hashRateLimitKey } from './rate-limit-store'
 import { STELLR_TENANT_ID } from './tenancy/constants'
 
 const WINDOW = { limit: 1, windowMs: 60_000, tenantId: null }
@@ -22,6 +54,9 @@ const fresh = () => `test-key-${++n}`
 const request = (ip: string) => new Request('https://example.test/', { headers: { 'x-forwarded-for': ip } })
 
 beforeEach(() => {
+  rows.loaded.clear()
+  rows.record.mockClear()
+  rows.scheduled.length = 0
   h.take.mockReset()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -130,6 +165,106 @@ describe('shadow mode', () => {
 
     h.take.mockResolvedValueOnce(null)
     expect((await limit(fresh(), WINDOW)).ok).toBe(true)
+  })
+})
+
+describe('app_errors rows for shadow disagreements', () => {
+  const written = () => rows.record.mock.calls.map(([route, message]) => `${route} | ${message}`)
+
+  it("writes a fixed-text 'RATELIMIT <label>' row when the store and memory disagree", async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    await limit(fresh(), WINDOW)
+    await rateLimit(request('203.0.113.20'), 'check-in', WINDOW, fresh())
+    await rows.settle()
+    expect(written()).toEqual([
+      'RATELIMIT limit | shadow_disagreement memory=allow store=deny',
+      'RATELIMIT check-in | shadow_disagreement memory=allow store=deny',
+    ])
+  })
+
+  it('never writes a key, an IP or the HMAC', async () => {
+    const secret = 'k'.repeat(32)
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', secret)
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    const ip = '203.0.113.21'
+    const nameKey = `check-in-name:event-slug:Ada:Lovelace:${ip}:${fresh()}`
+    const suffix = `token-${fresh()}`
+    await limit(nameKey, WINDOW)
+    await limit(nameKey, { ...WINDOW, tenantId: OTHER_TENANT })
+    await rateLimit(request(ip), 'check-in', WINDOW, suffix)
+    await rows.settle()
+
+    expect(rows.record).toHaveBeenCalledTimes(3)
+    const sentKeys = h.take.mock.calls.map((call) => call[0] as string)
+    const hmacs = sentKeys.map((key) => hashRateLimitKey(key, secret).slice(2))
+    const payloads = JSON.stringify(rows.record.mock.calls)
+    for (const raw of [...sentKeys, ...hmacs, nameKey, suffix, ip, 'Ada', 'Lovelace', 'event-slug', OTHER_TENANT]) {
+      expect(payloads).not.toContain(raw)
+    }
+  })
+
+  it('writes nothing when they agree, in postgres mode, or when the store cannot answer', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    h.take.mockResolvedValueOnce({ ok: true, retryAfterSeconds: 0 })
+    await limit(fresh(), WINDOW)
+    h.take.mockResolvedValueOnce(null)
+    await limit(fresh(), WINDOW)
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres')
+    h.take.mockResolvedValueOnce({ ok: false, retryAfterSeconds: 9 })
+    await limit(fresh(), WINDOW)
+    await rows.settle()
+    expect(rows.scheduled).toHaveLength(0)
+    expect(rows.record).not.toHaveBeenCalled()
+  })
+
+  it('does not change the decision when the write fails', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    rows.record.mockResolvedValueOnce(false)
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    expect(await limit(fresh(), WINDOW)).toEqual({ ok: true, retryAfterSeconds: 0 })
+    await rows.settle()
+    expect(console.error).toHaveBeenCalledWith('[rate-limit] app_errors record failed')
+  })
+})
+
+describe('memory mode loads nothing new', () => {
+  // Fresh modules, with the two lazy imports registered again, so a test sees whether they load.
+  async function freshAsync() {
+    vi.resetModules()
+    vi.doMock('@/lib/app-errors', () => rows.appErrors())
+    vi.doMock('@/lib/after-response', () => rows.afterResponse())
+    rows.loaded.clear()
+    return import('./rate-limit-async')
+  }
+
+  it('imports neither lib/app-errors nor lib/after-response, and writes nothing, with RATE_LIMIT_STORE unset', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', undefined as unknown as string)
+    const async = await freshAsync()
+    const key = fresh()
+    await async.limit(key, WINDOW)
+    await async.limit(key, WINDOW)
+    const route = fresh()
+    await async.rateLimit(request('203.0.113.22'), route, WINDOW)
+    expect((await async.rateLimit(request('203.0.113.22'), route, WINDOW))?.status).toBe(429)
+    expect(h.take).not.toHaveBeenCalled()
+    expect(rows.scheduled).toHaveLength(0)
+    expect([...rows.loaded]).toEqual([])
+  })
+
+  it('loads them only once there is a row to write', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    const async = await freshAsync()
+    h.take.mockResolvedValue({ ok: true, retryAfterSeconds: 0 })
+    await async.limit(fresh(), WINDOW)
+    expect([...rows.loaded]).toEqual([])
+
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    await async.limit(fresh(), WINDOW)
+    await rows.settle()
+    expect([...rows.loaded].sort()).toEqual(['after-response', 'app-errors'])
   })
 })
 

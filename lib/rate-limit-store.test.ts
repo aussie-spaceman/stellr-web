@@ -8,6 +8,37 @@ const h = vi.hoisted(() => ({ rpc: vi.fn(), server: vi.fn(), cronStart: vi.fn(),
 vi.mock('@/lib/supabase', () => ({ supabaseServer: h.server }))
 vi.mock('@/lib/cron-runs', () => ({ startCronRun: h.cronStart }))
 
+/** The app_errors writer and runAfterResponse, each noting when it is loaded. */
+const rows = vi.hoisted(() => {
+  const rows = {
+    loaded: new Set<string>(),
+    record: vi.fn(async (..._args: unknown[]) => true),
+    scheduled: [] as { label: string; task: Promise<unknown> }[],
+    async settle() {
+      await Promise.all(rows.scheduled.map((s) => s.task))
+    },
+    appErrors() {
+      rows.loaded.add('app-errors')
+      return {
+        errorDigest: (route: string) => `digest of ${route}`,
+        routeLabel: (method: string, routePath: string) => `${method} ${routePath}`,
+        recordBuiltAppError: rows.record,
+      }
+    },
+    afterResponse() {
+      rows.loaded.add('after-response')
+      return {
+        runAfterResponse: (label: string, task: () => Promise<unknown>) => {
+          rows.scheduled.push({ label, task: task() })
+        },
+      }
+    },
+  }
+  return rows
+})
+vi.mock('@/lib/app-errors', () => rows.appErrors())
+vi.mock('@/lib/after-response', () => rows.afterResponse())
+
 import { STORE_TIMEOUT_MS, gcRateLimitStore, hashRateLimitKey, rateLimitStoreMode, takeFromStore } from './rate-limit-store'
 
 const SECRET = 'k'.repeat(32)
@@ -20,6 +51,9 @@ function rpcResolves(result: unknown) {
 }
 
 beforeEach(() => {
+  rows.loaded.clear()
+  rows.record.mockClear()
+  rows.scheduled.length = 0
   h.rpc.mockReset()
   h.server.mockReset().mockReturnValue({ rpc: h.rpc })
   h.cronFail.mockReset()
@@ -165,6 +199,156 @@ describe('takeFromStore', () => {
     await fresh.takeFromStore('k', WINDOW)
     await fresh.takeFromStore('k', WINDOW)
     expect(h.server).toHaveBeenCalledOnce()
+  })
+})
+
+describe('app_errors rows for store problems', () => {
+  // Each test takes a fresh module, so the once-a-minute state starts empty.
+  // Its two lazy imports are registered again, so the test sees whether they load.
+  async function freshStore() {
+    vi.resetModules()
+    vi.doMock('@/lib/app-errors', () => rows.appErrors())
+    vi.doMock('@/lib/after-response', () => rows.afterResponse())
+    rows.loaded.clear()
+    return import('./rate-limit-store')
+  }
+  const written = () => rows.record.mock.calls.map(([route, message]) => `${route} | ${message}`)
+
+  it('writes a missing secret, a timeout and a failure as fixed text, the failure by its SQLSTATE alone', async () => {
+    const store = await freshStore()
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', 'short')
+    await store.takeFromStore('k', WINDOW)
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', SECRET)
+
+    rpcResolves({ data: null, error: { message: 'duplicate key value violates unique constraint', code: '23505' } })
+    await store.takeFromStore('k', WINDOW)
+
+    vi.useFakeTimers()
+    h.rpc.mockReturnValue({ abortSignal: () => new Promise(() => {}) })
+    const pending = store.takeFromStore('k', WINDOW)
+    await vi.advanceTimersByTimeAsync(STORE_TIMEOUT_MS)
+    await pending
+    await rows.settle()
+
+    expect(written()).toEqual([
+      'RATELIMIT store | store_skipped_no_secret',
+      'RATELIMIT store | store_failed code=23505',
+      'RATELIMIT store | store_timeout',
+    ])
+    expect(rows.scheduled.map((s) => s.label)).toEqual(['rate-limit', 'rate-limit', 'rate-limit'])
+  })
+
+  it('keeps a PostgREST code, and nothing that is not shaped like a code', async () => {
+    vi.useFakeTimers({ now: Date.now() + 30 * DAY_MS })
+    const store = await freshStore()
+    for (const code of ['PGRST202', '203.0.113.9', undefined, 'abc12']) {
+      rpcResolves({ data: null, error: { message: 'm', code } })
+      await store.takeFromStore('k', WINDOW)
+      vi.advanceTimersByTime(60_000)
+    }
+    h.rpc.mockImplementation(() => {
+      throw new Error('no env')
+    })
+    await store.takeFromStore('k', WINDOW)
+    vi.advanceTimersByTime(60_000)
+    rpcResolves({ data: [], error: null })
+    await store.takeFromStore('k', WINDOW)
+    await rows.settle()
+
+    expect(written()).toEqual([
+      'RATELIMIT store | store_failed code=PGRST202',
+      'RATELIMIT store | store_failed code=unknown',
+      'RATELIMIT store | store_failed code=unknown',
+      'RATELIMIT store | store_failed code=unknown',
+      'RATELIMIT store | store_failed code=threw',
+      'RATELIMIT store | store_failed code=unexpected_shape',
+    ])
+  })
+
+  it('writes each kind at most once a minute per instance', async () => {
+    vi.useFakeTimers({ now: Date.now() + 40 * DAY_MS })
+    const store = await freshStore()
+    rpcResolves({ data: null, error: { message: 'down', code: '57P01' } })
+    await store.takeFromStore('k', WINDOW)
+    await store.takeFromStore('k', WINDOW)
+    rpcResolves({ data: null, error: { message: 'down', code: '08006' } })
+    await store.takeFromStore('k', WINDOW)
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', '')
+    await store.takeFromStore('k', WINDOW)
+    await store.takeFromStore('k', WINDOW)
+    await rows.settle()
+    expect(written()).toEqual(['RATELIMIT store | store_failed code=57P01', 'RATELIMIT store | store_skipped_no_secret'])
+
+    vi.advanceTimersByTime(60_000)
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', SECRET)
+    await store.takeFromStore('k', WINDOW)
+    await rows.settle()
+    expect(written()).toHaveLength(3)
+    expect(written()[2]).toBe('RATELIMIT store | store_failed code=08006')
+  })
+
+  it('never writes a key, an IP, the HMAC, the secret or the error message', async () => {
+    vi.useFakeTimers({ now: Date.now() + 50 * DAY_MS })
+    const store = await freshStore()
+    const key = 'check-in-name:event:Ada:Lovelace:203.0.113.9'
+    const hmac = hashRateLimitKey(key, SECRET).slice(2)
+    const message = 'value 203.0.113.9 for Ada Lovelace rejected'
+    const take = async () => {
+      await store.takeFromStore(key, WINDOW)
+      vi.advanceTimersByTime(60_000)
+    }
+
+    rpcResolves({ data: null, error: { message, code: '23505', details: message, hint: key } })
+    await take()
+    rpcResolves({ data: null, error: { message, code: key } })
+    await take()
+    h.rpc.mockImplementation(() => {
+      throw new Error(message)
+    })
+    await take()
+    rpcResolves({ data: [{ allowed: 'yes', retry_after: key }], error: null })
+    await take()
+    h.rpc.mockReturnValue({ abortSignal: () => new Promise(() => {}) })
+    const pending = store.takeFromStore(key, WINDOW)
+    await vi.advanceTimersByTimeAsync(STORE_TIMEOUT_MS)
+    await pending
+    vi.advanceTimersByTime(60_000)
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', '')
+    await take()
+    await rows.settle()
+
+    expect(rows.record).toHaveBeenCalledTimes(6)
+    const payloads = JSON.stringify(rows.record.mock.calls)
+    for (const raw of [key, '203.0.113.9', 'Ada', 'Lovelace', 'check-in', hmac, SECRET, message, 'rejected']) {
+      expect(payloads).not.toContain(raw)
+    }
+  })
+
+  it('writes nothing and loads neither module while the store answers', async () => {
+    const store = await freshStore()
+    rpcResolves({ data: [{ allowed: false, retry_after: 4 }], error: null })
+    await store.takeFromStore('k', WINDOW)
+    await store.takeFromStore('k', WINDOW)
+    expect(rows.scheduled).toHaveLength(0)
+    expect(rows.record).not.toHaveBeenCalled()
+    expect([...rows.loaded]).toEqual([])
+  })
+
+  it('loads lib/app-errors only once there is a row to write', async () => {
+    const store = await freshStore()
+    vi.stubEnv('RATE_LIMIT_KEY_SECRET', '')
+    await store.takeFromStore('k', WINDOW)
+    await rows.settle()
+    expect([...rows.loaded].sort()).toEqual(['after-response', 'app-errors'])
+  })
+
+  it('does not throw, or change the answer, when the write fails', async () => {
+    const store = await freshStore()
+    rows.record.mockResolvedValueOnce(false)
+    rpcResolves({ data: null, error: { message: 'down', code: '57P01' } })
+    expect(await store.takeFromStore('k', WINDOW)).toBeNull()
+    await rows.settle()
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain('app_errors record failed')
   })
 })
 

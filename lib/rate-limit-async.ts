@@ -4,7 +4,8 @@
 //
 // RATE_LIMIT_STORE picks where the decision comes from:
 //   memory (default)  the in-memory limiter alone; Postgres is never called
-//   shadow            the in-memory decision, plus a Postgres count, logged when they differ
+//   shadow            the in-memory decision, plus a Postgres count, logged and written to
+//                     app_errors when they differ
 //   postgres          the Postgres decision, or the in-memory one if the store cannot answer
 //
 // Every mode counts in memory first, so a store outage falls back to a window
@@ -31,7 +32,7 @@
 // (test/rate-limit-await.test.ts).
 
 import { checkRateLimit, clientIp, HOUR_MS } from '@/lib/rate-limit'
-import { rateLimitStoreMode, takeFromStore } from '@/lib/rate-limit-store'
+import { rateLimitStoreMode, recordRateLimitRow, takeFromStore } from '@/lib/rate-limit-store'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 /**
@@ -87,6 +88,8 @@ function tenantKey(key: string, tenantId: string | null): string {
   return tenantId && tenantId !== STELLR_TENANT_ID ? `tenant:${tenantId}:${key}` : key
 }
 
+const verdict = (ok: boolean) => (ok ? 'allow' : 'deny')
+
 async function decide(key: string, opts: LimitOptions, label: string, budgetIp?: string): Promise<LimitDecision> {
   const scoped = tenantKey(key, opts.tenantId)
   const window = { limit: opts.limit, windowMs: opts.windowMs }
@@ -102,6 +105,8 @@ async function decide(key: string, opts: LimitOptions, label: string, budgetIp?:
 
   if (store.ok !== memory.ok) {
     console.warn('[rate-limit] shadow disagreement', label, { memory: memory.ok, store: store.ok })
+    // A 'RATELIMIT <label>' row: the label comes from the code, never the key.
+    await recordRateLimitRow(label, `shadow_disagreement memory=${verdict(memory.ok)} store=${verdict(store.ok)}`)
   }
   return memory
 }

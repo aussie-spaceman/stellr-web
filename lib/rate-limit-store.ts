@@ -7,6 +7,13 @@
 // Limiter keys hold IP addresses and sometimes names, so only an HMAC of a key
 // leaves this process. Without a usable secret nothing is sent at all, and the
 // caller keeps its in-memory decision.
+//
+// A store problem (a timeout, a failure, a missing secret) and a shadow
+// disagreement also leave a 'RATELIMIT' row in app_errors, so a dev soak has
+// something to read after Vercel's hour of logs is gone. Every such row is
+// built from fixed text and a shape-checked error code: never a key, an IP, an
+// HMAC or an error message. lib/app-errors brings the mailer with it, so it is
+// loaded only when there is a row to write, and never in memory mode.
 
 import { createHmac } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,7 +33,53 @@ const GC_TIMEOUT_MS = 10_000
 const MIN_SECRET_LENGTH = 32
 const LOG_EVERY_MS = 60_000
 
+/** The store problems that leave an app_errors row, each at most once a minute per instance. */
+type StoreProblemKind = 'timeout' | 'failed' | 'skipped_no_secret'
+
 const lastLogged = new Map<string, number>()
+const lastRecorded = new Map<StoreProblemKind, number>()
+
+/** A SQLSTATE, or a PostgREST code such as PGRST202. Anything else is not kept. */
+const ERROR_CODE = /^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/
+
+/**
+ * Register one app_errors row, written once the response has gone. `label` is
+ * the limiter's fixed label (a route name from the code, or 'store'), and
+ * `message` is fixed text: neither may hold a key, an IP, an HMAC or anything a
+ * request or an error supplied. lib/app-errors and lib/after-response load only
+ * here. recordBuiltAppError, not captureRequestError, so the text is kept as
+ * built; it has the same per-instance rate limit as every app_errors write.
+ * Never throws, and never waits for the database.
+ */
+export async function recordRateLimitRow(label: string, message: string): Promise<void> {
+  try {
+    const { runAfterResponse } = await import('@/lib/after-response')
+    runAfterResponse('rate-limit', async () => {
+      const { errorDigest, recordBuiltAppError, routeLabel } = await import('@/lib/app-errors')
+      const route = routeLabel('RATELIMIT', label, undefined)
+      // errorDigest flattens digits in the message, so the message joins the route
+      // part, which it keeps as given: each error code gets a row of its own.
+      if (!(await recordBuiltAppError(route, message, errorDigest(`${route}\n${message}`, message)))) {
+        console.error('[rate-limit] app_errors record failed')
+      }
+    })
+  } catch {
+    console.error('[rate-limit] app_errors record failed')
+  }
+}
+
+/** One row per kind per minute per instance, so an outage on a busy route cannot flood app_errors. */
+async function recordStoreProblem(kind: StoreProblemKind, message: string): Promise<void> {
+  const now = Date.now()
+  if (now - (lastRecorded.get(kind) ?? -Infinity) < LOG_EVERY_MS) return
+  lastRecorded.set(kind, now)
+  await recordRateLimitRow('store', message)
+}
+
+/** 'store_failed code=<SQLSTATE>', or a fixed reason when there is no code to trust. */
+function failedMessage(code: unknown): string {
+  return `store_failed code=${typeof code === 'string' && ERROR_CODE.test(code) ? code : 'unknown'}`
+}
 
 /**
  * Log a store problem at most once a minute per instance, so an outage on a busy
@@ -89,7 +142,8 @@ async function withTimeout<T>(request: (signal: AbortSignal) => PromiseLike<T>, 
 /**
  * Count one request against a key's window in Postgres. Null when the store
  * could not answer (no secret, an error, the timeout): the caller then uses its
- * in-memory decision. Never throws, and logs no key.
+ * in-memory decision. Never throws, and neither logs nor records a key: a
+ * problem's app_errors row is fixed text (recordStoreProblem).
  */
 export async function takeFromStore(
   key: string,
@@ -98,6 +152,7 @@ export async function takeFromStore(
   const secret = process.env.RATE_LIMIT_KEY_SECRET
   if (!secret || secret.length < MIN_SECRET_LENGTH) {
     logStoreProblem('store skipped: RATE_LIMIT_KEY_SECRET is missing or too short')
+    await recordStoreProblem('skipped_no_secret', 'store_skipped_no_secret')
     return null
   }
   try {
@@ -112,20 +167,24 @@ export async function takeFromStore(
     )
     if (!result) {
       logStoreProblem('store timed out')
+      await recordStoreProblem('timeout', 'store_timeout')
       return null
     }
     if (result.error) {
       logStoreProblem('store failed', result.error.message)
+      await recordStoreProblem('failed', failedMessage(result.error.code))
       return null
     }
     const row = (result.data as { allowed?: unknown; retry_after?: unknown }[] | null)?.[0]
     if (typeof row?.allowed !== 'boolean') {
       logStoreProblem('store returned an unexpected shape')
+      await recordStoreProblem('failed', 'store_failed code=unexpected_shape')
       return null
     }
     return { ok: row.allowed, retryAfterSeconds: Number(row.retry_after) || 0 }
   } catch (err) {
     logStoreProblem('store threw', err instanceof Error ? err.message : 'unknown error')
+    await recordStoreProblem('failed', 'store_failed code=threw')
     return null
   }
 }

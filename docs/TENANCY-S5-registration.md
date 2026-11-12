@@ -12,9 +12,9 @@ Registration stays open: anyone can register, and control is by age. Nothing her
 | The database backstop | `supabase/migrations/20261105041211_participants_eligibility.sql` | On the `dev` database since 5 Nov 2026, with the ledger re-read |
 | Its tests | `supabase/tests/database/participant_eligibility.test.sql`, `test/registration/participants-eligibility-sql.test.ts` | The second reads the constants and the SQL, and fails if one side changes alone. The pgTAP passes in CI's `db` job |
 | Production | | Applied on 5 Nov 2026 with the owner's yes, through the Supabase MCP (`.claude/releases/promote-2026-11-05.md`) |
-| Tenant guardian consent (A16) | `lib/registration/tenant-guardian-consent.ts`, migration `20261110164339_tenant_guardian_consent.sql` | On `dev` (#625), behind `TENANT_GUARDIAN_CONSENT_ENABLED`, off. The migration is on the `dev` database since 11 Nov 2026, not on production |
+| Tenant guardian consent (A16) | `lib/registration/tenant-guardian-consent.ts`, migration `20261110164339_tenant_guardian_consent.sql` | On production (#625, promoted in #643 on 12 Nov 2026), behind `TENANT_GUARDIAN_CONSENT_ENABLED`, off. The migration is on the `dev` database since 11 Nov 2026 and on production since 12 Nov 2026 |
 
-A7 replaced `checkRegistrationAge` with `assertEligible` in individual, group (both roster points) and group-join; for Stellr's events that makes exactly the old call. **Since promoted:** A7 is on production (#600, 9 Nov 2026). A8 (#625, on `dev`) does the same for the other participant writers.
+A7 replaced `checkRegistrationAge` with `assertEligible` in individual, group (both roster points) and group-join; for Stellr's events that makes exactly the old call. **Since promoted:** A7 is on production (#600, 9 Nov 2026). A8 (#625, promoted in #643 on 12 Nov 2026) does the same for the other participant writers.
 
 **Tenant events and consent (A7, fail-closed).** Stellr's consent is its own agreement, sent as Stellr, so it cannot serve a tenant. By default the register API refuses anyone under 18, today or on the day, for a non-Stellr event, through `TENANT_MIN_AGE_WITHOUT_GUARDIAN_CONSENT`, with the reason `under_minimum_age` and the wording the owner approved on 10 Nov 2026. The trigger keeps the platform floor of 14. Wave 6 adds the tenant guardian-consent flow, behind a flag ([below](#tenant-guardian-consent-a16)), and typed details only on a tenant host ([below](#typed-details-only-on-a-tenant-host-a7f)). A live tenant event with no start date refuses everyone (`eligibility_unavailable`, 503) until the owner decides how such events are dated.
 
@@ -52,7 +52,7 @@ The two sides refuse in the same order.
 
 ## Typed details only on a tenant host (A7f)
 
-Owner decision, 10 Nov 2026: a Stellr member's profile is not used at a tenant event until S7's per-tenant consent grant exists. Built in wave 6 (#625, on `dev`) in `lib/registration/individual/gate.ts` and `lib/registration/group/gate.ts`. The gates take the tenant branch only when `requestTenant()` names a tenant other than Stellr, which needs `TENANT_ROUTING_ENABLED`.
+Owner decision, 10 Nov 2026: a Stellr member's profile is not used at a tenant event until S7's per-tenant consent grant exists. Built in wave 6 (#625, promoted in #643 on 12 Nov 2026) in `lib/registration/individual/gate.ts` and `lib/registration/group/gate.ts`. The gates take the tenant branch only when `requestTenant()` names a tenant other than Stellr, which needs `TENANT_ROUTING_ENABLED`.
 
 On a tenant host:
 
@@ -64,7 +64,7 @@ These registrations link no member, so nothing may treat their typed email as th
 
 ## Tenant guardian consent (A16)
 
-Owner decision, 10 Nov 2026, built in wave 6 (#625, on `dev`) behind `TENANT_GUARDIAN_CONSENT_ENABLED` (off by default; on only when exactly `true`). The flow is `lib/registration/tenant-guardian-consent.ts`; the envelope is `lib/esign/tenant-guardian-consent.ts`. **With the flag off** every minor at a tenant event gets the approved refusal, as above, and the register route and the sweep read and write nothing new.
+Owner decision, 10 Nov 2026, built in wave 6 (#625, promoted in #643 on 12 Nov 2026) behind `TENANT_GUARDIAN_CONSENT_ENABLED` (off by default; on only when exactly `true`). The flow is `lib/registration/tenant-guardian-consent.ts`; the envelope is `lib/esign/tenant-guardian-consent.ts`. **With the flag off** every minor at a tenant event gets the approved refusal, as above, and the register route and the sweep read and write nothing new.
 
 **With it on, for `register/individual` on a tenant event:**
 
@@ -88,15 +88,16 @@ Owner decision, 10 Nov 2026, built in wave 6 (#625, on `dev`) behind `TENANT_GUA
 
 ### The migration
 
-`supabase/migrations/20261110164339_tenant_guardian_consent.sql`. On the `dev` database since 11 Nov 2026, not on production.
+`supabase/migrations/20261110164339_tenant_guardian_consent.sql`. On the `dev` database since 11 Nov 2026, and on production since 12 Nov 2026, applied through the production migration Action before #643 merged.
 
 - **The table.** `public.tenant_guardian_consents`: one row per consent-pending participant (`participant_id` unique), with its status (`pending`, `signed`, `declined`, `expired`), window and removal attempts. Stellr's tenant id is refused by CHECK. RLS on, `service_role` only, no `tenant_app` grant.
-- **The envelope type.** `agreements.envelope_type` also accepts `tenant_guardian_consent`. The CHECK is dropped and added again, wider, in the one transaction. That takes an ACCESS EXCLUSIVE lock on `agreements` and scans every row under it, and the lock is held until the migration commits, through the trigger steps that follow.
+- **The envelope type.** `agreements.envelope_type` also accepts `tenant_guardian_consent`. The CHECK is dropped and added again, wider, in the one transaction, which scans every `agreements` row.
 - **No check-in before consent.** `zzz_participants_refuse_unconsented_check_in`, BEFORE UPDATE OF `checked_in_at`, when it goes from NULL to a value: 23514 with the message `guardian_consent_pending`.
 - **Pending from the moment it exists.** `zzz_participants_open_tenant_guardian_consent`, AFTER INSERT OR UPDATE OF `date_of_birth`, `registration_id`. For a participant under 18, today or on the day, on another tenant's mirrored event, it writes a pending row in the same statement, whichever writer saved them. An insert that already sets `checked_in_at` is refused too. A move to another registration resets the row to pending: a signature covers one registration.
 - **A date-of-birth correction to 18 or over** removes a row still `pending`, so the adult is no longer held from check-in, event mail or the sweep. A `signed`, `declined` or `expired` row is left as it is. The sweep then voids the open envelope and audits it as `registration.guardian_consent.lift`.
 - **For Stellr:** both functions return before writing for a Stellr event or an unmirrored one. Each participant insert, and each update that changes `date_of_birth` or `registration_id`, makes one indexed join (the lookups A3's trigger makes on the same writes); each check-in write makes one indexed lookup on an empty set and is never refused.
-- **Sealing.** Both functions are SECURITY DEFINER with a pinned `search_path`, and EXECUTE is revoked from PUBLIC, anon and authenticated. `lock_timeout` 5 s.
+- **Sealing.** Both functions are SECURITY DEFINER with a pinned `search_path`, and EXECUTE is revoked from PUBLIC, anon and authenticated.
+- **Locks** (corrected 12 Nov 2026; the file's header understates them). Each is held until the transaction ends. The foreign keys stop writes to `tenants`, `registrations`, `participants` and `agreements` from the `CREATE TABLE`, the file's first statement after `SET LOCAL lock_timeout`. The CHECK then takes ACCESS EXCLUSIVE on `agreements`, and `DROP TRIGGER IF EXISTS` takes ACCESS EXCLUSIVE on `participants` even when the trigger is absent, so reads of those two wait as well. `lock_timeout` (5 s) bounds each wait to take a lock, not how long it is held. On production the Action's step that runs the transaction took about 3 s, in the dry run and again in the real run, so no lock was held longer than that. Detail: `docs/TENANCY-S5.md`, Wave 6 status, "Its locks".
 - **Tests.** `supabase/tests/database/tenant_guardian_consent.test.sql`, plan 37, passed in #625's `db` job. `test/registration/tenant-guardian-consent-sql.test.ts` holds the SQL's literals (Stellr's id, 18, the 14-day window) equal to their TypeScript constants.
 
 **Edges it does not re-check.** Re-owning an event, renaming its slug or changing its start date does not re-check consent. A move onto a Stellr event's registration leaves the old pending row, because the trigger returns before it for a Stellr event (tracker `s5-programme.26`).
@@ -171,7 +172,7 @@ WHERE e.starts_at IS NOT NULL
 1. **`dev` migration.** Applied 5 Nov 2026, and the ledger re-read. Still owed: confirm a Stellr registration on `dev` still writes.
 2. **Parity query on `dev`, then production.** `dev`, 5 Nov 2026: 0 mismatches across 9 dated events, after `scripts/backfill-events-mirror.ts` filled the mirror (11 rows, all Stellr's). Production's backfill and query are still owed.
 3. **Production migration.** Applied 5 Nov 2026 with the owner's yes, through the Supabase MCP, and the ledger re-read (`.claude/releases/promote-2026-11-05.md`). It is a no-op for Stellr apart from the one lookup above.
-4. **A7** wires `assertEligible` into the register routes, supplies `tenant_id` on every write, Stellr's too, and refuses priced tenant events. From #594, since promoted in #600. For Stellr it adds an owner read of `public.events` to each register, pay and pay-seat request (one read, or two when the row for the CMS document holds another slug or is missing, so that the owner agrees with the slug's row the trigger uses), and a failed read, or two rows naming different owners, answers a retryable 503. **A8** does the same for team-leader add and edit and the roster sheet import, from the registration's tenant (#625, on `dev`, not promoted).
+4. **A7** wires `assertEligible` into the register routes, supplies `tenant_id` on every write, Stellr's too, and refuses priced tenant events. From #594, since promoted in #600. For Stellr it adds an owner read of `public.events` to each register, pay and pay-seat request (one read, or two when the row for the CMS document holds another slug or is missing, so that the owner agrees with the slug's row the trigger uses), and a failed read, or two rows naming different owners, answers a retryable 503. **A8** does the same for team-leader add and edit and the roster sheet import, from the registration's tenant (#625, since promoted in #643 on 12 Nov 2026).
 5. **The S3 enforce flip**, after A7, A8, B16 and C20 and 7 clean days, and before the first non-owner event on production. A3 relies on it.
 6. **Before the first tenant event:** the sync fix above, and the owner's decision below.
 7. **Owner's manual test on a tenant event:** a 13-year-old, a NULL date of birth, a future date and an over-120 date refused by the API and by the database. With `TENANT_GUARDIAN_CONSENT_ENABLED` off, a 15-year-old is refused by the API too; with it on and the flow ready, a 15-year-old with a guardian named is saved pending, cannot be checked in, and is confirmed only once the guardian signs. A Stellr 12-year-old still registers.

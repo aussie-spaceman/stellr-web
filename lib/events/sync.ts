@@ -13,10 +13,12 @@
  * Every event document is Stellr's until S8 gives events an owner of their own, so
  * a NEW row's tenant defaults to STELLR_TENANT_ID. An existing row keeps its tenant
  * (upsertEventRows), and the sync on a miss must name one (lib/events/mirror.ts).
+ * An existing non-owner row also keeps its minimum age and time zone (S5 K4).
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { eventTimeZone, zonedTimeToUtc } from '@/lib/survey/timezone'
+import { eventTimeZone, isValidTimeZone, zonedTimeToUtc } from '@/lib/survey/timezone'
+import { normaliseState } from '@/lib/us-states'
 
 /** The Sanity fields the mirror keeps. No personal data: event documents are public. */
 export const MIRROR_PROJECTION = `{
@@ -83,6 +85,25 @@ export function eventCountry(raw: string | null | undefined): string {
 }
 
 /**
+ * starts_at and ends_at for an event's dates in `timeZone`: local midnight of the
+ * first day, and the EXCLUSIVE end (local midnight after the last day). Undated
+ * events have neither.
+ */
+function eventWindow(
+  date: unknown,
+  endDate: unknown,
+  timeZone: string,
+): { starts_at: string | null; ends_at: string | null } {
+  const first = typeof date === 'string' && ISO_DATE.test(date) ? date : null
+  const lastRaw = typeof endDate === 'string' && ISO_DATE.test(endDate) ? endDate : first
+  const last = first && lastRaw && lastRaw >= first ? lastRaw : first
+  return {
+    starts_at: first ? zonedTimeToUtc(first, timeZone).toISOString() : null,
+    ends_at: last ? zonedTimeToUtc(nextDay(last), timeZone).toISOString() : null,
+  }
+}
+
+/**
  * Map a Sanity event document to a mirror row. Pure. Returns null for anything
  * the mirror must not hold: no _id, a draft, or no slug.
  *
@@ -101,11 +122,7 @@ export function toEventRow(
 
   const country = eventCountry(doc.country)
   const timeZone = eventTimeZone({ state: doc.state ?? null, country })
-  const first = typeof doc.date === 'string' && ISO_DATE.test(doc.date) ? doc.date : null
-  const lastRaw = typeof doc.endDate === 'string' && ISO_DATE.test(doc.endDate) ? doc.endDate : first
-  const last = first && lastRaw && lastRaw >= first ? lastRaw : first
-  const startsAt = first ? zonedTimeToUtc(first, timeZone).toISOString() : null
-  const endsAt = last ? zonedTimeToUtc(nextDay(last), timeZone).toISOString() : null
+  const { starts_at: startsAt, ends_at: endsAt } = eventWindow(doc.date, doc.endDate, timeZone)
 
   const { slug: _s, ...rest } = doc
   void _s
@@ -129,28 +146,68 @@ export function toEventRow(
   }
 }
 
+/** What upsertEventRows reads of a row that already exists. */
+interface ExistingEventRow {
+  sanity_id: string
+  tenant_id: string
+  currency: 'usd' | 'aud'
+  min_participant_age: number | null
+  time_zone: string | null
+  country: string | null
+  /** raw->>state: the document's state when the row was last written. */
+  state: string | null
+}
+
+/** A state as eventTimeZone reads it, so "Texas" and "TX" are the same state. */
+function stateKey(state: unknown): string {
+  if (typeof state !== 'string') return ''
+  return normaliseState(state) ?? state.trim().toUpperCase()
+}
+
+/**
+ * A non-owner (not Stellr) row keeps the settings toEventRow cannot know: its
+ * minimum age, and its time zone unless the venue's state or country changed. A
+ * kept zone that differs re-derives starts_at and ends_at in that zone, so
+ * starts_at in time_zone stays Sanity's date (the parity query in
+ * docs/TENANCY-S5-registration.md).
+ */
+function keepTenantSettings(row: EventRow, existing: ExistingEventRow): EventRow {
+  const out: EventRow = { ...row, min_participant_age: existing.min_participant_age ?? null }
+  const venueSame = existing.country === row.country && stateKey(existing.state) === stateKey(row.raw.state)
+  const zone = existing.time_zone
+  if (!venueSame || typeof zone !== 'string' || !zone || zone === row.time_zone || !isValidTimeZone(zone)) return out
+  return { ...out, time_zone: zone, ...eventWindow(row.raw.date, row.raw.endDate, zone) }
+}
+
 /**
  * Upsert mirror rows, matched on the Sanity _id (a renamed slug updates in place).
  *
  * A sync never changes who owns an event. A row that already exists under another
  * tenant keeps that tenant and its currency, so republishing a document cannot move
  * an event to the default owner. If the owners cannot be read, nothing is written.
+ *
+ * A row that already exists under a tenant other than Stellr also keeps its minimum
+ * age and, unless the venue moved, its time zone (keepTenantSettings). Those come
+ * from the same single read of the batch, so no batch makes an extra read. A Stellr
+ * row is written exactly as toEventRow mapped it.
  */
 export async function upsertEventRows(db: SupabaseClient, rows: EventRow[]): Promise<{ error: string | null }> {
   if (rows.length === 0) return { error: null }
   const { data, error: readError } = await db
     .from('events')
-    .select('sanity_id, tenant_id, currency')
+    .select('sanity_id, tenant_id, currency, min_participant_age, time_zone, country, state:raw->>state')
     .in('sanity_id', rows.map((r) => r.sanity_id))
   if (readError) return { error: readError.message }
-  const owners = new Map(
-    ((data ?? []) as Pick<EventRow, 'sanity_id' | 'tenant_id' | 'currency'>[]).map((o) => [o.sanity_id, o]),
-  )
+  const owners = new Map(((data ?? []) as ExistingEventRow[]).map((o) => [o.sanity_id, o]))
   const kept = rows.map((row) => {
     const owner = owners.get(row.sanity_id)
-    if (!owner || owner.tenant_id === row.tenant_id) return row
-    // An Australian venue is priced in AUD whoever owns it (toEventRow).
-    return { ...row, tenant_id: owner.tenant_id, currency: row.country === 'AU' ? row.currency : owner.currency }
+    if (!owner) return row
+    let out = row
+    if (owner.tenant_id !== row.tenant_id) {
+      // An Australian venue is priced in AUD whoever owns it (toEventRow).
+      out = { ...row, tenant_id: owner.tenant_id, currency: row.country === 'AU' ? row.currency : owner.currency }
+    }
+    return owner.tenant_id === STELLR_TENANT_ID ? out : keepTenantSettings(out, owner)
   })
   const { error } = await db.from('events').upsert(kept, { onConflict: 'sanity_id' })
   return { error: error ? error.message : null }

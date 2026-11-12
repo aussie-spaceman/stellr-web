@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { FieldMap } from '@/lib/esign/native/template'
+import type { TenantGuardianConsentInput } from '@/lib/esign/tenant-guardian-consent'
 import { DEV_SUPABASE_REF, isLoopbackSupabase } from '@/lib/testing/e2e-supabase-target'
 
 // The dev-only stand-in for the tenant guardian-consent document (S5 wave 7,
@@ -9,8 +10,10 @@ import { DEV_SUPABASE_REF, isLoopbackSupabase } from '@/lib/testing/e2e-supabase
 // form, so a copy that strays can never be mistaken for one.
 //
 // Used by `scripts/esign-template.ts dev-placeholder`, `publish --dev-placeholder`
-// and `approve --dev-placeholder`, and by scripts/seed-e2e-stack.ts. Everything
-// here is pure: no environment reads and no database.
+// and `approve --dev-placeholder`, `scripts/esign-dev-issue.ts
+// tenant_guardian_consent` (K0's end-to-end signature), the server side of Admin
+// → Agreement documents (lib/esign/native/template-admin.ts), and
+// scripts/seed-e2e-stack.ts. Nothing here reads the environment or a database.
 
 export const DEV_PLACEHOLDER_TITLE = 'DEV PLACEHOLDER – NOT A CONSENT FORM'
 
@@ -22,8 +25,52 @@ export const DEV_PLACEHOLDER_MAPS: Readonly<Record<string, string>> = {
   tenant_guardian_consent: 'lib/esign/native/templates/tenant-guardian-consent-v1.fields.json',
 }
 
+/**
+ * Letters and digits only, upper case: so the mark is found however it is
+ * spaced or punctuated ("Dev-Placeholder", "DEV  PLACEHOLDER", split across
+ * text items).
+ */
+const squash = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
+const SQUASHED_MARK = squash(DEV_PLACEHOLDER_MARK)
+
+/** Whether a piece of text carries the placeholder mark, however it is spaced or punctuated. */
+export function carriesDevPlaceholderMark(text: string | null | undefined): boolean {
+  return squash(text ?? '').includes(SQUASHED_MARK)
+}
+
 export function isDevPlaceholderTitle(title: string | null | undefined): boolean {
-  return (title ?? '').toUpperCase().includes(DEV_PLACEHOLDER_MARK)
+  return carriesDevPlaceholderMark(title)
+}
+
+export interface PlaceholderPageStatus {
+  pageCount: number
+  /** 1-based pages that carry the mark in any spelling. A real document has none. */
+  marked: number[]
+  /** 1-based pages that carry the exact placeholder title. The placeholder has every page. */
+  titled: number[]
+}
+
+/** Which pages of a document, given as each page's text, carry the mark and the exact title. */
+export function placeholderPageStatus(pageTexts: readonly string[]): PlaceholderPageStatus {
+  const marked: number[] = []
+  const titled: number[] = []
+  pageTexts.forEach((text, i) => {
+    if (carriesDevPlaceholderMark(text)) marked.push(i + 1)
+    if (text.replace(/\s+/g, ' ').includes(DEV_PLACEHOLDER_TITLE)) titled.push(i + 1)
+  })
+  return { pageCount: pageTexts.length, marked, titled }
+}
+
+/** Whether the status is the whole placeholder: at least one page, every one carrying the exact title. */
+export function isWholeDevPlaceholder(status: PlaceholderPageStatus): boolean {
+  return status.pageCount > 0 && status.titled.length === status.pageCount
+}
+
+/** placeholderPageStatus for a PDF's own pages. Reads the PDF only. */
+export async function pdfPlaceholderStatus(pdf: Uint8Array): Promise<PlaceholderPageStatus> {
+  const { extractPages } = await import('@/lib/esign/native/pdf-text')
+  const pages = await extractPages(pdf)
+  return placeholderPageStatus(pages.map((p) => p.items.map((it) => it.str).join(' ')))
 }
 
 export interface PlaceholderTarget {
@@ -52,6 +99,30 @@ export function devPlaceholderTargetRefusal(target: PlaceholderTarget): string |
   if (!host) return 'NEXT_PUBLIC_SUPABASE_URL is unset or not a URL.'
   if (host === `${DEV_SUPABASE_REF}.supabase.co` || isLoopbackSupabase(target.supabaseUrl)) return null
   return `A dev placeholder goes only to the dev project (${DEV_SUPABASE_REF}) or a stack on this machine, and the target is ${host}.`
+}
+
+/**
+ * The invented people on K0's placeholder envelope (scripts/esign-dev-issue.ts
+ * tenant_guardian_consent). It names no tenant and no participant, so signing
+ * or declining it settles no registration: lib/registration/tenant-guardian-consent.ts
+ * acts only on an envelope with both. Its email goes wherever DEV_EMAIL_SAFELIST
+ * routes dev mail.
+ */
+export function devPlaceholderConsentInput(stamp: string): TenantGuardianConsentInput {
+  return {
+    tenantId: '',
+    participantId: '',
+    eventSlug: 'dev-test',
+    eventTitle: 'Dev Test Event',
+    organiserName: 'Dev Canary',
+    minorFirstName: 'Robin',
+    minorLastName: `Minor-${stamp}`,
+    minorDateOfBirth: '2011-05-06',
+    guardianFirstName: 'Casey',
+    guardianLastName: `Guardian-${stamp}`,
+    guardianEmail: `guardian+${stamp}@example.test`,
+    relationship: 'Parent',
+  }
 }
 
 const PAGE: [number, number] = [612, 792]

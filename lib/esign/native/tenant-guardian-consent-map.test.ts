@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs'
+import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
 import { planTenantGuardianConsent, TENANT_GUARDIAN_CONSENT_TEMPLATE } from '@/lib/esign/tenant-guardian-consent'
 import { initialValues, parseFieldMap, signerFields, validateSignerValues } from './template'
@@ -7,12 +8,17 @@ import { checkClean, checkPlacement } from './template-check'
 import { extractPages } from './pdf-text'
 import {
   buildDevPlaceholderPdf,
+  carriesDevPlaceholderMark,
   DEV_PLACEHOLDER_MAPS,
   DEV_PLACEHOLDER_MARK,
   DEV_PLACEHOLDER_TITLE,
+  devPlaceholderConsentInput,
   devPlaceholderTargetRefusal,
   devPlaceholderTextHtml,
   isDevPlaceholderTitle,
+  isWholeDevPlaceholder,
+  pdfPlaceholderStatus,
+  placeholderPageStatus,
 } from './dev-placeholder'
 
 // S5 wave 7, K5: the field map for the tenant guardian-consent document, and
@@ -85,6 +91,16 @@ describe('dev placeholder document', () => {
     expect(isDevPlaceholderTitle(null)).toBe(false)
   })
 
+  it('finds the mark however it is spaced or punctuated', () => {
+    for (const t of ['DEV PLACEHOLDER - NOT A CONSENT FORM', 'Dev-Placeholder', 'dev  placeholder', 'DEV_PLACEHOLDER v2', 'DEV\nPLACEHOLDER']) {
+      expect(isDevPlaceholderTitle(t)).toBe(true)
+      expect(carriesDevPlaceholderMark(t)).toBe(true)
+    }
+    for (const t of ['Parental Consent Form', 'Development placeholder text', 'Participation Agreement — Student / Minor']) {
+      expect(carriesDevPlaceholderMark(t)).toBe(false)
+    }
+  })
+
   it('carries the mark on every page, is clean, and prints every field where the map says', async () => {
     const pdf = await buildDevPlaceholderPdf(map)
     const pages = await extractPages(pdf)
@@ -96,6 +112,43 @@ describe('dev placeholder document', () => {
     }
     expect(await checkClean(pdf)).toEqual([])
     expect(await checkPlacement(pdf, map)).toEqual([])
+  })
+
+  it('is whole only when every page carries the exact title', async () => {
+    const status = await pdfPlaceholderStatus(await buildDevPlaceholderPdf(map))
+    expect(status.pageCount).toBe(2)
+    expect(status.titled).toEqual([1, 2])
+    expect(status.marked).toEqual([1, 2])
+    expect(isWholeDevPlaceholder(status)).toBe(true)
+  })
+
+  it('sees a mixed PDF, placeholder pages plus a real one, as part placeholder and not whole', async () => {
+    const mixed = await PDFDocument.load(await buildDevPlaceholderPdf(map))
+    const font = await mixed.embedFont(StandardFonts.Helvetica)
+    mixed.addPage([612, 792]).drawText('Parent or Guardian Consent', { x: 54, y: 700, size: 14, font })
+    const status = await pdfPlaceholderStatus(await mixed.save())
+    expect(status).toEqual({ pageCount: 3, marked: [1, 2], titled: [1, 2] })
+    expect(isWholeDevPlaceholder(status)).toBe(false)
+  })
+
+  it('counts a page marked in another spelling as marked, but not titled', () => {
+    const status = placeholderPageStatus([`${DEV_PLACEHOLDER_TITLE} (page 1 of 2)`, 'Dev-Placeholder: not a consent form', 'Parent or Guardian Consent'])
+    expect(status).toEqual({ pageCount: 3, marked: [1, 2], titled: [1] })
+    expect(isWholeDevPlaceholder(status)).toBe(false)
+    expect(placeholderPageStatus(['Parent or Guardian Consent', 'Signature'])).toEqual({ pageCount: 2, marked: [], titled: [] })
+    expect(isWholeDevPlaceholder(placeholderPageStatus([]))).toBe(false)
+  })
+
+  it('K0 signs it with invented people, no tenant and no participant, and every field the map prefills', () => {
+    const input = devPlaceholderConsentInput('k0test')
+    expect(input.tenantId).toBe('')
+    expect(input.participantId).toBe('')
+    expect(input.guardianEmail).toMatch(/@example\.test$/)
+    const k0 = planTenantGuardianConsent(input)
+    expect(k0.signers).toEqual([expect.objectContaining({ role: 'guardian', email: 'guardian+k0test@example.test', order: 1 })])
+    const mapKeys = map.fields.filter((f) => f.source === 'prefill').map((f) => f.prefillKey as string)
+    for (const key of mapKeys) expect(k0.prefill[key], key).toBeTruthy()
+    expect(k0.subjectBirthYear).toBe('2011')
   })
 
   it('marks the text version too', () => {

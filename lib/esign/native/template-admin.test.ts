@@ -1,6 +1,7 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PDFDocument, PDFHexString, PDFName, StandardFonts } from 'pdf-lib'
+import { DEV_PLACEHOLDER_TITLE } from './dev-placeholder'
 import { fakeSupabase } from '@/test/fake-supabase'
 import { acceptUpload, approveVersion, createVersion, TemplateAdminError } from './template-admin'
 
@@ -89,5 +90,95 @@ describe('createVersion and approveVersion', () => {
     const row = db.table('esign_templates').find((r) => r.id === id)!
     db.objects.set(`agreement-templates/${row.pdf_path}`, await agreement(true))
     expect((await error(approveVersion(db.client, id, { by: 'B', confirm: 'adult v3' })))?.message).toMatch(/does not match/)
+  })
+})
+
+// S5 wave 7, K5: the dev placeholder for the guardian-consent document goes only
+// to dev, through this editor as through scripts/esign-template.ts.
+describe('the dev placeholder, through Admin → Agreement documents', () => {
+  const DEV_URL = 'https://xvxlhbxtiwxpopoqjygm.supabase.co'
+  const PROD_URL = 'https://hwtzpfrnksksxlwwabqz.supabase.co'
+  afterEach(() => { vi.unstubAllEnvs() })
+
+  function realProduction() {
+    vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', PROD_URL)
+  }
+  function devDeployment() {
+    vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'dev')
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', DEV_URL)
+  }
+
+  const consentMap = {
+    roles: [{ role: 'guardian', order: 1 }],
+    fields: [{ name: 'guardian_signature', label: 'Signature', role: 'guardian', type: 'signature', source: 'signer', page: 1, x: 100, y: 300, required: true }],
+  }
+
+  async function pdfWith(pages: string[]): Promise<Uint8Array> {
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    for (const text of pages) doc.addPage([612, 792]).drawText(text, { x: 54, y: 740, size: 14, font })
+    return doc.save()
+  }
+
+  async function draft(pages: string[]) {
+    const db = fakeSupabase({ esign_templates: [] })
+    const { pdfPath } = await acceptUpload(db.client, await pdfWith(pages))
+    return { db, pdfPath }
+  }
+
+  const create = (db: ReturnType<typeof fakeSupabase>, pdfPath: string, title: string) =>
+    createVersion(db.client, { key: 'tenant_guardian_consent', title, pdfPath, fieldMap: consentMap, createdBy: 'Admin A' })
+
+  it('refuses the placeholder title on the production app', async () => {
+    realProduction()
+    const { db, pdfPath } = await draft(['Parent or Guardian Consent'])
+    expect((await error(create(db, pdfPath, DEV_PLACEHOLDER_TITLE)))?.message).toMatch(/only on dev/)
+    expect(db.table('esign_templates')).toHaveLength(0)
+  })
+
+  it('refuses the placeholder file under a real title on the production app, even when only one page is marked', async () => {
+    realProduction()
+    const { db, pdfPath } = await draft(['Parent or Guardian Consent', `${DEV_PLACEHOLDER_TITLE} (page 2 of 2)`])
+    const refused = await error(create(db, pdfPath, 'Parent or Guardian Consent'))
+    expect(refused?.message).toMatch(/Page\(s\) 2 say "DEV PLACEHOLDER"/)
+    expect(refused?.issues).toEqual(['This is the production app.'])
+    const { pdfPath: dashed } = await acceptUpload(db.client, await pdfWith(['Dev-Placeholder: not a consent form']))
+    expect((await error(create(db, dashed, 'Parent or Guardian Consent')))?.message).toMatch(/only on dev/)
+  })
+
+  it('refuses it outside production too, when the database is not dev or a local stack', async () => {
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'dev')
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', PROD_URL)
+    const { db, pdfPath } = await draft(['Parent or Guardian Consent'])
+    expect((await error(create(db, pdfPath, DEV_PLACEHOLDER_TITLE)))?.issues.join(' ')).toMatch(/only to the dev project/)
+  })
+
+  it('will not approve a placeholder on the production app, by its title or by its file', async () => {
+    devDeployment()
+    const { db, pdfPath } = await draft([`${DEV_PLACEHOLDER_TITLE} (page 1 of 1)`])
+    const { id } = await create(db, pdfPath, DEV_PLACEHOLDER_TITLE)
+    const row = db.table('esign_templates').find((r) => r.id === id)!
+    realProduction()
+    expect((await error(approveVersion(db.client, id, { by: 'Admin B', confirm: 'tenant_guardian_consent v1' })))?.message).toMatch(/only on dev/)
+    row.title = 'Parent or Guardian Consent'
+    expect((await error(approveVersion(db.client, id, { by: 'Admin B', confirm: 'tenant_guardian_consent v1' })))?.message).toMatch(/Page\(s\) 1 say/)
+    expect(row.active).toBeUndefined()
+    expect(row.approved_at).toBeUndefined()
+  })
+
+  it('saves and approves it on dev, and a real document on production as before', async () => {
+    devDeployment()
+    const dev = await draft([`${DEV_PLACEHOLDER_TITLE} (page 1 of 1)`])
+    const { id } = await create(dev.db, dev.pdfPath, DEV_PLACEHOLDER_TITLE)
+    expect(await approveVersion(dev.db.client, id, { by: 'Admin B', confirm: 'tenant_guardian_consent v1' })).toEqual({ key: 'tenant_guardian_consent', version: 1 })
+
+    realProduction()
+    const prod = await draft(['Parent or Guardian Consent'])
+    const real = await create(prod.db, prod.pdfPath, 'Parent or Guardian Consent')
+    expect(await approveVersion(prod.db.client, real.id, { by: 'Admin B', confirm: 'tenant_guardian_consent v1' })).toEqual({ key: 'tenant_guardian_consent', version: 1 })
   })
 })

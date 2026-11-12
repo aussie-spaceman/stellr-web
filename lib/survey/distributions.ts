@@ -14,7 +14,7 @@ import { hashToken, surveyToken } from './tokens'
 import { writeAudit } from './audit'
 import { isProd } from '@/lib/env'
 import { logActivities } from '@/lib/activity-log'
-import { recordTenant } from '@/lib/tenancy/host-record'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 export const SURVEY_KEY = 'post_event'
 
@@ -496,11 +496,13 @@ export async function materialiseInvitations(db: SupabaseClient, d: Distribution
 
 /**
  * The survey's tenant: its own, or Stellr's for NULL (S5 A10b). A row read without the
- * column has no tenant, and nothing is planned or sent for it on a guess.
+ * column has no tenant, and nothing is planned or sent for it on a guess. Pure, and not
+ * lib/tenancy/host-record.ts: the event-day QR page reaches this file, and pages may not
+ * reach requestTenant().
  */
 export function distributionTenant(d: Pick<DistributionRow, 'tenant_id'>): string {
   if (d.tenant_id === undefined) throw new Error('The survey distribution was read without its tenant_id')
-  return recordTenant(d.tenant_id)
+  return d.tenant_id === null ? STELLR_TENANT_ID : d.tenant_id
 }
 
 /** Recipient plan for a distribution (the preview and the go-live job share it). */

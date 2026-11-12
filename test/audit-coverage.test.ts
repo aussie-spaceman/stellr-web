@@ -94,8 +94,11 @@ describe('audit coverage', () => {
   })
 
   it('follows a GET into the helper that writes, and names the way there', () => {
+    // Audited since S5 A10b (survey.response.open), so out of the baseline's list, and
+    // still measured as a GET that writes.
     const file = 'app/api/survey/[token]/route.ts'
-    expect(baseline.getMutations).toContain(`${file}#GET`)
+    expect(live.mutations.find((h: { key: string }) => h.key === `${file}#GET`)).toMatchObject({ kind: 'get_mutation', audited: true })
+    expect(baseline.getMutations).not.toContain(`${file}#GET`)
     const why = whyGetWrites(file, sources.get(file) as string, sources)
     expect(why?.[0]).toBe('lib/survey/handlers#handleOpen')
   })

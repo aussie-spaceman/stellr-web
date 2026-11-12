@@ -58,6 +58,8 @@ export interface InvitationRow {
   last_reminder_at: string | null
   reminders_opted_out_at: string | null
   created_at: string
+  /** The survey's tenant, inherited from its distribution (S5). NULL is Stellr's. */
+  tenant_id: string | null
 }
 
 export function linksFor(inv: Pick<InvitationRow, 'id' | 'token_version'>) {

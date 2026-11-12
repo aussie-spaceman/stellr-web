@@ -36,6 +36,8 @@ export interface DistributionRow extends ScheduleState {
   minor_agreement_override_set_at: string | null
   last_run_at: string | null
   created_at: string
+  /** The event's tenant, stamped from event_slug (S5). NULL is Stellr's. */
+  tenant_id: string | null
 }
 
 export interface DefinitionRow {

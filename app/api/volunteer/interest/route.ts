@@ -5,13 +5,29 @@ import { getEventBySlug } from '@/lib/events/repo'
 import { isVolunteer } from '@/lib/volunteer'
 import { logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { loadEventTenantId } from '@/lib/authz/principal'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { recordOnHost } from '@/lib/tenancy/host-record'
+import { withAudit } from '@/lib/audit/route'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 
 /**
  * POST { eventSlug, interested } — a volunteer raising (or withdrawing) their
  * hand to support an event or campaign. Assignment stays manual: admins see the
  * interest on the event's Volunteers panel and assign from there.
+ *
+ * Stellr's events only (S5 A10b; decision W7-12, default): another tenant's event, or
+ * any event asked about from another tenant's host, answers as one that does not
+ * exist. The owner comes from the events mirror, an unmirrored slug counting as
+ * Stellr's; a failed read is a retryable 503, never Stellr's. The row carries its
+ * tenant, and the change is audited on that tenant's chain.
  */
-export async function POST(req: NextRequest) {
+export const POST = withAudit(
+  ({ args: [req] }: { args: [NextRequest] }) => ({ action: 'event_volunteer.interest.set', ...auditSubject(req, 'volunteer_event_interest'), actor: { session: true } }),
+  setInterest,
+)
+
+async function setInterest(req: NextRequest) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -34,8 +50,20 @@ export async function POST(req: NextRequest) {
   if (!eventTitle) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
 
   const db = supabaseServer()
+  let owner: string
+  try {
+    owner = await loadEventTenantId(db, eventSlug)
+  } catch {
+    console.error('[volunteer/interest] event owner lookup failed')
+    return NextResponse.json({ error: 'This is temporarily unavailable. Please try again shortly.' }, { status: 503, headers: { 'Retry-After': '5' } })
+  }
+  if (owner !== STELLR_TENANT_ID) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
+  if (!(await recordOnHost({ tenant_id: owner }))) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
+  noteAuditSubject(req, { tenantId: owner, eventSlug, detail: { status: interested ? 'interested' : 'withdrawn' } })
+
   const { error } = await db.from('volunteer_event_interest').upsert(
     {
+      tenant_id: owner,
       member_id: member.id,
       event_slug: eventSlug,
       event_title: eventTitle,

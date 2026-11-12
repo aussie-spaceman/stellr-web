@@ -226,7 +226,7 @@ function signSessionFixture(): CaseFixture {
  * Tenant routing on, as on a real tenant host: requestTenant() then reads the tenant the
  * proxy would have set (the harness sends both headers on Canary's host), instead of
  * answering Stellr whatever the host. Only for the routes whose slice checks the host
- * (A10a's so far); a route still without a check would answer for its own reasons with
+ * (A10a's and A10b's); a route still without a check would answer for its own reasons with
  * it on, which is that route's slice to settle, not this table's.
  */
 const ROUTING_ON = { TENANT_ROUTING_ENABLED: 'true' }
@@ -238,9 +238,9 @@ const hostChecked = (fixture?: CaseFixture): CaseFixture => ({
 })
 
 const FIXTURES: Record<string, () => CaseFixture> = {
-  'app/api/survey/[token]/route.ts': () => linkFixture,
-  'app/api/survey/[token]/stop-reminders/route.ts': () => linkFixture,
-  'app/api/survey/[token]/submit/route.ts': () => linkFixture,
+  'app/api/survey/[token]/route.ts': () => hostChecked(linkFixture),
+  'app/api/survey/[token]/stop-reminders/route.ts': () => hostChecked(linkFixture),
+  'app/api/survey/[token]/submit/route.ts': () => hostChecked(linkFixture),
   'app/api/team-profile/[token]/route.ts': () => hostChecked(linkFixture),
   'app/api/credentials/[number]/certificate/route.ts': () => hostChecked(),
   'app/api/credentials/[number]/events/route.ts': () => hostChecked(),
@@ -252,8 +252,9 @@ const FIXTURES: Record<string, () => CaseFixture> = {
   'app/api/credentials/[number]/visibility/route.ts': () => hostChecked({ reason: 'the consent check past the owner check reads a grade as text', honey: { grade: '10' } }),
   'app/api/register/individual/route.ts': () => individualFixture,
   'app/api/register/group/route.ts': () => groupFixture,
-  'app/api/volunteer/interest/route.ts': () => volunteerFixture,
-  'app/api/survey/event/[slug]/link/route.ts': () => surveyLinkFixture,
+  'app/api/volunteer/interest/route.ts': () => hostChecked(volunteerFixture),
+  'app/api/survey/event/[slug]/link/route.ts': () => hostChecked(surveyLinkFixture),
+  'app/api/email/unsubscribe/route.ts': () => hostChecked(),
 }
 
 /** Routes that take a second kind of record: each runs as a case of its own. */

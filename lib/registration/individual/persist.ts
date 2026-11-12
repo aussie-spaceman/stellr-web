@@ -5,6 +5,7 @@ import { resolveAndLinkSchool, syncMemberOptionSelections } from '@/lib/communit
 import { mintPayToken } from '@/lib/registration-checkout'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 import { refuse, temporarilyUnavailable, type Refusable } from '../refusal'
+import { openTenantGuardianConsent } from '../tenant-guardian-consent'
 import type { GatedRegistration } from './gate'
 import type { IndividualBody } from './parse'
 
@@ -23,6 +24,8 @@ export interface PersistedRegistration {
   resolvedRole: ReturnType<typeof normalizeEventRole>
   /** The linked school's state, when it has one. */
   schoolState: string | null | undefined
+  /** S5 wave 6: the consent-pending participant's consent row and envelope, or null. */
+  consent: { consentId: string; agreementId: string } | null
 }
 
 export type PersistResult = Refusable<{ row: PersistedRegistration }>
@@ -246,6 +249,37 @@ async function saveParticipant(
   // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
   shadowSyncFields('participants', [partRow.id])
 
+  // S5 wave 6: a tenant event's 14-17-year-old is saved consent-pending, with the
+  // guardian's consent envelope recorded (nothing is sent yet). The participant
+  // insert above already wrote its pending consent row (a database trigger), so
+  // whatever happens next it cannot be checked in or mailed. If either write here
+  // fails, the registration is taken back (the participant and the consent row go
+  // with it), and the registrant can try again; a take-back that fails leaves it
+  // pending for the sweep.
+  let consent: PersistedRegistration['consent'] = null
+  if (gated.consent && !context.isPlatformOwner) {
+    try {
+      consent = await openTenantGuardianConsent(db, {
+        tenantId: context.tenantId,
+        registrationId: regId,
+        participantId: partRow.id,
+        eventSlug: body.event_slug as string,
+        eventTitle: gated.eventTitle,
+        organiserName: gated.consent.organiserName,
+        expiresAt: gated.consent.expiresAt,
+        minorFirstName: first_name ?? '',
+        minorLastName: last_name ?? '',
+        minorDateOfBirth: dob,
+        guardian: gated.consent.guardian,
+      })
+    } catch (err) {
+      console.error('[register/individual] guardian consent could not be opened:', err instanceof Error ? err.message : err)
+      const { error: takeBackError } = await db.from('registrations').delete().eq('id', regId)
+      if (takeBackError) console.error('[register/individual] could not take back registration', regId, takeBackError)
+      return refuse(temporarilyUnavailable())
+    }
+  }
+
   return {
     ok: true,
     row: {
@@ -256,6 +290,7 @@ async function saveParticipant(
       participantId: partRow.id,
       resolvedRole,
       schoolState,
+      consent,
     },
   }
 }

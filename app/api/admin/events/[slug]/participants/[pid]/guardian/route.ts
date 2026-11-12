@@ -12,7 +12,7 @@ import { classifyAgreement } from '@/lib/docusign'
 import { liveAgreementForParticipant, stellrOnlyDb } from '@/lib/events/admin-records'
 import { saveGuardianEmail } from '@/lib/events/guardian-email'
 import { maskEmail } from '@/lib/utils'
-import { loadRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/participants/[pid]/guardian — fix a student's
 // parent/guardian email when their consent form could not be sent (a refused
@@ -59,6 +59,8 @@ async function correctGuardian(req: Request, { params }: Ctx) {
   noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id: pid })
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
+  const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
+  if (foreign) return foreign
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {

@@ -3,9 +3,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { watchSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ownsTeam } from '@/lib/team-access'
-import { syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
+import { SHEET_SYNC_COLUMNS, SheetSyncRefused, syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
 import { randomUUID } from 'crypto'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { withAudit } from '@/lib/audit/route'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { rowTenant } from '@/lib/registration/event-context'
+import { teamAudit, TEAM_SHEET_SYNC_AUDIT } from '@/lib/registration/team-audit'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
@@ -14,8 +18,13 @@ export const maxDuration = 300
 // POST /api/members/teams/[id]/sheet-sync
 // Reads the linked Google Sheet and upserts participant records.
 // Also registers a push notification channel if one isn't active.
-export async function POST(
-  _req: NextRequest,
+//
+// S5 A8: only a group of this host's tenant (another tenant's answers as missing), and
+// audited behind PLATFORM_AUDIT_ENABLED on the group's tenant's chain.
+export const POST = withAudit(TEAM_SHEET_SYNC_AUDIT, syncSheet)
+
+async function syncSheet(
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -40,18 +49,22 @@ export async function POST(
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, teacher_email, teacher_poc_email, spreadsheet_id, event_slug, event_title, school_name, school_address_state')
+    .select(`teacher_member_id, teacher_email, teacher_poc_email, ${SHEET_SYNC_COLUMNS}`)
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
 
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  if (rowTenant(registration.tenant_id) !== (await requestTenant()).tenantId) {
+    return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  }
   // Ownership by member id OR registrant email OR nominated teacher-POC email
   // (see lib/team-access).
   if (!ownsTeam(member, registration)) {
     console.warn('[teams/sheet-sync] Access denied', { registrationId, memberId: member.id })
     return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })
   }
+  teamAudit(req, { registrationId, tenantId: rowTenant(registration.tenant_id), userId })
   if (!registration.spreadsheet_id) return NextResponse.json({ error: 'No spreadsheet linked to this team' }, { status: 400 })
 
   if (!isGoogleSheetsConfigured()) {
@@ -62,14 +75,14 @@ export async function POST(
   // for an individually-paid group — send each new person their payment link or
   // free-event notice (shared with the Google-Drive webhook so the two paths
   // never drift).
-  const { created, updated, paymentLinksSent, skippedForDateOfBirth } = await syncParticipantsFromSheet(db, {
-    id: registration.id,
-    spreadsheet_id: registration.spreadsheet_id,
-    school_name: registration.school_name,
-    event_slug: registration.event_slug,
-    event_title: registration.event_title,
-    school_address_state: registration.school_address_state,
-  })
+  let synced: Awaited<ReturnType<typeof syncParticipantsFromSheet>>
+  try {
+    synced = await syncParticipantsFromSheet(db, registration)
+  } catch (e) {
+    if (e instanceof SheetSyncRefused) return NextResponse.json(e.body, { status: e.status })
+    throw e
+  }
+  const { created, updated, paymentLinksSent, skippedForDateOfBirth } = synced
 
   // Register watch channel if not already active
   let watchActive = false

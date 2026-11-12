@@ -26,8 +26,21 @@ export const AUDIT_ACTIONS = [
   'registration.seat_payment.start',
   'registration.participant.create',
   'registration.participant.update',
+  // An organiser's team writes (A8): app/api/members/teams/**
+  'registration.participant.remove',
+  'registration.roster.sheet_sync',
+  'registration.seat_payment_link.create',
   'registration.payment_method.change',
   'registration.invoice_discount.change',
+  // Guardian consent on a tenant's event (S5 wave 6, lib/registration/tenant-guardian-consent.ts)
+  'registration.guardian_consent.request',
+  'registration.guardian_consent.sign',
+  'registration.guardian_consent.decline',
+  'registration.guardian_consent.expire',
+  // A date-of-birth correction lifted a pending consent; its open envelope was voided.
+  'registration.guardian_consent.lift',
+  // A consent envelope from an earlier registration was voided.
+  'registration.guardian_consent.void',
 
   // Consent and uploads (A14)
   'consent.request.send',
@@ -214,6 +227,13 @@ export const AUDIT_ACTIONS = [
   'survey.distribution.change',
   'survey.distribution.read',
   'team_profile.invite.send',
+
+  // Events admin: configuration under an event, the first tenantDb area (C18)
+  'event_company.count.set',
+  'event_company.placement.change',
+  'event_offering.record.create',
+  'event_offering.record.delete',
+  'merch.batch.commit',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

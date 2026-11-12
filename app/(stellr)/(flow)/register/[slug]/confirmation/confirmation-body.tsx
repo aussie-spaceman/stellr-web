@@ -17,6 +17,8 @@ export interface ConfirmationQuery {
   spreadsheet?: string
   remaining?: string
   campaign?: string
+  /** S5 wave 6, after a 14-17-year-old registers for another organiser's event: 'pending' when the guardian was invited, 'unsent' when the invitation did not go. */
+  consent?: string
 }
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
@@ -25,13 +27,24 @@ export async function confirmationBody({
   slug,
   query,
   funnel,
+  tenantEvent = false,
 }: {
   slug: string
   query: ConfirmationQuery
   funnel?: (event: Awaited<ReturnType<typeof getEventBySlug>> | null) => ReactNode
+  /**
+   * S5 wave 6: set only by the tenant confirmation page. Only another organiser's
+   * event can wait on a guardian's consent, so Stellr's page ignores ?consent=.
+   */
+  tenantEvent?: boolean
 }) {
   const { id, type, spreadsheet, remaining, campaign } = query
   const isGroup = type === 'group'
+  // Only an individual registration can wait on a guardian; the words are a proposal.
+  // 'pending': the guardian's invitation went (sent, or queued to send). 'unsent': it
+  // did not, so the page says only that consent is still needed.
+  const consentPending = tenantEvent && !isGroup && (query.consent === 'pending' || query.consent === 'unsent')
+  const guardianInvited = consentPending && query.consent === 'pending'
   const isCampaign = campaign === '1'
   const sheetLink = googleSheetParam(spreadsheet)
   const spreadsheetUrl = sheetLink ? decodeURIComponent(sheetLink) : null
@@ -50,11 +63,17 @@ export async function confirmationBody({
         </div>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3">
-          {isCampaign ? 'Campaign Registration Confirmed!' : isGroup ? 'Group Registration Submitted!' : 'Registration Submitted!'}
+          {consentPending
+            ? 'Waiting for your parent or guardian'
+            : isCampaign ? 'Campaign Registration Confirmed!' : isGroup ? 'Group Registration Submitted!' : 'Registration Submitted!'}
         </h1>
 
         <p className="text-content-body mb-6">
-          {isCampaign
+          {consentPending
+            ? guardianInvited
+              ? 'We’ll email your parent or guardian a consent form. Your place is confirmed once they sign, and we’ll email you when they do.'
+              : 'Because you’re under 18, your parent or guardian needs to sign a consent form before your place is confirmed. We couldn’t send it to them just now, so please contact the event organiser.'
+            : isCampaign
             ? 'Your group is registered — Campaigns are free. A confirmation email has been sent to you.'
             : isGroup
             ? 'Thank you for registering your group. A confirmation email has been sent to you.'
@@ -112,6 +131,8 @@ export async function confirmationBody({
           </div>
         )}
 
+        {/* A consent-pending registration has none of these next steps: no payment, and no agreement of its own. */}
+        {!consentPending && (
         <div className="bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8">
           <p className="font-semibold text-brand-blue-dark">What happens next?</p>
           {isCampaign ? (
@@ -184,6 +205,7 @@ export async function confirmationBody({
             </ul>
           )}
         </div>
+        )}
 
         {/* Campaign — jump straight to the campaign workspace in the member web app. */}
         {isCampaign && (

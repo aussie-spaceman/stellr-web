@@ -26,19 +26,38 @@
 //   * the URL must name one user and one host and carry no query parameter
 //     but sslmode; postgres.js gets the checked parts, never the string, so
 //     the host it dials is the host the TLS rule below was decided on;
-//   * TLS is required for any host that is not this machine;
+//   * any host that is not this machine is accepted only with
+//     sslmode=verify-full in the URL and a root CA in
+//     TENANT_DATABASE_CA_CERT (server-only, read here alone): postgres.js
+//     then checks the server's certificate chain against that CA and its
+//     name against the host. Any other sslmode, no sslmode, or a missing or
+//     unreadable CA throws before a pool exists; there is no fallback to an
+//     unchecked TLS mode. Local hosts (CI's throwaway database) use no TLS;
 //   * every statement goes on the extended protocol, so the server runs one
 //     statement per call;
-//   * the connection string never appears in an error or a log line, and
-//     postgres.js notices are dropped rather than printed.
+//   * the connection string and the CA never appear in an error or a log
+//     line, and postgres.js notices are dropped rather than printed.
 
 import 'server-only'
+import { X509Certificate } from 'node:crypto'
+import { isIP } from 'node:net'
 import postgres from 'postgres'
 import { TenantContextError } from './tenant-id'
 import type { TenantQueryResult, TenantSqlDriver, TenantSqlTx } from './db'
 
 /** The server-only secret holding the tenant_app_login pooler connection string. */
 export const TENANT_DATABASE_URL_VAR = 'TENANT_DATABASE_URL'
+
+/**
+ * The server-only secret holding the PEM of the root CA that signs the
+ * database's certificate (Supabase's root CA). Required for any non-local
+ * host; never NEXT_PUBLIC_, never logged. A value stored with literal "\n"
+ * escapes is read as if it held newlines.
+ */
+export const TENANT_DATABASE_CA_CERT_VAR = 'TENANT_DATABASE_CA_CERT'
+
+/** The one sslmode accepted for a non-local host. */
+export const TENANT_REQUIRED_SSLMODE = 'verify-full'
 
 /** The login role (docs/TENANCY-S4.md, owner actions); the pooler spells it tenant_app_login.<project-ref>. */
 export const TENANT_LOGIN_ROLE = 'tenant_app_login'
@@ -57,6 +76,12 @@ export const TENANT_POOL_DEFAULTS = Object.freeze({
 export interface TenantDriverOptions {
   /** Pool size; defaults to TENANT_POOL_DEFAULTS.max. Tests use 1 to force connection reuse. */
   max?: number
+  /**
+   * The root CA PEM for a non-local host. Defaults to
+   * process.env.TENANT_DATABASE_CA_CERT; tenantDriverFromEnv passes the value
+   * from the environment it was given. Ignored for a local host.
+   */
+  caCert?: string
 }
 
 /** A running driver, with a way to close its pool (scripts and tests). */
@@ -74,8 +99,15 @@ interface ParsedUrl {
   password: string
   database: string
   local: boolean
+  /** The URL's sslmode, or null when it has none. */
+  sslmode: string | null
   verifyFull: boolean
 }
+
+/** What postgres.js is given as `ssl`: nothing locally, else a chain and name check against the CA. */
+export type TenantTlsOptions =
+  | false
+  | { ca: string; rejectUnauthorized: true; servername?: string; host?: string; minVersion: 'TLSv1.2' }
 
 const ALLOWED_QUERY_PARAMS = new Set(['sslmode'])
 
@@ -96,11 +128,12 @@ function decoded(part: string, what: string, name: string): string {
  * when it is missing, is not a postgres URL, names a user other than the
  * tenant login, has an authority that parsers could read two ways (more than
  * one '@', a host list, or an encoded host), or carries a query parameter
- * other than sslmode. The driver connects with the parts returned here, so the
- * host it dials is the host checked here.
+ * other than sslmode, or names a non-local host without sslmode=verify-full.
+ * The driver connects with the parts returned here, so the host it dials is
+ * the host checked here. The CA is checked separately (tenantTlsOptions).
  */
 export function parseTenantDatabaseUrl(raw: string | undefined): ParsedUrl {
-  return parsePostgresUrl(raw, TENANT_DATABASE_URL_VAR, {
+  const parsed = parsePostgresUrl(raw, TENANT_DATABASE_URL_VAR, {
     checkUser: (user) => {
       if (!LOGIN_USER.test(user)) {
         throw new TenantContextError(
@@ -109,6 +142,88 @@ export function parseTenantDatabaseUrl(raw: string | undefined): ParsedUrl {
       }
     },
   })
+  if (!parsed.local && parsed.sslmode !== TENANT_REQUIRED_SSLMODE) {
+    throw new TenantContextError(
+      `${TENANT_DATABASE_URL_VAR} must end in ?sslmode=${TENANT_REQUIRED_SSLMODE} for a host that is not this machine; no other TLS mode is accepted`,
+    )
+  }
+  return parsed
+}
+
+const PEM_BLOCK = /-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]+?-----END CERTIFICATE-----/g
+
+// Values that parsed, and their result. tenantDriverFromEnv runs on every
+// tenantDb transaction and hands the normalised PEM on to
+// createPostgresTenantDriver, so both the raw value and the PEM are kept, and
+// the certificates are parsed once per value. Only a value that passed every
+// check is kept; a refused value is checked (and refused) on every call. A
+// server instance sees one or two values, so the map is simply emptied if it
+// ever grows past a few.
+const parsedCa = new Map<string, string>()
+const PARSED_CA_LIMIT = 8
+
+/**
+ * Reads the root CA PEM from TENANT_DATABASE_CA_CERT's value. Throws, without
+ * echoing the value, unless it holds at least one certificate, every block in
+ * it parses, and every certificate is a CA certificate (a pasted server
+ * certificate is refused). Returns the normalised PEM.
+ */
+export function parseTenantCaCert(raw: string | undefined): string {
+  const known = typeof raw === 'string' ? parsedCa.get(raw) : undefined
+  if (known !== undefined) return known
+  const pem = readTenantCaCert(raw)
+  if (parsedCa.size >= PARSED_CA_LIMIT) parsedCa.clear()
+  parsedCa.set(raw as string, pem)
+  parsedCa.set(pem, pem)
+  return pem
+}
+
+function readTenantCaCert(raw: string | undefined): string {
+  const missing = `${TENANT_DATABASE_CA_CERT_VAR} is not set; a host that is not this machine needs the database's root CA to check its certificate`
+  if (typeof raw !== 'string' || raw.trim() === '') throw new TenantContextError(missing)
+  // Some secret stores keep a multi-line value with literal "\n" escapes.
+  const pem = raw.replace(/\\r\\n|\\n/g, '\n').replace(/\r\n/g, '\n').trim()
+  const blocks = pem.match(PEM_BLOCK) ?? []
+  const unreadable = `${TENANT_DATABASE_CA_CERT_VAR} must hold one or more PEM CA certificates and nothing else`
+  if (blocks.length === 0 || pem.replace(PEM_BLOCK, '').trim() !== '') throw new TenantContextError(unreadable)
+  for (const block of blocks) {
+    let cert: X509Certificate
+    try {
+      cert = new X509Certificate(block)
+    } catch {
+      throw new TenantContextError(unreadable)
+    }
+    if (!cert.ca) {
+      throw new TenantContextError(`${TENANT_DATABASE_CA_CERT_VAR} must hold the root CA, not a server certificate`)
+    }
+  }
+  return blocks.join('\n') + '\n'
+}
+
+/**
+ * The `ssl` option postgres.js gets for a parsed tenant URL. Local: no TLS, as
+ * before. Otherwise only sslmode=verify-full with a readable CA: the chain is
+ * checked against that CA alone and the certificate's name against the host
+ * (Node's default identity check). A name goes as the server name. An IPv4
+ * address goes as `host`: SNI carries names only, and postgres.js hands Node
+ * a connected socket with no host, so without it Node checks the certificate
+ * against "localhost" rather than the address (driver-tls.test.ts). Throws for
+ * anything else; never returns an unchecked mode.
+ */
+export function tenantTlsOptions(parsed: ParsedUrl, caCert: string | undefined): TenantTlsOptions {
+  if (parsed.local) return false
+  if (parsed.sslmode !== TENANT_REQUIRED_SSLMODE) {
+    throw new TenantContextError(
+      `${TENANT_DATABASE_URL_VAR} must end in ?sslmode=${TENANT_REQUIRED_SSLMODE} for a host that is not this machine; no other TLS mode is accepted`,
+    )
+  }
+  const ca = parseTenantCaCert(caCert)
+  return {
+    ca,
+    rejectUnauthorized: true,
+    ...(isIP(parsed.host) ? { host: parsed.host } : { servername: parsed.host }),
+    minVersion: 'TLSv1.2',
+  }
 }
 
 /**
@@ -161,6 +276,8 @@ export function parsePostgresUrl(
       throw new TenantContextError(`${name} may carry only sslmode as a query parameter`)
     }
   }
+  const sslmodes = u.searchParams.getAll('sslmode')
+  if (sslmodes.length > 1) throw new TenantContextError(`${name} may give sslmode once`)
   const host = u.hostname.toLowerCase()
   const port = u.port === '' ? 5432 : Number(u.port)
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -174,13 +291,15 @@ export function parsePostgresUrl(
     password: decoded(u.password, 'password', name),
     database: decoded(u.pathname.replace(/^\//, ''), 'database name', name) || 'postgres',
     local: LOCAL_HOSTS.has(host),
-    verifyFull: u.searchParams.get('sslmode') === 'verify-full',
+    sslmode: sslmodes[0] ?? null,
+    verifyFull: sslmodes[0] === 'verify-full',
   }
 }
 
 /** A driver over one postgres.js pool. Opens no connection until the first transaction. */
 export function createPostgresTenantDriver(rawUrl: string | undefined, opts: TenantDriverOptions = {}): PostgresTenantDriver {
   const parsed = parseTenantDatabaseUrl(rawUrl)
+  const ssl = tenantTlsOptions(parsed, opts.caCert ?? process.env[TENANT_DATABASE_CA_CERT_VAR])
   // The checked parts, not the string: postgres.js parses a URL its own way
   // (host lists, its own '@' split, query keys as startup parameters), and the
   // host it dials must be the one checked above (one name, no ',' or ':').
@@ -195,9 +314,9 @@ export function createPostgresTenantDriver(rawUrl: string | undefined, opts: Ten
     idle_timeout: TENANT_POOL_DEFAULTS.idleTimeoutSeconds,
     connect_timeout: TENANT_POOL_DEFAULTS.connectTimeoutSeconds,
     max_lifetime: TENANT_POOL_DEFAULTS.maxLifetimeSeconds,
-    // Encrypted off this machine. 'require' encrypts without checking the
-    // certificate chain; sslmode=verify-full in the URL checks it too.
-    ssl: parsed.local ? false : parsed.verifyFull ? 'verify-full' : 'require',
+    // Off this machine: the chain checked against the CA and the name against
+    // the host (tenantTlsOptions). No TLS on this machine only.
+    ssl,
     onnotice: () => {},
     debug: false,
     connection: { application_name: 'stellr-tenantdb' },
@@ -234,14 +353,17 @@ const cached = new Map<string, PostgresTenantDriver>()
  * The driver for this environment's TENANT_DATABASE_URL, one pool per URL per
  * server instance. lib/tenancy/db.ts calls this when the flag is on and no
  * driver was registered. Throws, without connecting, when the URL is missing
- * or refused.
+ * or refused, or when a non-local host has no readable CA.
  */
 export function tenantDriverFromEnv(env: Record<string, string | undefined> = process.env): PostgresTenantDriver {
   const parsed = parseTenantDatabaseUrl(env[TENANT_DATABASE_URL_VAR])
-  let driver = cached.get(parsed.url)
+  const ssl = tenantTlsOptions(parsed, env[TENANT_DATABASE_CA_CERT_VAR])
+  // A changed CA gets its own pool rather than reusing one built on the old one.
+  const key = ssl ? `${parsed.url}\n${ssl.ca}` : parsed.url
+  let driver = cached.get(key)
   if (!driver) {
-    driver = createPostgresTenantDriver(parsed.url)
-    cached.set(parsed.url, driver)
+    driver = createPostgresTenantDriver(parsed.url, { caCert: ssl ? ssl.ca : undefined })
+    cached.set(key, driver)
   }
   return driver
 }

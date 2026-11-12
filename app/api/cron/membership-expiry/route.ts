@@ -6,9 +6,12 @@ import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { sweepEventManagers, type SweepResult } from '@/lib/event-manager'
+import { tenantGuardianConsentEnabled } from '@/lib/registration/eligibility'
+import { sweepTenantGuardianConsents } from '@/lib/registration/tenant-guardian-consent'
 
-// GET /api/cron/membership-expiry — runs daily (see vercel.json). Three steps
-// (the third, Event Manager expiry, is described where it runs below):
+// GET /api/cron/membership-expiry — runs daily (see vercel.json). Four steps
+// (the third, Event Manager expiry, and the fourth, tenant guardian consents
+// behind TENANT_GUARDIAN_CONSENT_ENABLED, are described where they run below):
 //
 //   1. Flips complimentary / rule-granted memberships to 'expired' once their
 //      expires_at has passed (the downgrade side of the grant engine). Paid
@@ -62,7 +65,27 @@ export const GET = withCronAudit('membership-expiry', async (req: NextRequest) =
     eventManagers = { error: err instanceof Error ? err.message : String(err) }
   }
 
-  await run.finish({ expired, pendingConsentPurge: purge, eventManagers })
-  if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge, eventManagers }, { status: 500 })
-  return NextResponse.json({ expired, pendingConsentPurge: purge, eventManagers })
+  // 4. S5 wave 6: tenant guardian consents. A consent-pending registration whose
+  //    window closed is removed (lib/registration/tenant-guardian-consent), and a
+  //    removal that failed is retried. Only with TENANT_GUARDIAN_CONSENT_ENABLED,
+  //    so with it off this step reads nothing and adds no result key.
+  let tenantGuardianConsent: Record<string, unknown> | undefined
+  if (tenantGuardianConsentEnabled()) {
+    try {
+      const r = await sweepTenantGuardianConsents(db)
+      for (const e of r.errors) run.fail(`tenant-guardian-consent:${e.consentId}`, e.error)
+      tenantGuardianConsent = {
+        scanned: r.scanned, signed: r.signed.length, expired: r.expired.length,
+        removed: r.removed.length, held: r.held.length, voided: r.voided.length, errors: r.errors.length,
+      }
+    } catch (err) {
+      run.fail('tenant-guardian-consent', err)
+      tenantGuardianConsent = { error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+  const consentKey = tenantGuardianConsent ? { tenantGuardianConsent } : {}
+
+  await run.finish({ expired, pendingConsentPurge: purge, eventManagers, ...consentKey })
+  if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge, eventManagers, ...consentKey }, { status: 500 })
+  return NextResponse.json({ expired, pendingConsentPurge: purge, eventManagers, ...consentKey })
 })

@@ -653,6 +653,13 @@ export async function declineAgreement(
     ...auditMeta(meta),
     detail: { reason: cleanReason },
   })
+  // S5 wave 6: a guardian declining consent for another organiser's event ends that
+  // registration (removed through the deletion registry) and tells the registrant.
+  // Never throws; a removal that fails is retried by the daily sweep.
+  if (ctx.envelope.envelope_type === 'tenant_guardian_consent') {
+    const { settleTenantGuardianConsentDeclined } = await import('@/lib/registration/tenant-guardian-consent')
+    await settleTenantGuardianConsentDeclined(db, ctx.envelope, { now })
+  }
 }
 
 // ── Completion ───────────────────────────────────────────────────────────────

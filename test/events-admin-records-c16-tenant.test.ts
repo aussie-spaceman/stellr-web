@@ -190,13 +190,23 @@ afterEach(() => {
 describe('group money and roster actions on a tenant\'s own group', () => {
   const REFUSED = 503
 
-  it('a roster add is refused before anything runs, a Member ID link included', async () => {
+  // S5 A8 lifted C16's refusal here: the shared add takes the tenant's path
+  // (lib/group-participant-add.test.ts and test/registration/roster-writers-tenant.test.ts
+  // hold what that path does). The route hands it the tenant's own row, as staff, and
+  // records nothing in Stellr's activity log for a row with no member.
+  it('a roster add on the tenant\'s own group goes to the shared add as staff, with the tenant row', async () => {
     state.rows.registrations = [OWN_GROUP]
+    state.addParticipantToGroup.mockResolvedValueOnce({ status: 201, body: {}, memberId: null } as never)
     const { POST } = await import('@/app/api/admin/registrations/[id]/participants/route')
     const res = await POST(req({ linked: true, membership_id: 'ST-000001', first_name: 'A', last_name: 'B' }), ctx())
-    expect(res.status).toBe(REFUSED)
-    expect(JSON.stringify(await res.json())).not.toContain('ST-000001')
-    expect(state.addParticipantToGroup).not.toHaveBeenCalled()
+    expect(res.status).toBe(201)
+    expect(state.addParticipantToGroup).toHaveBeenCalledTimes(1)
+    expect(state.addParticipantToGroup).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: ID, tenant_id: TENANT }),
+      expect.anything(),
+      expect.objectContaining({ label: 'admin' }),
+    )
     expect(state.stripeClient).not.toHaveBeenCalled()
     expect(state.logActivity).not.toHaveBeenCalled()
   })

@@ -26,7 +26,12 @@ const h = vi.hoisted(() => ({
   followUp: vi.fn(async () => ({})),
   provision: vi.fn(async () => ({ signInToken: 'tkt', clerkUserId: 'user_1' })),
   hook: vi.fn((_name: string) => {}),
-  session: null as { email: string } | null,
+  // The Clerk session and the limiter: signed out and allowed, unless a test says otherwise.
+  auth: vi.fn(async (): Promise<{ userId: string | null }> => ({ userId: null })),
+  rateLimit: vi.fn(async (..._a: unknown[]): Promise<Response | null> => null),
+  session: null as { email: string; date_of_birth?: string } | null,
+  // Reads h.session: the signed-in login's Stellr record (null: signed out).
+  currentMember: vi.fn(async (): Promise<unknown> => null),
 }))
 
 vi.mock('@/lib/tenancy/request-tenant', () => ({ requestTenant: h.requestTenant }))
@@ -36,16 +41,16 @@ vi.mock('@/lib/supabase', async () => {
 })
 vi.mock('@/lib/field-crypto-shadow', () => ({ shadowSyncFields: () => {} }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
-vi.mock('@/lib/community', () => ({ getCurrentMember: async () => h.session }))
+vi.mock('@/lib/community', () => ({ getCurrentMember: h.currentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({ prices: { retrieve: h.priceRetrieve } }) }))
 vi.mock('@/lib/registration-duplicates', () => ({
   findExistingRegistrations: h.findExisting,
   resolveDuplicate: h.resolveDuplicate,
 }))
-vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: null }) }))
+vi.mock('@clerk/nextjs/server', () => ({ auth: h.auth }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.provision }))
-vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: async () => null }))
+vi.mock('@/lib/rate-limit-async', () => ({ rateLimit: h.rateLimit }))
 vi.mock('@/lib/after-response', () => ({ runAfterResponse: (label: string) => h.hook(`after ${label}`) }))
 vi.mock('@/lib/group-registration-followup', () => ({ runGroupRegistrationFollowUp: h.followUp }))
 vi.mock('@/lib/email', () => ({
@@ -168,6 +173,9 @@ beforeEach(() => {
   h.findExisting.mockResolvedValue(new Map())
   h.resolveDuplicate.mockReturnValue({ kind: 'none' })
   h.session = null
+  h.currentMember.mockImplementation(async () => h.session)
+  h.auth.mockResolvedValue({ userId: null })
+  h.rateLimit.mockResolvedValue(null)
   onHost(CANARY)
   mirror({})
 })
@@ -226,6 +234,20 @@ describe('S5 A7: register/group on a tenant event, the age gate', () => {
     expect(writes()).toEqual([])
     expect(h.findExisting).not.toHaveBeenCalled()
     expect(h.tenantConfirmation).not.toHaveBeenCalled()
+  })
+
+  it('S5 wave 6: with the guardian-consent flag on, a group organiser’s 15-year-old student is still refused (the flow is individual-only)', async () => {
+    vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+    try {
+      const res = await settle(await post(body({ students: [student('1'), student('2', { date_of_birth: dateBefore(15) })] })))
+      expect(res).toEqual({
+        status: 400,
+        body: { code: 'under_minimum_age', error: 'Stu Dent2 must be 18 or older to register for this event online. Please contact the event organiser.' },
+      })
+      expect(writes()).toEqual([])
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('adults on the event date are admitted: every row carries the tenant, and only those rows are written', async () => {
@@ -368,6 +390,91 @@ describe('S5 A7: register/group, priced tenant events fail closed', () => {
     expect(res).toMatchObject({ status: 409, body: { code: 'registration_on_file' } })
     expect(h.hook).not.toHaveBeenCalled()
     expect(writes()).toEqual([])
+  })
+})
+
+// Owner decision, 10 Nov 2026: a Stellr member's profile is not used at a tenant's
+// event until S7's consent grant. The organiser's Stellr record is never read on a
+// tenant's host: the address they type stands, as on the tenant join page.
+describe('S5 A7 follow-up: register/group on a tenant event takes the organiser’s typed details only', () => {
+  const MEMBER = { email: 'member@example.com', date_of_birth: '1970-03-03' }
+
+  it('an organiser signed in as a member is registered under the address they typed, linked to no member', async () => {
+    h.session = MEMBER
+    const res = await settle(await post(body()))
+    expect(res).toEqual({
+      status: 201,
+      body: { registrationId: 'reg-1', checkoutUrl: null, spreadsheetUrl: null, joinUrl: null, signInToken: null },
+    })
+    expect(h.currentMember).not.toHaveBeenCalled()
+    expect(rec.calls.some((c) => c.table === 'members')).toBe(false)
+    expect(JSON.stringify(rec.calls)).not.toContain(MEMBER.email)
+    const [reg] = rec.payloads('insert', 'registrations') as Person[]
+    expect(reg).toMatchObject({ tenant_id: CANARY, teacher_email: 'teacher@example.com' })
+    const [rows] = rec.payloads('insert', 'participants') as Person[][]
+    expect(rows[0]).toMatchObject({ email: 'teacher@example.com', date_of_birth: '1980-01-01', member_id: null })
+    expect(h.findExisting.mock.calls[0][1]).toContain('teacher@example.com')
+    expect(h.findExisting.mock.calls[0][1]).not.toContain(MEMBER.email)
+    expect(h.tenantConfirmation.mock.calls[0][1]).toMatchObject({ tenantId: CANARY, to: 'teacher@example.com' })
+    expect(h.provision).not.toHaveBeenCalled()
+  })
+
+  it('typing the account’s own address is not taken as the organiser: an earlier registration gets the answer anyone gets', async () => {
+    h.session = { email: 'teacher@example.com' }
+    const found = [{ registrationId: 'reg-old' }]
+    h.findExisting.mockResolvedValue(new Map([['teacher@example.com', found]]))
+    h.resolveDuplicate.mockReturnValue({ kind: 'email_link', registration: { registrationId: 'reg-old', type: 'group' } })
+    const res = await settle(await post(body()))
+    expect(h.resolveDuplicate).toHaveBeenCalledWith(found, { sessionMatches: false })
+    expect(res).toMatchObject({ status: 409, body: { code: 'registration_on_file' } })
+    expect(h.currentMember).not.toHaveBeenCalled()
+    expect(writes()).toEqual([])
+  })
+
+  it('on Stellr’s host the session is still read first, as before', async () => {
+    onHost(STELLR_TENANT_ID)
+    h.session = MEMBER
+    await settle(await post(body()))
+    expect(h.currentMember).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Review fix: Stellr gives a signed-in retry its own count because an organiser on
+// file is asked to sign in first. A tenant's event never asks that, and its gate
+// takes no sign-in as an identity, so a signed-in caller there shares the anonymous
+// count: new accounts cannot multiply what one address may register.
+describe('S5 A7 follow-up: register/group on a tenant host, the rate limit', () => {
+  const calls = () => h.rateLimit.mock.calls.map((c) => [c[1], (c[2] as { limit: number }).limit, c[3]])
+
+  it('a signed-in organiser is counted as anyone is: no per-account bucket, no session cap', async () => {
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    await post(body())
+    expect(calls()).toEqual([['register-group', 3, 'canary-cup']])
+  })
+
+  it('with the real limiter, a second account cannot add to what one IP has registered for the event', async () => {
+    const { rateLimit: real } = await vi.importActual<typeof import('@/lib/rate-limit-async')>('@/lib/rate-limit-async')
+    h.rateLimit.mockImplementation(real as never)
+    // A slug of its own, so no other test's count is in this bucket.
+    const send = (n: number) => post(body({
+      event_slug: 'canary-cup-limit',
+      teacher: { ...(body().teacher as Person), email: `organiser${n}@example.com` },
+    }))
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    for (const n of [1, 2, 3]) expect((await send(n)).status).toBe(201)
+    h.auth.mockResolvedValue({ userId: 'user_2' })
+    expect((await send(4)).status).toBe(429)
+    expect(h.tenantConfirmation).toHaveBeenCalledTimes(3)
+  })
+
+  it('on Stellr’s host a signed-in retry keeps its own count, as before', async () => {
+    onHost(STELLR_TENANT_ID)
+    h.auth.mockResolvedValue({ userId: 'user_1' })
+    await post(body())
+    expect(calls()).toEqual([
+      ['register-group-session', 30, 'canary-cup'],
+      ['register-group', 3, 'canary-cup:user_1'],
+    ])
   })
 })
 

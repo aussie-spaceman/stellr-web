@@ -15,6 +15,7 @@ import {
   type CheckInCandidate,
 } from '@/lib/check-in'
 import { loadCheckInView } from '@/lib/check-in-view'
+import { GUARDIAN_CONSENT_PENDING_CHECK_IN, isConsentPendingRefusal } from '@/lib/check-in-consent'
 
 // POST /api/check-in — public, token-gated participant check-in (PRD 6.7).
 // Body: { slug, token, firstName, lastName, dob } or { slug, token, email }.
@@ -127,6 +128,16 @@ export async function POST(req: Request) {
       .update({ checked_in_at: new Date().toISOString(), check_in_method: method })
       .eq('id', found.id)
       .is('checked_in_at', null)
+    // S5 wave 6: a tenant event's participant whose guardian has not signed the
+    // consent form cannot be checked in. The database refuses the write
+    // (zzz_participants_refuse_unconsented_check_in); this says why, to someone who
+    // already proved who they are with the event code and their details.
+    if (error && isConsentPendingRefusal(error)) {
+      return NextResponse.json(
+        { code: 'guardian_consent_pending', error: GUARDIAN_CONSENT_PENDING_CHECK_IN },
+        { status: 403 }
+      )
+    }
     if (error) {
       console.error('[check-in] update error:', error)
       return NextResponse.json({ error: 'Something went wrong. Please see the registration desk.' }, { status: 500 })

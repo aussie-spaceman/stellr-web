@@ -3,6 +3,26 @@ import { supabaseServer } from '@/lib/supabase'
 import { resolveRequestMember } from '@/lib/impersonation'
 import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { isDetailsHiddenFrom } from '@/lib/team-linked-details'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { rowTenant } from '@/lib/registration/event-context'
+
+function withoutTenant<T extends { tenant_id?: unknown }>(row: T): Omit<T, 'tenant_id'> {
+  const { tenant_id: _tenantId, ...rest } = row
+  return rest
+}
+
+/** A member's participations in groups of this host's tenant, with tenant_id taken off. */
+function ofHostTenant<P extends { registrations: unknown }>(rows: P[] | null, hostTenant: string): P[] {
+  const out: P[] = []
+  for (const p of rows ?? []) {
+    const embedded = p.registrations
+    const regs = (Array.isArray(embedded) ? embedded : embedded ? [embedded] : []) as Record<string, unknown>[]
+    if (regs.some((r) => rowTenant(r.tenant_id as string | null | undefined) !== hostTenant)) continue
+    const stripped = regs.map((r) => withoutTenant(r))
+    out.push({ ...p, registrations: Array.isArray(embedded) ? stripped : embedded ? stripped[0] : embedded })
+  }
+  return out
+}
 
 // GET /api/members/teams
 // Managers: all group registrations they own — as the registrant (teacher or
@@ -28,7 +48,7 @@ export async function GET() {
     ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email},teacher_poc_email.eq.${member.email}`
     : `teacher_member_id.eq.${member.id}`
 
-  const { data: registrations, error } = await db
+  const { data: rawRegistrations, error } = await db
     .from('registrations')
     .select(`
       id, event_slug, event_title, school_name, status, created_at,
@@ -36,7 +56,7 @@ export async function GET() {
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
       member_pays_individually, invoice_requested, invoice_paid_at,
-      details_method, adult_count, student_count,
+      details_method, adult_count, student_count, tenant_id,
       participants(id, member_id, details_from_member, event_role, first_name, last_name, email, join_completed_at, individual_payment_status, event_companies(number, name))
     `)
     .or(ownerOr)
@@ -47,6 +67,14 @@ export async function GET() {
     console.error('[teams] DB error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
+
+  // S5 A8: only groups of this host's tenant (Stellr's on Stellr's hosts). Another
+  // tenant's group registered under this member's email, or naming it as the teacher's,
+  // is not theirs to open here. tenant_id stays on the server.
+  const { tenantId: hostTenant } = await requestTenant()
+  const registrations = (rawRegistrations ?? [])
+    .filter((r) => rowTenant(r.tenant_id) === hostTenant)
+    .map(withoutTenant)
 
   if ((registrations ?? []).length > 0) {
 
@@ -94,7 +122,7 @@ export async function GET() {
         registrations(
           id, event_slug, event_title, school_name, status, created_at,
           teacher_first_name, teacher_last_name, teacher_email,
-          member_pays_individually, invoice_requested, invoice_paid_at
+          member_pays_individually, invoice_requested, invoice_paid_at, tenant_id
         )
       `)
       .eq('member_id', member.id)
@@ -102,7 +130,7 @@ export async function GET() {
 
     // Exclude any participations that belong to a registration they manage (avoid duplicates)
     const managedIds = new Set((registrations ?? []).map((r: { id: string }) => r.id))
-    const joinedTeams = (participations ?? []).filter(
+    const joinedTeams = ofHostTenant(participations, hostTenant).filter(
       (p: { registrations: { id: string }[] | { id: string } | null }) => {
         const reg = Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
         return reg && !managedIds.has(reg.id)
@@ -120,7 +148,7 @@ export async function GET() {
       registrations(
         id, event_slug, event_title, school_name, status, created_at,
         teacher_first_name, teacher_last_name, teacher_email,
-        member_pays_individually, invoice_requested, invoice_paid_at
+        member_pays_individually, invoice_requested, invoice_paid_at, tenant_id
       )
     `)
     .eq('member_id', member.id)
@@ -131,5 +159,5 @@ export async function GET() {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  return NextResponse.json({ teams: participations ?? [], role: 'student' })
+  return NextResponse.json({ teams: ofHostTenant(participations, hostTenant), role: 'student' })
 }

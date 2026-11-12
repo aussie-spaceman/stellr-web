@@ -4,6 +4,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { ownsTeam, teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { resolveRequestMember } from '@/lib/impersonation'
 import { isDetailsHiddenFrom, organiserViewOfParticipant } from '@/lib/team-linked-details'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { rowTenant } from '@/lib/registration/event-context'
+import { withoutTenantId } from '@/lib/registration/roster-context'
 
 // GET /api/members/teams/[id] — full team detail with participants
 // An admin holding a view-as ticket reads it as the viewed member.
@@ -32,7 +35,7 @@ export async function GET(
       teacher_first_name, teacher_last_name, teacher_email, teacher_member_id,
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
-      member_pays_individually, late_joiner_payer, details_method,
+      member_pays_individually, late_joiner_payer, details_method, tenant_id,
       participants(*, event_companies(number, name))
     `)
     .eq('id', id)
@@ -44,6 +47,11 @@ export async function GET(
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  // S5 A8: only a group of this host's tenant (Stellr's on Stellr's hosts). Another
+  // tenant's group answers as a missing one, whoever registered it or is on it.
+  if (rowTenant(registration.tenant_id) !== (await requestTenant()).tenantId) {
+    return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  }
 
   // Access control: the group organiser owns it (the registrant — teacher or
   // student manager — OR the nominated teacher POC, matched by member id/email;
@@ -72,7 +80,7 @@ export async function GET(
         status: registration.status,
         participants: parts.map((p) =>
           p.member_id === member.id
-            ? p
+            ? withoutTenantId(p)
             : {
                 id: p.id,
                 first_name: p.first_name,
@@ -180,7 +188,9 @@ export async function GET(
 
   const viewerRole = teamViewerRole(member, registration as unknown as TeamViewerRegistration)
 
-  const participants = roster.map((p) => organiserViewOfParticipant(p, member.id))
+  const participants = roster.map((p) => withoutTenantId(organiserViewOfParticipant(p, member.id)))
 
-  return NextResponse.json({ registration: { ...registration, participants, joinUrl, docusignEnvelopes, viewerRole }, watchActive })
+  // tenant_id was read for the check above, and stays on the server.
+  const { tenant_id: _tenantId, ...answered } = registration as Record<string, unknown>
+  return NextResponse.json({ registration: { ...answered, participants, joinUrl, docusignEnvelopes, viewerRole }, watchActive })
 }

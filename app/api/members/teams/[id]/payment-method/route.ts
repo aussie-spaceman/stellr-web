@@ -8,6 +8,7 @@ import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { assertNotImpersonating, resolveRequestMember } from '@/lib/impersonation'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
+import { rowTenant } from '@/lib/registration/event-context'
 import { changeGroupPaymentMethod, paymentChangeView, PAYMENT_METHOD_LABEL } from '@/lib/group-payment-change'
 import { paymentChangeBody } from '@/lib/group-payment-change-body'
 
@@ -34,7 +35,10 @@ const auditSpec = ({ args: [req] }: { args: [Request, unknown] }) => ({
   target: { table: 'registrations', id: new URL(req.url).pathname.split('/').at(-2) ?? null },
 })
 
-const REG_COLUMNS = 'id, type, event_slug, teacher_member_id, teacher_email, teacher_poc_email, registrant_role'
+const REG_COLUMNS = 'id, type, event_slug, teacher_member_id, teacher_email, teacher_poc_email, registrant_role, tenant_id'
+
+/** S5 A8: a group of another tenant than this host's answers as a missing one. */
+const otherTenant = async (reg: { tenant_id?: string | null }) => rowTenant(reg.tenant_id) !== (await requestTenant()).tenantId
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -45,7 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
   const { data: registration } = await db.from('registrations').select(REG_COLUMNS).eq('id', id).eq('type', 'group').maybeSingle()
-  if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  if (!registration || await otherTenant(registration)) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
   const role = teamViewerRole(member, registration as unknown as TeamViewerRegistration)
   // Same answer as no such group: this caller learns nothing about whether it exists.
@@ -88,7 +92,7 @@ export const POST = withAudit(auditSpec, async (req: NextRequest, { params }: { 
     db.from('registrations').select(REG_COLUMNS).eq('id', id).eq('type', 'group').maybeSingle(),
   ])
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-  if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  if (!registration || await otherTenant(registration)) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
   const role = teamViewerRole(member, registration as unknown as TeamViewerRegistration)
   // Same answer as no such group: this caller learns nothing about whether it exists.
@@ -107,7 +111,7 @@ export const POST = withAudit(auditSpec, async (req: NextRequest, { params }: { 
     label: role,
     by: 'organizer',
   })
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+  if (!result.ok) return NextResponse.json(result.code ? { code: result.code, error: result.error } : { error: result.error }, { status: result.status })
 
   const teacherMemberId = registration.teacher_member_id as string | null
   await logActivity({

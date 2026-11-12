@@ -9,14 +9,14 @@ Started 12 Nov 2026. People are named by role only: "the owner" is the programme
 ## How to read an entry
 
 - **Id:** `W7-<n>`. `W7-1` to `W7-8` keep the numbers of the wave 7 plan's "Owner actions and decisions first" list, so either numbering can be cited.
-- **Default:** what is built, or what happens, until the owner answers. Every default fails closed.
+- **Recommended default:** the answer we recommend. For an open entry that gates code (batch 2), it is also what each slice builds until the owner answers, and those defaults fail closed. For an entry that gates a hosted step (`W7-1` to `W7-8`, and `W7-14`), nothing happens until the owner answers: a "Yes" here is a recommendation, never a yes to act.
 - **Answer:** "Approved as recommended", "Declined", or "Open", with the date.
 
 ## Gate: wave 6 on `dev` and A16 on the `dev` database
 
 | Id | Question | Recommended default | Answer | Answered |
 |---|---|---|---|---|
-| W7-1 | **Wave 6 landing.** Merge the browser-install fix (#630), then the status PR (#626), Lane C (#624), Lane A (#625), then a docs PR for wave 6 Lane D. Each later PR re-syncs (update-branch, then regenerate its baselines), with no hand merges. Accept A16's migration (`20261110164339_tenant_guardian_consent`) as bundled in #625, and apply it to the `dev` database only, once #625's `db` job is green | Yes | Approved as recommended. **Done:** wave 6 landed on `dev` on 11 Nov 2026 (order and commits in tracker `s5-programme.7`; Lane D as #637), and A16 was applied to the `dev` database the same day after #625's `db` job passed (`.13`). Since then, wave 6 was promoted to production in #643 (`5d18d321`) on 12 Nov 2026, with A16 applied to production first through the production migration Action (`.14`). The plan's follow-up, one check-in exercised on `dev` after the apply, is not recorded as done; it stays in wave 7's exit criteria | 11 Nov 2026 |
+| W7-1 | **Wave 6 landing.** Merge the browser-install fix (#630), then the status PR (#626), Lane C (#624), Lane A (#625), then a docs PR for wave 6 Lane D. Each later PR re-syncs (update-branch, then regenerate its baselines), with no hand merges. Accept A16's migration (`20261110164339_tenant_guardian_consent`) as bundled in #625, and apply it to the `dev` database only, once #625's `db` job is green | Yes | Approved as recommended. **Done:** wave 6 landed on `dev` on 11 Nov 2026 (first the browser-install fix #630, `e5421e23`; order and commits in tracker `s5-programme.7`; Lane D as #637), and A16 was applied to the `dev` database the same day after #625's `db` job passed (`.13`). Since then, wave 6 was promoted to production in #643 (`5d18d321`) on 12 Nov 2026, with A16 applied to production first through the production migration Action (`.14`). The plan's follow-up, one check-in exercised on `dev` after the apply, is not recorded as done; it stays in wave 7's exit criteria | 11 Nov 2026 |
 
 ## Gate: any switch flip on `stellr-web-dev` (P0 to P12)
 

@@ -25,16 +25,23 @@ import { createClient } from '@supabase/supabase-js'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { FIXTURES } from '../e2e/fixtures/users'
 import { DISCLOSURE_VERSION } from '../lib/esign/disclosure'
+import { DEV_PLACEHOLDER_MAPS, DEV_PLACEHOLDER_TITLE } from '../lib/esign/native/dev-placeholder'
 import { parseFieldMap } from '../lib/esign/native/template'
 import { TEMPLATE_BUCKET } from '../lib/esign/native/templates-store'
 import { supabaseFetch, supabaseSecretKey } from '../lib/supabase-keys'
 import { isLoopbackSupabase } from '../lib/testing/e2e-supabase-target'
 
-/** Same titles and lengths as the active versions on dev. The specs find documents by title. */
+/**
+ * Same titles and lengths as the active versions on dev. The specs find documents by title.
+ * The tenant guardian-consent document (S5 wave 7, K5) is dev's placeholder, under the
+ * placeholder's own title, so tenantGuardianConsentDocumentReady is true on this stack. Only
+ * a tenant event with TENANT_GUARDIAN_CONSENT_ENABLED reads it; nothing of Stellr's does.
+ */
 const DOCUMENTS = [
-  { key: 'minor', title: 'Participation Agreement — Student / Minor', pages: 9 },
-  { key: 'adult', title: 'Participation Agreement — Educator / Chaperone', pages: 4 },
-  { key: 'mentor', title: 'Mentor and Volunteer Agreement', pages: 5 },
+  { key: 'minor', title: 'Participation Agreement — Student / Minor', pages: 9, map: 'lib/esign/native/templates/minor-v2-3.fields.json' },
+  { key: 'adult', title: 'Participation Agreement — Educator / Chaperone', pages: 4, map: 'lib/esign/native/templates/adult-v2-3.fields.json' },
+  { key: 'mentor', title: 'Mentor and Volunteer Agreement', pages: 5, map: 'lib/esign/native/templates/mentor-v2-3.fields.json' },
+  { key: 'tenant_guardian_consent', title: DEV_PLACEHOLDER_TITLE, pages: 2, map: DEV_PLACEHOLDER_MAPS.tenant_guardian_consent },
 ] as const
 
 /** Oldest first: the newest published version is the one new surveys use. */
@@ -61,8 +68,8 @@ async function blankDocument(title: string, pages: number): Promise<Uint8Array> 
 }
 
 async function seedDocuments() {
-  for (const { key, title, pages } of DOCUMENTS) {
-    const map = parseFieldMap(JSON.parse(readFileSync(`lib/esign/native/templates/${key}-v2-3.fields.json`, 'utf8')))
+  for (const { key, title, pages, map: mapFile } of DOCUMENTS) {
+    const map = parseFieldMap(JSON.parse(readFileSync(mapFile, 'utf8')))
     const offPage = map.fields.filter((f) => f.page > pages)
     if (offPage.length) throw new Error(`${key}: field ${offPage[0].name} is on page ${offPage[0].page} of a ${pages}-page fixture.`)
 

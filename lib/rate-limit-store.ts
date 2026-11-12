@@ -36,8 +36,53 @@ const LOG_EVERY_MS = 60_000
 /** The store problems that leave an app_errors row, each at most once a minute per instance. */
 type StoreProblemKind = 'timeout' | 'failed' | 'skipped_no_secret'
 
+/**
+ * At most this many RATELIMIT rows per instance per minute, across every label
+ * and store problem. lib/app-errors allows 30 writes a minute per instance
+ * (MAX_WRITES_PER_MINUTE) for every caller, the AUTHZ, TENANTDB and LOADSCOPED
+ * shadow rows among them, so the limiter must never use that budget up.
+ */
+export const RATE_LIMIT_ROWS_PER_MINUTE = 5
+
 const lastLogged = new Map<string, number>()
 const lastRecorded = new Map<StoreProblemKind, number>()
+/** When each distinct RATELIMIT row (label and message) was last registered. */
+const lastRow = new Map<string, number>()
+let rowMinuteStart = 0
+let rowsThisMinute = 0
+
+/** Test hook: forget which RATELIMIT rows this instance has registered. */
+export function resetRateLimitRowState(): void {
+  lastRow.clear()
+  lastRecorded.clear()
+  rowMinuteStart = 0
+  rowsThisMinute = 0
+}
+
+/**
+ * Whether a RATELIMIT row may be registered now: each distinct row at most once
+ * a minute, and RATE_LIMIT_ROWS_PER_MINUTE in all. Decided before anything is
+ * imported, so a disagreement on every request of a busy route costs a map
+ * lookup, not a scheduled task.
+ */
+function takeRowSlot(label: string, message: string, now: number): boolean {
+  const id = `${label}\n${message}`
+  if (now - (lastRow.get(id) ?? -Infinity) < LOG_EVERY_MS) return false
+  if (now - rowMinuteStart >= LOG_EVERY_MS) {
+    rowMinuteStart = now
+    rowsThisMinute = 0
+  }
+  if (rowsThisMinute >= RATE_LIMIT_ROWS_PER_MINUTE) {
+    logStoreProblem('app_errors rows capped for this minute')
+    return false
+  }
+  rowsThisMinute++
+  // Labels and messages are fixed text from the code, so this stays small; the
+  // clear is a backstop, and the cap above still holds after it.
+  if (lastRow.size > 200) lastRow.clear()
+  lastRow.set(id, now)
+  return true
+}
 
 /** A SQLSTATE, or a PostgREST code such as PGRST202. Anything else is not kept. */
 const ERROR_CODE = /^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/
@@ -48,10 +93,12 @@ const ERROR_CODE = /^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/
  * `message` is fixed text: neither may hold a key, an IP, an HMAC or anything a
  * request or an error supplied. lib/app-errors and lib/after-response load only
  * here. recordBuiltAppError, not captureRequestError, so the text is kept as
- * built; it has the same per-instance rate limit as every app_errors write.
- * Never throws, and never waits for the database.
+ * built. It has the same per-instance rate limit as every app_errors write,
+ * and its own limits on top (takeRowSlot), so the limiter cannot crowd out
+ * another caller's rows. Never throws, and never waits for the database.
  */
 export async function recordRateLimitRow(label: string, message: string): Promise<void> {
+  if (!takeRowSlot(label, message, Date.now())) return
   try {
     const { runAfterResponse } = await import('@/lib/after-response')
     runAfterResponse('rate-limit', async () => {

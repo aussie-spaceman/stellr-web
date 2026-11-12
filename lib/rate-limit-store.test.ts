@@ -13,6 +13,8 @@ const rows = vi.hoisted(() => {
   const rows = {
     loaded: new Set<string>(),
     record: vi.fn(async (..._args: unknown[]) => true),
+    /** lib/app-errors' own errorDigest, set once the real module is loaded below. */
+    digest: (route: string, _message: string) => `digest of ${route}`,
     scheduled: [] as { label: string; task: Promise<unknown> }[],
     async settle() {
       await Promise.all(rows.scheduled.map((s) => s.task))
@@ -20,7 +22,7 @@ const rows = vi.hoisted(() => {
     appErrors() {
       rows.loaded.add('app-errors')
       return {
-        errorDigest: (route: string) => `digest of ${route}`,
+        errorDigest: (route: string, message: string) => rows.digest(route, message),
         routeLabel: (method: string, routePath: string) => `${method} ${routePath}`,
         recordBuiltAppError: rows.record,
       }
@@ -39,7 +41,18 @@ const rows = vi.hoisted(() => {
 vi.mock('@/lib/app-errors', () => rows.appErrors())
 vi.mock('@/lib/after-response', () => rows.afterResponse())
 
-import { STORE_TIMEOUT_MS, gcRateLimitStore, hashRateLimitKey, rateLimitStoreMode, takeFromStore } from './rate-limit-store'
+import {
+  RATE_LIMIT_ROWS_PER_MINUTE,
+  STORE_TIMEOUT_MS,
+  gcRateLimitStore,
+  hashRateLimitKey,
+  rateLimitStoreMode,
+  takeFromStore,
+} from './rate-limit-store'
+
+// The real digest, so a test can see which failures share an app_errors row.
+const appErrors = await vi.importActual<typeof import('./app-errors')>('./app-errors')
+rows.digest = appErrors.errorDigest
 
 const SECRET = 'k'.repeat(32)
 const WINDOW = { limit: 5, windowMs: 60_000 }
@@ -285,6 +298,30 @@ describe('app_errors rows for store problems', () => {
     await rows.settle()
     expect(written()).toHaveLength(3)
     expect(written()[2]).toBe('RATELIMIT store | store_failed code=08006')
+  })
+
+  it('gives each error code a row of its own, though the digest flattens digits', async () => {
+    vi.useFakeTimers({ now: Date.now() + 45 * DAY_MS })
+    const store = await freshStore()
+    const codes = ['23505', '57014', '57P01', '08006', 'PGRST202', 'PGRST301']
+    for (const code of codes) {
+      rpcResolves({ data: null, error: { message: 'down', code } })
+      await store.takeFromStore('k', WINDOW)
+      vi.advanceTimersByTime(60_000)
+    }
+    await rows.settle()
+
+    expect(written()).toEqual(codes.map((code) => `RATELIMIT store | store_failed code=${code}`))
+    const digests = rows.record.mock.calls.map((call) => call[2])
+    expect(new Set(digests).size).toBe(codes.length)
+    // The flattening this guards against: by the message alone, these codes are one row.
+    expect(appErrors.errorDigest('RATELIMIT store', 'store_failed code=23505')).toBe(
+      appErrors.errorDigest('RATELIMIT store', 'store_failed code=57014'),
+    )
+  })
+
+  it('takes at most a sixth of the app_errors write budget', () => {
+    expect(RATE_LIMIT_ROWS_PER_MINUTE * 6).toBeLessThanOrEqual(appErrors.MAX_WRITES_PER_MINUTE)
   })
 
   it('never writes a key, an IP, the HMAC, the secret or the error message', async () => {

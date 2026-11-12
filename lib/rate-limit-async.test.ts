@@ -14,6 +14,8 @@ const rows = vi.hoisted(() => {
   const rows = {
     loaded: new Set<string>(),
     record: vi.fn(async (..._args: unknown[]) => true),
+    /** lib/app-errors' own errorDigest, set once the real module is loaded below. */
+    digest: (route: string, _message: string) => `digest of ${route}`,
     scheduled: [] as Promise<unknown>[],
     async settle() {
       await Promise.all(rows.scheduled)
@@ -21,7 +23,7 @@ const rows = vi.hoisted(() => {
     appErrors() {
       rows.loaded.add('app-errors')
       return {
-        errorDigest: (route: string) => `digest of ${route}`,
+        errorDigest: (route: string, message: string) => rows.digest(route, message),
         routeLabel: (method: string, routePath: string) => `${method} ${routePath}`,
         recordBuiltAppError: rows.record,
       }
@@ -42,8 +44,11 @@ vi.mock('@/lib/after-response', () => rows.afterResponse())
 
 import { rateLimitGuard } from './rate-limit'
 import { limit, rateLimit, type LimitOptions } from './rate-limit-async'
-import { hashRateLimitKey } from './rate-limit-store'
+import { RATE_LIMIT_ROWS_PER_MINUTE, hashRateLimitKey, resetRateLimitRowState } from './rate-limit-store'
 import { STELLR_TENANT_ID } from './tenancy/constants'
+
+// The real digest, so a test can see which disagreements share an app_errors row.
+rows.digest = (await vi.importActual<typeof import('./app-errors')>('./app-errors')).errorDigest
 
 const WINDOW = { limit: 1, windowMs: 60_000, tenantId: null }
 const OTHER_TENANT = '11111111-1111-4111-8111-111111111111'
@@ -58,10 +63,12 @@ beforeEach(() => {
   rows.record.mockClear()
   rows.scheduled.length = 0
   h.take.mockReset()
+  resetRateLimitRowState()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
@@ -181,6 +188,46 @@ describe('app_errors rows for shadow disagreements', () => {
       'RATELIMIT limit | shadow_disagreement memory=allow store=deny',
       'RATELIMIT check-in | shadow_disagreement memory=allow store=deny',
     ])
+    const digests = rows.record.mock.calls.map((call) => call[2])
+    expect(new Set(digests).size).toBe(2)
+  })
+
+  it('writes each label at most once a minute', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    await rateLimit(request('203.0.113.23'), 'check-in', WINDOW, fresh())
+    await rateLimit(request('203.0.113.24'), 'check-in', WINDOW, fresh())
+    await limit(fresh(), WINDOW)
+    await rows.settle()
+    expect(written()).toEqual([
+      'RATELIMIT check-in | shadow_disagreement memory=allow store=deny',
+      'RATELIMIT limit | shadow_disagreement memory=allow store=deny',
+    ])
+    expect(rows.scheduled).toHaveLength(2)
+
+    vi.setSystemTime(Date.now() + 60_000)
+    await rateLimit(request('203.0.113.23'), 'check-in', WINDOW, fresh())
+    await rows.settle()
+    expect(written()).toHaveLength(3)
+    expect(written()[2]).toBe('RATELIMIT check-in | shadow_disagreement memory=allow store=deny')
+  })
+
+  it('caps its rows each minute, so it cannot use up the budget other app_errors rows share', async () => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    h.take.mockResolvedValue({ ok: false, retryAfterSeconds: 9 })
+    const labels = Array.from({ length: 30 }, (_, i) => `public-route-${i}`)
+    for (const label of labels) await rateLimit(request('203.0.113.25'), label, WINDOW, fresh())
+    await rows.settle()
+    expect(rows.record).toHaveBeenCalledTimes(RATE_LIMIT_ROWS_PER_MINUTE)
+    expect(rows.scheduled).toHaveLength(RATE_LIMIT_ROWS_PER_MINUTE)
+    expect(RATE_LIMIT_ROWS_PER_MINUTE).toBeLessThan(labels.length)
+
+    vi.setSystemTime(Date.now() + 60_000)
+    for (const label of labels) await rateLimit(request('203.0.113.25'), label, WINDOW, fresh())
+    await rows.settle()
+    expect(rows.record).toHaveBeenCalledTimes(2 * RATE_LIMIT_ROWS_PER_MINUTE)
   })
 
   it('never writes a key, an IP or the HMAC', async () => {
@@ -191,7 +238,10 @@ describe('app_errors rows for shadow disagreements', () => {
     const ip = '203.0.113.21'
     const nameKey = `check-in-name:event-slug:Ada:Lovelace:${ip}:${fresh()}`
     const suffix = `token-${fresh()}`
+    vi.useFakeTimers({ toFake: ['Date'] })
     await limit(nameKey, WINDOW)
+    // A minute on, so the second 'limit' row is not held back as a repeat.
+    vi.setSystemTime(Date.now() + 60_000)
     await limit(nameKey, { ...WINDOW, tenantId: OTHER_TENANT })
     await rateLimit(request(ip), 'check-in', WINDOW, suffix)
     await rows.settle()

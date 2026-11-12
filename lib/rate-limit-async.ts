@@ -105,7 +105,8 @@ async function decide(key: string, opts: LimitOptions, label: string, budgetIp?:
 
   if (store.ok !== memory.ok) {
     console.warn('[rate-limit] shadow disagreement', label, { memory: memory.ok, store: store.ok })
-    // A 'RATELIMIT <label>' row: the label comes from the code, never the key.
+    // A 'RATELIMIT <label>' row: the label comes from the code, never the key. At
+    // most one a minute per label, within the limiter's own cap (recordRateLimitRow).
     await recordRateLimitRow(label, `shadow_disagreement memory=${verdict(memory.ok)} store=${verdict(store.ok)}`)
   }
   return memory

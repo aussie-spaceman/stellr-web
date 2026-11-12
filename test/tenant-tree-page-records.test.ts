@@ -67,7 +67,10 @@ vi.mock('@/app/(stellr)/(flow)/check-in/not-open', () => ({ checkInNotOpen: () =
 vi.mock('@/app/(stellr)/(flow)/survey/[token]/page', () => ({ default: function Survey() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/survey/[token]/stop-reminders/page', () => ({ default: function StopReminders() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/survey/event/[slug]/page', () => ({ default: function EventSurvey() { return null } }))
-vi.mock('@/app/(stellr)/(flow)/team-profile/[token]/page', () => ({ default: function TeamProfile() { return null } }))
+vi.mock('@/app/(stellr)/(flow)/team-profile/[token]/team-profile-body', () => ({ TeamProfileBody: function TeamProfile() { return null } }))
+// The team profile page reads its session after the record check; what that read
+// refuses has its own test (team-profile-body.test.ts).
+vi.mock('@/lib/team-profile/store', () => ({ sessionByToken: async () => null }))
 vi.mock('@/components/esign/SigningApp', () => ({ SigningApp: function SigningApp() { return null } }))
 vi.mock('@/components/esign/SignedCopy', () => ({ SignedCopy: function SignedCopy() { return null } }))
 vi.mock('@/lib/sanity', () => ({ getEventsBySlugs: async () => [] }))

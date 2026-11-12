@@ -1,9 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@/lib/email'
-import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, type CredentialRow } from '@/lib/credentials'
+import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, isStellrCredential, type CredentialRow } from '@/lib/credentials'
 import { familyCredentialUrl } from '@/lib/credentials-link'
 import { relabelIssuedAward } from '@/lib/event-awards'
-import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // The "you've earned a credential" email, addressed the way the DocuSign
 // notices are: an adult hears directly; a Minor's guardian is the addressee
@@ -20,28 +19,28 @@ export interface CredentialRecipient {
 }
 
 /**
- * Whether this credential's holder is another tenant's participant whose guardian has
- * not signed that tenant's consent form (S5 A16, A10a). Their credential email is not
- * sent. A credential with no participant (a member's: a course, a mentor, PD hours)
- * reads nothing. Otherwise the credential's own tenant is read, and only another
- * tenant's makes the consent read: Stellr's credentials make none. A failed read
- * throws, so the caller sends nothing.
+ * Is this Stellr's credential, so the email may go (S5 wave 7, A10a; decisions W7-9 and
+ * W7-10)? Another tenant's credential gets no email: Stellr is not that tenant's issuer,
+ * every link in the email leads to Stellr's credential page, which shows Stellr's
+ * credentials only, and a consent-pending minor of that tenant is never written to.
+ *
+ * The row's own tenant decides when the caller selected it (CREDENTIAL_TENANT_COLUMNS,
+ * which issueCredential and reinstateCredential do), and then nothing is read. A row
+ * without it reads the credential's tenant once. Nothing here reads guardian consent. A
+ * failed read throws, so the caller sends nothing.
  */
-export async function holderConsentPending(db: SupabaseClient, row: Pick<CredentialRow, 'id' | 'participant_id'>): Promise<boolean> {
-  if (!row.participant_id) return false
+export async function credentialIsStellrs(db: SupabaseClient, row: Pick<CredentialRow, 'id' | 'tenant_id'>): Promise<boolean> {
+  if (row.tenant_id !== undefined) return isStellrCredential(row)
   const { data, error } = await db.from('credentials').select('tenant_id').eq('id', row.id).maybeSingle()
   if (error) throw new Error(`Reading the credential tenant failed: ${error.message}`)
   if (!data) throw new Error('Reading the credential tenant failed: no row')
-  const tenantId = (data as { tenant_id: string | null }).tenant_id
-  if (tenantId === null || tenantId === STELLR_TENANT_ID) return false
-  const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
-  return (await unconsentedParticipantIds(db, tenantId)).has(row.participant_id)
+  return isStellrCredential(data as { tenant_id: string | null })
 }
 
 /**
  * Non-fatal: a mail outage must never undo an issue. Returns whether it sent. Nothing
- * goes to a tenant's participant whose guardian has not signed (holderConsentPending),
- * and a failed check sends nothing.
+ * goes for another tenant's credential (credentialIsStellrs), and a failed check sends
+ * nothing.
  */
 export async function sendCredentialIssuedEmail(
   db: SupabaseClient,
@@ -49,7 +48,7 @@ export async function sendCredentialIssuedEmail(
   to: CredentialRecipient,
 ): Promise<boolean> {
   try {
-    if (await holderConsentPending(db, row)) return false
+    if (!(await credentialIsStellrs(db, row))) return false
     const consent = await shareConsentFor(db, row)
     const share = canShare(row, consent)
     const isMinor = await holderIsMinor(db, row)

@@ -135,6 +135,9 @@ export const RECORD_PAGES: RecordPageCase[] = [
     missing: `/team-profile/${MISSING_TOKEN}`,
     // Past the record check the page needs the event from the CMS, so it says invalid.
     ownHost: { kind: 'shows', text: () => 'link isn’t valid' },
+    // Stellr's page answers another tenant's link as unknown straight after the row is
+    // read, before the CMS is asked (A10a); team-profile-body.test.ts runs it with a
+    // loadable event.
     onStellrHost: { kind: 'sameAsUnknown', owner: 'A10' },
   },
   {

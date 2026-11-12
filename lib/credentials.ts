@@ -7,7 +7,9 @@ import { isKnownMinorOn } from '@/lib/age'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import {
   CREDENTIAL_COLUMNS,
+  CREDENTIAL_TENANT_COLUMNS,
   ageBlock,
+  isStellrCredential,
   canShare,
   normaliseCredentialNumber,
   type CredentialRow,
@@ -229,6 +231,11 @@ export interface IssueInput {
   activityTitle?: string | null
   activityDate?: string | null
   activityLocation?: string | null
+  /**
+   * The event's owner, shared across a batch (eventTenantOnce), so a run of issues
+   * reads it once. Left out, issueCredential reads it for each new credential.
+   */
+  eventTenant?: () => Promise<string>
 }
 
 /** Why issueCredential made no credential (S5 wave 7, A10a). */
@@ -266,6 +273,16 @@ async function eventTenant(db: SupabaseClient, slug: string): Promise<string> {
 }
 
 /**
+ * The event's owner for a batch of issues (IssueInput.eventTenant): read on first use,
+ * once, and shared. A failed read stays failed for the batch, so every issue in it is
+ * refused rather than one going ahead on a guess.
+ */
+export function eventTenantOnce(db: SupabaseClient, slug: string): () => Promise<string> {
+  let read: Promise<string> | null = null
+  return () => (read ??= eventTenant(db, slug))
+}
+
+/**
  * May a new credential be issued for this input? Stellr's events, and credentials with
  * no event (courses), go ahead with no consent read. For another tenant's event: a
  * participant whose guardian has not signed the tenant's consent form is skipped (A16),
@@ -274,7 +291,7 @@ async function eventTenant(db: SupabaseClient, slug: string): Promise<string> {
  */
 async function assertMayIssue(db: SupabaseClient, input: IssueInput): Promise<void> {
   if (!input.eventSlug) return
-  const tenantId = await eventTenant(db, input.eventSlug)
+  const tenantId = await (input.eventTenant ? input.eventTenant() : eventTenant(db, input.eventSlug))
   if (tenantId === STELLR_TENANT_ID) return
   if (input.participantId) {
     const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
@@ -291,8 +308,11 @@ async function assertMayIssue(db: SupabaseClient, input: IssueInput): Promise<vo
  * a re-run returns the existing row with `created: false`. A concurrent first
  * issue is treated the same way — the unique violation is the signal.
  *
- * A new credential for an event first reads the event's owner (assertMayIssue): only
- * Stellr's events are issued for, and a refusal throws CredentialNotIssuedError.
+ * A new credential for an event first reads the event's owner (assertMayIssue), once
+ * per batch where the caller shares IssueInput.eventTenant: only Stellr's events are
+ * issued for, and a refusal throws CredentialNotIssuedError. The row comes back with its
+ * tenant_id (CREDENTIAL_TENANT_COLUMNS), so the credential email decides on it with no
+ * further read.
  */
 export async function issueCredential(
   db: SupabaseClient,
@@ -339,7 +359,7 @@ export async function issueCredential(
   const { data, error } = await db
     .from('credentials')
     .insert(insert)
-    .select(CREDENTIAL_COLUMNS)
+    .select(CREDENTIAL_TENANT_COLUMNS)
     .single()
 
   if (error) {
@@ -354,7 +374,7 @@ export async function issueCredential(
 }
 
 async function findExisting(db: SupabaseClient, input: IssueInput): Promise<CredentialRow | null> {
-  let q = db.from('credentials').select(CREDENTIAL_COLUMNS).eq('source', input.source)
+  let q = db.from('credentials').select(CREDENTIAL_TENANT_COLUMNS).eq('source', input.source)
   if (input.source === 'course') {
     if (!input.memberId || !input.moduleId) throw new Error('[credentials] course credential needs memberId + moduleId')
     q = q.eq('member_id', input.memberId).eq('module_id', input.moduleId)
@@ -409,15 +429,24 @@ export async function revokeCredential(
  * Undo a revocation — an award taken away and then given back to the same
  * person. The unique index means the old row is the only row this person can
  * hold for it, so it is restored (same number, same URL) rather than re-issued.
+ *
+ * A reinstated credential is issued again, so it follows issuance (S5 A10a, decision
+ * W7-9): another tenant's row, or one whose tenant the caller did not select, is refused
+ * with CredentialNotIssuedError before anything is written. The row's own tenant
+ * decides, so Stellr's make no read.
  */
-export async function reinstateCredential(db: SupabaseClient, id: string): Promise<CredentialRow | null> {
+export async function reinstateCredential(
+  db: SupabaseClient,
+  revoked: Pick<CredentialRow, 'id' | 'tenant_id'>,
+): Promise<CredentialRow | null> {
+  if (!isStellrCredential(revoked)) throw new CredentialNotIssuedError('tenant_not_issuer')
   const { data } = await db
     .from('credentials')
     .update({ status: 'issued', revoked_at: null, revoked_reason: null, revoked_by: null, updated_at: new Date().toISOString() })
-    .eq('id', id)
+    .eq('id', revoked.id)
     .eq('status', 'revoked')
     .is('tombstoned_at', null)
-    .select(CREDENTIAL_COLUMNS)
+    .select(CREDENTIAL_TENANT_COLUMNS)
     .maybeSingle()
   return (data as CredentialRow | null) ?? null
 }
@@ -498,7 +527,7 @@ export async function getCredentialByNumber(db: SupabaseClient, number: string):
   if (!n) return null
   const { data, error } = await db
     .from('credentials')
-    .select(`${CREDENTIAL_COLUMNS}, tenant_id, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
+    .select(`${CREDENTIAL_TENANT_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
     .eq('number', n)
     .maybeSingle()
   if (error) console.error('[credentials] lookup failed:', error.message)
@@ -516,11 +545,20 @@ export async function listMemberCredentials(db: SupabaseClient, memberId: string
     : `member_id.eq.${memberId}`
   const { data } = await db
     .from('credentials')
-    .select(`${CREDENTIAL_COLUMNS}, tenant_id, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
+    .select(`${CREDENTIAL_TENANT_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
     .or(owner)
     .is('tombstoned_at', null)
     .order('issued_at', { ascending: false })
   return ((data ?? []) as Record<string, unknown>[]).map(withDob)
+}
+
+/**
+ * The member's wallet (/community/credentials): their credentials, Stellr's only
+ * (S5 A10a, decision W7-10). Another tenant's credential is left out, as on the public
+ * page; a NULL tenant is a Stellr row the backfill has not reached.
+ */
+export async function listWalletCredentials(db: SupabaseClient, memberId: string): Promise<CredentialView[]> {
+  return (await listMemberCredentials(db, memberId)).filter(isStellrCredential)
 }
 
 function withDob(row: Record<string, unknown>): CredentialView {

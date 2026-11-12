@@ -12,11 +12,15 @@
 // Returning students (a submitted profile from an earlier event) get their
 // last answers pre-filled and an email asking them to check and update them.
 //
-// Another tenant's student whose guardian has not signed that tenant's consent
-// form (S5 A16) is never sent one (A10a). The automatic sends hold the invitation:
-// the row is made, marked held, and not sent, so the sweep never sends it later.
-// Only a staff resend releases it (decision W7-11), and that too refuses while the
-// consent is unsigned. Stellr's students make no consent read.
+// Another tenant's students are not sent one yet (S5 wave 7, A10a). Every link is
+// built on Stellr's app host (teamProfileLink), and the save route refuses another
+// tenant's link there, so the form could not be saved; and a student whose guardian
+// has not signed that tenant's consent form (A16) must not be written to at all. So
+// for a non-Stellr row the automatic sends hold the invitation: the row is made,
+// marked held, and not sent, so no later sweep sends it either. Only a staff resend
+// releases a held one (decision W7-11), and it refuses another tenant's row until
+// links are built on the tenant's own host. The row's tenant comes back with the row,
+// so the decision reads nothing: no consent read, for Stellr or anyone.
 
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -350,33 +354,20 @@ async function ensureRow(db: SupabaseClient, p: Candidate): Promise<{ row: TeamP
   return owned(data, true)
 }
 
-// ── Guardian consent (S5 A16, A10a) ───────────────────────────────────────────
+// ── Held invitations (S5 A10a) ─────────────────────────────────────────────────
 
 /** What the roster shows for an invitation held back (lib/team-profile/assign.ts reads it). */
-export const HELD_FOR_CONSENT = 'Held: waiting for guardian consent. Resend once it is signed.'
+export const HELD_FOR_TENANT = 'Held: team profiles for this organisation’s events can’t be sent yet.'
 
-/**
- * Is this student another tenant's participant whose guardian has not signed? Stellr's
- * answer no with no read. Each tenant's unsigned consents are read once per call, through
- * `cache`. A failed read throws, so nothing is sent.
- */
-async function consentPending(
-  db: SupabaseClient,
-  tenantId: string,
-  participantId: string,
-  cache: Map<string, Promise<ReadonlySet<string>>>,
-): Promise<boolean> {
-  if (tenantId === STELLR_TENANT_ID) return false
-  let pending = cache.get(tenantId)
-  if (!pending) {
-    pending = import('@/lib/registration/tenant-guardian-consent').then(({ unconsentedParticipantIds }) => unconsentedParticipantIds(db, tenantId))
-    cache.set(tenantId, pending)
-  }
-  return (await pending).has(participantId)
+/** Is this another tenant's row, whose invitation is held? From the row's own tenant: no read. */
+function held(tenantId: string): boolean {
+  return tenantId !== STELLR_TENANT_ID
 }
 
 async function markHeld(db: SupabaseClient, rowId: string): Promise<void> {
-  await db.from('team_profiles').update({ last_send_error: HELD_FOR_CONSENT, updated_at: new Date().toISOString() }).eq('id', rowId)
+  const { error } = await db.from('team_profiles').update({ last_send_error: HELD_FOR_TENANT, updated_at: new Date().toISOString() }).eq('id', rowId)
+  // Held either way: the row exists, so nothing sends it. Only the roster label is lost.
+  if (error) console.error('[team-profile] marking an invitation held failed:', error.message)
 }
 
 // ── Public operations ─────────────────────────────────────────────────────────
@@ -446,7 +437,6 @@ export async function dispatchTeamProfiles(
   const dates = new Map([...events].map(([slug, ctx]) => [slug, ctx?.meta.date ?? null]))
   const ready = await formsComplete(db, people, dates)
 
-  const consents = new Map<string, Promise<ReadonlySet<string>>>()
   // Shared by every tenant: the spacing is Resend's rate, which is one account's.
   let first = true
   const started = Date.now()
@@ -468,7 +458,7 @@ export async function dispatchTeamProfiles(
       const { row, created, tenantId } = await ensureRow(db, p)
       if (!created) continue
       // Held, not sent: the row now exists, so no later sweep sends it either (W7-11).
-      if (await consentPending(db, tenantId, p.id, consents)) {
+      if (held(tenantId)) {
         await markHeld(db, row.id)
         count('waiting')
         continue
@@ -528,9 +518,9 @@ export async function resendTeamProfile(db: SupabaseClient, slug: string, partic
   const ready = await formsComplete(db, [p], new Map([[slug, ctx.meta.date]]))
   if (!ready.has(p.id)) return { ok: false, status: 409, error: 'Their permission form isn’t complete yet. The team profile goes out as soon as it is.' }
   const { row, tenantId } = await ensureRow(db, p)
-  if (await consentPending(db, tenantId, p.id, new Map())) {
+  if (held(tenantId)) {
     await markHeld(db, row.id)
-    return { ok: false, status: 409, error: 'Their parent or guardian hasn’t signed the consent form yet. Resend once they have.' }
+    return { ok: false, status: 409, error: 'Team profiles for this organisation’s events can’t be sent yet.' }
   }
   const sent = await sendInvite(db, row, p, ctx.email)
   if (!sent.ok) return { ok: false, status: 502, error: sent.error ?? 'Sending failed.' }
@@ -559,22 +549,21 @@ export async function resendOutstanding(
 
   let sent = 0
   let failed = 0
-  let held = 0
-  const consents = new Map<string, Promise<ReadonlySet<string>>>()
+  let heldBack = 0
   for (const [i, p] of todo.slice(0, limit).entries()) {
     if (i > 0) await sleep(SEND_SPACING_MS)
     const { row, tenantId } = await ensureRow(db, p)
-    // Still unsigned: stays held, and counts as waiting.
-    if (await consentPending(db, tenantId, p.id, consents)) {
+    // Another tenant's: stays held, and counts as waiting.
+    if (held(tenantId)) {
       await markHeld(db, row.id)
-      held++
+      heldBack++
       continue
     }
     const r = await sendInvite(db, row, p, ctx.email)
     if (r.ok) sent++
     else failed++
   }
-  return { sent, failed, waiting: outstanding.length - todo.length + held, remaining: Math.max(0, todo.length - limit) }
+  return { sent, failed, waiting: outstanding.length - todo.length + heldBack, remaining: Math.max(0, todo.length - limit) }
 }
 
 /**

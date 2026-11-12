@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  CREDENTIAL_COLUMNS,
+  CREDENTIAL_TENANT_COLUMNS,
+  eventTenantOnce,
   issueCredential,
   reinstateCredential,
   revokeCredential,
@@ -15,13 +16,17 @@ import { listAssignments, listEventStudents, type AssignmentRow } from '@/lib/ev
 // Turns the draft in event_award_assignments into credentials, and reconciles
 // on every re-run: a new assignment is issued, one given back is reinstated,
 // one taken away is revoked. Idempotent — running it twice changes nothing.
+//
+// Another tenant's event gets no credential, new or reinstated (S5 A10a, decision W7-9):
+// each one is a failure line. The event's owner is read once per run, and the rows carry
+// their own tenant, so the credential email reads nothing more.
 
 export const AWARD_REVOKED_REASON = 'Award reassigned by the judges'
 
 async function awardCredentials(db: SupabaseClient, slug: string): Promise<CredentialRow[]> {
   const { data, error } = await db
     .from('credentials')
-    .select(CREDENTIAL_COLUMNS)
+    .select(CREDENTIAL_TENANT_COLUMNS)
     .eq('event_slug', slug)
     .eq('source', 'event')
     .in('award_type', ASSIGNED_AWARD_TYPES)
@@ -84,6 +89,7 @@ export async function issueAwards(
     unchanged: assignments.length - plan.toIssue.length,
   }
   const awarded = new Set<string>()
+  const eventTenant = eventTenantOnce(db, slug)
 
   for (const a of plan.toIssue) {
     const p = byId.get(a.participant_id)
@@ -97,7 +103,7 @@ export async function issueAwards(
       let row: CredentialRow | null
       const revoked = held.get(key(a.participant_id, a.award_type))
       if (revoked) {
-        row = await reinstateCredential(db, revoked.id)
+        row = await reinstateCredential(db, revoked)
         if (row) { result.reinstated++; awarded.add(p.id) }
       } else {
         const def = EVENT_AWARDS[a.award_type]
@@ -115,6 +121,7 @@ export async function issueAwards(
           roleLabel: 'Student',
           award: def.label,
           theme: opts.theme,
+          eventTenant,
         })
         row = out.row
         if (out.created) { result.issued++; awarded.add(p.id) }

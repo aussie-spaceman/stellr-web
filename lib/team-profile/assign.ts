@@ -19,9 +19,13 @@ export type ProfileStatus = 'waiting' | 'not_sent' | 'sent' | 'submitted'
 
 export interface PlanningStudent {
   participantId: string
+  /** The members row, for the admin record link. */
+  memberId: string | null
   firstName: string
   lastName: string
   school: string | null
+  /** The school record behind `school`, when the page resolves it (lib/school-ids). */
+  schoolId?: string | null
   grade: string | null
   gender: string | null
   age: number | null
@@ -148,6 +152,7 @@ export async function loadCompanyPlan(db: SupabaseClient, slug: string, eventDat
     const companyId = (p.company_id as string | null) ?? null
     return {
       participantId: id,
+      memberId,
       firstName: (p.first_name as string) ?? '',
       lastName: (p.last_name as string) ?? '',
       school: (p.school_name as string | null) ?? null,

@@ -14,6 +14,8 @@ export type GapReason = 'not_issued' | 'issue_failed' | 'voided' | 'declined' | 
 
 export interface PaperworkGap {
   participantId: string
+  /** The member behind the participant, for the admin link to their record. */
+  memberId?: string | null
   name: string
   eventSlug: string
   eventTitle: string
@@ -26,6 +28,7 @@ export interface PaperworkGap {
 
 export interface GapParticipant {
   id: string
+  memberId?: string | null
   name: string
   dateOfBirth: string | null
   eventRole: string | null
@@ -59,7 +62,7 @@ export function findGaps(participants: GapParticipant[], envelopes: GapEnvelope[
   for (const p of participants) {
     if (!classifyAgreement(p.eventRole, p.dateOfBirth)) continue
     const rows = (byParticipant.get(p.id) ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at))
-    const base = { participantId: p.id, name: p.name, eventSlug: p.eventSlug, eventTitle: p.eventTitle, eventDate: p.eventDate }
+    const base = { participantId: p.id, memberId: p.memberId, name: p.name, eventSlug: p.eventSlug, eventTitle: p.eventTitle, eventDate: p.eventDate }
     if (rows.some((r) => r.status === 'completed')) continue
     // Out for signature, but the email never arrived: a person has to fix the address.
     const live = rows.filter((r) => ['sent', 'delivered', 'created'].includes(r.status))
@@ -104,7 +107,7 @@ export async function loadPaperworkGaps(
 
   const { data: regs, error } = await scoped(db
     .from('registrations')
-    .select('event_slug, event_title, participants(id, first_name, last_name, date_of_birth, event_role)'))
+    .select('event_slug, event_title, participants(id, member_id, first_name, last_name, date_of_birth, event_role)'))
     .neq('status', 'withdrawn')
     .in('event_slug', [...upcoming.keys()])
   if (error) throw new Error(`Participant lookup failed: ${error.message}`)
@@ -113,6 +116,7 @@ export async function loadPaperworkGaps(
     const event = upcoming.get(r.event_slug as string)!
     return ((r.participants as Record<string, unknown>[] | null) ?? []).map((p) => ({
       id: p.id as string,
+      memberId: (p.member_id as string | null) ?? null,
       name: [p.first_name, p.last_name].filter(Boolean).join(' '),
       dateOfBirth: (p.date_of_birth as string | null) ?? null,
       eventRole: (p.event_role as string | null) ?? null,

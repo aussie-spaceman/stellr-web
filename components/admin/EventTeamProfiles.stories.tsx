@@ -19,6 +19,7 @@ export default meta
 type Story = StoryObj<typeof EventTeamProfiles>
 
 const base: Omit<PlanningStudent, 'participantId' | 'firstName' | 'lastName'> = {
+  memberId: null,
   school: 'Lincoln High School',
   grade: 'grade_10',
   gender: 'Female',

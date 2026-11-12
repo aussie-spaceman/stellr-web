@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Collapsible } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import type { CredentialRow } from '@/lib/credentials-core'
 import { formatPdHours } from '@/lib/pd-standards'
 import PdCertificateArtwork from '@/components/admin/PdCertificateArtwork'
@@ -106,19 +108,24 @@ export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: strin
     } finally { setBusy(null) }
   }
 
+  const pdIssued = rows ? rows.filter((c) => c.status === 'issued' && !c.tombstoned_at).length : 0
   const input = 'rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
   const newMemberHref = `/admin/members/new?return=${encodeURIComponent(`/admin/competitions/${eventSlug}?tab=settings`)}`
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-brand-muted">Educator PD</h3>
-        <p className="text-xs text-brand-muted-soft mt-1">
+    <Collapsible
+      id="educator-pd"
+      title="Educator PD"
+      summary={rows ? `${pdIssued} issued` : undefined}
+      description={
+        <>
           Teachers who supported this event get a PD certificate showing their hours, aligned to Common
           Core, plus a credential they can add to LinkedIn. One per educator per event; to change the hours, revoke
           and issue again.
-        </p>
-      </div>
+        </>
+      }
+    >
+      <div className="space-y-4">
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
 
@@ -181,7 +188,11 @@ export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: strin
                 return (
                   <tr key={c.id}>
                     <td className="pr-4 py-2 text-brand-blue-dark whitespace-nowrap">
-                      {c.tombstoned_at ? <span className="italic text-brand-muted-soft">withdrawn</span> : c.recipient_name}
+                      {c.tombstoned_at ? (
+                        <span className="italic text-brand-muted-soft">withdrawn</span>
+                      ) : (
+                        <MemberLink memberId={c.member_id}>{c.recipient_name}</MemberLink>
+                      )}
                     </td>
                     <td className="pr-4 py-2 text-brand-muted text-xs whitespace-nowrap">{c.pd_hours ? formatPdHours(Number(c.pd_hours)) : '—'}</td>
                     <td className="pr-4 py-2 text-xs font-mono whitespace-nowrap">
@@ -227,6 +238,7 @@ export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: strin
 
       {/* ── Certificate artwork (global, admins) ───────────────────── */}
       {canIssue && <PdCertificateArtwork theme={theme} eventSlug={eventSlug} />}
-    </div>
+      </div>
+    </Collapsible>
   )
 }

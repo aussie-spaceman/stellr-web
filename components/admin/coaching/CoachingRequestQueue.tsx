@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Clock, UserCheck, XCircle } from 'lucide-react'
 import type { CoachingRequest, CoachingEligibility, CoachOption } from '@/lib/coaching-requests'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 const STATUS_META: Record<CoachingRequest['status'], { label: string; className: string; Icon: typeof Clock }> = {
   pending: { label: 'Pending', className: 'bg-[#FDEFD6] text-brand-gold-ink', Icon: Clock },
@@ -105,7 +106,9 @@ function RequestRow({ req, coaches, suggested }: { req: CoachingRequest; coaches
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-display text-[16px] font-bold text-ink">{req.memberName ?? 'Member'}</p>
+            <p className="font-display text-[16px] font-bold text-ink">
+              <MemberLink memberId={req.memberId}>{req.memberName ?? 'Member'}</MemberLink>
+            </p>
             <span className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-0.5 text-xs font-bold ${meta.className}`}>
               <meta.Icon className="h-3 w-3" /> {meta.label}
             </span>

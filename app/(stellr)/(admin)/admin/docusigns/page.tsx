@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { DocusignTable, type EnvelopeRow } from '@/components/admin/DocusignTable'
 import { EsignEngineCard } from '@/components/admin/EsignEngineCard'
 import { NeedsPaperwork } from '@/components/admin/NeedsPaperwork'
+import { Collapsible, CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
 import { loadPaperworkGaps } from '@/lib/esign/needs-paperwork'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 
@@ -74,11 +75,24 @@ export default async function AdminDocusignsPage() {
         </div>
       </div>
 
-      <EsignEngineCard />
+      <CollapsibleGroup storageKey="admin.docusigns">
+        <div className="space-y-6">
+          <CollapseAllControls className="justify-end" />
 
-      <NeedsPaperwork gaps={gaps} />
+          <EsignEngineCard />
 
-      <DocusignTable initial={rows} />
+          <NeedsPaperwork gaps={gaps} />
+
+          <Collapsible
+            id="agreements"
+            title="Agreements"
+            summary={`${pending} awaiting · ${completed} signed · ${rows.length} total`}
+            bodyClassName="p-4"
+          >
+            <DocusignTable initial={rows} />
+          </Collapsible>
+        </div>
+      </CollapsibleGroup>
     </div>
   )
 }

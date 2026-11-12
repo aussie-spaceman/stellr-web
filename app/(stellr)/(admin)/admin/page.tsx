@@ -8,6 +8,7 @@ import { formatDateShort } from '@/lib/utils'
 import { formatUsd } from '@/lib/mentoring-format'
 import { MetricRow, Panel, PeopleList, StatTile, daysSince } from '@/components/admin/dashboard/DashboardParts'
 import { SendDigestButton } from '@/components/admin/dashboard/SendDigestButton'
+import { CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
 
 export const metadata = { title: 'Admin — Dashboard' }
 // Always current: this is a live view of the member database.
@@ -176,6 +177,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const otherCount = o.queues.coaching.length + o.queues.scholarships.length + o.queues.privacy.length + o.queues.deletions.length
 
   return (
+    <CollapsibleGroup storageKey="admin.dashboard">
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
@@ -204,6 +206,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
             ))}
           </nav>
           <SendDigestButton />
+          <CollapseAllControls label="Expand or collapse dashboard panels" />
         </div>
       </div>
 
@@ -316,6 +319,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
               rows={o.paperworkGaps.map((g) => ({
                 key: g.participantId,
                 primary: g.name || 'Participant',
+                href: g.memberId ? `/admin/members/${g.memberId}` : undefined,
                 secondary: `${g.eventTitle} · ${GAP_REASONS[g.reason] ?? g.reason}${g.detail ? ` · ${g.detail}` : ''}`,
                 right: g.since ? formatDateShort(g.since) : null,
               }))}
@@ -413,5 +417,6 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         {' '}<Link prefetch={false} href="/home" className="text-primary hover:underline">Return to the web app</Link>
       </p>
     </div>
+    </CollapsibleGroup>
   )
 }

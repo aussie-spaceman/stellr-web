@@ -15,10 +15,19 @@ const STATUS_CLS: Record<SurveyStatusKey, string> = {
 
 // The member's post-event surveys on their admin page: every invitation, where
 // it stands, and the answers for a submitted one (each view is logged).
-export function MemberSurveysPanel({ memberId, items }: { memberId: string; items: MemberSurveyItem[] }) {
+export function MemberSurveysPanel({
+  memberId,
+  items,
+  embedded = false,
+}: {
+  memberId: string
+  items: MemberSurveyItem[]
+  /** Inside a Collapsible that supplies the card and title. */
+  embedded?: boolean
+}) {
   return (
-    <div className="bg-white rounded-xl border border-line p-6">
-      <h2 className="text-base font-semibold text-ink mb-4">Surveys</h2>
+    <div className={embedded ? undefined : 'bg-white rounded-xl border border-line p-6'}>
+      {!embedded && <h2 className="text-base font-semibold text-ink mb-4">Surveys</h2>}
       {items.length === 0 ? (
         <p className="text-sm text-content-muted">No survey invitations yet.</p>
       ) : (

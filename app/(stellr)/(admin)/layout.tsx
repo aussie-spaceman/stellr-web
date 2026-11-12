@@ -7,6 +7,7 @@ import { requestNonce } from '@/lib/request-nonce'
 import { hasPortalAccess, isStellrAdmin } from '@/lib/authz'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
+import { RecordLinksProvider } from '@/components/admin/RecordLinks'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth()
@@ -34,7 +35,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </header>
 
           <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
-            {children}
+            {/* Names link to member and school records for admins only. */}
+            <RecordLinksProvider enabled={isAdmin}>{children}</RecordLinksProvider>
           </main>
 
           {/* Footer hidden on mobile — bottom tab bar serves that role */}

@@ -12,6 +12,7 @@ import { MemberSearchField, type PickedPerson } from '@/components/community/men
 import { ModalShell, ScheduleAllModal, ScheduleOneModal, EditSessionModal } from '@/components/community/mentoring/ScheduleModals'
 import { CohortResourceAttacher, type AttachedFileResource } from '@/components/community/mentoring/CohortResourceAttacher'
 import { formatSessionTime, TIMEZONES } from '@/lib/mentoring-format'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 type Tab = 'member' | 'schedule' | 'resources' | 'chat' | 'settings'
 
@@ -122,7 +123,7 @@ export function AdminManageWorkshop(props: {
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-[12px] font-semibold text-white">{(workshop.memberName ?? 'M').charAt(0).toUpperCase()}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink">{workshop.memberName}</p>
+                <p className="text-sm font-medium text-ink"><MemberLink memberId={workshop.memberId}>{workshop.memberName}</MemberLink></p>
                 <p className="text-[12.5px] text-content-muted">{workshop.memberEmail}</p>
               </div>
               <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${workshop.memberStatus === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>{workshop.memberStatus === 'active' ? 'Active' : 'Invited'}</span>

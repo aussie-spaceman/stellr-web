@@ -3,6 +3,8 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
+import { Collapsible } from '@stellr/web-ui'
+import { MemberLink, SchoolLink } from '@/components/admin/RecordLinks'
 import type { CompanyPlan, PlanningStudent, ProfileStatus } from '@/lib/team-profile/assign'
 import {
   FOCUS_AREAS,
@@ -148,21 +150,20 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
   if (plan.students.length === 0) return null
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-semibold text-brand-muted">Team profiles</h3>
-        <span className="text-xs text-brand-muted-soft">
-          {[
-            `${counts.submitted} submitted`,
-            counts.overridden ? `${counts.overridden} overridden` : null,
-            `${counts.sent} sent`,
-            `${counts.not_sent} not sent`,
-            `${counts.waiting} waiting on forms`,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
+    <Collapsible
+      id="team-profiles"
+      title="Team profiles"
+      summary={[
+        `${counts.submitted} submitted`,
+        counts.overridden ? `${counts.overridden} overridden` : null,
+        `${counts.sent} sent`,
+        `${counts.not_sent} not sent`,
+        `${counts.waiting} waiting on forms`,
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+      actions={
+        <>
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as typeof filter)}
@@ -188,17 +189,19 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
           >
             {busy === 'override_all' ? 'Overriding…' : 'Override all not submitted'}
           </button>
-        </div>
-      </div>
-
-      <p className="text-xs text-brand-muted-soft">
-        Team profiles go out automatically once a student’s permission form is complete. Auto-Assign places students who have
-        submitted one, and any you override; anyone else stays unassigned, with a suggested company. An overridden student is
-        balanced on age, school, experience, gender and ethnicity, and still gets the team profile emails. If they submit, the
-        next Auto-Assign uses their answers. <Lock className="inline h-3 w-3" aria-label="Locked" /> marks a
-        student placed by hand, whom Auto-Assign leaves alone.
-      </p>
-
+        </>
+      }
+      description={
+        <>
+          Team profiles go out automatically once a student’s permission form is complete. Auto-Assign places students who have
+          submitted one, and any you override; anyone else stays unassigned, with a suggested company. An overridden student is
+          balanced on age, school, experience, gender and ethnicity, and still gets the team profile emails. If they submit, the
+          next Auto-Assign uses their answers. <Lock className="inline h-3 w-3" aria-label="Locked" /> marks a
+          student placed by hand, whom Auto-Assign leaves alone.
+        </>
+      }
+      bodyClassName="space-y-4 p-4"
+    >
       {note && <p className={`text-xs ${note.ok ? 'text-green-700' : 'text-red-600'}`}>{note.text}</p>}
 
       <div className="overflow-x-auto">
@@ -218,11 +221,15 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
               <Fragment key={s.participantId}>
                 <tr className="border-b border-brand-border/60 align-top">
                   <td className="px-3 py-2.5">
-                    <div className="font-medium text-brand-blue-dark">{s.firstName} {s.lastName}</div>
+                    <div className="font-medium text-brand-blue-dark">
+                      <MemberLink memberId={s.memberId}>
+                        {s.firstName} {s.lastName}
+                      </MemberLink>
+                    </div>
                     <div className="text-xs text-brand-muted-soft">
-                      {[s.school, s.grade && (/^(?:grade_)?(\d+)$/.exec(s.grade) ? `Grade ${/(\d+)/.exec(s.grade)![1]}` : s.grade)]
-                        .filter(Boolean)
-                        .join(' · ')}
+                      {s.school && <SchoolLink schoolId={s.schoolId}>{s.school}</SchoolLink>}
+                      {s.school && s.grade && ' · '}
+                      {s.grade && (/^(?:grade_)?(\d+)$/.exec(s.grade) ? `Grade ${/(\d+)/.exec(s.grade)![1]}` : s.grade)}
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-brand-muted whitespace-nowrap">
@@ -279,7 +286,16 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
                         const mate = t.participantId ? plan.students.find((x) => x.participantId === t.participantId) : null
                         return (
                           <div key={i} className={mate ? 'text-brand-muted' : 'text-amber-700'}>
-                            {mate ? `${mate.firstName} ${mate.lastName}${mate.companyNumber !== null && mate.companyNumber === s.companyNumber ? ' ✓' : ''}` : `“${t.typed}” (no match)`}
+                            {mate ? (
+                              <>
+                                <MemberLink memberId={mate.memberId}>
+                                  {mate.firstName} {mate.lastName}
+                                </MemberLink>
+                                {mate.companyNumber !== null && mate.companyNumber === s.companyNumber ? ' ✓' : ''}
+                              </>
+                            ) : (
+                              `“${t.typed}” (no match)`
+                            )}
                           </div>
                         )
                       })
@@ -327,7 +343,7 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
           </tbody>
         </table>
       </div>
-    </div>
+    </Collapsible>
   )
 }
 

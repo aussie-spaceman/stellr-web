@@ -314,7 +314,7 @@ export async function deliver(
     .select('id')
     .single()
 
-  const results: { email: string; name: string; roles: string[]; status: 'sent' | 'failed'; error?: string }[] = []
+  const results: { email: string; name: string; memberId?: string | null; roles: string[]; status: 'sent' | 'failed'; error?: string }[] = []
   // deep review INT-1: persist progress after EACH recipient, not only at the
   // end. A send runs in a ≤60s function; if it is killed mid-loop the earlier
   // write means every address already tried is on the row, so a re-run
@@ -356,7 +356,7 @@ export async function deliver(
         attachments: opts.attachments,
         kind,
       })
-      results.push({ email: r.email, name: r.name, roles: r.roles, status: 'sent' })
+      results.push({ email: r.email, name: r.name, memberId: r.memberId ?? null, roles: r.roles, status: 'sent' })
     } catch (err) {
       // deep review INT-2 / PUB-4: a quota/429 means the SHARED Resend budget is
       // spent, not that this recipient failed. STOP now and do NOT record this
@@ -368,7 +368,7 @@ export async function deliver(
         stoppedForQuota = true
         break
       }
-      results.push({ email: r.email, name: r.name, roles: r.roles, status: 'failed', error: err instanceof Error ? err.message.slice(0, 300) : String(err) })
+      results.push({ email: r.email, name: r.name, memberId: r.memberId ?? null, roles: r.roles, status: 'failed', error: err instanceof Error ? err.message.slice(0, 300) : String(err) })
     }
     await persistProgress()
   }

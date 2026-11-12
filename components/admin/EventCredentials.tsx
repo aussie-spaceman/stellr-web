@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Collapsible } from '@stellr/web-ui'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import type { CredentialRow } from '@/lib/credentials-core'
 import { EVENT_AWARDS } from '@/lib/event-awards'
 
@@ -134,20 +136,23 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
     } finally { setBusy(null) }
   }
 
+  const issuedCount = data ? data.credentials.filter((c) => c.status === 'issued' && !c.tombstoned_at).length : 0
   const input = 'w-full rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-blue'
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-brand-muted">Participation credentials</h3>
-          <p className="text-xs text-brand-muted-soft mt-1">
-            A verifiable record per person with its own page, which they can make public and add to LinkedIn (16+).
-            {audience === 'students'
-              ? ' Award credentials are issued from Judging & awards above; every student credential for this event is listed here.'
-              : ' Mentors are the volunteers assigned on the Volunteers panel; theirs is the Certificate of Appreciation.'}
-          </p>
-        </div>
+    <Collapsible
+      id="credentials"
+      title="Participation credentials"
+      summary={data ? `${issuedCount} ${audience === 'mentors' ? 'mentor' : 'student'} credential${issuedCount === 1 ? '' : 's'} valid` : undefined}
+      description={
+        <>
+          A verifiable record per person with its own page, which they can make public and add to LinkedIn (16+).
+          {audience === 'students'
+            ? ' Award credentials are issued from Judging & awards above; every student credential for this event is listed here.'
+            : ' Mentors are the volunteers assigned on the Volunteers panel; theirs is the Certificate of Appreciation.'}
+        </>
+      }
+      actions={
         <div role="group" aria-label="Show credentials for" className="inline-flex rounded-lg border border-brand-border p-0.5">
           {(['students', 'mentors'] as const).map((a) => (
             <button key={a} type="button" onClick={() => switchTo(a)} aria-pressed={audience === a} disabled={busy !== null}
@@ -156,7 +161,9 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
             </button>
           ))}
         </div>
-      </div>
+      }
+    >
+      <div className="space-y-4">
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
 
@@ -231,7 +238,11 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
                 return (
                   <tr key={c.id}>
                     <td className="pr-4 py-2 text-brand-blue-dark whitespace-nowrap">
-                      {c.tombstoned_at ? <span className="italic text-brand-muted-soft">withdrawn</span> : c.recipient_name}
+                      {c.tombstoned_at ? (
+                        <span className="italic text-brand-muted-soft">withdrawn</span>
+                      ) : (
+                        <MemberLink memberId={c.member_id}>{c.recipient_name}</MemberLink>
+                      )}
                       {c.award && <span className="ml-2 text-xs text-brand-muted-soft">· {c.award}</span>}
                     </td>
                     <td className="pr-4 py-2 text-brand-muted text-xs whitespace-nowrap">{c.role_label ?? '—'}</td>
@@ -274,6 +285,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
           </table>
         </div>
       )}
-    </div>
+      </div>
+    </Collapsible>
   )
 }

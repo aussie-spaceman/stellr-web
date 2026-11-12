@@ -301,6 +301,58 @@ describe('membership-expiry under the opt-in', () => {
   })
 })
 
+// The route does not lean on guardCron alone to keep the purge off dev. If a second
+// membership-expiry value were ever added to DEV_CRON_OPT_INS, guardCron would let the
+// call through; the route must still run no step. And outside production the four-step
+// path declines even when guardCron answers null.
+describe('membership-expiry fails closed off production', () => {
+  const call = async () => {
+    const { GET } = await import('@/app/api/cron/membership-expiry/route')
+    const res = await (GET as unknown as (r: Request) => Promise<Response>)(req('membership-expiry'))
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+  }
+  const nothingRan = () => {
+    expect(h.startRun).not.toHaveBeenCalled()
+    expect(h.sweep).not.toHaveBeenCalled()
+    expect(h.expire).not.toHaveBeenCalled()
+    expect(h.purge).not.toHaveBeenCalled()
+    expect(h.managers).not.toHaveBeenCalled()
+  }
+
+  beforeEach(() => vi.resetModules())
+  afterEach(() => {
+    vi.doUnmock('@/lib/cron-dev-opt-in')
+    vi.doUnmock('@/lib/cron')
+    vi.resetModules()
+  })
+
+  it.each([
+    'membership-expiry:event-managers',
+    'membership-expiry:expire',
+    'membership-expiry:purge',
+  ])('a hypothetical second allowlisted value, %s, runs no step on hosted dev', async (value) => {
+    // As if the value had been added to DEV_CRON_OPT_INS: the helpers honour it.
+    vi.doMock('@/lib/cron-dev-opt-in', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@/lib/cron-dev-opt-in')>()),
+      devCronOptIns: () => [value],
+      devCronOptInFor: (job: string | null) => (job && (value === job || value.startsWith(`${job}:`)) ? value : null),
+    }))
+    hostedDev(value)
+    vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+    expect(await guard('membership-expiry')).toBeNull()
+    expect(await call()).toEqual({ status: 200, body: DECLINED })
+    nothingRan()
+  })
+
+  it('outside production, the four-step path declines even when guardCron answers null', async () => {
+    vi.doMock('@/lib/cron', () => ({ guardCron: () => null }))
+    hostedDev(undefined)
+    vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+    expect(await call()).toEqual({ status: 200, body: DECLINED })
+    nothingRan()
+  })
+})
+
 describe('email-outbox under the opt-in', () => {
   const call = async () => {
     const { GET } = await import('@/app/api/cron/email-outbox/route')

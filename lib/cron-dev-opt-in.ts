@@ -17,7 +17,16 @@
 // so that cron is declined exactly as before. That includes every integration
 // cron (Apollo, HubSpot, campaigns, alumni upgrades, background checks, Motion),
 // the per-tenant crons, and membership-expiry as a whole: its second step deletes
-// self-registered minors and their logins, and never runs on dev.
+// self-registered minors and their logins, and never runs on dev. The route holds
+// that on its own too: it declines any other membership-expiry value, and never
+// runs its four-step path outside production.
+//
+// Scheduled calls count as well as calls made by hand. Vercel's own cron calls carry
+// the real CRON_SECRET, so while the variable names a job its schedule runs too
+// (vercel.json): membership-expiry at 06:00 UTC daily runs the consent sweep, and
+// email-outbox drains at 00:05, 06:05, 12:05 and 18:05 UTC. A proof that ages a
+// consent row and then calls the sweep by hand should do both between two 06:00 UTC
+// runs, or read the scheduled run's cron_runs row as the result.
 //
 // A separate module from lib/cron.ts because several route tests replace that
 // module with a stub holding guardCron alone (see lib/cron-audit.ts).

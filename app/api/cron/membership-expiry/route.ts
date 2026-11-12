@@ -9,6 +9,7 @@ import { sweepEventManagers, type SweepResult } from '@/lib/event-manager'
 import { tenantGuardianConsentEnabled } from '@/lib/registration/eligibility'
 import { sweepTenantGuardianConsents } from '@/lib/registration/tenant-guardian-consent'
 import { devCronOptInFor } from '@/lib/cron-dev-opt-in'
+import { appEnv, isProd } from '@/lib/env'
 
 // GET /api/cron/membership-expiry — runs daily (see vercel.json). Four steps
 // (the third, Event Manager expiry, and the fourth, tenant guardian consents
@@ -25,12 +26,20 @@ import { devCronOptInFor } from '@/lib/cron-dev-opt-in'
 //
 // S5 B26a: on the hosted dev deployment, CRON_NON_PROD_JOBS=membership-expiry:tenant-consent
 // lets a call through guardCron for step 4 ALONE (lib/cron-dev-opt-in). Steps 1 to 3
-// never run there: step 2 deletes self-registered minors and their logins. In
-// production that variable is never read, and the route is unchanged.
+// never run there: step 2 deletes self-registered minors and their logins. The route
+// holds that itself rather than trusting guardCron: any other opt-in value declines,
+// and the four-step path declines outside production. In production that variable
+// is never read, and the route is unchanged.
 
 export const maxDuration = 60
 
 type CronRunHandle = Awaited<ReturnType<typeof startCronRun>>
+
+// The same 200 answer guardCron gives when it declines outside production. Built
+// here because route tests replace lib/cron with a stub holding guardCron alone.
+function declineOffProd() {
+  return NextResponse.json({ skipped: true, reason: `APP_ENV=${appEnv()}` })
+}
 
 // 4. S5 wave 6: tenant guardian consents. A consent-pending registration whose
 //    window closed is removed (lib/registration/tenant-guardian-consent), and a
@@ -55,8 +64,13 @@ export const GET = withCronAudit('membership-expiry', async (req: NextRequest) =
   const blocked = guardCron(req)
   if (blocked) return blocked
 
-  // S5 B26a: the dev opt-in runs step 4 and nothing else. Never true in production.
-  if (devCronOptInFor('membership-expiry') === 'membership-expiry:tenant-consent') {
+  // S5 B26a: the dev opt-in runs step 4 and nothing else. Never set in production.
+  // Fails closed: any other membership-expiry opt-in declines here, and outside
+  // production the four-step path below never runs, whatever guardCron let through.
+  // In production both checks are env reads only, and neither is ever true.
+  const optIn = devCronOptInFor('membership-expiry')
+  if (optIn !== null && optIn !== 'membership-expiry:tenant-consent') return declineOffProd()
+  if (optIn === 'membership-expiry:tenant-consent') {
     const db = supabaseServer()
     const run = await startCronRun(db, 'membership-expiry')
     const tenantGuardianConsent =
@@ -65,6 +79,9 @@ export const GET = withCronAudit('membership-expiry', async (req: NextRequest) =
     await run.finish(body)
     return NextResponse.json(body, { status: 'error' in tenantGuardianConsent ? 500 : 200 })
   }
+
+  // Steps 1 to 3 delete and expire real records: production only, with no exception.
+  if (!isProd()) return declineOffProd()
 
   // deep review INT-9: record the run so a failing downgrade engine is visible.
   const db = supabaseServer()

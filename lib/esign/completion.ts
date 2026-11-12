@@ -8,6 +8,7 @@ import { archiveEnvelope } from '@/lib/esign/archive'
 import { retainUntilOnCompletion } from '@/lib/esign/storage'
 import { AUTH_APP_URL, SITE_URL } from '@/lib/env'
 import { agreementCompletedEmail } from '@/lib/esign/emails'
+import { AGREEMENT_TITLE } from '@/lib/esign/native/plan'
 import { DOWNLOAD_LINK_TTL_SECONDS, downloadUrl, mintToken } from '@/lib/esign/native/tokens'
 import { isTenantRow, loadTenantSender, type EventSender } from '@/lib/event-emails/tenant-mail'
 
@@ -90,10 +91,25 @@ export async function onEnvelopeCompleted(
     }
   }
 
+  // S5 wave 6: a guardian's consent for another organiser's event. The
+  // consent-pending participant becomes registered and is told. Idempotent (only a
+  // pending consent moves); non-fatal, because the daily sweep settles a consent
+  // whose envelope completed. It is not a participation agreement, so it opens no
+  // team profile.
+  const tenantConsent = (envelope.envelope_type ?? '') === 'tenant_guardian_consent'
+  if (tenantConsent) {
+    try {
+      const { settleTenantGuardianConsentSigned } = await import('@/lib/registration/tenant-guardian-consent')
+      await settleTenantGuardianConsentSigned(db, envelope)
+    } catch (err) {
+      console.error('[esign-completion] tenant guardian consent settle failed:', err instanceof Error ? err.message : err)
+    }
+  }
+
   // A student's permission form is the gate for their team profile. Idempotent
   // (one profile per participant), so a replay is harmless; non-fatal, because
   // the daily team-profiles sweep sends anything this misses.
-  if (envelope.participant_id) {
+  if (envelope.participant_id && !tenantConsent) {
     try {
       const { dispatchTeamProfiles } = await import('@/lib/team-profile/store')
       await dispatchTeamProfiles(db, { participantIds: [envelope.participant_id] })
@@ -194,7 +210,7 @@ async function notifyNativeSigners(db: SupabaseClient, envelope: CompletedEnvelo
     const { token, expiresAt } = mintToken(r.id, 'download', r.token_version, DOWNLOAD_LINK_TTL_SECONDS)
     const content = agreementCompletedEmail({
       recipientName: r.name,
-      documentLabel: AGREEMENT_LABEL[type] ?? 'Agreement',
+      documentLabel: (envelope.envelope_type === 'tenant_guardian_consent' ? AGREEMENT_TITLE.tenantGuardianConsent : AGREEMENT_LABEL[type]) ?? 'Agreement',
       eventTitle: envelope.event_title,
       copyUrl: downloadUrl(SITE_URL, token),
       copyUntil: expiresAt.toISOString(),

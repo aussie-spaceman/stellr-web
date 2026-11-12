@@ -36,4 +36,11 @@ export const TENANT_DB_CALLERS: readonly string[] = [
   // paths.
   'test/integration/two-tenant/kit.ts',
   'test/integration/two-tenant/kit.int.test.ts',
+  // The first converted area (C18): events admin configuration ('events-config'),
+  // through readArea and writeArea. The routes reach it only through this module.
+  // Its unit test registers a stand-in driver. Its two-tenant test
+  // (test/integration/two-tenant/events-config.int.test.ts) reaches tenantDb only
+  // through the kit and this module, so it is not listed itself.
+  'lib/events/admin-config.ts',
+  'lib/events/admin-config.test.ts',
 ]

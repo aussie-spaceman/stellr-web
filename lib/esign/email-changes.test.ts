@@ -81,6 +81,24 @@ describe('an organiser fixes a bounced address', () => {
     expect(correctAgreementRecipient).not.toHaveBeenCalled()
   })
 
+  it('S5 A8: a tenant’s group whose teacher address is the member’s answers as a missing group, and nothing is corrected', async () => {
+    const fake = setup()
+    fake.table('registrations')[0].tenant_id = '11111111-1111-4111-8111-111111111111'
+    fake.table('registrations')[0].teacher_member_id = null
+    expect(await correct(fake, TEACHER, 'ash@home.test')).toEqual({ ok: false, status: 404, code: 'NOT_FOUND', error: 'Team not found' })
+    expect(await organiserView(fake.client, TEACHER, 'reg-1', 'p-1')).toMatchObject({ ok: false, status: 404, error: 'Team not found' })
+    expect(await organiserDecide(fake.client, { member: TEACHER, registrationId: 'reg-1', changeId: 'c-1', decision: 'approve' })).toMatchObject({ ok: false, status: 404, error: 'Team not found' })
+    expect(await correctFromRosterEdit(fake.client, {
+      member: TEACHER, registrationId: 'reg-1', participantId: 'p-1',
+      before: { email: 'olive@school.test', emergency_contact_email: 'ash@dead.test' },
+      after: { email: 'olive@school.test', emergency_contact_email: 'ash@home.test' },
+    })).toBeNull()
+    expect(correctAgreementRecipient).not.toHaveBeenCalled()
+    // Stellr's own row, stamped or not yet backfilled, still opens.
+    fake.table('registrations')[0].tenant_id = null
+    expect((await correct(fake, TEACHER, 'ash@home.test')).ok).toBe(true)
+  })
+
   it('only a bounced signer: a working address is staff’s to change', async () => {
     expect(await correct(setup({ guardianStatus: 'sent' }), TEACHER, 'ash@home.test')).toMatchObject({ ok: false, code: 'NOT_BOUNCED' })
   })

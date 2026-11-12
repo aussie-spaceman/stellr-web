@@ -10,6 +10,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
   settings: { check_in_token: 'tok', check_in_open: true } as Record<string, unknown> | null,
   regs: [] as unknown[],
+  // What the participants update answers (S5 wave 6: the consent trigger's refusal).
+  updateError: null as { code: string; message: string } | null,
 }))
 
 vi.mock('@/lib/supabase', () => ({
@@ -23,7 +25,7 @@ vi.mock('@/lib/supabase', () => ({
         update: () => chain,
         maybeSingle: async () => ({ data: table === 'event_settings' ? h.settings : null, error: null }),
         then: (onF: (v: unknown) => unknown) =>
-          Promise.resolve({ data: table === 'registrations' ? h.regs : null, error: null }).then(onF),
+          Promise.resolve({ data: table === 'registrations' ? h.regs : null, error: table === 'participants' ? h.updateError : null }).then(onF),
       }
       return chain
     },
@@ -61,6 +63,31 @@ async function bodyAndStatus(fields: Record<string, unknown>) {
 beforeEach(() => {
   h.settings = { check_in_token: 'tok', check_in_open: true }
   h.regs = []
+  h.updateError = null
+})
+
+// S5 wave 6: a tenant event's 14-17-year-old whose guardian has not signed the
+// consent form. The database refuses the write (pgTAP:
+// supabase/tests/database/tenant_guardian_consent.test.sql); this pins what the
+// door says when it does, by the error PostgREST returns for that trigger.
+describe('POST /api/check-in — guardian consent pending', () => {
+  it('answers 403 guardian_consent_pending, not a server error, and sets no check-in cookie', async () => {
+    h.regs = [{ id: 'r1', participants: [participant()] }]
+    h.updateError = { code: '23514', message: 'guardian_consent_pending' }
+    const res = await post({ email: 'parent@example.com' })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({
+      code: 'guardian_consent_pending',
+      error: "You can't check in yet: your parent or guardian hasn't signed the consent form. Please see the registration desk.",
+    })
+    expect(res.headers.get('set-cookie')).toBeNull()
+  })
+
+  it('any other failed write is still the generic 500', async () => {
+    h.regs = [{ id: 'r1', participants: [participant()] }]
+    h.updateError = { code: '23514', message: 'participants_check_in_method_check' }
+    expect((await post({ email: 'parent@example.com' })).status).toBe(500)
+  })
 })
 
 describe('POST /api/check-in — REG-8 presence oracle', () => {

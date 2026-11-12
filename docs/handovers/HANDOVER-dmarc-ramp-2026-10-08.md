@@ -67,7 +67,8 @@ run on the default model, which was Sonnet 5.5 in the test.
   ran. The first real proof is the 14 Oct run.
 - **HubSpot alignment is unproven.** HubSpot did not appear as a source in the
   Postmark digests we saw, and the step 1 HubSpot caveat was never read in full.
-  Read it at <https://claude.ai/code/session_013jSxua2FjiEzoraCyFB2e2>.
+  It is in the step 1 Claude Code session on the owner's previous Claude account,
+  which only the owner can open.
 - The 2% unaligned in the 27 Sept–4 Oct digest was not broken down by source. The
   week before, it was `cloud-sec-av.com` (a forwarding gateway).
 - The 22 Oct and 5 Nov steps happen only if David edits GoDaddy himself.

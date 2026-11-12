@@ -6,7 +6,7 @@ import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { withAudit } from '@/lib/audit/route'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
 import { describeDispatchOutcome } from '@/lib/docusign-status'
-import { loadRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/docusign-reissue — the roster's "Reissue
 // DocuSign" action (admins + assigned event managers).
@@ -33,6 +33,8 @@ async function reissueAgreement(req: Request, { params }: Ctx) {
   noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
+  const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
+  if (foreign) return foreign
 
   const body = await req.json().catch(() => null)
   const participantId = typeof body?.participantId === 'string' ? body.participantId : null

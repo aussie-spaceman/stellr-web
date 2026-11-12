@@ -37,13 +37,22 @@ runs:
     # from the Ubuntu mirror, which usually takes 10 s, but twice on 4 Nov 2026
     # ran at ~200 kB/s and took 9-10 minutes. apt only moves to its next mirror on
     # a stall, so a slow connection never fails over. Keeping the packages means a
-    # normal run downloads almost nothing. apt checks every package against the
-    # signed index, so a restored file cannot install anything apt would not
-    # accept. The key changes weekly, seeded from the previous week, so Ubuntu
-    # updates do not pile up as repeat downloads.
+    # normal run downloads almost nothing. The key changes weekly, seeded from the
+    # previous week, so Ubuntu updates do not pile up as repeat downloads.
+    #
+    # The cache also keeps the package lists the debs were installed against
+    # (lists/), so a run can install with no network at all: on 11 Nov 2026 the
+    # runners could not resolve the Ubuntu mirrors for hours, and a restored cache
+    # did not help because `install-deps` always runs `apt-get update` first. The
+    # lists are checked against Ubuntu's signing key before use, and apt checks
+    # every deb against them, so a restored file cannot install anything apt
+    # would not accept from the mirror. install-deps.sh has the detail.
+    #
+    # "-lists" marks entries that carry lists/. restore-keys still matches the
+    # entries from before it, which restore as "earlier" and refresh online.
     - id: apt-week
       shell: bash
-      run: echo "value=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      run: echo "value=$(date -u +%G-W%V)-lists" >> "$GITHUB_OUTPUT"
 
     - id: apt
       uses: actions/cache/restore@v6
@@ -52,37 +61,30 @@ runs:
         key: playwright-apt-${{ steps.key.outputs.value }}-${{ steps.apt-week.outputs.value }}
         restore-keys: playwright-apt-${{ steps.key.outputs.value }}-
 
-    # A package a security update has replaced is still downloaded, so the mirror
-    # can stall this. A stalled try is stopped and retried: apt keeps what it has
-    # fetched, and a fresh connection often lands somewhere faster. The last try
-    # has no limit of its own but the job's timeout, and failing fails the job.
-    - shell: bash
+    # exact: this week's entry; install offline, falling back to the mirror.
+    # earlier: a previous week's; refresh from the mirror, falling back to offline.
+    # none: from the mirror.
+    - id: install
+      shell: bash
       env:
         BROWSERS: ${{ inputs.browsers }}
+        RESTORED: ${{ steps.apt.outputs.cache-hit == 'true' && 'exact' || steps.apt.outputs.cache-matched-key != '' && 'earlier' || 'none' }}
       run: |
         archives="$HOME/apt-archives"
         sudo mkdir -p "$archives/partial"
         printf 'Dir::Cache::Archives "%s/";\nDPkg::Lock::Timeout "60";\n' "$archives" \
           | sudo tee /etc/apt/apt.conf.d/99-playwright-cache > /dev/null
-        installed=false
-        for attempt in 1 2; do
-          if timeout -k 10 180 npx playwright install-deps $BROWSERS; then
-            installed=true
-            break
-          fi
-          echo "::warning::Installing browser libraries stopped after 3 minutes (try $attempt). The apt mirror is probably slow; retrying."
-          sudo dpkg --configure -a || true
-        done
-        [ "$installed" = true ] || npx playwright install-deps $BROWSERS
-        # Drop superseded versions, so the cache does not grow.
-        sudo apt-get autoclean -qq || true
+        status=0
+        ARCHIVES="$archives" "$GITHUB_ACTION_PATH/install-deps.sh" || status=$?
         # apt ran as root. actions/cache saves these as the runner user.
         sudo rm -f "$archives/lock"
         sudo chown -R "$USER" "$archives"
+        exit "$status"
 
     # Saved here, not at the end of the job, so a failing test does not stop the
-    # next run benefiting.
-    - if: steps.apt.outputs.cache-hit != 'true'
+    # next run benefiting. Only after an online install: an offline one changed
+    # nothing, and saving it would stop the week's refresh.
+    - if: steps.apt.outputs.cache-hit != 'true' && steps.install.outputs.source == 'online'
       uses: actions/cache/save@v6
       with:
         path: ~/apt-archives

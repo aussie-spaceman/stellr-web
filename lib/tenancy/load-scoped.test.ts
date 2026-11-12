@@ -12,6 +12,7 @@ import {
   loadScoped,
   loadScopedMode,
   planScope,
+  refuseUnlessStellrEvent,
   registryKey,
   scopedQuery,
   stripScopeEmbed,
@@ -922,5 +923,51 @@ describe('scopedQuery', () => {
     const row = { id: 2 }
     expect(stripScopeEmbed(row)).toBe(row)
     expect(stripScopeEmbed(null)).toBeNull()
+  })
+})
+
+describe('refuseUnlessStellrEvent', () => {
+  const OTHER = '11111111-1111-4111-8111-111111111111'
+  const eventsDb = (answer: () => Promise<{ data: unknown; error: unknown }>) => {
+    const reads: [string, string, unknown][] = []
+    const db = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: (col: string, value: unknown) => {
+            reads.push([table, col, value])
+            return { maybeSingle: answer }
+          },
+        }),
+      }),
+    }
+    return { db: db as unknown as Parameters<typeof refuseUnlessStellrEvent>[0], reads }
+  }
+
+  it("is null for Stellr's mirrored event, and for one the mirror does not hold, reading the mirror by slug", async () => {
+    for (const data of [{ tenant_id: STELLR_TENANT_ID }, { tenant_id: null }, null]) {
+      const { db, reads } = eventsDb(async () => ({ data, error: null }))
+      expect(await refuseUnlessStellrEvent(db, 'nevada', 'test')).toBeNull()
+      expect(reads).toEqual([['events', 'slug', 'nevada']])
+    }
+  })
+
+  it("answers another tenant's event as a missing one", async () => {
+    const { db } = eventsDb(async () => ({ data: { tenant_id: OTHER }, error: null }))
+    const res = await refuseUnlessStellrEvent(db, 'nevada', 'test')
+    expect(res?.status).toBe(404)
+    expect(await res?.json()).toEqual({ error: 'Not found' })
+  })
+
+  it('fails closed with a retryable 503 when the owner read errors or throws', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (const answer of [async () => ({ data: null, error: { message: 'down' } }), async () => Promise.reject(new Error('socket'))]) {
+        const res = await refuseUnlessStellrEvent(eventsDb(answer).db, 'nevada', 'test')
+        expect(res?.status).toBe(503)
+        expect(res?.headers.get('Retry-After')).toBeTruthy()
+      }
+    } finally {
+      err.mockRestore()
+    }
   })
 })

@@ -559,7 +559,7 @@
     },
     "app/api/admin/events/[slug]/companies/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: event_companies, event_settings, participants, team_profiles"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/credentials/route.ts": {
       "class": "convert",
@@ -611,11 +611,11 @@
     },
     "app/api/admin/events/[slug]/merch/commit/route.ts": {
       "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/offerings/route.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: event_store_offerings, store_products"
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
     "app/api/admin/events/[slug]/participants/[pid]/guardian/route.ts": {
       "class": "convert",
@@ -1435,7 +1435,7 @@
     },
     "lib/deletion/execute.ts": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: member_pending_consent, participants, registrations"
+      "reason": "auto: touches tenant or event-scoped tables; tables: member_pending_consent, participants, registrations, tenant_guardian_consents"
     },
     "lib/deletion/external.ts": {
       "class": "convert",

@@ -11,16 +11,47 @@ import { removeEventParticipation } from '@/lib/event-participation-sync'
 import { stripeClient } from '@/lib/stripe'
 import { executeRefund, type RefundResult } from '@/lib/refunds/execute'
 import { applyRosterChange, describeRemoval } from '@/lib/group-billing'
-import { checkRegistrationAge, isRegistrationMinor } from '@/lib/registration-eligibility'
+import { isRegistrationMinor } from '@/lib/registration-eligibility'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { DETAILS_MEMBER_MANAGED, isDetailsHiddenFrom } from '@/lib/team-linked-details'
 import { correctFromRosterEdit } from '@/lib/esign/email-changes'
+import { withAudit } from '@/lib/audit/route'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { rowTenant } from '@/lib/registration/event-context'
+import { assertRegistrable } from '@/lib/registration/eligibility'
+import {
+  isEligibilityRefusal,
+  resolveRosterContext,
+  rosterPaymentsRefusal,
+  rosterRefusal,
+  rosterTakesMoney,
+  TENANT_MONEY_COLUMNS,
+  withoutTenantId,
+} from '@/lib/registration/roster-context'
+import { teamAudit, TEAM_PARTICIPANT_REMOVE_AUDIT, TEAM_PARTICIPANT_UPDATE_AUDIT } from '@/lib/registration/team-audit'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
 export const maxDuration = 300
 
+// S5 A8. Both handlers act only on a group of this host's tenant (Stellr on Stellr's
+// hosts): another tenant's group answers as missing. Both are audited behind
+// PLATFORM_AUDIT_ENABLED, on the group's tenant's chain, with the registration as the
+// target; who was edited or removed stays out of the event.
+//
+// An edit never writes tenant_id or registration_id (neither is in `allowed`). An
+// edited date of birth goes through assertRegistrable with the group's context: for
+// Stellr's group exactly today's check, for another tenant's that tenant's rules and
+// no minor. If the database's eligibility check still refuses it, the answer says so
+// rather than reporting a failed save.
+
+/** The answer a team route gives for a group of another tenant: the missing group's. */
+const teamNotFound = () => NextResponse.json({ error: 'Team not found' }, { status: 404 })
+
 // PATCH /api/members/teams/[id]/participants/[pid]
-export async function PATCH(
+export const PATCH = withAudit(TEAM_PARTICIPANT_UPDATE_AUDIT, updateParticipant)
+
+async function updateParticipant(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; pid: string }> }
 ) {
@@ -42,7 +73,7 @@ export async function PATCH(
       .eq('is_active', true)
       .maybeSingle(),
     db.from('registrations')
-      .select('id, teacher_member_id, teacher_email, teacher_poc_email')
+      .select('id, teacher_member_id, teacher_email, teacher_poc_email, event_slug, tenant_id')
       .eq('id', registrationId)
       .eq('type', 'group')
       .maybeSingle(),
@@ -50,12 +81,14 @@ export async function PATCH(
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  if (rowTenant(registration.tenant_id) !== (await requestTenant()).tenantId) return teamNotFound()
 
   // Only an owner of this registration can edit participants — the registrant
   // (teacher or student manager) or the nominated teacher POC (see lib/team-access).
   if (!ownsTeam(member, registration)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  teamAudit(req, { registrationId, tenantId: rowTenant(registration.tenant_id), userId })
 
   const { data: target } = await db
     .from('participants')
@@ -95,11 +128,20 @@ export async function PATCH(
   // S0 (2 Nov 2026): an edited date of birth gets the same check as one added
   // (POST, and the registration routes): a cleared, unreadable or future date
   // is refused, not stored for the agreement and consent rules to misread.
+  // S5 A8: through assertRegistrable with the group's context (no read for Stellr's).
+  const tenantGroup = rowTenant(registration.tenant_id) !== STELLR_TENANT_ID
   if ('date_of_birth' in updates) {
-    const ageCheck = checkRegistrationAge(updates.date_of_birth, {
+    const roster = await resolveRosterContext(db, registration, 'teams/participants/pid')
+    if (!roster.ok) {
+      const refused = rosterRefusal(roster)
+      return NextResponse.json(refused.body, { status: refused.status })
+    }
+    const ageCheck = assertRegistrable(updates.date_of_birth, roster.eligibility, {
       name: [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || 'this person',
     })
-    if (!ageCheck.ok) return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: 400 })
+    if (!ageCheck.ok) {
+      return NextResponse.json({ code: ageCheck.reason, error: ageCheck.error }, { status: ageCheck.reason === 'eligibility_unavailable' ? 503 : 400 })
+    }
     updates.date_of_birth = ageCheck.dateOfBirth
   }
 
@@ -133,7 +175,15 @@ export async function PATCH(
     .single()
 
   if (error) {
-    console.error('[teams/participants/pid] Update error:', error)
+    // S5 A8: on another tenant's group, the database's eligibility check refusing the
+    // date answers as the eligibility check does. Stellr's answer is unchanged.
+    if (tenantGroup && isEligibilityRefusal(error)) {
+      console.warn('[teams/participants/pid] the participants eligibility check refused an edit')
+      const refused = rosterRefusal({ ok: false, reason: 'rules_unavailable', detail: 'tenant_mismatch' })
+      return NextResponse.json(refused.body, { status: refused.status })
+    }
+    // The code and message only: a check or unique violation's details carry the row.
+    console.error('[teams/participants/pid] Update error:', (error as { code?: string }).code, error.message)
     return NextResponse.json({ error: 'Failed to update participant' }, { status: 500 })
   }
   // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
@@ -141,7 +191,8 @@ export async function PATCH(
 
   // A bounced signer's address edited here also fixes the live consent form.
   let consentMessage: string | null = null
-  if (target && ('email' in updates || 'emergency_contact_email' in updates)) {
+  // Stellr's consent forms only: another tenant's group has none of them.
+  if (!tenantGroup && target && ('email' in updates || 'emergency_contact_email' in updates)) {
     const before = target as { email: string | null; emergency_contact_email: string | null }
     const after = participant as { email: string | null; emergency_contact_email: string | null }
     consentMessage = await correctFromRosterEdit(db, {
@@ -156,13 +207,15 @@ export async function PATCH(
     })
   }
 
-  return NextResponse.json({ participant, consent: consentMessage ? { message: consentMessage } : undefined })
+  return NextResponse.json({ participant: withoutTenantId(participant as Record<string, unknown>), consent: consentMessage ? { message: consentMessage } : undefined })
 }
 
 // DELETE /api/members/teams/[id]/participants/[pid]
 // Teacher can remove any participant; student can only remove themselves.
-export async function DELETE(
-  _req: NextRequest,
+export const DELETE = withAudit(TEAM_PARTICIPANT_REMOVE_AUDIT, removeParticipant)
+
+async function removeParticipant(
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; pid: string }> }
 ) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -188,7 +241,7 @@ export async function DELETE(
       .eq('registration_id', registrationId)
       .maybeSingle(),
     db.from('registrations')
-      .select('id, teacher_member_id, teacher_first_name, teacher_email, teacher_poc_email, event_title, event_slug')
+      .select(`id, teacher_member_id, teacher_first_name, teacher_email, teacher_poc_email, event_title, event_slug, tenant_id, ${TENANT_MONEY_COLUMNS}`)
       .eq('id', registrationId)
       .maybeSingle(),
   ])
@@ -196,6 +249,12 @@ export async function DELETE(
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!participant) return NextResponse.json({ error: 'Participant not found' }, { status: 404 })
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+  // S5 A8: another tenant's group answers as a missing participant, before anything
+  // about it, or about whether the caller may act on it, is told.
+  if (rowTenant(registration.tenant_id) !== (await requestTenant()).tenantId) {
+    return NextResponse.json({ error: 'Participant not found' }, { status: 404 })
+  }
+  const tenantGroup = rowTenant(registration.tenant_id) !== STELLR_TENANT_ID
 
   // An owner (registrant — teacher or student manager — or teacher POC) can remove
   // anyone; a participant can only remove themselves.
@@ -204,6 +263,14 @@ export async function DELETE(
 
   if (!isManager && !isSelf) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  teamAudit(req, { registrationId, tenantId: rowTenant(registration.tenant_id), userId })
+  // S5 A8: nothing is refunded or re-billed for another tenant until S9. A group of
+  // theirs that shows any sign of money is refused here, before the refund reads
+  // Stripe; any other is removed with no Stripe call at all.
+  if (tenantGroup && rosterTakesMoney(registration)) {
+    const refused = rosterPaymentsRefusal()
+    return NextResponse.json(refused.body, { status: refused.status })
   }
 
   // Managers cannot delete student accounts — only remove from team
@@ -245,7 +312,9 @@ export async function DELETE(
   // seat they paid themselves. executeRefund never throws on a Stripe failure.
   let refund: RefundResult | null = null
   try {
-    refund = await executeRefund(pid, 'cash', member.id, isManager ? 'Removed by the group organiser' : 'Left the team', { actorType: 'member' })
+    if (!tenantGroup) {
+      refund = await executeRefund(pid, 'cash', member.id, isManager ? 'Removed by the group organiser' : 'Left the team', { actorType: 'member' })
+    }
   } catch (err) {
     console.error('[teams/participants/pid] refund error:', err)
   }
@@ -263,7 +332,7 @@ export async function DELETE(
 
   // The group now has one fewer place: an unpaid invoice is revised and
   // re-sent (lib/group-billing.ts). Never throws; a failure alerts staff.
-  const billing = await applyRosterChange(db, stripeClient(), {
+  const billing = tenantGroup ? null : await applyRosterChange(db, stripeClient(), {
     registrationId,
     change: { kind: 'removed' },
     eventRole: participant.event_role,
@@ -279,6 +348,8 @@ export async function DELETE(
   // registration for the event re-grants it from the cohort roster. Revoke the
   // inherited Space access now. No-ops if this member still holds another active
   // participant on the event (the row is already deleted, so the guard is clean).
+  // S5 A8: on any tenant's group. A8's tenant rows carry no member_id, but a row
+  // written before A8 may, and whatever it was granted is revoked with it.
   if (participant.member_id && registration.event_slug) {
     await removeEventParticipation(db, {
       memberId: participant.member_id,
@@ -287,7 +358,8 @@ export async function DELETE(
   }
 
   // Notify the organiser if a participant removed themselves
-  if (isSelf && !isManager && registration.teacher_email && registration.teacher_first_name) {
+  // Sent as Stellr, so Stellr's groups only.
+  if (!tenantGroup && isSelf && !isManager && registration.teacher_email && registration.teacher_first_name) {
     const tmpl = studentLeftTeamEmail({
       teacherFirstName: registration.teacher_first_name,
       studentFirstName: participant.first_name,

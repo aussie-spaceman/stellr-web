@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
+import { SHEET_SYNC_COLUMNS, syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
 
 // A roster change waits out the group invoice quiet period after responding
 // (lib/group-billing.ts), and that wait has to fit inside the function.
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, spreadsheet_id, school_name, event_slug, event_title, school_address_state')
+    .select(SHEET_SYNC_COLUMNS)
     .eq('id', channel.registration_id)
     .maybeSingle()
 
@@ -52,15 +52,9 @@ export async function POST(req: NextRequest) {
 
   try {
     // Same upsert + DocuSign dispatch + individual-payment notices as the manual
-    // "Sync From Sheet" button.
-    const { created, updated, paymentLinksSent } = await syncParticipantsFromSheet(db, {
-      id: registration.id,
-      spreadsheet_id: registration.spreadsheet_id,
-      school_name: registration.school_name,
-      event_slug: registration.event_slug,
-      event_title: registration.event_title,
-      school_address_state: registration.school_address_state,
-    })
+    // "Sync From Sheet" button. S5 A8: the registration's tenant decides whose rules
+    // apply; a refusal (SheetSyncRefused) is logged below like any other failure.
+    const { created, updated, paymentLinksSent } = await syncParticipantsFromSheet(db, registration)
     console.log(`[webhook/google-sheets] Synced registration ${registration.id} (${created} created, ${updated} updated, ${paymentLinksSent} payment notices sent)`)
   } catch (err) {
     console.error('[webhook/google-sheets] Sync error:', err)

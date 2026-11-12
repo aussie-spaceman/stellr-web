@@ -10,16 +10,42 @@ import { isMinor } from '@/lib/docusign'
 import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/individual-payment'
 import { applyRosterChange } from '@/lib/group-billing'
 import { stripeClient } from '@/lib/stripe'
-import { checkRegistrationAge } from '@/lib/registration-eligibility'
 import { shadowSyncFields } from '@/lib/field-crypto-shadow'
+import { assertRegistrable } from '@/lib/registration/eligibility'
+import {
+  isEligibilityRefusal,
+  resolveRosterContext,
+  rosterPaymentsRefusal,
+  rosterRefusal,
+  rosterTakesMoney,
+  TENANT_MONEY_COLUMNS,
+  type RosterMoneyColumns,
+} from '@/lib/registration/roster-context'
 
-export interface SheetSyncRegistration {
+export interface SheetSyncRegistration extends RosterMoneyColumns {
   id: string
   spreadsheet_id: string
   school_name: string | null
   event_slug: string
   event_title: string
   school_address_state?: string | null
+  /** The registration's tenant. NULL (or absent) is a Stellr row the backfill has not reached. */
+  tenant_id?: string | null
+}
+
+/** The registration columns a caller selects for the sync. */
+export const SHEET_SYNC_COLUMNS = `id, spreadsheet_id, school_name, event_slug, event_title, school_address_state, tenant_id, ${TENANT_MONEY_COLUMNS}`
+
+/**
+ * The sync did not run, and nothing was read from the sheet or written (S5 A8): a read
+ * about the registration's tenant failed, its rules can't be worked out, or it is
+ * another tenant's group that takes money. `status` and `body` are the answer.
+ */
+export class SheetSyncRefused extends Error {
+  constructor(readonly status: number, readonly body: Record<string, unknown>) {
+    super(typeof body.error === 'string' ? body.error : 'sheet sync refused')
+    this.name = 'SheetSyncRefused'
+  }
 }
 
 export interface SheetSyncResult {
@@ -63,19 +89,40 @@ function roleFromType(type: string, dateOfBirth: string | null): { eventRole: st
 // them unbilled and invisible to the webhook's "is the group paid?" check.
 // Shared by the manual "Sync From Sheet" button and the Google-Drive change
 // webhook so the two never drift. Non-fatal throughout.
+//
+// S5 A8. The registration's tenant decides whose rules apply
+// (lib/registration/roster-context); for Stellr's group nothing is read for it and
+// every row is judged as before. Another tenant's group is judged by that tenant's
+// rules with no minor admitted, gets only participant rows (no member row, school
+// link, event history, agreement or payment link), and is refused with
+// SheetSyncRefused before the sheet is read if it takes money. Every inserted row
+// carries tenant_id. A row the database's eligibility check refuses (SQLSTATE 23514),
+// on insert or on either update, is left out and reported in skippedForDateOfBirth;
+// it is never taken for the duplicate race (23505) and gets no paperwork or billing.
 export async function syncParticipantsFromSheet(
   db: SupabaseClient,
   registration: SheetSyncRegistration,
 ): Promise<SheetSyncResult> {
+  const roster = await resolveRosterContext(db, registration, 'sheet-sync')
+  if (!roster.ok) {
+    const refused = rosterRefusal(roster)
+    throw new SheetSyncRefused(refused.status, refused.body)
+  }
+  if (!roster.isPlatformOwner && rosterTakesMoney(registration)) {
+    const refused = rosterPaymentsRefusal()
+    throw new SheetSyncRefused(refused.status, refused.body)
+  }
   // Stellr signing invitations go out together at the end, so a parent of
   // siblings on the sheet gets one email with a link for each child.
-  return batchInvites(db, () => syncFromSheet(db, registration))
+  return batchInvites(db, () => syncFromSheet(db, registration, roster))
 }
 
 async function syncFromSheet(
   db: SupabaseClient,
   registration: SheetSyncRegistration,
+  roster: Extract<Awaited<ReturnType<typeof resolveRosterContext>>, { ok: true }>,
 ): Promise<SheetSyncResult> {
+  const tenantGroup = !roster.isPlatformOwner
   const sheetRows = await readSheetParticipants(registration.spreadsheet_id)
 
   let created = 0
@@ -108,19 +155,25 @@ async function syncFromSheet(
     // impossible date (a typo'd 2030) used to reach the member row and the
     // agreement, and the person was then swept for a login. The row is left out
     // and reported, not the whole sync; it syncs once the date is fixed.
-    const ageCheck = checkRegistrationAge(row.date_of_birth)
+    // S5 A8: assertRegistrable with the group's context. For Stellr's group that is
+    // the call above (no event date, no floor); for another tenant's, its rules, and
+    // no minor, since a sheet can't collect a guardian's consent.
+    const skipRow = () => skippedForDateOfBirth.push([row.first_name, row.last_name].filter(Boolean).join(' ').trim() || email)
+    const ageCheck = assertRegistrable(row.date_of_birth, roster.eligibility)
     if (!ageCheck.ok) {
-      skippedForDateOfBirth.push([row.first_name, row.last_name].filter(Boolean).join(' ').trim() || email)
+      skipRow()
       continue
     }
 
+    // A Stellr Member ID means nothing on another tenant's roster.
+    const sheetMembershipId = tenantGroup ? null : row.membership_id
     const { data: existing } = await db
       .from('participants')
       .select('id, details_from_member')
       .eq('registration_id', registration.id)
       .or(
-        row.membership_id
-          ? `membership_id.eq.${row.membership_id},email.eq.${email}`
+        sheetMembershipId
+          ? `membership_id.eq.${sheetMembershipId},email.eq.${email}`
           : `email.eq.${email}`
       )
       .maybeSingle()
@@ -141,7 +194,8 @@ async function syncFromSheet(
     // typed adult date used to overwrite a child's record, and the COPPA guard
     // reads the member row's date of birth first. The row's values still reach
     // the participant row below.
-    const memberId = await upsertMember(db, {
+    // S5 A8: another tenant's participant gets no Stellr member row.
+    const memberId = tenantGroup ? null : await upsertMember(db, {
       email,
       school_email: schoolEmail,
       first_name: row.first_name,
@@ -187,15 +241,27 @@ async function syncFromSheet(
 
     let participantId: string | null = null
     if (existing) {
-      await db.from('participants').update(payload).eq('id', existing.id)
+      const { error: updErr } = await db.from('participants').update(payload).eq('id', existing.id)
+      // S5 A8: the eligibility check refused the edited date. Left out, as above.
+      if (isEligibilityRefusal(updErr)) {
+        skipRow()
+        continue
+      }
+      if (updErr) console.error('[sheet-sync] participant update failed:', updErr.message)
       participantId = existing.id
       updated++
     } else {
       const { data: inserted, error: insErr } = await db
         .from('participants')
-        .insert({ ...payload, registration_id: registration.id })
+        .insert({ ...payload, registration_id: registration.id, tenant_id: roster.tenantId })
         .select('id')
         .single()
+      // S5 A8: the eligibility check refused the row. That is not the duplicate race
+      // below, so the row is left out and reported, with no re-read.
+      if (isEligibilityRefusal(insErr)) {
+        skipRow()
+        continue
+      }
       if (insErr) {
         // deep review INT-4: two overlapping Drive pushes run two full syncs at
         // once; both read "no participant" and both try to insert the same
@@ -211,7 +277,12 @@ async function syncFromSheet(
           .maybeSingle()
         if (raced?.details_from_member === true) continue
         if (raced?.id) {
-          await db.from('participants').update(payload).eq('id', raced.id)
+          const { error: racedErr } = await db.from('participants').update(payload).eq('id', raced.id)
+          if (isEligibilityRefusal(racedErr)) {
+            skipRow()
+            continue
+          }
+          if (racedErr) console.error('[sheet-sync] participant update failed:', racedErr.message)
           participantId = raced.id
           updated++
         } else {
@@ -231,7 +302,8 @@ async function syncFromSheet(
     // already has an envelope for this participant or valid signed paperwork on
     // file, so a re-sync never re-sends — that dedupe used to be duplicated here
     // and now lives inside dispatchAgreement, where every caller gets it.
-    if (participantId) {
+    // S5 A8: Stellr's paperwork and billing, so Stellr's groups only.
+    if (participantId && !tenantGroup) {
       await dispatchAgreement(db, {
         participantId,
         memberId,
@@ -262,6 +334,14 @@ async function syncFromSheet(
         lastName:  row.last_name,
       })
     }
+  }
+
+  // S5 A8: another tenant's rows are written and reported, and that is all.
+  if (tenantGroup) {
+    if (skippedForDateOfBirth.length > 0) {
+      console.warn('[sheet-sync] rows skipped for a date of birth', { registrationId: registration.id, count: skippedForDateOfBirth.length })
+    }
+    return { created, updated, syncedMemberIds, paymentLinksSent: 0, skippedForDateOfBirth }
   }
 
   // Link every synced member to the group's school, and record the event in

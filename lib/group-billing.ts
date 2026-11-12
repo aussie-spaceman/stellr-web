@@ -103,12 +103,14 @@ export interface GroupRegistration {
   /** Set only on a group whose students share the teacher's cost (lib/teacher-share.ts). */
   share_estimate?: number | null
   share_first_paid_at?: string | null
+  /** The registration's tenant (S5 A8). NULL is a Stellr row the backfill has not reached. */
+  tenant_id?: string | null
 }
 
 const REG_COLUMNS =
   'id, type, event_slug, event_title, status, invoice_requested, invoice_paid_at, member_pays_individually, ' +
   'stripe_payment_intent_id, amount_due_cents, adult_count, student_count, teacher_first_name, teacher_last_name, ' +
-  'teacher_email, teacher_member_id, invoice_coupon_id, invoice_promotion_code, late_joiner_payer, share_estimate, share_first_paid_at'
+  'teacher_email, teacher_member_id, invoice_coupon_id, invoice_promotion_code, late_joiner_payer, share_estimate, share_first_paid_at, tenant_id'
 
 // ── Pure rules ───────────────────────────────────────────────────────────────
 

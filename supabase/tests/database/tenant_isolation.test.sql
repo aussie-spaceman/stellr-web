@@ -19,7 +19,7 @@ DO $grant$ BEGIN
   EXECUTE format('GRANT %I TO %I', 'tenant_app', current_user);
 END $grant$;
 
-SELECT plan(1523);
+SELECT plan(1524);
 
 -- 1. The tenant role cannot escape RLS, and every tenant table carries both tenant policies.
 SELECT ok(EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tenant_app'), 'role tenant_app exists');
@@ -478,6 +478,9 @@ SELECT ok(NOT has_table_privilege('tenant_app', 'public.platform_audit_events', 
 SELECT ok(NOT has_table_privilege('tenant_app', 'public.tenant_data_keys', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
   AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.tenant_data_keys'::regclass),
   'public.tenant_data_keys: platform-level (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES), RLS on and tenant_app has no privilege on it at all');
+SELECT ok(NOT has_table_privilege('tenant_app', 'public.tenant_guardian_consents', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.tenant_guardian_consents'::regclass),
+  'public.tenant_guardian_consents: platform-level (lib/tenancy/tenant-role.ts TENANT_APP_NO_ACCESS_TABLES), RLS on and tenant_app has no privilege on it at all');
 SELECT is((SELECT count(*)::int FROM pg_class WHERE oid = ANY (ARRAY['public.agreement_email_changes'::regclass, 'public.agreement_recipients'::regclass, 'public.agreements'::regclass, 'public.community_resources'::regclass, 'public.community_spaces'::regclass, 'public.credential_events'::regclass, 'public.credentials'::regclass, 'public.esign_access_log'::regclass, 'public.esign_audit_events'::regclass, 'public.event_award_assignments'::regclass, 'public.event_badge_templates'::regclass, 'public.event_certificate_templates'::regclass, 'public.event_companies'::regclass, 'public.event_email_sends'::regclass, 'public.event_email_templates'::regclass, 'public.event_emails'::regclass, 'public.event_manager_assignments'::regclass, 'public.event_participations'::regclass, 'public.event_refunds'::regclass, 'public.event_settings'::regclass, 'public.event_staff_check_ins'::regclass, 'public.event_store_offerings'::regclass, 'public.events'::regclass, 'public.group_invoices'::regclass, 'public.group_join_tokens'::regclass, 'public.member_group_members'::regclass, 'public.member_groups'::regclass, 'public.mentoring_cohorts'::regclass, 'public.merch_batches'::regclass, 'public.participants'::regclass, 'public.refund_policies'::regclass, 'public.registrations'::regclass, 'public.scholarship_applications'::regclass, 'public.store_event_discounts'::regclass, 'public.store_order_items'::regclass, 'public.store_orders'::regclass, 'public.store_returns'::regclass, 'public.survey_access_log'::regclass, 'public.survey_answers'::regclass, 'public.survey_distributions'::regclass, 'public.survey_invitations'::regclass, 'public.survey_responses'::regclass, 'public.team_profiles'::regclass, 'public.tenant_domains'::regclass, 'public.tenant_memberships'::regclass, 'public.training_assignments'::regclass, 'public.training_modules'::regclass, 'public.volunteer_event_interest'::regclass]) AND relforcerowsecurity), 0,
   'no tenant table has FORCE ROW LEVEL SECURITY yet (a later, owner-gated step: docs/TENANCY-S4.md)');
 SELECT ok(NOT has_function_privilege('anon', 'public.storage_object_tenant_id(text)', 'EXECUTE')

@@ -4,6 +4,10 @@ import { supabaseServer } from '@/lib/supabase'
 import { remindEnvelopeRow } from '@/lib/esign/operations'
 import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { withAudit } from '@/lib/audit/route'
+import { requestTenant } from '@/lib/tenancy/request-tenant'
+import { rowTenant } from '@/lib/registration/event-context'
+import { teamAudit, TEAM_AGREEMENT_RESEND_AUDIT } from '@/lib/registration/team-audit'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** A first nudge only once the signer has had a week with the original. */
@@ -16,8 +20,13 @@ const LIVE = ['created', 'sent', 'delivered']
 // POST /api/members/teams/[id]/participants/[pid]/docusign-resend
 // A group's organiser re-sends the signing request to whoever on a participant's
 // agreement has not signed yet.
-export async function POST(
-  _req: NextRequest,
+//
+// S5 A8: only a group of this host's tenant (another tenant's answers as someone else's
+// group does), and audited behind PLATFORM_AUDIT_ENABLED on the group's tenant's chain.
+export const POST = withAudit(TEAM_AGREEMENT_RESEND_AUDIT, resendAgreement)
+
+async function resendAgreement(
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; pid: string }> },
 ) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -38,7 +47,7 @@ export async function POST(
       .eq('is_active', true)
       .maybeSingle(),
     db.from('registrations')
-      .select('teacher_member_id, teacher_email, teacher_poc_email')
+      .select('teacher_member_id, teacher_email, teacher_poc_email, tenant_id')
       .eq('id', id)
       .maybeSingle(),
     // The participant must belong to THIS registration. It used to be looked
@@ -55,9 +64,10 @@ export async function POST(
 
   // Only an owner of this registration — the registrant (teacher or student
   // manager) or the nominated teacher POC — can resend (see lib/team-access).
-  if (!reg || !ownsTeam(member, reg)) {
+  if (!reg || rowTenant(reg.tenant_id) !== (await requestTenant()).tenantId || !ownsTeam(member, reg)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  teamAudit(req, { registrationId: id, tenantId: rowTenant(reg.tenant_id), userId })
   if (!participant) return NextResponse.json({ error: 'Participant not found' }, { status: 404 })
 
   // The participant's newest agreement. After a void and reissue there are two

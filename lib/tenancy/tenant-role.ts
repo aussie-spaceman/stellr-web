@@ -75,6 +75,8 @@ export const TENANT_APP_NO_ACCESS_TABLES: Readonly<Record<string, string>> = {
     'hash-chained audit (S4 audit lane): written by service_role through lib/audit/platform.ts; a tenant must not read or rewrite the chain, and tenant_id is nullable (NULL = the platform chain)',
   'public.tenant_data_keys':
     'wrapped field-encryption data keys (S4 field-crypto lane): read only by service_role through lib/field-crypto-store.ts; a tenant session never needs key material, and deleting a row crypto-shreds the tenant',
+  'public.tenant_guardian_consents':
+    'guardian consent state (S5 wave 6): written by service_role through lib/registration/tenant-guardian-consent.ts; a tenant session writing it could mark its own participants consented',
 }
 
 export interface TenantParentRef {

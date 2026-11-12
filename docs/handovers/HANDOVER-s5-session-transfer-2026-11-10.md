@@ -1,6 +1,6 @@
 # Handover: S5 multi-tenant session transfer, 10 Nov 2026
 
-The Claude Code session that built Stage 5 waves 3 to 6 is ending because the owner is moving to a new Claude account. This is the public-safe copy of its handover. **The full handover is private, on the owner's Mac at `~/Documents/stellr-handover-2026-11-10/HANDOVER.md`**, next to a backup of the unpushed wave 6 branches, the workflow scripts and their results. Read that one first; it is newer than this file if they disagree.
+The Claude Code session that built Stage 5 waves 3 to 6 is ending because the owner is moving to a new Claude account. This is the public-safe copy of its handover. **The full handover is private, on the owner's Mac at `~/Documents/Claude/Handover/s5-transfer-2026-11-10/HANDOVER.md`**, next to a backup of the unpushed wave 6 branches, the workflow scripts and their results. Read that one first; it is newer than this file if they disagree.
 
 ## State at handover
 
@@ -10,6 +10,13 @@ The Claude Code session that built Stage 5 waves 3 to 6 is ending because the ow
 | S5 waves 1 to 5 | On `dev` and on production (wave 4 via #587, wave 5 via #600) |
 | S5 wave 6 | Built and reviewed on local branches only (`s5/w6-A`, `s5/w6-B`, `s5/w6-C`, `s5/w6-D`, integration `s5/wave6`), from `dev` at `898956c0`. Not pushed, not on `dev` |
 | Plan of record | `docs/TENANCY-S5.md` |
+
+> **Update 11 Nov 2026.** The table above is the state at handover and is kept as written. Since then:
+>
+> - **Production (`main`) is `3d90a6dd`** (#612, promoted 10 Nov 2026, `.claude/releases/promote-2026-11-10b.md`). It carries wave 6 Lane B: B14b, squashed to `dev` as #610 (`b4329149`).
+> - **`dev` is `66a06f8b`**, with docs, a dependency bump and the design-system sync since #612, and no S5 code. Promotion #620 (`dev` to `main`) is open and carries no S5 code.
+> - **Wave 6 Lanes A and C** are reviewed, with their PRs pending: Lane A's interrupted consent-safety and regression reviews were completed on 11 Nov, and the lane branch has since merged current `dev` and taken the fix pass from them (on the lane branch only, not on `dev`). **Lane D** is to be rebuilt after A and C land.
+> - Current status: `docs/TENANCY-S5.md`, [Wave 6 status](../TENANCY-S5.md#wave-6-status). Open items: `tracker/2026-11-11-s5-programme.md`.
 
 ## Wave 6, for the next session
 

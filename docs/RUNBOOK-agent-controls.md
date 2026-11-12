@@ -46,6 +46,7 @@ Settings → Environments → New environment `prod-migrations`:
 
 - **Required reviewers:** the owner. Leave **Prevent self-review** off while the owner is the only reviewer: it stops whoever started a run from approving it, and only the owner can start one (the machine account's token has no Actions permission). Turn it on when a second reviewer exists.
 - **Deployment branches and tags:** selected branches `main` and `dev` only.
+- **Allow administrators to bypass configured protection rules:** off, so an admin's run waits for the same approval as anyone else's.
 - **Environment secret** `PROD_DATABASE_URL`: the owner's production session-pooler URI for `postgres` (Supabase → Connect → Session pooler). Add it **last**, after the reviewer and branch rules are saved. Only jobs that name `environment: prod-migrations` can read it, and only after the owner approves the run.
 
 Order matters. If the Action runs before the environment exists, GitHub creates `prod-migrations` on the spot with no protection rules, but also with no secret, so the job stops at "PROD_DATABASE_URL is not set" and touches nothing. Once the secret is there, the reviewer rule is the gate: check it in §7 before relying on it.

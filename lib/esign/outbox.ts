@@ -64,6 +64,7 @@ const DOCUMENT_LABEL: Record<string, string> = {
   mentor: AGREEMENT_TITLE.mentor,
   volunteer: AGREEMENT_TITLE.mentor,
   membership: AGREEMENT_TITLE.membership,
+  tenant_guardian_consent: AGREEMENT_TITLE.tenantGuardianConsent,
 }
 
 const ROLE: Record<string, 'guardian' | 'student' | 'adult' | 'mentor' | 'member'> = {

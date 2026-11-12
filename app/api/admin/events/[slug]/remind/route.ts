@@ -8,7 +8,7 @@ import { type StellarEvent } from '@/lib/sanity'
 import { sendEmail, outstandingItemsReminderEmail } from '@/lib/email'
 import { supabaseServer } from '@/lib/supabase'
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
-import { enforcedTenantFilter, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { enforcedTenantFilter, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/remind — one-click reminder emails for the
 // participants matching the roster filters (admins + assigned event managers).
@@ -36,6 +36,8 @@ async function sendReminders(req: Request, { params }: Ctx) {
   noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
+  const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
+  if (foreign) return foreign
 
   const body = await req.json().catch(() => null)
   const payment = body?.payment === true

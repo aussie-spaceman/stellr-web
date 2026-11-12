@@ -20,7 +20,9 @@
  *
  * What it does, in order:
  *   1. Checks the URL and the CA with the driver's own parsers. A local host is
- *      refused: this canary is for the pooler.
+ *      refused: this canary is for the pooler. So is the production project
+ *      (its ref in the login user or the host), unless `--production` is passed
+ *      to check it on purpose; the ref is never printed.
  *   2. A diagnostic TLS handshake (this file only): Postgres's SSLRequest, then
  *      TLS against the given CA, then the socket is closed. It sends no user,
  *      password or query. It does not refuse an unverified chain, so that it can
@@ -28,13 +30,20 @@
  *      and SANs. Its verdict is reported, never acted on.
  *   3. The real check, through the driver and tenantDb exactly as the app runs
  *      them: verify-full (the chain against the CA alone, the name against the
- *      host), SET LOCAL ROLE tenant_app, Stellr pinned. It then reads back
- *      current_user and app_tenant_id(), and counts public.event_companies.
+ *      host), a READ ONLY transaction, SET LOCAL ROLE tenant_app, Stellr pinned.
+ *      It then reads back current_user and app_tenant_id(), counts
+ *      public.event_companies, and reads current_setting('application_name').
  *
  * PASS needs all of: the connection under verify-full; current_user tenant_app;
  * the tenant read back equal to Stellr's; an event_companies count above 0.
  * Anything else is FAIL with a code. sslmode is never weakened: if no CA
  * verifies, the next step is the owner's decision, not a looser mode.
+ *
+ * The application line is reported, not gated: it says whether the server
+ * session behind the pooler sees application_name 'stellr-tenantdb' (the name
+ * the watch SQL counts connections by). Through the transaction pooler the
+ * server connection may carry the pooler's own name instead; if so, the watch
+ * SQL counts by usename. Only the verdict is printed, never the value.
  *
  * It prints outcome codes, counts and certificate names. It never prints the
  * URL, the password, the host it was given or the PEM. Nothing under lib/ or
@@ -49,12 +58,16 @@ import { X509Certificate } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants'
 import type { TenantSqlDriver } from '../lib/tenancy/db'
+import { PRODUCTION_SUPABASE_REF } from './production-guard.mjs'
 
 /** Where the canary reads the pooler URL. Not the app's variable: the owner sets this for one run. */
 export const CANARY_URL_VAR = 'TENANT_DB_CANARY_URL'
 
 /** The role tenantDb's transactions must run as. */
 const EXPECTED_ROLE = 'tenant_app'
+
+/** The pooler's login user: tenant_app_login, then '.<project-ref>'. */
+const LOGIN_USER_PREFIX = 'tenant_app_login.'
 
 const HANDSHAKE_TIMEOUT_MS = 10_000
 
@@ -104,6 +117,14 @@ export interface CanaryInput {
   /** The PEM file's contents, or null when the file could not be read. */
   ca: string | null
   label: string
+  /** True only with an explicit --production: the production project is otherwise refused. */
+  production?: boolean
+}
+
+/** True when the URL's login user or host names the production Supabase project. */
+export function namesProductionProject(user: string, host: string): boolean {
+  const ref = user.startsWith(LOGIN_USER_PREFIX) ? user.slice(LOGIN_USER_PREFIX.length) : ''
+  return ref === PRODUCTION_SUPABASE_REF || host.toLowerCase().includes(PRODUCTION_SUPABASE_REF)
 }
 
 /** A code safe to print: letters, digits and underscores, upper-cased. Anything else is UNKNOWN. */
@@ -232,7 +253,7 @@ export interface CanaryResult {
  * driver's own.
  */
 export async function runCanary(input: CanaryInput, deps: CanaryDeps, print: (line: string) => void): Promise<CanaryResult> {
-  const { parseTenantCaCert, parseTenantDatabaseUrl, tenantTlsOptions, TenantDbConfigError } = await import('../lib/tenancy/driver')
+  const { parseTenantCaCert, parseTenantDatabaseUrl, tenantTlsOptions, TenantDbConfigError, TENANT_APPLICATION_NAME } = await import('../lib/tenancy/driver')
   const { tenantDb } = await import('../lib/tenancy/db')
   const reason = (err: unknown) => (err instanceof TenantDbConfigError ? err.reason : 'refused')
   const fail = (code: string): CanaryResult => {
@@ -254,7 +275,12 @@ export async function runCanary(input: CanaryInput, deps: CanaryDeps, print: (li
     print('url          refused (a local host: the canary is for the pooler)')
     return fail('URL_LOCAL')
   }
-  print(`url          ok (sslmode=${parsed.sslmode})`)
+  const production = namesProductionProject(parsed.user, parsed.host)
+  if (production && input.production !== true) {
+    print('url          refused (the production project: pass --production to check it on purpose)')
+    return fail('URL_PRODUCTION')
+  }
+  print(`url          ok (sslmode=${parsed.sslmode}${production ? '; the production project, by --production' : ''})`)
   if (input.ca === null) {
     print('ca           the file could not be read')
     return fail('CA_FILE_UNREADABLE')
@@ -292,12 +318,14 @@ export async function runCanary(input: CanaryInput, deps: CanaryDeps, print: (li
     print(`verify-full  refused (${reason(err)})`)
     return fail('DRIVER_REFUSED')
   }
-  let found: { role: unknown; tenant: unknown; companies: unknown }
+  let found: { role: unknown; tenant: unknown; companies: unknown; app: unknown }
   try {
-    found = await tenantDb(STELLR_TENANT_ID, { driver }).transaction(async (q) => {
+    // Read-only: the canary only reads, and the database refuses any write.
+    found = await tenantDb(STELLR_TENANT_ID, { driver, readOnly: true }).transaction(async (q) => {
       const [pin] = await q.sql<{ role: unknown; tenant: unknown }>`SELECT current_user AS role, public.app_tenant_id()::text AS tenant`
       const [count] = await q.sql<{ n: unknown }>`SELECT count(*)::int AS n FROM public.event_companies`
-      return { role: pin?.role, tenant: pin?.tenant, companies: count?.n }
+      const [app] = await q.sql<{ app: unknown }>`SELECT current_setting('application_name') AS app`
+      return { role: pin?.role, tenant: pin?.tenant, companies: count?.n, app: app?.app }
     })
   } catch (err) {
     const code = codeOf(err)
@@ -307,6 +335,8 @@ export async function runCanary(input: CanaryInput, deps: CanaryDeps, print: (li
     await driver.end().catch(() => {})
   }
   print('verify-full  ok')
+  // Reported, not gated: whether pg_stat_activity can count these connections by name.
+  print(`application  ${found.app === TENANT_APPLICATION_NAME ? `${TENANT_APPLICATION_NAME} (ok)` : `not ${TENANT_APPLICATION_NAME}`}`)
 
   const roleOk = found.role === EXPECTED_ROLE
   print(`role         ${roleOk ? `${EXPECTED_ROLE} (ok)` : 'not tenant_app'}`)
@@ -331,23 +361,25 @@ export const realDeps: CanaryDeps = {
   },
 }
 
-/** `--ca <file>` and an optional `--label <name>`. Null on a usage error. */
-export function parseArgs(argv: readonly string[]): { caPath: string; label: string } | null {
+/** `--ca <file>`, an optional `--label <name>` and an optional `--production`. Null on a usage error. */
+export function parseArgs(argv: readonly string[]): { caPath: string; label: string; production: boolean } | null {
   let caPath: string | null = null
   let label = '-'
+  let production = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--ca' && argv[i + 1]) caPath = argv[++i]
     else if (arg === '--label' && argv[i + 1] && /^[A-Za-z0-9_-]{1,20}$/.test(argv[i + 1])) label = argv[++i]
+    else if (arg === '--production') production = true
     else return null
   }
-  return caPath ? { caPath, label } : null
+  return caPath ? { caPath, label, production } : null
 }
 
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2))
   if (!args) {
-    console.error('Usage: npx tsx --conditions=react-server scripts/tenant-db-canary.ts --ca <PEM file> [--label A]')
+    console.error('Usage: npx tsx --conditions=react-server scripts/tenant-db-canary.ts --ca <PEM file> [--label A] [--production]')
     console.error(`The pooler URL is read from ${CANARY_URL_VAR}.`)
     return 2
   }
@@ -358,7 +390,7 @@ async function main(): Promise<number> {
     ca = null
   }
   try {
-    const result = await runCanary({ url: process.env[CANARY_URL_VAR], ca, label: args.label }, realDeps, (line) => console.log(line))
+    const result = await runCanary({ url: process.env[CANARY_URL_VAR], ca, label: args.label, production: args.production }, realDeps, (line) => console.log(line))
     return result.pass ? 0 : 1
   } catch (err) {
     // The driver is marked server-only; plain Node refuses to load it.

@@ -36,6 +36,7 @@ import {
   type HandshakeReport,
 } from './tenant-db-canary'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants'
+import { PRODUCTION_SUPABASE_REF } from './production-guard.mjs'
 
 const PASSWORD = 'pw-placeholder-canary'
 const REF = 'placeholderref'
@@ -63,8 +64,11 @@ const VERIFIED: HandshakeReport = {
   chain: [{ subject: `CN=${NAME}`, issuer: 'CN=canary-test-root', san: `DNS:${NAME}`, sha256: 'AA:BB' }],
 }
 
-/** A stand-in driver that behaves like Postgres for tenantDb's pin, and counts companies. */
-function fakeDriver(opts: { role?: string; tenant?: string; companies?: unknown; fail?: unknown } = {}) {
+/**
+ * A stand-in driver that behaves like Postgres for tenantDb's pin and its
+ * read-only check, counts companies, and answers application_name.
+ */
+function fakeDriver(opts: { role?: string; tenant?: string; companies?: unknown; fail?: unknown; app?: string; readOnly?: string } = {}) {
   const sent: string[] = []
   let ended = false
   const driver: CanaryDriver = {
@@ -78,6 +82,8 @@ function fakeDriver(opts: { role?: string; tenant?: string; companies?: unknown;
           if (/^SET LOCAL ROLE /.test(text)) role = opts.role ?? text.slice('SET LOCAL ROLE '.length)
           else if (/set_config/.test(text)) tenant = opts.tenant ?? String(values[0])
           else if (/current_user AS role/.test(text)) return { rows: [{ role, tenant } as never], rowCount: 1 }
+          else if (/current_setting\('transaction_read_only'\)/.test(text)) return { rows: [{ read_only: opts.readOnly ?? 'on' } as never], rowCount: 1 }
+          else if (/current_setting\('application_name'\) AS app/.test(text)) return { rows: [{ app: opts.app ?? 'stellr-tenantdb' } as never], rowCount: 1 }
           else if (/count\(\*\)::int AS n FROM public\.event_companies/.test(text)) return { rows: [{ n: 'companies' in opts ? opts.companies : 3 } as never], rowCount: 1 }
           return { rows: [], rowCount: 0 }
         },
@@ -90,13 +96,13 @@ function fakeDriver(opts: { role?: string; tenant?: string; companies?: unknown;
   return { driver, sent, ended: () => ended }
 }
 
-async function run(input: { url?: string; ca?: string | null }, deps: Partial<CanaryDeps> = {}) {
+async function run(input: { url?: string; ca?: string | null; production?: boolean }, deps: Partial<CanaryDeps> = {}) {
   const lines: string[] = []
   const handshake = vi.fn(async () => VERIFIED)
   const fake = fakeDriver()
   const driver = vi.fn(async () => fake.driver)
   const result = await runCanary(
-    { url: 'url' in input ? input.url : URL_VF, ca: input.ca === undefined ? root.pem : input.ca, label: 'A' },
+    { url: 'url' in input ? input.url : URL_VF, ca: input.ca === undefined ? root.pem : input.ca, label: 'A', ...(input.production ? { production: true } : {}) },
     { handshake, driver, ...deps },
     (line) => lines.push(line),
   )
@@ -116,19 +122,26 @@ describe('runCanary: the verdict', () => {
     expect(out).toMatch(/^role {9}tenant_app \(ok\)$/m)
     expect(out).toMatch(/^tenant {7}Stellr's \(ok\)$/m)
     expect(out).toMatch(/^companies {4}3 \(ok\)$/m)
+    expect(out).toMatch(/^application {2}stellr-tenantdb \(ok\)$/m)
     expect(out).toMatch(/^RESULT {7}PASS$/m)
     expectNoSecrets(out)
     // The handshake goes to the URL's host, with its name as SNI; the driver gets the URL and the checked PEM.
     expect(handshake).toHaveBeenCalledWith({ host: HOST, port: 6543, servername: HOST }, root.pem)
     expect(driver).toHaveBeenCalledWith(URL_VF, root.pem)
-    // Through tenantDb: the pin, its read-back, then the canary's own two reads, each followed by the read-back.
+    // Through tenantDb, read-only: READ ONLY before the pin, the pin and its
+    // read-back, the read-only read-back, then the canary's own three reads,
+    // each followed by the pin read-back. Nothing it sends can write.
     expect(fake.sent).toEqual([
+      'SET TRANSACTION READ ONLY',
       'SET LOCAL ROLE tenant_app',
       "SELECT set_config('stellr.tenant_id', $1, true)",
       'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
+      "SELECT current_setting('transaction_read_only') AS read_only",
       'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
       'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
       'SELECT count(*)::int AS n FROM public.event_companies',
+      'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
+      "SELECT current_setting('application_name') AS app",
       'SELECT current_user AS role, public.app_tenant_id()::text AS tenant',
     ])
     expect(fake.ended()).toBe(true)
@@ -163,6 +176,20 @@ describe('runCanary: the verdict', () => {
     }
   })
 
+  it('fails when the transaction cannot be made read-only (tenantDb refuses it)', async () => {
+    const { result, out } = await run({}, { driver: async () => fakeDriver({ readOnly: 'off' }).driver })
+    expect(result).toEqual({ pass: false, code: 'CONNECT_TENANTCONTEXTERROR' })
+    expect(out).not.toMatch(/^RESULT {7}PASS/m)
+  })
+
+  it('reports, without gating on it, a server session that does not see application_name stellr-tenantdb, and never prints the value', async () => {
+    const { result, out } = await run({}, { driver: async () => fakeDriver({ app: 'Supavisor-placeholder' }).driver })
+    expect(result).toEqual({ pass: true, code: 'PASS' })
+    expect(out).toMatch(/^application {2}not stellr-tenantdb$/m)
+    expect(out).not.toContain('Supavisor-placeholder')
+    expectNoSecrets(out)
+  })
+
   it('fails when event_companies reads no rows for Stellr', async () => {
     for (const companies of [0, '0', null]) {
       const { result, out } = await run({}, { driver: async () => fakeDriver({ companies }).driver })
@@ -185,6 +212,29 @@ describe('runCanary: the verdict', () => {
     expect(handshake).not.toHaveBeenCalled()
     expect(driver).not.toHaveBeenCalled()
     expectNoSecrets(out)
+  })
+
+  it.each([
+    ['in its login user', URL_VF.replace(`tenant_app_login.${REF}`, `tenant_app_login.${PRODUCTION_SUPABASE_REF}`)],
+    ['in its host', `postgres://tenant_app_login:${PASSWORD}@db.${PRODUCTION_SUPABASE_REF}.supabase.co:5432/postgres?sslmode=verify-full`],
+  ])('refuses the production project (named %s) without --production, and never prints its ref', async (_label, url) => {
+    const { result, out, handshake, driver } = await run({ url })
+    expect(result).toEqual({ pass: false, code: 'URL_PRODUCTION' })
+    expect(out).toContain('url          refused (the production project: pass --production to check it on purpose)')
+    expect(out).not.toContain(PRODUCTION_SUPABASE_REF)
+    expect(handshake).not.toHaveBeenCalled()
+    expect(driver).not.toHaveBeenCalled()
+    expectNoSecrets(out)
+  })
+
+  it('checks the production project only with an explicit --production, still read-only, and never prints its ref', async () => {
+    const url = URL_VF.replace(`tenant_app_login.${REF}`, `tenant_app_login.${PRODUCTION_SUPABASE_REF}`)
+    const { result, out, driver, fake } = await run({ url, production: true })
+    expect(result).toEqual({ pass: true, code: 'PASS' })
+    expect(out).toMatch(/^url {10}ok \(sslmode=verify-full; the production project, by --production\)$/m)
+    expect(out).not.toContain(PRODUCTION_SUPABASE_REF)
+    expect(driver).toHaveBeenCalledWith(url, root.pem)
+    expect(fake.sent[0]).toBe('SET TRANSACTION READ ONLY')
   })
 
   it.each([
@@ -330,9 +380,11 @@ describe('small parts', () => {
     expect(codeOf('a string')).toBe('UNKNOWN')
   })
 
-  it('parseArgs takes --ca and an optional --label, and nothing else (no URL on the command line)', () => {
-    expect(parseArgs(['--ca', 'a.pem'])).toEqual({ caPath: 'a.pem', label: '-' })
-    expect(parseArgs(['--ca', 'a.pem', '--label', 'B'])).toEqual({ caPath: 'a.pem', label: 'B' })
+  it('parseArgs takes --ca, an optional --label and an optional --production, and nothing else (no URL on the command line)', () => {
+    expect(parseArgs(['--ca', 'a.pem'])).toEqual({ caPath: 'a.pem', label: '-', production: false })
+    expect(parseArgs(['--ca', 'a.pem', '--label', 'B'])).toEqual({ caPath: 'a.pem', label: 'B', production: false })
+    expect(parseArgs(['--ca', 'a.pem', '--production'])).toEqual({ caPath: 'a.pem', label: '-', production: true })
+    expect(parseArgs(['--production'])).toBeNull()
     expect(parseArgs([])).toBeNull()
     expect(parseArgs(['--label', 'A'])).toBeNull()
     expect(parseArgs(['--ca', 'a.pem', '--url', URL_VF])).toBeNull()

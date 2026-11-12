@@ -11,6 +11,12 @@
 //
 // Returning students (a submitted profile from an earlier event) get their
 // last answers pre-filled and an email asking them to check and update them.
+//
+// Another tenant's student whose guardian has not signed that tenant's consent
+// form (S5 A16) is never sent one (A10a). The automatic sends hold the invitation:
+// the row is made, marked held, and not sent, so the sweep never sends it later.
+// Only a staff resend releases it (decision W7-11), and that too refuses while the
+// consent is unsigned. Stellr's students make no consent read.
 
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -59,6 +65,9 @@ export interface TeamProfileRow {
 const ROW_COLUMNS =
   'id, participant_id, member_id, event_slug, token_version, prefilled_from, definition_version, answers, ' +
   'submitted_at, first_sent_at, last_sent_at, send_count, last_send_error, created_at, updated_at'
+
+/** ensureRow's read: the row and its tenant, which the derivation trigger stamps from the event. */
+const OWNED_COLUMNS = `${ROW_COLUMNS}, tenant_id`
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
@@ -298,10 +307,20 @@ async function previousProfile(db: SupabaseClient, memberId: string | null, excl
   return data as { id: string; answers: unknown } | null
 }
 
-/** Creates the row if there isn't one. Returns it, and whether this call created it. */
-async function ensureRow(db: SupabaseClient, p: Candidate): Promise<{ row: TeamProfileRow; created: boolean }> {
-  const { data: existing } = await db.from('team_profiles').select(ROW_COLUMNS).eq('participant_id', p.id).maybeSingle()
-  if (existing) return { row: existing as unknown as TeamProfileRow, created: false }
+type OwnedRow = TeamProfileRow & { tenant_id?: string | null }
+
+/**
+ * Creates the row if there isn't one. Returns it, whether this call created it, and its
+ * tenant: the row's own, else the registration's where the caller selected it, else
+ * Stellr's. Reading it costs no query: it comes back with the row.
+ */
+async function ensureRow(db: SupabaseClient, p: Candidate): Promise<{ row: TeamProfileRow; created: boolean; tenantId: string }> {
+  const owned = (data: unknown, created: boolean) => {
+    const { tenant_id: tenantId, ...row } = data as OwnedRow
+    return { row: row as TeamProfileRow, created, tenantId: tenantId ?? p.tenant_id ?? STELLR_TENANT_ID }
+  }
+  const { data: existing } = await db.from('team_profiles').select(OWNED_COLUMNS).eq('participant_id', p.id).maybeSingle()
+  if (existing) return owned(existing, false)
 
   const id = randomUUID()
   const prev = await previousProfile(db, p.member_id, p.id, p.tenant_id ?? STELLR_TENANT_ID)
@@ -318,17 +337,46 @@ async function ensureRow(db: SupabaseClient, p: Candidate): Promise<{ row: TeamP
       definition_version: DEFINITION_VERSION,
       answers: prev ? normaliseAnswers(prev.answers) : {},
     })
-    .select(ROW_COLUMNS)
+    .select(OWNED_COLUMNS)
     .single()
   if (error) {
     // Someone else created it between our read and insert: theirs stands.
     if (error.code === '23505') {
-      const { data: theirs } = await db.from('team_profiles').select(ROW_COLUMNS).eq('participant_id', p.id).single()
-      return { row: theirs as unknown as TeamProfileRow, created: false }
+      const { data: theirs } = await db.from('team_profiles').select(OWNED_COLUMNS).eq('participant_id', p.id).single()
+      return owned(theirs, false)
     }
     throw new Error(`Creating team profile failed: ${error.message}`)
   }
-  return { row: data as unknown as TeamProfileRow, created: true }
+  return owned(data, true)
+}
+
+// ── Guardian consent (S5 A16, A10a) ───────────────────────────────────────────
+
+/** What the roster shows for an invitation held back (lib/team-profile/assign.ts reads it). */
+export const HELD_FOR_CONSENT = 'Held: waiting for guardian consent. Resend once it is signed.'
+
+/**
+ * Is this student another tenant's participant whose guardian has not signed? Stellr's
+ * answer no with no read. Each tenant's unsigned consents are read once per call, through
+ * `cache`. A failed read throws, so nothing is sent.
+ */
+async function consentPending(
+  db: SupabaseClient,
+  tenantId: string,
+  participantId: string,
+  cache: Map<string, Promise<ReadonlySet<string>>>,
+): Promise<boolean> {
+  if (tenantId === STELLR_TENANT_ID) return false
+  let pending = cache.get(tenantId)
+  if (!pending) {
+    pending = import('@/lib/registration/tenant-guardian-consent').then(({ unconsentedParticipantIds }) => unconsentedParticipantIds(db, tenantId))
+    cache.set(tenantId, pending)
+  }
+  return (await pending).has(participantId)
+}
+
+async function markHeld(db: SupabaseClient, rowId: string): Promise<void> {
+  await db.from('team_profiles').update({ last_send_error: HELD_FOR_CONSENT, updated_at: new Date().toISOString() }).eq('id', rowId)
 }
 
 // ── Public operations ─────────────────────────────────────────────────────────
@@ -398,6 +446,7 @@ export async function dispatchTeamProfiles(
   const dates = new Map([...events].map(([slug, ctx]) => [slug, ctx?.meta.date ?? null]))
   const ready = await formsComplete(db, people, dates)
 
+  const consents = new Map<string, Promise<ReadonlySet<string>>>()
   // Shared by every tenant: the spacing is Resend's rate, which is one account's.
   let first = true
   const started = Date.now()
@@ -416,8 +465,14 @@ export async function dispatchTeamProfiles(
         count('deferred')
         continue
       }
-      const { row, created } = await ensureRow(db, p)
+      const { row, created, tenantId } = await ensureRow(db, p)
       if (!created) continue
+      // Held, not sent: the row now exists, so no later sweep sends it either (W7-11).
+      if (await consentPending(db, tenantId, p.id, consents)) {
+        await markHeld(db, row.id)
+        count('waiting')
+        continue
+      }
       if (!first) await sleep(SEND_SPACING_MS)
       first = false
       const sent = await sendInvite(db, row, p, events.get(p.event_slug)!.email)
@@ -472,7 +527,11 @@ export async function resendTeamProfile(db: SupabaseClient, slug: string, partic
   if (!profileOpen(ctx.meta)) return { ok: false, status: 400, error: 'The event has started, so team profiles are closed.' }
   const ready = await formsComplete(db, [p], new Map([[slug, ctx.meta.date]]))
   if (!ready.has(p.id)) return { ok: false, status: 409, error: 'Their permission form isn’t complete yet. The team profile goes out as soon as it is.' }
-  const { row } = await ensureRow(db, p)
+  const { row, tenantId } = await ensureRow(db, p)
+  if (await consentPending(db, tenantId, p.id, new Map())) {
+    await markHeld(db, row.id)
+    return { ok: false, status: 409, error: 'Their parent or guardian hasn’t signed the consent form yet. Resend once they have.' }
+  }
   const sent = await sendInvite(db, row, p, ctx.email)
   if (!sent.ok) return { ok: false, status: 502, error: sent.error ?? 'Sending failed.' }
   return { ok: true, email: recipientFor(p)!.email }
@@ -500,14 +559,22 @@ export async function resendOutstanding(
 
   let sent = 0
   let failed = 0
+  let held = 0
+  const consents = new Map<string, Promise<ReadonlySet<string>>>()
   for (const [i, p] of todo.slice(0, limit).entries()) {
     if (i > 0) await sleep(SEND_SPACING_MS)
-    const { row } = await ensureRow(db, p)
+    const { row, tenantId } = await ensureRow(db, p)
+    // Still unsigned: stays held, and counts as waiting.
+    if (await consentPending(db, tenantId, p.id, consents)) {
+      await markHeld(db, row.id)
+      held++
+      continue
+    }
     const r = await sendInvite(db, row, p, ctx.email)
     if (r.ok) sent++
     else failed++
   }
-  return { sent, failed, waiting: outstanding.length - todo.length, remaining: Math.max(0, todo.length - limit) }
+  return { sent, failed, waiting: outstanding.length - todo.length + held, remaining: Math.max(0, todo.length - limit) }
 }
 
 /**
@@ -539,6 +606,8 @@ export async function outstandingProfileLinks(
 
 export interface ProfileSession {
   row: TeamProfileRow
+  /** The profile's tenant, NULL for a Stellr row the backfill has not reached (S5 A10a). */
+  tenant_id: string | null
   answers: TeamProfileAnswers
   studentFirstName: string
   eventTitle: string
@@ -548,12 +617,13 @@ export interface ProfileSession {
   prefilled: boolean
 }
 
-async function sessionFor(db: SupabaseClient, row: TeamProfileRow): Promise<ProfileSession | null> {
+async function sessionFor(db: SupabaseClient, row: TeamProfileRow, tenantId: string | null): Promise<ProfileSession | null> {
   const { data: p } = await db.from('participants').select('first_name').eq('id', row.participant_id).maybeSingle()
   const ctx = await loadEventContext(row.event_slug)
   if (!p || !ctx) return null
   return {
     row,
+    tenant_id: tenantId,
     answers: normaliseAnswers(row.answers),
     studentFirstName: (p.first_name as string) ?? '',
     eventTitle: ctx.meta.title,
@@ -563,10 +633,24 @@ async function sessionFor(db: SupabaseClient, row: TeamProfileRow): Promise<Prof
   }
 }
 
-export async function sessionByToken(db: SupabaseClient, token: string): Promise<ProfileSession | null> {
+/**
+ * The session for an emailed link, or null for a link nobody holds. `onHost`, when given,
+ * is asked first, straight after the row is read: an API route passes recordOnHost, so
+ * another host's link answers as an unknown one before anything else reads or checks it
+ * (S5 A10a).
+ */
+export async function sessionByToken(
+  db: SupabaseClient,
+  token: string,
+  opts: { onHost?: (row: { tenant_id: string | null }) => Promise<boolean> } = {},
+): Promise<ProfileSession | null> {
   if (!looksLikeToken(token)) return null
-  const { data } = await db.from('team_profiles').select(ROW_COLUMNS).eq('token_hash', hashToken(token)).maybeSingle()
-  return data ? sessionFor(db, data as unknown as TeamProfileRow) : null
+  const { data } = await db.from('team_profiles').select(`${ROW_COLUMNS}, tenant_id`).eq('token_hash', hashToken(token)).maybeSingle()
+  if (!data) return null
+  // The tenant stays off the row, which a page hands on: it travels beside it.
+  const { tenant_id: tenantId, ...row } = data as unknown as TeamProfileRow & { tenant_id: string | null }
+  if (opts.onHost && !(await opts.onHost({ tenant_id: tenantId }))) return null
+  return sessionFor(db, row, tenantId)
 }
 
 export type SaveOutcome = { ok: true } | { ok: false; status: number; error: string; missing?: string[] }

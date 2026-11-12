@@ -61,7 +61,7 @@ import { auditHandlers } from '@/lib/security/audit-coverage'
 import { GUARD_EXCEPTIONS } from '@/lib/security/route-guards'
 import { CANARY_TENANT, HONEYTOKENS, honeytokenFor, isCanaryId, scanForHoneytokens, type HoneytokenHit } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { TENANT_ID_HEADER } from '@/lib/tenancy/host'
+import { TENANT_ID_HEADER, TENANT_SLUG_HEADER } from '@/lib/tenancy/host'
 import type { IdorTarget } from '@/lib/security/idor-targets'
 import { applyEnv, CASE_FIXTURES, fixtureFor, type CaseFixture } from './case-fixtures'
 // Not lib/tenancy/area-switch: it loads next/server, which this file mocks (a cycle).
@@ -402,7 +402,10 @@ export function nextHeadersMock() {
       const { host, callerTenantId } = harness.context
       const h = new Headers({ 'x-forwarded-for': '203.0.113.9', host })
       // What the proxy will set on a tenant host. It sets nothing on Stellr's.
-      if (callerTenantId !== STELLR_TENANT_ID) h.set(TENANT_ID_HEADER, callerTenantId)
+      if (callerTenantId !== STELLR_TENANT_ID) {
+        h.set(TENANT_ID_HEADER, callerTenantId)
+        h.set(TENANT_SLUG_HEADER, CANARY_TENANT.slug)
+      }
       return h
     },
     draftMode: async () => ({ isEnabled: false, enable: () => {}, disable: () => {} }),
@@ -709,7 +712,10 @@ export async function buildRequest(input: CaseInput, method: string, opts: { mal
     ...extraHeaders,
   }
   if (!fixture?.omitOrigin) headers.origin = `http://${host}`
-  if (callerTenantId !== STELLR_TENANT_ID) headers[TENANT_ID_HEADER] = callerTenantId
+  if (callerTenantId !== STELLR_TENANT_ID) {
+    headers[TENANT_ID_HEADER] = callerTenantId
+    headers[TENANT_SLUG_HEADER] = CANARY_TENANT.slug
+  }
   const cookieHeader = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ')
   if (cookieHeader) headers.cookie = cookieHeader
   const req = new NextRequest(url, { method, headers, body: hasBody ? JSON.stringify(body) : undefined })

@@ -4,6 +4,7 @@ import { agreementValid } from '@/lib/docusign-agreements'
 import { relabelIssuedAward } from '@/lib/event-awards'
 import { isMinorPerPolicy, type MinorFacts } from '@/lib/minor-policy'
 import { isKnownMinorOn } from '@/lib/age'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import {
   CREDENTIAL_COLUMNS,
   ageBlock,
@@ -230,11 +231,68 @@ export interface IssueInput {
   activityLocation?: string | null
 }
 
+/** Why issueCredential made no credential (S5 wave 7, A10a). */
+export type CredentialNotIssuedReason = 'consent_pending' | 'tenant_not_issuer'
+
+const NOT_ISSUED: Record<CredentialNotIssuedReason, string> = {
+  consent_pending: 'Not issued: their parent or guardian hasn’t signed the consent form yet.',
+  tenant_not_issuer: 'Not issued: Stellr doesn’t issue credentials for another organisation’s event.',
+}
+
+/**
+ * issueCredential's refusal. It is thrown, not returned, so the return shape stays
+ * `{ row, created }` and every caller's existing catch reports it as it does any other
+ * failure. A caller that tells the two apart checks `instanceof` and `reason`.
+ */
+export class CredentialNotIssuedError extends Error {
+  readonly reason: CredentialNotIssuedReason
+  constructor(reason: CredentialNotIssuedReason) {
+    super(NOT_ISSUED[reason])
+    this.name = 'CredentialNotIssuedError'
+    this.reason = reason
+  }
+}
+
+/**
+ * The tenant that owns an event, from the mirror, which is where the derivation trigger
+ * stamps a credential's tenant from. An event the mirror does not hold counts as
+ * Stellr's, as the trigger and lib/authz read it. A failed read throws: answering Stellr
+ * there would issue for another tenant's event while the read is down.
+ */
+async function eventTenant(db: SupabaseClient, slug: string): Promise<string> {
+  const { data, error } = await db.from('events').select('tenant_id').eq('slug', slug).maybeSingle()
+  if (error) throw new Error(`[credentials] reading the event's owner failed: ${error.message}`)
+  return (data as { tenant_id?: string | null } | null)?.tenant_id ?? STELLR_TENANT_ID
+}
+
+/**
+ * May a new credential be issued for this input? Stellr's events, and credentials with
+ * no event (courses), go ahead with no consent read. For another tenant's event: a
+ * participant whose guardian has not signed the tenant's consent form is skipped (A16),
+ * and otherwise the issue is refused, because Stellr is not that tenant's issuer
+ * (decision W7-9, default). Either way it throws CredentialNotIssuedError.
+ */
+async function assertMayIssue(db: SupabaseClient, input: IssueInput): Promise<void> {
+  if (!input.eventSlug) return
+  const tenantId = await eventTenant(db, input.eventSlug)
+  if (tenantId === STELLR_TENANT_ID) return
+  if (input.participantId) {
+    const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
+    if ((await unconsentedParticipantIds(db, tenantId)).has(input.participantId)) {
+      throw new CredentialNotIssuedError('consent_pending')
+    }
+  }
+  throw new CredentialNotIssuedError('tenant_not_issuer')
+}
+
 /**
  * Idempotent on the partial unique indexes (member+course,
  * participant+event+award, member+event for a mentor or a live PD credential):
  * a re-run returns the existing row with `created: false`. A concurrent first
  * issue is treated the same way — the unique violation is the signal.
+ *
+ * A new credential for an event first reads the event's owner (assertMayIssue): only
+ * Stellr's events are issued for, and a refusal throws CredentialNotIssuedError.
  */
 export async function issueCredential(
   db: SupabaseClient,
@@ -242,6 +300,7 @@ export async function issueCredential(
 ): Promise<{ row: CredentialRow; created: boolean }> {
   const existing = await findExisting(db, input)
   if (existing) return { row: existing, created: false }
+  await assertMayIssue(db, input)
 
   // Minor per the policy, not just under 18 (holderMinorFacts). If the records
   // cannot be read, fall back to the DOB alone rather than storing a guess:
@@ -422,6 +481,8 @@ export async function unpublishCredentialsFor(
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 export interface CredentialView extends CredentialRow {
+  /** The owning tenant, NULL for a Stellr row the backfill has not reached (S5). */
+  tenant_id: string | null
   /** From the linked member or participant; used for the LinkedIn age gate. */
   date_of_birth: string | null
   /**
@@ -437,7 +498,7 @@ export async function getCredentialByNumber(db: SupabaseClient, number: string):
   if (!n) return null
   const { data, error } = await db
     .from('credentials')
-    .select(`${CREDENTIAL_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
+    .select(`${CREDENTIAL_COLUMNS}, tenant_id, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
     .eq('number', n)
     .maybeSingle()
   if (error) console.error('[credentials] lookup failed:', error.message)
@@ -455,7 +516,7 @@ export async function listMemberCredentials(db: SupabaseClient, memberId: string
     : `member_id.eq.${memberId}`
   const { data } = await db
     .from('credentials')
-    .select(`${CREDENTIAL_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
+    .select(`${CREDENTIAL_COLUMNS}, tenant_id, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
     .or(owner)
     .is('tombstoned_at', null)
     .order('issued_at', { ascending: false })
@@ -467,7 +528,9 @@ function withDob(row: Record<string, unknown>): CredentialView {
     (Array.isArray(v) ? v[0] : v) as { date_of_birth?: string | null; member_id?: string | null } | null
   const { members, participants, ...rest } = row
   // Reads are for display, so a renamed award shows its current label.
-  const cred = relabelIssuedAward(rest as unknown as CredentialRow)
+  // tenant_id rides along from the select. Were a select to leave it out, it would be
+  // undefined, which is not NULL: the row then counts as nobody's, never as Stellr's.
+  const cred = relabelIssuedAward(rest as unknown as CredentialRow & { tenant_id: string | null })
   const dob = one(members)?.date_of_birth ?? one(participants)?.date_of_birth ?? null
   return { ...cred, date_of_birth: dob, owner_member_id: cred.member_id ?? one(participants)?.member_id ?? null }
 }

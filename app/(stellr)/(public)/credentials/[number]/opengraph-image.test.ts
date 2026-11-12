@@ -46,6 +46,7 @@ function ogRow(over: Record<string, unknown> = {}) {
     tombstoned_at: null,
     visibility: 'public',
     date_of_birth: '1990-01-01',
+    tenant_id: null,
     ...over,
   } as Parameters<typeof ogCardFor>[0]
 }
@@ -62,6 +63,13 @@ describe('ogCardFor (MP-4 name gate)', () => {
     // DOB corrected to under-13 while still flagged public → name withheld.
     expect(ogCardFor(ogRow({ date_of_birth: '2015-01-01' }), NOW)).toBeNull()
     expect(ogCardFor(ogRow({ date_of_birth: null }), NOW)).toBeNull()
+  })
+
+  it("S5 A10a (W7-10): names Stellr's holders only; another tenant's credential gets the generic card", () => {
+    expect(ogCardFor(ogRow({ tenant_id: '00000000-0000-4000-8000-000000000001' }), NOW)?.recipient_name).toBe('Ada Lovelace')
+    expect(ogCardFor(ogRow({ tenant_id: 'c0000000-0000-4000-8000-0000000000aa' }), NOW)).toBeNull()
+    // A select that lost the column is not a NULL tenant: no name.
+    expect(ogCardFor(ogRow({ tenant_id: undefined }), NOW)).toBeNull()
   })
 })
 

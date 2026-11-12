@@ -1,5 +1,6 @@
 import { SITE_URL } from '@/lib/env'
 import { ageOn, isMinorOn } from '@/lib/age'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // ── Verifiable credentials: pure helpers ─────────────────────────────────────
 // Edge-safe (no Node crypto, no DocuSign): imported by the OG image and badge
@@ -61,6 +62,17 @@ export function credentialState(c: Pick<CredentialRow, 'status' | 'expires_at' |
   if (c.status === 'revoked') return 'revoked'
   if (c.expires_at && new Date(c.expires_at) < now) return 'expired'
   return 'valid'
+}
+
+/**
+ * S5 wave 7 (A10a, decision W7-10): the public page, the badge, the share card and the
+ * member's wallet show Stellr's credentials only. Another tenant's credential answers
+ * as a number nobody holds. A NULL tenant is a Stellr row the backfill has not reached.
+ * Pure and edge-safe, for the edge routes; the API routes check the host instead
+ * (lib/tenancy/host-record.ts).
+ */
+export function isStellrCredential(row: { tenant_id: string | null }): boolean {
+  return row.tenant_id === null || row.tenant_id === STELLR_TENANT_ID
 }
 
 export function credentialUrl(number: string): string {

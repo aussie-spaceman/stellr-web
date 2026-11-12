@@ -3,6 +3,7 @@ import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@
 import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, type CredentialRow } from '@/lib/credentials'
 import { familyCredentialUrl } from '@/lib/credentials-link'
 import { relabelIssuedAward } from '@/lib/event-awards'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // The "you've earned a credential" email, addressed the way the DocuSign
 // notices are: an adult hears directly; a Minor's guardian is the addressee
@@ -18,13 +19,37 @@ export interface CredentialRecipient {
   guardianEmail?: string | null
 }
 
-/** Non-fatal: a mail outage must never undo an issue. Returns whether it sent. */
+/**
+ * Whether this credential's holder is another tenant's participant whose guardian has
+ * not signed that tenant's consent form (S5 A16, A10a). Their credential email is not
+ * sent. A credential with no participant (a member's: a course, a mentor, PD hours)
+ * reads nothing. Otherwise the credential's own tenant is read, and only another
+ * tenant's makes the consent read: Stellr's credentials make none. A failed read
+ * throws, so the caller sends nothing.
+ */
+export async function holderConsentPending(db: SupabaseClient, row: Pick<CredentialRow, 'id' | 'participant_id'>): Promise<boolean> {
+  if (!row.participant_id) return false
+  const { data, error } = await db.from('credentials').select('tenant_id').eq('id', row.id).maybeSingle()
+  if (error) throw new Error(`Reading the credential tenant failed: ${error.message}`)
+  if (!data) throw new Error('Reading the credential tenant failed: no row')
+  const tenantId = (data as { tenant_id: string | null }).tenant_id
+  if (tenantId === null || tenantId === STELLR_TENANT_ID) return false
+  const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
+  return (await unconsentedParticipantIds(db, tenantId)).has(row.participant_id)
+}
+
+/**
+ * Non-fatal: a mail outage must never undo an issue. Returns whether it sent. Nothing
+ * goes to a tenant's participant whose guardian has not signed (holderConsentPending),
+ * and a failed check sends nothing.
+ */
 export async function sendCredentialIssuedEmail(
   db: SupabaseClient,
   row: CredentialRow,
   to: CredentialRecipient,
 ): Promise<boolean> {
   try {
+    if (await holderConsentPending(db, row)) return false
     const consent = await shareConsentFor(db, row)
     const share = canShare(row, consent)
     const isMinor = await holderIsMinor(db, row)

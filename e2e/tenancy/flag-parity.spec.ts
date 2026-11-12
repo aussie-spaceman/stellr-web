@@ -130,3 +130,9 @@ test.afterAll(async () => {
   const { hostMapLoads, writes } = await stubStats()
   console.log(`The stub served ${hostMapLoads} host map loads and took ${writes.length} writes: ${[...new Set(writes)].join(', ') || 'none'}`)
 })
+
+// THROWAWAY (B10r proof, never to merge): one deliberately failing test, so this run
+// shows the e2e gate go red when tenant-host-routing fails.
+test('B10r proof: a deliberately failing tenant-host check', () => {
+  expect('red').toBe('green')
+})

@@ -100,7 +100,8 @@ jobs:
           fi
 
       # Fails closed: e2e is skipped only on proof that a run in this repository,
-      # from this workflow file, passed both jobs on this tree. An API error, an
+      # from this workflow file, passed all three jobs on this tree (e2e-tests,
+      # storybook and tenant-host-routing). An API error, an
       # expired marker or a fork's marker all mean e2e runs. The tree includes
       # this file, so the run that wrote the marker ran this same workflow.
       - id: tested
@@ -121,11 +122,11 @@ jobs:
               path=$(gh api "repos/$REPO/actions/runs/$run" --jq .path 2>/dev/null) || continue
               [ "$path" = .github/workflows/ci.yml ] || continue
               passed=$(gh api "repos/$REPO/actions/runs/$run/jobs?per_page=30" \
-                --jq '[.jobs[] | select((.name == "e2e-tests" or .name == "storybook") and .conclusion == "success")] | length' \
+                --jq '[.jobs[] | select((.name == "e2e-tests" or .name == "storybook" or .name == "tenant-host-routing") and .conclusion == "success")] | length' \
                 2>/dev/null) || continue
-              if [ "$passed" = 2 ]; then
+              if [ "$passed" = 3 ]; then
                 e2e=false
-                echo "This tree already passed e2e and Storybook in run $run: https://github.com/$REPO/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "This tree already passed e2e, Storybook and tenant-host-routing in run $run: https://github.com/$REPO/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
                 break
               fi
             done
@@ -284,12 +285,18 @@ jobs:
   # Required check. A gate, so the name branch protection asks for stays the same
   # while the work moves into jobs that can run apart. A required check that is
   # SKIPPED counts as passed, so this must always run. It passes only for a
-  # docs-only change, a tree that already passed, or both jobs succeeding. A job
-  # that timed out or was pushed off a full queue (see e2e-tests) therefore shows
-  # red here: re-run the failed jobs.
+  # docs-only change, a tree that already passed, or e2e-tests, storybook and
+  # tenant-host-routing all succeeding. A job that timed out or was pushed off a
+  # full queue (see e2e-tests) therefore shows red here: re-run the failed jobs.
+  #
+  # tenant-host-routing is required through this gate (owner decision W7-8(c),
+  # 12 Nov 2026), so branch protection still names only verify and e2e. It runs
+  # under the same condition as e2e-tests, so it skips only where the two early
+  # exits below pass the gate before its result is read, or where verify failed
+  # and the gate is red anyway.
   e2e:
     name: e2e
-    needs: [changes, verify, e2e-tests, storybook]
+    needs: [changes, verify, e2e-tests, storybook, tenant-host-routing]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -301,9 +308,10 @@ jobs:
           VERIFY: ${{ needs.verify.result }}
           TESTS: ${{ needs.e2e-tests.result }}
           STORYBOOK: ${{ needs.storybook.result }}
+          THR: ${{ needs.tenant-host-routing.result }}
           RAN: ${{ needs.e2e-tests.outputs.ran }}
         run: |
-          echo "code: $CODE; e2e needed: $NEEDED; verify: $VERIFY; e2e-tests: $TESTS; storybook: $STORYBOOK; suite ran: $RAN"
+          echo "code: $CODE; e2e needed: $NEEDED; verify: $VERIFY; e2e-tests: $TESTS; storybook: $STORYBOOK; tenant-host-routing: $THR; suite ran: $RAN"
           if [ "$CODE" = false ]; then echo "Docs-only change: nothing to test."; exit 0; fi
           if [ "$NEEDED" = false ]; then echo "This tree already passed: see the changes job."; exit 0; fi
           if [ "$VERIFY" != success ]; then echo "::error::e2e did not run because verify did not pass ($VERIFY)."; exit 1; fi
@@ -311,16 +319,20 @@ jobs:
             echo "::error::e2e needs e2e-tests and storybook to pass (e2e-tests: $TESTS, storybook: $STORYBOOK). If one reads cancelled, re-run the failed jobs."
             exit 1
           fi
+          if [ "$THR" != success ]; then
+            echo "::error::e2e needs tenant-host-routing to pass ($THR). If it reads cancelled, re-run the failed jobs."
+            exit 1
+          fi
           if [ "$RAN" = true ]; then echo "record=true" >> "$GITHUB_OUTPUT"; fi
 
       # What the `changes` job looks for. Written last, so it exists only after
       # everything above passed, and never for a run that skipped the suite.
-      - if: steps.gate.outputs.record == 'true' && needs.changes.outputs.tree != ''
+      - if: steps.gate.outputs.record == 'true' && needs.tenant-host-routing.result == 'success' && needs.changes.outputs.tree != ''
         env:
           TREE: ${{ needs.changes.outputs.tree }}
         run: echo "$TREE" > e2e-passed-tree.txt
 
-      - if: steps.gate.outputs.record == 'true' && needs.changes.outputs.tree != ''
+      - if: steps.gate.outputs.record == 'true' && needs.tenant-host-routing.result == 'success' && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: e2e-passed-tree-${{ needs.changes.outputs.tree }}
@@ -1064,8 +1076,9 @@ jobs:
 
   # S5 B10a: one build served twice, tenant routing off and on, must answer the
   # same on every Stellr host for every page (e2e/tenancy/flag-parity.spec.ts).
-  # Report-only and not a required check, until the owner says otherwise. No
-  # secrets and no database: its Supabase is a stub on the runner, so it takes no
+  # Required through the e2e gate (owner decision W7-8(c), 12 Nov 2026, S5 B10r):
+  # no continue-on-error, and its condition matches e2e-tests', so it never skips
+  # where the gate reads its result. No secrets and no database: its Supabase is a stub on the runner, so it takes no
   # lock and cannot write to the shared dev project. A build of its own, because
   # the stub's URL is inlined at build.
   tenant-host-routing:
@@ -1073,7 +1086,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [verify, changes]
     if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.e2e != 'false' }}
-    continue-on-error: true
     # Holds room for a browser install from a slow mirror: see the action.
     timeout-minutes: 25
     steps:

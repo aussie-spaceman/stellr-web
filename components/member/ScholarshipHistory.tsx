@@ -11,15 +11,18 @@ const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 
 export function ScholarshipHistory({
   items,
   audience,
+  embedded = false,
 }: {
   items: ScholarshipHistoryItem[]
   audience: 'member' | 'admin'
+  /** Inside an admin Collapsible that supplies the card and title. */
+  embedded?: boolean
 }) {
   if (items.length === 0) return null
   const labels = audience === 'member' ? STAGE_LABEL_MEMBER : STAGE_LABEL
   return (
-    <div className="bg-white rounded-xl border border-line p-6">
-      <h2 className="text-base font-semibold text-ink mb-4">Scholarships</h2>
+    <div className={embedded ? undefined : 'bg-white rounded-xl border border-line p-6'}>
+      {!embedded && <h2 className="text-base font-semibold text-ink mb-4">Scholarships</h2>}
       <ul className="divide-y divide-line-light">
         {items.map((s) => (
           <li key={s.id} className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-start justify-between gap-3">

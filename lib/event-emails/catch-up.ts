@@ -49,7 +49,7 @@ export interface CatchUpStatus {
   eligible: boolean
   open: boolean
   audiences: AudienceKey[]
-  pending: { email: string; name: string; roles: RecipientRole[] }[]
+  pending: { email: string; name: string; memberId: string | null; roles: RecipientRole[] }[]
 }
 
 /** Who a catch-up would reach right now, for the tab. Read-only. */
@@ -66,7 +66,7 @@ export async function catchUpStatus(db: SupabaseClient, email: EventEmailRow): P
     resolveAudience(db, event, audiences),
     alreadyTriedAddresses(db, email.id),
   ])
-  const pending = missedRecipients(recipients, tried).map((r) => ({ email: r.email, name: r.name, roles: r.roles }))
+  const pending = missedRecipients(recipients, tried).map((r) => ({ email: r.email, name: r.name, memberId: r.memberId ?? null, roles: r.roles }))
   return { ...base, open, pending }
 }
 

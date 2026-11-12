@@ -31,7 +31,7 @@ const REASON_LABEL: Record<SpaceGrant['reason'], string> = {
   roster: 'Added directly',
 }
 
-export function MemberSpacesPanel({ memberId }: { memberId: string }) {
+export function MemberSpacesPanel({ memberId, embedded = false }: { memberId: string; embedded?: boolean }) {
   const [spaces, setSpaces] = useState<SpaceGrant[] | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -48,9 +48,11 @@ export function MemberSpacesPanel({ memberId }: { memberId: string }) {
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold text-brand-muted-soft">
-        Community spaces
-      </h2>
+      {!embedded && (
+        <h2 className="mb-3 text-sm font-semibold text-brand-muted-soft">
+          Community spaces
+        </h2>
+      )}
 
       {failed ? (
         // Never render an empty list on failure — an admin would read it as

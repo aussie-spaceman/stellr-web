@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Collapsible } from '@stellr/web-ui'
 import {
   EVENT_AWARDS,
   INDIVIDUAL_AWARD_TYPES,
@@ -82,10 +83,9 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
 
   if (!data) {
     return (
-      <div className="bg-white rounded-xl border border-brand-border p-4">
-        <h3 className="text-sm font-semibold text-brand-muted">Judging &amp; awards</h3>
-        {msg ? <p className="text-xs text-red-600 mt-2">{msg.text}</p> : <p className="text-xs text-brand-muted-soft mt-2">Loading…</p>}
-      </div>
+      <Collapsible id="awards" title="Judging &amp; awards">
+        {msg ? <p className="text-xs text-red-600">{msg.text}</p> : <p className="text-xs text-brand-muted-soft">Loading…</p>}
+      </Collapsible>
     )
   }
 
@@ -131,30 +131,28 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
     : 'Not issued yet — students can’t see any of this'
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-brand-muted">Judging &amp; awards</h3>
-          <p className="text-xs text-brand-muted-soft mt-1">
-            Record the judges&rsquo; pick of the winning company and the mentors&rsquo; choices for the other
-            awards, print the certificates, then issue them. A student can win one individual award per event: {EVENT_AWARDS.anita_gale.label},{' '}
-            {EVENT_AWARDS.dick_edwards.label} or {EVENT_AWARDS.norm_chaffee.label}.
-          </p>
-        </div>
-        <div className="text-right space-y-1">
-          <button
-            onClick={issue}
-            disabled={busy || data.pending === 0}
-            className="text-xs font-medium px-3 py-2 rounded-md bg-brand-blue text-white hover:bg-brand-blue-bright disabled:opacity-50"
-          >
-            {busy ? 'Working…' : 'Issue awards'}
-          </button>
-          <p className="text-xs text-brand-muted-soft">
-            {status}
-            {data.pending > 0 && <span className="text-brand-blue-dark font-medium"> · {data.pending} change{data.pending === 1 ? '' : 's'} not yet issued</span>}
-          </p>
-        </div>
-      </div>
+    <Collapsible
+      id="awards"
+      title="Judging &amp; awards"
+      summary={`${status}${data.pending > 0 ? ` · ${data.pending} change${data.pending === 1 ? '' : 's'} not yet issued` : ''}`}
+      description={
+        <>
+          Record the judges&rsquo; pick of the winning company and the mentors&rsquo; choices for the other
+          awards, print the certificates, then issue them. A student can win one individual award per event: {EVENT_AWARDS.anita_gale.label},{' '}
+          {EVENT_AWARDS.dick_edwards.label} or {EVENT_AWARDS.norm_chaffee.label}.
+        </>
+      }
+      actions={
+        <button
+          onClick={issue}
+          disabled={busy || data.pending === 0}
+          className="text-xs font-medium px-3 py-2 rounded-md bg-brand-blue text-white hover:bg-brand-blue-bright disabled:opacity-50"
+        >
+          {busy ? 'Working…' : 'Issue awards'}
+        </button>
+      }
+    >
+      <div className="space-y-5">
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
 
@@ -271,6 +269,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
           </section>
         </>
       )}
-    </div>
+      </div>
+    </Collapsible>
   )
 }

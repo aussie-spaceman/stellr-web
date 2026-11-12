@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ExternalLink, Plus, Trash2 } from 'lucide-react'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
+import { MemberLink } from '@/components/admin/RecordLinks'
 import { toast } from '@/components/ui/Toast'
 import { NewObjectWizard } from './NewObjectWizard'
 
@@ -285,7 +286,7 @@ function RosterPane({ object }: { object: ObjectListItem }) {
         <ul className="space-y-1">
           {rows.map((r, i) => (
             <li key={r.member_id + i} className="flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-1.5 text-sm">
-              <span className="text-brand-blue-dark">{memberName(r.members)}</span>
+              <MemberLink memberId={r.member_id} className="text-brand-blue-dark">{memberName(r.members)}</MemberLink>
               <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs text-brand-muted capitalize">
                 {r.relationship ?? r.role ?? 'member'}
               </span>
@@ -367,7 +368,7 @@ function ManagersPane({ object }: { object: ObjectListItem }) {
         <ul className="space-y-1">
           {rows.map((r, i) => (
             <li key={r.member_id + i} className="flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-1.5 text-sm">
-              <span className="text-brand-blue-dark">{memberName(r.members)}</span>
+              <MemberLink memberId={r.member_id} className="text-brand-blue-dark">{memberName(r.members)}</MemberLink>
               <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs text-brand-muted capitalize">{r.role}</span>
               {r.source === 'structural' && (
                 <span className="text-xs text-brand-muted-soft" title="Set on the container itself (coach/mentor)">structural</span>

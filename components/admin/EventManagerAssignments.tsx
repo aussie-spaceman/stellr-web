@@ -2,12 +2,16 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Collapsible } from '@stellr/web-ui'
 import { formatDateShort } from '@/lib/utils'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 interface Assignment {
   id: string
   clerk_user_id: string
   email?: string | null
+  /** The manager's members row, when they have one. */
+  member_id?: string | null
   expires_on?: string | null
   active?: boolean
 }
@@ -55,8 +59,12 @@ export default function EventManagerAssignments({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-brand-muted">Event Managers</h3>
+    <Collapsible
+      id="event-managers"
+      title="Event Managers"
+      summary={`${initialAssignments.length} assigned`}
+    >
+      <div className="space-y-3">
       {initialAssignments.length === 0 ? (
         <p className="text-sm text-brand-muted-soft">No event managers assigned to this event.</p>
       ) : (
@@ -64,7 +72,7 @@ export default function EventManagerAssignments({
           {initialAssignments.map((a) => (
             <li key={a.id} className="flex items-center justify-between text-sm">
               <span className="text-content-body">
-                {a.email ?? a.clerk_user_id}
+                <MemberLink memberId={a.member_id}>{a.email ?? a.clerk_user_id}</MemberLink>
                 <span className="ml-2 text-xs text-content-muted">
                   {a.active === false ? 'expired' : a.expires_on ? `until ${formatDateShort(a.expires_on)}` : 'no expiry set'}
                 </span>
@@ -101,6 +109,7 @@ export default function EventManagerAssignments({
         They need a Stellr login, must be 18+ and cleared (background check, verified uploaded check or verified
         teaching license). Access ends 30 days after the event; change the date on their member page.
       </p>
-    </div>
+      </div>
+    </Collapsible>
   )
 }

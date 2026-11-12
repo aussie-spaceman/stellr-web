@@ -29,6 +29,8 @@ interface Props {
   adminMemberId?: string
   /** The member's own post-event survey per event, keyed by event slug. */
   surveys?: Record<string, SurveyChip>
+  /** Inside an admin Collapsible that supplies the card and title. */
+  embedded?: boolean
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -37,7 +39,7 @@ function blankForm() {
   return { event_year: '', event_location: '', team_name: '', award: '' }
 }
 
-export function EventHistory({ participations: initialParticipations, editable = false, adminMemberId, surveys }: Props) {
+export function EventHistory({ participations: initialParticipations, editable = false, adminMemberId, surveys, embedded = false }: Props) {
   const router = useRouter()
   const [items, setItems] = useState(initialParticipations)
   const [adding, setAdding] = useState(false)
@@ -88,11 +90,13 @@ export function EventHistory({ participations: initialParticipations, editable =
   const sorted = [...items].sort((a, b) => (b.event_year ?? 0) - (a.event_year ?? 0))
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-brand-blue-dark">
-          {adminMemberId ? 'Event Activity' : 'Log Historical Event Activity'}
-        </h2>
+    <div className={embedded ? undefined : 'bg-white rounded-xl border border-brand-border p-6'}>
+      <div className={`flex items-center mb-4 ${embedded ? 'justify-end' : 'justify-between'}`}>
+        {!embedded && (
+          <h2 className="text-base font-semibold text-brand-blue-dark">
+            {adminMemberId ? 'Event Activity' : 'Log Historical Event Activity'}
+          </h2>
+        )}
         {editable && !adding && (
           <button
             onClick={() => setAdding(true)}

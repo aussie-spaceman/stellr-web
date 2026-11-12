@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Collapsible } from '@stellr/web-ui'
 
 type School = {
   id: string
@@ -71,20 +72,23 @@ export function SchoolEditForm({ school }: { school: School }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-      <div className="px-5 py-4 border-b border-brand-hairline flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-brand-muted">School details</h2>
-        {!editing && (
+    <Collapsible
+      id="details"
+      title="School details"
+      summary={[school.city, school.state].filter(Boolean).join(', ')}
+      actions={
+        !editing && (
           <button
             onClick={() => setEditing(true)}
             className="text-xs font-semibold text-brand-blue hover:text-brand-blue-bright"
           >
             Edit
           </button>
-        )}
-      </div>
-
-      <div className="px-5 py-4">
+        )
+      }
+      bodyClassName="px-5 py-4"
+    >
+      <div>
         {!editing ? (
           <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
             <Field label="Name" value={school.name} />
@@ -127,7 +131,7 @@ export function SchoolEditForm({ school }: { school: School }) {
           </div>
         )}
       </div>
-    </div>
+    </Collapsible>
   )
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button } from '@stellr/web-ui'
+import { Badge, Button, Collapsible } from '@stellr/web-ui'
 import { formatDateShort } from '@/lib/utils'
 import type { EngineSummary } from '@/lib/esign/state'
 
@@ -133,11 +133,17 @@ export function EsignEngineCard() {
   const accountReported = state.accountSent !== null && state.accountSyncedAt
 
   return (
-    <section className="rounded-xl border border-line bg-white p-5 space-y-4" aria-labelledby="esign-engine-heading">
+    <Collapsible
+      id="esign-engine"
+      title="E-signature engine"
+      summary={`${summary.currentEngine === 'docusign' ? 'DocuSign' : 'Stellr signing'} · ${
+        exhausted ? 'DocuSign allowance used up' : `${remaining} DocuSign envelope${remaining === 1 ? '' : 's'} left`
+      }`}
+      bodyClassName="p-5 space-y-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="esign-engine-heading" className="font-heading text-lg font-semibold text-ink">E-signature engine</h2>
-          <p className="text-sm text-content-muted mt-0.5">
+          <p className="text-sm text-content-muted">
             New agreements are going to{' '}
             <strong className="text-ink">{summary.currentEngine === 'docusign' ? 'DocuSign' : 'Stellr signing'}</strong>.
           </p>
@@ -314,6 +320,6 @@ export function EsignEngineCard() {
       {msg && (
         <p className={`text-sm ${msg.error ? 'text-danger' : 'text-ink'}`} role="status">{msg.text}</p>
       )}
-    </section>
+    </Collapsible>
   )
 }

@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { SchoolLink } from '@/components/admin/RecordLinks'
 import { formatDateShort } from '@/lib/utils'
 import {
   MEMBER_BRACKETS,
@@ -34,6 +35,7 @@ export interface MemberRow {
   }>
   member_schools: Array<{
     is_current: boolean
+    school_id?: string | null
     schools: { name: string }
   }>
 }
@@ -309,7 +311,8 @@ export function MemberTable({ members, tiers, schools = [], total, page, pageSiz
               const activeTier = m.member_memberships?.find(
                 (mm) => mm.renewal_status === 'active'
               )?.membership_tiers?.name
-              const school = m.member_schools?.find((s) => s.is_current)?.schools?.name
+              const currentSchool = m.member_schools?.find((s) => s.is_current)
+              const school = currentSchool?.schools?.name
 
               return (
                 <tr key={m.id} className="group hover:bg-surface">
@@ -362,7 +365,9 @@ export function MemberTable({ members, tiers, schools = [], total, page, pageSiz
                       <span className="text-xs text-content-muted">—</span>
                     )}
                   </td>
-                  <td className={`${TD} min-w-40 text-content-body`}>{school ?? '—'}</td>
+                  <td className={`${TD} min-w-40 text-content-body`}>
+                    {school ? <SchoolLink schoolId={currentSchool?.school_id}>{school}</SchoolLink> : '—'}
+                  </td>
                   <td className={`${TD} whitespace-nowrap text-content-muted`}>
                     {formatDateShort(m.created_at)}
                   </td>

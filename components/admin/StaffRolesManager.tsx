@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 export interface StaffRole {
   member_id: string
@@ -124,7 +125,7 @@ export default function StaffRolesManager({
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-brand-blue-dark">
-                {r.member_name?.trim() || r.member_email || 'Member'}
+                <MemberLink memberId={r.member_id}>{r.member_name?.trim() || r.member_email || 'Member'}</MemberLink>
               </p>
               <div className="mt-1 flex flex-wrap gap-1">
                 {r.scopes.map((s) => (

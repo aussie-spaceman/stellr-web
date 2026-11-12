@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@stellr/web-ui'
 import { ROLE_LABEL, type RecipientRole } from '@/lib/event-emails/types'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 interface Status {
   eligible: boolean
   open: boolean
-  pending: { email: string; name: string; roles: RecipientRole[] }[]
+  pending: { email: string; name: string; memberId?: string | null; roles: RecipientRole[] }[]
 }
 
 // Shown on a sent All-participants email: who has registered since it went out
@@ -77,7 +78,11 @@ export function EventEmailCatchUp({
           <ul className="grid gap-1 text-xs text-brand-muted sm:grid-cols-2">
             {status.pending.map((r) => (
               <li key={r.email}>
-                {r.name !== r.email && <span className="text-ink">{r.name} · </span>}
+                {r.name !== r.email && (
+                  <span className="text-ink">
+                    <MemberLink memberId={r.memberId}>{r.name}</MemberLink> ·{' '}
+                  </span>
+                )}
                 {r.email}
                 {r.roles.length > 0 && ` (${r.roles.map((x) => ROLE_LABEL[x] ?? x).join(', ')})`}
               </li>

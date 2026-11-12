@@ -12,6 +12,7 @@ import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
 import { memberSurveyRows } from '@/lib/survey/member'
 import { toMemberSurveyItems, type MemberSurveyItem } from '@/lib/survey/history'
+import { resolveSchoolIds } from '@/lib/school-ids'
 
 export const metadata = { title: 'Admin — Member Detail' }
 
@@ -190,6 +191,16 @@ export default async function AdminMemberPage({
       })
   }
 
+  // The organiser's registrations carry the school as typed text: find the
+  // school record behind each (the organiser's current school, then an exact
+  // unique name match) so it can link to the school page.
+  const regRows = registrations ?? []
+  const regSchoolIds = await resolveSchoolIds(
+    db,
+    regRows.map((r) => ({ memberId: id, schoolName: r.school_name as string | null })),
+  )
+  const registrationsWithSchool = regRows.map((r, i) => ({ ...r, school_id: regSchoolIds[i] }))
+
   return (
     <AdminMemberDetail
       member={member}
@@ -197,7 +208,7 @@ export default async function AdminMemberPage({
       schools={schools ?? []}
       ethnicityOptions={ethnicityOptions ?? []}
       allergyOptions={allergyOptions ?? []}
-      registrations={registrations ?? []}
+      registrations={registrationsWithSchool}
       sessions={hostedSessions}
       membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
       activity={activity ?? []}

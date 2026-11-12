@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { SchoolEditForm } from '@/components/admin/SchoolEditForm'
+import { Collapsible, CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
 import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — School Detail' }
@@ -90,14 +91,12 @@ export default async function AdminSchoolDetailPage({
         </div>
       </div>
 
+      <CollapsibleGroup storageKey="admin.school">
+      <div className="space-y-6">
+      <CollapseAllControls className="justify-end" />
       <SchoolEditForm school={school} />
 
-      <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-        <div className="px-5 py-4 border-b border-brand-hairline flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-brand-muted">Members</h2>
-          <span className="text-xs text-brand-muted-soft">{allMembers.length} active</span>
-        </div>
-
+      <Collapsible id="members" title="Members" summary={`${allMembers.length} active`} bodyClassName="p-0">
         {allMembers.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-brand-muted-soft">No members linked to this school.</div>
         ) : (
@@ -161,7 +160,9 @@ export default async function AdminSchoolDetailPage({
             </table>
           </div>
         )}
+      </Collapsible>
       </div>
+      </CollapsibleGroup>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusi
 import { downloadSignedRecord } from '@/lib/esign/download-client'
 import { slug } from '@/lib/esign/filenames'
 import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
+import { MemberLink } from '@/components/admin/RecordLinks'
 
 export interface EnvelopeRow {
   id: string
@@ -209,7 +210,9 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
             <tbody className="divide-y divide-brand-hairline">
               {filtered.map(env => (
                 <tr key={env.id} className="hover:bg-brand-canvas">
-                  <td className="px-4 py-3 font-medium text-brand-blue-dark whitespace-nowrap">{env.minor_name}</td>
+                  <td className="px-4 py-3 font-medium text-brand-blue-dark whitespace-nowrap">
+                    <MemberLink memberId={env.member_id}>{env.minor_name}</MemberLink>
+                  </td>
                   <td className="px-4 py-3 text-brand-muted-soft text-xs whitespace-nowrap capitalize">{env.envelope_type ?? 'minor'}</td>
                   <td className="px-4 py-3 text-brand-muted-soft text-xs whitespace-nowrap">
                     {(env.provider ?? 'docusign') === 'native' ? 'Stellr' : 'DocuSign'}

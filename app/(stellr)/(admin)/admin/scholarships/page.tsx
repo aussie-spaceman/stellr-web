@@ -5,6 +5,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { SCHOLARSHIP_COLUMNS, withStages, type ScholarshipApplication, type ScholarshipStage } from '@/lib/scholarships'
 import { ScholarshipStagePill } from '@/components/admin/ScholarshipStagePill'
+import { SchoolLink } from '@/components/admin/RecordLinks'
+import { resolveSchoolIds } from '@/lib/school-ids'
 
 export const metadata = { title: 'Admin — Scholarships' }
 export const dynamic = 'force-dynamic'
@@ -38,6 +40,11 @@ export default async function AdminScholarshipsPage({ searchParams }: { searchPa
     filter === 'review' ? apps.filter((a) => a.stage === 'submitted')
     : filter === 'offered' ? apps.filter((a) => OFFERED.includes(a.stage))
     : apps
+  // The applicant's school is typed text: find the record behind it, if one matches surely.
+  const schoolIds = await resolveSchoolIds(
+    db,
+    rows.map((a) => ({ memberId: a.member_id, schoolName: a.school })),
+  )
 
   return (
     <div className="space-y-6">
@@ -96,13 +103,18 @@ export default async function AdminScholarshipsPage({ searchParams }: { searchPa
                 </td>
               </tr>
             )}
-            {rows.map((a) => (
+            {rows.map((a, i) => (
               <tr key={a.id} className="hover:bg-surface">
                 <td className="px-4 py-3">
                   <Link href={`/admin/scholarships/${a.id}`} className="font-semibold text-ink hover:text-primary">
                     {a.first_name} {a.last_name}
                   </Link>
                   <div className="text-xs text-content-body">{a.email}</div>
+                  {a.school && (
+                    <div className="text-xs text-content-body">
+                      <SchoolLink schoolId={schoolIds[i]}>{a.school}</SchoolLink>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-content-body">{a.event_title ?? a.activity ?? '—'}</td>
                 <td className="px-4 py-3 text-content-body whitespace-nowrap">

@@ -3,6 +3,7 @@
 
 import Link from 'next/link'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
+import { Collapsible } from '@stellr/web-ui'
 import { formatDateShort } from '@/lib/utils'
 import type { Metric, PersonRef } from '@/lib/admin-digest'
 
@@ -80,20 +81,25 @@ export function Panel({
   return (
     // min-w-0: as a grid item the panel would otherwise grow to fit its
     // longest one-line detail and push the page sideways on a phone.
-    <section className={`app-card min-w-0 p-5 ${className}`} aria-label={title}>
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-heading text-lg text-ink">
-          {title}
-          {count !== undefined && <span className="ml-2 font-subheading text-sm font-medium text-content-muted">{count}</span>}
-        </h3>
-        {href && (
+    // Folds to its title and count; remembered under the page's
+    // CollapsibleGroup ("admin.dashboard").
+    <Collapsible
+      id={title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}
+      title={title}
+      summary={count !== undefined ? String(count) : undefined}
+      headingLevel={3}
+      className={`min-w-0 ${className}`}
+      bodyClassName="p-5"
+      actions={
+        href && (
           <Link prefetch={false} href={href} className="shrink-0 text-sm font-medium text-primary hover:underline">
             {hrefLabel}
           </Link>
-        )}
-      </div>
-      <div className="mt-3">{children}</div>
-    </section>
+        )
+      }
+    >
+      {children}
+    </Collapsible>
   )
 }
 

@@ -111,6 +111,30 @@ describe('diffRoleMapping', () => {
     expect(roleDriftCount(drift)).toBe(1)
   })
 
+  it("accepts the Clerk event_manager role backed only by another tenant's assignment and membership", () => {
+    const base = seeded()
+    const drift = diffRoleMapping({
+      ...base,
+      clerkEventManagerIds: [...base.clerkEventManagerIds, 'user_other'],
+      eventManagers: [...base.eventManagers, { clerk_user_id: 'user_other', tenant_id: OTHER_TENANT }],
+      existingMemberships: [...base.existingMemberships, { tenant_id: OTHER_TENANT, clerk_user_id: 'user_other', member_id: null, role: 'event_manager' }],
+    })
+    expect(drift.claimWithoutAssignment).toEqual([])
+    expect(roleDriftCount(drift)).toBe(0)
+  })
+
+  it("still reports another tenant's manager whose membership is missing, though the claim is backed", () => {
+    const base = seeded()
+    const drift = diffRoleMapping({
+      ...base,
+      clerkEventManagerIds: [...base.clerkEventManagerIds, 'user_other'],
+      eventManagers: [...base.eventManagers, { clerk_user_id: 'user_other', tenant_id: OTHER_TENANT }],
+    })
+    expect(drift.claimWithoutAssignment).toEqual([])
+    expect(drift.otherTenantManagers).toEqual([{ tenant_id: OTHER_TENANT, clerk_user_id: 'user_other', kind: 'assignment_without_membership' }])
+    expect(roleDriftCount(drift)).toBe(1)
+  })
+
   it('reports an assignment whose holder has no portal role in Clerk', () => {
     const drift = diffRoleMapping({ ...seeded(), clerkEventManagerIds: [] })
     expect(drift.assignmentWithoutClaim).toEqual(['user_m'])

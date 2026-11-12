@@ -21,7 +21,9 @@
 //
 // --check reads the rows back and prints readiness reasons only: no ids of
 // people, no emails, no secrets. --remove tears the tenant down through the
-// deletion registry (lib/deletion), scoped by the canary's own id and slug.
+// deletion registry (lib/deletion), scoped by the canary's own id and slug, and
+// only once the canary event's Sanity document is gone (a sync would otherwise
+// re-create the mirror row under the default tenant).
 // Nothing in this file names Stellr's tenant id: a teardown that cannot name it
 // cannot delete it.
 //
@@ -33,7 +35,7 @@
 // example.test domain, with no password.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadAssignmentTenantId, loadEventAssignees, type RoleSyncResult } from '../authz/role-sync'
-import { toEventRow, type EventRow } from '../events/sync'
+import { toEventRow, type EventFetcher, type EventRow } from '../events/sync'
 import { localDate } from '../survey/timezone'
 import { isAllowedE2eSupabase } from './e2e-supabase-target'
 import { assertSeedTarget } from './two-tenant-seed'
@@ -67,9 +69,19 @@ export const CANARY_FLOW_EVENT = {
   state: 'CO',
 } as const
 
-/** How far ahead the seeded event starts, and the least --check calls comfortable. */
+/** How far ahead the seeded event starts, and the least --check accepts (the plan's "at least 3 weeks out"). */
 export const CANARY_EVENT_LEAD_DAYS = 28
 export const CANARY_EVENT_MIN_LEAD_DAYS = 21
+
+/** raw.fixture on the mirror row the seed writes. The K7b publish replaces raw, so a row that still has it is the seed's own. */
+export const CANARY_EVENT_FIXTURE = 'canary-flow'
+
+/** Whole days from `now` until `startsAt`; null when there is no start. */
+export function daysUntil(startsAt: string | null | undefined, now: Date): number | null {
+  if (!startsAt) return null
+  const at = Date.parse(startsAt)
+  return Number.isNaN(at) ? null : Math.floor((at - now.getTime()) / 86_400_000)
+}
 
 /** An assignment lasts until the event's end plus this, like a default grant (lib/event-manager.ts). */
 export const CANARY_ASSIGNMENT_GRACE_DAYS = 30
@@ -265,7 +277,7 @@ export function canaryEventRow(now: Date): EventRow {
     now,
   )
   if (!row) throw new Error('canary event row could not be built')
-  return { ...row, min_participant_age: CANARY_FLOW_TENANT.min_participant_age, raw: { ...row.raw, fixture: 'canary-flow' } }
+  return { ...row, min_participant_age: CANARY_FLOW_TENANT.min_participant_age, raw: { ...row.raw, fixture: CANARY_EVENT_FIXTURE } }
 }
 
 export interface CanaryFlowPlan {
@@ -366,9 +378,13 @@ export interface ApplyDeps {
 /**
  * Writes the plan. Idempotent: the tenant row is upserted on its id; a host or
  * the mirror row is inserted when missing and kept when it already belongs to
- * dev-canary (so a re-run after K7b leaves the published event alone). Refuses,
- * before writing anything it would move, a slug, host or event that belongs to
- * another tenant, and a probe host that is mapped.
+ * dev-canary (so a re-run after K7b leaves the published event alone). The
+ * seed's own mirror row (raw.fixture still CANARY_EVENT_FIXTURE) is moved to the
+ * plan's dates when it starts fewer than CANARY_EVENT_MIN_LEAD_DAYS out, so a
+ * re-run keeps it at least 3 weeks away; a published row is left for a
+ * republish, and --check reports it. Refuses, before writing anything it would
+ * move, a tenant row under the canary id that is not dev-canary, a slug, host or
+ * event that belongs to another tenant, and a probe host that is mapped.
  */
 export async function applyCanaryFlowSeed(plan: CanaryFlowPlan, deps: ApplyDeps): Promise<void> {
   const { db, log } = deps
@@ -377,6 +393,11 @@ export async function applyCanaryFlowSeed(plan: CanaryFlowPlan, deps: ApplyDeps)
   if (problems.length) throw new Error(`the canary tenant row fails the tenants CHECKs: ${problems.join('; ')}`)
 
   // Refuse everything that would take something from another tenant, before any write.
+  const idOwner = await db.from('tenants').select('id, slug, is_platform_owner').eq('id', tenantId).maybeSingle()
+  check('tenants read', idOwner.error)
+  const idRow = idOwner.data as { slug: string; is_platform_owner: boolean } | null
+  if (idRow && (idRow.is_platform_owner || idRow.slug !== plan.tenant.slug)) throw new Error('refusing: the row under the canary id is not dev-canary')
+
   const slugOwner = await db.from('tenants').select('id').eq('slug', String(plan.tenant.slug)).maybeSingle()
   check('tenants read', slugOwner.error)
   if (slugOwner.data && (slugOwner.data as { id: string }).id !== tenantId) throw new Error(`the slug ${String(plan.tenant.slug)} belongs to another tenant`)
@@ -390,9 +411,9 @@ export async function applyCanaryFlowSeed(plan: CanaryFlowPlan, deps: ApplyDeps)
     if (mapped.has(d.host) && mapped.get(d.host) !== tenantId) throw new Error(`${d.host} is mapped to another tenant`)
   }
 
-  const eventRows = await db.from('events').select('slug, sanity_id, tenant_id, ends_at').in('slug', [plan.event.slug])
+  const eventRows = await db.from('events').select('slug, sanity_id, tenant_id, starts_at, ends_at, raw').in('slug', [plan.event.slug])
   check('events read', eventRows.error)
-  const bySanity = await db.from('events').select('slug, sanity_id, tenant_id, ends_at').in('sanity_id', [plan.event.sanity_id])
+  const bySanity = await db.from('events').select('slug, sanity_id, tenant_id, starts_at, ends_at, raw').in('sanity_id', [plan.event.sanity_id])
   check('events read', bySanity.error)
   const existingEvents = [...((eventRows.data ?? []) as EventFacts[]), ...((bySanity.data ?? []) as EventFacts[])]
   if (existingEvents.some((e) => e.tenant_id !== tenantId)) throw new Error(`the event ${plan.event.slug} belongs to another tenant`)
@@ -416,9 +437,22 @@ export async function applyCanaryFlowSeed(plan: CanaryFlowPlan, deps: ApplyDeps)
   log(`  ✓ left unmapped: ${plan.unmappedHost}`)
 
   let eventEnd = plan.event.ends_at
-  if (kept) {
+  // The plan's own clock: canaryEventRow stamps synced_at with it.
+  const days = kept ? daysUntil(kept.starts_at, new Date(plan.event.synced_at)) : null
+  const tooSoon = days === null || days < CANARY_EVENT_MIN_LEAD_DAYS
+  if (kept && tooSoon && isSeedEventRow(kept)) {
+    const move = await db
+      .from('events')
+      .update({ starts_at: plan.event.starts_at, ends_at: plan.event.ends_at, raw: plan.event.raw, synced_at: plan.event.synced_at })
+      .eq('slug', plan.event.slug)
+      .eq('sanity_id', plan.event.sanity_id)
+      .eq('tenant_id', tenantId)
+    check('events update', move.error)
+    log(`  ✓ events: ${plan.event.slug} (kept, moved to start ${plan.event.starts_at?.slice(0, 10) ?? '-'})`)
+  } else if (kept) {
     eventEnd = kept.ends_at ?? eventEnd
     log(`  ✓ events: ${plan.event.slug} (kept)`)
+    if (tooSoon) log(`  ! events: the published event starts fewer than ${CANARY_EVENT_MIN_LEAD_DAYS} days out; republish it with a later date`)
   } else {
     const ins = await db.from('events').insert(plan.event)
     check('events insert', ins.error)
@@ -463,7 +497,13 @@ interface EventFacts {
   slug: string
   sanity_id: string
   tenant_id: string
+  starts_at: string | null
   ends_at: string | null
+  raw: unknown
+}
+
+function isSeedEventRow(e: EventFacts): boolean {
+  return typeof e.raw === 'object' && e.raw !== null && (e.raw as Record<string, unknown>).fixture === CANARY_EVENT_FIXTURE
 }
 
 // ── --check ─────────────────────────────────────────────────────────────────
@@ -557,12 +597,15 @@ export function canaryReadiness(
   else if (e.tenant_id !== tenantId) lines.push({ ok: false, what: 'mirror row', reason: `${plan.event.slug} belongs to another tenant` })
   else if (e.min_participant_age !== null && e.min_participant_age < 14) lines.push({ ok: false, what: 'mirror row', reason: 'its minimum age is below 14' })
   else {
-    const days = e.starts_at ? Math.floor((Date.parse(e.starts_at) - now.getTime()) / 86_400_000) : null
+    const days = daysUntil(e.starts_at, now)
     if (days === null || days < 0) lines.push({ ok: false, what: 'mirror row', reason: 'the event has no start date or has started' })
-    else {
-      const soon = days < CANARY_EVENT_MIN_LEAD_DAYS ? `; fewer than ${CANARY_EVENT_MIN_LEAD_DAYS} days out` : ''
-      lines.push({ ok: true, what: 'mirror row', reason: `${plan.event.slug} is dev-canary's, starts in ${days} days${soon}` })
-    }
+    else if (days < CANARY_EVENT_MIN_LEAD_DAYS) {
+      lines.push({
+        ok: false,
+        what: 'mirror row',
+        reason: `starts in ${days} days; fewer than ${CANARY_EVENT_MIN_LEAD_DAYS}. Re-run --apply (before the publish) or republish it with a later date`,
+      })
+    } else lines.push({ ok: true, what: 'mirror row', reason: `${plan.event.slug} is dev-canary's, starts in ${days} days` })
   }
 
   const missing = [
@@ -582,6 +625,7 @@ export function formatReadiness(lines: ReadinessLine[]): string[] {
 
 /** What --remove does, in order. A dry run prints this. */
 export const CANARY_REMOVAL_STEPS: readonly string[] = [
+  "refuse while the canary event's Sanity document is published, or Sanity cannot be read (a sync would re-create the mirror row under the default tenant)",
   'refuse unless the row under the canary id is dev-canary and not the platform owner',
   "ask the deletion registry what blocks deleting the canary event; stop if anything does (registrations and participation records go through the app's deletion tool first)",
   "refuse unless every row the registry's 'event' entity would delete is stamped with dev-canary",
@@ -602,6 +646,8 @@ export interface RegistryEntity {
 
 export interface RemoveDeps {
   db: SupabaseClient
+  /** Whether the canary event's document is published in Sanity: canaryEventInSanity. A throw counts as published. */
+  sanityEventPublished: () => Promise<boolean>
   /** lib/deletion/registry.ts getEntityDef('event'). */
   eventEntity: RegistryEntity
   /** lib/deletion/preflight.ts. */
@@ -619,6 +665,23 @@ export interface RemoveDeps {
   /** With --clerk: deletes the persona's Clerk user if it exists. */
   deleteClerkUser?: (persona: CanaryPersona) => Promise<'deleted' | 'absent'>
   log: (line: string) => void
+}
+
+/** NEXT_PUBLIC_SANITY_PROJECT_ID names a project (lib/sanity.ts treats 'placeholder' as none). */
+export function sanityProjectConfigured(projectId: string | undefined): boolean {
+  return Boolean(projectId && projectId !== 'placeholder')
+}
+
+/**
+ * RemoveDeps.sanityEventPublished for the script: the canary document, looked up
+ * by its _id and by its slug through the mirror's own fetcher. Throws, so the
+ * teardown refuses, when no Sanity project is configured: an unconfigured client
+ * reads every document as absent.
+ */
+export async function canaryEventInSanity(fetcher: EventFetcher, configured: boolean): Promise<boolean> {
+  if (!configured) throw new Error('no Sanity project is configured')
+  const [byId, bySlug] = await Promise.all([fetcher({ sanityId: CANARY_FLOW_EVENT.sanity_id }), fetcher({ slug: CANARY_FLOW_EVENT.slug })])
+  return Boolean(byId || bySlug)
 }
 
 export interface RemoveResult {
@@ -644,6 +707,20 @@ export async function removeCanaryFlow(deps: RemoveDeps): Promise<RemoveResult> 
   const tenantId = CANARY_FLOW_TENANT.id
   const slug = CANARY_FLOW_EVENT.slug
   const def = deps.eventEntity
+
+  // First: while the document exists, the event webhook or the mirror backfill
+  // re-creates a deleted mirror row as a NEW row, which gets the default tenant.
+  let published: boolean
+  try {
+    published = await deps.sanityEventPublished()
+  } catch {
+    throw new Error("refusing: Sanity could not be read, so the canary event's document may still exist; nothing was deleted")
+  }
+  if (published) {
+    throw new Error(
+      `refusing: the ${CANARY_FLOW_EVENT.sanity_id} event document is still published in Sanity. Unpublish and delete it (and any draft) in the dev dataset first, then re-run; nothing was deleted`,
+    )
+  }
 
   const tenant = await db.from('tenants').select('id, slug, is_platform_owner').eq('id', tenantId).maybeSingle()
   check('tenants read', tenant.error)

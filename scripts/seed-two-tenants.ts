@@ -37,6 +37,10 @@
  *   npx tsx scripts/seed-two-tenants.ts --profile flow --remove                       # dry run of the teardown
  *   npx tsx scripts/seed-two-tenants.ts --profile flow --remove --apply --clerk       # teardown (K7a rollback)
  *
+ * --remove refuses while the canary event's document is published in the
+ * Sanity dataset this env reads (unpublish and delete it first), and when
+ * Sanity cannot be read.
+ *
  * The flow profile also refuses a live Clerk key without --clerk, APP_ENV or
  * NEXT_PUBLIC_APP_ENV prod or preview, VERCEL_ENV preview, and any database but
  * the dev project or a stack on this machine. It prints hosts, slugs and handles,
@@ -51,6 +55,7 @@ import {
   assertCanaryFlowTarget,
   canaryClerkCreateUserBody,
   canaryClerkMetadata,
+  canaryEventInSanity,
   canaryReadiness,
   CANARY_REMOVAL_STEPS,
   describeCanaryFlowPlan,
@@ -59,6 +64,7 @@ import {
   planCanaryFlowSeed,
   readCanaryFacts,
   removeCanaryFlow,
+  sanityProjectConfigured,
   type CanaryPersona,
 } from '../lib/testing/canary-flow-seed'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants'
@@ -200,10 +206,14 @@ async function mainFlow() {
     const { deletionPreflight } = await import('../lib/deletion/preflight')
     const { archiveEntity } = await import('../lib/deletion/archive')
     const { syncEventManagerUnassigned } = await import('../lib/authz/role-sync')
+    const { fetchSanityEvent } = await import('../lib/events/sync')
     const eventEntity = getEntityDef('event')
     if (!eventEntity) throw new Error("the deletion registry has no 'event' entity")
+    // The dataset this env reads, which is the one its webhook and backfill sync from.
+    console.log(`  sanity dataset: ${process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'}`)
     const result = await removeCanaryFlow({
       db: supabaseServer(),
+      sanityEventPublished: () => canaryEventInSanity(fetchSanityEvent, sanityProjectConfigured(process.env.NEXT_PUBLIC_SANITY_PROJECT_ID)),
       eventEntity,
       deletionPreflight,
       archive: (_def, id, deletedBy) => archiveEntity(eventEntity, id, deletedBy),

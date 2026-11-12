@@ -122,7 +122,11 @@ export interface RoleDrift {
   stale: StaleMembership[]
   /** In platform_admins without the Clerk admin role. */
   platformAdminsWithoutClerkAdmin: string[]
-  /** The Clerk event_manager role with no assignment in this tenant: the role opens the portal, a membership would not exist. */
+  /**
+   * The Clerk event_manager role with no assignment in any tenant: the role opens the portal, and no membership
+   * anywhere stands behind it. The claim is one per person, not per tenant, so an assignment in another tenant
+   * backs it (that tenant's rows are checked in otherTenantManagers).
+   */
   claimWithoutAssignment: string[]
   /** An assignment in this tenant with no portal role in Clerk: the role denies them, a membership would admit them. */
   assignmentWithoutClaim: string[]
@@ -167,6 +171,8 @@ export function diffRoleMapping(input: RoleDiffInput, tenantId: string = STELLR_
   const admins = new Set(input.clerkAdminIds.filter(Boolean))
   const claimManagers = new Set(input.clerkEventManagerIds.filter(Boolean))
   const managers = new Set(managersInTenant(input.eventManagers, tenantId))
+  // The Clerk claim names no tenant: any tenant's assignment backs it.
+  const assignedAnywhere = new Set(input.eventManagers.map((e) => e.clerk_user_id).filter(Boolean))
   const staffMembers = new Set(input.staff.map((s) => s.member_id).filter(Boolean))
   const staffClerks = new Set(input.staff.map((s) => s.clerk_user_id).filter(Boolean))
 
@@ -186,7 +192,7 @@ export function diffRoleMapping(input: RoleDiffInput, tenantId: string = STELLR_
     missing: plan.memberships,
     stale,
     platformAdminsWithoutClerkAdmin: [...platform].filter((id) => !admins.has(id)).sort(),
-    claimWithoutAssignment: [...claimManagers].filter((id) => !managers.has(id)).sort(),
+    claimWithoutAssignment: [...claimManagers].filter((id) => !assignedAnywhere.has(id)).sort(),
     assignmentWithoutClaim: [...managers].filter((id) => !admins.has(id) && !claimManagers.has(id)).sort(),
     otherTenantManagers: otherTenantManagerDrift(input, tenantId),
     clerkAdminsNotPlatform: plan.platformAdmins,

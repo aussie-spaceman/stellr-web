@@ -6,8 +6,10 @@ import {
   assertCanaryFlowTarget,
   canaryClerkCreateUserBody,
   canaryClerkMetadata,
+  canaryEventInSanity,
   canaryHosts,
   canaryReadiness,
+  CANARY_EVENT_FIXTURE,
   CANARY_EVENT_MIN_LEAD_DAYS,
   CANARY_FLOW_EVENT,
   CANARY_FLOW_TENANT,
@@ -20,6 +22,7 @@ import {
   planCanaryFlowSeed,
   readCanaryFacts,
   removeCanaryFlow,
+  sanityProjectConfigured,
   TENANT_HOST_RE,
   TENANT_SLUG_RE,
   TENANT_TIME_ZONE_RE,
@@ -33,7 +36,8 @@ import { PRODUCTION_SUPABASE_REF, planTwoTenantSeed } from './two-tenant-seed'
 import { DEV_SUPABASE_REF } from './e2e-supabase-target'
 import { STELLR_TENANT_ID } from '../tenancy/constants'
 import { tenantEventSender } from '../event-emails/tenant-mail'
-import { syncEventManagerAssigned, syncEventManagerUnassigned, syncTenantAdminGranted } from '../authz/role-sync'
+import { loadRoleInput, syncEventManagerAssigned, syncEventManagerUnassigned, syncTenantAdminGranted } from '../authz/role-sync'
+import { diffRoleMapping, formatRoleDrift, roleDriftCount } from '../tenancy/role-mapping'
 import { getEntityDef } from '../deletion/registry'
 import { fakeSupabase, type FakeDb } from '../../test/fake-supabase'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -337,13 +341,44 @@ describe('--apply', () => {
   it('is idempotent, and keeps a mirror row the publish has since updated', async () => {
     const db = seedDb()
     await applyCanaryFlowSeed(plan(), applyDeps(db))
-    db.table('events').find((e) => e.slug === CANARY_FLOW_EVENT.slug)!.title = 'Published title'
-    await applyCanaryFlowSeed(planCanaryFlowSeed({ zone: ZONE, now: new Date('2026-12-01T00:00:00Z') }), applyDeps(db))
+    // The K7b publish rewrites the row from the document: its raw has no fixture tag.
+    const published = db.table('events').find((e) => e.slug === CANARY_FLOW_EVENT.slug)!
+    published.title = 'Published title'
+    published.raw = { _id: CANARY_FLOW_EVENT.sanity_id, slug: CANARY_FLOW_EVENT.slug, title: 'Published title' }
+    const publishedDates = { starts_at: published.starts_at, ends_at: published.ends_at }
+    const log: string[] = []
+    await applyCanaryFlowSeed(planCanaryFlowSeed({ zone: ZONE, now: new Date('2026-12-01T00:00:00Z') }), applyDeps(db, { log }))
     expect(db.table('tenants').filter((t) => t.id === CANARY_FLOW_TENANT.id)).toHaveLength(1)
     expect(db.table('tenant_domains')).toHaveLength(1)
-    expect(db.table('events').filter((e) => e.slug === CANARY_FLOW_EVENT.slug)).toEqual([expect.objectContaining({ title: 'Published title' })])
+    expect(db.table('events').filter((e) => e.slug === CANARY_FLOW_EVENT.slug)).toEqual([expect.objectContaining({ title: 'Published title', ...publishedDates })])
+    // 16 days out: a published row is the publish's to move, and the seed says so
+    expect(log.join('\n')).toMatch(/published event starts fewer than 21 days out; republish/)
     expect(db.table('event_manager_assignments').filter((a) => a.event_slug === CANARY_FLOW_EVENT.slug)).toHaveLength(1)
     expect(db.table('tenant_memberships')).toHaveLength(4)
+  })
+
+  it("moves the seed's own mirror row forward on a re-run when it is fewer than 3 weeks out, and the assignment with it", async () => {
+    const db = seedDb()
+    await applyCanaryFlowSeed(plan(), applyDeps(db))
+    const later = planCanaryFlowSeed({ zone: ZONE, now: new Date('2026-12-01T00:00:00Z') })
+    await applyCanaryFlowSeed(later, applyDeps(db))
+    const row = db.table('events').find((e) => e.slug === CANARY_FLOW_EVENT.slug)!
+    expect(row).toMatchObject({ starts_at: later.event.starts_at, ends_at: later.event.ends_at, tenant_id: CANARY_FLOW_TENANT.id })
+    expect((row.raw as Record<string, unknown>).fixture).toBe(CANARY_EVENT_FIXTURE)
+    expect((Date.parse(row.starts_at as string) - Date.parse('2026-12-01T00:00:00Z')) / 86_400_000).toBeGreaterThanOrEqual(CANARY_EVENT_MIN_LEAD_DAYS)
+    const assignment = db.table('event_manager_assignments').find((a) => a.event_slug === CANARY_FLOW_EVENT.slug)!
+    expect(Date.parse(assignment.expires_at as string)).toBe(Date.parse(later.event.ends_at as string) + 30 * 86_400_000)
+    expect(db.table('events').filter((e) => e.slug === CANARY_FLOW_EVENT.slug)).toHaveLength(1)
+    // Stellr's row is untouched
+    expect(db.table('events').find((e) => e.slug === STELLR_EVENT.slug)).toEqual(STELLR_EVENT)
+  })
+
+  it("leaves the seed's own mirror row alone while it is still 3 weeks or more out", async () => {
+    const db = seedDb()
+    await applyCanaryFlowSeed(plan(), applyDeps(db))
+    const before = JSON.stringify(db.table('events').find((e) => e.slug === CANARY_FLOW_EVENT.slug))
+    await applyCanaryFlowSeed(planCanaryFlowSeed({ zone: ZONE, now: new Date('2026-11-21T00:00:00Z') }), applyDeps(db))
+    expect(JSON.stringify(db.table('events').find((e) => e.slug === CANARY_FLOW_EVENT.slug))).toBe(before)
   })
 
   it('without --clerk writes the data rows only', async () => {
@@ -361,6 +396,9 @@ describe('--apply', () => {
       { events: [STELLR_EVENT, { ...STELLR_EVENT, id: 'ev-y', slug: 'other', sanity_id: CANARY_FLOW_EVENT.sanity_id }] },
       { events: [STELLR_EVENT, { ...STELLR_EVENT, id: 'ev-z', tenant_id: CANARY_FLOW_TENANT.id, sanity_id: 'other', slug: CANARY_FLOW_EVENT.slug }] },
       { tenants: [{ id: STELLR_TENANT_ID, slug: 'stellr', is_platform_owner: true }, { id: 'someone-else', slug: 'dev-canary', is_platform_owner: false }] },
+      // the canary id under another slug, or as the platform owner
+      { tenants: [{ id: STELLR_TENANT_ID, slug: 'stellr', is_platform_owner: true }, { id: CANARY_FLOW_TENANT.id, slug: 'someone', is_platform_owner: false, status: 'active' }] },
+      { tenants: [{ id: STELLR_TENANT_ID, slug: 'stellr', is_platform_owner: true }, { id: CANARY_FLOW_TENANT.id, slug: 'dev-canary', is_platform_owner: true, status: 'active' }] },
     ]
     for (const extra of cases) {
       const db = seedDb(extra)
@@ -368,6 +406,32 @@ describe('--apply', () => {
       await expect(applyCanaryFlowSeed(plan(), applyDeps(db))).rejects.toThrow()
       expect(JSON.stringify(db.tables)).toBe(before)
     }
+  })
+
+  it('names the reason when the canary id holds another tenant', async () => {
+    const db = seedDb({ tenants: [{ id: STELLR_TENANT_ID, slug: 'stellr', is_platform_owner: true }, { id: CANARY_FLOW_TENANT.id, slug: 'someone', is_platform_owner: false }] })
+    await expect(applyCanaryFlowSeed(plan(), applyDeps(db))).rejects.toThrow(/the row under the canary id is not dev-canary/)
+    expect(db.table('tenants').find((t) => t.id === CANARY_FLOW_TENANT.id)).toMatchObject({ slug: 'someone' })
+  })
+
+  it('leaves no role drift for map-tenancy-roles --check (K7a), with the personas as Clerk will hold them', async () => {
+    // A Stellr baseline with no drift: one Stellr admin who also manages a Stellr event.
+    const db = seedDb({
+      tenant_memberships: [
+        { id: 'm-stellr', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_staff', member_id: null, role: 'tenant_admin', source: 'admin' },
+        { id: 'm-stellr-em', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_staff', member_id: null, role: 'event_manager', source: 'admin' },
+      ],
+    })
+    const clerkUsers = [
+      { id: 'user_stellr_staff', role: 'admin' },
+      ...CANARY_PERSONAS.map((p) => ({ id: CLERK_IDS[p.handle], role: p.clerkRole ?? undefined })),
+    ]
+    const baseline = diffRoleMapping(await loadRoleInput(wired(db), [{ id: 'user_stellr_staff', role: 'admin' }]))
+    expect(formatRoleDrift(baseline)).toEqual([])
+    await applyCanaryFlowSeed(plan(), applyDeps(db))
+    const drift = diffRoleMapping(await loadRoleInput(wired(db), clerkUsers))
+    expect(formatRoleDrift(drift)).toEqual([])
+    expect(roleDriftCount(drift)).toBe(0)
   })
 
   it('refuses a plan whose tenant row would fail the CHECKs', async () => {
@@ -449,6 +513,22 @@ describe('--check', () => {
     expect(lines.filter((l) => !l.ok).map((l) => l.what).sort()).toEqual(['host map', 'mirror row', 'probe host'])
   })
 
+  it('is not ready when the mirror row starts fewer than 3 weeks out', async () => {
+    const db = seedDb()
+    await applyCanaryFlowSeed(plan(), applyDeps(db))
+    const startsAt = Date.parse(plan().event.starts_at as string)
+    for (const daysOut of [20, 5, 0]) {
+      const now = new Date(startsAt - daysOut * 86_400_000 - 3_600_000)
+      const lines = canaryReadiness(plan(), await readCanaryFacts(wired(db), plan()), { senderOf: sender, now })
+      const mirror = lines.find((l) => l.what === 'mirror row')!
+      expect(mirror.ok, `${daysOut} days out`).toBe(false)
+      expect(mirror.reason).toMatch(new RegExp(`starts in ${daysOut} days; fewer than ${CANARY_EVENT_MIN_LEAD_DAYS}`))
+    }
+    const atLimit = new Date(startsAt - CANARY_EVENT_MIN_LEAD_DAYS * 86_400_000 - 3_600_000)
+    const ok = canaryReadiness(plan(), await readCanaryFacts(wired(db), plan()), { senderOf: sender, now: atLimit })
+    expect(ok.find((l) => l.what === 'mirror row')?.ok).toBe(true)
+  })
+
   it('throws on a failed read, so a failure never reads as "not seeded"', async () => {
     const db = fakeSupabase({}, { failOn: (t) => (t === 'tenant_domains' ? 'boom' : null) })
     await expect(readCanaryFacts(wired(db), plan())).rejects.toThrow(/tenant_domains read failed/)
@@ -458,9 +538,13 @@ describe('--check', () => {
 describe('--remove', () => {
   const EVENT_ENTITY = getEntityDef('event')!
 
-  function removeDeps(db: FakeDb, seen: unknown[], calls: string[]): RemoveDeps {
+  function removeDeps(db: FakeDb, seen: unknown[], calls: string[], sanity: () => Promise<boolean> = async () => false): RemoveDeps {
     return {
       db: wired(db, seen),
+      sanityEventPublished: async () => {
+        calls.push('sanity')
+        return sanity()
+      },
       eventEntity: EVENT_ENTITY,
       // The registry's own count queries, against the same rows.
       deletionPreflight: async (entity, id) => {
@@ -516,7 +600,7 @@ describe('--remove', () => {
     const calls: string[] = []
     const result = await removeCanaryFlow(removeDeps(db, [], calls))
     expect(result).toEqual({ tenant: 'deleted' })
-    expect(calls).toEqual(['preflight event', 'archive event', 'unassign', 'clerk canary-manager', 'clerk canary-admin'])
+    expect(calls).toEqual(['sanity', 'preflight event', 'archive event', 'unassign', 'clerk canary-manager', 'clerk canary-admin'])
     expect(stellrRows(db)).toBe(before)
     const canaryLeft = Object.values(db.tables)
       .flat()
@@ -546,7 +630,7 @@ describe('--remove', () => {
       const before = snapshot(db)
       const calls: string[] = []
       await expect(removeCanaryFlow(removeDeps(db, [], calls))).rejects.toThrow(new RegExp(`deletion registry finds rows on ${CANARY_FLOW_EVENT.slug} \\(${table} 1\\)`))
-      expect(calls).toEqual(['preflight event'])
+      expect(calls).toEqual(['sanity', 'preflight event'])
       expect(snapshot(db)).toBe(before)
     }
   })
@@ -558,9 +642,38 @@ describe('--remove', () => {
       const before = snapshot(db)
       const calls: string[] = []
       await expect(removeCanaryFlow(removeDeps(db, [], calls))).rejects.toThrow(/not stamped with dev-canary/)
-      expect(calls).toEqual(['preflight event'])
+      expect(calls).toEqual(['sanity', 'preflight event'])
       expect(snapshot(db)).toBe(before)
     }
+  })
+
+  it("refuses, deleting nothing, while the canary event's Sanity document is published, or Sanity cannot be read", async () => {
+    for (const sanity of [async () => true, async () => Promise.reject(new Error('network'))]) {
+      const db = await seeded()
+      const before = snapshot(db)
+      const calls: string[] = []
+      await expect(removeCanaryFlow(removeDeps(db, [], calls, sanity))).rejects.toThrow(/refusing: .*(still published in Sanity|Sanity could not be read).*nothing was deleted/)
+      expect(calls).toEqual(['sanity'])
+      expect(snapshot(db)).toBe(before)
+    }
+    expect(CANARY_REMOVAL_STEPS[0]).toMatch(/Sanity document/)
+  })
+
+  it('canaryEventInSanity looks the document up by _id and by slug, and fails closed with no Sanity project', async () => {
+    const asked: unknown[] = []
+    const none = async (by: { sanityId?: string; slug?: string }) => {
+      asked.push(by)
+      return null
+    }
+    await expect(canaryEventInSanity(none, true)).resolves.toBe(false)
+    expect(asked).toEqual([{ sanityId: CANARY_FLOW_EVENT.sanity_id }, { slug: CANARY_FLOW_EVENT.slug }])
+    await expect(canaryEventInSanity(async (by) => (by.slug ? { _id: 'renamed' } : null), true)).resolves.toBe(true)
+    await expect(canaryEventInSanity(async (by) => (by.sanityId ? { _id: CANARY_FLOW_EVENT.sanity_id } : null), true)).resolves.toBe(true)
+    await expect(canaryEventInSanity(none, false)).rejects.toThrow(/no Sanity project/)
+    expect(sanityProjectConfigured(undefined)).toBe(false)
+    expect(sanityProjectConfigured('')).toBe(false)
+    expect(sanityProjectConfigured('placeholder')).toBe(false)
+    expect(sanityProjectConfigured('abc123')).toBe(true)
   })
 
   it('refuses when the row under the canary id is not dev-canary', async () => {
@@ -606,7 +719,7 @@ describe('scripts/seed-two-tenants.ts --profile flow', () => {
   it('guards before it loads any client, on every flow path', () => {
     const guard = flow.indexOf('assertCanaryFlowTarget(')
     expect(guard).toBeGreaterThan(-1)
-    for (const mod of ['../lib/supabase', '../lib/deletion/registry', '../lib/deletion/preflight', '../lib/deletion/archive', '../lib/authz/role-sync', '../lib/event-emails/tenant-mail']) {
+    for (const mod of ['../lib/supabase', '../lib/deletion/registry', '../lib/deletion/preflight', '../lib/deletion/archive', '../lib/authz/role-sync', '../lib/event-emails/tenant-mail', '../lib/events/sync']) {
       const at = flow.indexOf(`await import('${mod}')`)
       expect(at, mod).toBeGreaterThan(guard)
     }
@@ -623,6 +736,11 @@ describe('scripts/seed-two-tenants.ts --profile flow', () => {
 
   it('reads the env the guard checks', () => {
     expect(flow).toContain('assertCanaryFlowTarget(flowTargetEnvFrom(process.env, CLERK))')
+  })
+
+  it("gives the teardown the Sanity check, against the dataset this env syncs from", () => {
+    const remove = flow.slice(flow.indexOf('if (REMOVE) {'), flow.indexOf('const plan = planCanaryFlowSeed'))
+    expect(remove).toContain('sanityEventPublished: () => canaryEventInSanity(fetchSanityEvent, sanityProjectConfigured(process.env.NEXT_PUBLIC_SANITY_PROJECT_ID))')
   })
 
 })

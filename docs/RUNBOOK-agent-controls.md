@@ -224,8 +224,8 @@ With the machine account's token, try each of these and record the outcome:
 | Open a PR changing `proxy.ts`, approve it with the machine account | Cannot approve own PR; merge blocked until the owner approves | | |
 | Push a change to `.github/workflows/ci.yml` | Refused (token has no Workflows permission) | | |
 | Start "Production migration" via the API | Refused (token has no Actions permission) | | |
-| Run "Production migration" as the owner with `dry_run: true`, and do not approve for 10 minutes | Run shows "Waiting" for review on `prod-migrations`; no `apply` step has started (proves the reviewer rule is on the environment the job actually uses) | | |
-| Approve that run | It rolls back; the ledger is unchanged; the log shows only `==` lines | | |
+| Run "Production migration" as the owner with `dry_run: true`, and do not approve for 10 minutes | Run shows "Waiting" for review on `prod-migrations`; no `apply` step has started (proves the reviewer rule is on the environment the job actually uses) | 12 Nov 2026 | **Passed.** Run 43152631990, A16 from `dev`, started with the owner's GitHub login. The check job finished at 04:07 UTC; the apply job waited on `prod-migrations` until the owner approved and started at 04:28 UTC, about 21 minutes later, with no step before then |
+| Approve that run | It rolls back; the ledger is unchanged; the log shows only `==` lines | 12 Nov 2026 | **Passed.** The same run succeeded with "== dry run: rolling back". The transaction step's log shows only the `==` lines; the "Not in the ledger" line before it is the Action's own message from its ledger check. The ledger kept no row: about 24 minutes later the real run (43157319187) read "Not in the ledger" again before it applied |
 | `execute_sql` against production from the agent | Tool denied, or not connected to production | | |
 | `SELECT email FROM members` as `agent_ro` | Permission denied | | |
 | `SELECT pay_token FROM registrations`, `SELECT minor_name FROM agreements`, `SELECT token FROM group_join_tokens` as `agent_ro` | Permission denied, each | | |

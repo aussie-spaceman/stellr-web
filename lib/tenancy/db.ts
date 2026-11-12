@@ -54,18 +54,22 @@
 // owner actions). This file reads no key and no URL.
 
 import { STELLR_TENANT_ID } from './constants'
+import { isTenantDbEnabled, TENANT_DB_FLAG } from './tenant-db-config'
 import { assertTenantId, TenantContextError } from './tenant-id'
 
 export { assertTenantId, TenantContextError }
+
+/**
+ * Environment flag; tenantDb refuses to run unless it is exactly 'true'. Read in
+ * ./tenant-db-config (pure), so the switch registry can resolve it without this module.
+ */
+export { isTenantDbEnabled, TENANT_DB_FLAG }
 
 /** The database role tenant transactions run as (20261104200000). */
 export const TENANT_ROLE = 'tenant_app'
 
 /** The transaction-local setting public.app_tenant_id() reads. */
 export const TENANT_SETTING = 'stellr.tenant_id'
-
-/** Environment flag; tenantDb refuses to run unless it is exactly 'true'. */
-export const TENANT_DB_FLAG = 'TENANT_DB_ENABLED'
 
 /** The only statement kinds a caller may send: plain DML and reads. */
 const ALLOWED_START = /^\s*(?:select|insert|update|delete|with|values|merge)\b/i
@@ -192,10 +196,6 @@ let registeredDriver: TenantSqlDriver | null = null
  */
 export function setTenantDbDriver(driver: TenantSqlDriver | null): void {
   registeredDriver = driver
-}
-
-export function isTenantDbEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env[TENANT_DB_FLAG] === 'true'
 }
 
 export interface TenantDbOptions {

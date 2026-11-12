@@ -43,7 +43,7 @@
     },
     "app/(stellr)/(admin)/admin/competitions/[slug]/page.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: container_contents, event_companies, event_manager_assignments, mentoring_cohorts, training_modules"
+      "reason": "auto: touches tenant or event-scoped tables; tables: container_contents, event_companies, event_manager_assignments, members, mentoring_cohorts, training_modules"
     },
     "app/(stellr)/(admin)/admin/competitions/check-in-banner/page.tsx": {
       "class": "convert",
@@ -648,6 +648,10 @@
     "app/api/admin/events/slug-guard/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
+    },
+    "app/api/admin/health/integrations/route.ts": {
+      "class": "system",
+      "reason": "Admin-only health report (S5 wave 7, O1): one read of the tenancy_settings singleton for derivation_mode, which only service_role may select (owner yes, W7-8). Reads no tenant data."
     },
     "app/api/admin/impersonation/route.ts": {
       "class": "identity",

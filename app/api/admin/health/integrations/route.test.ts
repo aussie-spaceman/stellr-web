@@ -183,7 +183,7 @@ describe('GET /api/admin/health/integrations — tenancy', () => {
     expect(flipped.rateLimitStore).toEqual({ mode: 'shadow', secretUsable: false })
     expect(flipped.invalidCombinations.map((c: { id: string }) => c.id)).toEqual(['rate_limit_store_without_secret'])
 
-    const secret = 'sentinel-secret-h4-0123456789abcdefghijklmnopqrstuv'
+    const secret = 'sentinel-placeholder-secret-h4-not-a-real-key'
     const masterKey = Buffer.alloc(32, 7).toString('base64')
     const raw: Record<string, string> = {
       AUTHZ_SOURCE: 'sentinel-authz-h4',

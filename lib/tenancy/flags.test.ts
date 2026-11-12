@@ -201,7 +201,7 @@ describe('tenancyReport', () => {
       AUTHZ_SOURCE: 'sentinel-authz-q7',
       LOADSCOPED_MODE: 'sentinel-loadscoped-q7',
       RATE_LIMIT_STORE: 'sentinel-store-q7',
-      RATE_LIMIT_KEY_SECRET: 'sentinel-secret-q7-0123456789abcdefghijklmnop',
+      RATE_LIMIT_KEY_SECRET: 'sentinel-placeholder-secret-q7-not-a-real-key',
       PLATFORM_AUDIT_ENABLED: 'sentinel-audit-q7',
       TENANT_EVENT_MAIL_ENABLED: 'sentinel-mail-q7',
       TENANT_GUARDIAN_CONSENT_ENABLED: 'sentinel-consent-q7',

@@ -30,7 +30,8 @@ export interface StoreDecision {
 /** A limiter sits on the request path, so a slow database must not become a slow site. */
 export const STORE_TIMEOUT_MS = 300
 const GC_TIMEOUT_MS = 10_000
-const MIN_SECRET_LENGTH = 32
+/** The shortest RATE_LIMIT_KEY_SECRET the store will use (takeFromStore); the switch registry reports against it. */
+export const MIN_SECRET_LENGTH = 32
 const LOG_EVERY_MS = 60_000
 
 /** The store problems that leave an app_errors row, each at most once a minute per instance. */

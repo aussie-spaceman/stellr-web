@@ -90,10 +90,18 @@ export function CollapseAllControls({ className, label }: { className?: string; 
 
 export type CollapsibleTone = 'default' | 'primary' | 'muted'
 
-const TONE: Record<CollapsibleTone, { box: string; header: string; title: string }> = {
-  default: { box: 'border-line bg-white', header: 'hover:bg-surface', title: 'text-ink' },
-  primary: { box: 'border-primary bg-white', header: 'bg-primary-soft hover:bg-primary-soft/70', title: 'text-primary-deep' },
-  muted: { box: 'border-line bg-white', header: 'bg-surface hover:bg-line-light', title: 'text-content-body' },
+// Summary text must hold 4.5:1 on its header, hover included. content-muted
+// does on white and surface (the default tone), but not on primary-soft
+// (4.27:1) or line-light (4.21:1), so those tones use body text.
+const TONE: Record<CollapsibleTone, { box: string; header: string; title: string; summary: string }> = {
+  default: { box: 'border-line bg-white', header: 'hover:bg-surface', title: 'text-ink', summary: 'text-content-muted' },
+  primary: {
+    box: 'border-primary bg-white',
+    header: 'bg-primary-soft hover:bg-primary-soft/70',
+    title: 'text-primary-deep',
+    summary: 'text-content-body',
+  },
+  muted: { box: 'border-line bg-white', header: 'bg-surface hover:bg-line-light', title: 'text-content-body', summary: 'text-content-body' },
 }
 
 export function Collapsible({
@@ -174,7 +182,7 @@ export function Collapsible({
               className={cn('h-4 w-4 shrink-0 text-content-muted transition-transform', open && 'rotate-90')}
             />
             <span className={cn('font-subheading text-sm font-semibold', t.title)}>{title}</span>
-            {summary && <span className="min-w-0 truncate text-xs font-normal text-content-muted">{summary}</span>}
+            {summary && <span className={cn('min-w-0 truncate text-xs font-normal', t.summary)}>{summary}</span>}
           </button>
         </Heading>
         {open && actions && <div className="flex flex-wrap items-center gap-3 py-1">{actions}</div>}

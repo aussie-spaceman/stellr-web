@@ -156,6 +156,8 @@ interface ExistingEventRow {
   country: string | null
   /** raw->>state: the document's state when the row was last written. */
   state: string | null
+  /** Set only on a row a sync from Sanity wrote; a seeded or hand-written row has none. */
+  source_updated_at: string | null
 }
 
 /** A state as eventTimeZone reads it, so "Texas" and "TX" are the same state. */
@@ -165,17 +167,29 @@ function stateKey(state: unknown): string {
 }
 
 /**
+ * Whether the venue moved in a way that can change the zone toEventRow derives.
+ * A change of country always counts. A change of state counts only in the US,
+ * because eventTimeZone ignores the state anywhere else, and only on a row an
+ * earlier sync wrote: a seeded or hand-written row (no source_updated_at) holds
+ * no earlier document's state to compare against.
+ */
+function venueMoved(row: EventRow, existing: ExistingEventRow): boolean {
+  if (existing.country !== row.country) return true
+  if (row.country !== 'US' || !existing.source_updated_at) return false
+  return stateKey(existing.state) !== stateKey(row.raw.state)
+}
+
+/**
  * A non-owner (not Stellr) row keeps the settings toEventRow cannot know: its
- * minimum age, and its time zone unless the venue's state or country changed. A
- * kept zone that differs re-derives starts_at and ends_at in that zone, so
- * starts_at in time_zone stays Sanity's date (the parity query in
+ * minimum age, and its time zone unless the venue moved (venueMoved). A kept zone
+ * that differs re-derives starts_at and ends_at in that zone, so starts_at in
+ * time_zone stays Sanity's date (the parity query in
  * docs/TENANCY-S5-registration.md).
  */
 function keepTenantSettings(row: EventRow, existing: ExistingEventRow): EventRow {
   const out: EventRow = { ...row, min_participant_age: existing.min_participant_age ?? null }
-  const venueSame = existing.country === row.country && stateKey(existing.state) === stateKey(row.raw.state)
   const zone = existing.time_zone
-  if (!venueSame || typeof zone !== 'string' || !zone || zone === row.time_zone || !isValidTimeZone(zone)) return out
+  if (venueMoved(row, existing) || typeof zone !== 'string' || !zone || zone === row.time_zone || !isValidTimeZone(zone)) return out
   return { ...out, time_zone: zone, ...eventWindow(row.raw.date, row.raw.endDate, zone) }
 }
 
@@ -195,7 +209,7 @@ export async function upsertEventRows(db: SupabaseClient, rows: EventRow[]): Pro
   if (rows.length === 0) return { error: null }
   const { data, error: readError } = await db
     .from('events')
-    .select('sanity_id, tenant_id, currency, min_participant_age, time_zone, country, state:raw->>state')
+    .select('sanity_id, tenant_id, currency, min_participant_age, time_zone, country, state:raw->>state, source_updated_at')
     .in('sanity_id', rows.map((r) => r.sanity_id))
   if (readError) return { error: readError.message }
   const owners = new Map(((data ?? []) as ExistingEventRow[]).map((o) => [o.sanity_id, o]))

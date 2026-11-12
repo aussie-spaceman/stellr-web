@@ -27,7 +27,12 @@ const run = async () => {
   return (await res.json()) as Record<string, unknown>
 }
 
-beforeEach(() => vi.clearAllMocks())
+// guardCron is stubbed to let every call through; the route runs its four steps only
+// in production (S5 B26a), so these run as production does.
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
+})
 afterEach(() => vi.unstubAllEnvs())
 
 describe('membership-expiry: tenant guardian consents', () => {

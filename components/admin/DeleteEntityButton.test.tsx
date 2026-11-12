@@ -9,6 +9,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push }) }))
 
 type Reply = { status?: number; body: unknown }
 let preflight: Reply
+let refundPreview: Reply[] = []
 let deletion: Reply | (() => Promise<Reply>)
 let deleteBodies: unknown[] = []
 
@@ -20,11 +21,17 @@ beforeEach(() => {
   push.mockClear()
   deleteBodies = []
   preflight = { body: { blockers: [] } }
+  refundPreview = []
   deletion = { body: { ok: true } }
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.startsWith('/api/admin/deletion/preflight')) return json(preflight)
+      if (url.startsWith('/api/admin/refunds/preview')) {
+        const next = refundPreview.shift()
+        if (!next) throw new Error('no refund preview queued')
+        return json(next)
+      }
       if (url === '/api/admin/deletion' && init?.method === 'DELETE') {
         deleteBodies.push(JSON.parse(String(init.body)))
         return json(typeof deletion === 'function' ? await deletion() : deletion)
@@ -107,5 +114,76 @@ describe('DeleteEntityButton', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(refresh).toHaveBeenCalled()
+  })
+
+  describe('the refund preview for a participant', () => {
+    const PAID = {
+      paid: true,
+      paidCents: 25000,
+      currency: 'usd',
+      daysSincePayment: 3,
+      guaranteeDays: 45,
+      options: { cash: { pct: 100, cents: 25000 } },
+      hasPaymentRef: true,
+      alreadyRefunded: false,
+      externalRefund: null,
+    }
+    const UNAVAILABLE = { status: 503, body: { error: 'This is temporarily unavailable. Please try again shortly.' } }
+
+    async function openParticipant() {
+      const user = userEvent.setup()
+      render(<DeleteEntityButton entity="participant" id="p-1" name="A Student" softDeletable={false} refundable />)
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
+      await screen.findByRole('alertdialog', { name: 'Delete A Student?' })
+      const field = await screen.findByRole('textbox', { name: 'Type DELETE to confirm' })
+      await user.type(field, 'DELETE')
+      return user
+    }
+
+    it('a paid participant must have a refund chosen before the delete', async () => {
+      refundPreview = [{ body: PAID }]
+      const user = await openParticipant()
+      await screen.findByText(/within the 45-day money-back guarantee/)
+      const confirm = screen.getByRole('button', { name: 'Permanently delete' })
+      expect(confirm).toBeDisabled()
+      await user.click(screen.getByRole('radio', { name: /Full refund/ }))
+      expect(confirm).toBeEnabled()
+    })
+
+    it('a preview that fails is not read as unpaid: the delete waits, and Try again reloads it', async () => {
+      refundPreview = [UNAVAILABLE, { body: PAID }]
+      const user = await openParticipant()
+      expect(await screen.findByText(/couldn't load the refund details/)).toBeInTheDocument()
+      expect(screen.queryByText(/No payment on record/)).toBeNull()
+      const confirm = screen.getByRole('button', { name: 'Permanently delete' })
+      expect(confirm).toBeDisabled()
+      await user.click(confirm)
+      expect(deleteBodies).toEqual([])
+
+      await user.click(screen.getByRole('button', { name: 'Try again' }))
+      await screen.findByText(/within the 45-day money-back guarantee/)
+      expect(screen.queryByText(/couldn't load the refund details/)).toBeNull()
+      await user.type(screen.getByRole('textbox', { name: 'Type DELETE to confirm' }), 'DELETE')
+      await user.click(screen.getByRole('radio', { name: /Full refund/ }))
+      await user.click(screen.getByRole('button', { name: 'Permanently delete' }))
+      await waitFor(() => expect(deleteBodies).toEqual([{ entity: 'participant', id: 'p-1', mode: 'hard', refundChoice: 'cash' }]))
+    })
+
+    it('a server error blocks the delete the same way', async () => {
+      refundPreview = [{ status: 500, body: { error: 'Preview failed' } }]
+      await openParticipant()
+      expect(await screen.findByText(/couldn't load the refund details/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Permanently delete' })).toBeDisabled()
+    })
+
+    it('no such participant offers no refund, and the delete goes ahead', async () => {
+      refundPreview = [{ status: 404, body: { error: 'Not found' } }]
+      const user = await openParticipant()
+      const confirm = screen.getByRole('button', { name: 'Permanently delete' })
+      await waitFor(() => expect(confirm).toBeEnabled())
+      expect(screen.queryByText(/couldn't load the refund details/)).toBeNull()
+      await user.click(confirm)
+      await waitFor(() => expect(deleteBodies).toEqual([{ entity: 'participant', id: 'p-1', mode: 'hard' }]))
+    })
   })
 })

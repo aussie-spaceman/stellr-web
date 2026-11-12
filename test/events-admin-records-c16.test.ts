@@ -472,7 +472,9 @@ describe('who else is refused, and with what', () => {
   })
 
   it('one the caller can reach goes on to the payment, with one read and today\'s query', async () => {
-    state.rows.participants = { id: ID }
+    // C20c: the place's event must be Stellr's, so its registration is read for the slug.
+    state.rows.participants = { id: ID, registration_id: ID }
+    state.rows.registrations = { id: ID, event_slug: 'nevada' }
     const preview = await import('@/app/api/admin/refunds/preview/route')
     expect((await preview.GET(req(undefined, `https://app.test/x?participant=${ID}`))).status).toBe(200)
     expect(state.resolveRefundBasis).toHaveBeenCalledTimes(1)

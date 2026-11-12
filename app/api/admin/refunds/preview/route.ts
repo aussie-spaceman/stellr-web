@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { currentTenantId, requireTenantStaff } from '@/lib/authz'
-import { previewRefund } from '@/lib/refunds/preview'
+import { previewRefundOnStellrEvent } from '@/lib/refunds/preview'
 import { withAudit } from '@/lib/audit/route'
 import { tenantWideScope } from '@/lib/tenancy/scope-context'
 
@@ -24,7 +24,10 @@ export const GET = withAudit(
 )
 
 // GET /api/admin/refunds/preview?participant=<id>
-// Powers the refund choice in the delete dialog (cash/credit options, amounts).
+// Powers the refund choice in the delete dialog (cash/credit options, amounts). The
+// preview reads Stellr's Stripe account, so after the participant load, a participant on
+// another tenant's event is refused for everyone, a Stellr admin included: 404, or a
+// retryable 503 when the event's owner cannot be read (previewRefundOnStellrEvent).
 async function preview(req: Request) {
   const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -35,7 +38,8 @@ async function preview(req: Request) {
   audited.set(req, { id: participant, userId, tenantId: admin.tenantId })
 
   try {
-    return NextResponse.json(await previewRefund(participant, tenantWideScope(admin.tenantId, 'tenant_admin')))
+    const preview = await previewRefundOnStellrEvent(participant, tenantWideScope(admin.tenantId, 'tenant_admin'), ROUTE)
+    return preview instanceof Response ? preview : NextResponse.json(preview)
   } catch (e) {
     console.error('Refund preview error:', e)
     return NextResponse.json({ error: 'Preview failed' }, { status: 500 })

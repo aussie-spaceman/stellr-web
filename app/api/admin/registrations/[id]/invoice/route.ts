@@ -12,7 +12,7 @@ import {
   setGroupDiscount,
 } from '@/lib/group-billing'
 import { withAudit } from '@/lib/audit/route'
-import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadEventRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // "Invoice & discount…" on a group in the event roster.
 //   GET  → the group's places, current invoice and invoice history.
@@ -53,6 +53,10 @@ async function guard(db: Db, id: string, req: Request) {
   // Every action here reads or changes Stellr's Stripe account, its coupons included.
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
+  // So the group's event must be Stellr's, for a Stellr admin too. Another tenant's answers
+  // as a missing group; a failed read of the event's owner is a retryable 503.
+  const foreign = await refuseUnlessStellrEvent(db, loaded.row.event_slug, ROUTE)
+  if (foreign) return foreign.status === 404 ? notFound() : foreign
   return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, actorLabel: staff.isAdmin ? 'admin' as const : 'event_manager' as const }
 }
 

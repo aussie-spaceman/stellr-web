@@ -3,7 +3,7 @@ import { stripeClient } from '@/lib/stripe'
 import { GUARANTEE_DAYS, daysSincePayment, guaranteeRefundOptions, type RefundOptions } from './policy'
 import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
 import { resolveRefundBasis } from './payment-basis'
-import { loadRecord } from '@/lib/tenancy/load-scoped'
+import { loadRecord, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 import { isStellrScope, type ScopeContext } from '@/lib/tenancy/scope-context'
 
 export interface RefundPreview {
@@ -36,8 +36,39 @@ const PREVIEW_COLUMNS = 'id, registration_id, individual_payment_status, stripe_
 // scope, a participant outside it answers as one that does not exist.
 export async function previewRefund(participantId: string, scope?: ScopeContext): Promise<RefundPreview> {
   const db = supabaseServer()
-  const empty = EMPTY_REFUND_PREVIEW
+  const p = await loadPreviewParticipant(db, participantId, scope)
+  if (!p) return EMPTY_REFUND_PREVIEW
+  return previewFor(db, participantId, p)
+}
 
+/**
+ * previewRefund for the admin delete dialog, which reads Stellr's Stripe account. After the
+ * participant load, the event their place is on must be Stellr's: another tenant's event gets
+ * refuseUnlessStellrEvent's 404, and a failed read of the event's owner its retryable 503, both
+ * before anything reads the payment. A participant out of reach, or whose registration cannot
+ * be read, is the empty preview, as in previewRefund. Another tenant's own scope is empty
+ * before this check, so only Stellr's scope makes the two extra reads.
+ */
+export async function previewRefundOnStellrEvent(participantId: string, scope: ScopeContext, label: string): Promise<RefundPreview | Response> {
+  const db = supabaseServer()
+  const p = await loadPreviewParticipant(db, participantId, scope)
+  if (!p) return EMPTY_REFUND_PREVIEW
+  const reg = await loadRecord<{ event_slug: string }>(scope, 'registrations', p.registration_id, {
+    db,
+    select: 'event_slug',
+    notFound: () => new Response(null, { status: 404 }),
+    label,
+  })
+  if (!reg.ok) return EMPTY_REFUND_PREVIEW
+  const foreign = await refuseUnlessStellrEvent(db, reg.row.event_slug, label)
+  if (foreign) return foreign
+  return previewFor(db, participantId, p)
+}
+
+type Db = ReturnType<typeof supabaseServer>
+
+/** The participant, or null when there is none, it is outside the scope, or the scope is another tenant's. */
+async function loadPreviewParticipant(db: Db, participantId: string, scope?: ScopeContext): Promise<PreviewParticipant | null> {
   let p: PreviewParticipant | null
   if (scope) {
     const loaded = await loadRecord<PreviewParticipant>(scope, 'participants', participantId, {
@@ -51,9 +82,14 @@ export async function previewRefund(participantId: string, scope?: ScopeContext)
     const { data } = await db.from('participants').select(PREVIEW_COLUMNS).eq('id', participantId).maybeSingle()
     p = data as PreviewParticipant | null
   }
-  if (!p) return empty
+  if (!p) return null
   // A tenant's event takes no payment yet, and Stripe here is Stellr's account.
-  if (scope && !isStellrScope(scope)) return empty
+  if (scope && !isStellrScope(scope)) return null
+  return p
+}
+
+async function previewFor(db: Db, participantId: string, p: PreviewParticipant): Promise<RefundPreview> {
+  const empty = EMPTY_REFUND_PREVIEW
 
   const { data: prior } = await db
     .from('event_refunds')

@@ -7,7 +7,7 @@ import { withAudit } from '@/lib/audit/route'
 import { firstLinkedMemberId, stellrOnlyDb } from '@/lib/events/admin-records'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { isEmailLike, maskEmail } from '@/lib/utils'
-import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadEventRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/payment-link — email the durable pay link for
 // a pending card registration (admins + assigned event managers). Goes to the
@@ -17,6 +17,8 @@ import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 //   body: { registrationId: string, extraRecipients?: string[] }
 //
 // The pay page takes payment on Stellr's Stripe account: priced tenant events wait on S9.
+// Until then a tenant's event is refused for everyone, a Stellr admin included
+// (refuseUnlessStellrEvent), before the registration is read or anyone is emailed.
 
 const ROUTE = '/api/admin/events/[slug]/payment-link'
 
@@ -43,6 +45,8 @@ async function sendPayLink(req: Request, { params }: Ctx) {
   noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
+  const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
+  if (foreign) return foreign
 
   const body = await req.json().catch(() => null)
   const registrationId = typeof body?.registrationId === 'string' ? body.registrationId : null

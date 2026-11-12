@@ -1,19 +1,20 @@
 # Tenancy S5: data path, loadScoped and audit runbook
 
-What `LOADSCOPED_MODE`, `TENANT_DB_ENABLED`, `TENANT_DB_AREAS`, `TENANT_DATABASE_URL` and `PLATFORM_AUDIT_ENABLED` do, the order to flip them, the owner's steps for the tenant login, and how to roll each one back. This is D4 in `docs/TENANCY-S5.md`, which stays the plan of record. Checked against the code on 9 Nov 2026: `dev` at `b620a113`, with all of wave 5 merged (B14 #588, A7 #594, and C16's payment-method follow-up, C11 and C12 in #598). None of wave 5 is on production. If the code and this file disagree, the code wins and this file is fixed.
+What `LOADSCOPED_MODE`, `TENANT_DB_ENABLED`, `TENANT_DB_AREAS`, `TENANT_DATABASE_URL`, `TENANT_DATABASE_CA_CERT` and `PLATFORM_AUDIT_ENABLED` do, the order to flip them, the owner's steps for the tenant login, and how to roll each one back. This is D4 in `docs/TENANCY-S5.md`, which stays the plan of record. Checked against the code on 9 Nov 2026: `dev` at `b620a113`, with all of wave 5 merged (B14 #588, A7 #594, and C16's payment-method follow-up, C11 and C12 in #598). Updated on 11 Nov 2026 for wave 6's C11t and C18 (Lane C, #624) and Lane A's audited routes (#625), read on `dev` at `b8c1fba3`. **Since promoted:** wave 5, in #600 on 9 Nov 2026. Wave 6's Lanes A and C are on `dev` and not promoted. If the code and this file disagree, the code wins and this file is fixed.
 
 Sibling records: `docs/AUTHZ.md` (`AUTHZ_SOURCE`), `docs/TENANCY-S5-routing.md` (`TENANT_ROUTING_ENABLED`), `docs/S5-CRONS-LIMITS-SMMA.md` (`RATE_LIMIT_STORE`, the crons and the mail share), `docs/TENANCY-S4.md` (`tenantDb` and the `tenant_app` role), `docs/PLATFORM-AUDIT.md` (the audit table). Names and defaults of every variable: `docs/ENV-MATRIX.md`, section 6.
 
 ## Where it stands
 
-**Unset is correct on both Vercel projects today.** With every variable here unset, Stellr runs exactly the queries it ran before S5, writes no audit row and opens no tenant connection. Nothing in the S5 PRs sets one. **No route reads or writes through `tenantDb` yet,** so `TENANT_DB_ENABLED`, `TENANT_DB_AREAS` and `TENANT_DATABASE_URL` change nothing until C18 converts the first area.
+**Unset is correct on both Vercel projects today.** With every variable here unset, Stellr runs exactly the queries it ran before S5, writes no audit row and opens no tenant connection. Nothing in the S5 PRs sets one. **C18 (wave 6, #624, on `dev`) converts the first area,** `events-config`: an event's companies under `app/api/admin/events/[slug]/companies` reach `tenantDb` through `readArea` and `writeArea`, and only when `TENANT_DB_ENABLED` is `true` and `TENANT_DB_AREAS` lists the area. With those two unset, `TENANT_DB_ENABLED`, `TENANT_DB_AREAS`, `TENANT_DATABASE_URL` and `TENANT_DATABASE_CA_CERT` change nothing.
 
 | Variable | Read by | Unset | Other values | Reaches today |
 |---|---|---|---|---|
 | `LOADSCOPED_MODE` | `lib/tenancy/load-scoped-mode.ts`, through `loadRecord` and `loadEventRecord` in `lib/tenancy/load-scoped.ts` | `off`: today's query by id, nothing else | `shadow`, `enforce`. Anything else is `off`, reported once per instance to `app_errors` | The `tenant_staff` routes that load a record by id: C16's, C17's under `events/[slug]`, the refund preview (`lib/refunds/preview.ts`), the bounced-signer email change and the saved event email templates (both added straight to `tenant_staff` on 9 Nov 2026), and in wave 5 the admin group payment-method route |
-| `TENANT_DB_ENABLED` | `lib/tenancy/db.ts`, and the area switch in `lib/tenancy/area-switch.ts` | `tenantDb` throws before anything connects; every area answers `service` | Exactly `true` | Nothing: no route calls `tenantDb`, `readArea` or `writeArea` |
-| `TENANT_DB_AREAS` | `lib/tenancy/area-switch.ts` | Every area `service` | Comma-separated `<area>:shadow`, `<area>:shadow:<rate>` (0 to 1, default 1), `<area>:tenant`. Only `events-config` is declared | Nothing until C18 |
-| `TENANT_DATABASE_URL` | `lib/tenancy/driver.ts`, loaded by `db.ts` only when `TENANT_DB_ENABLED` is `true` and no test driver is registered | With the flag on, `tenantDb` throws: there is no fallback connection | The `tenant_app_login` pooler URL (owner steps below) | Nothing until the flag is on and a caller exists |
+| `TENANT_DB_ENABLED` | `lib/tenancy/db.ts`, and the area switch in `lib/tenancy/area-switch.ts` | `tenantDb` throws before anything connects; every area answers `service` | Exactly `true` | On `dev`, the `events-config` area (C18), and only while `TENANT_DB_AREAS` lists it |
+| `TENANT_DB_AREAS` | `lib/tenancy/area-switch.ts` | Every area `service` | Comma-separated `<area>:shadow`, `<area>:shadow:<rate>` (0 to 1, default 1), `<area>:tenant`. Only `events-config` is declared | `events-config` on `dev`: an event's company list, count and rename (below) |
+| `TENANT_DATABASE_URL` | `lib/tenancy/driver.ts`, loaded by `db.ts` only when `TENANT_DB_ENABLED` is `true` and no test driver is registered | With the flag on, `tenantDb` throws: there is no fallback connection | The `tenant_app_login` pooler URL, with `sslmode=verify-full` for any non-local host (owner steps below) | Nothing until the flag is on and an area is listed |
+| `TENANT_DATABASE_CA_CERT` | `lib/tenancy/driver.ts` alone, for a host other than `localhost` or `127.0.0.1`, with the flag on (C11t, wave 6) | With the flag on and a non-local URL, `tenantDb` throws before any pool exists | A **server-only secret**: the PEM of the root CA that signs the database's certificate. One or more CA certificates and nothing else. Literal `\n` escapes are read as newlines | Nothing until the flag is on |
 | `PLATFORM_AUDIT_ENABLED` | `lib/audit/platform.ts`, `lib/audit/route.ts`, `lib/cron-audit.ts` | No audit row, no session read, nothing scheduled | Exactly `true` | Every handler the audit gate counts as audited (see below) |
 
 ### `LOADSCOPED_MODE`
@@ -34,7 +35,7 @@ A missing row, a malformed id, another tenant's row and another event's row all 
 
 - **Loaded only on demand.** With the flag off nothing imports postgres.js and nothing connects. With it on, `db.ts` loads the driver on first use.
 - **One connection string, checked before use.** It must be a `postgres://` or `postgresql://` URL whose user is `tenant_app_login`, or the pooler's `tenant_app_login.<project-ref>`. It must name one user and one host (a host name or IPv4 address, not IPv6) and carry no query parameter except `sslmode`. Anything else throws an error that names the rule and never echoes the string. A pasted owner or service connection string is refused.
-- **TLS.** Required for any host other than `localhost` or `127.0.0.1`. By default the connection is encrypted but the server's certificate is not checked. `sslmode=verify-full` in the URL asks Node to check the certificate against its default trust store; the code has no setting to supply Supabase's root CA, and whether `verify-full` connects to the pooler has not been tried. Which of the two to require is an open owner decision (wave 5).
+- **TLS, with full certificate checking (owner decision, 10 Nov 2026; C11t, wave 6).** For any host other than `localhost` or `127.0.0.1` the URL must carry `sslmode=verify-full`, given once: no `sslmode`, any other mode or a second `sslmode` is refused. `TENANT_DATABASE_CA_CERT` must hold the root CA: every PEM block must parse and be a CA certificate, so a pasted server certificate is refused. postgres.js then checks the server's chain against that CA alone and its certificate's name against the host (an IPv4 host against its address), with TLS 1.2 or later. A missing or refused URL or CA throws before a pool exists, and there is no fallback to an unchecked mode. Local hosts, such as CI's throwaway database, use no TLS. Neither the URL nor the CA appears in an error or a log line, and only `lib/tenancy/driver.ts` reads the CA (`lib/tenancy/driver-wiring.test.ts`). **Not yet tried against the hosted pooler** (below).
 - **Pool.** At most 3 connections per server instance, idle connections closed after 20 s, every connection replaced after 5 minutes, 10 s to connect, `prepare: false` for the pooler's transaction mode, every statement on the extended protocol so the server runs one statement per call.
 - **No service-role fallback.** A missing or refused URL is a thrown `TenantContextError`.
 
@@ -48,9 +49,35 @@ The per-area switch (C12) decides, per area and per call, which path answers. It
 
 An entry that does not parse, names an undeclared area, gives a rate to `tenant`, or repeats an area is ignored, so its area stays on `service`. Ignored entries are reported once per instance as `CONFIG TENANT_DB_AREAS`, by count only.
 
+### The first area: `events-config` (C18)
+
+`lib/events/admin-config.ts` holds the queries behind `companies`, `offerings` and `merch/commit` under `app/api/admin/events/[slug]`, moved out of the routes. Each route takes its tenant from `requireEventRoute`, never from the request.
+
+- **Service path:** today's supabase-js query. With defaults this is all that runs: `tenantDb` is not built and no connection opens.
+- **Tenant path:** SQL through `tenantDb`, pinned to the caller's tenant. Under the tenant policies another tenant's event reads as empty, and a write naming it is refused by the database.
+- **Shadow:** a sampled share of list reads also runs the tenant read after the response, read-only. Writes take the service path alone.
+- **Who reaches it.** The three routes moved from `stellr_only` to `tenant_staff`. Stellr's admins and event managers get today's answers. Their writes audit behind `PLATFORM_AUDIT_ENABLED`, with five new actions (`event_company.count.set`, `event_company.placement.change`, `event_offering.record.create`, `event_offering.record.delete`, `merch.batch.commit`).
+- **A failed list read** logs its error code only (a SQLSTATE or an error class name), then answers today's 500, so a `tenantDb` that cannot start shows in the logs.
+
+**What C18 converted, and what it left.** Each part left has an owner slice. Where the code names none, the slice is a proposal for the owner.
+
+| Part | Path today | Owner slice |
+|---|---|---|
+| An event's company list, the count (with the settings row's `company_count`) and a company's rename | **Converted:** `readArea` and `writeArea` | C18, done |
+| A participant's move between companies | Service path. Confined for a tenant's staff by `findEventParticipant` and `findEventCompany`, run before the write (`test/events-admin-config-c18.test.ts`) | Waits on `tenant_app`'s column grants on `participants`, which `lib/events/admin-config.ts` leaves to Lane A. Proposed: the slice that settles those grants also moves this write onto `writeArea` |
+| Auto-Assign, `override` and `override_all` | Service path. A tenant's staff get `refuseOutsideStellr`'s 503, because they read team profiles, which tenant events do not take | Proposed: A10 (team profiles), with the slice that lets tenant events take them (see PR amendments, wave 4) |
+| Store offerings and the merch batch | Service path through a `StellrOnlyDb`. A tenant's staff get `refuseOutsideStellr`'s 503, and another tenant's event answers 404 for everyone (below) | Proposed: C23 (store admin), or Stellr-only for good if the owner gives tenants no store |
+| The other configuration routes under `events/[slug]`: awards, badge and certificate templates, badges, certificates, check-in, credentials | `stellr_only` | C19 (`lib/security/stellr-only-dispositions.ts`) |
+
+**CI.** `test/integration/two-tenant/events-config.int.test.ts` runs in the `tenant-db` job, which C18 made required in the workflow: no `continue-on-error` on the job or any step. Its scope step also runs for `lib/events/admin-config.ts` and the three routes (`test/ci-tenant-db-required.test.ts`). It passed on #624 and #625.
+
+### Stellr-only routes refuse another tenant's event (wave 6)
+
+`refuseUnlessStellrEvent` (`lib/tenancy/load-scoped.ts`) reads the event's owner from the events mirror by slug, an unmirrored slug counting as Stellr's. `remind`, `docusign-reissue`, the guardian route, `offerings` and `merch/commit` under `app/api/admin/events/[slug]` ask it after `refuseOutsideStellr` and before any read about a person, any email and any envelope. Another tenant's event answers 404 for everyone, a Stellr admin included, **in every `LOADSCOPED_MODE`**, because `off` and `shadow` do not narrow the reads that follow. A failed owner read answers a retryable 503. For Stellr's own events the answer is today's, at the cost of one `events` read per request (#624).
+
 ### `PLATFORM_AUDIT_ENABLED`
 
-With it on, each audited handler appends one row to `platform_audit_events`, the append-only, hash-chained table in `docs/PLATFORM-AUDIT.md`. Who is audited by now: the C7 mechanism; wave 3's A14, B12 (every cron) and B18; wave 4's B16 (54 member and community handlers), C13 (42), C15 (7), C16 and C17; and in wave 5 the 5 register routes (A7; pay and pay-seat record no payment start for an answer given before a Checkout was tried, such as a tenant's 503 or any 4xx) and the admin group payment-method GET and POST (the POST records the method and, for "Invoice for some", a participant count, never ids). What is still unaudited is `test/baselines/unaudited-mutations.json`, regenerated at each merge: on `dev` at `b620a113`, 123 mutating handlers and 6 GET writers, with every one of the 24 crons audited.
+With it on, each audited handler appends one row to `platform_audit_events`, the append-only, hash-chained table in `docs/PLATFORM-AUDIT.md`. Who is audited by now: the C7 mechanism; wave 3's A14, B12 (every cron) and B18; wave 4's B16 (54 member and community handlers), C13 (42), C15 (7), C16 and C17; and in wave 5 the 5 register routes (A7; pay and pay-seat record no payment start for an answer given before a Checkout was tried, such as a tenant's 503 or any 4xx) and the admin group payment-method GET and POST (the POST records the method and, for "Invoice for some", a participant count, never ids). Wave 6 adds C18's three event configuration routes (#624) and 5 more mutating team route files (6 handlers) under `app/api/members/teams` (A8, #625), so every mutating team route is now audited, and A16's consent steps (`registration.guardian_consent.request`, `.sign`, `.decline`, `.expire`, `.lift`, `.void`), ids only. What is still unaudited is `test/baselines/unaudited-mutations.json`, regenerated at each merge: on `dev` at `b8c1fba3`, 112 mutating handlers and 6 GET writers, with every one of the 24 crons audited.
 
 What it costs and what it cannot do:
 
@@ -63,9 +90,9 @@ What it costs and what it cannot do:
 ## Before any flip
 
 1. **S4 state on production.** `20261104200000`, `210000`, `300000` and `400000` are applied, and `tenancy_cutover_checks` Section D shows 0 NULL `tenant_id` (`docs/TENANCY-S5.md`, Owner gates). Needed before `LOADSCOPED_MODE=enforce` or any area on `tenant`.
-2. **One variable at a time, `dev` first, then production.** After each change, redeploy the newest READY deployment: a running deployment does not pick up a new value.
+2. **One variable at a time, `dev` first, then production, each with the owner's yes** (owner decision, 11 Nov 2026). After each change, redeploy the newest READY deployment: a running deployment does not pick up a new value.
 3. **Outside event hours**, and with Active CPU read on the Vercel Usage page before and after.
-4. **Proof by step outcome, not badge.** The CI `tenant-db` job is report-only (`continue-on-error: true`), so it can look green and still have failed.
+4. **Proof by step outcome, not badge.** Since C18 the CI `tenant-db` job has no `continue-on-error`, so a failure fails the run. A PR its scope step skips still finishes green without running the tests, and the job blocks a merge only once the owner adds it to branch protection.
 
 ## The order
 
@@ -77,9 +104,9 @@ A proposal for the owner. The plan fixes no order between these flags; the reaso
 | 2 | `dev` | `LOADSCOPED_MODE=shadow` | The scoped read beside the legacy one. Use the admin record screens (refund preview, correct-recipient, group payment method), then read `app_errors` for `LOADSCOPED` rows: expect none |
 | 3 | `dev` | `LOADSCOPED_MODE=enforce` | Only after a clean shadow. A mismatch here points at a row stamped with the wrong tenant or none, which RLS would trip over later too, so it is cheaper to find first |
 | 4 | production | `LOADSCOPED_MODE=shadow`, then `enforce` | After step 1 of "Before any flip". The plan sets no shadow length for this flag; the owner chooses one |
-| 5 | `dev`, then production | Create `tenant_app_login` and `TENANT_DATABASE_URL` (owner steps below) | Inert until step 6. Settle the TLS decision first |
-| 6 | `dev` | `TENANT_DB_ENABLED=true` | Only when C18 ships the first caller (`docs/TENANCY-S4.md`, owner actions). With no area listed it still changes nothing |
-| 7 | `dev` | `TENANT_DB_AREAS=events-config:shadow:<low rate>` | C18's area. Start low and read Active CPU before raising the rate: each sampled call adds a transaction after the response. Read `TENANTDB` rows in `app_errors` |
+| 5 | `dev`, then production | Create `tenant_app_login`, `TENANT_DATABASE_URL` and `TENANT_DATABASE_CA_CERT` (owner steps below), and see one handshake to the pooler complete on `dev` | Inert until step 6 |
+| 6 | `dev` | `TENANT_DB_ENABLED=true` | C18, the first caller, is on `dev` (#624). With no area listed it still changes nothing |
+| 7 | `dev` | `TENANT_DB_AREAS=events-config:shadow:<low rate>` | C18's area. Use the admin companies screen on a Stellr event to give it reads. Start low and read Active CPU before raising the rate: each sampled call adds a transaction after the response. Read `TENANTDB` rows in `app_errors` |
 | 8 | `dev` | `events-config:shadow:1`, then `events-config:tenant` | After a clean sampled shadow |
 | 9 | production | Steps 6 to 8 again | After `dev` holds |
 | 10 | production | `PLATFORM_AUDIT_ENABLED=true` | Whenever its own decisions are made (below). It does not depend on, or block, steps 2 to 9 |
@@ -88,7 +115,7 @@ A proposal for the owner. The plan fixes no order between these flags; the reaso
 
 ## Owner steps: `tenant_app_login` and `TENANT_DATABASE_URL`
 
-Needed only for a deployed `tenantDb` flip, not to build, merge or run CI. Do `dev` first, then production, each on its own Supabase project and its own Vercel project.
+Needed only for a deployed `tenantDb` flip, not to build, merge or run CI. The owner creates the `dev` login (owner decision, 11 Nov 2026). Do `dev` first, then production, each on its own Supabase project and its own Vercel project.
 
 1. **Create the login.** In the Supabase SQL editor, as `postgres`:
 
@@ -101,12 +128,16 @@ Needed only for a deployed `tenantDb` flip, not to build, merge or run CI. Do `d
 2. **Build the connection string** from the project's pooler settings: transaction mode (port 6543), user `tenant_app_login.<project-ref>`, database `postgres`. Then make it pass the driver's checks:
    - **Remove every query parameter except `sslmode`.** A string copied with `pgbouncer=true` or similar is refused.
    - Percent-encode any `@`, `,` or `%` in the password.
-   - Add `?sslmode=verify-full` only if the owner chose certificate checking (wave 5 decision), and only after it has been tried on `dev`.
+   - **End it with `?sslmode=verify-full`,** once. The driver refuses a non-local URL without it (owner decision, 10 Nov 2026).
 3. **Store it in Vercel** as `TENANT_DATABASE_URL`, a server-only secret, never under a `NEXT_PUBLIC_` name. `dev`'s string on the `dev` project, production's on production.
-4. **Confirm the pooler's client limit** on the plan page (`docs/S4-SPIKE.md`, section 2). Each instance opens at most 3 connections.
-5. **Leave `TENANT_DB_ENABLED` unset** until step 6 of the order.
+4. **Store the root CA** as `TENANT_DATABASE_CA_CERT`, a server-only secret, never under a `NEXT_PUBLIC_` name: the certificate blocks and nothing else. A value saved with literal `\n` escapes is accepted. Keep it beside the URL so the two change together. Which PEM exactly, the root alone or a bundle, is an open owner decision that rests on the next step.
+5. **Try one connection on `dev`** with the real pooler URL and that CA, before `TENANT_DB_ENABLED` is set anywhere, and confirm the handshake completes: the pooler's chain must end at the CA supplied, with a name matching the pooler host. If it does not, the choice of certificate goes back to the owner; the driver keeps refusing until it verifies. CI cannot show this, because its database runs on `127.0.0.1` with no TLS (tracker `s5-programme.30`).
+6. **Confirm the pooler's client limit** on the plan page (`docs/S4-SPIKE.md`, section 2). Each instance opens at most 3 connections.
+7. **Leave `TENANT_DB_ENABLED` unset** until step 6 of the order.
 
 **Rotating the password.** `ALTER ROLE tenant_app_login PASSWORD '<new>';` in the SQL editor, update `TENANT_DATABASE_URL`, redeploy the newest READY deployment straight away. Connections already open stay up until they are replaced (at most 5 minutes); new ones fail on the old password until the redeploy.
+
+**Changing the CA.** Update `TENANT_DATABASE_CA_CERT` and redeploy. Each instance keys its pool on the URL and the CA together (`tenantDriverFromEnv`), so a new CA gets a new pool rather than reusing connections built on the old one.
 
 ## Rollback
 
@@ -118,11 +149,13 @@ Each rollback is the variable unset (or set back) and a redeploy of the newest R
 | `TENANT_DB_AREAS` | Remove the area's entry, or the whole variable | Rows written in `tenant` mode stay; they are ordinary rows in the same tables. Shadow never wrote through `tenantDb` |
 | `TENANT_DB_ENABLED` | Unset | Every area falls back to `service`. Any caller that used `tenantDb` directly rather than through `readArea` or `writeArea` now fails closed, so a slice that adds such a caller states its own rollback |
 | `TENANT_DATABASE_URL` | Unset the flag first (above). To stop the login without a redeploy: `ALTER ROLE tenant_app_login NOLOGIN;` in the SQL editor, which refuses new connections; open ones end within the 5-minute lifetime, or terminate them from `pg_stat_activity` where `usename = 'tenant_app_login'` | With the flag still on, `tenantDb` callers fail closed until it is unset |
+| `TENANT_DATABASE_CA_CERT` | Unset the flag first. Unsetting the CA alone with the flag on makes every non-local `tenantDb` call fail closed | Nothing |
 | `PLATFORM_AUDIT_ENABLED` | Unset | **Every row already written stays.** The table is append-only: removing a row needs the owner to disable its trigger, and leaves a gap the chain check shows. Stopping the flag stops new rows only |
 
 ## What is not yet proven
 
-- **`tenant-db` as a gate.** Its first run against a real database, on #598, passed every step, including "Two tenants through the real driver": `test/integration/tenant-db.int.test.ts` and the two-tenant kit's test, with the read-only shadow path (`SET TRANSACTION READ ONLY` before the role, then the read-back). It is still report-only, so a later failure blocks nothing until the owner makes it required.
-- **The driver against a hosted pooler.** CI connects to a local database on `127.0.0.1`, where the driver uses no TLS, so CI has tried neither TLS mode; `sslmode=verify-full` against the pooler has not been tried.
+- **`tenant-db` as a gate.** Its first run against a real database, on #598, passed every step, including "Two tenants through the real driver": `test/integration/tenant-db.int.test.ts` and the two-tenant kit's test, with the read-only shadow path (`SET TRANSACTION READ ONLY` before the role, then the read-back). Since C18 it is required in the workflow, and it passed on #624, the first run of `test/integration/two-tenant/events-config.int.test.ts`, and on #625. It blocks a merge only once the owner adds it to branch protection.
+- **The driver against a hosted pooler.** CI connects to a local database on `127.0.0.1`, where the driver uses no TLS. `lib/tenancy/driver-tls.test.ts` proves the checks with real TLS handshakes against a local server and a generated CA, but `verify-full` against the real pooler has not been tried (owner step 5).
+- **C18 on a deployment.** No `events-config` read has gone through `tenantDb` anywhere but CI; the shadow step on `dev` is the first.
 - **The audit actor read inside `after()`**: one real row on `dev` per route kind, before production.
 - **C16's scope check on a deployment**: one admin call to a `loadRecord` route and one by an event manager inside their event on `dev`, reading `loadScopedMode` on the health route (wave 4, still open).

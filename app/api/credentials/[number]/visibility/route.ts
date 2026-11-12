@@ -33,9 +33,11 @@ async function setCredentialVisibility(req: Request, { params }: { params: Promi
   const { number } = await params
   const db = supabaseServer()
   const cred = await getCredentialByNumber(db, number)
-  if (!cred || !(await recordOnHost(cred)) || cred.owner_member_id !== member.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
+  // One guard per line, each answering as a credential nobody holds: the IDOR canary
+  // (scripts/idor-canary.mjs) deletes guard lines, and a deleted line must leave valid code.
+  if (!cred) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await recordOnHost(cred))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (cred.owner_member_id !== member.id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   noteAuditSubject(req, { tenantId: recordTenant(cred.tenant_id), id: cred.id, detail: { visibility } })
 
   const consent = await shareConsentFor(db, cred)

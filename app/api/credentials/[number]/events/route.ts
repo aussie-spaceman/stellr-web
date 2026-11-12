@@ -29,7 +29,9 @@ export const POST = withAudit(
     const { number } = await params
     const db = supabaseServer()
     const cred = await getCredentialByNumber(db, number)
-    if (!cred || !(await recordOnHost(cred))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    // One guard per line: the IDOR canary (scripts/idor-canary.mjs) deletes the host check alone.
+    if (!cred) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!(await recordOnHost(cred))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     noteAuditSubject(req, { userId: null, tenantId: recordTenant(cred.tenant_id), id: cred.id, detail: { kind } })
 
     await recordCredentialEvent(db, cred.id, kind)

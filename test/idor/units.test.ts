@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { CANARY_TENANT, HONEYTOKENS, HONEYTOKEN_VALUES, honeyColumnId, honeytokenFor, isCanaryId, scanForHoneytokens } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
@@ -595,11 +596,15 @@ describe('tenant-host cap', () => {
 })
 
 describe('canary', () => {
-  it('mutate() removes exactly the marked guard line', () => {
+  it('mutate() removes exactly the marked guard lines, and the copy still parses', () => {
     const src = readFileSync('test/idor/fixtures/handlers.ts', 'utf8')
-    for (const m of MUTATIONS as { kind: string; file: string; line: RegExp }[]) {
-      const { removed } = mutate(readFileSync(m.file, 'utf8'), m.line)
-      expect(removed, `${m.file} ${m.line}`).toBe(1)
+    for (const m of MUTATIONS as { kind: string; file: string; line: RegExp; removes?: number }[]) {
+      const { text, removed } = mutate(readFileSync(m.file, 'utf8'), m.line)
+      expect(removed, `${m.file} ${m.line}`).toBe(m.removes ?? 1)
+      // A copy that no longer compiles fails the suite for the wrong reason, and the canary
+      // then counts the mutation as survived (wave 7 A10a, PR #655).
+      const { diagnostics } = ts.transpileModule(text, { fileName: m.file, reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.Preserve } })
+      expect(diagnostics?.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')), `${m.file} after the mutation`).toEqual([])
     }
     expect(mutate(src, /CANARY:nope/).removed).toBe(0)
   })

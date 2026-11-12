@@ -29,7 +29,7 @@ The fixes for all three are under [PR amendments](#pr-amendments).
 - **B13.** It edits the cron that sends post-event surveys, Nevada's included. After it lands, confirm in `cron_runs` that the cron still opens and invites.
 - **Environment flips.** On `dev` first, each followed by a redeploy of the newest READY deployment.
 
-Every runtime change sits behind a default-off flag: `TENANT_ROUTING_ENABLED`, `AUTHZ_SOURCE=clerk`, `LOADSCOPED_MODE=off`, `TENANT_DB_ENABLED` off and `TENANT_DB_AREAS` unset, `RATE_LIMIT_STORE=memory`, `PLATFORM_AUDIT_ENABLED` off, `TENANT_EVENT_MAIL_ENABLED` off (wave 5). Where it cannot be, it must be provably a no-op for Stellr: a platform-owner early return, the Stellr-or-NULL tenant filter, or the zone-suffix string check.
+Every runtime change sits behind a default-off flag: `TENANT_ROUTING_ENABLED`, `AUTHZ_SOURCE=clerk`, `LOADSCOPED_MODE=off`, `TENANT_DB_ENABLED` off and `TENANT_DB_AREAS` unset, `RATE_LIMIT_STORE=memory`, `PLATFORM_AUDIT_ENABLED` off, `TENANT_EVENT_MAIL_ENABLED` off (wave 5), `TENANT_GUARDIAN_CONSENT_ENABLED` off (wave 6). Where it cannot be, it must be provably a no-op for Stellr: a platform-owner early return, the Stellr-or-NULL tenant filter, or the zone-suffix string check.
 
 ## Lanes and file ownership
 
@@ -181,6 +181,7 @@ The route counts use one regex: `MUT='export[[:space:]]+(async[[:space:]]+)?(fun
 | A5 | Handler split: `register/group-join` | A1, A2, A4 | later |
 | A6 | Handler split: `register/group` | A1, A2, A4 | later |
 | A7 + | Tenant event resolution, API age gate, Stellr-only hooks, audit on all 5 register routes, priced-event refusal | A3, A4, A5, A6, B5, B5b, B8, B10a, B14, C7, C8 | later |
+| A7f + | A7 follow-up (owner decision, 10 Nov 2026): on a tenant host the individual and group register gates read no session, so a tenant form uses only the details typed | A7 | later |
 | A8 + | Other participant writers: team-leader add and edit, roster sheet import | A2, A3, A7 | later |
 | A9 + | Async rate-limiter adoption | B4, C5b | later |
 | A10 + | Data conversion: credentials, surveys, team profiles, volunteer interest | C0b, C7, C11, C12 | later |
@@ -188,6 +189,7 @@ The route counts use one regex: `MUT='export[[:space:]]+(async[[:space:]]+)?(fun
 | A12 + | Check-in participant side | A10, C0b, C12 | later |
 | A13 | Stripe and webhook handlers: audit actors, tenant resolution | A7, C7 | later |
 | A14 + | Audit sweep: `consent/request`, `uploads/sign` | C7 | later |
+| A16 + | Tenant guardian consent (owner decision, 10 Nov 2026): a 14 to 17-year-old admitted to a tenant's event, on `register/individual` only, once a parent or legal guardian signs a platform-locked document on the native signing engine. Behind `TENANT_GUARDIAN_CONSENT_ENABLED`, with one migration | A7, B14b, C7 | later |
 
 ### Lane B
 
@@ -211,6 +213,7 @@ The route counts use one regex: `MUT='export[[:space:]]+(async[[:space:]]+)?(fun
 | B12 | Cron audit hook | B3, C7 | later |
 | B13 | Per-tenant surveys, team-profile and survey-retention crons | B3, B11 | later |
 | B14 | Per-tenant event emails and e-sign reminders, tenant email share | B3, B11 | later |
+| B14b + | B14 follow-up (owner decision, 10 Nov 2026): the signing engine's tenant sender. Another tenant's signing mail goes from its sender, or is held or not sent, and `docusign-reminders` may chase its native envelopes | B14 | later |
 | B15 + | Async rate-limiter adoption, the `schools/search` and `store/checkout` limits | B4, C5b | later |
 | B16 + | Member and community audit sweep, explicit `tenant_id` writes | C2, C7 | later |
 | B17 | Staff email audiences from memberships | C9 | later |
@@ -239,6 +242,7 @@ B5d is added by this file: the review listed the gap but no fix. It has hunks in
 | C9 | Role sync: dual-write, drift check, audience helpers | C1 | later |
 | C10 | Committed authz codemod | C1 | later |
 | C11 | `tenantDb` Postgres driver and CI tenant-db job | C2 | later |
+| C11t + | C11 follow-up (owner decision, 10 Nov 2026): `sslmode=verify-full` and `TENANT_DATABASE_CA_CERT` required for any non-local tenant database host | C11 | later |
 | C12 | Per-area switch, shadow compare, two-tenant kit | C7, C11 | later |
 | C13 + | Pilot: Stellr-only community, academy, training, coaching, entitlements admin | C5a, C7, C10 | later |
 | C14 + | Admin shell, view-as, staff-target checks | C1, C5a | later |
@@ -636,22 +640,105 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-
 
 ## Wave 6 status
 
-**Status at 11 Nov 2026,** read against `origin/main` at `3d90a6dd` and `origin/dev` at `66a06f8b`. This is a short status row only: Lane D, the wave 6 docs PR, replaces it with the full record (what wave 6 corrected, owner decisions it raised) once Lanes A and C have landed. Open items are tracked in `docs/handovers/tracker/2026-11-11-s5-programme.md`.
+**Merged** means squashed into `dev`, one PR per lane: Lane B #610 (`b4329149`) on 10 Nov 2026, then Lane C #624 (`12877f5e`) and Lane A #625 (`b8c1fba3`) on 11 Nov 2026. Lane A's branch merged #605 (the "All attendees" email group and staff check-in) and current `dev` before it landed. Lane D, this docs PR, follows them, checked against `dev` at `b8c1fba3`. **Since promoted:** B14b alone, in #612 (`3d90a6dd`) on 10 Nov 2026 (`.claude/releases/promote-2026-11-10b.md`). Lanes A and C are on `dev` and not promoted: production's `main` is #620 (`ccf45694`, `.claude/releases/promote-2026-11-11.md`), which carries no wave 6 code beyond B14b. No tenancy switch has been on in a hosted environment. Every PR not listed here or under waves 2 to 5 is still to build. Open items, each with the gate it blocks: `docs/handovers/tracker/2026-11-11-s5-programme.md`.
+
+**Owner decisions this wave builds on, settled 10 Nov 2026** (recorded under [Owner decisions wave 5 raised](#owner-decisions-wave-5-raised)): under-18s stay refused at tenant events until a tenant guardian-consent flow exists, and that flow uses the native signing engine with a platform-locked consent document, admitting 14 to 17-year-olds once a guardian signs; the signing engine gets a tenant sender; a Stellr member's profile is never used at a tenant event until S7's consent grant, so tenant forms take typed details only; the refusal copy and the `TENANT_SENDER_REQUIRED` copy as written; `sslmode=verify-full` with a supplied root CA for any non-local tenant database host; the `tenant-db` CI job required from C18.
+
+**Environment:** two new names, both unset by default: `TENANT_GUARDIAN_CONSENT_ENABLED` (A16, a flag, on only when exactly `true`) and `TENANT_DATABASE_CA_CERT` (C11t, a server-only secret read only for a non-local host with `TENANT_DB_ENABLED` on). Both are in `docs/ENV-MATRIX.md`, section 6. **Dependency:** none added.
 
 | PR | State | Flag, or why it is a no-op for Stellr |
 |---|---|---|
-| B14b | **On production.** Squashed to `dev` as #610 (`b4329149`), promoted in #612 (`3d90a6dd`) on 10 Nov 2026 (`.claude/releases/promote-2026-11-10b.md`). No migration | **`TENANT_EVENT_MAIL_ENABLED` off:** every other tenant's signing mail is held as before. **On:** the native signing engine sends another tenant's invitations, reminders, completion emails and bounce and correction notices from that tenant's sender ("`<Tenant>` via Stellr", its Reply-To). A tenant envelope with no usable sender is held in the outbox or refused by a reminder (`TENANT_SENDER_REQUIRED`), never sent as Stellr. `docusign-reminders` chases a tenant's Stellr-signing envelopes inside its own slice; its DocuSign envelopes stay held. `drainOutbox` reads Stellr's waiting signers first, in a read of their own. Stellr's signing mail, sender and budget are unchanged |
-| A7f, A16, A8 (Lane A) | Built on a local lane branch, not on `dev`. The consent-safety and regression reviews, interrupted by the 10 Nov session move, were completed on 11 Nov: no change to Stellr's behaviour with default flags, and a short list of follow-ups that matter only with the consent flag on. The branch has since merged current `dev` (`66a06f8b`) and taken the fix pass from those reviews, both on the lane branch only. **PR pending**, after the baselines are regenerated by script and a CI run in which A16's database tests pass | A16 adds `TENANT_GUARDIAN_CONSENT_ENABLED` (default off) and migration `20261110164339_tenant_guardian_consent`. The migration goes to the dev database only after its PR's `db` job passes |
-| C11t, C18 (Lane C) | Built, reviewed and fixed on a local lane branch. **PR pending.** It applies to current `dev` with no dependency on Lane A | C11t: a non-local tenant connection needs `sslmode=verify-full` and a CA. C18: the first area read through `tenantDb`, behind `TENANT_DB_AREAS`, empty by default. C18 was narrowed from the plan; Lane D records the deferred parts and their owner slices |
-| Lane D | Written before the wave 6 cross-review fixes and #605. **To be rebuilt** from the final state of A and C, then shipped last | Docs only |
+| B14b | **On production.** Squashed to `dev` as #610 (`b4329149`), promoted in #612 (`3d90a6dd`) on 10 Nov 2026. No migration | **`TENANT_EVENT_MAIL_ENABLED` off:** every other tenant's signing mail is held as before. **On:** the native signing engine sends another tenant's invitations, reminders, completion emails and bounce and correction notices from that tenant's sender ("`<Tenant>` via Stellr", its Reply-To). Without a usable sender, a tenant envelope's invitations and reminders are held in the outbox or refused by a reminder (`TENANT_SENDER_REQUIRED`), and its completion emails and bounce and correction notices are not sent. Nothing is sent as Stellr. `docusign-reminders` chases a tenant's Stellr-signing envelopes inside its own slice; its DocuSign envelopes stay held. `drainOutbox` reads Stellr's waiting signers first, in a read of their own. Stellr's signing mail, sender and budget are unchanged |
+| A7f | On `dev` (#625) | No flag of its own: the gates take the tenant branch only when `requestTenant()` names a tenant other than Stellr, which needs `TENANT_ROUTING_ENABLED`. On a tenant host `lib/registration/individual/gate.ts` reads neither the session's member nor its child-awaiting-consent state, so the typed address and date of birth stand, with no stored date-of-birth comparison; `lib/registration/group/gate.ts` keeps the organiser's typed address. Stellr's hosts run the same code as before |
+| A16 | On `dev` (#625); its migration on the `dev` database since 11 Nov 2026, not on production | `TENANT_GUARDIAN_CONSENT_ENABLED`. **Flag off:** every minor at a tenant event gets the approved refusal, and the register route and the `membership-expiry` sweep read and write nothing new. **On**, for `register/individual` on a tenant event: a 14 to 17-year-old is saved consent-pending, a parent or legal guardian signs a platform-locked document sent from the tenant's sender through B14b's `sendTenantSigningInvitation`, and a decline or a closed window removes the registration. Group and group-join still refuse every minor. **Not free once the migration is applied, flag or not:** each participant insert, and each update of `date_of_birth` or `registration_id`, makes one indexed join and writes nothing for Stellr; each write that sets `checked_in_at` makes one indexed lookup and is never refused for Stellr. A tenant's event mail reads the consent table whatever the flag says; Stellr's sends read nothing more. Detail: `docs/TENANCY-S5-registration.md` |
+| A8 | On `dev` (#625) | No flag of its own. `lib/registration/roster-context.ts` starts from the registration's `tenant_id` and makes no read for a Stellr registration, so the shared roster add (organiser and staff), team-leader edit and remove, and the sheet import make exactly the old age call for Stellr. The team routes under `app/api/members/teams` act only on groups whose tenant matches `requestTenant()`, which is Stellr while routing is off, and their responses drop `tenant_id`. On another tenant's group: that tenant's age rules, with every minor refused (these paths collect no guardian), no Member ID lookup, participant rows only, and the tenant payments answer for a group that takes money. The organiser payment writers refuse a tenant registration before any Stripe call. In the sheet import an eligibility refusal from the A3 trigger (`isEligibilityRefusal`) is skipped and listed in `skippedForDateOfBirth`, where it was ignored; any other write error is still only logged. A8 audits 5 more mutating team route files (6 handlers) under `app/api/members/teams` behind `PLATFORM_AUDIT_ENABLED`, with `lib/registration/team-audit.ts`: `participants`, `participants/[pid]`, `sheet-sync`, `docusign-resend` and `payment-link`. Every mutating team route is now audited |
+| C11t | On `dev` (#624) | `TENANT_DB_ENABLED` off: nothing connects. For any host other than `localhost` or `127.0.0.1` the driver accepts only `sslmode=verify-full`, given once, with `TENANT_DATABASE_CA_CERT` holding one or more PEM CA certificates and nothing else. postgres.js then checks the chain against that CA and the name against the host (an IPv4 host against its address), TLS 1.2 or later. Anything else throws before a pool exists, with no fallback to an unchecked mode. `parsePostgresUrl` now refuses `sslmode` given twice for every caller |
+| C18 | On `dev` (#624) | `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`: with defaults no `tenantDb` is built and no connection opens. The events admin companies list, count and rename are the first area, `events-config` (`lib/events/admin-config.ts`), with today's query kept as the service path. `companies`, `offerings` and `merch/commit` move from `stellr_only` to `tenant_staff`. What C18 converted and what it left, each with its owner slice: `docs/TENANCY-S5-data.md`, "The first area". **`tenant-db` is required in the workflow:** no `continue-on-error`, and its scope step also runs for the area module and the three routes |
+| Tenant-event refusals (Lane C) | On `dev` (#624) | `refuseUnlessStellrEvent` (`lib/tenancy/load-scoped.ts`) on `remind`, `docusign-reissue`, the guardian route, `offerings` and `merch/commit` under `app/api/admin/events/[slug]`: another tenant's event answers 404 for everyone, a Stellr admin included, in every `LOADSCOPED_MODE`, before any read about a person, email or envelope. **For Stellr:** one extra read of the event's owner per request, and a retryable 503 if that read fails, the trade-off already accepted for the register routes |
+| D | This docs PR | Docs |
 
-**Proposed order** (for the owner's yes): promotion #620, which carries no S5 code, merges first; then this status PR (docs only); then Lane C; then Lane A; then Lane D. Lane A and this PR both edit `docs/ENV-MATRIX.md`: whichever lands second keeps both changes. No wave 6 PR merges to `dev` while a `dev` to `main` promotion is open. `TENANT_GUARDIAN_CONSENT_ENABLED` is not turned on anywhere before Lane C is on production.
+**Merged with #605.** For another tenant's email, every roster-based audience, "All attendees" included, reads the roster with consent-pending participants left out (`resolveAudience`, `lib/event-emails/audiences.ts`), with their signers' links. Volunteer mentors and event managers are staff, not participants, and keep #605's behaviour. The check-in desk keeps #605's staff check-in beside the consent refusal.
+
+**Migrations, stamped.** One file, A16's:
+
+| File | What it does |
+|---|---|
+| `20261110164339_tenant_guardian_consent.sql` | New table `public.tenant_guardian_consents` (no contact data, Stellr refused by CHECK, RLS on, `service_role` only, no `tenant_app` grant); `agreements.envelope_type` also accepts `tenant_guardian_consent`, by dropping the CHECK and adding it again, wider, in the one transaction; trigger `zzz_participants_refuse_unconsented_check_in` (BEFORE UPDATE OF `checked_in_at`, 23514 `guardian_consent_pending`); trigger `zzz_participants_open_tenant_guardian_consent` (AFTER INSERT OR UPDATE OF `date_of_birth`, `registration_id`). Both functions SECURITY DEFINER, `search_path` pinned, EXECUTE revoked from PUBLIC, anon and authenticated. `lock_timeout` 5 s |
+
+**Its locks.** Adding the CHECK takes an ACCESS EXCLUSIVE lock on `agreements` and scans every row under it, and that lock is held until the migration commits, through the two trigger steps that follow, which may each wait up to `lock_timeout` for `participants`. So `agreements` is unavailable from the CHECK to the end of the migration (the file's header).
+
+**Where it is applied.** The `dev` database, on 11 Nov 2026, after #625's `db` job passed; the `dev` ledger lists `20261110164339`. Not production: its ledger ended at `20261110120000` when #620 was promoted. Production needs the owner's yes on the exact SQL, a fresh backup and a window with no events ([Owner gates](#owner-gates)), and goes before Lane A's code, as the promote skill orders it: a tenant's event mail reads the new table whatever the flag says, and fails closed if it is missing.
+
+**Proven.**
+
+- **CI on #624.** `tenant-db`, with no `continue-on-error`, passed every step, including "Two tenants through the real driver", which ran `test/integration/two-tenant/events-config.int.test.ts` for the first time. It passed again on #625.
+- **CI on #625.** The `db` job's pgTAP step passed, the first run of `supabase/tests/database/tenant_guardian_consent.test.sql` (plan 37). `db` is report-only, so this is read by step outcome.
+- C11t: `lib/tenancy/driver-tls.test.ts` runs real postgres.js and Node TLS handshakes against a local server and a generated CA: the right chain and name connect, another CA or another name is refused, an IPv4 host is checked against its address, and a control shows the old unchecked mode would have connected to the wrong server.
+- C18: `test/events-admin-config-c18.test.ts` drives the three routes under real `lib/authz` with every flag at its default and for a tenant's staff; `lib/events/admin-config.test.ts` drives the real switch on all three paths.
 
 **Not yet proven.**
 
-- **B14b on production.** The first production runs of `docusign-reminders` and of the outbox drain since 10 Nov: result keys present, no `tenantHeld`, no `outbox` or `tenants` failure in `cron_runs`. Agents cannot read production, so the owner reads them.
-- **B14b's flag-on path** has run only against test stand-ins.
-- **A16's database tests** have not yet run in CI.
+- **The consent flow end to end.** No guardian has signed a tenant consent on any deployment. With the flag on, the flow refuses every minor (`document`) until a document is published under `tenant_guardian_consent`.
+- **`verify-full` against the hosted pooler.** CI's `tenant-db` job connects to `127.0.0.1`, where the driver uses no TLS. Before `TENANT_DB_ENABLED` is set anywhere, one connection on `dev` with the real pooler URL and the supplied CA must complete its handshake (`docs/TENANCY-S5-data.md`, Owner steps).
+- **C18 on a deployment.** No `events-config` read has gone through `tenantDb` anywhere but CI.
+- **B14b on production.** The first production runs of `docusign-reminders` and of the outbox drain since 10 Nov: result keys present, no `tenantHeld`, no `outbox` or `tenants` failure in `cron_runs`. Agents cannot read production, so the owner reads them (tracker `s5-programme.34`). B14b's flag-on path has run only against test stand-ins.
+- **A8 on a deployment.** One organiser's add, edit and remove and one sheet import on a Stellr group on `dev`.
+
+### What wave 6 corrected
+
+Generated baselines are regenerated at merge and win over any number here.
+
+| This file said | Now | Source |
+|---|---|---|
+| `MAX_TENANT_DESTINED_STELLR_ONLY` 21 | **18** after C18. 0 through C21 | `test/idor/stellr-only-dispositions.test.ts` |
+| Manifest `stellr_only` 165, `tenant_staff` 35 | **162 and 38** after C18, 508 entries | `test/tenant-surface-routes.test.ts` |
+| IDOR targets: 94 `stellr_only`, 35 `tenant_staff` | **91 and 38**, 240 in all. The reported 4xx-oracle count is **13**, from 17 | `test/idor/idor-snapshot.json` |
+| Unaudited mutations 123 | **118** after Lane C, **112** after Lane A | `test/baselines/unaudited-mutations.json` |
+| Authz legacy idioms 138 files, 198 sites | **135 and 190** after Lane C | `test/baselines/authz-legacy-idioms.json` |
+| `tenant-db` is report-only | **Required in the workflow** (no `continue-on-error`). Adding it to branch protection is the owner's step | `.github/workflows/ci.yml`, `test/ci-tenant-db-required.test.ts` |
+| Tenant database TLS: encrypted, certificate unchecked unless `sslmode=verify-full` | **`verify-full` and `TENANT_DATABASE_CA_CERT` required** for any non-local host | `lib/tenancy/driver.ts` |
+| Amendment: the signing engine's tenant sender, nearest slice A11 | **Built in B14b** | `lib/esign/outbox.ts` |
+| A7: the register API refuses under-18s on tenant events | Still the default. With `TENANT_GUARDIAN_CONSENT_ENABLED` on and the flow ready, `register/individual` admits 14 to 17-year-olds pending a guardian's signature | `lib/registration/eligibility.ts` |
+| A7: the individual form takes the signed-in account's email and checks its stored date of birth on a tenant event | **Not on a tenant host** (A7f) | `lib/registration/individual/gate.ts` |
+| Amendment: A8 scopes the team routes and refuses tenant registrations in the payment writers before routing on any zone | **Built in A8** | `lib/registration/roster-context.ts`, `app/api/members/teams/**` |
+
+### Owner decisions wave 6 raised
+
+On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-closed until decided. Proposed user-facing wording is the slice's, for the owner to approve or reword.
+
+| From | Decision |
+|---|---|
+| A16 | **The consent document.** The flow refuses every minor until one is published under `tenant_guardian_consent`. Its wording needs the owner, with legal input. Only platform staff can publish it (Admin, Agreement documents; `lib/esign/native/template-admin.ts`) |
+| A16 | Guardian identity assurance: whether an emailed link to an address that is none of the registrant's own, plus the birth-year question and the guardian's attestation at signing, is enough for tenant events. It matches Stellr's own minor consent |
+| A16 | Proposed caps on consent invitations: 5 a day per guardian address, across every organiser, and 30 an hour per organiser (`GUARDIAN_INVITES_PER_ADDRESS_PER_DAY`, `GUARDIAN_INVITES_PER_TENANT_PER_HOUR`). They use `lib/rate-limit-async.ts`, so they count per instance until `RATE_LIMIT_STORE` is `postgres` |
+| A16 | Proposed window: 14 days, or until the event starts if sooner (`TENANT_GUARDIAN_CONSENT_WINDOW_DAYS`) |
+| A16 | Proposed wording, all new: `GUARDIAN_REQUIRED_MESSAGE` (400 `guardian_required`), `GUARDIAN_CONSENT_BUSY_MESSAGE` (429 `guardian_consent_busy`), the door and desk refusals while consent is pending (`lib/check-in-consent.ts`), the confirmation page's "Waiting for your parent or guardian", the registrant's five notices (`consent_pending`, `consent_pending_unsent`, `consent_signed`, `consent_declined`, `consent_expired` in `lib/registration/tenant-confirmation.ts`), and the document title "Parent or Guardian Consent" |
+| A16 | Confirm that moving a participant to another registration needs a fresh guardian signature. As built the consent resets to pending, because a signature covers one registration |
+| A16 | The desk: a group check-in with one consent-pending member gets a 409 and nobody in the group is checked in. Checking in the rest is not built (tracker `s5-programme.24`) |
+| A16 | Before the flag is on anywhere: credentials and surveys do not yet leave out consent-pending participants (A10, tracker `s5-programme.22`), staff see no pending marker on the roster or desk (`.23`), and the sweep's removal retries have no cap (`.26`) |
+| A16 | Before the flag is on anywhere: Lane C's tenant-event refusals (`refuseUnlessStellrEvent`, #624) live on production, as `docs/ENV-MATRIX.md` states, and whether `LOADSCOPED_MODE=enforce` is also required (tracker `s5-programme.20`). This precondition comes from the wave 6 plan, not an owner decision; whether `dev` may go first is the owner's call |
+| TB3 E | Whether threat-model TB3 E (age-gate bypass) moves from M to L. Its stated condition, A3 and A7 on production, is met (A3 since 5 Nov 2026, A7 since #600); the rating is unchanged until the owner decides (tracker `s5-programme.19`) |
+| A16 | CODEOWNERS now also owns `lib/esign/completion.ts` and `lib/esign/native/flow.ts`, where the consent hooks are called, which puts owner review on future e-sign changes there. Keep these two lines, or rely on the owned consent tests (#625) |
+| A8 | Before S9 opens tenant billing, the roster writers also check the event's current price, not only the registration's money columns (`TENANT_MONEY_COLUMNS`), or a free-registered group on an event that later gains a price admits places that never show as owed |
+| C11t | Which PEM goes in `TENANT_DATABASE_CA_CERT`: the provider's published root CA, or a bundle. This rests on the `dev` handshake showing the pooler's chain ends at that root with a name matching the pooler host (tracker `s5-programme.30`) |
+| C18 | Add `tenant-db` to branch protection on `dev` and `main`. It has passed on #624 and #625 (tracker `s5-programme.5`) |
+| C18 | How the companies area is confined for Stellr's admins before the first tenant event: `LOADSCOPED_MODE=enforce`, `AUTHZ_SOURCE=postgres`, or an owner check (#624) |
+
+### Owner decisions for wave 7, settled 11 Nov 2026
+
+- `dev` switches are flipped one at a time, each with the owner's yes, and a redeploy after each.
+- A fictitious tenant, "dev-canary", for `dev`.
+- A separate Sanity development dataset.
+- A consent document marked DEV PLACEHOLDER may be published on `dev`.
+- The owner creates `tenant_app_login` on `dev`.
+- The proposed 72-hour no-flip windows around events: declined by the owner.
+
+### Docs owed after wave 6
+
+- **D7:** a tenant consent signed end to end on `dev`, once a document is published, both flags are on there and the consent flag's precondition above is met; the B14b outbox read in `cron_runs` on production; one A8 roster round on a Stellr group on `dev`.
+- **The wave 7 plan,** with an owner slice for each unassigned need (tracker `s5-programme.43`).
+- **`docs/PLATFORM-AUDIT.md`:** the member-uuid sentence, once the owner answers C13.
+- **The template PDF-hash test** (tracker `s5-programme.18`): not yet identified, so it is not recorded here. The requester is asked what it refers to.
 
 ## PR amendments
 
@@ -771,6 +858,15 @@ Other things this slice leaves in place:
 - **`invoice` alongside `payment-method` (from C16's follow-up).** `app/api/admin/registrations/[id]/invoice` takes the payment-method route's pattern: the stamped-tenant check on the loaded row, and the audit target named before the staff check. Lane C, as a follow-up.
 - **C18, the first `tenantDb` area (from C12).** Production code calls `readArea` and `writeArea`, never the `*WithSeams` variants (a `lib/tenancy/db.test.ts` ratchet enforces it). Mismatch records show uuids only unless the area opts in through `showIds`, and a member number or a slug made from a person's name is never the key. Start `events-config:shadow` at a low sample rate and read Active CPU before raising it. `parsePostgresUrl` in `lib/tenancy/driver.ts` checks any other connection string the same way.
 
+**Added by wave 6.** Each comes from a wave 6 slice report or review and lands on the PR named.
+
+- **S7: the stored date of birth on a tenant host (from A7f).** On a tenant host neither the stored date-of-birth comparison nor Stellr's child-awaiting-consent check runs, so a signed-in Stellr minor is held only by the tenant's rules on the date typed, as a signed-out visitor is. S7 brings the comparison back once the profile may be used. Nothing may treat the typed email on these registrations as the session's: they link no member.
+- **Any later tenant participant writer (from A16).** The migration's trigger opens a pending consent for any participant under 18 on a tenant event, whoever writes it, but only `register/individual` issues the guardian's envelope. A row opened another way has no envelope: it is held from check-in and tenant event mail. With `TENANT_GUARDIAN_CONSENT_ENABLED` on, the sweep removes it once its window closes, through `executeDeletion`'s guard, which takes a registration only when every participant on it is declined or expired. The sweep runs only with the flag on (`app/api/cron/membership-expiry/route.ts`), and the migration's trigger opens the row whatever the flag says, so with the flag off the row stays pending, the participant stays held, and nothing removes it. Any later slice that lets a tenant write participants issues an envelope for such rows or refuses minors.
+- **What the consent trigger does not re-check (from A16).** It fires only on a participant's insert or a change of `date_of_birth` or `registration_id`. Re-owning an event, renaming its slug or changing its start date does not re-check consent. A move onto a Stellr event's registration leaves the old pending row, because the trigger returns before it for a Stellr event, so the participant stays held from check-in until the row goes (tracker `s5-programme.26`).
+- **A new Stellr-only route under `events/[slug]` (from Lane C).** A route that acts only on Stellr's accounts, sender or store asks `refuseUnlessStellrEvent` before any read about a person, any email and any envelope, as `remind`, `docusign-reissue`, the guardian route, `offerings` and `merch/commit` do. Moving the check into `requireEventAccess` would cover them all (tracker `s5-programme.28`).
+- **C19, after C18.** The service-role baseline no longer names the tables behind `companies`, `offerings` and `merch/commit`, because their queries moved into `lib/events/admin-config.ts` (`test/baselines/service-role-files.json`): C19 checks that the inventory attributes those tables.
+- **An admin count of held signing invitations (from B14b).** With the flag on, `drainOutbox` reads only the signers of tenants with a usable sender, so a sender-less tenant's waiting signers are neither read nor counted. `loadTenantSenders` reads every non-Stellr tenant in one unpaged query, which needs paging before the tenant list nears PostgREST's row cap.
+
 **Two different TODO pairs.** Do not conflate them. The snapshot entries in `test/idor/idor-snapshot.json` are on community coaching request and training `[itemId]/flag`. The allow-list entries in `route-guards.ts` are `schools/search` and `store/checkout`. B9 and C6 close the first pair; B15 closes the second.
 
 ## Gates
@@ -779,13 +875,13 @@ S5 finishes when all of these hold. Each names its proof.
 
 | Gate | Proof |
 |---|---|
-| Cross-tenant ratchet at 0 | C6: 0 leak, honey_write or 4xx-oracle outcomes for the tenant personas on every `tenant_staff` and `platform_admin` route. `MAX_TENANT_DESTINED_STELLR_ONLY` falls from 52 to 0 through C16 to C21: 21 after C16's payment-method follow-up (wave 5), and `app/api/admin/event-managers` stays `stellr_only` until C21. `MAX_UNEXERCISED` falls from 5 towards 0. `idor:canary` proves the personas can fail. |
+| Cross-tenant ratchet at 0 | C6: 0 leak, honey_write or 4xx-oracle outcomes for the tenant personas on every `tenant_staff` and `platform_admin` route. `MAX_TENANT_DESTINED_STELLR_ONLY` falls from 52 to 0 through C16 to C21: 21 after C16's payment-method follow-up (wave 5), 18 after C18 (wave 6), and `app/api/admin/event-managers` stays `stellr_only` until C21. `MAX_UNEXERCISED` falls from 5 towards 0. `idor:canary` proves the personas can fail. |
 | Tenant-host routes isolate records | C6 for the APIs, B10(c) for the pages: 0 leak, honey_write or 4xx-oracle outcomes on every id-bearing route in `allowedTenantFiles()`, in both directions, Stellr included. An accepted outcome is listed by route with its reason (for example a capability token) and the owner's approval. A green `tenant-host-routing` job does not meet this: the Stellr-host rows in `e2e/tenancy/host-cases.ts` are recorded outcomes, not failures (see [Wave 4 status](#wave-4-status)), so D7's sign-off checks them by route. |
 | 100% of mutations audited | C7's enforcing gate over every mutating handler, GET writers included, and the 24 crons (counts in `test/baselines/unaudited-mutations.json`). Every mutating route group now has a claimant: A7, A8, A10 to A14, B12, B16, B18 and C13 to C23. The rest are owner-approved, reasoned exemptions, proposed for `contact`, `subscribe`, `lp-lead`, `white-paper`, `join-network`, `host-event`, `asset-request` and `csp-report`. |
 | Host-header spoof | B10(c): forged `X-Forwarded-Host` and `x-stellr-tenant-id` change nothing; `/_t/<slug>` and `/%5Ft/<slug>` 404 on every host, for `stellr` and for another tenant's slug on a foreign tenant host and on the Stellr host, with dotted variants (`x.html`, `x.png`, `x.pngfoo`); an unknown zone host 404s. The harness has no platform in front of it, so it cannot show how forwarding headers are handled on a deployment; a request to the deployed hosts on 8 Nov 2026 confirmed the platform sets them itself. |
 | Warm-cache body hash | B10a: flag off and on, the same status, headers and normalised hash for every page under `app/` plus a sample of other routes (167 paths on 5 Nov), and no write added. Signed out and with no records: about 60 paths compare a rendered body (45 on the app host) and the rest compare a redirect or an error. So this says what switching routing on does, not what a code change does, and it says nothing about signed-in bodies or real records. Those are D7's sign-off unless a later slice takes them. B10(b): two non-owner tenants keep their own hashes. |
 | 0 trackers, 0 community routes on tenant hosts | B10(d) and B9, with the localhost control proving the test can fail. All 80 community and home entries 404. |
-| Under-14 and unknown DOB rejected | A7 by API, A3 by database (23514): a 13-year-old, NULL, future or over-120 DOB, and a registration moved onto a tenant event. In enforce, a tenant slug with no `events` row and no supplied `tenant_id` raises 23503. Stellr 12-year-olds still insert, on a mirrored and an unmirrored event. |
+| Under-14 and unknown DOB rejected | A7 by API, A3 by database (23514): a 13-year-old, NULL, future or over-120 DOB, and a registration moved onto a tenant event. In enforce, a tenant slug with no `events` row and no supplied `tenant_id` raises 23503. Stellr 12-year-olds still insert, on a mirrored and an unmirrored event. Since wave 6 (A16), a tenant event's 14 to 17-year-old is admitted only through the guardian-consent flow, behind `TENANT_GUARDIAN_CONSENT_ENABLED`, and a database trigger refuses their check-in until the guardian signs. |
 | Authorisation converged | C5a's ratchet reaches 0 by C25. At least 7 clean days of `AUTHZ_SOURCE=shadow` on production before the flip. |
 | Data access classified and shrinking | The service-role and events-facade baselines only fall; the facade reaches 0 through C8, A7 and B19. |
 | 30-day production checklist | D7's list, signed by the owner, on the converted code. |
@@ -793,14 +889,14 @@ S5 finishes when all of these hold. Each names its proof.
 ## Owner gates
 
 - **Production migrations.** Each of the six above, through `prod-migrate`. B9's CHECK, which also needed the owner's approval of the rule itself, was applied on 9 Nov 2026 with that approval, before #587.
-  - **Open control item (11 Nov 2026).** The `prod-migrations` environment's protection rules (`docs/RUNBOOK-agent-controls.md` §3), then §7's proof run, are an open owner action, due before any PR that adds a migration (A16 first) merges to `dev`.
+  - **Open control item (11 Nov 2026).** The `prod-migrations` environment's protection rules (`docs/RUNBOOK-agent-controls.md` §3), then §7's proof run, are an open owner action, due before any PR that adds a migration (A16 first) merges to `dev`. A16 merged to `dev` in #625 on 11 Nov 2026; the item's state is in tracker `s5-programme.1`.
   - **Until §7 records a proof date,** production SQL keeps the interim route in `CLAUDE.md`: the promote skill's Step 3, with the owner's explicit yes on the exact SQL. Proposed for A16, the first S5 migration that adds triggers on participants: a fresh production backup first, and a window with no events.
 - **S4 state.** Confirm `20261104200000`, `210000`, `300000` and `400000` are on production, and that `tenancy_cutover_checks` Section D shows 0 NULL `tenant_id`, before any area reads through `tenantDb` or `loadScoped` enforce.
-- **`tenant_app_login`.** Create on dev, then production; store `TENANT_DATABASE_URL` as a server-only secret. Needed only for a deployed flip, not to build, merge or CI-test. The steps, the URL rules C11's driver enforces, and rotation are in `docs/TENANCY-S5-data.md`. Decide the TLS rule first (wave 5).
+- **`tenant_app_login`.** Create on dev, then production; store `TENANT_DATABASE_URL` as a server-only secret. Needed only for a deployed flip, not to build, merge or CI-test. The steps, the URL rules C11's driver enforces, and rotation are in `docs/TENANCY-S5-data.md`. The TLS rule was settled on 10 Nov 2026 and built in C11t: also store the root CA as the server-only secret `TENANT_DATABASE_CA_CERT`, give the URL `sslmode=verify-full`, and see one handshake to the pooler complete on `dev` before `TENANT_DB_ENABLED` is set. The owner creates the `dev` login (owner decision, 11 Nov 2026).
 - **Roles.** Run `scripts/map-tenancy-roles.ts --apply`, decide `--platform-admins`, and decide route by route which of the 9 platform-destined routes become owner-only (class `platform_destined` since C15). After C9, stop assigning `admin` or `event_manager` in the Clerk dashboard, or run `--check` after any change.
-- **Environment flips**, each with the rules above: `AUTHZ_SOURCE`, `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`, `PLATFORM_AUDIT_ENABLED` (proposed order and rollback for these four: `docs/TENANCY-S5-data.md`), `TENANT_EVENT_MAIL_ENABLED` (not before the signing-sender decision of wave 5), `RATE_LIMIT_STORE`, `TENANT_ROUTING_ENABLED` and `TENANT_HOST_SUFFIX` (before the zone is attached: see Real tenant hosts). Create `RATE_LIMIT_KEY_SECRET` before any non-memory limiter mode, and flip `RATE_LIMIT_STORE` only after A9 and B15 (`docs/S5-CRONS-LIMITS-SMMA.md`). Add the WAF rules for `/credentials/`, then tenant hosts (`docs/RUNBOOK-waf-rule.md`).
+- **Environment flips**, each with the rules above: `AUTHZ_SOURCE`, `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`, `PLATFORM_AUDIT_ENABLED` (proposed order and rollback for these four: `docs/TENANCY-S5-data.md`), `TENANT_EVENT_MAIL_ENABLED` (the signing engine's tenant sender it waited on is B14b, on production), `TENANT_GUARDIAN_CONSENT_ENABLED` (after A16's migration, a published consent document and `TENANT_EVENT_MAIL_ENABLED`, and only once Lane C's tenant-event refusals are live on production: `docs/ENV-MATRIX.md`), `RATE_LIMIT_STORE`, `TENANT_ROUTING_ENABLED` and `TENANT_HOST_SUFFIX` (before the zone is attached: see Real tenant hosts). Create `RATE_LIMIT_KEY_SECRET` before any non-memory limiter mode, and flip `RATE_LIMIT_STORE` only after A9 and B15 (`docs/S5-CRONS-LIMITS-SMMA.md`). Add the WAF rules for `/credentials/`, then tenant hosts (`docs/RUNBOOK-waf-rule.md`).
 - **Dependencies.** `ts-morph` (dev, C10), or the TypeScript-API fallback. **`postgres` (runtime, C11): approved 9 Nov 2026**, postgres.js, on the terms in the file-ownership table. The login (`tenant_app_login`) and `TENANT_DB_ENABLED` stay separate gates.
-- **CODEOWNERS reviews**, `DB_CI_ENFORCE=true`, and the tenant-db job as required, which the owner settled on 10 Nov 2026 for the PR that first wires a live area to `tenantDb` (C18).
+- **CODEOWNERS reviews**, `DB_CI_ENFORCE=true`, and the tenant-db job as required, which the owner settled on 10 Nov 2026 for the PR that first wires a live area to `tenantDb` (C18). C18 removed `continue-on-error` from the job (#624); adding `tenant-db` to branch protection is the owner's step.
 - **`tenant-host-routing` as required.** B10a landed it report-only: a failure blocks nothing and the run can still look green. Proposed: required at the latest before B5c merges, and before `TENANT_ROUTING_ENABLED` is set on any deployment with a zone attached. Until then a B5c or A7 PR cites this job's step outcome, not the run's badge.
 - **Decisions:**
   - the tenant-tree segment (`%5Ft` for `/_t`, or `/t`), because a folder named `_t` is private and never routes;
@@ -809,13 +905,13 @@ S5 finishes when all of these hold. Each names its proof.
   - where tenant staff work;
   - whether `group/route` gets `childAwaitingConsentBlock` (A7 left it without);
   - live tenant events with no start date (A7 refuses everyone for such an event until decided);
-  - guardian consent on tenant events (A7 refuses anyone under 18 until decided; see [Owner decisions wave 5 raised](#owner-decisions-wave-5-raised));
+  - guardian consent on tenant events: **settled 10 Nov 2026** (see [Owner decisions wave 5 raised](#owner-decisions-wave-5-raised)) and built in A16 behind `TENANT_GUARDIAN_CONSENT_ENABLED`; what remains is under [Owner decisions wave 6 raised](#owner-decisions-wave-6-raised);
   - **the tenant email share: settled 9 Nov 2026.** The owner chose one shared pool, until the move to SES: tenants' event mail counts against the same daily counter in `lib/email-budget.ts` as Stellr's, under the same rules, with no per-tenant allowance. Transactional mail is never refused by the counter, and the transactional reserve keeps bulk mail out, not any one sender. B14 builds on that. The risk the owner accepted: one busy tenant can reach Resend's own daily limit, after which Resend rejects mail for every sender, Stellr included;
   - cron fairness;
   - audit exemptions for anonymous writes;
   - the audit gate's `OPERATIONAL_WRITERS` list (`lib/security/audit-coverage.ts`), a second exemption route, and in it the sign-in consent gate: `childAwaitingConsent` and `childAwaitingConsentBlock` record through the activity log, and whether they also need a platform audit event;
   - the disposition register (51 / 9 / 55 / 16);
-  - the refusal copy for under-minimum registrants (A7's proposal is under wave 5);
+  - the refusal copy for under-minimum registrants: **settled 10 Nov 2026** (see [Owner decisions wave 5 raised](#owner-decisions-wave-5-raised));
   - the `proxy.ts` admin prefilter (B20).
 - **Real tenant hosts.** The G5 subzone, Vercel Pro (G1), Clerk session sharing and FAPI origins, and the cookie-domain review on `.stellreducation.org`. That review also decides the no-ads marker: since B7 a student who signs in only on a tenant host is not marked for Stellr's www in that browser, so Privacy Policy section 9.4 is not closed for them.
   - **Order on each Vercel project.** Set the flag and suffix, redeploy, confirm through the health check that `suffixError` is null, then attach the wildcard domain. Then check straight away that an unknown host in the zone answers 404, and detach if it does not. The review put that 404 check before the attach, but Vercel does not route the host to the deployment until the domain is attached.

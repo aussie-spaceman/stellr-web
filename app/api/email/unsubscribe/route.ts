@@ -41,9 +41,9 @@ import { recordOnHost } from '@/lib/tenancy/host-record'
 // A members row carries no tenant (an identity record, lib/tenancy/registry.ts), so the
 // record checked is the list. On Stellr's host the token is the holder's own capability,
 // whichever other organisations they also belong to: refusing it there would answer
-// "unsubscribed" while Stellr's campaigns kept coming. That is open as decision W7-15
-// (docs/S5-DECISION-REGISTER.md), and the tenant-host baseline keeps those cases until
-// the owner answers.
+// "unsubscribed" while Stellr's campaigns kept coming. The owner approved that as decision
+// W7-15 (docs/S5-DECISION-REGISTER.md, with #660), so the two Stellr-host cases are entered
+// in TENANT_HOST_ACCEPTED (test/idor/tenant-host-accepted.ts).
 
 /** The list being left: Stellr's own, whoever the member is. */
 const STELLR_LIST = { tenant_id: STELLR_TENANT_ID }

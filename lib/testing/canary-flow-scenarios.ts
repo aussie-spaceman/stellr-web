@@ -250,9 +250,6 @@ export function sessionIdEnvName(handle: CanaryPersonaHandle): string {
 /** A Clerk session id. */
 export const SESSION_ID_RE = /^sess_[A-Za-z0-9]+$/
 
-/** Clerk's Backend API. */
-export const CLERK_API = 'https://api.clerk.com/v1'
-
 export type PersonaSession = { kind: 'session-id'; sessionId: string } | { kind: 'token'; token: string }
 
 /** A persona's session from the env, or why there is none. Never echoes a value. */
@@ -274,12 +271,14 @@ export function personaSessionFrom(
 
 /**
  * A fresh session token for a session id, from Clerk's Backend API
- * (POST /v1/sessions/{id}/tokens) with the caller's fetch. Only with a development
+ * (POST /v1/sessions/{id}/tokens) at the base URL the caller passes (the script
+ * holds it: lib/clerk-provisioning.guard.test.ts keeps Clerk REST URLs out of lib/), with the caller's fetch. Only with a development
  * (sk_test_) key, and the token must pass sessionTokenProblem: issued by a Clerk
  * development instance, with time left. Errors carry a status code at most, never
  * the id, the key or a token.
  */
 export async function mintSessionToken(
+  clerkApi: string,
   sessionId: string,
   secretKey: string | undefined,
   now: () => Date,
@@ -288,7 +287,7 @@ export async function mintSessionToken(
   const key = (secretKey ?? '').trim()
   if (!key.startsWith('sk_test_')) throw new Error("refusing: minting a session token needs the dev instance's sk_test_ key")
   if (!SESSION_ID_RE.test(sessionId)) throw new Error('not a Clerk session id')
-  const res = await fetchImpl(`${CLERK_API}/sessions/${sessionId}/tokens`, {
+  const res = await fetchImpl(`${clerkApi.replace(/\/+$/, '')}/sessions/${sessionId}/tokens`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: '{}',

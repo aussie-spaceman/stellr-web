@@ -55,6 +55,8 @@ import { ageOn, isMinorOn } from '../age'
 import { guardianFromForm } from '../registration/tenant-guardian-consent'
 import { hasSchool } from '../registration/individual/parse'
 import { STELLR_TENANT_ID } from '../tenancy/constants'
+
+const CLERK = 'https://api.clerk.com/v1'
 import { AUTHZ_SOURCES } from '../authz/decide'
 import { LOADSCOPED_MODES } from '../tenancy/load-scoped-mode'
 
@@ -235,26 +237,26 @@ describe("the personas' sessions", () => {
       calls.push({ url, init })
       return { ok: status < 300, status, json: async () => ({ object: 'token', jwt }) }
     }
-    expect(await mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(minted))).toBe(minted)
+    expect(await mintSessionToken(CLERK, 'sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(minted))).toBe(minted)
     expect(calls[0].url).toBe('https://api.clerk.com/v1/sessions/sess_placeholder1/tokens')
     expect(calls[0].init.method).toBe('POST')
     expect(calls[0].init.headers.Authorization).toBe('Bearer sk_test_placeholder')
     // Nothing is asked of Clerk without a development key, or for something that is not a session id.
     calls.length = 0
-    await expect(mintSessionToken('sess_placeholder1', 'sk_live_placeholder', () => NOW, fetchOk(minted))).rejects.toThrow(/sk_test_/)
-    await expect(mintSessionToken('sess_placeholder1', undefined, () => NOW, fetchOk(minted))).rejects.toThrow(/sk_test_/)
-    await expect(mintSessionToken('../users', 'sk_test_placeholder', () => NOW, fetchOk(minted))).rejects.toThrow(/session id/)
+    await expect(mintSessionToken(CLERK, 'sess_placeholder1', 'sk_live_placeholder', () => NOW, fetchOk(minted))).rejects.toThrow(/sk_test_/)
+    await expect(mintSessionToken(CLERK, 'sess_placeholder1', undefined, () => NOW, fetchOk(minted))).rejects.toThrow(/sk_test_/)
+    await expect(mintSessionToken(CLERK, '../users', 'sk_test_placeholder', () => NOW, fetchOk(minted))).rejects.toThrow(/session id/)
     expect(calls).toEqual([])
     // A refusal, a production instance's token, an expired one or no token at all.
-    const refused = mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(null, 404))
+    const refused = mintSessionToken(CLERK, 'sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(null, 404))
     await expect(refused).rejects.toThrow(/\(404\)/)
-    await expect(mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: 'https://clerk.stellreducation.org', exp: live(60) })))).rejects.toThrow(
+    await expect(mintSessionToken(CLERK, 'sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: 'https://clerk.stellreducation.org', exp: live(60) })))).rejects.toThrow(
       /development instance/,
     )
-    await expect(mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: DEV_ISSUER, exp: live(5) })))).rejects.toThrow(/expire/)
-    await expect(mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(undefined))).rejects.toThrow(/not a session token/)
+    await expect(mintSessionToken(CLERK, 'sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: DEV_ISSUER, exp: live(5) })))).rejects.toThrow(/expire/)
+    await expect(mintSessionToken(CLERK, 'sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(undefined))).rejects.toThrow(/not a session token/)
     // No error names the id, the key or a token.
-    for (const p of [refused, mintSessionToken('sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: DEV_ISSUER, exp: live(5) })))]) {
+    for (const p of [refused, mintSessionToken(CLERK, 'sess_placeholder1', 'sk_test_placeholder', () => NOW, fetchOk(token({ iss: DEV_ISSUER, exp: live(5) })))]) {
       const message = await p.then(
         () => '',
         (e: Error) => e.message,

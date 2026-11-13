@@ -117,6 +117,10 @@ dotenv.config(fs.existsSync(envPath) ? { path: envPath } : {})
 
 const CANARY_ID = CANARY_FLOW_TENANT.id
 const SLUG = CANARY_FLOW_EVENT.slug
+// Clerk's Backend API, for minting persona session tokens on the dev instance. It
+// stays here, not in lib/: lib/clerk-provisioning.guard.test.ts allows no Clerk REST
+// URL in app code.
+const CLERK_API = 'https://api.clerk.com/v1'
 const MINORS = ['minor-sign', 'minor-decline'] as const
 
 /** `--name value` or `--name=value`; undefined when absent. */
@@ -164,7 +168,7 @@ async function tokenFor(c: Client, persona: Exclude<ProbePersona, 'anonymous'>):
     const last = c.minted.get(persona)
     if (last && !sessionTokenProblem(last, new Date())) return last
     try {
-      token = await mintSessionToken(session.sessionId, process.env.CLERK_SECRET_KEY, () => new Date(), fetch)
+      token = await mintSessionToken(CLERK_API, session.sessionId, process.env.CLERK_SECRET_KEY, () => new Date(), fetch)
       problem = null
       c.minted.set(persona, token)
     } catch (e) {

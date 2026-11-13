@@ -73,7 +73,7 @@ An entry that does not parse, names an undeclared area, gives a rate to `tenant`
 
 **CI.** `test/integration/two-tenant/events-config.int.test.ts` runs in the `tenant-db` job, which C18 made required in the workflow: no `continue-on-error` on the job or any step. Its scope step also runs for `lib/events/admin-config.ts` and the three routes (`test/ci-tenant-db-required.test.ts`). It passed on #624 and #625.
 
-### Stellr-only routes refuse another tenant's event (wave 6)
+### Stellr-only routes refuse another tenant's event (waves 6 and 7)
 
 `refuseUnlessStellrEvent` (`lib/tenancy/load-scoped.ts`) reads the event's owner from the events mirror by slug, an unmirrored slug counting as Stellr's. `remind`, `docusign-reissue`, the guardian route, `offerings` and `merch/commit` under `app/api/admin/events/[slug]` ask it after `refuseOutsideStellr` and before any read about a person, any email and any envelope. Another tenant's event answers 404 for everyone, a Stellr admin included, **in every `LOADSCOPED_MODE`**, because `off` and `shadow` do not narrow the reads that follow. A failed owner read answers a retryable 503. For Stellr's own events the answer is today's, at the cost of one `events` read per request (#624).
 
@@ -138,14 +138,15 @@ Needed only for a deployed `tenantDb` flip, not to build, merge or run CI. The o
 4. **Store the root CA** as `TENANT_DATABASE_CA_CERT`, a server-only secret, never under a `NEXT_PUBLIC_` name: the certificate blocks and nothing else. A value saved with literal `\n` escapes is accepted. Keep it beside the URL so the two change together. **Which PEM is pending:** the provider's root CA if it verifies, otherwise a bundle, decided by the canary in the next step (P6) and recorded in tracker `s5-programme.30`. Never a weaker `sslmode`.
 5. **Run the pooler TLS canary on your own machine** (O3, `scripts/tenant-db-canary.ts`), before `TENANT_DB_ENABLED` is set anywhere. CI cannot show this, because its database runs on `127.0.0.1` with no TLS. The URL goes in an environment variable for one run, never on the command line or in `.env.local`:
 
-   ```bash
+   ```zsh
    read -rs "TENANT_DB_CANARY_URL?Pooler URL: " && export TENANT_DB_CANARY_URL   # zsh; nothing is echoed
+   # in bash instead: read -rsp 'Pooler URL: ' TENANT_DB_CANARY_URL && echo && export TENANT_DB_CANARY_URL
    npx tsx --conditions=react-server scripts/tenant-db-canary.ts --ca <PEM A file> --label A
    npx tsx --conditions=react-server scripts/tenant-db-canary.ts --ca <PEM B file> --label B   # only if A fails
    unset TENANT_DB_CANARY_URL
    ```
 
-   - **Refused before connecting:** a local host, any `sslmode` but `verify-full`, a login other than `tenant_app_login.<ref>`, an unreadable PEM, a server certificate passed as the CA, and the production project (unless `--production` is passed on purpose).
+   - **Refused before connecting:** a local host, any `sslmode` but `verify-full`, a login other than `tenant_app_login` (or the pooler's `tenant_app_login.<ref>`), by the driver's own URL rules, an unreadable PEM, a server certificate passed as the CA, and the production project (unless `--production` is passed on purpose).
    - **A diagnostic handshake** prints each certificate the pooler presents: subject, issuer, SANs and sha256. It does not refuse an unverified chain, so that a failure shows what was presented; its verdict is reported, never acted on (owner answer `PR658-1` in `docs/S5-DECISION-REGISTER.md`).
    - **The real check** goes through the app's own driver and `tenantDb` under `verify-full`, in a read-only transaction: it reads back `current_user` and `app_tenant_id()`, counts `public.event_companies`, and reports whether `application_name` reaches Postgres.
    - **PASS** needs the connection under `verify-full`, `current_user` `tenant_app`, Stellr's tenant id read back and a count above 0. Exit status 0 is PASS, 1 FAIL, 2 a usage error.

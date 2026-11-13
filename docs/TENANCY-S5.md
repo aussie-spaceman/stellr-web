@@ -755,7 +755,7 @@ Wave 7 proves the switches on `dev` one at a time, runs a fictitious canary tena
 |---|---|---|
 | W7-pre | #646 (`a33ef9c9`) | No runtime change: 10 audit action names (`credential.*`, `team_profile.record.save`, `survey.*`, `event_volunteer.interest.set`) and 3 CODEOWNERS paths registered up front. Unsubscribe keeps `email.unsubscribe.apply` |
 | D1 | #647 (`fee4420f`) | Docs: the decision register and the flip log |
-| C20c | #648 (`891822f3`) | No flag. The money routes on Stellr's Stripe refuse another tenant's event in every mode: `invoice-paid`, `payment-link`, `registrations/[id]/invoice`, `registrations/[id]/finish-setup` and `refunds/preview` (`docs/TENANCY-S5-data.md`, "Stellr-only routes refuse another tenant's event"). **For Stellr:** one extra read of the event's owner per request, two for `refunds/preview`, and a retryable 503 if it fails. The delete dialog now blocks a delete when the refund preview fails for any reason but 404 |
+| C20c | #648 (`891822f3`) | No flag. The money routes on Stellr's Stripe refuse another tenant's event in every mode: `invoice-paid`, `payment-link`, `registrations/[id]/invoice`, `registrations/[id]/finish-setup` and `refunds/preview` (`docs/TENANCY-S5-data.md`, "Stellr-only routes refuse another tenant's event (waves 6 and 7)"). **For Stellr:** one extra read of the event's owner per request, two for `refunds/preview`, and a retryable 503 if it fails. The delete dialog now blocks a delete when the refund preview fails for any reason but 404 |
 | K4 | #649 (`1a1bd5d7`) | The event mirror sync keeps a non-owner row's minimum age, and its time zone unless the venue moved (`docs/TENANCY-S5-registration.md`, Known limits). Stellr's written payload is byte-identical, with no extra read |
 | O2 | #650 (`7dca70e1`) | `RATE_LIMIT_STORE`: in `memory`, today's default, nothing new is written or imported. In `shadow` a disagreement or store problem leaves a `RATELIMIT` row (`docs/S5-CRONS-LIMITS-SMMA.md`) |
 | B26a | #651 (`06e06f24`) | `CRON_NON_PROD_JOBS`, unset: read only on the hosted `dev` deployment, two values only, never the minor-account purge (`docs/S5-CRONS-LIMITS-SMMA.md`, "The dev opt-in") |
@@ -810,6 +810,7 @@ It is informational and does not feed `ok`. After each flip's redeploy, read it 
 **Not yet proven.**
 
 - **Any switch on a hosted deployment.** P1 onwards wait on the owner's yes for each flip.
+- **The `AUTHZ_SOURCE=shadow` rehearsal (P3).** Not started. On `dev`, after `scripts/map-tenancy-roles.ts --check` exits 0, it runs for 7 days, counted from the first expected canary mismatch row, which proves the switch took effect; a fix to the role tables restarts the clock (tracker `s5-programme.31`, `W7-2`).
 - **The pooler TLS canary (P6).** Built, not run, so which PEM goes in `TENANT_DATABASE_CA_CERT` is pending (tracker `s5-programme.30`).
 - **The `dev` Sanity dataset (K2).** Approved (`W7-5`), not done. Without it the hosted canary stops at the local rehearsal.
 - **Signing on `dev` (K0).** On 12 Nov 2026 `stellr-web-dev` had no e-sign or seal variables, which K0 checks first.

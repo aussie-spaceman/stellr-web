@@ -284,10 +284,68 @@ const SIGNATURE_TEXT = [
 
 export interface RenderedEventEmail { subject: string; html: string; text: string }
 
+// ── Held links ────────────────────────────────────────────────────────────────
+
+/**
+ * Link fields left out when they are held, rather than rendered empty: the line that
+ * carries one (its text, or a link pointing at it) goes, so "Give feedback:" never
+ * dangles. Only {{feedback_link}}, which eventVarsFor (send.ts) empties for another
+ * tenant's event while surveySendsHeld (lib/survey/hold.ts) holds its survey. Stellr's
+ * value is never empty, so its emails render byte for byte as before.
+ */
+export const OMIT_WHEN_EMPTY = ['feedback_link'] as const
+
+const tokenPattern = (token: string) => new RegExp(`\\{\\{\\s*${token}\\s*\\}\\}`)
+
+/** Does this node (its text or a link's href) use the token? */
+function carries(node: Node, re: RegExp): boolean {
+  return re.test(JSON.stringify(node))
+}
+
+/** A paragraph's lines, split at its hard breaks. */
+function lines(content: Node[]): Node[][] {
+  const out: Node[][] = [[]]
+  for (const c of content) {
+    if (c.type === 'hardBreak') out.push([])
+    else out[out.length - 1].push(c)
+  }
+  return out
+}
+
+/**
+ * The tiptap body without the lines that carry the token: a line of a paragraph (up to
+ * its hard breaks), the paragraph or heading when nothing else is left, and a list item,
+ * list or quote left empty by that. Returns null when nothing is left of the node.
+ */
+function withoutToken(node: Node, re: RegExp): Node | null {
+  if (!node || typeof node !== 'object' || !carries(node, re)) return node
+  if (node.type === 'text') return null
+  if (node.type === 'paragraph' || node.type === 'heading') {
+    const kept = lines(node.content ?? []).filter((l) => l.length > 0 && !l.some((c) => carries(c, re)))
+    if (!kept.length) return null
+    return { ...node, content: kept.flatMap((l, i) => (i ? [{ type: 'hardBreak' }, ...l] : l)) }
+  }
+  const content = (node.content ?? []).map((c) => withoutToken(c, re)).filter((c): c is Node => c !== null)
+  if (node.type !== 'doc' && !content.length) return null
+  return { ...node, content }
+}
+
+/** The body with every held (empty) OMIT_WHEN_EMPTY field's lines taken out; the same object when none is held. */
+export function omitHeldLinks(bodyJson: unknown, vars: Record<string, string>): unknown {
+  let body = bodyJson
+  for (const token of OMIT_WHEN_EMPTY) {
+    if (token in vars && vars[token] === '' && body && typeof body === 'object') {
+      body = withoutToken(body as Node, tokenPattern(token)) ?? { type: 'doc', content: [] }
+    }
+  }
+  return body
+}
+
 export function renderEventEmail(
   email: { subject: string; body_json: unknown },
   vars: Record<string, string>,
 ): RenderedEventEmail {
+  const bodyJson = omitHeldLinks(email.body_json, vars)
   const htmlVars: Record<string, string> = {}
   for (const [k, v] of Object.entries(vars)) {
     htmlVars[k] = URL_FIELDS.has(k) && v ? link(v) : escapeHtml(v)
@@ -300,10 +358,10 @@ export function renderEventEmail(
   if ('credential_links' in vars) htmlVars.credential_links = linesHtmlFromText(vars.credential_links, 'View credential')
 
   const subject = substituteTokens(email.subject, vars).replace(/\s+/g, ' ').trim()
-  const bodyHtml = substituteTokens(tiptapToEmailHtml(email.body_json), htmlVars)
+  const bodyHtml = substituteTokens(tiptapToEmailHtml(bodyJson), htmlVars)
     // An empty merge field (e.g. no payment note) must not leave a blank paragraph.
     .replace(/<p style="margin:0 0 16px"><\/p>/g, '')
-  const bodyText = substituteTokens(tiptapToEmailText(email.body_json), vars).replace(/\n{3,}/g, '\n\n')
+  const bodyText = substituteTokens(tiptapToEmailText(bodyJson), vars).replace(/\n{3,}/g, '\n\n')
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#000000;max-width:640px">
 ${bodyHtml}

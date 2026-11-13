@@ -593,3 +593,72 @@ describe('POST /api/register/group — S0 age gate', () => {
     expect(participantRows()[0]).toMatchObject({ email: 'teacher@example.com', event_role: 'teacher' })
   })
 })
+
+// Owner decision, 13 Nov 2026 (tracker row promote-s5-wave3.17): a signed-in
+// organiser's name is their account's. What the form, or a crafted request, sends for
+// it is ignored, so the registration, the organiser's participant row and the
+// agreements cannot drift from the account. Signed out, the typed name stands.
+describe('POST /api/register/group — the organiser’s name', () => {
+  const signedIn = (name: { first_name: string | null; last_name: string | null }) =>
+    h.getCurrentMember.mockResolvedValue({ id: 'm-session', email: 'teacher@example.com', ...name })
+  const typed = (who: Record<string, unknown> = {}) => body({
+    teacher: {
+      email: 'teacher@example.com', first_name: 'Typed', last_name: 'Othername',
+      school_name: 'Denver High', date_of_birth: '1980-01-01',
+      phone: '', gender: '', t_shirt_size: '', age_bracket: 'adult',
+      ...who,
+    },
+  })
+  const registration = () => h.captures.registrations?.[0] as Record<string, unknown>
+  async function organiserNameOnAgreements(): Promise<string> {
+    for (const task of h.afterTasks) await task()
+    return (h.followUp.mock.calls[0][1] as { organiserName: string }).organiserName
+  }
+
+  it('signed in: the account’s name goes on the registration, the participant row and the agreements, whatever was typed', async () => {
+    signedIn({ first_name: 'Account', last_name: 'Holder' })
+    const res = await post(typed())
+    expect(res.status).toBe(201)
+    expect(registration()).toMatchObject({ teacher_first_name: 'Account', teacher_last_name: 'Holder' })
+    expect(participantRows()[0]).toMatchObject({ email: 'teacher@example.com', first_name: 'Account', last_name: 'Holder' })
+    expect(JSON.stringify(h.captures)).not.toContain('Typed')
+    expect(await organiserNameOnAgreements()).toBe('Account Holder')
+  })
+
+  it('signed in: a request with no name, or a blank one, still takes the account’s', async () => {
+    signedIn({ first_name: 'Account', last_name: 'Holder' })
+    const res = await post(typed({ first_name: '', last_name: undefined }))
+    expect(res.status).toBe(201)
+    expect(registration()).toMatchObject({ teacher_first_name: 'Account', teacher_last_name: 'Holder' })
+  })
+
+  it('signed in as a Student Manager: the same rule', async () => {
+    signedIn({ first_name: 'Account', last_name: 'Holder' })
+    const sm = studentManager('2009-01-01') as Record<string, unknown>
+    const res = await post({ ...sm, teacher: { ...(sm.teacher as Record<string, unknown>), email: 'teacher@example.com' } })
+    expect(res.status).toBe(201)
+    expect(registration()).toMatchObject({ teacher_first_name: 'Account', teacher_last_name: 'Holder', registrant_role: 'student_manager' })
+  })
+
+  it('signed in with only half a name on file: the typed name stands, as the form leaves it open', async () => {
+    signedIn({ first_name: 'Account', last_name: null })
+    const res = await post(typed())
+    expect(res.status).toBe(201)
+    expect(registration()).toMatchObject({ teacher_first_name: 'Typed', teacher_last_name: 'Othername' })
+  })
+
+  it('signed out: the typed name stands, unchanged', async () => {
+    const res = await post(typed())
+    expect(res.status).toBe(201)
+    expect(h.getCurrentMember).toHaveBeenCalled()
+    expect(registration()).toMatchObject({ teacher_first_name: 'Typed', teacher_last_name: 'Othername' })
+    expect(participantRows()[0]).toMatchObject({ first_name: 'Typed', last_name: 'Othername' })
+    expect(await organiserNameOnAgreements()).toBe('Typed Othername')
+  })
+
+  it('signed out with no name: still refused as before', async () => {
+    const res = await post(typed({ first_name: '' }))
+    expect(res.status).toBe(400)
+    expect(h.captures.registrations).toBeUndefined()
+  })
+})

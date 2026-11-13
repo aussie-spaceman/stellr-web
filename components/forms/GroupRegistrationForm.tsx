@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, useCallback, useId, type RefObject } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, type UseFormRegisterReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { MemberEmailFields, emailPairError } from '@/components/forms/MemberEmailFields'
 import { z } from 'zod'
@@ -183,6 +183,39 @@ function NumberStepper({ label, value, min, max, onChange, note }: {
         </button>
       </div>
       {note && <p id={`${id}-note`} className="text-xs text-content-faint mt-1">{note}</p>}
+    </div>
+  )
+}
+
+// ── The organiser's own name ──────────────────────────────────────────────────
+// Signed in with a full name on file, the organiser's name is their account's and
+// read-only (owner decision, 13 Nov 2026): the route uses the account's name
+// whatever is sent (lib/registration/group/parse, settleRegistrantName), so an
+// editable field would only mislead. The link is a plain <a> in a new tab: the
+// Account page renders Clerk's UI (test/register-links-to-clerk-ui.test.ts), and a
+// new tab keeps what has been typed here.
+function RegistrantNameFields({ first, last, firstError, lastError, locked }: {
+  first: UseFormRegisterReturn; last: UseFormRegisterReturn
+  firstError?: string; lastError?: string; locked: boolean
+}) {
+  const noteId = useId()
+  const lock = locked ? { readOnly: true, 'aria-readonly': true, 'aria-describedby': noteId } : {}
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="First Name" required error={firstError}>
+          <Input {...first} {...lock} autoComplete="given-name" />
+        </Field>
+        <Field label="Last Name" required error={lastError}>
+          <Input {...last} {...lock} autoComplete="family-name" />
+        </Field>
+      </div>
+      {locked && (
+        <p id={noteId} className="text-xs text-content-muted">
+          This is the name on your Stellr account. To change it, choose Manage account in your account menu, then
+          reload this page.
+        </p>
+      )}
     </div>
   )
 }
@@ -550,9 +583,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   // (Option A) — only the registrant block is pre-filled; additional adults and
   // students are still entered as before.
   const emailLocked = !!prefill?.email
+  // So is their name, when their account has one (RegistrantNameFields). Not the
+  // roster-row name in prefill.first_name: the account's is the one the route uses.
+  const accountName = prefill?.account_name ?? null
+  const nameLocked = !!accountName
   const registrantDefaults = {
-    first_name: prefill?.first_name ?? '',
-    last_name: prefill?.last_name ?? '',
+    first_name: accountName?.first_name ?? prefill?.first_name ?? '',
+    last_name: accountName?.last_name ?? prefill?.last_name ?? '',
     nickname: prefill?.nickname ?? '',
     email: prefill?.email ?? '',
     phone: prefill?.phone ?? '',
@@ -1060,14 +1097,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             {/* Teacher personal info */}
             <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="First Name" required error={te.first_name?.message}>
-                  <Input {...tf.register('first_name')} autoComplete="given-name" />
-                </Field>
-                <Field label="Last Name" required error={te.last_name?.message}>
-                  <Input {...tf.register('last_name')} autoComplete="family-name" />
-                </Field>
-              </div>
+              <RegistrantNameFields locked={nameLocked}
+                first={tf.register('first_name')} last={tf.register('last_name')}
+                firstError={te.first_name?.message} lastError={te.last_name?.message} />
               <Field label="Preferred Name / Nickname">
                 <Input {...tf.register('nickname')} autoComplete="nickname" placeholder="Optional" />
               </Field>
@@ -1118,14 +1150,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             {/* SM personal info */}
             <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="First Name" required error={se.first_name?.message}>
-                  <Input {...sf.register('first_name')} autoComplete="given-name" />
-                </Field>
-                <Field label="Last Name" required error={se.last_name?.message}>
-                  <Input {...sf.register('last_name')} autoComplete="family-name" />
-                </Field>
-              </div>
+              <RegistrantNameFields locked={nameLocked}
+                first={sf.register('first_name')} last={sf.register('last_name')}
+                firstError={se.first_name?.message} lastError={se.last_name?.message} />
               <Field label="Preferred Name / Nickname">
                 <Input {...sf.register('nickname')} autoComplete="nickname" placeholder="Optional" />
               </Field>

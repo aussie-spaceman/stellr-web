@@ -129,3 +129,71 @@ describe('GroupRegistrationForm — step 2, the participants', () => {
     expect(terms).toHaveAccessibleDescription(/Accept the School Data Terms/)
   })
 })
+
+// Owner decision, 13 Nov 2026: a signed-in organiser's name is their account's. The
+// route uses it whatever is sent, so the form shows it read-only, and says how to change
+// it (Manage account in the account menu).
+describe('GroupRegistrationForm — the organiser’s name', () => {
+  // The account's name differs from the latest roster row's, which prefill.first_name prefers.
+  const withAccount: RegistrationPrefill = {
+    ...teacher,
+    first_name: 'Rostered', last_name: 'Elsewhere',
+    account_name: { first_name: 'Account', last_name: 'Holder' },
+  }
+
+  // The organiser's own name comes first; a Student Manager's form has others below it.
+  function expectLocked(value: { first: string; last: string }) {
+    const first = screen.getAllByLabelText(label('First Name'))[0]
+    const last = screen.getAllByLabelText(label('Last Name'))[0]
+    expect(first).toHaveValue(value.first)
+    expect(last).toHaveValue(value.last)
+    for (const el of [first, last]) {
+      expect(el).toHaveAttribute('readonly')
+      expect(el).toHaveAttribute('aria-readonly', 'true')
+      expect(el).toHaveAccessibleDescription(/This is the name on your Stellr account\. To change it, choose Manage account in your account menu, then reload this page\./)
+    }
+    // The Account page has no name field; Clerk's Manage account is where a name changes.
+    expect(screen.queryByRole('link', { name: /Account page/ })).toBeNull()
+  }
+
+  it('signed in: shows the account’s name, read-only, with how to change it', async () => {
+    const user = userEvent.setup()
+    renderForm(withAccount)
+    expectLocked({ first: 'Account', last: 'Holder' })
+    await user.type(screen.getByLabelText(label('First Name')), 'X')
+    expect(screen.getByLabelText(label('First Name'))).toHaveValue('Account')
+  })
+
+  it('signed in as a Student Manager: the same', async () => {
+    const user = userEvent.setup()
+    renderForm(withAccount)
+    await user.click(screen.getByRole('button', { name: /Student Manager/ }))
+    expectLocked({ first: 'Account', last: 'Holder' })
+  })
+
+  it('signed in: the locked name counts as filled, so Continue goes on', async () => {
+    const user = userEvent.setup()
+    renderForm(withAccount)
+    await user.click(screen.getByRole('button', { name: /Continue — Group Details/ }))
+    expect(await screen.findByRole('heading', { name: 'Group Details' })).toBeInTheDocument()
+  })
+
+  it('signed in with no full name on the account: the name stays open to type', () => {
+    renderForm(teacher)
+    const first = screen.getByLabelText(label('First Name'))
+    expect(first).toHaveValue('Test')
+    expect(first).not.toHaveAttribute('readonly')
+    expect(screen.queryByRole('link', { name: /Account page/ })).toBeNull()
+  })
+
+  it('signed out: the name is typed, as before', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    const first = screen.getByLabelText(label('First Name'))
+    expect(first).not.toHaveAttribute('readonly')
+    expect(first).not.toHaveAttribute('aria-readonly')
+    await user.type(first, 'Pat')
+    expect(first).toHaveValue('Pat')
+    expect(screen.queryByText(/name on your Stellr account/)).toBeNull()
+  })
+})

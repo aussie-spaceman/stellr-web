@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, type CommunityMember } from '@/lib/community'
 import { denormalizeGender, denormalizeGrade, denormalizeTshirt } from '@/lib/member-enums'
+import { accountName, type AccountName } from '@/lib/registration/account-name'
 
 // Update #2 — "recognize log in for registration".
 // When a signed-in member starts a registration, pre-fill what we already know
@@ -23,6 +24,13 @@ export interface RegistrationPrefill {
   event_role?: string
   first_name?: string
   last_name?: string
+  /**
+   * The name on the member's account (lib/registration/account-name), when it has
+   * both halves. The group form locks the organiser's name to it, and the group
+   * route uses it whatever is sent. first_name/last_name above can differ: they
+   * prefer the member's latest roster row.
+   */
+  account_name?: AccountName
   nickname?: string
   phone?: string
   date_of_birth?: string
@@ -119,6 +127,7 @@ export async function getRegistrationPrefill(
   const schoolRel = Array.isArray(sl?.schools) ? sl?.schools[0] : sl?.schools
   const schoolName = str(schoolRel?.name) ?? str(p.school_name)
   const school = sl?.school_id && schoolName ? { id: sl.school_id, name: schoolName } : undefined
+  const account = accountName(m)
 
   return {
     memberId: m.id,
@@ -128,6 +137,8 @@ export async function getRegistrationPrefill(
     event_role: str(mr.event_role),
     first_name: str(p.first_name) ?? str(mr.first_name) ?? m.first_name ?? undefined,
     last_name: str(p.last_name) ?? str(mr.last_name) ?? m.last_name ?? undefined,
+    // The session's member row, the same one the group gate reads.
+    ...(account ? { account_name: account } : {}),
     nickname: str(p.nickname) ?? str(mr.nickname),
     phone: str(p.phone) ?? str(mr.phone),
     // The member's own record first, unlike the fields around it: the individual

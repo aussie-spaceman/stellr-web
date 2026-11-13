@@ -8,8 +8,10 @@
 //   1. TENANT_ROUTING_ENABLED is not exactly 'true'  -> Stellr. No other check.
 //   2. The host is normalised (lower case, no :port, no trailing dot) and
 //      validated. A host that fails validation is 'invalid', never Stellr.
-//   3. TENANT_HOST_SUFFIX is unset, refused, or a dev zone on the real production
-//      app: the zone is unknown, so a known Stellr host -> Stellr and any other
+//   3. TENANT_HOST_SUFFIX is unset, refused, a dev zone on the real production
+//      app, any zone but PRODUCTION_TENANT_ZONE on the real production app, or
+//      PRODUCTION_TENANT_ZONE (or a zone under it) anywhere else (W7-27): the
+//      zone is unknown, so a known Stellr host -> Stellr and any other
 //      host -> 'unavailable' (reason 'zone-misconfigured'), never Stellr. Stellr
 //      stays up and a tenant host cannot be served the Stellr site by a bad
 //      setting. tenantRoutingConfig().suffixError says why, for health checks.
@@ -48,9 +50,18 @@
 import { isRealProductionApp } from '../env-guards'
 import { supabaseApiHeaders, supabaseSecretKey } from '../supabase-keys'
 import { STELLR_TENANT_ID } from './constants'
-import { classifyHost, isDevZoneSuffix, isKnownStellrHost, normaliseHost, normaliseZoneSuffix } from './host-pure'
+import {
+  classifyHost,
+  isDevZoneSuffix,
+  isInProductionTenantZone,
+  isKnownStellrHost,
+  normaliseHost,
+  normaliseZoneSuffix,
+  PRODUCTION_TENANT_ZONE,
+} from './host-pure'
 
 export {
+  PRODUCTION_TENANT_ZONE,
   classifyHost,
   isKnownStellrHost,
   isStellrTrackingHost,
@@ -117,6 +128,12 @@ const ON_BAD_ZONE = 'known Stellr hosts keep working and every other host answer
 /**
  * Reads the routing flag and zone suffix from the env it is given. Whether this
  * deployment is the real production app comes from process.env (env-guards).
+ *
+ * The production zone guard (W7-27): the real production app accepts only
+ * PRODUCTION_TENANT_ZONE, and every other deployment refuses it and any zone
+ * under it. So a dev zone set on production, or the production zone set on
+ * stellr-web-dev, leaves the zone unknown and fails closed, as an unsafe suffix
+ * does. The reasons are fixed text and never name the zone.
  */
 export function tenantRoutingConfig(env: Env = process.env): TenantRoutingConfig {
   const enabled = env[TENANT_ROUTING_FLAG] === 'true'
@@ -126,8 +143,21 @@ export function tenantRoutingConfig(env: Env = process.env): TenantRoutingConfig
   if (raw && raw.trim() && !suffix) {
     return { enabled, suffix: null, suffixError: `${TENANT_HOST_SUFFIX_VAR} is not a safe tenant zone suffix; ${ON_BAD_ZONE}` }
   }
-  if (suffix && isDevZoneSuffix(suffix) && isRealProductionApp()) {
-    return { enabled, suffix: null, suffixError: `${TENANT_HOST_SUFFIX_VAR} is a development zone on production; ${ON_BAD_ZONE}` }
+  if (suffix) {
+    const production = isRealProductionApp()
+    if (production && isDevZoneSuffix(suffix)) {
+      return { enabled, suffix: null, suffixError: `${TENANT_HOST_SUFFIX_VAR} is a development zone on production; ${ON_BAD_ZONE}` }
+    }
+    if (production && suffix !== PRODUCTION_TENANT_ZONE) {
+      return { enabled, suffix: null, suffixError: `${TENANT_HOST_SUFFIX_VAR} is not the production tenant zone; ${ON_BAD_ZONE}` }
+    }
+    if (!production && isInProductionTenantZone(suffix.slice(1))) {
+      return {
+        enabled,
+        suffix: null,
+        suffixError: `${TENANT_HOST_SUFFIX_VAR} is the production tenant zone, which is refused off production; ${ON_BAD_ZONE}`,
+      }
+    }
   }
   if (enabled && !suffix) {
     return { enabled, suffix: null, suffixError: `${TENANT_HOST_SUFFIX_VAR} is not set; ${ON_BAD_ZONE}` }

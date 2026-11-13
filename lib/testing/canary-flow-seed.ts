@@ -37,6 +37,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadAssignmentTenantId, loadEventAssignees, type RoleSyncResult } from '../authz/role-sync'
 import { toEventRow, type EventFetcher, type EventRow } from '../events/sync'
 import { localDate } from '../survey/timezone'
+import { isInProductionTenantZone } from '../tenancy/host-pure'
 import { isAllowedE2eSupabase } from './e2e-supabase-target'
 import { assertSeedTarget } from './two-tenant-seed'
 
@@ -235,6 +236,8 @@ export function normaliseZone(raw: string | undefined | null): string {
   const zone = (raw ?? '').trim().toLowerCase().replace(/^\.+|\.+$/g, '')
   if (!zone) throw new Error('--zone is required for the flow profile (for example --zone localhost for a local run)')
   if (!zone.split('.').every((label) => DNS_LABEL_RE.test(label))) throw new Error('--zone must be a DNS name: letters, digits, hyphens and dots')
+  // W7-27: the canary never maps a host in the production tenant zone, its apex included.
+  if (isInProductionTenantZone(zone)) throw new Error('refusing: --zone is in the production tenant zone (W7-27); use a dev zone such as devzone.stellreducation.org or localhost')
   for (const label of [CANARY_HOST_LABEL, CANARY_PROBE_HOST_LABEL]) {
     const host = `${label}.${zone}`
     if (host.length > 253 || !TENANT_HOST_RE.test(host)) throw new Error('--zone is too long for a tenant host')

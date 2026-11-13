@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   bypassHeadersFor,
@@ -18,6 +20,8 @@ import {
   originOf,
   policies,
   PRODUCTION_HOSTS,
+  PRODUCTION_TENANT_ZONE,
+  isInProductionTenantZone,
   rawRequest,
   REPORT_ONLY,
   runHeaderChecks,
@@ -25,6 +29,7 @@ import {
 } from './tenant-host-headers.mjs'
 import { DEV_DEPLOYMENT_HOST as SCENARIO_DEV_DEPLOYMENT_HOST, PRODUCTION_HOSTS as SCENARIO_PRODUCTION_HOSTS } from '../../lib/testing/canary-flow-scenarios'
 import { canaryHosts } from '../../lib/testing/canary-flow-seed'
+import { isInProductionTenantZone as pureIsInProductionTenantZone, PRODUCTION_TENANT_ZONE as PURE_PRODUCTION_TENANT_ZONE } from '../../lib/tenancy/host-pure'
 
 type Res = { status: number; headers: Record<string, string | string[] | undefined>; body: string }
 
@@ -216,5 +221,106 @@ describe('rawRequest', () => {
     expect(seen[0]).toMatchObject({ host: `canary.dev-zone.example:${port}`, method: 'POST', body: '{"a":1}' })
     expect(seen[0].headers?.authorization).toBe('Bearer placeholder')
     expect(seen[0].headers?.['content-type']).toBe('application/json')
+  })
+})
+
+// W7-27: neither CLI ever talks to the production tenant zone. The refusal comes
+// from the flags alone, before any request, with a clear message and exit 1.
+describe('the production tenant zone', () => {
+  it("is held equal to lib/tenancy/host-pure.ts's, and read the same way", () => {
+    expect(PRODUCTION_TENANT_ZONE).toBe(PURE_PRODUCTION_TENANT_ZONE)
+    for (const h of [
+      'events.stellreducation.org',
+      'canary.events.stellreducation.org',
+      'CANARY.Events.StellrEducation.org.',
+      'a.b.events.stellreducation.org',
+      'www.stellreducation.org',
+      'notevents.stellreducation.org',
+      'canary.devzone.stellreducation.org',
+      'events.stellreducation.org.evil.example',
+      'canary.localhost',
+      '',
+    ]) {
+      expect(isInProductionTenantZone(h), h).toBe(pureIsInProductionTenantZone(h))
+    }
+  })
+
+  it('is refused as --base, as --stellr-base and as --zone', () => {
+    for (const host of ['canary.events.stellreducation.org', 'nobody.events.stellreducation.org', 'CANARY.Events.StellrEducation.org', 'a.b.events.stellreducation.org']) {
+      expect(() => originOf(`https://${host}`, '--base'), host).toThrow(/refusing: --base is in the production tenant zone/)
+      expect(() => headerBases({ base: `https://${host}`, zone: 'events.stellreducation.org' }), host).toThrow(/production tenant zone/)
+      expect(() => headerBases({ base: 'https://canary.dev-zone.example', stellrBase: `https://${host}`, zone: 'dev-zone.example' }), host).toThrow(
+        /refusing: --stellr-base is in the production tenant zone/,
+      )
+    }
+    // The apex is a Stellr production host too, and is refused as one.
+    expect(() => originOf('https://events.stellreducation.org', '--base')).toThrow(/production host/)
+    for (const zone of ['events.stellreducation.org', '.events.stellreducation.org', 'Events.StellrEducation.org.', 'x.events.stellreducation.org']) {
+      expect(() => canaryHostFor(zone), zone).toThrow(/refusing: --zone is the production tenant zone/)
+      expect(() => headerBases({ base: 'https://canary.dev-zone.example', zone }), zone).toThrow(/refusing: --zone is the production tenant zone/)
+    }
+    // The dev zone is still a target.
+    expect(headerBases({ base: 'https://canary.devzone.stellreducation.org', zone: 'devzone.stellreducation.org' }).tenant.hostname).toBe('canary.devzone.stellreducation.org')
+  })
+
+  describe('from the command line, against a listener on this machine', () => {
+    let server: Server
+    let port = 0
+    let hits = 0
+    beforeAll(async () => {
+      server = createServer((_req, res) => {
+        hits++
+        res.writeHead(200).end()
+      })
+      await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+      port = (server.address() as AddressInfo).port
+    })
+    afterAll(() => new Promise<void>((done) => server.close(() => done())))
+
+    const run = (file: string, args: string[], env: Record<string, string> = {}) =>
+      new Promise<{ code: number | null; out: string }>((done) => {
+        execFile(process.execPath, [file, ...args], { cwd: process.cwd(), env: { ...process.env, ...env }, timeout: 60_000 }, (error, stdout, stderr) => {
+          const code = error ? (typeof error.code === 'number' ? error.code : null) : 0
+          done({ code, out: `${stdout}${stderr}` })
+        })
+      })
+
+    it('tenant-host-headers exits 1 before any request', { timeout: 60_000 }, async () => {
+      hits = 0
+      const base = `http://canary.events.stellreducation.org:${port}`
+      for (const args of [
+        ['--zone', 'events.stellreducation.org', '--base', base, '--connect', '127.0.0.1'],
+        ['--zone', 'localhost', '--base', `http://canary.localhost:${port}`, '--stellr-base', base, '--connect', '127.0.0.1'],
+      ]) {
+        const r = await run(resolve('scripts/canary/tenant-host-headers.mjs'), args)
+        expect(r.code, r.out).toBe(1)
+        expect(r.out).toMatch(/refusing: --(base|stellr-base) is in the production tenant zone/)
+      }
+      expect(hits).toBe(0)
+    })
+
+    it('canary-tenant-flow exits 1 before any request or read', { timeout: 120_000 }, async () => {
+      hits = 0
+      const tsxCli = resolve('node_modules/tsx/dist/cli.mjs')
+      // A database on this machine, so K3's guard passes and the host guard is what refuses.
+      const env = { NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:1', CLERK_SECRET_KEY: '', APP_ENV: '', NEXT_PUBLIC_APP_ENV: '', VERCEL_ENV: '' }
+      const r = await run(
+        tsxCli,
+        [
+          resolve('scripts/canary-tenant-flow.ts'),
+          '--phase', 'start',
+          '--zone', 'events.stellreducation.org',
+          '--base', `http://canary.events.stellreducation.org:${port}`,
+          '--stellr-base', `http://localhost:${port}`,
+          '--connect', '127.0.0.1',
+          '--authz-source', 'clerk',
+          '--loadscoped-mode', 'off',
+        ],
+        env,
+      )
+      expect(r.code, r.out).toBe(1)
+      expect(r.out).toMatch(/refusing: --base is in the production tenant zone/)
+      expect(hits).toBe(0)
+    })
   })
 })

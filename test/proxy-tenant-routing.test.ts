@@ -164,6 +164,14 @@ describe('a Stellr host answers the same with the flag off and on', () => {
     vi.stubEnv('TENANT_ROUTING_ENABLED', 'true')
     vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
     for (const host of STELLR_HOSTS) await hit(host, '/')
+    // W7-27: the production zone is usable only on the real production app, and
+    // the dev zone only off it. Each in its own place, as well as refused above.
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.devzone.stellreducation.org')
+    for (const host of STELLR_HOSTS) await hit(host, '/')
+    vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
+    for (const host of STELLR_HOSTS) await hit(host, '/')
     expect(fetchStub).not.toHaveBeenCalled()
   })
 

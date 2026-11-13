@@ -195,6 +195,38 @@ describe('tenancyReport', () => {
     expect(ids()).toEqual([])
   })
 
+  // W7-27: the production zone guard, as the registry reports it.
+  it('refuses the production tenant zone off production, and every other zone on production', () => {
+    vi.stubEnv('TENANT_ROUTING_ENABLED', 'true')
+
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
+    expect(SWITCHES.hostSuffix.accepts('.events.stellreducation.org')).toBe(false)
+    expect(SWITCHES.hostSuffix.accepts('.devzone.stellreducation.org')).toBe(true)
+    const offProduction = tenancyReport('log')
+    expect(offProduction.routing).toEqual({ enabled: true, suffixError: expect.stringMatching(/refused off production/) })
+    expect(offProduction.unrecognised).toEqual(['TENANT_HOST_SUFFIX'])
+    expect(offProduction.invalidCombinations.map((c) => c.id)).toEqual(['routing_without_usable_suffix'])
+
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.devzone.stellreducation.org')
+    expect(tenancyReport('log').routing).toEqual({ enabled: true, suffixError: null })
+
+    vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
+    expect(SWITCHES.hostSuffix.accepts('.devzone.stellreducation.org')).toBe(false)
+    expect(SWITCHES.hostSuffix.accepts('.events.stellreducation.org')).toBe(true)
+    const onProduction = tenancyReport('log')
+    expect(onProduction.routing).toEqual({ enabled: true, suffixError: expect.stringMatching(/not the production tenant zone/) })
+    expect(onProduction.unrecognised).toEqual(['TENANT_HOST_SUFFIX'])
+    expect(onProduction.invalidCombinations.map((c) => c.id)).toEqual(['routing_without_usable_suffix'])
+    expect(JSON.stringify(onProduction)).not.toContain('stellreducation')
+
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
+    const good = tenancyReport('log')
+    expect(good.routing).toEqual({ enabled: true, suffixError: null })
+    expect(good.unrecognised).toEqual([])
+    expect(good.invalidCombinations).toEqual([])
+  })
+
   it('never carries a raw value: secrets, zones, unrecognised strings and key material stay out', () => {
     const masterKey = randomBytes(32).toString('base64')
     const raw: Record<string, string> = {

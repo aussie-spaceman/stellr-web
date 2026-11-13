@@ -114,6 +114,27 @@ describe('GET /api/admin/health/integrations — supabaseKeys', () => {
     expect(JSON.parse(refused).tenantRouting.suffixError).toMatch(/not a safe tenant zone suffix/)
     expect(refused).not.toContain('.stellreducation.org')
 
+    // W7-27: off production the production zone is refused, and a dev zone is good.
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
+    const refusedOffProduction = await (await GET()).text()
+    expect(JSON.parse(refusedOffProduction).tenantRouting).toEqual({
+      enabled: true,
+      suffixError: expect.stringMatching(/is the production tenant zone, which is refused off production/),
+    })
+    expect(refusedOffProduction).not.toContain('events.stellreducation.org')
+
+    vi.stubEnv('TENANT_HOST_SUFFIX', '.devzone.stellreducation.org')
+    const devZone = await (await GET()).text()
+    expect(JSON.parse(devZone).tenantRouting).toEqual({ enabled: true, suffixError: null })
+    expect(devZone).not.toContain('devzone.stellreducation.org')
+
+    // On the real production app only the production zone is good.
+    vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
+    const notTheProductionZone = await (await GET()).text()
+    expect(JSON.parse(notTheProductionZone).tenantRouting.suffixError).toMatch(/is not the production tenant zone/)
+    expect(notTheProductionZone).not.toContain('devzone.stellreducation.org')
+
     vi.stubEnv('TENANT_HOST_SUFFIX', '.events.stellreducation.org')
     const good = await (await GET()).text()
     expect(JSON.parse(good).tenantRouting).toEqual({ enabled: true, suffixError: null })

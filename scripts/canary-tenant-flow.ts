@@ -32,7 +32,9 @@
  * the dev project or a stack on this machine only, no sk_live Clerk key, no APP_ENV or
  * NEXT_PUBLIC_APP_ENV prod or preview, no VERCEL_ENV preview. --base must be
  * canary.<zone>, and --stellr-base this machine or the stellr-web-dev deployment;
- * Stellr's production hosts are refused. --connect must be this machine. There is no
+ * Stellr's production hosts are refused, and so is every host in the production tenant
+ * zone (.events.stellreducation.org, its apex included) and that zone as --zone (W7-27),
+ * before any request. --connect must be this machine. There is no
  * override. Never point it at a hosted database without the owner's yes for that run (K9).
  *
  * Personas. S3, S5's check-in and most of S7 act as K3's personas. The runner never

@@ -3,7 +3,7 @@
   "totals": {
     "routes": 27,
     "cases": 124,
-    "failing": 50,
+    "failing": 48,
     "unproven": 18,
     "byOutcome": {
       "honey_write": 12,

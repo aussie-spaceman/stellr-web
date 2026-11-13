@@ -586,8 +586,22 @@ describe('tenant-host cap', () => {
     expect(() => tenantHostTargets(read)).toThrow('app/api/check-in/route.ts')
   })
 
-  it('accepted register starts empty: approval is the owner’s', () => {
-    expect(TENANT_HOST_ACCEPTED).toEqual({})
+  it('accepted register holds only what the owner approved, each citing its recorded decision', () => {
+    // Approval is the owner's: a new key here needs a decision answered in the register.
+    expect(Object.keys(TENANT_HOST_ACCEPTED).sort()).toEqual([
+      'app/api/email/unsubscribe/route.ts POST anonymous stellr_to_canary',
+      'app/api/email/unsubscribe/route.ts POST participant stellr_to_canary',
+    ])
+    const register = readFileSync('docs/S5-DECISION-REGISTER.md', 'utf8')
+    for (const [key, a] of Object.entries(TENANT_HOST_ACCEPTED)) {
+      const id = a.reason.match(/\bW\d+-\d+\b/)?.[0]
+      expect(id, `${key} names no decision`).toBeTruthy()
+      expect(a.approvedBy, key).toContain(id)
+      const row = register.split('\n').find((l) => l.startsWith(`| ${id} |`))
+      expect(row, `${id} is not in the register`).toBeTruthy()
+      expect(row, `${id} is not recorded as approved`).toMatch(/\| Approved/)
+      expect(row, `${id} does not name the case`).toContain(key.split(' ')[0])
+    }
   })
 
   it('CI compares the baseline with the merge base', () => {

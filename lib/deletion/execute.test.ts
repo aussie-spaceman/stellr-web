@@ -84,7 +84,10 @@ function list(table: string, cols: string): Record<string, unknown>[] {
   if (table === 'tenant_guardian_consents' && cols === 'participant_id') return refusedConsents
   return []
 }
+// The member_pending_consent row the archive-free purge requires. Reset in beforeEach.
+let pendingConsentRow: Record<string, unknown> | null = null
 function single(table: string, cols: string): Record<string, unknown> | null {
+  if (table === 'member_pending_consent') return pendingConsentRow
   if (table === 'participants' && cols.includes('registrations(event_slug)')) {
     return { member_id: 'mem1', registrations: { event_slug: 'evt' } }
   }
@@ -103,6 +106,7 @@ beforeEach(() => {
   for (const k of Object.keys(readErrors)) delete readErrors[k]
   registrationType = 'group'
   refusedConsents = []
+  pendingConsentRow = null
   deletedTables.length = 0
   loadEventAssignees.mockClear()
   syncEventManagerUnassigned.mockClear()
@@ -253,5 +257,24 @@ describe('executeDeletion — pending_guardian_consent_registration', () => {
     readErrors.tenant_guardian_consents = { message: 'down' }
     await expect(executeDeletion('pending_guardian_consent_registration', 'r1', { mode: 'hard' })).rejects.toThrow(/awaiting guardian consent/)
     expect(deletedTables).toEqual([])
+  })
+})
+
+// Owner decision 13 Nov 2026 (tracker attendee-email-cohort.4): event staff
+// check-ins leave with the account. Each member removal reaches the Clerk login
+// removal (lib/deletion/external.ts), which deletes the login's m.<id> rows
+// (lib/deletion/external.test.ts); v.<id> rows cascade with the members row.
+describe('executeDeletion — staff check-ins leave with the account', () => {
+  it('an admin hard delete (and a privacy request, which runs the same call) runs the Clerk login removal', async () => {
+    await executeDeletion('member', 'mem1', { mode: 'hard' })
+    expect(runExternalCleanup).toHaveBeenCalledWith(expect.objectContaining({ type: 'member', external: expect.arrayContaining(['clerk']) }), 'mem1', 'hard')
+    expect(deletedTables).toContain('members')
+  })
+
+  it('the pending-consent purge runs the same login removal, as a member', async () => {
+    pendingConsentRow = { member_id: 'mem1' }
+    await executeDeletion('pending_consent_member', 'mem1', { mode: 'hard', deletedBy: null })
+    expect(runExternalCleanup).toHaveBeenCalledWith(expect.objectContaining({ type: 'member', external: expect.arrayContaining(['clerk']) }), 'mem1', 'hard')
+    expect(deletedTables).toContain('members')
   })
 })

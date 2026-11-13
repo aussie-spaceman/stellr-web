@@ -72,8 +72,11 @@ migration that stops `audit_members()` copying `health_conditions` into
    posts, post-event survey responses (Admin → Surveys; one per event).
 3. **Delete, in this order.**
    1. **Admin → Members → Delete → Hard delete** (type DELETE). This removes the
-      member row and its cascades, deletes the Clerk login (unless staff),
-      cancels any Stripe subscription, voids in-flight DocuSign envelopes, and
+      member row and its cascades, deletes the Clerk login (unless staff) and,
+      with it, the event check-ins the desk recorded for that login and member
+      (`event_staff_check_ins`, `lib/deletion/staff-check-ins.ts`; owner
+      decision 13 Nov 2026), cancels any Stripe subscription, voids in-flight
+      DocuSign envelopes, and
       withdraws credentials (name removed; number kept so a copy can be checked,
       shown as withdrawn).
    1a. **Post-event surveys** go with the hard delete of a member, participant

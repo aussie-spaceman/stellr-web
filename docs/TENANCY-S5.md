@@ -4,7 +4,7 @@ Stage 5 of the multi-tenancy plan converts the app to tenancy and moves authoris
 
 It merges the six S5 area analyses with the review that followed them, at `dev` `c1e41eb8` (4 Nov 2026). Where this file disagrees with the plan or the scoping output, this file wins. Where it disagrees with a committed baseline (`test/baselines/**`), the baseline wins. Where it departs from the review, it says so and why.
 
-Sibling records: `docs/TENANCY-S3.md`, `docs/TENANCY-S4.md`, `docs/S4-SPIKE.md`, `docs/TENANCY-S5-routing.md` (D2), `docs/AUTHZ.md` (D3), `docs/TENANCY-S5-registration.md` (D5), `docs/TENANCY-S5-flow-checklist.md` (D7), `docs/S5-CRONS-LIMITS-SMMA.md` and `docs/RUNBOOK-waf-rule.md` (D6). The SMMA self-assessment is held privately pending the owner's decision. D4's data, `loadScoped` and audit runbook is `docs/TENANCY-S5-data.md` (wave 5). What each wave built, and what it corrected here, is under [Wave 2 status](#wave-2-status), [Wave 3 status](#wave-3-status), [Wave 4 status](#wave-4-status), [Wave 5 status](#wave-5-status) and [Wave 6 status](#wave-6-status). Open S5 items, each tagged with the gate it blocks, are in `docs/handovers/tracker/2026-11-11-s5-programme.md`.
+Sibling records: `docs/TENANCY-S3.md`, `docs/TENANCY-S4.md`, `docs/S4-SPIKE.md`, `docs/TENANCY-S5-routing.md` (D2), `docs/AUTHZ.md` (D3), `docs/TENANCY-S5-registration.md` (D5), `docs/TENANCY-S5-flow-checklist.md` (D7), `docs/S5-CRONS-LIMITS-SMMA.md` and `docs/RUNBOOK-waf-rule.md` (D6). The SMMA self-assessment is held privately pending the owner's decision. D4's data, `loadScoped` and audit runbook is `docs/TENANCY-S5-data.md` (wave 5). What each wave built, and what it corrected here, is under [Wave 2 status](#wave-2-status), [Wave 3 status](#wave-3-status), [Wave 4 status](#wave-4-status), [Wave 5 status](#wave-5-status), [Wave 6 status](#wave-6-status) and [Wave 7 status](#wave-7-status). Wave 7's owner decisions are in `docs/S5-DECISION-REGISTER.md`. Open S5 items, each tagged with the gate it blocks, are in `docs/handovers/tracker/2026-11-11-s5-programme.md`.
 
 ## What may merge when
 
@@ -721,13 +721,13 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-
 | A16 | Proposed wording, all new: `GUARDIAN_REQUIRED_MESSAGE` (400 `guardian_required`), `GUARDIAN_CONSENT_BUSY_MESSAGE` (429 `guardian_consent_busy`), the door and desk refusals while consent is pending (`lib/check-in-consent.ts`), the confirmation page's "Waiting for your parent or guardian", the registrant's five notices (`consent_pending`, `consent_pending_unsent`, `consent_signed`, `consent_declined`, `consent_expired` in `lib/registration/tenant-confirmation.ts`), and the document title "Parent or Guardian Consent" |
 | A16 | Confirm that moving a participant to another registration needs a fresh guardian signature. As built the consent resets to pending, because a signature covers one registration |
 | A16 | The desk: a group check-in with one consent-pending member gets a 409 and nobody in the group is checked in. Checking in the rest is not built (tracker `s5-programme.24`) |
-| A16 | Before the flag is on anywhere: credentials and surveys do not yet leave out consent-pending participants (A10, tracker `s5-programme.22`), staff see no pending marker on the roster or desk (`.23`), and the sweep's removal retries have no cap (`.26`) |
+| A16 | Before the flag is on anywhere: credentials and surveys do not yet leave out consent-pending participants (A10, tracker `s5-programme.22`), staff see no pending marker on the roster or desk (`.23`), and the sweep's removal retries have no cap (`.26`). **Credentials, team profiles and surveys now leave them out:** wave 7's A10a (#655) and A10b (#660), on `dev` |
 | A16 | Before the flag is on in an environment: Lane C's tenant-event refusals (`refuseUnlessStellrEvent`, #624) live in that same environment, as `docs/ENV-MATRIX.md` states (**settled 11 Nov 2026**: `dev` may go first, since Lane C is on `dev`; production waits for Lane C's promotion. **Met on production since 12 Nov 2026,** when #643 promoted Lane C; the flag's other preconditions still stand). Still open: whether `LOADSCOPED_MODE=enforce` is also required (tracker `s5-programme.20`) |
 | TB3 E | **Settled 11 Nov 2026: moved from M to L** (`docs/THREAT-MODEL.md` TB3 E). Its stated condition, A3 and A7 on production, was met (A3 since 5 Nov 2026, A7 since #600) (tracker `s5-programme.19`) |
 | A16 | CODEOWNERS now also owns `lib/esign/completion.ts` and `lib/esign/native/flow.ts`, where the consent hooks are called, which puts owner review on future e-sign changes there. Keep these two lines, or rely on the owned consent tests (#625) |
 | A8 | Before S9 opens tenant billing, the roster writers also check the event's current price, not only the registration's money columns (`TENANT_MONEY_COLUMNS`), or a free-registered group on an event that later gains a price admits places that never show as owed |
-| C11t | Which PEM goes in `TENANT_DATABASE_CA_CERT`: the provider's published root CA, or a bundle. This rests on the `dev` handshake showing the pooler's chain ends at that root with a name matching the pooler host (tracker `s5-programme.30`) |
-| C18 | Add `tenant-db` to branch protection on `dev` and `main`. It has passed on #624 and #625 (tracker `s5-programme.5`) |
+| C11t | Which PEM goes in `TENANT_DATABASE_CA_CERT`: the provider's published root CA, or a bundle. This rests on the `dev` handshake showing the pooler's chain ends at that root with a name matching the pooler host (tracker `s5-programme.30`). **Pending:** wave 7's O3 built the canary that decides it (#658); its run, P6, has not happened |
+| C18 | Add `tenant-db` to branch protection on `dev` and `main`. It has passed on #624 and #625 (tracker `s5-programme.5`). **Done on `dev`** (its required checks are `verify`, `e2e`, `db` and `tenant-db`, read 12 Nov 2026); `main` still requires `verify` and `e2e` only |
 | C18 | How the companies area is confined for Stellr's admins before the first tenant event: `LOADSCOPED_MODE=enforce`, `AUTHZ_SOURCE=postgres`, or an owner check (#624) |
 
 ### Owner decisions for wave 7, settled 11 Nov 2026
@@ -746,6 +746,109 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-
 - **The wave 7 plan,** with an owner slice for each unassigned need (tracker `s5-programme.43`).
 - **`docs/PLATFORM-AUDIT.md`:** the member-uuid sentence, once the owner answers C13.
 - **The template PDF-hash test** (tracker `s5-programme.18`): not yet identified, so it is not recorded here. The requester is asked what it refers to.
+
+## Wave 7 status
+
+Wave 7 proves the switches on `dev` one at a time, runs a fictitious canary tenant there end to end, and closes the consent and isolation gaps a second tenant would hit first. **Merged** means squashed into `dev`, one PR per slice, all on 12 Nov 2026; none is promoted. Owner decisions are in `docs/S5-DECISION-REGISTER.md` (`W7-1` to `W7-16`, and the answers given in PR review). Every flip goes in the tracker's "Wave 7 flip log" (`s5-programme.31`). **No tenancy switch has yet been on in a hosted environment:** on 12 Nov 2026 the flip log holds only the P0 baseline, with every S5 switch unset on `stellr-web-dev`. Checked against the code on `dev` at `82472e0d`.
+
+| Slice | PR | Flag, or why it is a no-op for Stellr |
+|---|---|---|
+| W7-pre | #646 (`a33ef9c9`) | No runtime change: 10 audit action names (`credential.*`, `team_profile.record.save`, `survey.*`, `event_volunteer.interest.set`) and 3 CODEOWNERS paths registered up front. Unsubscribe keeps `email.unsubscribe.apply` |
+| D1 | #647 (`fee4420f`) | Docs: the decision register and the flip log |
+| C20c | #648 (`891822f3`) | No flag. The money routes on Stellr's Stripe refuse another tenant's event in every mode: `invoice-paid`, `payment-link`, `registrations/[id]/invoice`, `registrations/[id]/finish-setup` and `refunds/preview` (`docs/TENANCY-S5-data.md`, "Stellr-only routes refuse another tenant's event (waves 6 and 7)"). **For Stellr:** one extra read of the event's owner per request, two for `refunds/preview`, and a retryable 503 if it fails. The delete dialog now blocks a delete when the refund preview fails for any reason but 404 |
+| K4 | #649 (`1a1bd5d7`) | The event mirror sync keeps a non-owner row's minimum age, and its time zone unless the venue moved (`docs/TENANCY-S5-registration.md`, Known limits). Stellr's written payload is byte-identical, with no extra read |
+| O2 | #650 (`7dca70e1`) | `RATE_LIMIT_STORE`: in `memory`, today's default, nothing new is written or imported. In `shadow` a disagreement or store problem leaves a `RATELIMIT` row (`docs/S5-CRONS-LIMITS-SMMA.md`) |
+| B26a | #651 (`06e06f24`) | `CRON_NON_PROD_JOBS`, unset: read only on the hosted `dev` deployment, two values only, never the minor-account purge (`docs/S5-CRONS-LIMITS-SMMA.md`, "The dev opt-in") |
+| K3 | #652 (`080d9c64`) | Tooling only: `scripts/seed-two-tenants.ts --profile flow` (below). One logic change: `lib/tenancy/role-mapping.ts` counts a Clerk event-manager claim as backed by an assignment in any tenant, because the claim names none. With Stellr-only data the results are identical (tested) |
+| K5 | #653 (`6475dc54`) | Tooling, the e2e stack and placeholder guards (below). Stellr's titles and PDFs carry no mark, so they pass through unchanged; off `dev`, admin create and approve read a PDF's text once more |
+| O1 | #654 (`82534411`) | The switch registry (`lib/tenancy/flags.ts`) and the health route's `tenancy` object (below). The health route is the registry's only importer, so no Stellr request path gains a read; the route makes one service-role read (`W7-8(b)`). `TENANT_DB_ENABLED`'s gate and `TENANT_DB_AREAS`' parser moved unchanged to `lib/tenancy/tenant-db-config.ts` |
+| A10a | #655 (`71a15c5f`) | No flag. `recordOnHost()` (`lib/tenancy/host-record.ts`, NULL counts as Stellr) on the credential events, visibility, pdf and certificate routes and the team-profile token POST; the public credential page, badge, card and wallet show Stellr's credentials only; a credential is never issued or reinstated for another tenant's event, and its email never sent; every non-Stellr team-profile invitation is held. Decisions `W7-9` to `W7-11`. **For Stellr:** responses byte-identical, zero consent reads, and issuing a credential for an event now reads the event's owner once (per batch for bulk issues); if that read fails, issuance fails |
+| B10r | #656 (`79a58c96`) | CI only: `tenant-host-routing` is required through the `e2e` gate (below) |
+| O3 | #658 (`907ce4fd`) | `TENANT_DB_ENABLED`, unset: nothing new runs or is imported. The pooler TLS canary, `TenantDbConfigError` with a fixed reason, one `TENANTDB config` row per instance, `tenancy.tenantDb.config` on the health route, and `application_name` `stellr-tenantdb` (`docs/TENANCY-S5-data.md`) |
+| K8 | #659 (`82472e0d`) | No app code: the canary runner and the tenant-host header checker (below). The only `lib/` file, `lib/testing/canary-flow-scenarios.ts`, is a pure module the app does not import |
+| A10b | #660 (`9912395b`) | No flag. `recordOnHost` in the survey session before the wrong-member check, for GET, PATCH, submit and stop-reminders; `survey/event/[slug]/link` sends only when the event's tenant matches the host; Stellr's token, stop-reminders and QR pages show Stellr's surveys only; consent-pending tenant minors and their guardians are left out of every survey send; `volunteer/interest` refuses another tenant's event; `email/unsubscribe` POST checks the host. Decisions `W7-12`, `W7-13` and `W7-15`. **For Stellr:** byte-identical plans, sends and pages, no consent read, and one `events.tenant_id` read on the admin late-open preview only |
+
+**`tenant-host-routing` is required (B10r).** It lost `continue-on-error`, and the `e2e` gate fails unless it succeeded, so a cancelled, failed or skipped run fails too. Branch protection still names `verify` and `e2e`; the requirement lives inside the gate (owner decision `W7-8(c)`). A throwaway PR with one deliberately failing tenant-host test (#657, closed unmerged) turned `e2e` red. The ledger of which jobs block a merge is `docs/RUNBOOK-ci-database.md`, "Enforcement ledger".
+
+**The health route (O1, O3).** `GET /api/admin/health/integrations` (admin only) now carries `tenancy`, every S5 switch as it resolved, never a raw value, secret, URL or zone:
+
+- `authzSource` {`value`, `unrecognised`}, `loadScopedMode`, `rateLimitStore` {`mode`, `secretUsable`};
+- `platformAudit`, `tenantEventMail` and `guardianConsent` as booleans, and `fieldCryptoMode`;
+- `derivationMode`, from one service-role read of `tenancy_settings` with a 2 s timeout, `unavailable` on failure;
+- `tenantDb` {`enabled`, `areas`, `ignoredEntries`}, and, only while `TENANT_DB_ENABLED` is on, `config` {`url`, `ca`}, each `ok`, `not-needed` (the CA, for a local host) or a fixed reason (O3);
+- `routing` {`enabled`, `suffixError`};
+- `unrecognised`, the variables whose value fell back to the default, by name;
+- `invalidCombinations`, of 5 rules: `rate_limit_store_without_secret`, `tenant_db_areas_without_flag`, `routing_without_usable_suffix`, `guardian_consent_without_tenant_mail`, `field_crypto_mode_without_key`.
+
+It is informational and does not feed `ok`. After each flip's redeploy, read it first, then `supabase/tests/s5_watch_only.sql` with the flip's time (`docs/TENANCY-S5-data.md`, "Before any flip").
+
+**The consent placeholder (K5).** The consent document's field map is `lib/esign/native/templates/tenant-guardian-consent-v1.fields.json`, whose prefill keys match `planTenantGuardianConsent`; the organiser, event, child's name and date of birth, and relationship are locked, and the guardian can correct only their own name and email. The e2e stack publishes `tenant_guardian_consent`. On `dev` only, `scripts/esign-template.ts` builds and publishes a document titled "DEV PLACEHOLDER – NOT A CONSENT FORM", marked on every page, refuses any target but the dev project or a loopback database, and approves nothing without `--dev-placeholder` and `--apply`; `scripts/esign-dev-issue.ts tenant_guardian_consent --version <n>` signs one before approval, for K0. `lib/esign/native/template-admin.ts` and `templates-store.ts` refuse a placeholder on the real production app. Nothing has been published or approved on `dev` yet, and each step needs the owner's yes (`W7-6`). The production wording stays a legal item.
+
+**The canary tenant (K3, K8 built; K9 not run).**
+
+- **K3, the seed.** `scripts/seed-two-tenants.ts --profile flow --zone <zone>` plans the `dev-canary` tenant (US, USD, America/Denver, minimum age 14, replies to the role inbox), `canary.<zone>` mapped and `nobody.<zone>` left unmapped as the probe host, one mirror row about 4 weeks out, and Clerk test personas `canary-manager`, `canary-admin` and `stellr-probe-admin`. A dry run by default; `--apply --clerk` writes it; `--check` prints READY or NOT READY reasons only; `--profile flow --remove [--apply --clerk]` tears down only rows stamped with `dev-canary`'s id, and refuses while registrations exist or the event is published. It refuses the production project, `sk_live_` keys, `APP_ENV` or `NEXT_PUBLIC_APP_ENV` prod or preview, and `VERCEL_ENV=preview`.
+- **K8, the runner.** `scripts/canary-tenant-flow.ts` drives S1 to S8 over HTTP against `--base` and reads the evidence back from the `dev` database: S1 an adult registers, S2 a minor is held pending consent, S3 check-in is refused while pending, S4 the pending minor gets no tenant mail, S5 the guardian signs, S6 the guardian declines, S7 isolation probes with an expectation table per `AUTHZ_SOURCE` and `LOADSCOPED_MODE` and known gaps named by slice, S8 Stellr unchanged. `--plan` prints the scenarios and the table and sends nothing. `scripts/canary/tenant-host-headers.mjs` checks one enforcing CSP on `/sign` and `/survey/x` and the fixed header on `/_next`, `/api/img` and `/api/csp-report`. Both print ids, counts and status codes only, and refuse Stellr's production hosts.
+
+**How to run K9.** Each numbered step needs the owner's yes at the time. Nothing here has run.
+
+*Phase A, the local rehearsal* (needs K7a, K0 and K7b; the CMS side needs K2, which is pending):
+
+1. **K7a.** From a checkout whose `.env.local` points at `dev` only: `npx tsx scripts/seed-two-tenants.ts --profile flow --zone <zone>` (dry run), then `--apply --clerk`, then `--check`. Then `scripts/map-tenancy-roles.ts --check` shows no drift, and the parity query returns 0. The next CI e2e and `tenant-host-routing` runs must pass by step outcome, because CI shares this database. Rollback: `--profile flow --remove --apply --clerk`.
+2. **`canary.localhost`.** A second K3 apply with `--zone localhost` maps it to `dev-canary` on the shared `dev` database (owner answer `PR659-1`).
+3. **The server.** A local `next start` with `TENANT_ROUTING_ENABLED=true` and `TENANT_HOST_SUFFIX=.localhost`, against the `dev` database.
+4. **Persona sessions.** Sign each persona in on the dev host in a browser with a Clerk testing token, and export its session id as `CANARY_SESSION_ID_<HANDLE>` in the shell (`docs/ENV-MATRIX.md`, section 6). The runner mints each token just before use.
+5. **Start.** `npx tsx scripts/canary-tenant-flow.ts --phase start --zone localhost --base http://canary.localhost:3000 --stellr-base http://localhost:3000 --stellr-event <a Stellr event slug>`, with `--authz-source` and `--loadscoped-mode` naming the server's modes. It runs S1 to S4, S7 and S8 and writes its ids to a state file outside the repo. The register route's cap allows one start an hour.
+6. **The guardian, by hand.** In the role inbox, with the owner as witness, sign the "guardian-sign" consent and decline the "guardian-decline" one.
+7. **Settle.** `--phase settle --state <file>` with the same flags, until S5 and S6 stop waiting.
+8. **Headers.** `node scripts/canary/tenant-host-headers.mjs --zone localhost --base http://canary.localhost:3000 --stellr-base http://localhost:3000`.
+9. **`app_errors`.** Read every unexpected row since the run started, a CI-origin one included (owner answer `PR659-3`).
+
+*Phase B, hosted `dev`* (after K6 attaches the canary zone, and P10 to P12): the same runner and header checker with `--base https://canary.<zone>` and `--stellr-base` the `stellr-web-dev` deployment. By hand: the check-in desk as `canary-manager` before and after consent; tenant-host pages in a browser with 0 trackers, no hydration error and 0 CSP violations; Clerk sign-in and sign-up with Turnstile on the canary host. The expiry path: an agent moves one canary consent row's `expires_at` into the past on the `dev` database, then the owner calls the consent-only sweep by hand (B26a), between two 06:00 UTC scheduled runs. Afterwards clear `CRON_NON_PROD_JOBS` and sign the persona sessions out.
+
+*Pass:* S1 to S6 and S8 green; S7 matching its table for the modes in force, with known gaps named; 0 unread `app_errors` rows; Resend sends within the agreed daily canary cap. The scenario table goes into `docs/TENANCY-S5-flow-checklist.md` with D3.
+
+**Not yet proven.**
+
+- **Any switch on a hosted deployment.** P1 onwards wait on the owner's yes for each flip.
+- **The `AUTHZ_SOURCE=shadow` rehearsal (P3).** Not started. On `dev`, after `scripts/map-tenancy-roles.ts --check` exits 0, it runs for 7 days, counted from the first expected canary mismatch row, which proves the switch took effect; a fix to the role tables restarts the clock (tracker `s5-programme.31`, `W7-2`).
+- **The pooler TLS canary (P6).** Built, not run, so which PEM goes in `TENANT_DATABASE_CA_CERT` is pending (tracker `s5-programme.30`).
+- **The `dev` Sanity dataset (K2).** Approved (`W7-5`), not done. Without it the hosted canary stops at the local rehearsal.
+- **Signing on `dev` (K0).** On 12 Nov 2026 `stellr-web-dev` had no e-sign or seal variables, which K0 checks first.
+- **The `RATELIMIT`, `TENANTDB config` and health signals** have run only in tests; the first flip that reaches each is its first real run.
+- **A10a and A10b on a deployment.** Every event and record is Stellr's, so their tenant branches have run only in tests and the tenant-host harness.
+
+### What wave 7 corrected
+
+Generated baselines are regenerated at merge and win over any number here.
+
+| The S5 docs said | Now | Source |
+|---|---|---|
+| Tenant-host cases failing: 82 (leak 14, honey_write 22, 4xx-oracle 42, oracle 4), 18 unproven | **74** after A10a, **50** after A10b: leak 10, honey_write 12, 4xx-oracle 28, oracle 0; unproven 18. The 2 Stellr-host unsubscribe leaks are accepted (`W7-15`) but not yet entered in `TENANT_HOST_ACCEPTED` | `test/baselines/tenant-host-idor.json` |
+| Unaudited: 112 mutating handlers and 6 GET writers | **104 and 4** (108 in all) after A10a and A10b | `test/baselines/unaudited-mutations.json` |
+| `tenant-host-routing` is report-only | **Required through the `e2e` gate** (B10r) | `.github/workflows/ci.yml`, `test/ci-tenant-host-routing-required.test.ts` |
+| No route decides through `lib/authz` | Converted routes decide through it, so `AUTHZ_SOURCE=shadow` compares real decisions (`docs/AUTHZ.md`) | `lib/authz.ts` |
+| The mirror sync writes a NULL minimum on every sync | **A non-owner row keeps its minimum and time zone** (K4) | `lib/events/sync.ts` |
+| Credentials and surveys do not leave out consent-pending participants (A10, tracker `s5-programme.22`) | **Built in A10a and A10b,** on `dev` | `test/participant-mail-consent-guard.test.ts` |
+
+### Owner decisions wave 7 raised
+
+All in `docs/S5-DECISION-REGISTER.md`. Answered on 12 Nov 2026: `W7-9` to `W7-13`, `W7-15` and `W7-16`, and the review answers `PR658-1`, `PR658-2` and `PR659-1` to `PR659-3`. Still open: `W7-14` (tracker `s5-programme.20`). These questions from wave 7 PR bodies are not recorded as answered in this repo:
+
+| From | Question |
+|---|---|
+| C20c (#648) | For another tenant's participant, should `refunds/preview` answer 404 (as built) or the empty preview a missing participant gets? |
+| B26a (#651) | Keep `membership-expiry` as the `cron_runs` job name for the consent-only run (result `{ only: 'tenant-consent', ... }`)? |
+| K5 (#653) | K0 signs the placeholder before approval and K7b approves it: keep that order? Lock the organiser, event, child's details and relationship on the guardian form, when Stellr's own minor form locks nothing? |
+| O1 (#654) | The stale "auto:" reason the generator re-derived for `admin/competitions/[slug]/page.tsx` in the service-role baseline |
+| A10a (#655) | One event-owner read per Stellr credential issue; refusals in the admin bulk issue shown as "skipped" rather than "failures"; `pd-credentials` answering 409 rather than 500 for a refused tenant event |
+| B10r (#656) | Pin the required jobs' Actions to SHAs, as `tenant-db` does, in a later slice? |
+
+### Docs owed after wave 7
+
+- **D3:** the dev canary record (what was proven, scenario results by mode, gaps by slice, re-run and rollback order), K6's zone steps in `docs/TENANCY-S5-routing.md`, the K8 scenario table in `docs/TENANCY-S5-flow-checklist.md`, and the keep-or-tear-down decision for the canary.
+- **The P6 result:** the PEM choice in tracker `s5-programme.30` and `docs/TENANCY-S5-data.md`.
+- **K2's dataset** in `docs/ENV-MATRIX.md`, once done.
+- **The e-sign runbook's placeholder script usage** (K5); for now it lives in `scripts/esign-template.ts`'s header.
 
 ## PR amendments
 
@@ -899,12 +1002,12 @@ S5 finishes when all of these hold. Each names its proof.
   - **Control item, settled 11 to 12 Nov 2026.** The `prod-migrations` environment's protection rules (`docs/RUNBOOK-agent-controls.md` §3) were set on 11 Nov 2026, before A16 merged to `dev` in #625. A16's dry run on 12 Nov 2026 passed §7's rows 5 and 6. §7's other rows are still to run.
   - **Until §7 records a proof date,** production SQL keeps the interim route in `CLAUDE.md`: the promote skill's Step 3, with the owner's explicit yes on the exact SQL. A16 took that route on 12 Nov 2026 through the Action, the owner approving each run. Proposed for each migration that adds triggers on participants: a fresh production backup first, and a window with no events.
 - **S4 state.** Confirm `20261104200000`, `210000`, `300000` and `400000` are on production, and that `tenancy_cutover_checks` Section D shows 0 NULL `tenant_id`, before any area reads through `tenantDb` or `loadScoped` enforce.
-- **`tenant_app_login`.** Create on dev, then production; store `TENANT_DATABASE_URL` as a server-only secret. Needed only for a deployed flip, not to build, merge or CI-test. The steps, the URL rules C11's driver enforces, and rotation are in `docs/TENANCY-S5-data.md`. The TLS rule was settled on 10 Nov 2026 and built in C11t: also store the root CA as the server-only secret `TENANT_DATABASE_CA_CERT`, give the URL `sslmode=verify-full`, and see one handshake to the pooler complete on `dev` before `TENANT_DB_ENABLED` is set. The owner creates the `dev` login (owner decision, 11 Nov 2026).
+- **`tenant_app_login`.** Create on dev, then production; store `TENANT_DATABASE_URL` as a server-only secret. Needed only for a deployed flip, not to build, merge or CI-test. The steps, the URL rules C11's driver enforces, and rotation are in `docs/TENANCY-S5-data.md`. The TLS rule was settled on 10 Nov 2026 and built in C11t: also store the root CA as the server-only secret `TENANT_DATABASE_CA_CERT`, give the URL `sslmode=verify-full`, and see the pooler TLS canary (`scripts/tenant-db-canary.ts`, wave 7's O3) PASS on `dev` before `TENANT_DB_ENABLED` is set. That run is P6, pending, and it decides the PEM. The owner creates the `dev` login (owner decision, 11 Nov 2026).
 - **Roles.** Run `scripts/map-tenancy-roles.ts --apply`, decide `--platform-admins`, and decide route by route which of the 9 platform-destined routes become owner-only (class `platform_destined` since C15). After C9, stop assigning `admin` or `event_manager` in the Clerk dashboard, or run `--check` after any change.
 - **Environment flips**, each with the rules above: `AUTHZ_SOURCE`, `LOADSCOPED_MODE`, `TENANT_DB_ENABLED` and `TENANT_DB_AREAS`, `PLATFORM_AUDIT_ENABLED` (proposed order and rollback for these four: `docs/TENANCY-S5-data.md`), `TENANT_EVENT_MAIL_ENABLED` (the signing engine's tenant sender it waited on is B14b, on production), `TENANT_GUARDIAN_CONSENT_ENABLED` (after A16's migration, a published consent document and `TENANT_EVENT_MAIL_ENABLED`, and only where Lane C's tenant-event refusals are live in the same environment: `docs/ENV-MATRIX.md`), `RATE_LIMIT_STORE`, `TENANT_ROUTING_ENABLED` and `TENANT_HOST_SUFFIX` (before the zone is attached: see Real tenant hosts). Create `RATE_LIMIT_KEY_SECRET` before any non-memory limiter mode, and flip `RATE_LIMIT_STORE` only after A9 and B15 (`docs/S5-CRONS-LIMITS-SMMA.md`). Add the WAF rules for `/credentials/`, then tenant hosts (`docs/RUNBOOK-waf-rule.md`).
 - **Dependencies.** `ts-morph` (dev, C10), or the TypeScript-API fallback. **`postgres` (runtime, C11): approved 9 Nov 2026**, postgres.js, on the terms in the file-ownership table. The login (`tenant_app_login`) and `TENANT_DB_ENABLED` stay separate gates.
-- **CODEOWNERS reviews**, `DB_CI_ENFORCE=true`, and the tenant-db job as required, which the owner settled on 10 Nov 2026 for the PR that first wires a live area to `tenantDb` (C18). C18 removed `continue-on-error` from the job (#624); adding `tenant-db` to branch protection is the owner's step.
-- **`tenant-host-routing` as required.** B10a landed it report-only: a failure blocks nothing and the run can still look green. Proposed: required at the latest before B5c merges, and before `TENANT_ROUTING_ENABLED` is set on any deployment with a zone attached. Until then a B5c or A7 PR cites this job's step outcome, not the run's badge.
+- **CODEOWNERS reviews**, `DB_CI_ENFORCE=true`, and the tenant-db job as required, which the owner settled on 10 Nov 2026 for the PR that first wires a live area to `tenantDb` (C18). C18 removed `continue-on-error` from the job (#624), and `dev`'s branch protection now requires `tenant-db` and `db`. Still open: `DB_CI_ENFORCE` is unset, so the `db` job keeps `continue-on-error`, and `main` requires only `verify` and `e2e` (read 12 Nov 2026; `docs/RUNBOOK-ci-database.md`, "Enforcement ledger").
+- **`tenant-host-routing` as required: settled 11 Nov 2026 (`W7-8(c)`), built 12 Nov 2026.** B10a landed it report-only. Since B10r (#656) it has no `continue-on-error` and the `e2e` gate fails unless it succeeded, so it blocks a merge through `e2e` while branch protection still names `verify` and `e2e`. Proven by the throwaway PR #657, closed unmerged. Re-check after the GitHub organisation move.
 - **Decisions:**
   - the tenant-tree segment (`%5Ft` for `/_t`, or `/t`), because a folder named `_t` is private and never routes;
   - the final allow-list;
@@ -927,7 +1030,7 @@ S5 finishes when all of these hold. Each names its proof.
   - **Before any real zone gets the routing flag (wave 4):** B6's canary checks pass (one enforcing policy on `/sign` and `/survey/x`, and Clerk sign-in, sign-up with Turnstile and a signed-in registration with 0 violations), and the icon and manifest decision is made.
   - **Before any non-owner tenant has records on production:** A7, A10 and A12 land, since B10(c) assigns them the Stellr-host rows. Production data was not checked for this.
 - **Witnessed.** The parity query (`events` where the local start date differs from `raw->>'date'`; expect 0), and one real Stellr registration on `dev` for each of individual, group by invoice, group by card, and group-join before promoting A4 to A6. The registrations were waived by the owner on 5 Nov for #548 and none was witnessed; the parity query still needs the events mirror backfilled on production.
-- **Sign-offs.** The S3 `derivation_mode` enforce flip after A7, A8, B16 and C20 and 7 clean days, and before the first non-owner event on production, because A3 relies on it; the SMMA memo; D7, including the steps wave 4 adds (see [Docs owed after wave 4](#docs-owed-after-wave-4)). `tenant-host-routing` stays report-only, so nothing mechanical fails while Stellr-host rows remain open: a person checks them at sign-off.
+- **Sign-offs.** The S3 `derivation_mode` enforce flip after A7, A8, B16 and C20 and 7 clean days, and before the first non-owner event on production, because A3 relies on it; the SMMA memo; D7, including the steps wave 4 adds (see [Docs owed after wave 4](#docs-owed-after-wave-4)). `tenant-host-routing` is now required through `e2e`, but the Stellr-host rows in `e2e/tenancy/host-cases.ts` are recorded outcomes, not failures, so nothing mechanical fails while they remain open: a person checks them at sign-off.
 
 The `via_parent` follow-up is no longer an owner gate: it is code plus a migration, in C0b. The owner only approves its production apply.
 

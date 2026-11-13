@@ -55,6 +55,7 @@ import { ageOn, isMinorOn } from '../age'
 import { guardianFromForm } from '../registration/tenant-guardian-consent'
 import { hasSchool } from '../registration/individual/parse'
 import { STELLR_TENANT_ID } from '../tenancy/constants'
+import { PRODUCTION_TENANT_ZONE } from '../tenancy/host-pure'
 
 const CLERK = 'https://api.clerk.com/v1'
 import { AUTHZ_SOURCES } from '../authz/decide'
@@ -182,6 +183,27 @@ describe('the targets', () => {
     expect(() => canaryBases({ ...ok, stellrBase: 'http://user:pw@localhost:3000' })).toThrow(/credentials/)
     expect(() => canaryBases({ ...ok, base: 'ftp://canary.localhost' })).toThrow(/http or https/)
     expect(() => canaryBases({ ...ok, base: undefined })).toThrow(/--base is required/)
+  })
+
+  // W7-27: the production tenant zone is never a canary target.
+  it('refuses every host in the production tenant zone, its apex included, and that zone as --zone', () => {
+    expect(PRODUCTION_TENANT_ZONE).toBe('.events.stellreducation.org')
+    const ok = { base: 'https://canary.devzone.stellreducation.org', stellrBase: 'https://stellr-web-dev.vercel.app', zone: 'devzone.stellreducation.org' }
+    expect(canaryBases(ok).unmapped.hostname).toBe('nobody.devzone.stellreducation.org')
+    for (const host of ['canary.events.stellreducation.org', 'nobody.events.stellreducation.org', 'CANARY.Events.StellrEducation.org', 'a.b.events.stellreducation.org']) {
+      expect(() => canaryBases({ ...ok, base: `https://${host}`, zone: 'events.stellreducation.org' }), host).toThrow(/refusing: --base is in the production tenant zone/)
+      expect(() => canaryBases({ ...ok, base: `https://${host}` }), host).toThrow(/refusing: --base is in the production tenant zone/)
+      expect(() => canaryBases({ ...ok, stellrBase: `https://${host}` }), host).toThrow(/refusing: --stellr-base is in the production tenant zone/)
+    }
+    // The apex is a Stellr production host as well, and is refused as one.
+    expect(() => canaryBases({ ...ok, base: 'https://events.stellreducation.org' })).toThrow(/refusing: --base is a Stellr production host/)
+    for (const zone of ['events.stellreducation.org', '.events.stellreducation.org', 'Events.StellrEducation.org.', 'x.events.stellreducation.org']) {
+      expect(() => canaryBases({ ...ok, zone }), zone).toThrow(/refusing: --zone is the production tenant zone/)
+    }
+    // Before any read or request: the whole guard runs on the env and flags alone.
+    expect(() =>
+      assertCanaryRunTarget({ NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321' }, { ...ok, base: 'https://canary.events.stellreducation.org', zone: 'events.stellreducation.org' }),
+    ).toThrow(/production tenant zone/)
   })
 
   it("applies K3's database guard first: production, live Clerk keys and prod or preview env are refused", () => {

@@ -19,7 +19,9 @@
  *
  * Targets, as the runner's (lib/testing/canary-flow-scenarios.ts canaryBases): --base
  * must be canary.<zone>, and --stellr-base this machine or the stellr-web-dev
- * deployment; Stellr's production hosts are refused. There is no override.
+ * deployment; Stellr's production hosts are refused, and so is every host in the
+ * production tenant zone (.events.stellreducation.org, its apex included) and that
+ * zone as --zone (W7-27), before any request. There is no override.
  * --connect <address> sends every request to that address with the URL's Host, and
  * must be this machine (127.0.0.1, ::1 or localhost); a *.localhost host goes to
  * 127.0.0.1 by default. VERCEL_AUTOMATION_BYPASS_SECRET, when set, is sent as
@@ -45,6 +47,24 @@ export const FIXED_PATHS = ['/_next/canary-no-such-file', '/api/img/canary-no-su
 
 /** Stellr's production hosts (lib/testing/canary-flow-scenarios.ts PRODUCTION_HOSTS; the test holds them equal). */
 export const PRODUCTION_HOSTS = ['stellreducation.org', 'www.stellreducation.org', 'app.stellreducation.org', 'events.stellreducation.org']
+
+/**
+ * The production tenant zone (lib/tenancy/host-pure.ts PRODUCTION_TENANT_ZONE, W7-27;
+ * this file is plain JavaScript and cannot import it, so the test holds them equal).
+ */
+export const PRODUCTION_TENANT_ZONE = '.events.stellreducation.org'
+
+/**
+ * Is this hostname in the production tenant zone: its apex or any host under it?
+ * Read loosely (leading dots, case, a trailing dot), so no spelling slips past.
+ *
+ * @param {string | undefined} raw
+ */
+export function isInProductionTenantZone(raw) {
+  const host = (raw ?? '').trim().toLowerCase().replace(/^\.+|\.+$/g, '')
+  if (!host) return false
+  return `.${host}` === PRODUCTION_TENANT_ZONE || host.endsWith(PRODUCTION_TENANT_ZONE)
+}
 
 /** The stellr-web-dev Vercel project's deployments (the runner's DEV_DEPLOYMENT_HOST; the test holds them equal). */
 export const DEV_DEPLOYMENT_HOST = /^stellr-web-dev[a-z0-9-]*\.vercel\.app$/
@@ -74,6 +94,9 @@ export function isThisMachine(hostname) {
 export function canaryHostFor(raw) {
   const zone = (raw ?? '').trim().toLowerCase().replace(/^\.+|\.+$/g, '')
   if (!zone) throw new Error('--zone is required (for example --zone localhost for a local run)')
+  if (isInProductionTenantZone(zone)) {
+    throw new Error(`refusing: --zone is the production tenant zone (${PRODUCTION_TENANT_ZONE}); the canary runs on dev only`)
+  }
   if (!zone.split('.').every((label) => DNS_LABEL.test(label))) throw new Error('--zone must be a DNS name: letters, digits, hyphens and dots')
   return `${CANARY_HOST_LABEL}.${zone}`
 }
@@ -186,6 +209,9 @@ export function originOf(raw, flag) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error(`${flag} must be http or https`)
   if (PRODUCTION_HOSTS.includes(url.hostname.toLowerCase())) throw new Error(`refusing: ${flag} is a Stellr production host; the canary runs on dev only`)
+  if (isInProductionTenantZone(url.hostname)) {
+    throw new Error(`refusing: ${flag} is in the production tenant zone (${PRODUCTION_TENANT_ZONE}); the canary runs on dev only`)
+  }
   return new URL(url.origin)
 }
 

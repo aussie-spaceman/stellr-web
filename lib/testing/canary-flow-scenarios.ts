@@ -25,6 +25,7 @@
 import type { AuthzSource } from '../authz/decide'
 import type { IndividualBody } from '../registration/individual/parse'
 import type { LoadScopedMode } from '../tenancy/load-scoped-mode'
+import { isInProductionTenantZone, PRODUCTION_TENANT_ZONE } from '../tenancy/host-pure'
 import {
   assertCanaryFlowTarget,
   canaryHosts,
@@ -191,16 +192,32 @@ function isProductionHost(hostname: string): boolean {
 }
 
 /**
+ * Whether a --zone value is the production tenant zone or a zone under it (W7-27).
+ * Read loosely (leading dots, case, a trailing dot), so no spelling slips past.
+ */
+function isProductionZoneFlag(raw: string | undefined): boolean {
+  return isInProductionTenantZone((raw ?? '').trim().replace(/^\.+/, ''))
+}
+
+/**
  * The three origins a run talks to, or a throw. The tenant base must be the canary
  * host under --zone (K3's canaryHosts), and the Stellr base this machine or the dev
  * deployment (stellr-web-dev on vercel.app). Stellr's production hosts are refused
- * for either. There is no override.
+ * for either, and so is every host in the production tenant zone
+ * (PRODUCTION_TENANT_ZONE, its apex included) and that zone as --zone (W7-27).
+ * There is no override. Pure: it runs before the runner's first request or read.
  */
 export function canaryBases(opts: { base?: string; stellrBase?: string; zone?: string }): CanaryBases {
   const tenant = parseBase(opts.base, '--base')
   const stellr = parseBase(opts.stellrBase, '--stellr-base')
   for (const [flag, url] of [['--base', tenant], ['--stellr-base', stellr]] as const) {
     if (isProductionHost(url.hostname)) throw new Error(`refusing: ${flag} is a Stellr production host; the canary runs on dev only`)
+    if (isInProductionTenantZone(url.hostname)) {
+      throw new Error(`refusing: ${flag} is in the production tenant zone (${PRODUCTION_TENANT_ZONE}); the canary runs on dev only`)
+    }
+  }
+  if (isProductionZoneFlag(opts.zone)) {
+    throw new Error(`refusing: --zone is the production tenant zone (${PRODUCTION_TENANT_ZONE}); the canary runs on dev only`)
   }
   const hosts = canaryHosts(opts.zone ?? '')
   if (tenant.hostname !== hosts.mapped) throw new Error(`--base must be the canary host for --zone (${hosts.mapped})`)

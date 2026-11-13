@@ -68,6 +68,26 @@ export function normaliseHost(raw: string | null | undefined): string | null {
   return host.split('.').every((label) => LABEL.test(label)) ? host : null
 }
 
+/**
+ * The one tenant zone the real production app may use (`W7-27`), in canonical
+ * form. The single source for the allow-list: tenantRoutingConfig (./host) accepts
+ * only this suffix on production and refuses it everywhere else, and the canary
+ * runner (lib/testing/canary-flow-scenarios.ts) refuses every host under it.
+ * scripts/canary/tenant-host-headers.mjs is plain JavaScript and cannot import
+ * this file, so it holds a copy; its test holds the two equal.
+ */
+export const PRODUCTION_TENANT_ZONE = '.events.stellreducation.org'
+
+/**
+ * Whether a hostname is in the production tenant zone: the zone apex
+ * (`events.stellreducation.org`) or any host under it. Invalid hosts are false.
+ */
+export function isInProductionTenantZone(rawHost: string | null | undefined): boolean {
+  const host = normaliseHost(rawHost)
+  if (!host) return false
+  return `.${host}` === PRODUCTION_TENANT_ZONE || host.endsWith(PRODUCTION_TENANT_ZONE)
+}
+
 /** Whether a canonical zone suffix is one only a test or local run should use. */
 export function isDevZoneSuffix(suffix: string): boolean {
   return suffix.endsWith('.localhost') || suffix.endsWith('.test')

@@ -19,6 +19,8 @@ import {
   type CredentialEventKind,
   type ShareConsent,
   type ShareBlock,
+  type CredentialNotIssuedReason,
+  type CredentialSkip,
 } from '@/lib/credentials-core'
 
 export * from '@/lib/credentials-core'
@@ -238,9 +240,6 @@ export interface IssueInput {
   eventTenant?: () => Promise<string>
 }
 
-/** Why issueCredential made no credential (S5 wave 7, A10a). */
-export type CredentialNotIssuedReason = 'consent_pending' | 'tenant_not_issuer'
-
 const NOT_ISSUED: Record<CredentialNotIssuedReason, string> = {
   consent_pending: 'Not issued: their parent or guardian hasn’t signed the consent form yet.',
   tenant_not_issuer: 'Not issued: Stellr doesn’t issue credentials for another organisation’s event.',
@@ -248,8 +247,9 @@ const NOT_ISSUED: Record<CredentialNotIssuedReason, string> = {
 
 /**
  * issueCredential's refusal. It is thrown, not returned, so the return shape stays
- * `{ row, created }` and every caller's existing catch reports it as it does any other
- * failure. A caller that tells the two apart checks `instanceof` and `reason`.
+ * `{ row, created }`. A caller that tells it apart from a failure checks `instanceof`
+ * and `reason`: the bulk issues count it as skipped (recordSkip), and the PD route
+ * answers 409.
  */
 export class CredentialNotIssuedError extends Error {
   readonly reason: CredentialNotIssuedReason
@@ -258,6 +258,17 @@ export class CredentialNotIssuedError extends Error {
     this.name = 'CredentialNotIssuedError'
     this.reason = reason
   }
+}
+
+/**
+ * For a bulk issue's catch (S5 A10a follow-up, owner-approved 13 Nov 2026): a refusal
+ * is recorded as a skip, with its reason, and true is returned; anything else is left
+ * for the caller to report as a failure.
+ */
+export function recordSkip(err: unknown, name: string, skips: CredentialSkip[]): boolean {
+  if (!(err instanceof CredentialNotIssuedError)) return false
+  skips.push({ name, reason: err.reason })
+  return true
 }
 
 /**

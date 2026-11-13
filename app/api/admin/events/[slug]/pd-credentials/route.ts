@@ -4,7 +4,7 @@ import { requireEventRoute } from '@/lib/authz'
 import { getEventBySlug } from '@/lib/events/repo'
 import { eventTitleFromRegistrations, stellrOnlyDb } from '@/lib/events/admin-records'
 import { getSignedInMember } from '@/lib/community'
-import { issueCredential, CREDENTIAL_COLUMNS } from '@/lib/credentials'
+import { issueCredential, CredentialNotIssuedError, CREDENTIAL_COLUMNS } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { logActivity } from '@/lib/activity-log'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
@@ -107,6 +107,12 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
       activityLocation: location,
     })
   } catch (err) {
+    // A refusal (S5 A10a: another organisation's event) is a conflict with the event's
+    // owner, not a server fault, so it answers 409 with the reason (owner-approved
+    // follow-up, 13 Nov 2026). Anything else is still a 500.
+    if (err instanceof CredentialNotIssuedError) {
+      return NextResponse.json({ error: err.message, reason: err.reason }, { status: 409 })
+    }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
   noteAuditSubject(req, { id: (result.row as { id?: string }).id ?? null, detail: { created: result.created } })

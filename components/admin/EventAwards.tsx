@@ -9,6 +9,7 @@ import {
   type AssignedAwardType,
   type Assignment,
 } from '@/lib/event-awards'
+import { describeSkips, type CredentialSkip } from '@/lib/credentials-skip'
 
 // The judges' winning company and the mentors' picks for the other three
 // awards → award certificates + credentials.
@@ -64,7 +65,7 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
     setBusy(true); setMsg(null)
     try {
       const res = await fetch(`${base}/issue`, { method: 'POST' })
-      const d = (await res.json()) as { error?: string; issued: number; students: number; reinstated: number; revoked: number; unchanged: number; emailed: number; failures: string[] }
+      const d = (await res.json()) as { error?: string; issued: number; students: number; reinstated: number; revoked: number; unchanged: number; emailed: number; skips?: CredentialSkip[]; failures: string[] }
       if (!res.ok) throw new Error(d.error ?? 'Issue failed')
       // Counts are awards, not people: a champion can also hold one individual
       // award, so 12 awards can go to 8 students.
@@ -73,6 +74,8 @@ export default function EventAwards({ eventSlug }: { eventSlug: string }) {
       if (d.reinstated) bits.push(`${d.reinstated} of them reinstated`)
       if (d.revoked) bits.push(`${n(d.revoked, 'award')} revoked`)
       bits.push(`${d.unchanged} unchanged`, `${n(d.emailed, 'email')} sent`)
+      // A refusal (S5 A10a) is a skip with its reason, not a failure.
+      bits.push(...describeSkips(d.skips ?? []))
       if (d.failures.length) bits.push(`${d.failures.length} failed: ${d.failures.join('; ')}`)
       setMsg({ text: `Awards issued — ${bits.join(', ')}.`, error: d.failures.length > 0 })
       await load()

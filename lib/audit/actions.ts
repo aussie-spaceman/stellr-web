@@ -64,6 +64,11 @@ export const AUDIT_ACTIONS = [
   'role.event_manager.update',
   'role.event_manager.remove',
 
+  // Staff role (app/api/admin/members/[id]/staff)
+  'role.staff.grant',
+  'role.staff.revoke',
+  'role.staff.recheck',
+
   // Background checks a member already holds (…/external-check)
   'compliance.external_check.submit',
   'compliance.external_check.verify',
@@ -178,6 +183,12 @@ export const AUDIT_ACTIONS = [
   'school.record.update',
   'duty.grant',
   'duty.revoke',
+  // The Staff role (13 Nov 2026): lib/staff.ts
+  'staff.grant',
+  'staff.activate',
+  'staff.suspend',
+  'staff.revoke',
+  'staff.expire',
 
   // Events admin: records by id inside an event (C16)
   'agreement.credential_sharing.set',

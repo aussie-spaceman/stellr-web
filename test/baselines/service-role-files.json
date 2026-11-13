@@ -721,6 +721,10 @@
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: mentoring_cohorts, training_modules"
     },
+    "app/api/admin/members/[id]/staff/route.ts": {
+      "class": "convert",
+      "reason": "the Staff role (lib/staff.ts, Stellr only, admin only): reads and writes staff_grants, the member, their clearance, Staff agreements and training progress; every table is Stellr-only or identity and service-role-only under RLS"
+    },
     "app/api/admin/members/[id]/volunteer-agreement/route.ts": {
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members"

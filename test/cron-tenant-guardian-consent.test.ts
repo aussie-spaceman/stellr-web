@@ -18,6 +18,7 @@ vi.mock('@/lib/cron-runs', () => ({ startCronRun: async () => ({ fail: h.fail, f
 vi.mock('@/lib/membership-grants', () => ({ expireLapsedGrants: async () => 0 }))
 vi.mock('@/lib/pending-consent', () => ({ purgeUnconsentedAccounts: async () => ({ scanned: 0, purged: [], cleared: [], heldGuardianSigned: [], heldAdultRoute: [], errors: [] }) }))
 vi.mock('@/lib/event-manager', () => ({ sweepEventManagers: async () => ({ errors: [] }) }))
+vi.mock('@/lib/staff', () => ({ sweepStaffGrants: async () => ({ checked: 0, activated: 0, suspended: 0, expired: 0, reminded: 0, failed: 0 }) }))
 vi.mock('@/lib/registration/tenant-guardian-consent', () => ({ sweepTenantGuardianConsents: h.sweep }))
 
 const { GET } = await import('@/app/api/cron/membership-expiry/route')
@@ -39,8 +40,8 @@ describe('membership-expiry: tenant guardian consents', () => {
   it('flag off: no sweep, and the result keys are unchanged', async () => {
     const body = await run()
     expect(h.sweep).not.toHaveBeenCalled()
-    expect(Object.keys(body).sort()).toEqual(['eventManagers', 'expired', 'pendingConsentPurge'])
-    expect(Object.keys(h.finish.mock.calls[0][0] as object).sort()).toEqual(['eventManagers', 'expired', 'pendingConsentPurge'])
+    expect(Object.keys(body).sort()).toEqual(['eventManagers', 'expired', 'pendingConsentPurge', 'staff'])
+    expect(Object.keys(h.finish.mock.calls[0][0] as object).sort()).toEqual(['eventManagers', 'expired', 'pendingConsentPurge', 'staff'])
   })
 
   it('flag on: sweeps and reports counts only', async () => {

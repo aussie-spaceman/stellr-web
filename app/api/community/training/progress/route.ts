@@ -72,6 +72,9 @@ async function saveProgress(req: Request) {
     }
     // Auto-issue a completion certificate once every published lesson is done.
     await ensureCertificate(member.id, moduleId)
+    // The Staff training is a Staff prerequisite (lib/staff.ts). Never throws.
+    const { nudgeStaff } = await import('@/lib/staff')
+    await nudgeStaff(db, { memberId: member.id }, 'training_completed')
   }
 
   return NextResponse.json({ ok: true })

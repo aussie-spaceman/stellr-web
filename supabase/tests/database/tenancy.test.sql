@@ -143,6 +143,8 @@ SELECT set_eq(
     'public.session_participants',
     'public.sessions',
     'public.sheet_watch_channels',
+    'public.staff_grants',
+    'public.staff_role_settings',
     'public.store_event_discounts',
     'public.store_order_items',
     'public.store_orders',

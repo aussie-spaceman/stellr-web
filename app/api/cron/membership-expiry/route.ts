@@ -6,6 +6,7 @@ import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { sweepEventManagers, type SweepResult } from '@/lib/event-manager'
+import { sweepStaffGrants } from '@/lib/staff'
 import { tenantGuardianConsentEnabled } from '@/lib/registration/eligibility'
 import { sweepTenantGuardianConsents } from '@/lib/registration/tenant-guardian-consent'
 import { devCronOptInFor } from '@/lib/cron-dev-opt-in'
@@ -120,11 +121,23 @@ export const GET = withCronAudit('membership-expiry', async (req: NextRequest) =
     eventManagers = { error: err instanceof Error ? err.message : String(err) }
   }
 
+  // 3b. Staff (lib/staff.ts): reconcile every live grant (a prerequisite that
+  //     lapsed on its own, a term that ended) and send 60- and 30-day renewal
+  //     reminders. The backstop for every hook that reconciles on the spot.
+  let staff: Awaited<ReturnType<typeof sweepStaffGrants>> | { error: string }
+  try {
+    staff = await sweepStaffGrants(db)
+    if (staff.failed) run.fail('staff', `${staff.failed} grant(s) could not be reconciled`)
+  } catch (err) {
+    run.fail('staff', err)
+    staff = { error: err instanceof Error ? err.message : String(err) }
+  }
+
   // 4. Tenant guardian consents (tenantGuardianConsentStep, above).
   const tenantGuardianConsent = await tenantGuardianConsentStep(db, run)
   const consentKey = tenantGuardianConsent ? { tenantGuardianConsent } : {}
 
-  await run.finish({ expired, pendingConsentPurge: purge, eventManagers, ...consentKey })
-  if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge, eventManagers, ...consentKey }, { status: 500 })
-  return NextResponse.json({ expired, pendingConsentPurge: purge, eventManagers, ...consentKey })
+  await run.finish({ expired, pendingConsentPurge: purge, eventManagers, staff, ...consentKey })
+  if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge, eventManagers, staff, ...consentKey }, { status: 500 })
+  return NextResponse.json({ expired, pendingConsentPurge: purge, eventManagers, staff, ...consentKey })
 })

@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function AdminSpaceConfigPage({ params }: { params: Promise<{ id: string }> }) {
-  await authz.page.requireStellrAdmin({ route: '/admin/community/spaces/[id]' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/community/spaces/[id]' })
   const { id } = await params
   const [config, tierMap] = await Promise.all([loadSpaceAdmin(id), resolveTierMap()])
   if (!config) notFound()

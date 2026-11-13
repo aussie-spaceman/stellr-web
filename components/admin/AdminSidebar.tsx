@@ -8,14 +8,16 @@ import {
   Users, Trophy, MessagesSquare, GraduationCap, SlidersHorizontal, Menu, Home, LayoutDashboard,
 } from 'lucide-react'
 import { Dialog } from '@stellr/web-ui'
+import { isStaffHiddenAdminPath } from '@/lib/authz/decide'
 
 // Persistent admin nav (PR A1, regrouped in the admin IA restructure). Navy rail
 // (desktop ≥lg) + bottom tab bar (mobile): Members · Competitions · Community ·
 // Academy, and "More" with every page — flat and colour-coded, no
 // hover-to-discover.
 //
-// Event Managers (isAdmin=false) only see the Competitions section; middleware
-// already bounces them away from other /admin routes.
+// Event Managers only see the Competitions section; proxy.ts bounces them away
+// from other /admin routes. Staff see every section except the pages proxy.ts
+// keeps from them (STAFF_HIDDEN_ADMIN_PATHS in lib/authz/decide.ts).
 //
 // prefetch={false} on every link: admin pages are dynamic, so prefetching the
 // rail rendered ~25 pages on the server each time it mounted, which is CPU
@@ -82,7 +84,8 @@ const SECTIONS: Section[] = [
 // active state (e.g. /admin/members/volunteers lights Volunteers, not Members).
 const ALL_HREFS = SECTIONS.flatMap((s) => s.items.map((i) => i.href))
 
-export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
+export function AdminSidebar({ role = 'admin' }: { role?: 'admin' | 'staff' | 'event_manager' }) {
+  const isAdmin = role === 'admin'
   const pathname = usePathname() ?? ''
   const [moreOpen, setMoreOpen] = useState(false)
   useEffect(() => setMoreOpen(false), [pathname])
@@ -96,7 +99,12 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
     matches(href) && !ALL_HREFS.some((h) => h.length > href.length && matches(h))
   const current = (href: string) => (itemActive(href) ? (pathname === href ? 'page' : 'true') : undefined)
 
-  const sections = isAdmin ? SECTIONS : SECTIONS.filter((s) => s.label === 'Competitions')
+  const sections =
+    role === 'admin'
+      ? SECTIONS
+      : role === 'staff'
+        ? SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => !isStaffHiddenAdminPath(i.href)) })).filter((s) => s.items.length > 0)
+        : SECTIONS.filter((s) => s.label === 'Competitions')
   // On a phone the section landings are tabs; Operations, and every page
   // under each section, is in "More" (the landings don't link to all of them).
   // The dashboard is in "More" too: it is where /admin opens anyway.
@@ -112,7 +120,7 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
           </span>
           <span className="font-heading text-lg tracking-wide">STELLR</span>
           <span className="ml-1 rounded-full bg-white/15 px-2 py-0.5 font-subheading text-xs font-semibold uppercase tracking-wide">
-            {isAdmin ? 'Admin' : 'Events'}
+            {isAdmin ? 'Admin' : role === 'staff' ? 'Staff' : 'Events'}
           </span>
         </Link>
 

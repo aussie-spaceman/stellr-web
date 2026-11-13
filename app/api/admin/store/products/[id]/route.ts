@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
-  if (!(await canManageStoreCatalog())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canManageStoreCatalog('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await params
   try {
     const product = await getProduct(id)

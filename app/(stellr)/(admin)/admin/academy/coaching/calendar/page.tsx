@@ -6,7 +6,7 @@ import { authz } from '@/lib/authz'
 export const metadata = { title: 'Admin · Coaching sessions calendar' }
 
 export default async function CoachingCalendarPage() {
-  await authz.page.requireStellrAdmin({ route: '/admin/academy/coaching/calendar' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/academy/coaching/calendar' })
   const sessions = await listAllCoachingSessions()
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">

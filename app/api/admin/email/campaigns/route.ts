@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
@@ -29,7 +30,7 @@ const createSchema = z
 // GET /api/admin/email/campaigns — list with template name + send tallies.
 export async function GET() {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data: campaigns } = await db

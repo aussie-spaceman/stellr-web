@@ -10,7 +10,7 @@ import { fakeSupabase, type FakeDb } from '@/test/fake-supabase'
 const { state } = vi.hoisted(() => ({ state: { db: null as FakeDb | null } }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ sessionClaims: {} }) }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))
+vi.mock('@/lib/authz', () => ({ hasCapability: async () => true }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => state.db!.client }))
 vi.mock('@/lib/entitlements', () => ({ grantTierAllocations: async () => {} }))
 vi.mock('@/lib/member-profile-options', () => ({ syncMemberOptionSelections: async () => {} }))

@@ -16,7 +16,7 @@ describe('the Staff capability set (owner decisions, 13 Nov 2026)', () => {
   })
   it('leaves clearance, deletion, roles, Duties, scholarships, the access console, view-as and privacy requests to admins', () => {
     expect([...ADMIN_ONLY].sort()).toEqual(
-      ['access:manage', 'clearance:verify', 'duties:manage', 'impersonate', 'members:delete', 'privacy:read', 'roles:manage', 'scholarships:write'].sort(),
+      ['access:manage', 'clearance:verify', 'duties:manage', 'impersonate', 'members:delete', 'privacy:read', 'roles:manage', 'scholarships:write', 'store:write'].sort(),
     )
   })
 })

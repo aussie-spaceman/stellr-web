@@ -9,7 +9,7 @@ import { isScholarshipPercent } from '@/lib/scholarship-levels'
 // What offering this level would reimburse a student who has already paid —
 // shown in the review panel before the reviewer confirms. A read; nothing moves.
 export async function GET(req: Request) {
-  const reviewer = await requireScholarshipAdmin()
+  const reviewer = await requireScholarshipAdmin('portal:read')
   if (!reviewer) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const url = new URL(req.url)
   const registrationId = url.searchParams.get('registrationId')

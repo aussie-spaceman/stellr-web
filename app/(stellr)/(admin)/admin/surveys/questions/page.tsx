@@ -1,10 +1,9 @@
 import Link from 'next/link'
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { redirect } from 'next/navigation'
 import { GitBranch, Info } from 'lucide-react'
 import { Badge } from '@stellr/web-ui'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { normaliseDefinition, ROLES, versionName, type Question, type RespondentRole, type SurveyDefinition } from '@/lib/survey/definition'
 import { fillTemplate } from '@/lib/survey/branching'
 import { answerFormat, branchCounts, describeShowIf, pageTitle, skipNote, TYPE_LABELS } from '@/lib/survey/describe'
@@ -32,8 +31,7 @@ interface DefinitionRow {
 }
 
 export default async function SurveyQuestionsPage({ searchParams }: { searchParams: Promise<{ id?: string; role?: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
   const sp = await searchParams
   const role: RespondentRole = (ROLES as readonly string[]).includes(sp.role ?? '') ? (sp.role as RespondentRole) : 'student'
 

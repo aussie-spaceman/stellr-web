@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { BADGE_FORMATS, isBadgeFormat, placementFromLine } from '@/lib/badge-layout'
 import { isArtworkTheme } from '@/lib/artwork-theme'
 import { BADGE_PLACEMENT_RANGES, badgePlacementFromArtwork, claimArtwork, placementInput } from '@/lib/artwork-template-input'
@@ -20,7 +20,7 @@ const AUDIENCES = ['everyone', 'mentors'] as const
 type DefaultAudience = (typeof AUDIENCES)[number]
 
 export async function GET(_req: Request, { params }: Ctx) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
   const db = supabaseServer()
@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 // PUT { format, audience, storagePath?, fileType?, name_x?, name_y?, name_max_width?, name_size?, reset? }
 export async function PUT(req: Request, { params }: Ctx) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('competitions:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
 
@@ -92,7 +92,7 @@ export async function PUT(req: Request, { params }: Ctx) {
 // DELETE ?id= — events without their own background for that slot fall back
 // to the next one down (mentors → everyone → plain).
 export async function DELETE(req: Request, { params }: Ctx) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('competitions:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
   const id = new URL(req.url).searchParams.get('id') ?? ''

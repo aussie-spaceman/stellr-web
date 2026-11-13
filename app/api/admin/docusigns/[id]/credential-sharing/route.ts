@@ -39,7 +39,7 @@ type Agreement = { id: string; envelope_type: string | null; status: string | nu
 // Opting out makes any page that is already public private and emails the
 // family (guardian, student Cc'd) — see applyGuardianOptOut.
 async function setCredentialSharing(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth } from '@/lib/activity-log'
 import { grantVolunteerRole, revokeVolunteerRole } from '@/lib/volunteer'
 
@@ -13,7 +13,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function POST(_req: Request, { params }: Ctx) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('volunteers:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()
@@ -24,7 +24,7 @@ export async function POST(_req: Request, { params }: Ctx) {
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('volunteers:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { listDiscounts, upsertDiscount, deleteDiscount, type DiscountInput } from '@/lib/entitlements'
 import { withAudit } from '@/lib/audit/route'
 
@@ -7,7 +7,7 @@ import { withAudit } from '@/lib/audit/route'
 const auditedId = new WeakMap<Request, string>()
 
 export async function GET() {
-  if (!(await isStellrAdmin({ route: '/api/admin/entitlements/discounts' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/entitlements/discounts' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   try {
     const discounts = await listDiscounts()
     return NextResponse.json({ discounts })

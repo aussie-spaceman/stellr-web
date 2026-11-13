@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { hasCapability, type Capability } from '@/lib/authz'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { claimUpload } from '@/lib/uploads'
 import {
@@ -23,13 +22,13 @@ export const dynamic = 'force-dynamic'
 //          previous one. Like the member's own upload, a new document RESETS
 //          verification: the admin verifies it as a separate step.
 
-async function requireAdmin(): Promise<NextResponse | null> {
-  const { sessionClaims } = await auth()
-  return isAdminClaims(sessionClaims) ? null : NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+// Viewing the document is portal:read; uploading one on the member's behalf is members:write.
+async function requireAdmin(cap: Capability): Promise<NextResponse | null> {
+  return (await hasCapability(cap)) ? null : NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('portal:read')
   if (denied) return denied
 
   const { id } = await params
@@ -54,7 +53,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('members:write')
   if (denied) return denied
 
   const { id } = await params

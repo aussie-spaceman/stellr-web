@@ -37,7 +37,7 @@ function adminPages(): string[] {
 // they admit an event manager, which is the competitions and campaigns rule, not this
 // sweep's.
 const PAGE_GUARD =
-  /requireAdminPage\(|isAdminClaims\(|role\s*(!==|===)\s*['"]admin['"]|\.requireAdmin\(|requireStellrAdmin\(|isStellrAdmin\(|assertPlatformAdmin\(/
+  /requireAdminPage\(|isAdminClaims\(|role\s*(!==|===)\s*['"]admin['"]|\.requireAdmin\(|requireStellrAdmin\(|isStellrAdmin\(|assertPlatformAdmin\(|hasCapability\(|requireCapability\(/
 // A tenant check answers for one tenant, not for Stellr, so it counts only on a page
 // the manifest has moved to tenant_crew.
 const TENANT_PAGE_GUARD = /requireTenantAdmin\(|requireTenantCrew\(|assertTenantRole\(/

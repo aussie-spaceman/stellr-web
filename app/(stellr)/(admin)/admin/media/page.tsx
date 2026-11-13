@@ -1,7 +1,6 @@
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { allRows } from '@/lib/db'
 import { MemberLink, SchoolLink } from '@/components/admin/RecordLinks'
 import { resolveSchoolIds } from '@/lib/school-ids'
@@ -22,8 +21,7 @@ const PILL: Record<MediaStatus, string> = {
 }
 
 export default async function MediaDoNotUsePage({ searchParams }: { searchParams: Promise<{ event?: string; show?: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
   const params = await searchParams
   const eventSlug = params.event || null
   const includeOk = params.show === 'all'

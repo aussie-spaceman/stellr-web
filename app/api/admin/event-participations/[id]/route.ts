@@ -36,7 +36,7 @@ const stopsAtLoad = (scope: ScopeContext) => enforcedTenantFilter(scope, 'event_
 export const PATCH = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'event_participation.record.update', ...eventFor(req) }), updateParticipation)
 
 async function updateParticipation(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 
@@ -89,7 +89,7 @@ async function updateParticipation(req: Request, { params }: { params: Promise<{
 export const DELETE = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'event_participation.record.delete', ...eventFor(req) }), deleteParticipation)
 
 async function deleteParticipation(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

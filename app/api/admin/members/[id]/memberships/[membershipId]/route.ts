@@ -1,8 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
-import { isAdminClaims } from '@/lib/admin-auth'
 
 // PATCH  /api/admin/members/[id]/memberships/[membershipId] — edit one membership
 //        (expiry, status, complimentary flag).
@@ -32,7 +32,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; membershipId: string }> },
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: memberId, membershipId } = await params
   const body = await req.json().catch(() => ({}))
@@ -97,7 +97,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; membershipId: string }> },
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: memberId, membershipId } = await params
   const db = supabaseServer()

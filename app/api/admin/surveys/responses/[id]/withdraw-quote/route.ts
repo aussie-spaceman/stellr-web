@@ -31,7 +31,7 @@ const notFound = () => NextResponse.json({ error: 'Not found, not submitted, or 
 // POST /api/admin/surveys/responses/[id]/withdraw-quote — an admin withdraws a
 // response's quote (e.g. on a parent's request). Permanent; logged.
 async function withdraw(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: admin.status === 401 ? 'Unauthorised' : 'Admins only' }, { status: admin.status })
   const { userId } = await auth()
   const { id } = await params

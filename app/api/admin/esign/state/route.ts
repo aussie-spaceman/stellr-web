@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
@@ -13,7 +14,7 @@ const noStore = { 'Cache-Control': 'private, no-store' }
 
 export async function GET() {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const summary = await loadEngineSummary(supabaseServer())
   return NextResponse.json(summary, { headers: noStore })
 }

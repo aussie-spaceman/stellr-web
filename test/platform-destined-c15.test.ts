@@ -36,7 +36,8 @@ const GUARDS: [file: string, method: string, guard: string, from: string][] = [
   ['app/api/admin/members/merge/route.ts', 'GET', 'currentUserIsAdmin', ADMIN_AUTH],
   ['app/api/admin/members/merge/route.ts', 'POST', 'currentUserIsAdmin', ADMIN_AUTH],
   ['app/api/admin/privacy-requests/[id]/route.ts', 'PATCH', 'isAdminClaims', ADMIN_AUTH],
-  ['app/api/admin/schools/[id]/route.ts', 'PATCH', 'isAdminClaims', ADMIN_AUTH],
+  // Staff role phase 3 (13 Nov 2026): schools moved to its capability, schools:write.
+  ['app/api/admin/schools/[id]/route.ts', 'PATCH', 'hasCapability', AUTHZ],
 ]
 /** duties compares the session claim itself. */
 const INLINE_CLAIM_CHECK: [file: string, method: string][] = [
@@ -291,7 +292,7 @@ describe('who gets in', () => {
   // no Stellr membership. Only the handlers that reach isStellrAdmin notice, so these routes
   // ignore the postgres source until C25 converts them, whatever class they end in.
   describe('the Clerk admin claim with no Stellr membership', () => {
-    const REACHES_AUTHZ = ['app/api/admin/impersonation/route.ts', 'app/api/admin/members/merge/route.ts']
+    const REACHES_AUTHZ = ['app/api/admin/impersonation/route.ts', 'app/api/admin/members/merge/route.ts', 'app/api/admin/schools/[id]/route.ts']
     const CLAIM_ONLY = PAST_GUARD.filter(([file]) => !REACHES_AUTHZ.includes(file))
     const NO_MEMBERSHIP = { members: { id: MEMBER }, tenant_memberships: [] }
 

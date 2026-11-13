@@ -17,7 +17,7 @@
  *   - Admin only, to keep duties apart: clearing people (background-check
  *     adjudication, verifying external checks and teaching licences), deleting
  *     or merging members, granting Staff or Admin, Duties, scholarships, the
- *     access console, view-as, privacy requests.
+ *     store catalogue, the access console, view-as, privacy requests.
  *
  * Event Managers are not here: their access is per event (decideEventAccess).
  * Pure and DB-free, like lib/authz/decide.ts, so proxy.ts and tests can import it.
@@ -40,6 +40,7 @@ export const CAPABILITIES = [
   'export',
   // Admin only
   'scholarships:write',
+  'store:write',
   'access:manage',
   'roles:manage',
   'duties:manage',

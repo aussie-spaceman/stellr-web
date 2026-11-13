@@ -1,8 +1,7 @@
 import Link from 'next/link'
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { normaliseDefinition, ROLES, versionName, type RespondentRole } from '@/lib/survey/definition'
 import { runtimeOptions } from '@/lib/survey/access'
 import { SurveyPreview } from '@/components/admin/surveys/SurveyPreview'
@@ -13,8 +12,7 @@ export const metadata = { title: 'Admin — Survey preview' }
 export const dynamic = 'force-dynamic'
 
 export default async function SurveyPreviewPage({ searchParams }: { searchParams: Promise<{ id?: string; role?: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
   const sp = await searchParams
   if (!sp.id || !/^[0-9a-f-]{36}$/.test(sp.id)) notFound()
   const role: RespondentRole = (ROLES as readonly string[]).includes(sp.role ?? '') ? (sp.role as RespondentRole) : 'student'

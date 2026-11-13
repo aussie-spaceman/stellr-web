@@ -109,6 +109,10 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[];
   isStellrAdmin: { file: 'lib/authz.ts', kinds: ['admin'] },
   hasPortalAccess: { file: 'lib/authz.ts', kinds: ['admin'] },
   hasScope: { file: 'lib/authz.ts', kinds: ['admin'] },
+  // The Staff role (13 Nov 2026): an admin, or Staff for a capability Staff holds. Stellr only by construction.
+  requireCapability: { file: 'lib/authz.ts', kinds: ['admin'] },
+  hasCapability: { file: 'lib/authz.ts', kinds: ['admin'] },
+  'requireCapability@page': { file: 'lib/authz.ts', kinds: ['admin'], call: 'requireCapability', export: 'page.requireCapability' },
   requireTenantCrew: { file: 'lib/authz.ts', kinds: ['tenant'] },
   // Same name as the lib/event-access helper above, which C25 deletes. Codemod T5
   // re-points routes that stay stellr_only, so it is an admin check like the legacy
@@ -158,6 +162,8 @@ export const AUTHZ_DECISIONS: Partial<Record<GuardKind, Record<string, readonly 
     decidePortalAccess: [AUTHZ_DECIDE],
     decideScope: [AUTHZ_DECIDE],
     decideEventAccess: [AUTHZ_DECIDE],
+    // The Staff role (13 Nov 2026): an admin, or Stellr Staff for a capability Staff holds.
+    decideCapability: ['lib/authz/capabilities'],
   },
   tenant: {
     decideTenantRole: [AUTHZ_DECIDE],

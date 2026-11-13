@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveMemberSpaces } from '@/lib/spaces'
 import { resolveTierMap } from '@/lib/tiers-server'
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) {
+  if (!(await hasCapability('portal:read'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

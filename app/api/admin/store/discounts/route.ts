@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 // Both discount axes plus the lookup lists (tiers, products) the editor needs.
 export async function GET() {
-  if (!(await canManageStoreCatalog())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canManageStoreCatalog('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   try {
     const db = supabaseServer()
     const [tier, event, tiersRes, productsRes] = await Promise.all([

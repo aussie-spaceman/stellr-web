@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 
 // What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
@@ -55,7 +55,7 @@ async function validateObjectRule(b: Record<string, unknown>): Promise<string | 
 }
 
 export async function GET() {
-  if (!(await isStellrAdmin({ route: '/api/admin/membership/rules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/membership/rules' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data } = await db

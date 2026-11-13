@@ -129,7 +129,7 @@ export default async function AdminTrainingPage({
 }: {
   searchParams: Promise<{ tab?: string; obj?: string; filter?: string; course?: string }>
 }) {
-  await authz.page.requireStellrAdmin({ route: '/admin/academy/training' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/academy/training' })
   const sp = await searchParams
   const tab = (['overview', 'builder', 'tracking', 'reminders'].includes(sp.tab ?? '')
     ? sp.tab

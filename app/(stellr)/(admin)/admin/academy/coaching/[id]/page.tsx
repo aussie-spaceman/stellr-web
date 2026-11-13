@@ -13,7 +13,7 @@ import { authz } from '@/lib/authz'
 export const metadata = { title: 'Admin · Manage workshop' }
 
 export default async function AdminManageWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
-  await authz.page.requireStellrAdmin({ route: '/admin/academy/coaching/[id]' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/academy/coaching/[id]' })
   const member = await getSignedInMember()
   if (!member) redirect('/sign-in')
   if (!member.isAdmin) redirect('/community/coaching')

@@ -228,10 +228,11 @@ describe('what the pilot covers', () => {
 describe('the pages', () => {
   const proxy = readFileSync('proxy.ts', 'utf8')
 
-  it('guard with page.requireStellrAdmin, not the portal shell', () => {
+  // Staff role phase 3 (13 Nov 2026): these pages read for Staff too, page.requireCapability('portal:read').
+  it('guard with page.requireCapability(portal:read), not the portal shell', () => {
     for (const f of PAGES) {
       const src = readFileSync(f, 'utf8')
-      expect(src, f).toContain(`authz.page.requireStellrAdmin({ route: '${routeOf(f)}' })`)
+      expect(src, f).toContain(`authz.page.requireCapability('portal:read', { route: '${routeOf(f)}' })`)
       expect(src, f).not.toMatch(/requireAdminPage|page\.requireAdmin\(/)
     }
   })
@@ -240,7 +241,7 @@ describe('the pages', () => {
     for (const f of PAGES) {
       const src = readFileSync(f, 'utf8')
       const body = src.match(/export default (?:async )?function \w+\([^)]*(?:\{[^}]*\}[^)]*)?\)[^{]*\{\n(.*)/)
-      expect(body?.[1].trim(), f).toBe(`await authz.page.requireStellrAdmin({ route: '${routeOf(f)}' })`)
+      expect(body?.[1].trim(), f).toBe(`await authz.page.requireCapability('portal:read', { route: '${routeOf(f)}' })`)
     }
   })
 

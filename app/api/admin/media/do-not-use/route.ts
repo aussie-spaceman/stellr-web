@@ -15,7 +15,7 @@ const ROUTE = '/api/admin/media/do-not-use'
 export const maxDuration = 60
 
 export async function GET(req: Request) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: admin.status === 401 ? 'Unauthorised' : 'Admins only' }, { status: admin.status })
   const params = new URL(req.url).searchParams
   const eventSlug = params.get('event') || null

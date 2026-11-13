@@ -1,6 +1,6 @@
 import { NextResponse, after } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { RESOURCES_BUCKET, signedDownloadUrl, VIDEO_SIGNED_URL_TTL_SECONDS } from '@/lib/community'
 import { markPhase, recordingFileLimitBytes, runOffload } from '@/lib/recording-offload'
 import { recordingView, type OffloadRow } from '@/lib/recording-view'
@@ -31,7 +31,7 @@ async function load(itemId: string) {
 }
 
 export async function GET(req: Request) {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/training/recording' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/training/recording' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
 

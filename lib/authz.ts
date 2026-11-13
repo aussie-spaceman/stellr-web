@@ -35,6 +35,7 @@ import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { eventInScope } from '@/lib/tenancy/event-in-scope'
 import { tenantWideScope, type ScopeContext } from '@/lib/tenancy/scope-context'
 import { currentTenantId } from '@/lib/authz/tenant'
+import { capabilitiesOf, decideCapability, type Capability, type CapabilityDecision } from '@/lib/authz/capabilities'
 import {
   anonymousPrincipal,
   authzSource,
@@ -74,6 +75,7 @@ export { currentTenantId } from '@/lib/authz/tenant'
 // proxy.ts must import this from '@/lib/authz/decide': this module is server-only.
 export { portalRoleFromClaims } from '@/lib/authz/decide'
 export type { AuthzSource, Decision, EventAccess, Principal, TenantRole } from '@/lib/authz/decide'
+export type { Capability } from '@/lib/authz/capabilities'
 
 /** Options every decision takes. `route` labels a shadow mismatch (a route pattern, never a concrete path). */
 export interface AuthzOptions {
@@ -260,6 +262,30 @@ export async function assertTenantRole(tenantId: string, roles: readonly TenantR
 
 // ── Composites (the future DELEGATE guards) ────────────────────────────────
 
+/**
+ * May the caller use `cap` (lib/authz/capabilities.ts)? Admins hold every
+ * capability, Stellr Staff its named set, anyone else none. Deny by default.
+ */
+export async function requireCapability(cap: Capability, opts: AuthzOptions = {}): Promise<CapabilityDecision> {
+  return decide(
+    `capability:${cap}`,
+    opts,
+    async (s) => decideCapability(await principalFor(s), cap, s, currentTenantId()),
+    sameOk,
+    DENY_403,
+  )
+}
+
+export async function hasCapability(cap: Capability, opts: AuthzOptions = {}): Promise<boolean> {
+  return (await requireCapability(cap, opts)).ok
+}
+
+/** Every capability the caller holds, by the configured source. For the admin layout to hide controls; never a guard. */
+export async function currentCapabilities(): Promise<Capability[]> {
+  const s: DecisionSource = getAuthzSource() === 'postgres' ? 'postgres' : 'clerk'
+  return capabilitiesOf(await getPrincipal(), s, currentTenantId())
+}
+
 /** Replaces isAdminClaims / currentUserIsAdmin and the admin-only wrappers. */
 export async function requireStellrAdmin(opts: AuthzOptions = {}): Promise<Decision> {
   return decide('stellr_admin', opts, async (s) => decideStellrAdmin(await principalFor(s), s, currentTenantId()), sameOk, DENY_403)
@@ -273,7 +299,7 @@ export async function requireTenantCrew(tenantId: string, roles: readonly Tenant
   return decide('tenant_crew', opts, async (s) => decideTenantCrew(await principalFor(s), tenantId, roles, s), sameOk, DENY_403)
 }
 
-/** Replaces hasAdminPortalAccess: an admin or an event manager. Staff never. */
+/** Replaces hasAdminPortalAccess: an admin, Stellr Staff or an event manager. A duty never. */
 export async function hasPortalAccess(opts: AuthzOptions = {}): Promise<boolean> {
   return decide(
     'portal',
@@ -608,6 +634,12 @@ export const page = {
     if (!session.userId) redirect('/sign-in')
     if (!(await requireEventAccess(undefined, opts)).ok) notFound()
   },
+  /** Holders of `cap`: an admin, or Staff when the capability is Staff's. */
+  async requireCapability(cap: Capability, opts: AuthzOptions = {}): Promise<void> {
+    const session = await clerkSession()
+    if (!session.userId) redirect('/sign-in')
+    if (!(await requireCapability(cap, opts)).ok) notFound()
+  },
   /** Stellr admins only. */
   async requireStellrAdmin(opts: AuthzOptions = {}): Promise<void> {
     const session = await clerkSession()
@@ -631,6 +663,10 @@ export const api = {
     const d = await requireStellrAdmin(opts)
     return d.ok ? { ok: true, value: d } : { ok: false, deny: denyResponse(d.status) }
   },
+  async requireCapability(cap: Capability, opts: AuthzOptions = {}): Promise<ApiResult<CapabilityDecision & { ok: true }>> {
+    const d = await requireCapability(cap, opts)
+    return d.ok ? { ok: true, value: d } : { ok: false, deny: denyResponse(d.status) }
+  },
   async requireTenantCrew(tenantId: string, roles: readonly TenantRole[], opts: AuthzOptions = {}): Promise<ApiResult<Decision & { ok: true }>> {
     const d = await requireTenantCrew(tenantId, roles, opts)
     return d.ok ? { ok: true, value: d } : { ok: false, deny: denyResponse(d.status) }
@@ -652,6 +688,9 @@ export const authz = {
   requireStellrAdmin,
   isStellrAdmin,
   requireTenantCrew,
+  requireCapability,
+  hasCapability,
+  currentCapabilities,
   hasPortalAccess,
   requireEventAccess,
   requireEventCrew,

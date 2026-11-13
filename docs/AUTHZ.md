@@ -17,6 +17,16 @@ Plan of record: `docs/TENANCY-S5.md`. Built by C1, C5a, C6 and C9. Code wins ove
 | staff inbox (`staffAlertEmail`) | team inbox (`teamInboxEmail`) | The shared mailbox admin alerts fall back to |
 | `member_role_type 'staff'` | unchanged | Will mirror the Staff role; its backfilled rows were removed |
 
+## Staff and capabilities (13 Nov 2026)
+
+Staff is a portal role between Event Manager and Admin, **Stellr only**: the Clerk claim `staff` (clerk source) or a Stellr `tenant_memberships` row `staff` (postgres). A `staff` row on any other tenant grants nothing.
+
+- **Portal:** Staff enters `/admin` (`decidePortalAccess`). `proxy.ts` sends Staff away from `STAFF_HIDDEN_ADMIN_PATHS`: view-as, `/admin/duties`, `/admin/members/access`, `/admin/privacy-requests`.
+- **Events:** `decideEventAccess` gives Staff every Stellr event with `isAdmin: false`, so an admin-only branch inside an event route still refuses it.
+- **Capabilities:** `lib/authz/capabilities.ts` names what each role may do. Admin holds all; Staff holds `STAFF_CAPABILITIES` (`portal:read`, `competitions:write`, `refunds:write`, `event_managers:assign`, `members:write`, `schools:write`, `volunteers:write`, `export`); everyone else none. Guard with `requireCapability(cap)`, `api.requireCapability(cap)` or `page.requireCapability(cap)`.
+- **Fails closed:** every route still guarded by `isAdminClaims` / `isStellrAdmin` refuses Staff until it is converted to a capability, so a route nobody converted stays admin-only.
+- **Granting** is `lib/staff.ts` (prerequisites: staff agreement, cleared background check, MFA, training); never set the claim by hand.
+
 ## Where it stands
 
 **Routes now decide through `lib/authz`** (corrected 12 Nov 2026; this section used to say none did). The conversion slices since wave 3 moved them on: on `dev` at `82472e0d`, 89 files under `app/` import `@/lib/authz`, 71 of them under `app/api`, most often through `isStellrAdmin`, `requireEventRoute`, `authz`, `requireEventCrew` and `requireTenantCrew`. The role-sync helpers (`lib/authz/role-sync.ts`, `lib/authz/role-sync-report.ts`) still keep the tables in step from the duties and event-managers routes and `lib/deletion/execute.ts`. What that means:

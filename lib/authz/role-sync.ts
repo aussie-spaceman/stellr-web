@@ -182,7 +182,7 @@ export async function loadEventAssignees(db: SupabaseClient, eventSlug: string):
   }
 }
 
-// ── Staff (admin_duties is Stellr's only) ───────────────────────────────────
+// ── Duties (admin_duties is Stellr's only) ──────────────────────────────────
 
 /** After admin_duties is written. Scopes stay in admin_duties; a membership says only that the role is held. */
 export function syncDutyGranted(db: SupabaseClient, memberId: string): Promise<RoleSyncResult> {
@@ -207,6 +207,18 @@ export function syncDutyRevoked(db: SupabaseClient, memberId: string): Promise<R
       if (attempt.status === 'rejected') throw attempt.reason
     }
   })
+}
+
+// ── Staff (lib/staff.ts; Stellr's alone) ────────────────────────────────────
+
+/** After the Clerk 'staff' role is set on activation. Keyed by Clerk id, as tenant_admin is. */
+export function syncStaffGranted(db: SupabaseClient, clerkUserId: string): Promise<RoleSyncResult> {
+  return guarded('staff_grant', () => ensureMembership(db, STELLR_TENANT_ID, 'staff', { clerkUserId, memberId: null }))
+}
+
+/** After the Clerk 'staff' role is cleared (revoke, suspension, expiry). */
+export function syncStaffRevoked(db: SupabaseClient, clerkUserId: string): Promise<RoleSyncResult> {
+  return guarded('staff_revoke', () => removeMembership(db, STELLR_TENANT_ID, 'staff', { clerkUserId, memberId: null }))
 }
 
 // ── Admins (scripts/set-admin.ts) ──────────────────────────────────────────
@@ -289,6 +301,7 @@ export async function loadRoleInput(db: SupabaseClient, clerkUsers: readonly Cle
   }
   return {
     clerkAdminIds: clerkUsers.filter((u) => u.role === 'admin').map((u) => u.id),
+    clerkStaffIds: clerkUsers.filter((u) => u.role === 'staff').map((u) => u.id),
     clerkEventManagerIds: clerkUsers.filter((u) => u.role === 'event_manager').map((u) => u.id),
     eventManagers: managers,
     duties: dutyIds.map((id) => ({ member_id: id, clerk_user_id: clerkByMember.get(id) ?? null })),

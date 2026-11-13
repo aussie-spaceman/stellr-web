@@ -281,7 +281,8 @@ describe('lib/admin-auth, the shims, answer as the frozen legacy code did', () =
     for (const v of [undefined, null, '', 'admin', 'event_manager', 'member', 'Admin', 7, ['admin'], {}]) {
       expect(shim.isCrewRole(v), String(v)).toBe(isCrewRole(v))
     }
-    expect([...shim.CREW_CLERK_ROLES]).toEqual(['admin', 'event_manager'])
+    // The Staff role (13 Nov 2026) is the one deliberate addition to the frozen list.
+    expect([...shim.CREW_CLERK_ROLES]).toEqual(['admin', 'staff', 'event_manager'])
   })
 })
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Collapsible } from '@stellr/web-ui'
 import { MemberLink } from '@/components/admin/RecordLinks'
 import type { CredentialRow } from '@/lib/credentials-core'
+import { describeSkips, type CredentialSkip } from '@/lib/credentials-skip'
 import { EVENT_AWARDS } from '@/lib/event-awards'
 
 // Participation credentials panel on the competition admin page: the
@@ -99,9 +100,11 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
     setBusy('issue'); setMsg(null)
     try {
       const res = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, audience }) })
-      const d = (await res.json()) as { error?: string; created?: number; existing?: number; emailed?: number; considered?: number; failures?: string[] }
+      const d = (await res.json()) as { error?: string; created?: number; existing?: number; emailed?: number; considered?: number; skips?: CredentialSkip[]; failures?: string[] }
       if (!res.ok) throw new Error(d.error ?? 'Issue failed')
       const bits = [`${d.created} issued`, `${d.existing} already held one`, `${d.emailed} emailed`]
+      // A refusal (S5 A10a) is a skip with its reason, not a failure.
+      bits.push(...describeSkips(d.skips ?? []))
       if (d.failures?.length) bits.push(`${d.failures.length} failed: ${d.failures.join('; ')}`)
       setMsg({ text: `${d.considered} considered — ${bits.join(', ')}.`, error: !!d.failures?.length })
       await load()

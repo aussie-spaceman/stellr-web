@@ -2,6 +2,9 @@ import { SITE_URL } from '@/lib/env'
 import { ageOn, isMinorOn } from '@/lib/age'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
+// The bulk-issue skip labels live in a dependency-free module the admin panels import.
+export * from '@/lib/credentials-skip'
+
 // ── Verifiable credentials: pure helpers ─────────────────────────────────────
 // Edge-safe (no Node crypto, no DocuSign): imported by the OG image and badge
 // routes as well as by lib/credentials.ts, which re-exports everything here.

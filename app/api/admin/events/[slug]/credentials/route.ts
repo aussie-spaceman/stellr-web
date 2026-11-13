@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/events/repo'
-import { issueCredential, eventTenantOnce, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
+import { issueCredential, eventTenantOnce, recordSkip, CREDENTIAL_COLUMNS, type CredentialRow, type CredentialSkip } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { themeFromType } from '@/lib/campaigns'
 import { EVENT_AWARDS, mentorCredentialTitle } from '@/lib/event-awards'
@@ -131,6 +131,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slug: 
 // can override. Mentors are not checked in at the door, so every assigned
 // mentor is issued and `mode` is ignored; Revoke covers a no-show.
 // Idempotent: anyone already holding one is skipped, not duplicated.
+// A person issueCredential refuses (another tenant's event, or a consent form not yet
+// signed: S5 A10a) is counted in `skipped` with the reason in `skips`, not as a
+// failure (owner-approved follow-up, 13 Nov 2026). `failures` is for what went wrong.
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await requireEventAccess(slug)
@@ -170,6 +173,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   let existing = 0
   let emailed = 0
   const failures: string[] = []
+  const skips: CredentialSkip[] = []
   // The event's owner, read once for the run (S5 A10a).
   const eventTenant = eventTenantOnce(db, slug)
   for (const p of people) {
@@ -204,11 +208,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         existing++
       }
     } catch (err) {
-      failures.push(`${p.first_name} ${p.last_name}: ${(err as Error).message}`)
+      const name = `${p.first_name} ${p.last_name}`
+      if (!recordSkip(err, name, skips)) failures.push(`${name}: ${(err as Error).message}`)
     }
   }
 
-  return NextResponse.json({ ok: true, mode, considered: people.length, created, existing, emailed, failures })
+  return NextResponse.json({ ok: true, mode, considered: people.length, created, existing, emailed, skipped: skips.length, skips, failures })
 }
 
 async function issueToMentors(
@@ -224,6 +229,7 @@ async function issueToMentors(
   let existing = 0
   let emailed = 0
   const failures: string[] = []
+  const skips: CredentialSkip[] = []
   const eventTenant = eventTenantOnce(db, slug)
   for (const m of mentors) {
     try {
@@ -249,10 +255,11 @@ async function issueToMentors(
         existing++
       }
     } catch (err) {
-      failures.push(`${m.first_name} ${m.last_name}: ${(err as Error).message}`)
+      const name = `${m.first_name} ${m.last_name}`
+      if (!recordSkip(err, name, skips)) failures.push(`${name}: ${(err as Error).message}`)
     }
   }
-  return { ok: true, audience: 'mentors' as const, mode: 'all' as const, considered: mentors.length, created, existing, emailed, failures }
+  return { ok: true, audience: 'mentors' as const, mode: 'all' as const, considered: mentors.length, created, existing, emailed, skipped: skips.length, skips, failures }
 }
 
 async function registrationIds(slug: string): Promise<string[]> {

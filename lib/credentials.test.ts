@@ -42,7 +42,11 @@ import {
   eventTenantOnce,
   reinstateCredential,
   listWalletCredentials,
+  recordSkip,
+  describeSkips,
+  NOT_ISSUED_SHORT,
   type CredentialRow,
+  type CredentialSkip,
 } from './credentials'
 
 const NOW = new Date('2026-09-21T12:00:00Z')
@@ -787,5 +791,40 @@ describe('isStellrCredential (W7-10: public page, badge, card and wallet)', () =
     expect(isStellrCredential({ tenant_id: null })).toBe(true)
     expect(isStellrCredential({ tenant_id: 'c0000000-0000-4000-8000-0000000000aa' })).toBe(false)
     expect(isStellrCredential({} as { tenant_id: string | null })).toBe(false)
+  })
+})
+
+// S5 A10a follow-up (owner-approved 13 Nov 2026): a bulk issue counts a refusal as a
+// skip with its reason, and leaves anything else to be reported as a failure.
+describe('recordSkip and describeSkips', () => {
+  it('records a refusal as a skip with its reason', () => {
+    const skips: CredentialSkip[] = []
+    expect(recordSkip(new CredentialNotIssuedError('tenant_not_issuer'), 'A Person', skips)).toBe(true)
+    expect(recordSkip(new CredentialNotIssuedError('consent_pending'), 'B Person', skips)).toBe(true)
+    expect(skips).toEqual([
+      { name: 'A Person', reason: 'tenant_not_issuer' },
+      { name: 'B Person', reason: 'consent_pending' },
+    ])
+  })
+
+  it('leaves any other error to the caller', () => {
+    const skips: CredentialSkip[] = []
+    expect(recordSkip(new Error('insert failed'), 'A Person', skips)).toBe(false)
+    expect(recordSkip('not an error', 'A Person', skips)).toBe(false)
+    expect(skips).toEqual([])
+  })
+
+  it('describes skips once per reason, with a count', () => {
+    expect(describeSkips([])).toEqual([])
+    expect(
+      describeSkips([
+        { reason: 'tenant_not_issuer' },
+        { reason: 'consent_pending' },
+        { reason: 'tenant_not_issuer' },
+      ]),
+    ).toEqual([
+      `2 skipped (${NOT_ISSUED_SHORT.tenant_not_issuer})`,
+      `1 skipped (${NOT_ISSUED_SHORT.consent_pending})`,
+    ])
   })
 })

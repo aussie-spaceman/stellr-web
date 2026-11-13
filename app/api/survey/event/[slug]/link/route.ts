@@ -6,7 +6,8 @@ import { requestTenant } from '@/lib/tenancy/request-tenant'
 import { recordOnHost, recordTenant } from '@/lib/tenancy/host-record'
 import { withAudit } from '@/lib/audit/route'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
-import { distributionForEvent, loadDefinition, statusNow } from '@/lib/survey/distributions'
+import { distributionForEvent, distributionTenant, loadDefinition, statusNow } from '@/lib/survey/distributions'
+import { surveySendsHeld } from '@/lib/survey/hold'
 import { heldForConsent, sendLinkEmail, type InvitationRow } from '@/lib/survey/send'
 
 // POST /api/survey/event/[slug]/link { email } — the QR page's "email me my
@@ -47,8 +48,10 @@ export const POST = withAudit(
       if (data?.length) {
         const { def } = await loadDefinition(db, d.definition_id)
         // A guardian address can hold several students' invitations: send each, except one
-        // held for guardian consent (decision W7-13), read once for them all.
-        const held = await heldForConsent(db, d)
+        // held for guardian consent (decision W7-13), read once for them all. Another
+        // tenant's survey sends nothing yet (W7-16), so its consent is not read: sendLinkEmail
+        // refuses each of its invitations first, and the answer is the same { ok: true }.
+        const held = surveySendsHeld(distributionTenant(d)) ? null : await heldForConsent(db, d)
         let sent = 0
         for (const inv of data as InvitationRow[]) if (await sendLinkEmail(db, inv, d, def, held)) sent++
         noteAuditSubject(req, { detail: { sent } })

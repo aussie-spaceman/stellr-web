@@ -20,6 +20,12 @@
 // mail, and is refused for another tenant's event: app/api/volunteer/interest.) The same
 // re-check holds for an admin's resend and the QR page's "email me my link", and the
 // admin's late-open preview counts the people the plan would.)
+//
+// Since W7-16 another tenant's survey sends no email at all yet (lib/survey/hold.ts): its
+// links are on Stellr's host, which refuses its token. That hold sits in front of the
+// consent re-check, so the re-check tests here run with it lifted, as it will be once
+// tenant-host survey links exist; the hold itself, both directions, is pinned in
+// lib/survey/send-hold.test.ts, and one test here shows it holds the signed student too.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STELLR_TENANT_ID as STELLR } from '@/lib/tenancy/constants'
 import { fakeChainDb, type Answer, type ChainCall, type Row } from '@/test/helpers/fake-chain-db'
@@ -32,7 +38,13 @@ const h = vi.hoisted(() => ({
   sendEmail: vi.fn(async (_m: unknown) => ({ id: 'email_1' })),
   // The tenant's participants whose consent is not signed: only PENDING.
   unconsented: vi.fn(async (_db: unknown, _tenantId: string) => new Set<string>(['p-pending'])),
+  // The survey tenant hold (W7-16), lifted for the consent re-check tests.
+  surveyHoldLifted: true,
 }))
+vi.mock('@/lib/survey/hold', async (orig) => {
+  const real = await orig<typeof import('@/lib/survey/hold')>()
+  return { ...real, surveySendsHeld: (tenantId: string) => !h.surveyHoldLifted && real.surveySendsHeld(tenantId) }
+})
 
 vi.mock('@/lib/env', async (orig) => ({ ...(await orig<Record<string, unknown>>()), SITE_URL: 'https://www.example.test' }))
 vi.mock('@/lib/email', () => ({
@@ -81,6 +93,7 @@ beforeEach(() => {
   vi.stubEnv('SURVEY_TOKEN_SECRET', 'test-only-token-secret-not-used-anywhere-else')
   h.sendEmail.mockClear()
   h.unconsented.mockClear()
+  h.surveyHoldLifted = true
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -432,6 +445,21 @@ describe('survey invitations', () => {
     const still = new Set(INVITATIONS().map((i) => i.recipient_key as string))
     await expect(sendQueued(db, asDistribution(distribution(CANARY)), DEF, still, emptyTally(), Date.now() + 60_000, NOW)).rejects.toThrow('down')
     expect(h.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("with the tenant hold in place (W7-16), another tenant's survey sends nobody, the signed student included, and reads no consent", async () => {
+    h.surveyHoldLifted = false
+    const still = new Set(INVITATIONS().map((i) => i.recipient_key as string))
+    const queued = surveyDb(INVITATIONS())
+    await sendQueued(queued.db, asDistribution(distribution(CANARY)), DEF, still, emptyTally(), Date.now() + 60_000, NOW)
+    const reminders = surveyDb(INVITATIONS('sent'))
+    await sendReminders(reminders.db, asDistribution(distribution(CANARY)), DEF, still, emptyTally(), Date.now() + 60_000, NOW)
+    const inv = byId('queued')
+    expect(await sendLinkEmail(queued.db, inv['inv-signed'], asDistribution(distribution(CANARY)), DEF)).toBe(false)
+    expect((await resendInvitation(queued.db, inv['inv-signed'], asDistribution(distribution(CANARY)), DEF)).ok).toBe(false)
+    expect(h.sendEmail).not.toHaveBeenCalled()
+    expect(consentReads()).toBe(0)
+    expect(queued.rpcCalls).toEqual([])
   })
 
   it("Stellr's invitations and reminders, a NULL tenant included, send to everyone as before, with no consent read", async () => {

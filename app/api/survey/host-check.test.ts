@@ -54,6 +54,7 @@ vi.mock('@/lib/survey/access', () => ({
 }))
 vi.mock('@/lib/survey/distributions', () => ({
   distributionForEvent: async () => h.dist,
+  distributionTenant: (d: { tenant_id: string | null }) => d.tenant_id ?? STELLR,
   statusNow: () => 'open',
   loadDefinition: async () => ({ def: {} }),
 }))
@@ -191,7 +192,7 @@ describe('"email me my link": only this host’s survey sends', () => {
     expect(h.sendLink).toHaveBeenCalledTimes(2)
   })
 
-  it("sends nothing for Stellr's survey on another tenant's host, and sends that tenant's own", async () => {
+  it("sends nothing for Stellr's survey on another tenant's host, and hands that tenant's own to the send, which holds it", async () => {
     onCanaryHost()
     h.dist = distribution(null)
     h.inv = invitation(null)
@@ -200,13 +201,23 @@ describe('"email me my link": only this host’s survey sends', () => {
     expect(h.held).not.toHaveBeenCalled()
     h.dist = distribution(CANARY)
     h.inv = invitation(CANARY)
-    const hold = new Set(['p-held'])
-    h.held.mockResolvedValueOnce(hold)
-    await ask()
+    expect(await (await ask()).json()).toEqual({ ok: true })
+    // The tenant's survey email is held (W7-16, refused inside sendLinkEmail), so its
+    // guardian consent is not read for the request.
     expect(h.sendLink).toHaveBeenCalledTimes(1)
-    // The consent hold is read once for the request, and the send is given it.
-    expect(h.held).toHaveBeenCalledTimes(1)
-    expect(h.sendLink.mock.calls[0][4]).toBe(hold)
+    expect(h.held).not.toHaveBeenCalled()
+    expect(h.sendLink.mock.calls[0][4]).toBeNull()
+  })
+
+  it("reads the consent hold once for Stellr's survey, and gives it to the send", async () => {
+    for (const tenant of [STELLR, null]) {
+      h.dist = distribution(tenant)
+      h.inv = invitation(tenant)
+      await ask()
+    }
+    // Stellr's heldForConsent reads nothing and answers null; the route still asks it, as before.
+    expect(h.held).toHaveBeenCalledTimes(2)
+    expect(h.sendLink).toHaveBeenCalledTimes(2)
   })
 
   it('answers the same when there is no survey at all', async () => {

@@ -57,7 +57,7 @@ Owner decision, 10 Nov 2026: a Stellr member's profile is not used at a tenant e
 On a tenant host:
 
 - **Individual:** the gate reads neither the session's member nor Stellr's child-awaiting-consent state. The typed address stands, the typed date of birth is not compared with a stored one, and the registration is treated as having no session.
-- **Group:** the organiser's typed address stands, and no session member is read.
+- **Group:** the organiser's typed address and name stand, and no session member is read. On Stellr's hosts a signed-in organiser's name is their account's, whatever is sent (owner decision, 13 Nov 2026; `settleRegistrantName` in `lib/registration/group/parse.ts`).
 - **Group-join** already worked this way.
 
 These registrations link no member, so nothing may treat their typed email as the session's. Until S7, a tenant event relies on the typed date of birth alone. On Stellr's hosts the gates run the same code as before.

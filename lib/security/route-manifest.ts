@@ -163,6 +163,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/admin/members/[id]/background-check/route.ts': 'stellr_only',
   'app/api/admin/members/[id]/event-manager/route.ts': 'stellr_only',
   'app/api/admin/members/[id]/staff/route.ts': 'stellr_only',
+  'app/api/admin/staff-settings/route.ts': 'stellr_only',
   'app/api/admin/members/[id]/event-participations/route.ts': 'stellr_only',
   'app/api/admin/members/[id]/external-check/route.ts': 'stellr_only',
   'app/api/admin/members/[id]/invite/route.ts': 'stellr_only',

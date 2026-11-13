@@ -80,6 +80,10 @@ Signed agreements: duration of membership and 7 years after the account is deact
 
 See `information-security-program.md`: fragment tokens, 30-minute session cookies, private-route headers, append-only audit trail, encrypted off-site copy, integrity checks, access log, admin-only downloads with no download under impersonation.
 
+### Staff access (13 Nov 2026)
+
+Staff (paid staff or highly engaged volunteers) read every minor's record in the admin portal. Mitigations: Staff activate only with a signed Staff agreement (confidentiality, need-to-know, a safeguarding code with no private one-to-one contact with minors, duty to report), a cleared background check, MFA and the Staff safeguarding and privacy training; access pauses when any lapses and ends after 3 years. Each view of a minor's record, each roster view and each export is logged by IDs in `record_access_log`, and the Friday digest names unusual volumes. Staff cannot make clearance decisions or override the minor-agreement requirement on a survey. Research and the legal questions still open: `staff-role-review.md`.
+
 ## 11. Risks and mitigations
 
 | # | Risk to minors | Likelihood | Impact | Mitigation in place | Remaining action |

@@ -1,4 +1,4 @@
-import { hasCapability } from '@/lib/authz'
+import { hasCapability, isStellrAdmin } from '@/lib/authz'
 import { logRecordAccess } from '@/lib/record-access-log'
 import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
@@ -219,6 +219,7 @@ export default async function AdminMemberPage({
       scholarships={scholarships}
       surveys={surveys}
       canManageEventManager={canManageEventManager}
+      viewerIsAdmin={await isStellrAdmin()}
     />
   )
 }

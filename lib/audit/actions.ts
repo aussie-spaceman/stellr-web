@@ -189,6 +189,7 @@ export const AUDIT_ACTIONS = [
   'staff.suspend',
   'staff.revoke',
   'staff.expire',
+  'staff.settings.update',
   // Exports of personal data (Staff role phase 4): also in record_access_log
   'export.roster',
   'export.members',

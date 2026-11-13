@@ -62,6 +62,7 @@ const ADMIN_ONLY = [
   /^members\/merge$/,
   /^members\/\[id\]\/background-check\/adjudicate$/,
   /^members\/\[id\]\/staff$/,
+  /^staff-settings$/,
   /^esign\/templates(?!\/\[id\]\/preview$)/, // reading a template's preview is portal:read
   /^esign\/(maintenance|membership-backfill)$/,
   /^compliance\/sync$/,

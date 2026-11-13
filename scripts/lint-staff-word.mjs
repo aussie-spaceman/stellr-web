@@ -106,7 +106,7 @@ export function findStaffWords(fileName, text) {
     }
     const hit = value !== null ? RETIRED_RE.exec(value) : null
     // '/admin/staff' is retired only as the whole path: /admin/staffing is not it.
-    if (hit && !(hit[0] === '/admin/staff' && /^[a-z]/.test(value.slice(hit.index + hit[0].length)))) {
+    if (hit && !(hit[0] === '/admin/staff' && /^[a-z-]/.test(value.slice(hit.index + hit[0].length)))) {
       const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf))
       if (!OPT_OUT.test(lines[line] ?? '')) hits.push({ line: line + 1, what, value: value.trim().slice(0, 80), retired: hit[0] })
     }

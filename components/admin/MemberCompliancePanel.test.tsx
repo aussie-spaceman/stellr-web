@@ -136,3 +136,15 @@ describe('MemberCompliancePanel — uploaded background check', () => {
     })
   })
 })
+
+describe('MemberCompliancePanel — Staff (canVerify off)', () => {
+  it('shows the license but no Mark verified: an admin verifies', () => {
+    render(<MemberCompliancePanel memberId="m1" compliance={compliance({ state: 'in_process', license })} canVerify={false} />)
+    expect(screen.queryByRole('button', { name: /Mark verified/ })).toBeNull()
+    expect(screen.getByText('An admin verifies teaching licenses.')).toBeInTheDocument()
+  })
+  it('an admin still gets Mark verified', () => {
+    render(<MemberCompliancePanel memberId="m1" compliance={compliance({ state: 'in_process', license })} />)
+    expect(screen.getByRole('button', { name: /Mark verified/ })).toBeInTheDocument()
+  })
+})

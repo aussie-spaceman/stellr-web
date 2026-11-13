@@ -20,13 +20,13 @@
     "roleTableRead"
   ],
   "totals": {
-    "files": 135,
-    "sites": 190,
+    "files": 134,
+    "sites": 189,
     "byIdiom": {
       "CREW_CLERK_ROLES": 1,
       "adminName": 5,
       "canManageStoreCatalog": 14,
-      "clerkRoleRead": 12,
+      "clerkRoleRead": 11,
       "currentUserHasScope": 3,
       "currentUserIsAdmin": 17,
       "hasAdminPortalAccess": 1,
@@ -456,9 +456,6 @@
     "lib/uploads.ts": {
       "clerkRoleRead": 1,
       "requireEventAccess": 2
-    },
-    "proxy.ts": {
-      "clerkRoleRead": 1
     }
   }
 }

@@ -39,6 +39,13 @@ export const STAFF_ROLE_FILES = {
   // The gate and the one-off rename name the word on purpose.
   'scripts/lint-staff-word.mjs': 'this gate',
   'scripts/codemods/rename-staff.mjs': 'the 13 Nov rename, kept as the record of it',
+  // The Staff role itself (13 Nov 2026).
+  'lib/authz/capabilities.ts': 'implements the Staff role',
+  'lib/authz/decide.ts': 'implements the Staff role (portal role, event access, hidden pages)',
+  'lib/authz/principal.ts': "tenant_role 'staff' is the Staff role",
+  'lib/authz/role-sync.ts': 'keeps the Staff membership in step with the Clerk role',
+  'lib/tenancy/role-mapping.ts': 'maps the Clerk staff role to its membership',
+  'proxy.ts': 'gates Staff in the admin portal',
   // member_role_type 'staff' is kept: it mirrors the Staff role.
   'lib/member-roles.ts': "member_role_type 'staff' mirrors the Staff role",
   'components/admin/access/PeopleTab.tsx': "member_role_type 'staff' mirrors the Staff role",

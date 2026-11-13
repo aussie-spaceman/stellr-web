@@ -22,7 +22,7 @@ export class AuthzLookupError extends Error {
   }
 }
 
-const TENANT_ROLES: readonly TenantRole[] = ['tenant_admin', 'event_manager', 'duty_holder']
+const TENANT_ROLES: readonly TenantRole[] = ['tenant_admin', 'staff', 'event_manager', 'duty_holder']
 
 function isTenantRole(v: unknown): v is TenantRole {
   return typeof v === 'string' && (TENANT_ROLES as readonly string[]).includes(v)

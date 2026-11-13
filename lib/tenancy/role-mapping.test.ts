@@ -269,3 +269,23 @@ describe('dualWriteTarget', () => {
     expect(dualWriteTarget({ ...dev, isProductionDb: true, clerkLive: true, productionFlag: true })).toEqual({ write: true })
   })
 })
+
+describe('Staff (13 Nov 2026)', () => {
+  const base = { clerkAdminIds: [], eventManagers: [], duties: [], existingMemberships: [], existingPlatformAdmins: [] }
+  it('maps a Clerk staff role to a Stellr staff membership, keyed by Clerk id', () => {
+    expect(planRoleMapping({ ...base, clerkStaffIds: ['user_s'] }).memberships).toMatchObject([
+      { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'staff' },
+    ])
+  })
+  it('never plans Staff for another tenant', () => {
+    expect(planRoleMapping({ ...base, clerkStaffIds: ['user_s'] }, 'another-tenant').memberships).toEqual([])
+  })
+  it('a staff row is stale once the Clerk role is gone, and unknown when Clerk staff ids were not read', () => {
+    const existingMemberships = [{ tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'staff' }]
+    const diff = { ...base, clerkEventManagerIds: [], existingMemberships }
+    expect(diffRoleMapping({ ...diff, clerkStaffIds: [] }).stale).toEqual([{ clerk_user_id: 'user_s', member_id: null, role: 'staff' }])
+    expect(diffRoleMapping({ ...diff, clerkStaffIds: ['user_s'] }).stale).toEqual([])
+    expect(diffRoleMapping(diff).stale).toEqual([])
+  })
+})
+

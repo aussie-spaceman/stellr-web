@@ -9,8 +9,10 @@
  *       -> tenant_memberships tenant_admin for Stellr
  *   event_manager_assignments.clerk_user_id
  *       -> tenant_memberships event_manager for Stellr (one per person, not per event)
+ *   Clerk Staff (public_metadata.role = 'staff', 13 Nov 2026)
+ *       -> tenant_memberships staff for Stellr (Staff is Stellr's alone)
  *   admin_duties.member_id
- *       -> tenant_memberships staff for Stellr (keyed by member, with the
+ *       -> tenant_memberships duty_holder for Stellr (keyed by member, with the
  *          member's Clerk id when it has one)
  *
  * S5 C9 keeps the rows in step with those authorities: lib/authz/role-sync.ts
@@ -20,7 +22,7 @@
  */
 import { STELLR_TENANT_ID } from './constants'
 
-export type TenantRole = 'tenant_admin' | 'event_manager' | 'duty_holder'
+export type TenantRole = 'tenant_admin' | 'staff' | 'event_manager' | 'duty_holder'
 
 export interface MembershipRow {
   tenant_id: string
@@ -32,6 +34,8 @@ export interface MembershipRow {
 
 export interface RoleMappingInput {
   clerkAdminIds: string[]
+  /** Clerk users whose public_metadata.role is 'staff'. Absent: not read, so staff rows are neither planned nor called stale. */
+  clerkStaffIds?: string[]
   /** tenant_id is the row's derived tenant; null or absent counts as Stellr's, as in lib/authz/decide.ts. */
   eventManagers: { clerk_user_id: string; tenant_id?: string | null }[]
   duties: { member_id: string; clerk_user_id: string | null }[]
@@ -73,6 +77,7 @@ export function planRoleMapping(input: RoleMappingInput, tenantId: string = STEL
     source: MAPPING_SOURCE,
   })
   for (const id of new Set(input.clerkAdminIds.filter(Boolean))) wanted.push(row(id, null, 'tenant_admin'))
+  if (tenantId === STELLR_TENANT_ID) for (const id of new Set((input.clerkStaffIds ?? []).filter(Boolean))) wanted.push(row(id, null, 'staff'))
   for (const id of new Set(managersInTenant(input.eventManagers, tenantId))) wanted.push(row(id, null, 'event_manager'))
   const seenDuty = new Set<string>()
   for (const s of input.duties) {
@@ -178,6 +183,7 @@ export function diffRoleMapping(input: RoleDiffInput, tenantId: string = STELLR_
 
   const backed = (m: StaleMembership): boolean => {
     if (m.role === 'tenant_admin') return !!m.clerk_user_id && admins.has(m.clerk_user_id)
+    if (m.role === 'staff') return input.clerkStaffIds === undefined || (tenantId === STELLR_TENANT_ID && !!m.clerk_user_id && input.clerkStaffIds.includes(m.clerk_user_id))
     if (m.role === 'event_manager') return !!m.clerk_user_id && managers.has(m.clerk_user_id)
     if (m.role === 'duty_holder') return (!!m.member_id && dutyMembers.has(m.member_id)) || (!!m.clerk_user_id && dutyClerks.has(m.clerk_user_id))
     return false

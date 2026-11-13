@@ -157,7 +157,7 @@ If the tenant zone sits under `stellreducation.org`, a browser sends any `Domain
 
 **The no-ads gap.** A student who signs in only on a tenant host is not marked for Stellr's www in that browser, so if advertising was previously accepted there, www can grant it. Privacy Policy section 9.4 promises otherwise. Either accept and record it, or have a tenant-tree server action or a small non-analytics module set the fixed bit for zone hosts under `stellreducation.org`. A tenant on a custom domain could not share the cookie either way.
 
-**Recorded 13 Nov 2026 (`W7-26`): known and accepted for now.** No setter is built, and the dev zone does not try to prove one, because a dev-zone write would be read by production www. The marker is still never written off Stellr's hosts, which is correct for the dev zone: it neither closes nor widens the gap. If a setter is built later, it sets only the fixed `stellr_no_ads=1` (no identifier; `Path=/`; `SameSite=Lax`; `Secure`; a year; `Domain=.stellreducation.org`), only on zone hosts under `stellreducation.org` and only for a member for whom `isStudentForAds` is true, and never loads `lib/analytics`, so `test/tenant-tree-no-analytics.test.ts` stays green. The question comes back before a production tenant zone under `stellreducation.org`.
+**Open (`W7-26`).** Until the owner answers, nothing changes: no setter is built, and the dev zone must not try to prove one, because a dev-zone write would be read by production www. The marker is still never written off Stellr's hosts, which is correct for the dev zone: it neither closes nor widens the gap. If a setter is built later, it sets only the fixed `stellr_no_ads=1` (no identifier; `Path=/`; `SameSite=Lax`; `Secure`; a year; `Domain=.stellreducation.org`), only on zone hosts under `stellreducation.org` and only for a member for whom `isStudentForAds` is true, and never loads `lib/analytics`, so `test/tenant-tree-no-analytics.test.ts` stays green. The question comes back before a production tenant zone under `stellreducation.org`.
 
 ## Bypasses on a tenant host
 
@@ -216,7 +216,7 @@ A read-only review on 13 Nov 2026, before the zone was approved. Nothing was cha
 7. Rollback: detach both domains in Vercel first, then delete the two CNAMEs at GoDaddy, then remove the flag and suffix and redeploy the newest READY deployment.
 8. Before production's `TENANT_ROUTING_ENABLED` flip (not before K6): the production zone guard (`W7-27`) in `tenantRoutingConfig`, and the canary runner refusing every host under `.events.stellreducation.org`.
 
-**The canary hosts are public for the K9 window.** A custom domain on `stellr-web-dev`'s production target is outside Standard Deployment Protection. The owner accepted that for the K9 window (`W7-25`): the hosts serve the tenant tree only, allow-listed pages, and `dev` data.
+**The canary hosts are public for the K9 window.** A custom domain on `stellr-web-dev`'s production target is outside Standard Deployment Protection. Whether that is acceptable for the K9 window is open (`W7-25`; recommended: yes). The hosts would serve the tenant tree only, allow-listed pages, and `dev` data.
 
 ### The K6 steps
 
@@ -236,11 +236,15 @@ Results are recorded with hostnames, status codes and header names only.
 
 ### The production zone guard (`W7-27`)
 
-Approved on 13 Nov 2026 as a small wave 7 slice; not built yet. In `tenantRoutingConfig`, on the real production app (`isRealProductionApp()`), accept only an allow-listed production zone, `.events.stellreducation.org`, and otherwise set `suffixError` to a fixed "not the production tenant zone" reason; off production, refuse that same zone. Unit-test both directions, and show the result through health. Make the canary runner (`lib/testing/canary-flow-scenarios.ts` and `scripts/canary/tenant-host-headers.mjs`) refuse any host ending in `.events.stellreducation.org`. It must be on production before production's `TENANT_ROUTING_ENABLED` flip.
+Open (`W7-27`): a small wave 7 slice now, or a gate item before production's routing flip. Not built. Either way it is a hard gate before that flip. In `tenantRoutingConfig`, on the real production app (`isRealProductionApp()`), accept only an allow-listed production zone, `.events.stellreducation.org`, and otherwise set `suffixError` to a fixed "not the production tenant zone" reason; off production, refuse that same zone. Unit-test both directions, and show the result through health. Make the canary runner (`lib/testing/canary-flow-scenarios.ts` and `scripts/canary/tenant-host-headers.mjs`) refuse any host ending in `.events.stellreducation.org`. It must be on production before production's `TENANT_ROUTING_ENABLED` flip.
 
 ### Still open
 
-- `W7-29`: Clerk dev instance settings, deferred to Monday 16 Nov 2026; K6 step 9 shows what is needed.
+- `W7-25`: the canary hosts are public for the K9 window (recommended: acceptable).
+- `W7-26`: the no-ads marker: accept and record the gap, or build a setter.
+- `W7-27`: the production zone guard: a slice now, or a gate item.
+- `W7-28`: keep the dev zone under `stellreducation.org` after K9, or move to a separate domain.
+- `W7-29`: Clerk dev instance settings; K6 step 9 shows what is needed.
 - `W7-30`: who holds GoDaddy DNS access for `stellreducation.org`, and whether a 600-second TTL is available.
 - `W7-31`: Phase A's `canary.localhost` row: replace it with the devzone host, or keep both.
 

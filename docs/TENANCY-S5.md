@@ -751,7 +751,7 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-
 
 Wave 7 proves the switches on `dev` one at a time, runs a fictitious canary tenant there end to end, and closes the consent and isolation gaps a second tenant would hit first. **Merged** means squashed into `dev`, one PR per slice, on 12 and 13 Nov 2026; none is promoted. Owner decisions are in `docs/S5-DECISION-REGISTER.md` (`W7-1` to `W7-32`, and the answers given in PR review). Every flip goes in the tracker's "Wave 7 flip log" (`s5-programme.31`). **No tenancy switch has yet been on in a hosted environment:** on 13 Nov 2026 the flip log holds only the P0 baseline, with every S5 switch unset on `stellr-web-dev`. Checked against the code on `dev` at `bac59d66`.
 
-**Merged so far:** batches 1 to 4 (W7-pre to A10b, below), the survey hold #661 and docs train D2 #662. **Open follow-ups on 13 Nov 2026:** #665 enters `W7-15`'s two Stellr-host unsubscribe cases in `TENANT_HOST_ACCEPTED`; #666 hides another tenant's survey links in event emails and on check-in (`PR661-1`). The A10a follow-up (`PR655-3`: "skipped" in bulk issue, 409 from `pd-credentials`) and the production zone guard (`W7-27`) are approved and not yet built. This docs train is D3.
+**Merged so far:** batches 1 to 4 (W7-pre to A10b, below), the survey hold #661 and docs train D2 #662. **Open follow-ups on 13 Nov 2026:** #665 enters `W7-15`'s two Stellr-host unsubscribe cases in `TENANT_HOST_ACCEPTED`; #666 hides another tenant's survey links in event emails and on check-in (`PR661-1`); #667 is the A10a follow-up (`PR655-3`: "skipped" in bulk issue, 409 from `pd-credentials`); #668 removes event staff check-ins with the account (`attendee-email-cohort.4`); #669 takes a signed-in organiser's name from their account (`promote-s5-wave3.17`); #670 fixes the PD credential e2e flake. The production zone guard (`W7-27`) is open and not built. This docs train is D3.
 
 | Slice | PR | Flag, or why it is a no-op for Stellr |
 |---|---|---|
@@ -836,7 +836,7 @@ Generated baselines are regenerated at merge and win over any number here.
 
 ### Owner decisions wave 7 raised
 
-All in `docs/S5-DECISION-REGISTER.md`. Answered on 12 Nov 2026: `W7-9` to `W7-13`, `W7-15` and `W7-16`, and the review answers `PR658-1`, `PR658-2` and `PR659-1` to `PR659-3`. Answered on 13 Nov 2026: `W7-14`, `W7-17` to `W7-28`, `W7-32`, and every question the wave 7 PR bodies raised:
+All in `docs/S5-DECISION-REGISTER.md`. Answered on 12 Nov 2026: `W7-9` to `W7-13`, `W7-15` and `W7-16`, and the review answers `PR658-1`, `PR658-2` and `PR659-1` to `PR659-3`. Answered on 13 Nov 2026: `W7-14`, `W7-17` to `W7-24`, `W7-32`, and every question the wave 7 PR bodies raised:
 
 | From | Question | Answer (13 Nov 2026) |
 |---|---|---|
@@ -844,16 +844,16 @@ All in `docs/S5-DECISION-REGISTER.md`. Answered on 12 Nov 2026: `W7-9` to `W7-13
 | B26a (#651) | Keep `membership-expiry` as the `cron_runs` job name for the consent-only run (result `{ only: 'tenant-consent', ... }`)? | Kept (`PR651-1`) |
 | K5 (#653) | K0 signs the placeholder before approval and K7b approves it: keep that order? Lock the organiser, event, child's details and relationship on the guardian form, when Stellr's own minor form locks nothing? | Both kept (`PR653-1`, `PR653-2`) |
 | O1 (#654) | The stale "auto:" reason the generator re-derived for `admin/competitions/[slug]/page.tsx` in the service-role baseline | Accepted; fixed at the next regeneration (`PR654-2`) |
-| A10a (#655) | One event-owner read per Stellr credential issue; refusals in the admin bulk issue shown as "skipped" rather than "failures"; `pd-credentials` answering 409 rather than 500 for a refused tenant event | The read accepted (`PR655-2`); the follow-up approved, not yet built (`PR655-3`) |
+| A10a (#655) | One event-owner read per Stellr credential issue; refusals in the admin bulk issue shown as "skipped" rather than "failures"; `pd-credentials` answering 409 rather than 500 for a refused tenant event | The read accepted (`PR655-2`); the follow-up approved, in #667 (`PR655-3`) |
 | B10r (#656) | Pin the required jobs' Actions to SHAs, as `tenant-db` does, in a later slice? | Yes, after the GitHub organisation move (`PR656-1`) |
 | Survey hold (#661) | Hide `feedback_link` and the check-in survey link for another tenant's events; the held label's wording | Both approved (`PR661-1`, in #666; `PR661-2`) |
 | A16 (#625) | Keep the CODEOWNERS lines for `lib/esign/completion.ts` and `lib/esign/native/flow.ts`? | Kept (`PR625-1`) |
 
-**Still open, all about the dev canary zone's details:** `W7-29` (Clerk dev instance settings, deferred to 16 Nov 2026), `W7-30` (who holds GoDaddy DNS access, and the TTL) and `W7-31` (the Phase A `canary.localhost` row).
+**Still open, all raised by the 13 Nov cookie review of the dev canary zone:** `W7-25` (the canary hosts public for the K9 window), `W7-26` (the no-ads marker), `W7-27` (the production zone guard: a slice now or a gate item), `W7-28` (keep the zone after K9 or move to a separate domain), `W7-29` (Clerk dev instance settings), `W7-30` (who holds GoDaddy DNS access, and the TTL) and `W7-31` (the Phase A `canary.localhost` row).
 
 ### Docs owed after wave 7
 
-- **D3, in part (13 Nov 2026):** the owner's 13 Nov answers, K6's zone steps and the cookie review in `docs/TENANCY-S5-routing.md`, and the K8 scenario table in `docs/TENANCY-S5-flow-checklist.md` are written. **Still owed after K9:** the dev canary record (what was proven, scenario results by mode, gaps by slice, re-run and rollback order), the K6 results (including the `Domain` attribute of both `__client_uat` cookies), and the canary's keep-or-tear-down record (the zone itself is kept, `W7-28`).
+- **D3, in part (13 Nov 2026):** the owner's 13 Nov answers, K6's zone steps and the cookie review in `docs/TENANCY-S5-routing.md`, and the K8 scenario table in `docs/TENANCY-S5-flow-checklist.md` are written. **Still owed after K9:** the dev canary record (what was proven, scenario results by mode, gaps by slice, re-run and rollback order), the K6 results (including the `Domain` attribute of both `__client_uat` cookies), and the canary's keep-or-tear-down record (the zone itself: `W7-28`, open).
 - **The P6 result:** the PEM choice in tracker `s5-programme.30` and `docs/TENANCY-S5-data.md`.
 - **K2's dataset** in `docs/ENV-MATRIX.md`, once done.
 - **The e-sign runbook's placeholder script usage** (K5); for now it lives in `scripts/esign-template.ts`'s header.

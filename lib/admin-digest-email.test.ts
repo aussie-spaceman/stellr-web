@@ -121,3 +121,29 @@ describe('renderDigestEmail', () => {
     expect(text).toContain("Some sections didn't load and may read low: Payments.")
   })
 })
+
+describe('the Staff section (phase 4)', () => {
+  it('lists waiting and ending grants, over-readers and exports, and the quarterly review when due', () => {
+    const d: MemberDigest = {
+      ...digest(),
+      staff: {
+        pending: [{ memberId: 'm1', name: 'Ana B', missing: ['mfa', 'training'], since: '2026-10-20T00:00:00Z' }],
+        expiringSoon: [{ memberId: 'm2', name: 'Cy D', expiresAt: '2026-12-01T00:00:00Z' }],
+        exports: { total: 3, byRole: { staff: 2, admin: 1 } },
+        unusualViewers: [{ name: 'Gil H', role: 'staff', views: 140 }],
+        quarterlyReview: [{ memberId: 'm2', name: 'Cy D', expiresAt: '2026-12-01T00:00:00Z' }],
+      },
+    }
+    const { html, text } = render(d)
+    expect(html).toContain('Staff access')
+    expect(text).toContain('Ana B: Staff waiting - still needs mfa, training')
+    expect(text).toContain('Cy D: Staff ends')
+    expect(text).toContain('Gil H (staff) opened 140 minors’ records this week')
+    expect(text).toContain('3 exports this week - 2 by staff, 1 by admin')
+    expect(html).toContain('Quarterly Staff access review (1)')
+  })
+  it('is left out when there is nothing to say', () => {
+    const { html } = render({ ...digest(), staff: { pending: [], expiringSoon: [], exports: { total: 0, byRole: {} }, unusualViewers: [], quarterlyReview: null } })
+    expect(html).not.toContain('Staff access')
+  })
+})

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { crewActorType } from '@/lib/activity-log'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventCrew } from '@/lib/authz'
 import { getSignedInMember } from '@/lib/community'
@@ -64,7 +65,7 @@ async function revoke(req: Request, { params }: { params: Promise<{ id: string }
     await logActivity({
       memberId: row.member_id,
       category: 'account',
-      actorType: 'admin',
+      actorType: await crewActorType(),
       actorMemberId: actor?.id ?? null,
       action: 'credential_revoked',
       summary: `Credential revoked: ${row.title} (${row.number}) — ${reason}`,

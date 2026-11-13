@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { logRecordAccess } from '@/lib/record-access-log'
 import { redirect, notFound } from 'next/navigation'
 import { clerkClient } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
@@ -80,6 +81,10 @@ export default async function AdminEventDetailPage({
   const needsRoster = tab === 'overview' || tab === 'roster'
   const roster = needsRoster ? await getEventRoster(slug, event.date, { resolveSchools: tab === 'roster' }) : null
   const { summary } = roster ?? { summary: null }
+  // The roster tab lists minors' details: log the view, with how many people it showed (Staff role phase 4).
+  if (tab === 'roster' && roster) {
+    await logRecordAccess({ action: 'roster_view', route: '/admin/competitions/[slug]', eventSlug: slug, rowCount: roster.groups.reduce((n, g) => n + g.participants.length, 0) })
+  }
 
   // ── Company rows (roster tab, live events only) ───────────────────────────
   let companies: CompanyRow[] = []

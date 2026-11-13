@@ -43,7 +43,7 @@ vi.mock('@/lib/credentials', async () => {
   return { CREDENTIAL_COLUMNS: '*', issueCredential: h.issueCredential, CredentialNotIssuedError }
 })
 vi.mock('@/lib/credentials-notify', () => ({ sendCredentialIssuedEmail: async () => true }))
-vi.mock('@/lib/activity-log', () => ({ logActivity: h.logActivity }))
+vi.mock('@/lib/activity-log', () => ({ crewActorType: async () => 'admin', logActivity: h.logActivity }))
 
 const { POST } = await import('./route')
 const { CredentialNotIssuedError } = await import('@/lib/credentials')

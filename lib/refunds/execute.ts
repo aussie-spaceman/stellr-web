@@ -230,8 +230,9 @@ export async function executeRefund(
 
 // An admin sees a refund that needs a hand in the delete dialog; a member or
 // organiser withdrawing on their own does not, so staff are told.
-async function alertTeamIfUnattended(actorType: 'admin' | 'member', p: ParticipantRow, eventTitle: string, detail: string) {
-  if (actorType === 'admin') return
+async function alertTeamIfUnattended(actorType: 'admin' | 'staff' | 'member', p: ParticipantRow, eventTitle: string, detail: string) {
+  // Someone in the portal (an admin or Staff) is already looking at it.
+  if (actorType !== 'member') return
   await notifyCommunityAdmins({
     type: 'action',
     body: `A refund for ${p.first_name} ${p.last_name} (${eventTitle}) needs to be made by hand: ${detail}. See event_refunds for participant ${p.id}.`,

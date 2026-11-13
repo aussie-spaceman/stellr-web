@@ -41,7 +41,7 @@ vi.mock('@/lib/credentials', () => ({
   revokeCredential: h.revokeCredential,
   holderIsMinor: async () => false,
 }))
-vi.mock('@/lib/activity-log', () => ({ logActivity: h.logActivity }))
+vi.mock('@/lib/activity-log', () => ({ crewActorType: async () => 'admin', logActivity: h.logActivity }))
 vi.mock('@/lib/email', () => ({ sendEmail: async () => {}, credentialRevokedEmail: () => ({}) }))
 vi.mock('@/lib/credentials-notify', () => ({ recipientForCredential: async () => null }))
 

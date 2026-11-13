@@ -20,12 +20,12 @@
     "roleTableRead"
   ],
   "totals": {
-    "files": 83,
-    "sites": 118,
+    "files": 82,
+    "sites": 117,
     "byIdiom": {
       "CREW_CLERK_ROLES": 1,
       "adminName": 5,
-      "clerkRoleRead": 9,
+      "clerkRoleRead": 8,
       "currentUserHasScope": 3,
       "currentUserIsAdmin": 4,
       "hasAdminPortalAccess": 1,
@@ -268,9 +268,6 @@
       "isAdminClaims": 1
     },
     "components/layout/NavUserButton.tsx": {
-      "clerkRoleRead": 1
-    },
-    "lib/activity-log.ts": {
       "clerkRoleRead": 1
     },
     "lib/admin-auth.ts": {

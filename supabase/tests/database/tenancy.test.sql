@@ -131,6 +131,7 @@ SELECT set_eq(
     'public.platform_pricing',
     'public.privacy_requests',
     'public.rate_limit_hits',
+    'public.record_access_log',
     'public.recording_offloads',
     'public.refund_policies',
     'public.registrations',

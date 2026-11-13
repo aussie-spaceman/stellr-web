@@ -264,6 +264,7 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.admin_duties': stellr('Stellr duty scopes; mapped to Stellr duty_holder memberships'),
   'public.staff_grants': stellr('the Staff role: Stellr only (lib/staff.ts)'),
   'public.staff_role_settings': stellr('the Staff role’s training module'),
+  'public.record_access_log': stellr('admin-portal views of minors’ records and exports, append-only (lib/record-access-log.ts)'),
   'public.store_products': stellr('store catalogue'),
   'public.store_tier_discounts': stellr('store catalogue'),
   'public.store_variants': stellr('store catalogue'),

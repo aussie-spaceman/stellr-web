@@ -1537,6 +1537,10 @@
       "class": "system",
       "reason": "Calls rate_limit_take and rate_limit_gc, limiter counters that run before any user or tenant is resolved, with EXECUTE for service_role only, and writes its own rate-limit-gc row to cron_runs through the client the cron passes in. Reads no tenant data."
     },
+    "lib/record-access-log.ts": {
+      "class": "stellr_only",
+      "reason": "appends to record_access_log (Stellr-only, append-only: the service role may insert and read, never change or delete); called from admin pages and exports after their own guard"
+    },
     "lib/recording-offload.ts": {
       "class": "convert",
       "reason": "Webhook and retry jobs that copy a JaaS recording into private storage and record the outcome in recording_offloads, with no signed-in user. Converts with the community area."

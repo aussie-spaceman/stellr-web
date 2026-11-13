@@ -17,7 +17,7 @@ import { isRealProductionApp } from '@/lib/env-guards'
 // 'tenant_guardian_consent' (S5 wave 6) is the platform-locked guardian consent for
 // another organiser's event. Only platform staff publish it, here; no tenant can
 // edit it, and lib/esign/tenant-guardian-consent.ts issues it for every tenant.
-export const TEMPLATE_KEYS: TemplateKey[] = ['minor', 'adult', 'mentor', 'membership_adult', 'membership_minor', 'tenant_guardian_consent']
+export const TEMPLATE_KEYS: TemplateKey[] = ['minor', 'adult', 'mentor', 'membership_adult', 'membership_minor', 'tenant_guardian_consent', 'staff']
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 const MAX_PAGES = 30
 const DRAFT_PATH = /^drafts\/[0-9a-f]{64}\.pdf$/
@@ -55,7 +55,7 @@ export async function acceptUpload(db: SupabaseClient, bytes: Uint8Array): Promi
 
 /** A draft upload or a published version's file, by its storage path. Paths are checked, never trusted. */
 export async function loadTemplateFile(db: SupabaseClient, pdfPath: string): Promise<Uint8Array> {
-  const published = /^(minor|adult|mentor|membership_adult|membership_minor|tenant_guardian_consent)\/v\d+-[0-9a-f]{12}\.pdf$/
+  const published = /^(minor|adult|mentor|membership_adult|membership_minor|tenant_guardian_consent|staff)\/v\d+-[0-9a-f]{12}\.pdf$/
   if (!DRAFT_PATH.test(pdfPath) && !published.test(pdfPath)) throw new TemplateAdminError('Unknown document file.')
   const { data, error } = await db.storage.from(TEMPLATE_BUCKET).download(pdfPath)
   if (error || !data) throw new TemplateAdminError('The document file could not be read.')

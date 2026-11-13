@@ -84,7 +84,7 @@ const GROUPS: readonly DispositionGroup[] = [
     reason: 'touches identity tables; tenant crew see the participant under their event until S7 tenant profiles',
     routes: [
       'members', 'members/[id]', 'members/[id]/access', 'members/[id]/activity', 'members/[id]/background-check',
-      'members/[id]/background-check/adjudicate', 'members/[id]/background-check/report', 'members/[id]/event-manager',
+      'members/[id]/background-check/adjudicate', 'members/[id]/background-check/report', 'members/[id]/event-manager', 'members/[id]/staff',
       'members/[id]/event-participations', 'members/[id]/external-check', 'members/[id]/invite', 'members/[id]/license', 'members/[id]/license/document', 'members/[id]/memberships',
       'members/[id]/memberships/[membershipId]', 'members/[id]/spaces', 'members/[id]/volunteer', 'members/[id]/volunteer-agreement',
     ],

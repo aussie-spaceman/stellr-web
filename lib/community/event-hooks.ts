@@ -128,3 +128,15 @@ export async function syncMemberOptionSelections(
   if (!isStellrEvent(event)) return
   return syncOptions(db, selections)
 }
+
+/**
+ * A Staff agreement was signed (lib/esign/completion.ts). Staff is Stellr's alone and
+ * its prerequisites read the Academy training tables, so the call comes through here,
+ * where the tenant-surface walk stops. The envelope type is 'staff' only on Stellr's
+ * own envelopes. Never throws: the daily Staff sweep is the backstop.
+ */
+export async function onStaffAgreementSigned(event: EventHookContext, db: SupabaseClient, memberId: string): Promise<void> {
+  if (!isStellrEvent(event)) return
+  const { nudgeStaff } = await import('@/lib/staff')
+  await nudgeStaff(db, { memberId }, 'agreement_signed')
+}

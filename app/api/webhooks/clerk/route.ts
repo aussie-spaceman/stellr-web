@@ -222,6 +222,11 @@ export async function POST(req: Request) {
     if (Object.keys(patch).length) {
       await db.from('members').update(patch).eq('clerk_user_id', data.id)
     }
+
+    // Two-step verification is a Staff prerequisite: turning it off pauses
+    // Staff, turning it on can start it (lib/staff.ts). Never throws.
+    const { nudgeStaff } = await import('@/lib/staff')
+    await nudgeStaff(db, { clerkUserId: data.id }, 'login_updated')
   }
 
   if (type === 'user.deleted') {

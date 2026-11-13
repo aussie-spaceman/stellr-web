@@ -154,7 +154,7 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
   // Every tenant_crew, platform_admin and platform_destined route handler, with or without
   // an id. test/idor/fixtures.test.ts runs the same functions over handlers with known
   // guards, and the canary proves they can fail.
-  it('runs the staff personas on routes: the nine platform_destined at least', () => {
+  it('runs the crew personas on routes: the nine platform_destined at least', () => {
     expect(crewTargets().filter((t) => t.cls === 'platform_destined')).toHaveLength(9)
   })
 

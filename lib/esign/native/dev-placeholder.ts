@@ -23,6 +23,7 @@ export const DEV_PLACEHOLDER_MARK = 'DEV PLACEHOLDER'
 /** The documents that may be published as a dev placeholder, and the field map each uses. */
 export const DEV_PLACEHOLDER_MAPS: Readonly<Record<string, string>> = {
   tenant_guardian_consent: 'lib/esign/native/templates/tenant-guardian-consent-v1.fields.json',
+  staff: 'lib/esign/native/templates/staff-v1.fields.json',
 }
 
 /**

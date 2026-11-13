@@ -262,6 +262,8 @@ export const TABLE_REGISTRY: Record<string, TableEntry> = {
   'public.recording_offloads': stellr('academy + coaching: a recording on its way from the room to storage'),
   'public.sessions': stellr('coaching'),
   'public.admin_duties': stellr('Stellr duty scopes; mapped to Stellr duty_holder memberships'),
+  'public.staff_grants': stellr('the Staff role: Stellr only (lib/staff.ts)'),
+  'public.staff_role_settings': stellr('the Staff role’s training module'),
   'public.store_products': stellr('store catalogue'),
   'public.store_tier_discounts': stellr('store catalogue'),
   'public.store_variants': stellr('store catalogue'),

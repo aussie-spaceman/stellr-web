@@ -32,6 +32,7 @@ vi.mock('@/lib/cron-runs', () => ({
 vi.mock('@/lib/membership-grants', () => ({ expireLapsedGrants: h.expire }))
 vi.mock('@/lib/pending-consent', () => ({ purgeUnconsentedAccounts: h.purge }))
 vi.mock('@/lib/event-manager', () => ({ sweepEventManagers: h.managers }))
+vi.mock('@/lib/staff', () => ({ sweepStaffGrants: async () => ({ checked: 0, activated: 0, suspended: 0, expired: 0, reminded: 0, failed: 0 }) }))
 vi.mock('@/lib/registration/tenant-guardian-consent', () => ({ sweepTenantGuardianConsents: h.sweep }))
 vi.mock('@/lib/email/outbox', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/email/outbox')>()),
@@ -297,7 +298,7 @@ describe('membership-expiry under the opt-in', () => {
     expect(h.purge).toHaveBeenCalledTimes(1)
     expect(h.managers).toHaveBeenCalledTimes(1)
     expect(h.sweep).toHaveBeenCalledTimes(1)
-    expect(Object.keys(body).sort()).toEqual(['eventManagers', 'expired', 'pendingConsentPurge', 'tenantGuardianConsent'])
+    expect(Object.keys(body).sort()).toEqual(['eventManagers', 'expired', 'pendingConsentPurge', 'staff', 'tenantGuardianConsent'])
   })
 })
 

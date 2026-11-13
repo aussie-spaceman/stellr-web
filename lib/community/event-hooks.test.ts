@@ -193,6 +193,16 @@ describe('the membership, school and profile hooks', () => {
     expect(realSyncOptions).toHaveBeenCalledExactlyOnceWith(db, OPTIONS)
   })
 
+  it('Staff agreement signed: reconciles the grant on Stellr, never on another tenant', async () => {
+    const nudge = vi.fn(async () => {})
+    vi.doMock('@/lib/staff', () => ({ nudgeStaff: nudge }))
+    await hooks.onStaffAgreementSigned(CANARY, client(seeded()), MEMBER)
+    expect(nudge).not.toHaveBeenCalled()
+    await hooks.onStaffAgreementSigned(STELLR, client(seeded()), MEMBER)
+    expect(nudge).toHaveBeenCalledWith(expect.anything(), { memberId: MEMBER }, 'agreement_signed')
+    vi.doUnmock('@/lib/staff')
+  })
+
   it('Canary: calls none of them', async () => {
     const db = client(seeded())
     await hooks.autoGrantBaseMembership(CANARY, db, MEMBER)
@@ -214,6 +224,7 @@ describe('every hook', () => {
       'autoGrantBaseMembership',
       'linkMembersToRegistrationSchool',
       'linkMembersToSchoolByName',
+      'onStaffAgreementSigned',
       'reconcileEventSpaceRoster',
       'recordParticipation',
       'resolveAndLinkSchool',

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 // Admin catalog: list all products (with variants), create a new draft product.
 export async function GET() {
-  if (!(await canManageStoreCatalog())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canManageStoreCatalog('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   try {
     const products = await listProducts()
     return NextResponse.json({ products })

@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { hasCapability } from '@/lib/authz'
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { loadLongRows } from '@/lib/survey/export'
 import { computeStats, type InvitationCount, type Nps, type Pct } from '@/lib/survey/analytics'
 import { logSurveyAccess } from '@/lib/survey/audit'
@@ -30,8 +30,8 @@ const INTEREST_LABEL: Record<string, string> = {
 }
 
 export default async function AdminSurveysPage({ searchParams }: { searchParams: Promise<{ event?: string; year?: string }> }) {
-  const { userId, sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  const { userId } = await auth()
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
   const sp = await searchParams
   const eventSlug = sp.event || null
   const year = Number(sp.year) > 2000 ? Number(sp.year) : null

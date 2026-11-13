@@ -13,7 +13,7 @@ import { authz } from '@/lib/authz'
 export const metadata = { title: 'Admin · Manage cohort' }
 
 export default async function AdminManageCohortPage({ params }: { params: Promise<{ id: string }> }) {
-  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring/[id]' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/academy/mentoring/[id]' })
   const member = await getSignedInMember()
   if (!member) notFound()
   const { id } = await params

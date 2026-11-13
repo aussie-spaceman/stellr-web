@@ -1,12 +1,10 @@
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 
 // GET /api/admin/docusigns — all DocuSign envelopes across all participants
 export async function GET() {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { getBackgroundProvider, ReportPdfUnavailableError } from '@/lib/background-provider'
 import { actorFromAuth } from '@/lib/activity-log'
 import { loadComplianceRecordsForMembers } from '@/lib/compliance'
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 // (passed, or adjudicated cleared, and unexpired) has a report to hand out.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('export'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()

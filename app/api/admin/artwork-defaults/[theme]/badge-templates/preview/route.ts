@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { generateBadgesPdf } from '@/lib/event-pdf'
 import { isArtworkTheme } from '@/lib/artwork-theme'
 import { designOf, loadDefaultBadgeTemplate, placementFromParams, placementOf, prepareTemplate } from '@/lib/event-badges'
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 // One label on a theme default, with a sample name, shown inline — the event
 // preview (/api/admin/events/[slug]/badge-templates/preview) for the defaults.
 export async function GET(req: Request, { params }: { params: Promise<{ theme: string }> }) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
 

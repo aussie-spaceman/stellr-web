@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { loadTemplateById, loadTemplatePdf, TemplateUnavailableError } from '@/lib/esign/native/templates-store'
 import { labelSample, renderSample } from '@/lib/esign/native/template-sample'
 
@@ -18,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await params
   if (!UUID.test(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

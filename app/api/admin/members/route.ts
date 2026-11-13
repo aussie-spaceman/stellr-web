@@ -1,11 +1,11 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { resolveEmailPair } from '@/lib/member-email'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { grantTierAllocations } from '@/lib/entitlements'
 import { DEFAULT_ROLE_FOR_BRACKET } from '@/lib/membership-rules'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { getSignedInMember } from '@/lib/community'
 import { sendAccountInvite } from '@/lib/member-invite'
 import { isMinorOn } from '@/lib/age'
@@ -14,7 +14,7 @@ import { shadowSyncFields } from '@/lib/field-crypto-shadow'
 // POST /api/admin/members — admin manually creates a new member record
 export async function POST(req: Request) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
   const {

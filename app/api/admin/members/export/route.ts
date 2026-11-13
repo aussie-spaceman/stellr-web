@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { toCsv } from '@/lib/csv'
@@ -7,9 +7,7 @@ import { applyMemberFilters, applyMemberSort, memberFilterEmbeds, parseMemberFil
 // Takes the members list's filter params (lib/admin-member-filters), so the
 // export is exactly the filtered list on screen. No params: every active member.
 export async function GET(req: Request) {
-  const { sessionClaims } = await auth()
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('export'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const filters = parseMemberFilters(Object.fromEntries(new URL(req.url).searchParams))
   const db = supabaseServer()

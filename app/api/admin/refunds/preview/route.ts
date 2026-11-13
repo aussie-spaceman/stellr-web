@@ -29,7 +29,7 @@ export const GET = withAudit(
 // another tenant's event is refused for everyone, a Stellr admin included: 404, or a
 // retryable 503 when the event's owner cannot be read (previewRefundOnStellrEvent).
 async function preview(req: Request) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

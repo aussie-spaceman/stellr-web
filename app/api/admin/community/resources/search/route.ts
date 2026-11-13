@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { isStellrAdmin } from '@/lib/authz'
 
 // GET /api/admin/community/resources/search?q=…&limit=…
 // Admin resource picker: search the Global Resources Catalogue (every stored
@@ -8,7 +8,7 @@ import { isStellrAdmin } from '@/lib/authz'
 // re-uploading. Returns lightweight rows; attach happens via the space
 // `attach-resource` action, which reuses the same binary by reference.
 export async function GET(req: Request) {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/resources/search' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/resources/search' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const q = (searchParams.get('q') ?? '').trim()

@@ -1,10 +1,10 @@
 import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { grantTier, fireTierPurchased, type GrantTierOptions } from '@/lib/membership-grants'
 import { checkTierAllowedForMember } from '@/lib/tiers-server'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth } from '@/lib/activity-log'
-import { isAdminClaims } from '@/lib/admin-auth'
 
 // POST /api/admin/members/[id]/memberships — admin assigns a tier to a member.
 //
@@ -23,7 +23,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: memberId } = await params
   const body = await req.json().catch(() => ({}))

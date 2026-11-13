@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { claimUpload } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 
 // What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
@@ -17,7 +17,7 @@ export const maxDuration = 60
 
 // GET ?itemId= — list a lesson's resources.
 export async function GET(req: Request) {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/training/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/training/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
   const db = supabaseServer()

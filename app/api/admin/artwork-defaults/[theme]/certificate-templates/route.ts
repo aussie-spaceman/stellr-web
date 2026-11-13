@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { isAwardType } from '@/lib/event-awards'
 import { isArtworkTheme } from '@/lib/artwork-theme'
 import { CERTIFICATE_PLACEMENT_RANGES, claimArtwork, placementInput } from '@/lib/artwork-template-input'
@@ -20,14 +20,14 @@ export const dynamic = 'force-dynamic'
 type Ctx = { params: Promise<{ theme: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
   return NextResponse.json({ theme, templates: await loadDefaultTemplates(supabaseServer(), theme) })
 }
 
 export async function PUT(req: Request, { params }: Ctx) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('competitions:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
 
@@ -76,7 +76,7 @@ export async function PUT(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('competitions:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
   const awardType = new URL(req.url).searchParams.get('awardType')

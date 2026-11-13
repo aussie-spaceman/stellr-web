@@ -29,7 +29,7 @@ type Envelope = Parameters<typeof remindEnvelopeRow>[1] & { status: string | nul
 
 // POST /api/admin/docusigns/[id]/resend — admin can resend any envelope at any time
 async function resendEnvelope(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

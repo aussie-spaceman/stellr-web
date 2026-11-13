@@ -12,7 +12,7 @@ import { logSurveyAccess, writeAudit } from '@/lib/survey/audit'
 // contact detail or date of birth. Admin only; every export is logged to
 // survey_access_log and audit_log.
 export async function GET(req: Request) {
-  const gate = await requireSurveyAdmin()
+  const gate = await requireSurveyAdmin('portal:read')
   if (!gate.ok) return gate.response
   const f = filterFrom(req.url)
   const db = supabaseServer()

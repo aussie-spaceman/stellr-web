@@ -27,7 +27,7 @@ function routeFiles(dir: string): string[] {
 // requireAdmin/isAdmin functions, the store/survey/scholarship gates, and the
 // inline role check. A file matching ANY of these is considered guarded.
 const ADMIN_GUARD =
-  /isAdminClaims|currentUserIsAdmin|currentUserHasScope|requireEventAccess|requireScholarshipAdmin|requireSurveyAdmin|canManageStoreCatalog|requireAdmin|isAdmin|adminName|role\s*(!==|===)\s*['"]admin['"]|assertTenantRole|assertPlatformAdmin|requireStellrAdmin|isStellrAdmin|requireTenantCrew|requireTenantAdmin|requireEventSection|requireEventCrew|requireEventRoute|hasPortalAccess|hasScope/
+  /isAdminClaims|currentUserIsAdmin|currentUserHasScope|requireEventAccess|requireScholarshipAdmin|requireSurveyAdmin|canManageStoreCatalog|requireAdmin|isAdmin|adminName|role\s*(!==|===)\s*['"]admin['"]|assertTenantRole|assertPlatformAdmin|requireStellrAdmin|isStellrAdmin|requireTenantCrew|requireTenantAdmin|requireEventSection|requireEventCrew|requireEventRoute|hasPortalAccess|hasScope|requireCapability|hasCapability/
 
 // Admin routes that are deliberately NOT gated by an admin session. Each entry
 // needs a WHY: a stale entry here is the one way this test can hide a regression.

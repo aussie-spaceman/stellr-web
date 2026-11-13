@@ -1,8 +1,7 @@
 import Link from 'next/link'
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { SCHOLARSHIP_COLUMNS, withStages, type ScholarshipApplication, type ScholarshipStage } from '@/lib/scholarships'
 import { ScholarshipStagePill } from '@/components/admin/ScholarshipStagePill'
 import { SchoolLink } from '@/components/admin/RecordLinks'
@@ -20,8 +19,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 const OFFERED: ScholarshipStage[] = ['awaiting_details', 'awaiting_payment', 'confirmed', 'attended']
 
 export default async function AdminScholarshipsPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
 
   const { show } = await searchParams
   const filter: Filter = show === 'offered' || show === 'all' ? show : 'review'

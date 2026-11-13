@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { isStellrAdmin } from '@/lib/authz'
+import { hasCapability, type Capability } from '@/lib/authz'
 import { actorFromAuth } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
 import { getAllCampaigns, getAllEvents } from '@/lib/events/repo'
@@ -30,8 +30,9 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 //   PATCH   { eventSlug, expiresOn }    change the expiry (re-checks clearance)
 //   DELETE  { eventSlug } | { all: true }  remove one, or every assignment (unticking the box)
 
-async function guard(params: Promise<{ id: string }>): Promise<{ id: string } | NextResponse> {
-  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+// Reading a member's assignments is portal:read; changing them is event_managers:assign (Staff may).
+async function guard(params: Promise<{ id: string }>, cap: Capability = 'event_managers:assign'): Promise<{ id: string } | NextResponse> {
+  if (!(await hasCapability(cap, { route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await params
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   return { id }
@@ -68,7 +69,7 @@ async function eventOptions(now: Date): Promise<EventOption[]> {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guard(params)
+  const g = await guard(params, 'portal:read')
   if (g instanceof NextResponse) return g
   const db = supabaseServer()
   const now = new Date()

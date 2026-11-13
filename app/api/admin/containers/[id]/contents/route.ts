@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { attachAllowed, resolveAccessObject } from '@/lib/access-objects'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 
 // What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
@@ -10,7 +10,7 @@ const auditedId = new WeakMap<Request, string>()
 
 // GET /api/admin/containers/[id]/contents — training modules assigned to this container
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isStellrAdmin({ route: '/api/admin/containers/[id]/contents' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/containers/[id]/contents' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()

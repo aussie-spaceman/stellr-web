@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireEventRoute } from '@/lib/authz'
+import { hasCapability, requireEventRoute } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 import { withAudit } from '@/lib/audit/route'
@@ -63,7 +63,7 @@ async function readSurvey(req: Request, { params }: Ctx) {
     await logSurveyAccess(db, { actor: crew.userId, action: 'view', eventSlug: slug, distributionId: view.distribution?.id, rowCount: view.rows.length, detail: { what: 'completion_table' } })
   }
   noteAuditSubject(req, { id: view.distribution?.id ?? null })
-  return NextResponse.json({ ...view, isAdmin: crew.isAdmin })
+  return NextResponse.json({ ...view, isAdmin: crew.isAdmin || (await hasCapability('competitions:write', { route: ROUTE })) })
 }
 
 const Body = z.discriminatedUnion('action', [
@@ -101,8 +101,11 @@ async function changeSurvey(req: Request, { params }: Ctx) {
   const me = await getSignedInMember().catch(() => null)
   const actor: Actor = { memberId: me?.id ?? null, label: crew.userId }
 
+  // Admins and Staff (competitions:write) run a survey's settings; an event manager does not.
+  const canManage = crew.isAdmin || (await hasCapability('competitions:write', { route: ROUTE }))
+
   if (body.action === 'open_after_event') {
-    if (!crew.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+    if (!canManage) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
     const event = await loadSurveyEvent(slug)
     if (!event) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
     const r = await openAfterEvent(db, event, { acceptOlderMinorAgreements: body.acceptOlderMinorAgreements }, actor)
@@ -158,12 +161,13 @@ async function changeSurvey(req: Request, { params }: Ctx) {
       return r.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: r.error }, { status: r.status })
     }
     case 'gate_certificate': {
-      if (!crew.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+      if (!canManage) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
       await scopedRowWrite(crew.scope, 'survey_distributions', d.id, { db }).update({ gate_certificate: body.on })
       await writeAudit(db, { table: 'survey_distributions', recordId: d.id, action: 'UPDATE', actor: actor.label, data: { event: 'gate_certificate', on: body.on } })
       return NextResponse.json({ ok: true })
     }
     case 'minor_agreement_override': {
+      // A safeguarding decision about minors' agreements: admins only, Staff included out.
       if (!crew.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
       const r = await setMinorAgreementOverride(db, d, body.on, actor)
       return r.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: r.error }, { status: r.status })

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { getBackgroundProvider } from '@/lib/background-provider'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { requiresBackgroundCheck } from '@/lib/compliance'
@@ -14,7 +14,7 @@ import { assertLiveCredentials, SandboxCredentialsError } from '@/lib/env-guards
 // once ordered" (PRD) is satisfied by the provider's own per-report billing.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()

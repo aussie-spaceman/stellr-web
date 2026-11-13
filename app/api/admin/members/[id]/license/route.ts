@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { hasCapability } from '@/lib/authz'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { teacherLicenseSchema, type TeacherLicenseInput } from '@/lib/teacher-license'
 import { notifyLicenseVerified } from '@/lib/license-review'
@@ -34,8 +33,8 @@ const bodySchema = z.discriminatedUnion('action', [
 ])
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Staff may enter license details (members:write); verifying decides clearance (admins, clearance:verify).
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
@@ -49,6 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const db = supabaseServer()
   if (parsed.data.action === 'save') return saveLicense(db, id, parsed.data)
+  if (!(await hasCapability('clearance:verify'))) return NextResponse.json({ error: 'Only an admin can verify or unverify a teaching license.' }, { status: 403 })
 
   const { data: license } = await db
     .from('member_teacher_licenses')

@@ -9,7 +9,7 @@ export default async function AdminModerationPage({
 }: {
   searchParams: Promise<{ status?: string }>
 }) {
-  await authz.page.requireStellrAdmin({ route: '/admin/community/moderation' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/community/moderation' })
   const { status = 'pending' } = await searchParams
   const db = supabaseServer()
 

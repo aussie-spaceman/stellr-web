@@ -7,7 +7,7 @@ import { logSurveyAccess } from '@/lib/survey/audit'
 // GET /api/admin/surveys/export?format=long|wide&event=&year=&survey=
 // Survey answers as CSV (handover A3). Admin only; logged to survey_access_log.
 export async function GET(req: Request) {
-  const gate = await requireSurveyAdmin()
+  const gate = await requireSurveyAdmin('export')
   if (!gate.ok) return gate.response
   const f = filterFrom(req.url)
   const format = new URL(req.url).searchParams.get('format') === 'wide' ? 'wide' : 'long'

@@ -28,7 +28,7 @@ function typeLabel(fileType: string | null, isLink: boolean): string {
 // the admin path that creates a binary unconditionally (the force-duplicate
 // override, decision 5).
 export default async function AdminCommunityResourcesPage() {
-  await authz.page.requireStellrAdmin({ route: '/admin/community/resources' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/community/resources' })
   const { rows, stats } = await getAdminResourceIndex()
 
   const statCards = [

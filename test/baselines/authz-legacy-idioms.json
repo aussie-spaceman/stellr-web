@@ -20,24 +20,21 @@
     "roleTableRead"
   ],
   "totals": {
-    "files": 134,
-    "sites": 189,
+    "files": 83,
+    "sites": 118,
     "byIdiom": {
       "CREW_CLERK_ROLES": 1,
       "adminName": 5,
-      "canManageStoreCatalog": 14,
-      "clerkRoleRead": 11,
+      "clerkRoleRead": 9,
       "currentUserHasScope": 3,
-      "currentUserIsAdmin": 17,
+      "currentUserIsAdmin": 4,
       "hasAdminPortalAccess": 1,
-      "isAdminClaims": 77,
+      "isAdminClaims": 44,
       "isCrewRole": 1,
       "isEventManagerClaims": 2,
       "pageRequireAdmin": 1,
       "requireAdminPage": 17,
       "requireEventAccess": 28,
-      "requireScholarshipAdmin": 7,
-      "requireSurveyAdmin": 2,
       "roleTableRead": 2
     }
   },
@@ -84,15 +81,8 @@
     "app/(stellr)/(admin)/admin/email/page.tsx": {
       "requireAdminPage": 1
     },
-    "app/(stellr)/(admin)/admin/media/page.tsx": {
-      "isAdminClaims": 1
-    },
     "app/(stellr)/(admin)/admin/members/[id]/page.tsx": {
-      "isAdminClaims": 1,
       "requireAdminPage": 1
-    },
-    "app/(stellr)/(admin)/admin/members/[id]/surveys/[responseId]/page.tsx": {
-      "isAdminClaims": 1
     },
     "app/(stellr)/(admin)/admin/members/[id]/view-as/page.tsx": {
       "pageRequireAdmin": 1
@@ -115,12 +105,6 @@
     "app/(stellr)/(admin)/admin/privacy-requests/page.tsx": {
       "clerkRoleRead": 1
     },
-    "app/(stellr)/(admin)/admin/scholarships/[id]/page.tsx": {
-      "isAdminClaims": 1
-    },
-    "app/(stellr)/(admin)/admin/scholarships/page.tsx": {
-      "isAdminClaims": 1
-    },
     "app/(stellr)/(admin)/admin/schools/[id]/page.tsx": {
       "requireAdminPage": 1
     },
@@ -138,15 +122,6 @@
     },
     "app/(stellr)/(admin)/admin/store/page.tsx": {
       "requireAdminPage": 1
-    },
-    "app/(stellr)/(admin)/admin/surveys/page.tsx": {
-      "isAdminClaims": 1
-    },
-    "app/(stellr)/(admin)/admin/surveys/questions/page.tsx": {
-      "isAdminClaims": 1
-    },
-    "app/(stellr)/(admin)/admin/surveys/questions/preview/page.tsx": {
-      "isAdminClaims": 1
     },
     "app/(stellr)/(member)/layout.tsx": {
       "isAdminClaims": 1
@@ -178,18 +153,6 @@
     "app/api/admin/access/relations/route.ts": {
       "isAdminClaims": 2
     },
-    "app/api/admin/artwork-defaults/[theme]/badge-templates/preview/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/artwork-defaults/[theme]/badge-templates/route.ts": {
-      "currentUserIsAdmin": 3
-    },
-    "app/api/admin/artwork-defaults/[theme]/certificate-templates/preview/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/artwork-defaults/[theme]/certificate-templates/route.ts": {
-      "currentUserIsAdmin": 3
-    },
     "app/api/admin/compliance/sync/route.ts": {
       "isAdminClaims": 1
     },
@@ -208,9 +171,6 @@
     "app/api/admin/digest/send/route.ts": {
       "currentUserIsAdmin": 1
     },
-    "app/api/admin/docusigns/route.ts": {
-      "clerkRoleRead": 1
-    },
     "app/api/admin/duties/route.ts": {
       "clerkRoleRead": 1
     },
@@ -224,13 +184,13 @@
       "isAdminClaims": 1
     },
     "app/api/admin/email/campaigns/route.ts": {
-      "isAdminClaims": 2
+      "isAdminClaims": 1
     },
     "app/api/admin/email/templates/[id]/route.ts": {
       "isAdminClaims": 2
     },
     "app/api/admin/email/templates/route.ts": {
-      "isAdminClaims": 2
+      "isAdminClaims": 1
     },
     "app/api/admin/esign/maintenance/route.ts": {
       "isAdminClaims": 1
@@ -239,13 +199,10 @@
       "isAdminClaims": 1
     },
     "app/api/admin/esign/state/route.ts": {
-      "isAdminClaims": 2
+      "isAdminClaims": 1
     },
     "app/api/admin/esign/templates/[id]/approve/route.ts": {
       "adminName": 1
-    },
-    "app/api/admin/esign/templates/[id]/preview/route.ts": {
-      "isAdminClaims": 1
     },
     "app/api/admin/esign/templates/file/route.ts": {
       "adminName": 1
@@ -298,122 +255,17 @@
     "app/api/admin/health/integrations/route.ts": {
       "clerkRoleRead": 1
     },
-    "app/api/admin/members/[id]/access/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/activity/route.ts": {
-      "isAdminClaims": 1
-    },
     "app/api/admin/members/[id]/background-check/adjudicate/route.ts": {
       "isAdminClaims": 1
     },
-    "app/api/admin/members/[id]/background-check/report/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/background-check/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/event-participations/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/invite/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/license/document/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/license/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/memberships/[membershipId]/route.ts": {
-      "isAdminClaims": 2
-    },
-    "app/api/admin/members/[id]/memberships/route.ts": {
-      "isAdminClaims": 1
-    },
     "app/api/admin/members/[id]/route.ts": {
-      "isAdminClaims": 2
-    },
-    "app/api/admin/members/[id]/spaces/route.ts": {
       "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/volunteer-agreement/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/[id]/volunteer/route.ts": {
-      "isAdminClaims": 2
-    },
-    "app/api/admin/members/export/route.ts": {
-      "clerkRoleRead": 1
     },
     "app/api/admin/members/merge/route.ts": {
       "currentUserIsAdmin": 2
     },
-    "app/api/admin/members/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/members/search/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/pd-certificate/preview/route.ts": {
-      "currentUserIsAdmin": 1
-    },
-    "app/api/admin/pd-certificate/route.ts": {
-      "currentUserIsAdmin": 3
-    },
     "app/api/admin/privacy-requests/[id]/route.ts": {
       "isAdminClaims": 1
-    },
-    "app/api/admin/scholarships/[id]/cancel/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/scholarships/[id]/not-offered/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/scholarships/[id]/offer/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/scholarships/[id]/refund-quote/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/scholarships/[id]/refund/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/scholarships/[id]/resend/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/scholarships/[id]/route.ts": {
-      "requireScholarshipAdmin": 1
-    },
-    "app/api/admin/schools/[id]/route.ts": {
-      "isAdminClaims": 1
-    },
-    "app/api/admin/store/discounts/route.ts": {
-      "canManageStoreCatalog": 3
-    },
-    "app/api/admin/store/printful/route.ts": {
-      "canManageStoreCatalog": 1
-    },
-    "app/api/admin/store/products/[id]/route.ts": {
-      "canManageStoreCatalog": 3
-    },
-    "app/api/admin/store/products/[id]/sync/route.ts": {
-      "canManageStoreCatalog": 1
-    },
-    "app/api/admin/store/products/[id]/variants/route.ts": {
-      "canManageStoreCatalog": 3
-    },
-    "app/api/admin/store/products/route.ts": {
-      "canManageStoreCatalog": 2
-    },
-    "app/api/admin/surveys/export/route.ts": {
-      "requireSurveyAdmin": 1
-    },
-    "app/api/admin/surveys/testimonials/route.ts": {
-      "requireSurveyAdmin": 1
-    },
-    "app/api/store/returns/route.ts": {
-      "canManageStoreCatalog": 1
     },
     "components/layout/NavUserButton.tsx": {
       "clerkRoleRead": 1
@@ -439,15 +291,6 @@
       "roleTableRead": 1
     },
     "lib/member-session.ts": {
-      "isAdminClaims": 1
-    },
-    "lib/scholarship-admin.ts": {
-      "isAdminClaims": 1
-    },
-    "lib/store/auth.ts": {
-      "isAdminClaims": 1
-    },
-    "lib/survey/admin-auth.ts": {
       "isAdminClaims": 1
     },
     "lib/training.ts": {

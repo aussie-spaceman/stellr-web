@@ -10,7 +10,7 @@ const { dispatch, logActivity } = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ sessionClaims: { admin: true } }) }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: (c: { admin?: boolean } | null) => !!c?.admin }))
+vi.mock('@/lib/authz', () => ({ hasCapability: async () => true }))
 vi.mock('@/lib/volunteer', () => ({
   dispatchVolunteerAgreement: dispatch,
   VOLUNTEER_PROGRAM_TITLE: 'Stellr Volunteer Program',

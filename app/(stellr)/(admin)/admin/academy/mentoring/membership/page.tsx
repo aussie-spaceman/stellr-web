@@ -6,7 +6,7 @@ import { authz } from '@/lib/authz'
 export const metadata = { title: 'Admin · Membership & access' }
 
 export default async function MembershipAccessPage() {
-  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring/membership' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/academy/mentoring/membership' })
   const [tiers, cohorts] = await Promise.all([listMentoringTiers(), listCohortAccessRows()])
 
   return (

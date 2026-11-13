@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { hasCapability } from '@/lib/authz'
 import { auth } from '@clerk/nextjs/server'
 import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { participantIdsFor } from '@/lib/survey/access'
 import { submittedResponseById } from '@/lib/survey/member'
 import { responseBelongsTo, surveyRoleLabel } from '@/lib/survey/history'
@@ -23,8 +23,8 @@ export default async function AdminMemberSurveyResponsePage({
 }: {
   params: Promise<{ id: string; responseId: string }>
 }) {
-  const { userId, sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  const { userId } = await auth()
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
   const { id: memberId, responseId } = await params
   if (!UUID.test(memberId) || !UUID.test(responseId)) notFound()
 

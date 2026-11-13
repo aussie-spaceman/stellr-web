@@ -4,7 +4,7 @@ import { getSignedInMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { finaliseStoredUpload } from '@/lib/resource-finalise'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 
 // What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
@@ -93,7 +93,7 @@ async function createResource(req: Request) {
 
 // GET /api/admin/community/resources — list all resources for admin UI
 export async function GET() {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/resources' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data } = await db

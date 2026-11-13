@@ -1,7 +1,7 @@
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
-import { isAdminClaims, requireAdminPage } from '@/lib/admin-auth'
+import { requireAdminPage } from '@/lib/admin-auth'
 import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
 import { externalCheckValidUntil, loadComplianceForMember } from '@/lib/compliance'
 import { isKnownMinorOn } from '@/lib/age'
@@ -175,14 +175,13 @@ export default async function AdminMemberPage({
     await listMemberScholarships(db, { id, email: (member as { email?: string | null }).email ?? null }),
   )
 
-  // Post-event surveys: survey data is admin-only, so not for event managers
-  // even if they reach this page. Statuses only here; answers are a click away
-  // (and that view is logged).
-  const { sessionClaims } = await auth()
-  // Also gates Classification → Event Manager: only an admin grants access.
-  const viewerIsAdmin = isAdminClaims(sessionClaims)
+  // Post-event surveys: admins and Staff, not event managers even if they reach
+  // this page. Statuses only here; answers are a click away (and that view is logged).
+  const canReadSurveys = await hasCapability('portal:read')
+  // Classification → Event Manager: admins and Staff grant it (event_managers:assign).
+  const canManageEventManager = await hasCapability('event_managers:assign')
   let surveys: MemberSurveyItem[] | null = null
-  if (viewerIsAdmin) {
+  if (canReadSurveys) {
     surveys = await memberSurveyRows(db, id)
       .then((rows) => toMemberSurveyItems(rows))
       .catch((err) => {
@@ -216,7 +215,7 @@ export default async function AdminMemberPage({
       agreement={agreement}
       scholarships={scholarships}
       surveys={surveys}
-      canManageEventManager={viewerIsAdmin}
+      canManageEventManager={canManageEventManager}
     />
   )
 }

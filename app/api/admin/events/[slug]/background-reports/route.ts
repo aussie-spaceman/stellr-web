@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventRoute } from '@/lib/authz'
+import { hasCapability, requireEventRoute } from '@/lib/authz'
 import { refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 import { getEventBySlug } from '@/lib/events/repo'
 import { getBackgroundProvider } from '@/lib/background-provider'
@@ -39,7 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const participantId = search.get('participant')
   const memberId = search.get('member')
   const single = !!(participantId || memberId)
-  const mode: ExportMode = exportModeFor(crew.isAdmin, search.get('mode'))
+  const mode: ExportMode = exportModeFor(crew.isAdmin || (await hasCapability('export')), search.get('mode'))
 
   const db = supabaseServer()
   const [event, allMentors] = await Promise.all([getEventBySlug(slug), loadEventMentors(db, slug)])

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventRoute } from '@/lib/authz'
+import { hasCapability, requireEventRoute } from '@/lib/authz'
 import { getEventBySlug } from '@/lib/events/repo'
 import { eventTitleFromRegistrations, stellrOnlyDb } from '@/lib/events/admin-records'
 import { getSignedInMember } from '@/lib/community'
@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     label: ROUTE,
   })
   if (error) return NextResponse.json({ error: (error as { message?: string }).message }, { status: 500 })
-  return NextResponse.json({ credentials: data ?? [], canIssue: crew.isAdmin && isStellrScope(crew.scope) })
+  return NextResponse.json({ credentials: data ?? [], canIssue: (crew.isAdmin || (await hasCapability('competitions:write', { route: ROUTE }))) && isStellrScope(crew.scope) })
 }
 
 export const POST = withAudit(
@@ -59,7 +59,7 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
   const { slug } = await params
   const crew = await requireEventRoute(slug, { route: ROUTE })
   if (!crew.ok) return crew.response
-  if (!crew.isAdmin) return NextResponse.json({ error: 'Only admins can record PD hours' }, { status: 403 })
+  if (!crew.isAdmin && !(await hasCapability('competitions:write', { route: ROUTE }))) return NextResponse.json({ error: 'Only admins and Staff can record PD hours' }, { status: 403 })
   noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
   const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused

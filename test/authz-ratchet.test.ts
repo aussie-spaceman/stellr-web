@@ -107,7 +107,7 @@ describe('named helpers', () => {
     expect(sites(file, "import { isAdminClaims as ok } from '@/lib/admin-auth'\nok(a)")).toEqual({ isAdminClaims: 1 })
     expect(sites(file, "import * as a from '@/lib/admin-auth'\na.currentUserIsAdmin()")).toEqual({ currentUserIsAdmin: 1 })
     expect(sites('lib/x.ts', "import { requireEventAccess } from './event-access'\nrequireEventAccess()")).toEqual({ requireEventAccess: 1 })
-    expect(sites(file, "async function f() { const { isStaffRole } = await import('@/lib/admin-auth'); return isStaffRole(r) }")).toEqual({ isStaffRole: 1 })
+    expect(sites(file, "async function f() { const { isCrewRole } = await import('@/lib/admin-auth'); return isCrewRole(r) }")).toEqual({ isCrewRole: 1 })
     expect(sites(file, "async function f() { const m = await import('@/lib/admin-auth'); return m.isAdminClaims(c) }")).toEqual({ isAdminClaims: 1 })
     expect(sites(file, "export { isAdminClaims } from '@/lib/admin-auth'")).toEqual({ isAdminClaims: 1 })
     expect(sites(file, "import { isAdminClaims } from '@/lib/admin-auth'\nexport { isAdminClaims }")).toEqual({ isAdminClaims: 1 })
@@ -116,7 +116,7 @@ describe('named helpers', () => {
     expect(sites(file, "import('@/lib/admin-auth').then((m) => m.isAdminClaims(c))")).toEqual({ isAdminClaims: 1 })
     expect(sites(file, "import('@/lib/admin-auth').then(({ isAdminClaims: ok }) => ok(c))")).toEqual({ isAdminClaims: 1 })
     expect(sites(file, "import * as a from '@/lib/admin-auth'\nconst { isAdminClaims: ok } = a\nok(c)")).toEqual({ isAdminClaims: 1 })
-    expect(sites(file, "async function f() { const m = await import('@/lib/admin-auth'); const { isStaffRole } = m; return isStaffRole(r) }")).toEqual({ isStaffRole: 1 })
+    expect(sites(file, "async function f() { const m = await import('@/lib/admin-auth'); const { isCrewRole } = m; return isCrewRole(r) }")).toEqual({ isCrewRole: 1 })
   })
 
   it('counts lib/authz page.requireAdmin, which does not confine an event manager', () => {
@@ -144,7 +144,7 @@ describe('named helpers', () => {
     expect(sites(file, "import { isAdminClaims } from '@/lib/not-admin-auth'\nisAdminClaims(a)")).toEqual({})
     expect(sites(file, 'function isAdminClaims() { return true }\nisAdminClaims()')).toEqual({})
     expect(sites(file, "import { requireEventAccess } from '@/lib/authz'\nrequireEventAccess()")).toEqual({})
-    expect(sites(file, "import * as a from '@/lib/admin-auth'\nconst o = { isAdminClaims: 1 }; o.isAdminClaims; a.STAFF_SCOPES")).toEqual({})
+    expect(sites(file, "import * as a from '@/lib/admin-auth'\nconst o = { isAdminClaims: 1 }; o.isAdminClaims; a.DUTY_SCOPES")).toEqual({})
   })
 
   it('scans neither lib/authz, tests, stories nor scripts', () => {
@@ -222,22 +222,22 @@ describe('found by shape', () => {
   })
 
   it('counts a select from a role table, not a write, and not on its own screen', () => {
-    expect(sites('lib/x.ts', "db.from('staff_roles').select('scopes')")).toEqual({ roleTableRead: 1 })
+    expect(sites('lib/x.ts', "db.from('admin_duties').select('scopes')")).toEqual({ roleTableRead: 1 })
     expect(sites('lib/x.ts', "await db\n  .from('event_manager_assignments')\n  .select('event_slug')\n  .eq('a', b)")).toEqual({ roleTableRead: 1 })
-    expect(sites('lib/x.ts', "db.from('staff_roles').delete().eq('a', b); db.from('staff_roles').upsert(r)")).toEqual({})
+    expect(sites('lib/x.ts', "db.from('admin_duties').delete().eq('a', b); db.from('admin_duties').upsert(r)")).toEqual({})
     expect(sites('lib/x.ts', "db.from('members').select('id')")).toEqual({})
     expect(sites('app/api/admin/event-managers/route.ts', "db.from('event_manager_assignments').select('id')")).toEqual({})
-    expect(sites('lib/x.ts', "const q = db.from('staff_roles'); q.select('scopes')")).toEqual({ roleTableRead: 1 })
-    expect(sites('lib/x.ts', "const T = 'staff_roles'; db.from(T).select('scopes')")).toEqual({ roleTableRead: 1 })
+    expect(sites('lib/x.ts', "const q = db.from('admin_duties'); q.select('scopes')")).toEqual({ roleTableRead: 1 })
+    expect(sites('lib/x.ts', "const T = 'admin_duties'; db.from(T).select('scopes')")).toEqual({ roleTableRead: 1 })
     expect(sites('lib/x.ts', "const q = db.from('members'); q.select('id')")).toEqual({})
-    expect(sites('lib/x.ts', "db.from('staff_roles').upsert(r).select('id')")).toEqual({})
+    expect(sites('lib/x.ts', "db.from('admin_duties').upsert(r).select('id')")).toEqual({})
   })
 })
 
 describe('the page.requireAdmin swap (codemod T4)', () => {
   const page = 'app/(stellr)/(admin)/admin/x/page.tsx'
-  const baseline = { files: { [page]: { requireAdminPage: 1 }, 'lib/a.ts': { isStaffRole: 1 } } }
-  const swapped = { [page]: { pageRequireAdmin: 1 }, 'lib/a.ts': { isStaffRole: 1 } }
+  const baseline = { files: { [page]: { requireAdminPage: 1 }, 'lib/a.ts': { isCrewRole: 1 } } }
+  const swapped = { [page]: { pageRequireAdmin: 1 }, 'lib/a.ts': { isCrewRole: 1 } }
 
   it('is neither growth nor progress: the file still holds one site to convert', () => {
     expect(idiomDiff(baseline, swapped)).toEqual({ added: [], stale: [] })
@@ -255,7 +255,7 @@ describe('the page.requireAdmin swap (codemod T4)', () => {
 
   it('counts as progress only when the page moves on to a confining adapter', () => {
     const was = { files: swapped }
-    const done = { 'lib/a.ts': { isStaffRole: 1 } }
+    const done = { 'lib/a.ts': { isCrewRole: 1 } }
     expect(idiomDiff(was, done).stale).toEqual([`${page}: requireAdminPage 1 -> 0`])
     expect(nextIdiomFiles(was, done)).toEqual(done)
   })
@@ -347,7 +347,7 @@ describe('growth against the merge base', () => {
 })
 
 describe('baseline writer', () => {
-  const baseline = { files: { 'lib/a.ts': { isAdminClaims: 2, isStaffRole: 1 }, 'lib/gone.ts': { isAdminClaims: 1 } } }
+  const baseline = { files: { 'lib/a.ts': { isAdminClaims: 2, isCrewRole: 1 }, 'lib/gone.ts': { isAdminClaims: 1 } } }
 
   it('only falls by default, and rises only when told to', () => {
     const measured = { 'lib/a.ts': { isAdminClaims: 3 }, 'lib/new.ts': { isAdminClaims: 1 } }
@@ -359,19 +359,19 @@ describe('baseline writer', () => {
     const measured = { 'lib/a.ts': { isAdminClaims: 3 }, 'lib/new.ts': { isAdminClaims: 1 } }
     expect(idiomDiff(baseline, measured)).toEqual({
       added: ['lib/a.ts: isAdminClaims 2 -> 3', 'lib/new.ts: isAdminClaims 0 -> 1'],
-      stale: ['lib/a.ts: isStaffRole 1 -> 0', 'lib/gone.ts: isAdminClaims 1 -> 0'],
+      stale: ['lib/a.ts: isCrewRole 1 -> 0', 'lib/gone.ts: isAdminClaims 1 -> 0'],
     })
   })
 
   it('totals what is in the files', () => {
-    expect(totalsOf(baseline.files)).toEqual({ files: 2, sites: 4, byIdiom: { isAdminClaims: 3, isStaffRole: 1 } })
+    expect(totalsOf(baseline.files)).toEqual({ files: 2, sites: 4, byIdiom: { isAdminClaims: 3, isCrewRole: 1 } })
   })
 
   it('an idiom cannot leave the list while it still has sites', () => {
     const list = LEGACY_IDIOMS.filter((i: { id: string }) => i.id !== 'isAdminClaims')
-    const withIds = { idioms: ['isAdminClaims', 'isStaffRole'], files: baseline.files }
+    const withIds = { idioms: ['isAdminClaims', 'isCrewRole'], files: baseline.files }
     expect(droppedIdioms(withIds, list)).toEqual(['isAdminClaims'])
-    expect(droppedIdioms({ idioms: ['isAdminClaims'], files: { 'lib/a.ts': { isStaffRole: 1 } } }, list)).toEqual([])
+    expect(droppedIdioms({ idioms: ['isAdminClaims'], files: { 'lib/a.ts': { isCrewRole: 1 } } }, list)).toEqual([])
     expect(droppedIdioms(withIds)).toEqual([])
   })
 })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail, staffAlertEmail } from '@/lib/email'
+import { sendEmail, teamInboxEmail } from '@/lib/email'
 import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
@@ -9,7 +9,7 @@ import { loadMemberDigest, outstandingCount } from '@/lib/admin-digest'
 import { renderDigestEmail } from '@/lib/admin-digest-email'
 import { appUrl } from '@/lib/email-campaigns'
 import { isDigestSendTime } from '@/lib/weekly-digest-schedule'
-import { staffAudienceEmails } from '@/lib/authz/audiences'
+import { dutyAudienceEmails } from '@/lib/authz/audiences'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // GET /api/cron/weekly-digest — the admin dashboard's week, emailed every
@@ -31,12 +31,12 @@ const JOB = 'weekly-digest'
 
 /**
  * Emails of active members holding the 'all' staff scope, through the Stellr
- * staff audience (S5 B17), which reads staff_roles whatever AUTHZ_SOURCE says.
+ * staff audience (S5 B17), which reads admin_duties whatever AUTHZ_SOURCE says.
  * The digest is Stellr's: its sections read Stellr's rows only (S5 B11). Throws
  * AuthzLookupError so the caller can fall back.
  */
 function digestRecipients(db: SupabaseClient): Promise<string[]> {
-  return staffAudienceEmails(db, STELLR_TENANT_ID, ['all'])
+  return dutyAudienceEmails(db, STELLR_TENANT_ID, ['all'])
 }
 
 /** Whether a run already sent the digest in the last 20 hours. */
@@ -74,11 +74,11 @@ export const GET = withCronAudit('weekly-digest', async (req: NextRequest) => {
   try {
     recipients = await digestRecipients(db)
   } catch (err) {
-    console.error('[cron:weekly-digest] recipient lookup failed; falling back to the staff inbox:', err)
+    console.error('[cron:weekly-digest] recipient lookup failed; falling back to the team inbox:', err)
     run.fail('recipients', err)
   }
   const fallback = recipients.length === 0
-  if (fallback) recipients = [staffAlertEmail()]
+  if (fallback) recipients = [teamInboxEmail()]
 
   let digest
   try {

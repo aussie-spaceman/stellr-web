@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentTenantId, requireTenantStaff } from '@/lib/authz'
+import { currentTenantId, requireTenantCrew } from '@/lib/authz'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
 import { enforcedTenantFilter, loadRecord, scopedRowWrite } from '@/lib/tenancy/load-scoped'
@@ -36,7 +36,7 @@ const stopsAtLoad = (scope: ScopeContext) => enforcedTenantFilter(scope, 'event_
 export const PATCH = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'event_participation.record.update', ...eventFor(req) }), updateParticipation)
 
 async function updateParticipation(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 
@@ -89,7 +89,7 @@ async function updateParticipation(req: Request, { params }: { params: Promise<{
 export const DELETE = withAudit(({ args: [req] }: { args: Args }) => ({ action: 'event_participation.record.delete', ...eventFor(req) }), deleteParticipation)
 
 async function deleteParticipation(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

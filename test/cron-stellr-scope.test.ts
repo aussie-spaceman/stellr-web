@@ -26,7 +26,7 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => h.db }))
-vi.mock('@/lib/email', () => ({ sendEmail: h.sendEmail, staffAlertEmail: () => 'staff@example.org' }))
+vi.mock('@/lib/email', () => ({ sendEmail: h.sendEmail, teamInboxEmail: () => 'staff@example.org' }))
 vi.mock('@/lib/notify', () => ({ notifyMember: h.notifyMember, notifyCommunityAdmins: vi.fn() }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: vi.fn(async () => {}) }))
 vi.mock('@/lib/compliance-admin', () => ({

@@ -1,8 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail, staffAlertEmail } from '@/lib/email'
+import { sendEmail, teamInboxEmail } from '@/lib/email'
 import { escapeHtml } from '@/lib/email-layout'
 import { sendSms, SMS_ENABLED } from '@/lib/sms'
-import { staffAudienceMemberIds } from '@/lib/authz/audiences'
+import { dutyAudienceMemberIds } from '@/lib/authz/audiences'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 // Multi-channel notification dispatch (FR-COM-06 + session reminders).
@@ -94,7 +94,7 @@ export async function notifyMembers(memberIds: string[], input: NotifyInput): Pr
 }
 
 /**
- * Staff scopes that receive an admin alert in Stellr: anyone whose staff_roles
+ * Staff scopes that receive an admin alert in Stellr: anyone whose admin_duties
  * row grants 'all' or 'community', so member-raised issues (e.g. a flagged
  * unavailable training resource) reach the people who can fix them. Platform
  * admins are Clerk role claims, not rows there, so an admin is only reached if
@@ -102,7 +102,7 @@ export async function notifyMembers(memberIds: string[], input: NotifyInput): Pr
  */
 const ALERT_SCOPES = ['all', 'community'] as const
 
-export interface StaffAlertOptions {
+export interface TeamAlertOptions {
   /**
    * The tenant whose staff the alert is for. Stellr when omitted, as for every
    * caller today. Take it from the tenant_id of the database row the alert is
@@ -127,11 +127,11 @@ async function activeMemberIds(ids: string[]): Promise<string[]> {
 
 /**
  * Notify a tenant's staff. Best-effort. Recipients come from lib/authz/audiences
- * (S5 B17): for Stellr, the same staff_roles query as before, whatever
+ * (S5 B17): for Stellr, the same admin_duties query as before, whatever
  * AUTHZ_SOURCE says; for another tenant, its tenant_admin memberships.
  *
  * When a Stellr lookup fails or finds nobody, the alert goes to the staff inbox
- * instead: on 28 Sept 2026 prod had zero staff_roles rows and every admin alert
+ * instead: on 28 Sept 2026 prod had zero admin_duties rows and every admin alert
  * silently reached nobody.
  *
  * Another tenant's alert never goes to Stellr's inbox, because its body can hold
@@ -142,20 +142,20 @@ async function activeMemberIds(ids: string[]): Promise<string[]> {
  * community table. tenants.status is not read yet. Whether a suspended tenant's
  * admins keep getting alerts is an open owner decision.
  */
-export async function notifyCommunityAdmins(input: NotifyInput, opts: StaffAlertOptions = {}): Promise<void> {
+export async function notifyCommunityAdmins(input: NotifyInput, opts: TeamAlertOptions = {}): Promise<void> {
   const tenantId = opts.tenantId ?? STELLR_TENANT_ID
   const stellr = tenantId === STELLR_TENANT_ID
   let ids: string[] = []
   let lookupFailed = false
   try {
-    const audience = await staffAudienceMemberIds(supabaseServer(), tenantId, ALERT_SCOPES)
+    const audience = await dutyAudienceMemberIds(supabaseServer(), tenantId, ALERT_SCOPES)
     ids = stellr ? audience : await activeMemberIds(audience)
   } catch (e) {
     lookupFailed = true
     console.error(
       stellr
-        ? '[notify] staff_roles lookup failed; falling back to the staff inbox:'
-        : `[notify] staff lookup failed for tenant ${tenantId}:`,
+        ? '[notify] admin_duties lookup failed; falling back to the team inbox:'
+        : `[notify] admin lookup failed for tenant ${tenantId}:`,
       e,
     )
   }
@@ -167,18 +167,18 @@ export async function notifyCommunityAdmins(input: NotifyInput, opts: StaffAlert
   if (!stellr) {
     console.error(
       `[notify] admin alert for tenant ${tenantId} dropped: ` +
-        (lookupFailed ? 'its staff lookup failed' : 'it has no tenant admin') +
-        '. It is not sent to the Stellr staff inbox.',
+        (lookupFailed ? 'its admin lookup failed' : 'it has no tenant admin') +
+        '. It is not sent to the Stellr team inbox.',
     )
     return
   }
 
-  const to = staffAlertEmail()
+  const to = teamInboxEmail()
   console.error(
-    `[notify] no staff_roles holder of 'all' or 'community' — admin alert sent to ${to} instead. ` +
-      'Grant a scope on /admin/staff so alerts reach a named person.',
+    `[notify] no admin_duties holder of 'all' or 'community' — admin alert sent to ${to} instead. ` +
+      'Give a duty on /admin/duties so alerts reach a named person.',
   )
-  const note = `Sent to ${to} because no staff member holds the 'all' or 'community' scope. Grant one on /admin/staff.`
+  const note = `Sent to ${to} because nobody holds the 'all' or 'community' duty. Give one on /admin/duties.`
   try {
     await sendEmail({
       to,

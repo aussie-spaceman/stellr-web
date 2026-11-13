@@ -5,7 +5,7 @@ import { STELLR_TENANT_ID } from './constants'
 
 const OTHER_TENANT = '11111111-1111-4111-8111-111111111111'
 
-const empty = { clerkAdminIds: [], eventManagers: [], staff: [], existingMemberships: [], existingPlatformAdmins: [] }
+const empty = { clerkAdminIds: [], eventManagers: [], duties: [], existingMemberships: [], existingPlatformAdmins: [] }
 
 describe('planRoleMapping', () => {
   it('maps Clerk admins to platform admins and Stellr tenant admins', () => {
@@ -27,15 +27,15 @@ describe('planRoleMapping', () => {
   it('keys staff by member, carrying the Clerk id when there is one', () => {
     const plan = planRoleMapping({
       ...empty,
-      staff: [
+      duties: [
         { member_id: 'm1', clerk_user_id: 'user_s' },
         { member_id: 'm2', clerk_user_id: null },
         { member_id: 'm1', clerk_user_id: 'user_s' },
       ],
     })
     expect(plan.memberships.map((m) => [m.member_id, m.clerk_user_id, m.role])).toEqual([
-      ['m1', 'user_s', 'staff'],
-      ['m2', null, 'staff'],
+      ['m1', 'user_s', 'duty_holder'],
+      ['m2', null, 'duty_holder'],
     ])
   })
 
@@ -43,11 +43,11 @@ describe('planRoleMapping', () => {
     const plan = planRoleMapping({
       ...empty,
       clerkAdminIds: ['user_a'],
-      staff: [{ member_id: 'm1', clerk_user_id: null }],
+      duties: [{ member_id: 'm1', clerk_user_id: null }],
       existingPlatformAdmins: [{ clerk_user_id: 'user_a' }],
       existingMemberships: [
         { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_a', member_id: null, role: 'tenant_admin' },
-        { tenant_id: STELLR_TENANT_ID, clerk_user_id: null, member_id: 'm1', role: 'staff' },
+        { tenant_id: STELLR_TENANT_ID, clerk_user_id: null, member_id: 'm1', role: 'duty_holder' },
       ],
     })
     expect(plan).toEqual({ platformAdmins: [], memberships: [], alreadyPresent: 2 })
@@ -77,11 +77,11 @@ describe('diffRoleMapping', () => {
     clerkAdminIds: ['user_a'],
     clerkEventManagerIds: ['user_m'],
     eventManagers: [{ clerk_user_id: 'user_m', tenant_id: STELLR_TENANT_ID }, { clerk_user_id: 'user_m', tenant_id: null }],
-    staff: [{ member_id: 'm1', clerk_user_id: 'user_s' }],
+    duties: [{ member_id: 'm1', clerk_user_id: 'user_s' }],
     existingMemberships: [
       { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_a', member_id: null, role: 'tenant_admin' },
       { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_m', member_id: null, role: 'event_manager' },
-      { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: 'm1', role: 'staff' },
+      { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: 'm1', role: 'duty_holder' },
     ],
     existingPlatformAdmins: [{ clerk_user_id: 'user_a' }],
   })
@@ -152,14 +152,14 @@ describe('diffRoleMapping', () => {
   })
 
   it('reports a membership left behind when its last assignment or staff row went', () => {
-    const drift = diffRoleMapping({ ...seeded(), eventManagers: [], clerkEventManagerIds: [], staff: [] })
-    expect(drift.stale.map((m) => m.role)).toEqual(['event_manager', 'staff'])
+    const drift = diffRoleMapping({ ...seeded(), eventManagers: [], clerkEventManagerIds: [], duties: [] })
+    expect(drift.stale.map((m) => m.role)).toEqual(['duty_holder', 'event_manager'])
   })
 
   it('reports a membership missing after a staff row is added', () => {
     const base = seeded()
-    const drift = diffRoleMapping({ ...base, staff: [...base.staff, { member_id: 'm2', clerk_user_id: null }] })
-    expect(drift.missing).toMatchObject([{ member_id: 'm2', role: 'staff' }])
+    const drift = diffRoleMapping({ ...base, duties: [...base.duties, { member_id: 'm2', clerk_user_id: null }] })
+    expect(drift.missing).toMatchObject([{ member_id: 'm2', role: 'duty_holder' }])
   })
 
   it('matches a staff row by either key, so a Clerk id gained later is not drift', () => {
@@ -168,7 +168,7 @@ describe('diffRoleMapping', () => {
       roleDriftCount(
         diffRoleMapping({
           ...base,
-          existingMemberships: base.existingMemberships.map((m) => (m.role === 'staff' ? { ...m, clerk_user_id: null } : m)),
+          existingMemberships: base.existingMemberships.map((m) => (m.role === 'duty_holder' ? { ...m, clerk_user_id: null } : m)),
         }),
       ),
     ).toBe(0)
@@ -176,7 +176,7 @@ describe('diffRoleMapping', () => {
       roleDriftCount(
         diffRoleMapping({
           ...base,
-          existingMemberships: base.existingMemberships.map((m) => (m.role === 'staff' ? { ...m, member_id: null } : m)),
+          existingMemberships: base.existingMemberships.map((m) => (m.role === 'duty_holder' ? { ...m, member_id: null } : m)),
         }),
       ),
     ).toBe(0)

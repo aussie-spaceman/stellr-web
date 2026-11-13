@@ -1,7 +1,7 @@
 /**
  * Role sync (multi-tenancy plan S5, slice C9): keeps tenant_memberships and
  * platform_admins in step with today's authorities (the Clerk role,
- * event_manager_assignments, staff_roles), so AUTHZ_SOURCE=shadow and postgres
+ * event_manager_assignments, admin_duties), so AUTHZ_SOURCE=shadow and postgres
  * have something true to read. Under the default clerk source nothing reads
  * these rows, so writing them changes no decision.
  *
@@ -182,26 +182,26 @@ export async function loadEventAssignees(db: SupabaseClient, eventSlug: string):
   }
 }
 
-// ── Staff (staff_roles is Stellr's only) ───────────────────────────────────
+// ── Staff (admin_duties is Stellr's only) ───────────────────────────────────
 
-/** After staff_roles is written. Scopes stay in staff_roles; a membership says only that the role is held. */
-export function syncStaffGranted(db: SupabaseClient, memberId: string): Promise<RoleSyncResult> {
-  return guarded('staff_grant', async () => {
+/** After admin_duties is written. Scopes stay in admin_duties; a membership says only that the role is held. */
+export function syncDutyGranted(db: SupabaseClient, memberId: string): Promise<RoleSyncResult> {
+  return guarded('duty_grant', async () => {
     const clerkUserId = await memberClerkId(db, memberId)
-    await ensureMembership(db, STELLR_TENANT_ID, 'staff', { clerkUserId, memberId })
+    await ensureMembership(db, STELLR_TENANT_ID, 'duty_holder', { clerkUserId, memberId })
   })
 }
 
 /**
- * After staff_roles is deleted. Removes the row by either key, so a Clerk-keyed
+ * After admin_duties is deleted. Removes the row by either key, so a Clerk-keyed
  * row cannot survive the revoke. Each key is tried whatever happened to the other,
  * and the first failure is what gets reported.
  */
-export function syncStaffRevoked(db: SupabaseClient, memberId: string): Promise<RoleSyncResult> {
-  return guarded('staff_revoke', async () => {
+export function syncDutyRevoked(db: SupabaseClient, memberId: string): Promise<RoleSyncResult> {
+  return guarded('duty_revoke', async () => {
     const attempts = await Promise.allSettled([
-      removeMembership(db, STELLR_TENANT_ID, 'staff', { clerkUserId: null, memberId }),
-      memberClerkId(db, memberId).then((clerkUserId) => removeMembership(db, STELLR_TENANT_ID, 'staff', { clerkUserId, memberId: null })),
+      removeMembership(db, STELLR_TENANT_ID, 'duty_holder', { clerkUserId: null, memberId }),
+      memberClerkId(db, memberId).then((clerkUserId) => removeMembership(db, STELLR_TENANT_ID, 'duty_holder', { clerkUserId, memberId: null })),
     ])
     for (const attempt of attempts) {
       if (attempt.status === 'rejected') throw attempt.reason
@@ -270,20 +270,20 @@ async function readAll<T>(db: SupabaseClient, table: string, columns: string, or
 /**
  * Everything planRoleMapping and diffRoleMapping compare. Throws on any read
  * error, so a failed read can never look like "no drift". Member Clerk ids are
- * read for staff only: a read of every member would stop at PostgREST's row cap
+ * read for duty holders only: a read of every member would stop at PostgREST's row cap
  * and drop staff off the end.
  */
 export async function loadRoleInput(db: SupabaseClient, clerkUsers: readonly ClerkRoleUser[]): Promise<RoleDiffInput> {
-  const [managers, staff, memberships, platform] = await Promise.all([
+  const [managers, duties, memberships, platform] = await Promise.all([
     readAll<RoleDiffInput['eventManagers'][number]>(db, 'event_manager_assignments', 'clerk_user_id, tenant_id', 'id'),
-    readAll<{ member_id: string }>(db, 'staff_roles', 'member_id', 'member_id'),
+    readAll<{ member_id: string }>(db, 'admin_duties', 'member_id', 'member_id'),
     readAll<RoleDiffInput['existingMemberships'][number]>(db, 'tenant_memberships', 'tenant_id, clerk_user_id, member_id, role', 'id'),
     readAll<RoleDiffInput['existingPlatformAdmins'][number]>(db, 'platform_admins', 'clerk_user_id', 'clerk_user_id'),
   ])
-  const staffIds = staff.map((s) => s.member_id)
+  const dutyIds = duties.map((s) => s.member_id)
   const clerkByMember = new Map<string, string | null>()
-  if (staffIds.length > 0) {
-    const members = await db.from('members').select('id, clerk_user_id').in('id', staffIds)
+  if (dutyIds.length > 0) {
+    const members = await db.from('members').select('id, clerk_user_id').in('id', dutyIds)
     if (members.error) throw new Error(`Read failed: ${members.error.message}`)
     for (const m of (members.data ?? []) as { id: string; clerk_user_id: string | null }[]) clerkByMember.set(m.id, m.clerk_user_id)
   }
@@ -291,7 +291,7 @@ export async function loadRoleInput(db: SupabaseClient, clerkUsers: readonly Cle
     clerkAdminIds: clerkUsers.filter((u) => u.role === 'admin').map((u) => u.id),
     clerkEventManagerIds: clerkUsers.filter((u) => u.role === 'event_manager').map((u) => u.id),
     eventManagers: managers,
-    staff: staffIds.map((id) => ({ member_id: id, clerk_user_id: clerkByMember.get(id) ?? null })),
+    duties: dutyIds.map((id) => ({ member_id: id, clerk_user_id: clerkByMember.get(id) ?? null })),
     existingMemberships: memberships,
     existingPlatformAdmins: platform,
   }

@@ -69,8 +69,8 @@ export const DISPOSITIONS: Record<string, { transform: TransformId | null; why: 
   hasAdminPortalAccess: { transform: 'T1', why: 'not called on the session claims of an `await auth()` in the same async function' },
   isEventManagerClaims: { transform: null, why: 'lib/authz has no claim-only form. requireEventAccess also reads assignments, and can throw' },
   currentUserHasScope: { transform: 'T2', why: 'not a plain awaited call' },
-  isStaffRole: { transform: null, why: 'isStaffTarget is async and needs the target\'s ids, which the role alone does not give. A person also picks what a lookup failure refuses' },
-  STAFF_CLERK_ROLES: { transform: null, why: 'a role list, with no call to swap it for' },
+  isCrewRole: { transform: null, why: 'isCrewTarget is async and needs the target\'s ids, which the role alone does not give. A person also picks what a lookup failure refuses' },
+  CREW_CLERK_ROLES: { transform: null, why: 'a role list, with no call to swap it for' },
   portalRoleList: { transform: null, why: 'a role list, with no call to swap it for' },
   roleTableRead: { transform: null, why: 'a database read. Whether it decides access or lists an audience is a person\'s call' },
 }
@@ -85,7 +85,7 @@ const IDIOMS = LEGACY_IDIOMS as { id: string; kind: string; file?: string }[]
 const WRAPPER_FILES = IDIOMS.filter((i) => i.kind === 'wrapper').map((i) => i.file)
 
 /**
- * Wrappers that also serve people who are not staff, so the surface rule above applies to
+ * Wrappers that also serve people who are not crew, so the surface rule above applies to
  * them too. Take an entry off only once the sampling decision is recorded.
  */
 export const HELD_WRAPPERS: Readonly<Record<string, string>> = {
@@ -100,7 +100,7 @@ export function isAdminSurface(file: string): boolean {
 /** What to do after --write. A conversion moves both counts. */
 export const AFTER_WRITE = 'Now regenerate the baselines: npx tsx scripts/authz-idioms.mjs --write, then npx tsx scripts/s5-inventory.mjs --write'
 
-const OUTSIDE_SURFACE = 'outside the admin surface: this code can serve people who are not staff, so a person moves it (docs/AUTHZ.md, shadow reads)'
+const OUTSIDE_SURFACE = 'outside the admin surface: this code can serve people who are not crew, so a person moves it (docs/AUTHZ.md, shadow reads)'
 const CLIENT_FILE = 'a client component: lib/authz is server-only'
 
 export interface Conversion {

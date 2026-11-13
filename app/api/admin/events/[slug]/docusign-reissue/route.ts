@@ -28,10 +28,10 @@ export const POST = withAudit(
 
 async function reissueAgreement(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -68,7 +68,7 @@ async function reissueAgreement(req: Request, { params }: Ctx) {
   }
 
   // Reached only for a participant the reissue found on this event.
-  const part = await loadRecord<{ member_id: string | null }>(staff.scope, 'participants', participantId, {
+  const part = await loadRecord<{ member_id: string | null }>(crew.scope, 'participants', participantId, {
     db,
     select: 'member_id',
     notFound: () => NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 }),

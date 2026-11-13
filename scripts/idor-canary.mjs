@@ -51,12 +51,12 @@ const hostLabels = (name) =>
  * `suite` runs a route mutation in the tenant-host suite instead of the generated one.
  */
 export const MUTATIONS = [
-  { name: 'staff fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, label: 'staffFiltered', line: /CANARY:staff-tenant-filter/ },
-  { name: 'staff fixture: event filter removed', kind: 'fixture', file: FIXTURES, label: 'staffFiltered', line: /CANARY:staff-event-filter/ },
-  { name: 'staff fixture: 403 against 404 for a record out of scope', kind: 'fixture', file: FIXTURES, label: 'staffUniform', line: /CANARY:staff-uniform/ },
-  { name: 'staff fixture: tenant filter removed from a list with no id', kind: 'fixture', file: FIXTURES, label: 'staffList', line: /CANARY:staff-list-tenant-filter/ },
-  { name: 'staff fixture: event filter removed from a list with no id', kind: 'fixture', file: FIXTURES, label: 'staffList', line: /CANARY:staff-list-event-filter/ },
-  { name: 'staff fixture: platform guard removed', kind: 'fixture', file: FIXTURES, label: 'platformGuarded', line: /CANARY:platform-guard/ },
+  { name: 'crew fixture: tenant filter removed', kind: 'fixture', file: FIXTURES, label: 'crewFiltered', line: /CANARY:crew-tenant-filter/ },
+  { name: 'crew fixture: event filter removed', kind: 'fixture', file: FIXTURES, label: 'crewFiltered', line: /CANARY:crew-event-filter/ },
+  { name: 'crew fixture: 403 against 404 for a record out of scope', kind: 'fixture', file: FIXTURES, label: 'crewUniform', line: /CANARY:crew-uniform/ },
+  { name: 'crew fixture: tenant filter removed from a list with no id', kind: 'fixture', file: FIXTURES, label: 'crewList', line: /CANARY:crew-list-tenant-filter/ },
+  { name: 'crew fixture: event filter removed from a list with no id', kind: 'fixture', file: FIXTURES, label: 'crewList', line: /CANARY:crew-list-event-filter/ },
+  { name: 'crew fixture: platform guard removed', kind: 'fixture', file: FIXTURES, label: 'platformGuarded', line: /CANARY:platform-guard/ },
   { name: 'tenant host: host filter removed from a token lookup', kind: 'fixture', file: FIXTURES, labels: hostLabels('hostTokenScoped'), line: /CANARY:host-tenant-filter/ },
   { name: 'tenant host: 403 against 404 for another host\'s record', kind: 'fixture', file: FIXTURES, labels: hostLabels('hostUniform'), line: /CANARY:host-uniform/ },
   { name: 'fixture: owner filter removed from the query', kind: 'fixture', file: FIXTURES, label: 'ownerFiltered', line: /CANARY:owner-filter/ },

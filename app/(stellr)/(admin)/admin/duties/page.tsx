@@ -1,15 +1,15 @@
 import { supabaseServer } from '@/lib/supabase'
-import { STAFF_SCOPES, requireAdminPage } from '@/lib/admin-auth'
-import StaffRolesManager, { type StaffRole } from '@/components/admin/StaffRolesManager'
+import { DUTY_SCOPES, requireAdminPage } from '@/lib/admin-auth'
+import DutiesManager, { type DutyRow } from '@/components/admin/DutiesManager'
 
-export const metadata = { title: 'Admin — Staff roles' }
+export const metadata = { title: 'Admin — Duties' }
 
-// Function-scoped staff (platform RBAC seam, D10).
-export default async function AdminStaffPage() {
+// Duties: who gets which admin alerts and digests (was Staff roles until 13 Nov 2026).
+export default async function AdminDutiesPage() {
   await requireAdminPage()
   const db = supabaseServer()
   const { data } = await db
-    .from('staff_roles')
+    .from('admin_duties')
     .select('member_id, scopes, members:member_id(first_name, last_name, email)')
     .order('created_at', { ascending: false })
 
@@ -22,7 +22,7 @@ export default async function AdminStaffPage() {
       | null
   }
 
-  const roles: StaffRole[] = ((data ?? []) as Row[]).map((r) => {
+  const roles: DutyRow[] = ((data ?? []) as Row[]).map((r) => {
     const m = Array.isArray(r.members) ? r.members[0] : r.members
     const name = m ? `${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() : ''
     return {
@@ -36,13 +36,13 @@ export default async function AdminStaffPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Staff roles</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Duties</h1>
         <p className="mt-0.5 text-sm text-brand-muted-soft">
-          Grant members a scoped set of staff permissions — the seam for granular roles like a future
-          Graduations coordinator.
+          Give a member a duty: the alerts and digests for an area of Stellr’s work, such as community
+          alerts or the Friday digest. A duty routes notices. It does not open the admin portal.
         </p>
       </div>
-      <StaffRolesManager initial={roles} allScopes={[...STAFF_SCOPES]} />
+      <DutiesManager initial={roles} allScopes={[...DUTY_SCOPES]} />
     </div>
   )
 }

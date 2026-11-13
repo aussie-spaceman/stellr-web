@@ -64,10 +64,10 @@ describe('StartViewAsSession', () => {
   })
 
   it('shows why a session was refused and does not re-render', async () => {
-    reply = { status: 403, body: { error: 'Cannot view as a staff member.' } }
+    reply = { status: 403, body: { error: 'Cannot view as a crew member.' } }
     render(<StartViewAsSession memberId="m1" what="Billing details" />)
     fireEvent.click(screen.getByRole('button', { name: /Start view-as session/ }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot view as a staff member.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot view as a crew member.')
     expect(refresh).not.toHaveBeenCalled()
   })
 })

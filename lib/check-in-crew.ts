@@ -2,7 +2,7 @@
 //
 // They are not on an event's roster, so participants.checked_in_at can't hold
 // their arrival. The desk lists them on a Mentors tab (components/admin/
-// CheckInLive.tsx) and a tap writes a row to event_staff_check_ins; undo
+// CheckInLive.tsx) and a tap writes a row to event_crew_check_ins; undo
 // deletes it. The "All attendees" email group (lib/event-emails/audiences.ts)
 // reads these rows beside the roster's check-ins.
 //
@@ -13,10 +13,10 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadMentorContacts } from '@/lib/event-emails/audiences'
-import { STAFF_KEY, type DeskStaffCheckIn, type DeskStaffPerson } from '@/lib/check-in-desk'
+import { CREW_KEY, type DeskCrewCheckIn, type DeskCrewPerson } from '@/lib/check-in-desk'
 
 /** The Mentors tab: one row per person, by address, minus anyone on the roster. */
-export async function loadDeskStaff(db: SupabaseClient, slug: string): Promise<(DeskStaffPerson & { memberId: string | null })[]> {
+export async function loadDeskCrew(db: SupabaseClient, slug: string): Promise<(DeskCrewPerson & { memberId: string | null })[]> {
   const [contacts, { data: rosterRows }] = await Promise.all([
     loadMentorContacts(db, slug),
     db
@@ -28,7 +28,7 @@ export async function loadDeskStaff(db: SupabaseClient, slug: string): Promise<(
   ])
   const onRoster = new Set(((rosterRows ?? []) as { member_id: string | null }[]).map((r) => r.member_id))
   const seen = new Set<string>()
-  const out: (DeskStaffPerson & { memberId: string | null })[] = []
+  const out: (DeskCrewPerson & { memberId: string | null })[] = []
   // Volunteers come first, so someone who is both is listed once, as a mentor.
   for (const c of contacts) {
     const email = c.email.trim().toLowerCase()
@@ -39,54 +39,54 @@ export async function loadDeskStaff(db: SupabaseClient, slug: string): Promise<(
   return out
 }
 
-/** This event's staff check-ins, by staff key. */
-export async function loadStaffCheckIns(db: SupabaseClient, slug: string): Promise<Map<string, DeskStaffCheckIn>> {
+/** This event's crew check-ins, by crew key. */
+export async function loadCrewCheckIns(db: SupabaseClient, slug: string): Promise<Map<string, DeskCrewCheckIn>> {
   const { data, error } = await db
-    .from('event_staff_check_ins')
-    .select('staff_key, checked_in_at, check_in_method')
+    .from('event_crew_check_ins')
+    .select('crew_key, checked_in_at, check_in_method')
     .eq('event_slug', slug)
-  if (error) throw new Error(`event_staff_check_ins: ${error.message}`)
+  if (error) throw new Error(`event_crew_check_ins: ${error.message}`)
   return new Map(
-    ((data ?? []) as { staff_key: string; checked_in_at: string; check_in_method: string }[]).map((r) => [
-      r.staff_key,
+    ((data ?? []) as { crew_key: string; checked_in_at: string; check_in_method: string }[]).map((r) => [
+      r.crew_key,
       { checkedInAt: r.checked_in_at, checkInMethod: r.check_in_method },
     ]),
   )
 }
 
-export type StaffWriteResult = { ok: true } | { ok: false; status: number; error: string }
+export type CrewWriteResult = { ok: true } | { ok: false; status: number; error: string }
 
 /**
  * Checks a mentor or event manager in (at `at`) or undoes it. The key must
  * name someone on this event's Mentors tab. A second check-in keeps the first
  * time, as a participant's does.
  */
-export async function writeStaffCheckIn(
+export async function writeCrewCheckIn(
   db: SupabaseClient,
   slug: string,
   key: unknown,
   op: { checkIn: true; at: string; by: string | null } | { checkIn: false },
-): Promise<StaffWriteResult> {
-  if (typeof key !== 'string' || !STAFF_KEY.test(key)) return { ok: false, status: 400, error: 'staffKey required' }
-  const person = (await loadDeskStaff(db, slug)).find((s) => s.id === key)
+): Promise<CrewWriteResult> {
+  if (typeof key !== 'string' || !CREW_KEY.test(key)) return { ok: false, status: 400, error: 'crewKey required' }
+  const person = (await loadDeskCrew(db, slug)).find((s) => s.id === key)
   if (!person) return { ok: false, status: 404, error: 'Not a mentor or event manager of this event' }
 
   const { error } = op.checkIn
-    ? await db.from('event_staff_check_ins').upsert(
+    ? await db.from('event_crew_check_ins').upsert(
         {
           event_slug: slug,
-          staff_key: key,
+          crew_key: key,
           role: person.role,
           member_id: person.memberId,
           checked_in_at: op.at,
           check_in_method: 'manual',
           checked_in_by: op.by,
         },
-        { onConflict: 'event_slug,staff_key', ignoreDuplicates: true },
+        { onConflict: 'event_slug,crew_key', ignoreDuplicates: true },
       )
-    : await db.from('event_staff_check_ins').delete().eq('event_slug', slug).eq('staff_key', key)
+    : await db.from('event_crew_check_ins').delete().eq('event_slug', slug).eq('crew_key', key)
   if (error) {
-    console.error('[check-in] staff write failed:', error.message)
+    console.error('[check-in] crew write failed:', error.message)
     return { ok: false, status: 500, error: 'Database error' }
   }
   return { ok: true }

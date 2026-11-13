@@ -26,10 +26,10 @@ export const POST = withAudit(
 
 async function sendProfiles(req: Request, { params }: Params) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const body = await req.json().catch(() => null)

@@ -38,7 +38,7 @@ const { addParticipantToGroup } = await import('@/lib/group-participant-add')
 const { syncParticipantsFromSheet, SheetSyncRefused } = await import('@/lib/sheet-participant-sync')
 
 const organiser = { memberId: 'member-org', label: 'organiser' }
-const staff = { memberId: 'member-staff', label: 'admin' }
+const crew = { memberId: 'member-staff', label: 'admin' }
 const person = (dob: string, extra: Record<string, unknown> = {}) => ({
   first_name: 'Sam', last_name: 'Lee', email: 'sam@example.com', date_of_birth: dob, event_role: 'participant', ...extra,
 })
@@ -121,7 +121,7 @@ describe('the shared roster add, on a tenant’s group', () => {
     const res = await addParticipantToGroup(db.client, tenantGroup, person(FIFTEEN, {
       emergency_contact_first_name: 'Pat', emergency_contact_last_name: 'Lee', emergency_contact_email: 'pat@example.com',
       emergency_contact_relationship: 'Parent',
-    }), staff)
+    }), crew)
     expect(res).toEqual({
       status: 400,
       body: { code: 'under_minimum_age', error: 'Sam Lee must be 18 or older to register for this event online. Please contact the event organiser.' },
@@ -146,7 +146,7 @@ describe('the shared roster add, on a tenant’s group', () => {
 
   it('staff naming a Member ID carry on with what they typed, as for an unknown ID, with no lookup', async () => {
     s.onFile.mockResolvedValue(ON_FILE)
-    const res = await addParticipantToGroup(db.client, tenantGroup, { ...person(ADULT, { event_role: 'adult' }), membership_id: '0000271', linked: true }, staff)
+    const res = await addParticipantToGroup(db.client, tenantGroup, { ...person(ADULT, { event_role: 'adult' }), membership_id: '0000271', linked: true }, crew)
     expect(res.status).toBe(201)
     expect(participants()[0]).toMatchObject({ first_name: 'Sam', email: 'sam@example.com', tenant_id: TENANT })
     expect(participants()[0]).not.toHaveProperty('member_id')

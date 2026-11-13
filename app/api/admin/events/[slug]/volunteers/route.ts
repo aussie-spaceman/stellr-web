@@ -31,12 +31,12 @@ type Ctx = { params: Promise<{ slug: string }> }
 // GET — interested + assigned volunteers for this event, with advisory pills.
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
-  const db = stellrOnlyDb(staff.scope, supabaseServer())
+  const db = stellrOnlyDb(crew.scope, supabaseServer())
   const containerId = await eventContainerId(db, slug)
   const { interestRows, assignedRows } = await loadEventVolunteers(db, slug, containerId)
 
@@ -77,17 +77,17 @@ export const POST = withAudit(
 // POST { memberId } — assign a volunteer to this event.
 async function assignVolunteer(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const { memberId } = await req.json().catch(() => ({}))
   if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
   noteAuditSubject(req, { id: typeof memberId === 'string' ? memberId : null })
 
-  const db = stellrOnlyDb(staff.scope, supabaseServer())
+  const db = stellrOnlyDb(crew.scope, supabaseServer())
   const event = await getEventBySlug(slug).catch(() => null)
   const title = (event as { title?: string } | null)?.title ?? null
 
@@ -147,17 +147,17 @@ export const DELETE = withAudit(
 // DELETE { memberId } — remove a volunteer assignment.
 async function unassignVolunteer(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const { memberId } = await req.json().catch(() => ({}))
   if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
   noteAuditSubject(req, { id: typeof memberId === 'string' ? memberId : null })
 
-  const db = stellrOnlyDb(staff.scope, supabaseServer())
+  const db = stellrOnlyDb(crew.scope, supabaseServer())
   const containerId = await eventContainerId(db, slug)
   await removeEventVolunteer(db, { containerId, memberId, slug })
 

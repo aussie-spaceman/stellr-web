@@ -206,7 +206,7 @@ export function renderDigestEmail(
     <p style="margin:32px 0 4px;font-size:13px;font-weight:bold;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND_NAVY}">Waiting on you (${waiting})</p>
     ${blocksHtml}
     <p style="margin:32px 0 0"><a href="${url('/admin')}" style="display:inline-block;padding:12px 20px;background:${BRAND_NAVY};color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold">Open the dashboard</a></p>
-    <p style="margin:24px 0 0;font-size:13px;color:${MUTED}">Sent every Friday at midday Mountain time to staff with the “all” scope. Change who gets it on <a href="${url('/admin/staff')}" style="color:${MUTED}">Staff roles</a>.</p>`
+    <p style="margin:24px 0 0;font-size:13px;color:${MUTED}">Sent every Friday at midday Mountain time to everyone with the “all” duty. Change who gets it on <a href="${url('/admin/duties')}" style="color:${MUTED}">Duties</a>.</p>`
 
   const html = emailLayout({
     heading: 'Your weekly member digest',
@@ -239,7 +239,7 @@ export function renderDigestEmail(
     '',
     `Open the dashboard: ${url('/admin')}`,
     '',
-    'Sent every Friday at midday Mountain time to staff with the "all" scope.',
+    'Sent every Friday at midday Mountain time to everyone with the "all" duty.',
   ].join('\n')
 
   return { subject, html, text }

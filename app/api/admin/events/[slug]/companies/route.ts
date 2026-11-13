@@ -43,11 +43,11 @@ type Params = { params: Promise<{ slug: string }> }
 
 export async function GET(_req: Request, { params }: Params) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
 
   try {
-    const companies = await loadEventCompanies(supabaseServer(), staff.tenantId, slug)
+    const companies = await loadEventCompanies(supabaseServer(), crew.tenantId, slug)
     return NextResponse.json({ companies })
   } catch (err) {
     // The code only (a SQLSTATE or an error class name, never the message), so a
@@ -65,9 +65,9 @@ export const PUT = withAudit(
 
 async function setCount(req: Request, { params }: Params) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
 
   const body = await req.json().catch(() => null)
   const count = Number(body?.count)
@@ -78,7 +78,7 @@ async function setCount(req: Request, { params }: Params) {
 
   // Creates any missing companies up to `count` and removes those above it
   // (participants.company_id nulls via ON DELETE SET NULL).
-  if (!(await setEventCompanyCount(supabaseServer(), staff.tenantId, slug, count))) {
+  if (!(await setEventCompanyCount(supabaseServer(), crew.tenantId, slug, count))) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
   return NextResponse.json({ ok: true })
@@ -93,15 +93,15 @@ const STELLR_ONLY_ACTIONS = new Set(['override', 'override_all', 'auto_assign'])
 
 async function changePlacement(req: Request, { params }: Params) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
 
   const body = await req.json().catch(() => null)
   const action = body?.action
   if (typeof action === 'string' && /^[a-z_]{1,20}$/.test(action)) noteAuditSubject(req, { detail: { op: action } })
   if (STELLR_ONLY_ACTIONS.has(action)) {
-    const refused = refuseOutsideStellr(staff.scope)
+    const refused = refuseOutsideStellr(crew.scope)
     if (refused) return refused
   }
   const db = supabaseServer()
@@ -112,7 +112,7 @@ async function changePlacement(req: Request, { params }: Params) {
     noteAuditSubject(req, { id: companyId })
     const saved = await renameEventCompany(
       db,
-      staff.tenantId,
+      crew.tenantId,
       slug,
       companyId,
       typeof name === 'string' && name.trim() ? name.trim() : null,
@@ -162,7 +162,7 @@ async function changePlacement(req: Request, { params }: Params) {
       return NextResponse.json({ error: 'They’ve already submitted a team profile.' }, { status: 409 })
     }
     const fields = overridden
-      ? overrideFields({ userId: staff.userId, name: (await actorFromAuth()).actorLabel ?? null })
+      ? overrideFields({ userId: crew.userId, name: (await actorFromAuth()).actorLabel ?? null })
       : CLEARED_OVERRIDE
     const { error } = await updateEventParticipant(db, participantId, fields)
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
@@ -172,7 +172,7 @@ async function changePlacement(req: Request, { params }: Params) {
   if (action === 'override_all') {
     try {
       const actor = await actorFromAuth()
-      const result = await overrideOutstanding(db, slug, { userId: staff.userId, name: actor.actorLabel ?? null })
+      const result = await overrideOutstanding(db, slug, { userId: crew.userId, name: actor.actorLabel ?? null })
       return NextResponse.json({ ok: true, ...result })
     } catch (err) {
       console.error('[companies] override all failed:', err)

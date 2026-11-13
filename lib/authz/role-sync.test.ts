@@ -13,8 +13,8 @@ import {
   syncEventManagerUnassigned,
   syncPlatformAdminGranted,
   syncPlatformAdminRevoked,
-  syncStaffGranted,
-  syncStaffRevoked,
+  syncDutyGranted,
+  syncDutyRevoked,
   syncTenantAdminGranted,
   syncTenantAdminRevoked,
 } from './role-sync'
@@ -150,24 +150,24 @@ describe('event manager sync', () => {
 describe('staff sync', () => {
   it('is idempotent, and carries the Clerk id when the member has one', async () => {
     const { db, client } = fake({ members: [{ id: 'm1', clerk_user_id: 'user_s' }] })
-    await syncStaffGranted(client, 'm1')
-    await syncStaffGranted(client, 'm1')
-    expect(memberships(db)).toMatchObject([{ tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: 'm1', role: 'staff', source: 'admin' }])
+    await syncDutyGranted(client, 'm1')
+    await syncDutyGranted(client, 'm1')
+    expect(memberships(db)).toMatchObject([{ tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: 'm1', role: 'duty_holder', source: 'admin' }])
     expect(memberships(db)).toHaveLength(1)
   })
 
   it('writes a member-keyed row for a member with no login', async () => {
     const { db, client } = fake({ members: [{ id: 'm1', clerk_user_id: null }] })
-    expect(await syncStaffGranted(client, 'm1')).toEqual({ ok: true })
-    expect(memberships(db)).toMatchObject([{ clerk_user_id: null, member_id: 'm1', role: 'staff' }])
+    expect(await syncDutyGranted(client, 'm1')).toEqual({ ok: true })
+    expect(memberships(db)).toMatchObject([{ clerk_user_id: null, member_id: 'm1', role: 'duty_holder' }])
   })
 
   it('does not add a second row when one exists under the Clerk key only', async () => {
     const { db, client } = fake({
       members: [{ id: 'm1', clerk_user_id: 'user_s' }],
-      tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'staff' }],
+      tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'duty_holder' }],
     })
-    await syncStaffGranted(client, 'm1')
+    await syncDutyGranted(client, 'm1')
     expect(memberships(db)).toHaveLength(1)
   })
 
@@ -175,25 +175,25 @@ describe('staff sync', () => {
     const { db, client } = fake({
       members: [{ id: 'm1', clerk_user_id: 'user_s' }],
       tenant_memberships: [
-        { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'staff' },
-        { tenant_id: STELLR_TENANT_ID, clerk_user_id: null, member_id: 'm1', role: 'staff' },
+        { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'duty_holder' },
+        { tenant_id: STELLR_TENANT_ID, clerk_user_id: null, member_id: 'm1', role: 'duty_holder' },
         { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: null, role: 'event_manager' },
-        { tenant_id: OTHER_TENANT, clerk_user_id: 'user_s', member_id: null, role: 'staff' },
+        { tenant_id: OTHER_TENANT, clerk_user_id: 'user_s', member_id: null, role: 'duty_holder' },
       ],
     })
-    await syncStaffRevoked(client, 'm1')
+    await syncDutyRevoked(client, 'm1')
     expect(memberships(db).map((m) => [m.tenant_id, m.role])).toEqual([
       [STELLR_TENANT_ID, 'event_manager'],
-      [OTHER_TENANT, 'staff'],
+      [OTHER_TENANT, 'duty_holder'],
     ])
   })
 
   it('a failed member read still removes the member-keyed row, and is reported', async () => {
     const { db, client } = fake(
-      { tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, clerk_user_id: null, member_id: 'm1', role: 'staff' }] },
+      { tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, clerk_user_id: null, member_id: 'm1', role: 'duty_holder' }] },
       (table) => (table === 'members' ? 'boom' : null),
     )
-    expect(await syncStaffRevoked(client, 'm1')).toEqual({ ok: false, step: 'member_read', code: 'unknown' })
+    expect(await syncDutyRevoked(client, 'm1')).toEqual({ ok: false, step: 'member_read', code: 'unknown' })
     expect(memberships(db)).toHaveLength(0)
   })
 
@@ -201,7 +201,7 @@ describe('staff sync', () => {
     const { db, client } = fake({ members: [{ id: 'm1', clerk_user_id: 'user_s' }] }, (table, action) =>
       table === 'tenant_memberships' && action === 'select' ? 'boom' : null,
     )
-    expect(await syncStaffGranted(client, 'm1')).toEqual({ ok: false, step: 'membership_read', code: 'unknown' })
+    expect(await syncDutyGranted(client, 'm1')).toEqual({ ok: false, step: 'membership_read', code: 'unknown' })
     expect(memberships(db)).toHaveLength(0)
   })
 })
@@ -248,14 +248,14 @@ describe('a failed write', () => {
     const results = await Promise.all([
       assign(failing({ code: '42501', message: 'denied for value user_m' }), 'user_m', 'colorado'),
       unassign(failing({ code: '42501', message: 'x' }), 'user_m', 'colorado'),
-      syncStaffGranted(failing({ code: '42P01', message: 'x' }), 'm1'),
-      syncStaffRevoked(failing({ code: '42P01', message: 'x' }), 'm1'),
+      syncDutyGranted(failing({ code: '42P01', message: 'x' }), 'm1'),
+      syncDutyRevoked(failing({ code: '42P01', message: 'x' }), 'm1'),
       syncTenantAdminGranted(failing({ code: '42P01', message: 'x' }), 'user_a'),
       syncTenantAdminRevoked(failing({ code: '42P01', message: 'x' }), 'user_a'),
       syncPlatformAdminGranted(failing({ code: '42P01', message: 'x' }), 'user_a'),
       syncPlatformAdminRevoked(failing({ code: '42P01', message: 'x' }), 'user_a'),
       assign(failing('throw'), 'user_m', 'colorado'),
-      syncStaffGranted(failing('throw'), 'm1'),
+      syncDutyGranted(failing('throw'), 'm1'),
       syncTenantAdminGranted(failing('throw'), 'user_a'),
     ])
     for (const r of results) {
@@ -292,7 +292,7 @@ describe('the check, from a seeded database', () => {
       { clerk_user_id: 'user_m', event_slug: 'nevada', tenant_id: null },
       { clerk_user_id: 'user_other', event_slug: 'canary', tenant_id: OTHER_TENANT },
     ],
-    staff_roles: [{ member_id: 'm1', scopes: ['events'] }],
+    admin_duties: [{ member_id: 'm1', scopes: ['events'] }],
     members: [
       { id: 'm1', clerk_user_id: 'user_s' },
       { id: 'm9', clerk_user_id: 'user_nobody' },
@@ -300,7 +300,7 @@ describe('the check, from a seeded database', () => {
     tenant_memberships: [
       { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_a', member_id: null, role: 'tenant_admin' },
       { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_m', member_id: null, role: 'event_manager' },
-      { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: 'm1', role: 'staff' },
+      { tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_s', member_id: 'm1', role: 'duty_holder' },
       { tenant_id: OTHER_TENANT, clerk_user_id: 'user_other', member_id: null, role: 'tenant_admin' },
       { tenant_id: OTHER_TENANT, clerk_user_id: 'user_other', member_id: null, role: 'event_manager' },
     ],
@@ -330,8 +330,8 @@ describe('the check, from a seeded database', () => {
     const { db, client } = fake({ members: [{ id: 'm1', clerk_user_id: 'user_s' }] })
     db.table('event_manager_assignments').push({ clerk_user_id: 'user_m', event_slug: 'colorado', tenant_id: null })
     await assign(client, 'user_m', 'colorado')
-    db.table('staff_roles').push({ member_id: 'm1', scopes: ['events'] })
-    await syncStaffGranted(client, 'm1')
+    db.table('admin_duties').push({ member_id: 'm1', scopes: ['events'] })
+    await syncDutyGranted(client, 'm1')
     await syncTenantAdminGranted(client, 'user_a')
     await syncPlatformAdminGranted(client, 'user_a')
     expect(roleDriftCount(diffRoleMapping(await loadRoleInput(client, clerk)))).toBe(0)
@@ -345,14 +345,14 @@ describe('the check, from a seeded database', () => {
     expect(roleDriftCount(diffRoleMapping(input))).toBe(1200)
   })
 
-  it('reads Clerk ids for staff only, so a long members table cannot drop them past the cap', async () => {
+  it('reads Clerk ids for duty holders only, so a long members table cannot drop them past the cap', async () => {
     const others = Array.from({ length: 1100 }, (_, i) => ({ id: `other${i}`, clerk_user_id: `user_${i}` }))
-    const db = fakeSupabase({ staff_roles: [{ member_id: 'm1' }], members: [...others, { id: 'm1', clerk_user_id: 'user_s' }] }, { maxRows: 1000 })
+    const db = fakeSupabase({ admin_duties: [{ member_id: 'm1' }], members: [...others, { id: 'm1', clerk_user_id: 'user_s' }] }, { maxRows: 1000 })
     const input = await loadRoleInput(db.client as unknown as SupabaseClient, [])
-    expect(input.staff).toEqual([{ member_id: 'm1', clerk_user_id: 'user_s' }])
+    expect(input.duties).toEqual([{ member_id: 'm1', clerk_user_id: 'user_s' }])
   })
 
-  it.each(['event_manager_assignments', 'staff_roles', 'tenant_memberships', 'platform_admins', 'members'])(
+  it.each(['event_manager_assignments', 'admin_duties', 'tenant_memberships', 'platform_admins', 'members'])(
     'throws when %s cannot be read, so a failed read never looks like no drift',
     async (failed) => {
       const { client } = fake(seed(), (table) => (table === failed ? 'boom' : null))

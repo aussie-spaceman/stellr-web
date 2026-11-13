@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireEventStaff, staffCoversEvent } from '@/lib/authz'
+import { requireEventCrew, crewCoversEvent } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
@@ -28,10 +28,10 @@ const notFound = () => NextResponse.json({ error: 'Group registration not found'
 type GroupRow = { event_slug: string; type: string | null; teacher_member_id: string | null; tenant_id?: string | null }
 
 async function guard(db: Db, id: string, req: Request) {
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
-  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
-  const loaded = await loadEventRecord<GroupRow>(staff, 'registrations', id, {
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
+  audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
+  const loaded = await loadEventRecord<GroupRow>(crew, 'registrations', id, {
     db,
     select: 'event_slug, type, teacher_member_id, tenant_id',
     notFound,
@@ -42,10 +42,10 @@ async function guard(db: Db, id: string, req: Request) {
   // A group stamped with another tenant, or whose event the mirror places in another tenant,
   // answers as a missing one in every mode, as does a failed read of the event. The event
   // check is the one this route made before; the stamp check adds to it.
-  if (loaded.row.tenant_id && loaded.row.tenant_id !== staff.tenantId) return notFound()
-  if (!(await staffCoversEvent(staff, loaded.row.event_slug))) return notFound()
+  if (loaded.row.tenant_id && loaded.row.tenant_id !== crew.tenantId) return notFound()
+  if (!(await crewCoversEvent(crew, loaded.row.event_slug))) return notFound()
   // Both the view and the change read or move the group's billing on Stellr's Stripe account.
-  const refused = refuseOutsideStellr(staff.scope)
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const a = audited.get(req)
   if (a) a.eventSlug = loaded.row.event_slug
@@ -118,7 +118,7 @@ async function changePaymentMethod(req: Request, { params }: { params: Promise<{
   const result = await changeGroupPaymentMethod(db, stripe, id, parsed.data, {
     memberId: actor.actorMemberId ?? null,
     label: 'admin',
-    by: 'staff',
+    by: 'crew',
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
 

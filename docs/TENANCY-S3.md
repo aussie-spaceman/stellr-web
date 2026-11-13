@@ -4,7 +4,7 @@ Stage 3 of the multi-tenancy plan. Stellr becomes tenant #1, and the data model
 for tenants, events and event-scoped tables is put in place. **It all runs in
 the background.** No live flow reads it: registration, check-in, payments,
 e-sign and uploads behave exactly as before. The Clerk `role` claim,
-`staff_roles` and `event_manager_assignments` are still what every guard checks.
+`admin_duties` and `event_manager_assignments` are still what every guard checks.
 
 ## What S3 adds
 

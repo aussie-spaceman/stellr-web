@@ -71,10 +71,10 @@ export interface CaseFixture {
    */
   omitInputs?: readonly string[]
   /**
-   * For a staff persona on a tenant_staff route that really cannot get to the id: why.
-   * staffCaseProblem in test/idor/harness.ts refuses the case otherwise.
+   * For a staff persona on a tenant_crew route that really cannot get to the id: why.
+   * crewCaseProblem in test/idor/harness.ts refuses the case otherwise.
    */
-  staffUnproven?: Partial<Record<'stellr_staff' | 'canary_admin' | 'stellr_event_manager', string>>
+  crewUnproven?: Partial<Record<'stellr_crew' | 'canary_admin' | 'stellr_event_manager', string>>
 }
 
 const STRIPE_ENV = { STRIPE_SECRET_KEY: 'sk_test_x' }

@@ -67,7 +67,7 @@ const SECTIONS: Section[] = [
     label: 'Operations', href: '/admin/activity-log', tone: 'text-content-faint', icon: SlidersHorizontal,
     items: [
       { href: '/admin/activity-log', label: 'Activity log' },
-      { href: '/admin/staff', label: 'Staff roles' },
+      { href: '/admin/duties', label: 'Duties' },
       { href: '/admin/docusigns', label: 'Consent forms' },
       { href: '/admin/privacy-requests', label: 'Privacy requests' },
       { href: '/admin/media', label: 'Media do-not-use' },

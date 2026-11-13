@@ -26,12 +26,12 @@ export const PATCH = withAudit(
 
 async function updateTemplate(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
 
   const db = supabaseServer()
-  if (!(await getTemplate(db, staff.tenantId, id))) return notFound()
+  if (!(await getTemplate(db, crew.tenantId, id))) return notFound()
 
   const body = await req.json().catch(() => ({}))
   const update: Record<string, unknown> = {}
@@ -41,7 +41,7 @@ async function updateTemplate(req: Request, { params }: Ctx) {
     update.name = name
   }
   if (typeof body?.fromEmailId === 'string') {
-    const src = await loadEventRecord<EventEmailRow>(staff, 'event_emails', body.fromEmailId, {
+    const src = await loadEventRecord<EventEmailRow>(crew, 'event_emails', body.fromEmailId, {
       db,
       notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
       label: ROUTE,
@@ -52,8 +52,8 @@ async function updateTemplate(req: Request, { params }: Ctx) {
   if (!Object.keys(update).length) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
 
   const actor = await actorFromAuth()
-  update.updated_by = actor.actorLabel ?? staff.userId
-  const { data, error } = await scopedRowWrite(staff.scope, 'event_email_templates', id, { db })
+  update.updated_by = actor.actorLabel ?? crew.userId
+  const { data, error } = await scopedRowWrite(crew.scope, 'event_email_templates', id, { db })
     .update(update)
     .select('*')
     .maybeSingle()
@@ -69,13 +69,13 @@ export const DELETE = withAudit(
 
 async function deleteTemplate(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
 
   const db = supabaseServer()
-  if (!(await getTemplate(db, staff.tenantId, id))) return notFound()
-  const { error } = await scopedRowWrite(staff.scope, 'event_email_templates', id, { db }).delete()
+  if (!(await getTemplate(db, crew.tenantId, id))) return notFound()
+  const { error } = await scopedRowWrite(crew.scope, 'event_email_templates', id, { db }).delete()
   if (error) return NextResponse.json({ error: 'Could not delete the template' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

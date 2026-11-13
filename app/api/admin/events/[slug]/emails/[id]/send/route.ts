@@ -26,15 +26,15 @@ export const POST = withAudit(
 
 async function sendEmail(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const db = supabaseServer()
   // Scope check before handing the id to the engine, which does not know the URL.
-  const email = await loadEventRecord<{ id: string; event_slug: string }>(staff, 'event_emails', id, {
+  const email = await loadEventRecord<{ id: string; event_slug: string }>(crew, 'event_emails', id, {
     db,
     select: 'id, event_slug',
     notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
@@ -54,7 +54,7 @@ async function sendEmail(req: Request, { params }: Ctx) {
 
   const out = await sendEventEmail(db, id, {
     trigger: test ? 'test' : 'manual',
-    triggeredBy: actor.actorLabel ?? staff.userId,
+    triggeredBy: actor.actorLabel ?? crew.userId,
     testTo,
   })
   if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })

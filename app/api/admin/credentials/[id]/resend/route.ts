@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventStaff } from '@/lib/authz'
+import { requireEventCrew } from '@/lib/authz'
 import { CREDENTIAL_TENANT_COLUMNS, credentialState, type CredentialRow } from '@/lib/credentials'
 import { recipientForCredential, sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { withAudit } from '@/lib/audit/route'
@@ -27,13 +27,13 @@ export const POST = withAudit(
 // POST /api/admin/credentials/[id]/resend — re-send the "credential issued"
 // email to the holder (guardian for a minor). Same scoping as revoke.
 async function resendCredential(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
 
   const { id } = await params
-  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
+  audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
   const db = supabaseServer()
-  const loaded = await loadEventRecord<CredentialRow>(staff, 'credentials', id, {
+  const loaded = await loadEventRecord<CredentialRow>(crew, 'credentials', id, {
     db,
     // With its tenant, so the email's Stellr-only check reads nothing more (S5 A10a).
     select: CREDENTIAL_TENANT_COLUMNS,

@@ -98,14 +98,14 @@ export default async function ViewAsMemberPage({
   // the Teams and Billing tabs say so up front rather than offer a session that
   // will be refused. Only a positive answer counts: if either lookup fails the
   // tabs offer the session as usual, and the start route still refuses. Not
-  // isViewAsTargetStaff: that throws on a failed read, and it would ask Clerk a second time.
+  // isViewAsTargetCrew: that throws on a failed read, and it would ask Clerk a second time.
   // With no Clerk answer there is no role to compare, so nothing is asked: under shadow that
   // would read as a role mismatch for a member who has not drifted.
-  const holdsStaffRow = await authz.targetHoldsStaffRow(member.id).catch(() => false)
-  const staffTarget =
-    holdsStaffRow ||
+  const holdsDutyRow = await authz.targetHoldsDutyRow(member.id).catch(() => false)
+  const crewTarget =
+    holdsDutyRow ||
     (clerkRoleKnown &&
-      (await authz.isStaffTargetOrUnknown(
+      (await authz.isCrewTargetOrUnknown(
         { clerkUserId: member.clerk_user_id ?? null, clerkRole, memberId: member.id },
         { route: '/admin/members/[id]/view-as' },
       )) === true)
@@ -263,8 +263,8 @@ export default async function ViewAsMemberPage({
             </p>
             {viewingThisMember ? (
               <TeamsTab role={member.event_role} memberId={member.id} readOnly />
-            ) : staffTarget ? (
-              <StaffNotViewable what="Teams" />
+            ) : crewTarget ? (
+              <CrewNotViewable what="Teams" />
             ) : (
               <StartViewAsSession memberId={member.id} what="Teams" />
             )}
@@ -275,8 +275,8 @@ export default async function ViewAsMemberPage({
         {activeTab === 'billing' && showBilling && (
           viewingThisMember ? (
             <BillingHistory readOnly />
-          ) : staffTarget ? (
-            <StaffNotViewable what="Billing details" />
+          ) : crewTarget ? (
+            <CrewNotViewable what="Billing details" />
           ) : (
             <StartViewAsSession memberId={member.id} what="Billing details" />
           )
@@ -289,10 +289,10 @@ export default async function ViewAsMemberPage({
 // Deliberate, not a fault: one staff member does not open another's portal
 // (deep review AUTH-9, S0). Group registrations they organise are on the
 // admin member page, which reads them directly.
-function StaffNotViewable({ what }: { what: string }) {
+function CrewNotViewable({ what }: { what: string }) {
   return (
     <p className="rounded-ds-card border border-line bg-white p-5 text-sm text-content-body">
-      View-as isn’t available for staff accounts, so {what} can’t be shown here. Any group registrations they
+      View-as isn’t available for crew accounts (admins and event managers), so {what} can’t be shown here. Any group registrations they
       organise are listed on their member page.
     </p>
   )

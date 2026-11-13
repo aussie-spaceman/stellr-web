@@ -480,7 +480,7 @@ export function ScholarshipCancelButton({ id, stage }: { id: string; stage: Scho
       </ul>
       <div>
         <label htmlFor="sch-cancel-reason" className="block font-semibold mb-1">
-          Reason <span className="font-normal text-content-body">(optional, staff only)</span>
+          Reason <span className="font-normal text-content-body">(optional, internal only)</span>
         </label>
         <textarea
           id="sch-cancel-reason"

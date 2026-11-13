@@ -7,8 +7,8 @@ import { getEventBySlug } from '@/lib/events/repo'
 import { getEventRoster } from '@/lib/event-admin'
 import { checkInsVisibleTo, loadOpenCheckIns, pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
 import { verifyCheckInCode } from '@/lib/check-in-codes'
-import { checkInTime, meaningfulNote, type DeskContact, type DeskDetails, type DeskFlags, type DeskGroup } from '@/lib/check-in-desk'
-import { loadDeskStaff, loadStaffCheckIns, writeStaffCheckIn } from '@/lib/check-in-staff'
+import { checkInTime, crewActionName, meaningfulNote, type DeskContact, type DeskDetails, type DeskFlags, type DeskGroup } from '@/lib/check-in-desk'
+import { loadDeskCrew, loadCrewCheckIns, writeCrewCheckIn } from '@/lib/check-in-crew'
 import { GUARDIAN_CONSENT_PENDING_DESK, isConsentPendingRefusal } from '@/lib/check-in-consent'
 
 // Check-in management for an event (admins + assigned event managers).
@@ -27,8 +27,8 @@ import { GUARDIAN_CONSENT_PENDING_DESK, isConsentPendingRefusal } from '@/lib/ch
 //          { action: 'scan', code, at? } — a participant's code checks them in; a
 //          group's code returns the group for the desk to confirm (lib/check-in-codes.ts)
 //          { action: 'resources_url', url } — the event's Docs folder ('' clears it)
-//          { action: 'staff_check_in', staffKey, at? } | { action: 'staff_undo', staffKey }
-//          — a volunteer mentor or event manager, from the Mentors tab (lib/check-in-staff.ts)
+//          { action: 'crew_check_in', crewKey, at? } | { action: 'crew_undo', crewKey }
+//          — a volunteer mentor or event manager, from the Mentors tab (lib/check-in-crew.ts)
 //
 // `at` is when a tap happened on the desk. A tap that waited out a Wi-Fi drop
 // keeps its real arrival time (lib/check-in-desk.ts checkInTime).
@@ -66,7 +66,7 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
-  const [{ data: settings }, { data: regs }, { data: merchRows }, openCheckIns, staffCheckIns] = await Promise.all([
+  const [{ data: settings }, { data: regs }, { data: merchRows }, openCheckIns, crewCheckIns] = await Promise.all([
     db.from('event_settings').select('check_in_token, check_in_open, resources_url').eq('event_slug', slug).maybeSingle(),
     db
       .from('registrations')
@@ -85,8 +85,8 @@ export async function GET(req: Request, { params }: Params) {
     // Polled every few seconds: a hiccup here must not blank the desk list.
     loadOpenCheckIns(db).catch(() => null),
     // Mentors and event managers checked in. Null on a hiccup, so the desk keeps what it had.
-    loadStaffCheckIns(db, slug).catch((err) => {
-      console.error('[check-in] staff check-ins read failed:', err)
+    loadCrewCheckIns(db, slug).catch((err) => {
+      console.error('[check-in] crew check-ins read failed:', err)
       return null
     }),
   ])
@@ -130,7 +130,7 @@ export async function GET(req: Request, { params }: Params) {
     resourcesUrl: settings?.resources_url ?? null,
     participants,
     groups,
-    staffCheckIns: staffCheckIns ? Object.fromEntries(staffCheckIns) : null,
+    crewCheckIns: crewCheckIns ? Object.fromEntries(crewCheckIns) : null,
     // Where the banner points is worked out across every event, but only said
     // as yes/no for this one; the events listed are the caller's own. Null when
     // the open events could not be read, so the desk does not report the banner
@@ -149,7 +149,7 @@ export async function GET(req: Request, { params }: Params) {
  */
 async function loadDeskDetails(db: SupabaseClient, slug: string): Promise<DeskDetails> {
   const event = (await getEventBySlug(slug).catch(() => null)) as { date?: string } | null
-  const [roster, { data: groupRegs }, staff] = await Promise.all([
+  const [roster, { data: groupRegs }, crew] = await Promise.all([
     getEventRoster(slug, event?.date),
     db
       .from('registrations')
@@ -158,7 +158,7 @@ async function loadDeskDetails(db: SupabaseClient, slug: string): Promise<DeskDe
       .neq('status', 'withdrawn')
       .neq('type', 'individual'),
     // Names only: the member id stays on the server.
-    loadDeskStaff(db, slug).then((list) => list.map(({ memberId: _m, ...s }) => s)),
+    loadDeskCrew(db, slug).then((list) => list.map(({ memberId: _m, ...s }) => s)),
   ])
 
   const flags: Record<string, DeskFlags> = {}
@@ -201,7 +201,7 @@ async function loadDeskDetails(db: SupabaseClient, slug: string): Promise<DeskDe
       email: r.teacher_email || null,
     }
   }
-  return { flags, contacts, staff }
+  return { flags, contacts, crew }
 }
 
 /** Every id belongs to a participant of this event. */
@@ -225,7 +225,7 @@ export async function POST(req: Request, { params }: Params) {
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
 
   const body = await req.json().catch(() => null)
-  const action = body?.action
+  const action = crewActionName(body?.action)
   const db = supabaseServer()
 
   if (action === 'open' || action === 'close' || action === 'regenerate') {
@@ -353,12 +353,12 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'staff_check_in' || action === 'staff_undo') {
-    const result = await writeStaffCheckIn(
+  if (action === 'crew_check_in' || action === 'crew_undo') {
+    const result = await writeCrewCheckIn(
       db,
       slug,
-      body?.staffKey,
-      action === 'staff_check_in' ? { checkIn: true, at: checkInTime(body?.at), by: access.userId } : { checkIn: false },
+      body?.crewKey ?? body?.staffKey, // staff-word-ok: a tap queued before the 13 Nov rename
+      action === 'crew_check_in' ? { checkIn: true, at: checkInTime(body?.at), by: access.userId } : { checkIn: false },
     )
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
     return NextResponse.json({ ok: true })

@@ -22,7 +22,7 @@ export class AuthzLookupError extends Error {
   }
 }
 
-const TENANT_ROLES: readonly TenantRole[] = ['tenant_admin', 'event_manager', 'staff']
+const TENANT_ROLES: readonly TenantRole[] = ['tenant_admin', 'event_manager', 'duty_holder']
 
 function isTenantRole(v: unknown): v is TenantRole {
   return typeof v === 'string' && (TENANT_ROLES as readonly string[]).includes(v)
@@ -74,7 +74,7 @@ export async function loadMemberships(db: SupabaseClient, clerkUserId: string | 
  * Drop memberships in a suspended or archived tenant, so suspending a tenant
  * stops its staff. Stellr is not read (no new read for Stellr's own staff, and
  * Stellr is never suspended); a tenant row that does not come back drops too.
- * For the signed-in principal only: isStaffTarget keeps them, because a
+ * For the signed-in principal only: isCrewTarget keeps them, because a
  * suspended tenant's admin is still protected from view-as and deletion.
  */
 export async function dropClosedTenants(db: SupabaseClient, memberships: Membership[]): Promise<Membership[]> {
@@ -137,15 +137,15 @@ export async function loadEventTenantId(db: SupabaseClient, slug: string): Promi
   return (data as { tenant_id?: string | null } | null)?.tenant_id ?? STELLR_TENANT_ID
 }
 
-/** The member has a staff_roles row, whatever its scopes. View-as refuses on the row alone. */
-export async function loadHoldsStaffRow(db: SupabaseClient, memberId: string): Promise<boolean> {
-  const { data, error } = await db.from('staff_roles').select('member_id').eq('member_id', memberId).maybeSingle()
-  if (error) throw new AuthzLookupError('staff_roles')
+/** The member has an admin_duties row, whatever its scopes. View-as refuses on the row alone. */
+export async function loadHoldsDutyRow(db: SupabaseClient, memberId: string): Promise<boolean> {
+  const { data, error } = await db.from('admin_duties').select('member_id').eq('member_id', memberId).maybeSingle()
+  if (error) throw new AuthzLookupError('admin_duties')
   return Boolean(data)
 }
 
 /**
- * The role on another user's Clerk record, for isStaffTarget. A 404 is an answer: a Clerk
+ * The role on another user's Clerk record, for isCrewTarget. A 404 is an answer: a Clerk
  * user that does not exist cannot sign in or hold a role (a missed user.deleted webhook
  * leaves such ids behind). Any other error throws, so the caller can refuse.
  */
@@ -161,9 +161,9 @@ export async function loadTargetClerkRole(
   }
 }
 
-/** The member's staff_roles.scopes (Stellr only), or null when none. */
-export async function loadStaffScopes(db: SupabaseClient, memberId: string): Promise<string[] | null> {
-  const { data, error } = await db.from('staff_roles').select('scopes').eq('member_id', memberId).maybeSingle()
-  if (error) throw new AuthzLookupError('staff_roles')
+/** The member's admin_duties.scopes (Stellr only), or null when none. */
+export async function loadDutyScopes(db: SupabaseClient, memberId: string): Promise<string[] | null> {
+  const { data, error } = await db.from('admin_duties').select('scopes').eq('member_id', memberId).maybeSingle()
+  if (error) throw new AuthzLookupError('admin_duties')
   return ((data as { scopes?: string[] | null } | null)?.scopes as string[] | null) ?? null
 }

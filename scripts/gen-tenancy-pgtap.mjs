@@ -307,7 +307,7 @@ SELECT count(*) FROM public.rename_event_slug('pgtap-event', 'pgtap-event-rename
     ...fixtures.map((f) => `ALTER TABLE public.${f} DISABLE TRIGGER zz_tenancy_derive_tenant_id;`),
     `INSERT INTO public.event_settings (event_slug, updated_at) VALUES ('pgtap-historic', '2026-01-01T00:00:00Z');
 INSERT INTO public.event_settings (event_slug, updated_at) VALUES ('pgtap-event', '2026-01-01T00:00:00Z');
-INSERT INTO public.survey_access_log (actor, action, event_slug) VALUES ('staff', 'view', 'pgtap-historic');
+INSERT INTO public.survey_access_log (actor, action, event_slug) VALUES ('crew', 'view', 'pgtap-historic');
 INSERT INTO public.event_manager_assignments (clerk_user_id, event_slug) VALUES ('user_pgtap_hist', 'pgtap-event');
 INSERT INTO public.training_modules (title) VALUES ('PgTap historic module');`,
     ...fixtures.map((f) => `ALTER TABLE public.${f} ENABLE TRIGGER zz_tenancy_derive_tenant_id;`),

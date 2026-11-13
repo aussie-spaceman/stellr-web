@@ -62,12 +62,29 @@ export function getCampaignDates(season: CampaignSeason, year: number): Campaign
  */
 export function campaignStatusFromDates(
   dates: CampaignDates,
-  registrationOpen?: boolean | null
+  registrationOpen?: boolean | null,
+  deadline?: string | null
 ): 'Open' | 'Coming soon' | 'Closed' {
   const today = todayInAppZone()
   if (dates.startDate > today) return 'Coming soon'
-  if (dates.endDate < today) return 'Closed'
+  if (campaignWindowEnd(dates, deadline) < today) return 'Closed'
   return registrationOpen === true ? 'Open' : 'Closed'
+}
+
+/**
+ * The last day a campaign is live: the season window's end, or the proposal
+ * deadline when that falls later.
+ *
+ * The deadline used to be held inside the season window by Studio validation.
+ * That rule was lifted in Nov 2026 so the Fall 2027 Classroom Qualifier could
+ * take proposals until 31 Jan 2027, six weeks past its Dec 15 window end.
+ * Without this, the Qualifier would read Closed (and drop out of the member
+ * catalog) from Dec 16 while teachers still had six weeks to submit.
+ */
+export function campaignWindowEnd(dates: CampaignDates, deadline?: string | null): string {
+  return deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) && deadline > dates.endDate
+    ? deadline
+    : dates.endDate
 }
 
 /** Campaign document fields the status/window helpers below read. */
@@ -75,6 +92,7 @@ export interface CampaignLike {
   season?: string | null
   campaignYear?: number | null
   registrationOpen?: boolean | null
+  deadline?: string | null
 }
 
 /**
@@ -88,7 +106,8 @@ export function campaignStatus(campaign: CampaignLike): 'Open' | 'Coming soon' |
   }
   return campaignStatusFromDates(
     getCampaignDates(campaign.season as CampaignSeason, campaign.campaignYear),
-    campaign.registrationOpen
+    campaign.registrationOpen,
+    campaign.deadline
   )
 }
 
@@ -104,11 +123,12 @@ export function campaignStatusKey(campaign: CampaignLike): 'open' | 'coming-soon
  * An incomplete document is kept visible rather than silently dropped.
  */
 export function campaignHasEnded(
-  campaign: { season?: string | null; campaignYear?: number | null },
+  campaign: { season?: string | null; campaignYear?: number | null; deadline?: string | null },
   today: string
 ): boolean {
   if (!campaign.season || !campaign.campaignYear) return false
-  return getCampaignDates(campaign.season as CampaignSeason, campaign.campaignYear).endDate < today
+  const dates = getCampaignDates(campaign.season as CampaignSeason, campaign.campaignYear)
+  return campaignWindowEnd(dates, campaign.deadline) < today
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────

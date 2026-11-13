@@ -131,8 +131,8 @@ describe('GroupRegistrationForm — step 2, the participants', () => {
 })
 
 // Owner decision, 13 Nov 2026: a signed-in organiser's name is their account's. The
-// route uses it whatever is sent, so the form shows it read-only, with a way to change
-// it on the Account page.
+// route uses it whatever is sent, so the form shows it read-only, and says how to change
+// it (Manage account in the account menu).
 describe('GroupRegistrationForm — the organiser’s name', () => {
   // The account's name differs from the latest roster row's, which prefill.first_name prefers.
   const withAccount: RegistrationPrefill = {
@@ -150,18 +150,13 @@ describe('GroupRegistrationForm — the organiser’s name', () => {
     for (const el of [first, last]) {
       expect(el).toHaveAttribute('readonly')
       expect(el).toHaveAttribute('aria-readonly', 'true')
-      expect(el).toHaveAccessibleDescription(/This is the name on your Stellr account\. To change it, go to your Account page/)
+      expect(el).toHaveAccessibleDescription(/This is the name on your Stellr account\. To change it, choose Manage account in your account menu, then reload this page\./)
     }
-    const link = screen.getByRole('link', { name: /Account page/ })
-    // A plain anchor (not next/link) in a new tab: the Account page renders Clerk's UI,
-    // and the organiser keeps what they have typed here.
-    expect(link.tagName).toBe('A')
-    expect(link).toHaveAttribute('href', '/account')
-    expect(link).toHaveAttribute('target', '_blank')
-    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    // The Account page has no name field; Clerk's Manage account is where a name changes.
+    expect(screen.queryByRole('link', { name: /Account page/ })).toBeNull()
   }
 
-  it('signed in: shows the account’s name, read-only, with a link to change it', async () => {
+  it('signed in: shows the account’s name, read-only, with how to change it', async () => {
     const user = userEvent.setup()
     renderForm(withAccount)
     expectLocked({ first: 'Account', last: 'Holder' })

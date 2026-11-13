@@ -212,10 +212,8 @@ function RegistrantNameFields({ first, last, firstError, lastError, locked }: {
       </div>
       {locked && (
         <p id={noteId} className="text-xs text-content-muted">
-          This is the name on your Stellr account. To change it, go to your{' '}
-          <a href="/account" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline font-medium">
-            Account page<span className="sr-only"> (opens in a new tab)</span>
-          </a>.
+          This is the name on your Stellr account. To change it, choose Manage account in your account menu, then
+          reload this page.
         </p>
       )}
     </div>

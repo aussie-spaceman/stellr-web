@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
+import { freshClerkSession } from '../fixtures/fresh-session'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -38,7 +39,10 @@ test.describe('course builder', () => {
   const lessons: Record<string, string> = {}
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin') // Clerk refreshes a saved session on navigation, not on a bare request.
+    // A navigation keeps a saved token that still has seconds left, and the POST
+    // below then got a 403 in CI (12 Nov 2026). Mint one first (fixtures/fresh-session.ts).
+    await page.goto('/admin')
+    await freshClerkSession(page)
     const suffix = randomUUID().slice(0, 8)
     const created = await page.request.post(MODULES, { data: { title: `E2E builder ${suffix}` } })
     expect(created.ok(), `creating the course: ${created.status()} ${await created.text()}`).toBe(true)
@@ -176,6 +180,7 @@ test.describe('course builder', () => {
   })
 
   test('refuses a Resource lesson with no file and nothing attached', async ({ page }) => {
+    await freshClerkSession(page) // A 401 from a stale cookie would not be the 400 this proves.
     const res = await page.request.patch(ITEMS, { data: { id: lessons.One, contentKind: 'document' } })
     expect(res.status()).toBe(400)
   })

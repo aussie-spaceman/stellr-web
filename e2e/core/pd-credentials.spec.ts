@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { supabaseFetch, supabaseSecretKey } from '../../lib/supabase-keys'
 import { assertE2eSupabase } from '../../lib/testing/e2e-supabase-target'
+import { freshClerkSession } from '../fixtures/fresh-session'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 
@@ -34,10 +35,12 @@ test.describe('educator PD credential', () => {
 
   test('an admin issues hours once; the teacher sees them and downloads the certificate', async ({ browser }) => {
     const admin = await browser.newContext({ storageState: storageStatePath('admin') })
-    // Load a page first, and keep it open, so these API calls carry a fresh Clerk
-    // session cookie. The saved one is short-lived and nothing else renews it: this
-    // test got a 401 when it ran later in the suite (PR #523).
-    await (await admin.newPage()).goto('/account')
+    // A page that loads Clerk, kept open, and a token minted on it before the API
+    // calls. Loading the page alone kept a saved token with seconds left, which
+    // expired before the call: 401s in CI, 12 Nov 2026 (fixtures/fresh-session.ts).
+    const adminPage = await admin.newPage()
+    await adminPage.goto('/account')
+    await freshClerkSession(adminPage)
     const issue = (hours: number) =>
       admin.request.post(`/api/admin/events/${SLUG}/pd-credentials`, { data: { memberId: GRACE_ID, hours } })
 
@@ -59,6 +62,9 @@ test.describe('educator PD credential', () => {
     expect(participation.credentials.some((c: { source: string }) => c.source === 'pd')).toBe(false)
 
     const teacher = await browser.newContext({ storageState: storageStatePath('teacher') })
+    // The teacher's API calls get the same treatment, from her own account page.
+    const teacherAccount = await teacher.newPage()
+    await teacherAccount.goto('/account')
     const page = await teacher.newPage()
     await page.goto(`/credentials/${credential.number}`)
     await expect(page.getByRole('heading', { level: 1 })).toContainText('(7.5 hours)')
@@ -66,6 +72,7 @@ test.describe('educator PD credential', () => {
     await expect(page.getByText('Aligned to')).toBeVisible()
 
     // Owner download; PD is never held behind the survey.
+    await freshClerkSession(teacherAccount)
     const pdf = await page.request.get(`/api/credentials/${credential.number}/pdf`)
     expect(pdf.status()).toBe(200)
     expect(pdf.headers()['content-type']).toBe('application/pdf')

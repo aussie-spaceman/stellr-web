@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Member row + "other rows on this login" count the fake Supabase returns.
 let memberRow: { clerk_user_id: string | null } | null
 let otherLinked: number
+// An in-memory event_crew_check_ins: the login removal deletes this login's
+// event-manager check-ins once the login is gone (owner decision 13 Nov 2026).
+type StaffRow = { id: string; crew_key: string; member_id: string | null }
+let staffRows: StaffRow[]
+let staffDeleteError: string | null
 
 const getUser = vi.fn()
 const deleteUser = vi.fn()
@@ -26,6 +31,17 @@ vi.mock('@/lib/supabase', () => ({
           }
           return chain
         },
+        delete: () => ({
+          in: (column: keyof StaffRow, values: string[]) => ({
+            select: async () => {
+              if (table !== 'event_crew_check_ins') throw new Error(`unexpected delete from ${table}`)
+              if (staffDeleteError) return { data: null, error: { message: staffDeleteError } }
+              const gone = staffRows.filter((r) => values.includes(r[column] as string))
+              staffRows = staffRows.filter((r) => !gone.includes(r))
+              return { data: gone.map((r) => ({ id: r.id })), error: null }
+            },
+          }),
+        }),
       }
       return q
     },
@@ -35,12 +51,21 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/lib/docusign', () => ({ voidEnvelope: vi.fn() }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => null }))
 
-const { cleanupClerkForMember, runExternalCleanup } = await import('./external')
+const { cleanupClerkForMember, deleteUnsharedClerkLogin, runExternalCleanup } = await import('./external')
 const { getEntityDef } = await import('./registry')
+
+const crewKeysLeft = () => staffRows.map((r) => r.crew_key).sort()
 
 beforeEach(() => {
   memberRow = { clerk_user_id: 'user_abc' }
   otherLinked = 0
+  staffDeleteError = null
+  staffRows = [
+    { id: 's1', crew_key: 'm.user_abc', member_id: null },
+    { id: 's2', crew_key: 'm.user_abc', member_id: null },
+    { id: 's3', crew_key: 'm.user_someone_else', member_id: null },
+    { id: 's4', crew_key: 'v.33333333-3333-4333-8333-333333333333', member_id: '33333333-3333-4333-8333-333333333333' },
+  ]
   getUser.mockReset().mockResolvedValue({ publicMetadata: {} })
   deleteUser.mockReset().mockResolvedValue({})
 })
@@ -126,5 +151,82 @@ describe('runExternalCleanup — member', () => {
     const results = await runExternalCleanup(member, 'm1', 'soft')
     expect(results.some((r) => r.kind === 'clerk')).toBe(false)
     expect(deleteUser).not.toHaveBeenCalled()
+  })
+})
+
+// Owner decision 13 Nov 2026 (tracker attendee-email-cohort.4): event staff
+// check-ins leave with the account. The login removal is shared by the member
+// hard delete (and the pending-consent purge and privacy requests through it)
+// and the member merge.
+describe('login removal takes its event-manager check-ins with it', () => {
+  const OTHERS = ['m.user_someone_else', 'v.33333333-3333-4333-8333-333333333333']
+
+  it("removes the deleted login's m.<id> rows, and every other person's survive", async () => {
+    const r = await cleanupClerkForMember('m1')
+    expect(deleteUser).toHaveBeenCalledWith('user_abc')
+    expect(r).toEqual({ kind: 'clerk', ok: true, detail: 'Deleted Clerk login user_abc' })
+    expect(crewKeysLeft()).toEqual(OTHERS)
+  })
+
+  it('removes them when the login was already gone from Clerk', async () => {
+    getUser.mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }))
+    const r = await cleanupClerkForMember('m1')
+    expect(r).toEqual({ kind: 'clerk', ok: true, detail: 'Clerk login already removed' })
+    expect(crewKeysLeft()).toEqual(OTHERS)
+  })
+
+  it('removes them for the merge, which names the dropped login directly', async () => {
+    const r = await deleteUnsharedClerkLogin('user_abc')
+    expect(r.ok).toBe(true)
+    expect(crewKeysLeft()).toEqual(OTHERS)
+  })
+
+  it('keeps them while the login stays: a staff account', async () => {
+    getUser.mockResolvedValue({ publicMetadata: { role: 'event_manager' } })
+    await cleanupClerkForMember('m1')
+    expect(staffRows).toHaveLength(4)
+  })
+
+  it('keeps them while the login stays: another member still uses it', async () => {
+    otherLinked = 1
+    await cleanupClerkForMember('m1')
+    expect(staffRows).toHaveLength(4)
+  })
+
+  it('keeps them when Clerk refused the delete', async () => {
+    deleteUser.mockRejectedValue(new Error('Clerk down'))
+    await cleanupClerkForMember('m1')
+    expect(staffRows).toHaveLength(4)
+  })
+
+  it('touches nothing when the member has no login', async () => {
+    memberRow = { clerk_user_id: null }
+    await cleanupClerkForMember('m1')
+    expect(staffRows).toHaveLength(4)
+  })
+
+  it('reports a failed check-in delete to the admin after the login is gone', async () => {
+    staffDeleteError = 'connection reset'
+    const r = await cleanupClerkForMember('m1')
+    expect(deleteUser).toHaveBeenCalledWith('user_abc')
+    expect(r).toEqual({
+      kind: 'clerk',
+      ok: false,
+      detail: 'Deleted Clerk login user_abc, but its event check-ins were not removed (event_crew_check_ins: connection reset)',
+    })
+  })
+
+  it('a member hard delete through the registry removes them; a soft delete does not', async () => {
+    const member = getEntityDef('member')!
+    await runExternalCleanup(member, 'm1', 'soft')
+    expect(staffRows).toHaveLength(4)
+    await runExternalCleanup(member, 'm1', 'hard')
+    expect(crewKeysLeft()).toEqual(OTHERS)
+  })
+
+  it('the pending-consent purge (run as a member) removes them', async () => {
+    const pending = getEntityDef('pending_consent_member')!
+    await runExternalCleanup({ ...pending, type: pending.actsAs! }, 'm1', 'hard')
+    expect(crewKeysLeft()).toEqual(OTHERS)
   })
 })

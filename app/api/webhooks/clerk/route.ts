@@ -9,6 +9,7 @@ import { startRetentionClock } from '@/lib/esign/retention'
 import { mayLinkLogin } from '@/lib/guardian-consent'
 import { logActivity } from '@/lib/activity-log'
 import { isUnder13On, isValidDob } from '@/lib/age'
+import { purgeCrewCheckIns } from '@/lib/deletion/crew-check-ins'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
 // This keeps the members table in sync with Clerk identity records. A new
@@ -230,6 +231,23 @@ export async function POST(req: Request) {
   }
 
   if (type === 'user.deleted') {
+    // Event crew check-ins leave with the account (owner decision 13 Nov 2026):
+    // the event-manager rows keyed by this login, and the rows of the member it
+    // is linked to (the soft delete below never cascades them). Done first, while
+    // the link still names the member: a failure answers 500 so Clerk retries
+    // with nothing else changed.
+    const { data: linked, error: linkedErr } = await db.from('members').select('id').eq('clerk_user_id', data.id)
+    const purged = linkedErr
+      ? { ok: false as const, error: `members: ${linkedErr.message}` }
+      : await purgeCrewCheckIns(db, {
+          clerkUserId: data.id,
+          memberIds: ((linked ?? []) as { id: string }[]).map((m) => m.id),
+        })
+    if (!purged.ok) {
+      console.error('[clerk webhook] user.deleted: crew check-ins not removed:', purged.error)
+      return NextResponse.json({ error: "Could not remove the account's event check-ins" }, { status: 500 })
+    }
+
     // Soft-delete: retain data, revoke access
     const { data: deactivated } = await db
       .from('members')

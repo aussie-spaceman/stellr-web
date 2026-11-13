@@ -340,6 +340,11 @@ const nextConfig = {
       { source: '/stipend', destination: '/grant', permanent: true },
       // 'Activities' → 'Campaigns' → now the Curriculum Campaigns page at /curriculum.
       { source: '/activities', destination: '/curriculum', permanent: true },
+      // TEMPORARY (Nov 2026): the Classroom Qualifier flyers' QR code
+      // (bit.ly/27-qualifier) points here before the hub page exists. A 302 so
+      // nothing caches it; Next carries the query string across, so the flyer
+      // UTMs survive. Remove this when the /classroom-qualifier hub ships.
+      { source: '/classroom-qualifier', destination: '/curriculum', statusCode: 302 },
       // www keeps the legacy marketing redirect; host-scoped so the member portal
       // at app.stellreducation.org (and localhost dev) serves the real /campaigns route.
       {

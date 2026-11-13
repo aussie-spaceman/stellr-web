@@ -53,6 +53,7 @@ interface Campaign {
   season?: CampaignSeason
   campaignYear?: number
   registrationOpen?: boolean
+  deadline?: string
 }
 
 // campaignYear is the school year — both terms of 2026/27 are 2027.
@@ -148,7 +149,7 @@ function pickWindow(campaigns: Campaign[], season: CampaignSeason, fallbackYear:
   const match = campaigns.find((c) => c.season === season && c.campaignYear)
   const year = match?.campaignYear ?? fallbackYear
   const dates = getCampaignDates(season, year)
-  const status = campaignStatusFromDates(dates, match?.registrationOpen)
+  const status = campaignStatusFromDates(dates, match?.registrationOpen, match?.deadline)
   return { label: dates.label, status }
 }
 

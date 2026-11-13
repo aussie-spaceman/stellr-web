@@ -138,3 +138,32 @@ describe('campaignHasEnded', () => {
     expect(campaignHasEnded({ season: 'fall' }, '2026-08-28')).toBe(false)
   })
 })
+
+describe('a proposal deadline after the season window', () => {
+  // Nov 2026: the Fall 2027 Classroom Qualifier takes proposals until
+  // 2027-01-31, six weeks past its Dec 15 window end.
+  it('keeps the Qualifier open until the deadline', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2027-01-20T18:00:00Z'))
+    expect(campaignStatusFromDates(getCampaignDates('fall', 2027), true, '2027-01-31')).toBe('Open')
+    expect(
+      campaignStatus({ season: 'fall', campaignYear: 2027, registrationOpen: true, deadline: '2027-01-31' }),
+    ).toBe('Open')
+  })
+
+  it('closes the day after the deadline', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2027-02-01T18:00:00Z'))
+    expect(campaignStatusFromDates(getCampaignDates('fall', 2027), true, '2027-01-31')).toBe('Closed')
+  })
+
+  it('keeps it in the catalog until the deadline has passed', () => {
+    const c = { season: 'fall', campaignYear: 2027, deadline: '2027-01-31' }
+    expect(campaignHasEnded(c, '2027-01-31')).toBe(false)
+    expect(campaignHasEnded(c, '2027-02-01')).toBe(true)
+  })
+
+  it('never shortens the window for an earlier deadline', () => {
+    expect(campaignHasEnded({ season: 'fall', campaignYear: 2027, deadline: '2026-12-11' }, '2026-12-14')).toBe(false)
+  })
+})

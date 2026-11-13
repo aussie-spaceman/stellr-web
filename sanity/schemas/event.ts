@@ -1,4 +1,3 @@
-import { getCampaignDates } from '../../lib/campaigns'
 
 // ── Slug rename guard ────────────────────────────────────────────────────────
 // Validation runs in the Studio (a browser), so it can call the app's own API.
@@ -139,11 +138,13 @@ export const event = {
       type: 'string',
       description:
         'Live Events: fixed date, Stellr-facilitated, in-person or virtual. ' +
-        'Campaigns: asynchronous, educator-led, term-length — free to join.',
+        'Classroom Qualifier: asynchronous, educator-led curriculum, free to join. ' +
+        '(Stored as "campaign" — the label changed in Nov 2026, the value did not, ' +
+        'so existing documents and queries are unaffected.)',
       options: {
         list: [
           { title: 'Live Event', value: 'live_event' },
-          { title: 'Campaign', value: 'campaign' },
+          { title: 'Classroom Qualifier', value: 'campaign' },
         ],
         layout: 'radio',
       },
@@ -156,7 +157,7 @@ export const event = {
       name: 'type',
       type: 'string',
       title: 'Theme',
-      description: 'The competition theme this event or campaign is based on.',
+      description: 'The competition theme this event or Classroom Qualifier is based on.',
       options: {
         list: [
           { title: 'Space Design', value: 'Space Design Challenge' },
@@ -224,8 +225,9 @@ export const event = {
       title: 'Season',
       type: 'string',
       description:
-        'Fall — Campaign runs Aug 15 – Dec 15. Registration opens Aug 1, closes Nov 30.\n' +
-        'Spring — Campaign runs Jan 1 – Apr 30. Registration opens Dec 1 (prior year), closes Mar 31.',
+        'Fall — Qualifier runs Aug 15 – Dec 15. Registration opens Aug 1, closes Nov 30.\n' +
+        'Spring — Qualifier runs Jan 1 – Apr 30. Registration opens Dec 1 (prior year), closes Mar 31.\n' +
+        'A Proposal Deadline later than the window end keeps the Qualifier open until that deadline.',
       options: {
         list: [
           { title: 'Fall', value: 'fall' },
@@ -237,23 +239,23 @@ export const event = {
         document?.activityType !== 'campaign',
       validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
         Rule.custom((value, context) => {
-          if (context.document?.activityType === 'campaign' && !value) return 'Season is required for campaigns'
+          if (context.document?.activityType === 'campaign' && !value) return 'Season is required for a Classroom Qualifier'
           return true
         }),
     },
 
     {
       name: 'campaignYear',
-      title: 'Campaign Year',
+      title: 'School Year',
       type: 'number',
       description:
-        'The SCHOOL year the campaign belongs to — the year it ends in. Both terms of ' +
+        'The SCHOOL year the Qualifier belongs to — the year it ends in. Both terms of ' +
         '2026/27 are 2027: Fall 2027 runs Aug–Dec 2026, Spring 2027 runs Jan–Apr 2027.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType !== 'campaign',
       validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
         Rule.custom((value, context) => {
-          if (context.document?.activityType === 'campaign' && !value) return 'Campaign year is required'
+          if (context.document?.activityType === 'campaign' && !value) return 'School year is required'
           return true
         }),
     },
@@ -267,27 +269,21 @@ export const event = {
       name: 'deadline',
       title: 'Proposal Deadline',
       type: 'date',
-      description: 'The date the student proposal is due. Shown as the deadline banner across the site and app.',
+      description:
+        'The date the student proposal is due. Any date is allowed — it may fall after the ' +
+        'season window (e.g. Fall 2027 proposals due 2027-01-31), and the Qualifier stays ' +
+        'open until it. Shown as the deadline banner across the site and app.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType !== 'campaign',
-      // The deadline is authored, the season window is derived — so they can
-      // disagree. They did: a Fall 2027 campaign carried a deadline of
-      // 2026-12-11, which reads as a year out until you know campaignYear is a
-      // SCHOOL year. Cross-checking the two here catches that at authoring time
-      // instead of leaving it to surface as a wrong date on the public site.
+      // Until Nov 2026 this was held inside the season window. That rule was
+      // lifted so the Fall 2027 Classroom Qualifier could take proposals until
+      // 2027-01-31; lib/campaigns.ts campaignWindowEnd() keeps the Qualifier
+      // open until a deadline that falls after its window.
       validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
         Rule.custom((value, context) => {
           const doc = context.document
           if (doc?.activityType !== 'campaign') return true
-          if (!value) return 'A proposal deadline is required for campaigns'
-          const season = doc.season
-          const year = doc.campaignYear
-          if ((season !== 'fall' && season !== 'spring') || typeof year !== 'number') return true
-          const dates = getCampaignDates(season, year)
-          if (typeof value !== 'string' || value < dates.startDate || value > dates.endDate) {
-            return `Deadline must fall inside the ${dates.label} window (${dates.startDate} to ${dates.endDate}). ` +
-              `Remember Campaign Year is the SCHOOL year — ${dates.label} runs in ${dates.calendarYear}.`
-          }
+          if (!value) return 'A proposal deadline is required for a Classroom Qualifier'
           return true
         }),
     },
@@ -574,13 +570,13 @@ export const event = {
     {
       name: 'registrationOpen',
       type: 'boolean',
-      title: 'Registration Open (campaigns only)',
+      title: 'Registration Open (Classroom Qualifier only)',
       // New campaigns start explicitly open. Left unset this is falsy, so a
       // campaign nobody had switched on read Closed everywhere — and, now that
       // it is a real gate, would have rejected registrations outright.
       initialValue: true,
       description:
-        'Manual on/off switch for campaign registration. This really does gate the ' +
+        'Manual on/off switch for Classroom Qualifier registration. This really does gate the ' +
         'registration API — switching it off stops sign-ups, it is not just a label. ' +
         'Live events ignore this — their status is derived from the Registration ' +
         'Opens/Closes dates below (both empty = open).',
@@ -631,7 +627,7 @@ export const event = {
         'in the live Stripe account: an inactive or unknown price ID hides the fee on the page and is ' +
         'also rejected at checkout. A FREE event needs its own $0 price object here — do not leave ' +
         'this blank for one. Blank means the fee simply is not set yet, and the page reads ' +
-        '"Pricing TBC". Not applicable for Campaigns.',
+        '"Pricing TBC". Not applicable for a Classroom Qualifier.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType === 'campaign',
     },
@@ -644,7 +640,7 @@ export const event = {
       by: [{ field: 'date', direction: 'asc' }],
     },
     {
-      title: 'Campaign Year & Season',
+      title: 'School Year & Season',
       name: 'campaignAsc',
       by: [
         { field: 'campaignYear', direction: 'asc' },
@@ -675,7 +671,7 @@ export const event = {
             : season === 'spring'
               ? `Spring ${campaignYear ?? ''}`
               : ''
-        return { title, subtitle: `Campaign · ${seasonLabel}`.trim(), media }
+        return { title, subtitle: `Classroom Qualifier · ${seasonLabel}`.trim(), media }
       }
       return {
         title,

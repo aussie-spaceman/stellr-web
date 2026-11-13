@@ -452,6 +452,11 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
             </div>
           ))}
         </div>
+        {view.rows.some((r) => r.held) && (
+          <p className="text-sm text-brand-muted">
+            {`${view.rows.every((r) => !r.sentAt) ? 'Nothing has gone out: surveys' : 'Surveys'} for this organisation’s events can’t be sent yet. Held invitations are kept, and go out once they can.`}
+          </p>
+        )}
         {view.rows.length > 0 ? (
           <div className="overflow-x-auto rounded-xl border border-brand-border bg-white">
             <table className="min-w-full text-sm">
@@ -528,7 +533,7 @@ function Row({ r, tz, canResend, busy, onResend }: { r: CompletionRow; tz: strin
       <td className="px-3 py-2 text-brand-muted">
         {status}
         {r.openedFrom === 'dashboard' && <span className="ml-1 text-xs text-brand-muted-soft">(dashboard)</span>}
-        {r.lastError && <p className="text-xs text-danger">Send failed</p>}
+        {r.held ? <p className="text-xs text-brand-muted-soft">{r.lastError}</p> : r.lastError && <p className="text-xs text-danger">Send failed</p>}
       </td>
       <td className="px-3 py-2 text-xs text-brand-muted-soft">{r.lastActivityAt ? formatInZone(r.lastActivityAt, tz) : '—'}</td>
       <td className="px-3 py-2 text-xs text-brand-muted-soft">{r.remindersOff ? 'Stopped' : r.reminders}</td>

@@ -14,6 +14,11 @@
  * (decision W7-13, default), even if it was made before the plan left them out. That holds
  * for every path that mails one: the queued send, the reminders, an admin's resend and the
  * QR page's "email me my link". Stellr's surveys read no guardian consent.
+ *
+ * Before any of that, another tenant's survey sends nothing at all yet (S5 wave 7,
+ * decision W7-16, lib/survey/hold.ts): its links are on Stellr's host, which refuses its
+ * token. Each path asks sendsHeld(d) from the distribution in hand, and deliver() asks
+ * again, so a new path cannot mail one by leaving the check out.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { EmailSendError, sendEmail } from '@/lib/email'
@@ -22,6 +27,7 @@ import { distributionTenant, type DistributionRow } from './distributions'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { SurveyDefinition } from './definition'
 import { renderSurveyEmail, type SurveyEmailKind } from './emails'
+import { HELD_FOR_TENANT_SURVEY, HELD_FOR_TENANT_SURVEY_RESEND, surveySendsHeld } from './hold'
 import { dueReminder, type ReminderKind } from './schedule'
 import { stopRemindersLink, surveyLink, surveyToken } from './tokens'
 
@@ -80,7 +86,46 @@ export function linksFor(inv: Pick<InvitationRow, 'id' | 'token_version'>) {
   }
 }
 
+/** Is this distribution's survey email held (W7-16)? From the row in hand: no read. */
+export const sendsHeld = (d: Pick<DistributionRow, 'tenant_id'>) => surveySendsHeld(distributionTenant(d))
+
+/** How many queued invitations one sendQueued pass reads. */
+const QUEUED_PAGE = 200
+
+/**
+ * Label a held distribution's invitations for the admin tab, all of them in one write.
+ * Held rows stay queued, so sendQueued's page reads the same oldest rows every pass and
+ * labelling row by row would never reach the rest. Only rows not yet labelled are written.
+ */
+async function markQueuedHeld(db: SupabaseClient, distributionId: string): Promise<void> {
+  // The rows sendQueued would send once the hold lifts: queued, with attempts left.
+  const { error } = await db
+    .from('survey_invitations')
+    .update({ last_send_error: HELD_FOR_TENANT_SURVEY })
+    .eq('distribution_id', distributionId)
+    .eq('status', 'queued')
+    .lt('send_attempts', MAX_SEND_ATTEMPTS)
+    .or(`last_send_error.is.null,last_send_error.neq."${HELD_FOR_TENANT_SURVEY}"`)
+  // Held either way: nothing here sends them. Only the admin tab's label is lost.
+  if (error) console.error('[survey] marking invitations held failed:', error.message)
+}
+
+/**
+ * An admin's resend of a held invitation: refused, nothing sent and no budget claimed. Only
+ * a queued one is labelled, since only a queued one goes out once the hold lifts; any other
+ * keeps its status and its own last error.
+ */
+async function refuseHeldResend(db: SupabaseClient, inv: InvitationRow): Promise<{ ok: false; error: string }> {
+  if (inv.status === 'queued' && inv.last_send_error !== HELD_FOR_TENANT_SURVEY) {
+    const { error } = await db.from('survey_invitations').update({ last_send_error: HELD_FOR_TENANT_SURVEY }).eq('id', inv.id).eq('status', 'queued')
+    if (error) console.error('[survey] marking an invitation held failed:', error.message)
+  }
+  return { ok: false, error: HELD_FOR_TENANT_SURVEY_RESEND }
+}
+
 async function deliver(inv: InvitationRow, d: DistributionRow, def: SurveyDefinition, kind: SurveyEmailKind): Promise<void> {
+  // The backstop for every path: a held survey's email never reaches sendEmail.
+  if (sendsHeld(d)) throw new Error(HELD_FOR_TENANT_SURVEY)
   const links = linksFor(inv)
   const email = renderSurveyEmail({
     kind,
@@ -154,12 +199,24 @@ export async function sendQueued(
     .eq('status', 'queued')
     .lt('send_attempts', MAX_SEND_ATTEMPTS)
     .order('created_at')
-    .limit(200)
+    .limit(QUEUED_PAGE)
   if (error) throw new Error(`Reading queued invitations failed: ${error.message}`)
-  const held = data?.length ? await heldForConsent(db, d) : null
+  // Another tenant's survey holds every invitation (W7-16), so its consent re-check is not
+  // read: the hold is decided first, from the row in hand. That changes no status that
+  // matters: the plan already leaves a consent-pending student out, so their invitation is
+  // still expired below as one no longer invitable, and the rest stay queued and labelled,
+  // to be re-checked when the hold lifts. Stellr's survey reads and sends exactly as before.
+  const tenantHeld = sendsHeld(d)
+  const held = data?.length && !tenantHeld ? await heldForConsent(db, d) : null
+  // Label the whole distribution, past this page too, unless every row is already labelled
+  // and the page holds them all.
+  const unlabelled = (data ?? []).some((i) => (i as InvitationRow).last_send_error !== HELD_FOR_TENANT_SURVEY)
+  if (tenantHeld && (unlabelled || data?.length === QUEUED_PAGE)) await markQueuedHeld(db, d.id)
 
   for (const inv of (data ?? []) as InvitationRow[]) {
     if (tally.quotaHit) break
+    // A held survey has nothing to send, so past the deadline nothing of it is deferred.
+    if (tenantHeld && Date.now() > deadline) break
     if (Date.now() > deadline) {
       tally.deferred++
       continue
@@ -168,6 +225,7 @@ export async function sendQueued(
       await db.from('survey_invitations').update({ status: 'expired' }).eq('id', inv.id).eq('status', 'queued')
       continue
     }
+    if (tenantHeld) continue
     if (!(await claimBudget(db, now))) {
       tally.deferred++
       continue
@@ -207,6 +265,9 @@ export async function sendReminders(
   deadline: number,
   now = new Date(),
 ): Promise<void> {
+  // Another tenant's survey sends no reminder (W7-16), and reads nothing: sendQueued holds
+  // every invitation, so none of them was sent and none is due one.
+  if (sendsHeld(d)) return
   const { data, error } = await db
     .from('survey_invitations')
     .select('*, survey_responses(last_saved_at)')
@@ -257,6 +318,7 @@ async function claimReminder(db: SupabaseClient, inv: InvitationRow, kind: Remin
 /** Admin "resend" to one person: the invitation again, outside the cadence. */
 export async function resendInvitation(db: SupabaseClient, inv: InvitationRow, d: DistributionRow, def: SurveyDefinition): Promise<{ ok: boolean; error?: string }> {
   if (inv.status === 'submitted') return { ok: false, error: 'Already submitted.' }
+  if (sendsHeld(d)) return refuseHeldResend(db, inv)
   if (isHeld(await heldForConsent(db, d), inv)) return { ok: false, error: HELD_FOR_CONSENT }
   if (!(await claimBudget(db))) return { ok: false, error: 'Today’s survey email budget is spent. Try again tomorrow.' }
   try {
@@ -277,7 +339,8 @@ export async function resendInvitation(db: SupabaseClient, inv: InvitationRow, d
 
 /**
  * The QR page's "email me my link": the same link, to the address on file. A held
- * invitation is not sent. `held` is heldForConsent's answer when the caller already has
+ * invitation is not sent, and another tenant's survey sends nothing (W7-16), with no read
+ * and no write: the caller answers the same either way. `held` is heldForConsent's answer when the caller already has
  * it (one read for several invitations); left out, it is read here.
  */
 export async function sendLinkEmail(
@@ -287,6 +350,7 @@ export async function sendLinkEmail(
   def: SurveyDefinition,
   held?: Set<string> | null,
 ): Promise<boolean> {
+  if (sendsHeld(d)) return false
   if (isHeld(held === undefined ? await heldForConsent(db, d) : held, inv)) return false
   if (!(await claimBudget(db))) return false
   try {

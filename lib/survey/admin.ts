@@ -9,6 +9,7 @@ import { loadSurveyEvent } from './events'
 import { autoOpensAt, closesAtFor, lateOpenDeadline } from './schedule'
 import { buildRecipientPlan, type RecipientPlan } from './recipients'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { HELD_FOR_TENANT_SURVEY } from './hold'
 
 export interface CompletionRow {
   invitationId: string
@@ -29,6 +30,8 @@ export interface CompletionRow {
   reminders: number
   remindersOff: boolean
   lastError: string | null
+  /** Held, not failed: another tenant's survey sends nothing yet (W7-16). `lastError` holds the label. */
+  held: boolean
 }
 
 export interface AdminSurveyView {
@@ -176,6 +179,8 @@ export async function adminSurveyView(
       reminders: i.reminder_count + i.resume_reminder_count,
       remindersOff: !!i.reminders_opted_out_at,
       lastError: i.last_send_error,
+      // Only a queued row is still held: one expired later keeps the label but never goes out.
+      held: i.status === 'queued' && i.last_send_error === HELD_FOR_TENANT_SURVEY,
     }
   })
   rows.sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))

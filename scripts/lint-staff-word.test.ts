@@ -20,6 +20,7 @@ describe('lint:staff-word', () => {
   })
   it('treats /admin/staff as a whole path only', () => {
     expect(hits("const a = '/admin/staffing'")).toEqual([])
+    expect(hits("const a = '/api/admin/staff-settings'")).toEqual([])
   })
   it('skips comments', () => {
     expect(hits('// staff_roles was renamed\n/** isStaffTarget is now isCrewTarget. */\nconst crew = 1')).toEqual([])

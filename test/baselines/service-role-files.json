@@ -817,6 +817,10 @@
       "class": "platform",
       "reason": "auto: no tenant or event-scoped table, classed by its platform tables; tables: schools"
     },
+    "app/api/admin/staff-settings/route.ts": {
+      "class": "convert",
+      "reason": "the Staff role's one setting (admin only): reads and writes staff_role_settings and lists training_modules to choose from; both Stellr-only and service-role-only under RLS"
+    },
     "app/api/admin/store/discounts/route.ts": {
       "class": "stellr_only",
       "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: membership_tiers, store_products"

@@ -22,6 +22,7 @@ import { MemberSpacesPanel } from '@/components/admin/MemberSpacesPanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
 import { MemberMergeDialog } from '@/components/admin/MemberMergeDialog'
 import { MemberEventManagerRole } from '@/components/admin/MemberEventManagerRole'
+import { MemberStaffRole } from '@/components/admin/MemberStaffRole'
 import { PERSONAL_EMAIL_LABEL, SCHOOL_EMAIL_LABEL, showsSchoolEmail } from '@/lib/member-email'
 
 interface Member {
@@ -113,6 +114,8 @@ interface Props {
   surveys: MemberSurveyItem[] | null
   /** The viewer is an admin, so may grant or remove Event Manager access. */
   canManageEventManager?: boolean
+  /** An admin (not Staff): sees and uses view-as, merge, delete, clearance decisions and the Staff panel. */
+  viewerIsAdmin?: boolean
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -149,7 +152,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships, surveys, canManageEventManager = false }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships, surveys, canManageEventManager = false, viewerIsAdmin = true }: Props) {
   const router = useRouter()
   const [enteringPortal, setEnteringPortal] = useState(false)
   const [inviteSentAt, setInviteSentAt] = useState(member.account_invite_sent_at)
@@ -318,6 +321,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               {inviting ? 'Sending…' : inviteSentAt ? 'Resend invite' : 'Send invite'}
             </button>
           )}
+          {viewerIsAdmin && (<>
           <button
             onClick={handleEnterPortalAs}
             disabled={enteringPortal}
@@ -337,6 +341,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           >
             Account summary
           </Link>
+          </>)}
           <button
             onClick={handleSave}
             disabled={saving}
@@ -359,6 +364,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               Confirm deactivate
             </button>
           )}
+          {viewerIsAdmin && (<>
           <MemberMergeDialog
             member={{ id: member.id, first_name: member.first_name, last_name: member.last_name }}
             className="border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas"
@@ -370,6 +376,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             redirectTo="/admin/members"
             className="border border-red-300 text-red-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50"
           />
+          </>)}
         </div>
       </div>
 
@@ -466,6 +473,13 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             {canManageEventManager && (
               <div className="pt-2 border-t border-line-light">
                 <MemberEventManagerRole memberId={member.id} />
+              </div>
+            )}
+
+            {/* Staff: admins only, saved on its own, like Event Manager (lib/staff.ts). */}
+            {viewerIsAdmin && (
+              <div className="pt-2 border-t border-line-light">
+                <MemberStaffRole memberId={member.id} />
               </div>
             )}
 
@@ -686,13 +700,13 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                         >
                           {s.status ?? 'scheduled'}
                         </span>
-                        <DeleteEntityButton
+                        {viewerIsAdmin && <DeleteEntityButton
                           entity="session"
                           id={s.id}
                           name={s.title ?? 'this session'}
                           label="Delete"
                           className="text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 px-2.5 py-1 rounded-lg"
-                        />
+                        />}
                       </div>
                     </div>
                   )
@@ -735,7 +749,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
           {compliance && (
             <Collapsible id="background-check" title="Background Check" bodyClassName="p-5">
-              <MemberCompliancePanel memberId={member.id} compliance={compliance} embedded />
+              <MemberCompliancePanel memberId={member.id} compliance={compliance} embedded canVerify={viewerIsAdmin} />
             </Collapsible>
           )}
 

@@ -113,6 +113,7 @@ const GROUPS: readonly DispositionGroup[] = [
       'esign/templates/[id]/preview', 'esign/templates/file', 'esign/templates/preview', 'membership/rules', 'pd-certificate',
       'pd-certificate/preview', 'store/discounts', 'store/products/[id]', 'store/products/[id]/sync', 'store/products/[id]/variants',
       'training/assignments', 'training/bulk-notify', 'training/cert-preview', 'training/live-room', 'training/tracking',
+      'staff-settings',
     ],
   },
 ]

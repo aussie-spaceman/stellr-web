@@ -24,7 +24,7 @@ What is built, what it does for Stellr today, and what has to happen before it d
 - **Scheduled calls run too.** Vercel's own cron calls carry the real `CRON_SECRET`, so while the variable names a job its schedule runs it: the consent sweep at 06:00 UTC daily, the outbox at 00:05, 06:05, 12:05 and 18:05 UTC. An expiry proof ages a row and calls the sweep between two 06:00 runs, or reads the scheduled run's `cron_runs` row.
 - **Mail on `dev`.** An unset `DEV_EMAIL_SAFELIST` routes every send to the role inbox (the code default); an explicitly blank one suppresses mail.
 
-The owner sets it, or an agent with the owner's yes for that change, just before P12, and it is cleared after P12 (`docs/TENANCY-S5.md`, wave 7).
+Claude sets it with the Vercel CLI, after the owner's yes for that change (`W7-18`), just before P12, and clears it after P12 (`docs/TENANCY-S5.md`, wave 7). After each redeploy, confirm the `dev` deployment is READY for the expected commit (`W7-19`). The health endpoint does not report this variable, so the proof that it took is the consent-only run's `cron_runs` row, `{ only: 'tenant-consent', ... }`, and the consent flag's own health value.
 
 ### Scope classes
 

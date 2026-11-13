@@ -117,3 +117,56 @@ A monthly cron shows one run in 30 days, so read that one run closely.
 | Rows the owner accepted without a real use, with the reason | |
 | Clock ended (date) | |
 | **Owner's sign-off for M1** | |
+
+## The dev canary tenant (K8, K9)
+
+Not part of the 30-day gate above: this is wave 7's end-to-end run of a fictitious second tenant, `dev-canary`, on `dev` (`docs/TENANCY-S5.md`, Wave 7 status, "How to run K9"). The scenarios and the S7 table come from `lib/testing/canary-flow-scenarios.ts` (K8, #659), which wins over this copy; `npx tsx scripts/canary-tenant-flow.ts --plan` prints them and sends nothing. The runner prints ids, counts and status codes only. **Not run yet:** Phase A waits on K7a, K0 and K7b; Phase B on K6 (`docs/TENANCY-S5-routing.md`, "The dev canary zone (K6)") and P10 to P12.
+
+### Scenarios
+
+| Id | Scenario | Phase | Personas | Evidence read back |
+|---|---|---|---|---|
+| S1 | An adult registers | start | none | 201; `registrations` and `participants` rows stamped `dev-canary`; no guardian-consent row. A 201 the database does not hold as `dev-canary`'s stops the phase |
+| S2 | A minor is held pending consent | start | none | 201 with `consentPending` and `guardianInvited`, for two minors; each has a pending `tenant_guardian_consents` row stamped `dev-canary`, its window closing before the event, and a `tenant_guardian_consent` agreement |
+| S3 | Check-in is refused while pending | start | `canary-manager` | The desk's manual check-in answers 409 `guardian_consent_pending`; `participants.checked_in_at` stays empty |
+| S4 | The pending minor is left out of tenant mail | start | none | `unconsentedParticipantIds(dev-canary)` holds both minors and not the adult; no `event_email_sends` row since the start names a minor or a guardian |
+| S5 | After the guardian signs | settle | `canary-manager` | The consent row is signed and settled, its agreement completed, the minor is out of the unconsented set, and the desk checks them in (then undoes it) |
+| S6 | After the guardian declines | settle | none | The registration and participant are removed, the consent row with them; a declined row still waiting for removal is reported with its attempt count |
+| S7 | Isolation probes | start | `canary-manager`, `canary-admin`, `stellr-probe-admin` | Every probe answers as the table below says for the run's modes; known gaps are named by slice |
+| S8 | Stellr unchanged | start and settle | none | Stellr's pages answer 200; the Stellr event's registration count is unchanged; every registration the run made is `dev-canary`'s; every `app_errors` row since the start is one the table expects |
+
+Between the phases, the guardian signs one consent and declines the other in the role inbox, with the owner as witness. A persona with no session is skipped, and a skip is never a pass.
+
+### S7: the isolation probes, by mode
+
+Mode is `AUTHZ_SOURCE` / `LOADSCOPED_MODE`. "Any" means the answer is the same in all nine combinations. "+ LOADSCOPED row" means `shadow` also writes a `LOADSCOPED <route>` row to `app_errors`; under `AUTHZ_SOURCE=shadow`, P11 and P12 also write an `AUTHZ <route>` row. Those rows are expected; any other `app_errors` row fails S8.
+
+| Probe | What it checks | As | Host | Expected |
+|---|---|---|---|---|
+| P1 | The unmapped probe host | anonymous | `nobody.<zone>` | Any: 404 |
+| P2 | `/admin` on the canary host | anonymous | `canary.<zone>` | Any: 404 |
+| P3 | An admin API on the canary host, even for a Stellr admin | `stellr-probe-admin` | `canary.<zone>` | Any: 404 |
+| P4 | `dev-canary`'s register page on Stellr's host (A7) | anonymous | Stellr | Any: 404 |
+| P5 | Registering for `dev-canary`'s event through Stellr's host; nothing written (A7) | anonymous | Stellr | Any: 404 |
+| P6 | `dev-canary`'s check-in page on Stellr's host | anonymous | Stellr | Any: 200, **known gap A12** |
+| P7 | `canary-manager`'s desk for their own event, and the pending minor's consent marker | `canary-manager` | Stellr | Any: 200 with no marker, **known gap `.23`** |
+| P8 | `canary-manager` on a Stellr event's desk | `canary-manager` | Stellr | Any: 403 |
+| P9 | A group check-in of the adult and a pending minor | `canary-manager` | Stellr | Any: 409 for the whole group, **known gap `.24`** |
+| P10 | `canary-admin` (tenant admin, no Clerk role) on Stellr's admin health route | `canary-admin` | Stellr | Any: 403 |
+| P11 | `canary-manager` on their own event's email tab, on Stellr's host | `canary-manager` | Stellr | `clerk` or `shadow` with `off`: 200; with `shadow`: 200 + LOADSCOPED row; with `enforce`: 404. `postgres`, any: 403 |
+| P12 | `stellr-probe-admin` on `dev-canary`'s event's email tab | `stellr-probe-admin` | Stellr | `clerk` or `shadow` with `off`: 200; with `shadow`: 200 + LOADSCOPED row; with `enforce`: 404. `postgres`, any: 404 |
+| P13 | `stellr-probe-admin` loads `dev-canary`'s pending consent agreement by id | `stellr-probe-admin` | Stellr | `off`: 400 (found, unsigned); `shadow`: 400 + LOADSCOPED row; `enforce`: 404 |
+| P14 | Stellr's agreements list holds `dev-canary`'s consent agreement | `stellr-probe-admin` | Stellr | Any: 200 and it is listed, **known gap `.29`** |
+| P15 | `dev-canary`'s signing link on Stellr's host | anonymous | Stellr | Not run, **known gap A11**: opening a link records a view on the guardian's envelope |
+| P16 | A Stellr event's register page on the canary host | anonymous | `canary.<zone>` | Any: 404 |
+| P17 | Registering for a Stellr event through the canary host; nothing written | anonymous | `canary.<zone>` | Any: 404 |
+
+**Known gaps and who closes them:** A11 (slice A11: the e-sign participant side has no tenant check on Stellr's host), A12 (slice A12: `/check-in/<slug>` answers for another tenant's event on Stellr's host), `.23` (tracker `s5-programme.23`: no "waiting for guardian consent" marker on the desk), `.24` (`.24`: a group check-in with one pending minor refuses the whole group), `.29` (`.29`: a Stellr-only admin list includes another tenant's rows). A probe that answers the closed state instead is reported as differing, and the table changes in the same PR that closes the gap.
+
+### Pass, and the run record
+
+Pass: S1 to S6 and S8 green; S7 as the table says for the modes in force, with the known gaps named; 0 unread `app_errors` rows, a CI-origin one included (`PR659-3`); at most 25 canary sends a day (`W7-21`), counted by the operator. The optional supervised `AUTHZ_SOURCE=postgres` window (`W7-22`) re-runs S7 against the `postgres` rows.
+
+| Run | Phase and modes | Date | S1 to S8 | S7: pass / known gap / differs / skipped | Sends that day | Notes (ids and counts only) |
+|---|---|---|---|---|---|---|
+| | | | | | | |

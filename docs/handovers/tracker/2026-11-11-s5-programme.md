@@ -70,6 +70,7 @@ Rows in other sessions' tracker files, closed or decided here on 13 Nov 2026. Th
 - `promote-s5-wave3.5` (typed sign-in and a new login): **closed as not needed** by the owner, 13 Nov 2026.
 - `attendee-email-cohort.5` (organising teachers not on the roster cannot be checked in): **closed.** Owner, 13 Nov 2026: leave it as it is.
 - **Decided, not closed** (their slices are in progress): `promote-s5-wave3.17` (the account's name wins over a typed organiser name); `attendee-email-cohort.4` (event-manager check-in rows with no `members` row join the purge path).
+- `admin-collapse-links.1` (admin pages signed in on production) and `.2` (a real group's folded header): **closed.** Checked read-only on production, 13 Nov 2026, signed in as the owner, on one competition's Roster tab and one member page. The roster has 7 folds (4 sections, 3 groups); the page's Expand all / Collapse all acts on the sections and the Registrations control on the groups only, as built; a single fold toggles; each group header reads "N participants · N unpaid · N DocuSign open", with "· N background open" where one is open; all 204 member and school record links open in a new tab. The member page's 15 folds close and reopen with its buttons. One School link on the member page opened in the same tab; this PR makes it a `SchoolLink`. `.3` (an event manager sees plain names) still needs an event manager's sign-in.
 
 ## Owner-run production checklist (`.34`)
 

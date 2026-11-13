@@ -70,6 +70,14 @@ const claims = (rpcCalls: { fn: string }[]) => rpcCalls.filter((c) => c.fn === '
 const updates = (calls: ChainCall[]) => calls.filter((c) => c.table === 'survey_invitations' && c.op === 'update')
 const idOf = (c: ChainCall) => c.filters.find((f) => f.method === 'eq' && f.args[0] === 'id')?.args[1]
 const labelled = (calls: ChainCall[]) => updates(calls).filter((c) => (c.payload as Row).last_send_error === HELD_FOR_TENANT_SURVEY).map(idOf)
+const filtersOf = (c: ChainCall) => c.filters.map((f) => [f.method, ...f.args])
+/** The one write that labels a held distribution's queued invitations, past the page read too. */
+const BULK_LABEL = [
+  ['eq', 'distribution_id', 'dist-1'],
+  ['eq', 'status', 'queued'],
+  ['lt', 'send_attempts', 3],
+  ['or', `last_send_error.is.null,last_send_error.neq."${'Held: surveys for this organisation’s events can’t be sent yet.'}"`],
+]
 /** Every database call, as table:op, in order: what "the same reads and writes" means here. */
 const trace = (calls: ChainCall[]) => calls.map((c) => `${c.table}:${c.op}:${Object.keys((c.payload as Row | undefined) ?? {}).sort().join(',')}`)
 
@@ -115,25 +123,44 @@ describe('the queued invitations', () => {
     expect(h.unconsented).not.toHaveBeenCalled()
   })
 
-  it("another tenant's are kept queued and labelled: nothing sent, no budget claimed, no consent read", async () => {
+  it("another tenant's are kept queued and labelled in one write: nothing sent, no budget claimed, no consent read", async () => {
     const { db: client, calls, rpcCalls } = db(INVITATIONS())
     const tally = emptyTally()
     await sendQueued(client, distribution(CANARY), DEF, keys(INVITATIONS()), tally, SOON(), NOW)
     expect(h.sendEmail).not.toHaveBeenCalled()
     expect(rpcCalls).toEqual([])
     expect(h.unconsented).not.toHaveBeenCalled()
-    expect(labelled(calls)).toEqual(['inv-a', 'inv-b'])
-    // Labelled only: no status, no attempt counted, so they send once the hold lifts.
-    expect(updates(calls).map((c) => Object.keys(c.payload as Row))).toEqual([['last_send_error'], ['last_send_error']])
+    // Labelled only, the whole distribution at once: no status, no attempt counted, so they send once the hold lifts.
+    expect(updates(calls).map((c) => [c.payload, filtersOf(c)])).toEqual([[{ last_send_error: HELD_FOR_TENANT_SURVEY }, BULK_LABEL]])
     expect(tally).toEqual(emptyTally())
   })
 
+  it("another tenant's past the page read are labelled too: a full page, all labelled, still writes", async () => {
+    const page = Array.from({ length: 200 }, (_, n) => invitation(`inv-${n}`, 'queued', { last_send_error: HELD_FOR_TENANT_SURVEY }))
+    const { db: client, calls, rpcCalls } = db(page)
+    await sendQueued(client, distribution(CANARY), DEF, keys(page), emptyTally(), SOON(), NOW)
+    expect(updates(calls).map(filtersOf)).toEqual([BULK_LABEL])
+    expect(rpcCalls).toEqual([])
+    expect(h.sendEmail).not.toHaveBeenCalled()
+  })
+
   it("another tenant's already labelled are not written again, and one no longer invitable is still expired", async () => {
-    const invs = [invitation('inv-a', 'queued', { last_send_error: HELD_FOR_TENANT_SURVEY }), invitation('inv-gone')]
+    const invs = [invitation('inv-a', 'queued', { last_send_error: HELD_FOR_TENANT_SURVEY }), invitation('inv-gone', 'queued', { last_send_error: HELD_FOR_TENANT_SURVEY })]
     const { db: client, calls, rpcCalls } = db(invs)
     await sendQueued(client, distribution(CANARY), DEF, new Set([invs[0].recipient_key]), emptyTally(), SOON(), NOW)
     expect(updates(calls).map((c) => [idOf(c), c.payload])).toEqual([['inv-gone', { status: 'expired' }]])
     expect(rpcCalls).toEqual([])
+    expect(h.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("another tenant's past the deadline count nothing as deferred; Stellr's still do", async () => {
+    const past = Date.now() - 1
+    const held = emptyTally()
+    await sendQueued(db(INVITATIONS()).db, distribution(CANARY), DEF, keys(INVITATIONS()), held, past, NOW)
+    expect(held).toEqual(emptyTally())
+    const stellr = emptyTally()
+    await sendQueued(db(INVITATIONS()).db, distribution(STELLR), DEF, keys(INVITATIONS()), stellr, past, NOW)
+    expect(stellr.deferred).toBe(2)
     expect(h.sendEmail).not.toHaveBeenCalled()
   })
 })
@@ -177,14 +204,25 @@ describe("an admin's resend", () => {
     expect(h.unconsented).not.toHaveBeenCalled()
   })
 
-  it("another tenant's is refused and labelled: nothing sent, no budget claimed, no consent read", async () => {
+  it("another tenant's queued one is refused and labelled: nothing sent, no budget claimed, no consent read", async () => {
     const { db: client, calls, rpcCalls } = db()
-    expect(await resendInvitation(client, invitation('inv-a', 'expired'), distribution(CANARY), DEF)).toEqual({ ok: false, error: HELD_FOR_TENANT_SURVEY_RESEND })
+    expect(await resendInvitation(client, invitation('inv-a'), distribution(CANARY), DEF)).toEqual({ ok: false, error: HELD_FOR_TENANT_SURVEY_RESEND })
     expect(labelled(calls)).toEqual(['inv-a'])
     expect(updates(calls)).toHaveLength(1)
     expect(rpcCalls).toEqual([])
     expect(h.sendEmail).not.toHaveBeenCalled()
     expect(h.unconsented).not.toHaveBeenCalled()
+  })
+
+  it("another tenant's that is not queued is refused and keeps its own last error: no write", async () => {
+    for (const status of ['expired', 'sent', 'opened', 'started', 'bounced']) {
+      const { db: client, calls, rpcCalls } = db()
+      const inv = invitation('inv-a', status, { last_send_error: 'Resend said no' })
+      expect(await resendInvitation(client, inv, distribution(CANARY), DEF)).toEqual({ ok: false, error: HELD_FOR_TENANT_SURVEY_RESEND })
+      expect(calls, status).toEqual([])
+      expect(rpcCalls, status).toEqual([])
+    }
+    expect(h.sendEmail).not.toHaveBeenCalled()
   })
 
   it("another tenant's submitted one still answers as submitted", async () => {
@@ -221,6 +259,8 @@ describe('the admin Survey tab', () => {
   it('shows a held invitation as held, with its label, and a failed one as failed', async () => {
     const rows = [
       { ...invitation('inv-held'), last_send_error: HELD_FOR_TENANT_SURVEY },
+      // Expired after it was labelled: it never goes out, so it is not shown as held.
+      { ...invitation('inv-expired', 'expired'), last_send_error: HELD_FOR_TENANT_SURVEY },
       { ...invitation('inv-failed'), last_send_error: 'Resend said no' },
       invitation('inv-fine'),
     ]
@@ -232,7 +272,12 @@ describe('the admin Survey tab', () => {
     })
     const view = await adminSurveyView(client, 'the-event', NOW)
     const byId = Object.fromEntries(view.rows.map((r) => [r.invitationId, [r.held, r.lastError]]))
-    expect(byId).toEqual({ 'inv-held': [true, HELD_FOR_TENANT_SURVEY], 'inv-failed': [false, 'Resend said no'], 'inv-fine': [false, null] })
+    expect(byId).toEqual({
+      'inv-held': [true, HELD_FOR_TENANT_SURVEY],
+      'inv-expired': [false, HELD_FOR_TENANT_SURVEY],
+      'inv-failed': [false, 'Resend said no'],
+      'inv-fine': [false, null],
+    })
   })
 })
 
@@ -251,11 +296,11 @@ function sources(dir: string): string[] {
   })
 }
 
-/** The source of send.ts split into its top-level functions, by name. */
+/** The source of send.ts split into its top-level functions and arrow-function consts, by name. */
 function functionsOf(src: string): Map<string, string> {
   const out = new Map<string, string>()
-  const starts = [...src.matchAll(/^(?:export )?(?:async )?function (\w+)/gm)]
-  starts.forEach((m, i) => out.set(m[1], src.slice(m.index, starts[i + 1]?.index ?? src.length)))
+  const starts = [...src.matchAll(/^(?:export )?(?:(?:async )?function (\w+)|const (\w+)\s*(?::[^=\n]+)?=\s*(?:async\s*)?(?:<[^\n]*?>\s*)?(?:\(|\w+\s*=>))/gm)]
+  starts.forEach((m, i) => out.set(m[1] ?? m[2], src.slice(m.index, starts[i + 1]?.index ?? src.length)))
   return out
 }
 
@@ -276,6 +321,10 @@ describe('the hold guards every survey email', () => {
   it('every function that delivers asks the hold before it claims the budget or delivers', () => {
     const delivering = [...fns].filter(([name, body]) => name !== 'deliver' && body.includes('deliver('))
     expect(delivering.map(([name]) => name).sort()).toEqual(['resendInvitation', 'sendLinkEmail', 'sendQueued', 'sendReminders'])
+    // However a new caller is written, every deliver( call is in one of these four.
+    const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    const count = (text: string) => (code(text).match(/\bdeliver\(/g) ?? []).length
+    expect(count(send) - count(fns.get('deliver')!)).toBe(delivering.reduce((n, [, body]) => n + count(body), 0))
     for (const [name, body] of delivering) {
       const guard = body.search(/if \((sendsHeld\(d\)|tenantHeld)\)/)
       expect(guard, name).toBeGreaterThan(-1)

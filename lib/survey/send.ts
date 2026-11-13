@@ -89,20 +89,37 @@ export function linksFor(inv: Pick<InvitationRow, 'id' | 'token_version'>) {
 /** Is this distribution's survey email held (W7-16)? From the row in hand: no read. */
 export const sendsHeld = (d: Pick<DistributionRow, 'tenant_id'>) => surveySendsHeld(distributionTenant(d))
 
+/** How many queued invitations one sendQueued pass reads. */
+const QUEUED_PAGE = 200
+
 /**
- * Mark a held invitation with the admin tab's label. A row already labelled is not
- * written again, so the cron's every pass costs nothing more.
+ * Label a held distribution's invitations for the admin tab, all of them in one write.
+ * Held rows stay queued, so sendQueued's page reads the same oldest rows every pass and
+ * labelling row by row would never reach the rest. Only rows not yet labelled are written.
  */
-async function markHeld(db: SupabaseClient, inv: Pick<InvitationRow, 'id' | 'last_send_error'>): Promise<void> {
-  if (inv.last_send_error === HELD_FOR_TENANT_SURVEY) return
-  const { error } = await db.from('survey_invitations').update({ last_send_error: HELD_FOR_TENANT_SURVEY }).eq('id', inv.id)
-  // Held either way: nothing here sends it. Only the admin tab's label is lost.
-  if (error) console.error('[survey] marking an invitation held failed:', error.message)
+async function markQueuedHeld(db: SupabaseClient, distributionId: string): Promise<void> {
+  // The rows sendQueued would send once the hold lifts: queued, with attempts left.
+  const { error } = await db
+    .from('survey_invitations')
+    .update({ last_send_error: HELD_FOR_TENANT_SURVEY })
+    .eq('distribution_id', distributionId)
+    .eq('status', 'queued')
+    .lt('send_attempts', MAX_SEND_ATTEMPTS)
+    .or(`last_send_error.is.null,last_send_error.neq."${HELD_FOR_TENANT_SURVEY}"`)
+  // Held either way: nothing here sends them. Only the admin tab's label is lost.
+  if (error) console.error('[survey] marking invitations held failed:', error.message)
 }
 
-/** An admin's resend of a held invitation: labelled, refused, nothing sent and no budget claimed. */
+/**
+ * An admin's resend of a held invitation: refused, nothing sent and no budget claimed. Only
+ * a queued one is labelled, since only a queued one goes out once the hold lifts; any other
+ * keeps its status and its own last error.
+ */
 async function refuseHeldResend(db: SupabaseClient, inv: InvitationRow): Promise<{ ok: false; error: string }> {
-  await markHeld(db, inv)
+  if (inv.status === 'queued' && inv.last_send_error !== HELD_FOR_TENANT_SURVEY) {
+    const { error } = await db.from('survey_invitations').update({ last_send_error: HELD_FOR_TENANT_SURVEY }).eq('id', inv.id).eq('status', 'queued')
+    if (error) console.error('[survey] marking an invitation held failed:', error.message)
+  }
   return { ok: false, error: HELD_FOR_TENANT_SURVEY_RESEND }
 }
 
@@ -182,7 +199,7 @@ export async function sendQueued(
     .eq('status', 'queued')
     .lt('send_attempts', MAX_SEND_ATTEMPTS)
     .order('created_at')
-    .limit(200)
+    .limit(QUEUED_PAGE)
   if (error) throw new Error(`Reading queued invitations failed: ${error.message}`)
   // Another tenant's survey holds every invitation (W7-16), so its consent re-check is not
   // read: the hold is decided first, from the row in hand. That changes no status that
@@ -191,9 +208,15 @@ export async function sendQueued(
   // to be re-checked when the hold lifts. Stellr's survey reads and sends exactly as before.
   const tenantHeld = sendsHeld(d)
   const held = data?.length && !tenantHeld ? await heldForConsent(db, d) : null
+  // Label the whole distribution, past this page too, unless every row is already labelled
+  // and the page holds them all.
+  const unlabelled = (data ?? []).some((i) => (i as InvitationRow).last_send_error !== HELD_FOR_TENANT_SURVEY)
+  if (tenantHeld && (unlabelled || data?.length === QUEUED_PAGE)) await markQueuedHeld(db, d.id)
 
   for (const inv of (data ?? []) as InvitationRow[]) {
     if (tally.quotaHit) break
+    // A held survey has nothing to send, so past the deadline nothing of it is deferred.
+    if (tenantHeld && Date.now() > deadline) break
     if (Date.now() > deadline) {
       tally.deferred++
       continue
@@ -202,7 +225,7 @@ export async function sendQueued(
       await db.from('survey_invitations').update({ status: 'expired' }).eq('id', inv.id).eq('status', 'queued')
       continue
     }
-    if (tenantHeld) { await markHeld(db, inv); continue }
+    if (tenantHeld) continue
     if (!(await claimBudget(db, now))) {
       tally.deferred++
       continue

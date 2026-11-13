@@ -453,7 +453,9 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           ))}
         </div>
         {view.rows.some((r) => r.held) && (
-          <p className="text-sm text-brand-muted">Nothing has gone out: surveys for this organisation’s events can’t be sent yet. The invitations are kept, and go out once they can.</p>
+          <p className="text-sm text-brand-muted">
+            {`${view.rows.every((r) => !r.sentAt) ? 'Nothing has gone out: surveys' : 'Surveys'} for this organisation’s events can’t be sent yet. Held invitations are kept, and go out once they can.`}
+          </p>
         )}
         {view.rows.length > 0 ? (
           <div className="overflow-x-auto rounded-xl border border-brand-border bg-white">

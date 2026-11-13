@@ -179,7 +179,8 @@ export async function adminSurveyView(
       reminders: i.reminder_count + i.resume_reminder_count,
       remindersOff: !!i.reminders_opted_out_at,
       lastError: i.last_send_error,
-      held: i.last_send_error === HELD_FOR_TENANT_SURVEY,
+      // Only a queued row is still held: one expired later keeps the label but never goes out.
+      held: i.status === 'queued' && i.last_send_error === HELD_FOR_TENANT_SURVEY,
     }
   })
   rows.sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))

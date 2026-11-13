@@ -194,6 +194,26 @@ export function renderDigestEmail(
     ${b.note ? `<p style="margin:4px 0;font-size:13px;color:${MUTED}">${escapeHtml(b.note)}</p>` : ''}
     <p style="margin:4px 0;font-size:13px"><a href="${url(b.href)}" style="color:${BRAND_NAVY}">Open in admin</a></p>`).join('')
 
+  // ── Staff (phase 4): what an owner reviews for a role that reads minors' records ──
+  const st = digest.staff
+  const staffLines: Array<{ text: string; sub?: string }> = st
+    ? [
+        ...st.pending.slice(0, TOP).map((p) => ({ text: `${p.name}: Staff waiting`, sub: p.missing.length ? `still needs ${p.missing.join(', ')}` : `granted ${day(p.since)}` })),
+        ...st.expiringSoon.slice(0, TOP).map((p) => ({ text: `${p.name}: Staff ends ${day(p.expiresAt)}`, sub: 'renew the agreement and training to keep it' })),
+        ...st.unusualViewers.map((v) => ({ text: `${v.name} (${v.role}) opened ${v.views} minors’ records this week`, sub: 'more than usual: worth a look' })),
+        ...(st.exports.total ? [{ text: `${plural(st.exports.total, 'export')} this week`, sub: Object.entries(st.exports.byRole).map(([r, n]) => `${n} by ${r.replace('_', ' ')}`).join(', ') }] : []),
+      ]
+    : []
+  const reviewHtml = st?.quarterlyReview
+    ? `<p style="margin:20px 0 4px"><strong>Quarterly Staff access review (${st.quarterlyReview.length})</strong></p>
+    <p style="margin:0 0 4px;font-size:13px;color:${MUTED}">Check each person still needs Staff. Remove anyone who doesn’t from their member page.</p>
+    <ul style="margin:0;padding-left:20px">${st.quarterlyReview.map((r) => `<li style="margin:4px 0">${escapeHtml(r.name)}${r.expiresAt ? `<br/><span style="font-size:13px;color:${MUTED}">until ${escapeHtml(day(r.expiresAt))}</span>` : ''}</li>`).join('')}</ul>`
+    : ''
+  const staffHtml = staffLines.length || reviewHtml
+    ? `<p style="margin:32px 0 4px;font-size:13px;font-weight:bold;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND_NAVY}">Staff access</p>
+    <ul style="margin:0;padding-left:20px">${staffLines.map((l) => `<li style="margin:4px 0">${escapeHtml(l.text)}${l.sub ? `<br/><span style="font-size:13px;color:${MUTED}">${escapeHtml(l.sub)}</span>` : ''}</li>`).join('')}</ul>${reviewHtml}`
+    : ''
+
   const errorsHtml = digest.errors.length
     ? `<p style="margin:16px 0;padding:12px;background:#fdf1f0;border-radius:8px;font-size:14px">Some sections didn’t load and may read low: ${escapeHtml(digest.errors.join(', '))}. Check the dashboard.</p>`
     : ''
@@ -205,6 +225,7 @@ export function renderDigestEmail(
     ${groupsHtml}
     <p style="margin:32px 0 4px;font-size:13px;font-weight:bold;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND_NAVY}">Waiting on you (${waiting})</p>
     ${blocksHtml}
+    ${staffHtml}
     <p style="margin:32px 0 0"><a href="${url('/admin')}" style="display:inline-block;padding:12px 20px;background:${BRAND_NAVY};color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold">Open the dashboard</a></p>
     <p style="margin:24px 0 0;font-size:13px;color:${MUTED}">Sent every Friday at midday Mountain time to everyone with the “all” duty. Change who gets it on <a href="${url('/admin/duties')}" style="color:${MUTED}">Duties</a>.</p>`
 
@@ -236,6 +257,9 @@ export function renderDigestEmail(
           ...(b.note ? [`  ${b.note}`] : []),
           `  ${url(b.href)}`,
         ])),
+    ...(staffLines.length || st?.quarterlyReview
+      ? ['', 'STAFF ACCESS', ...staffLines.map((l) => `- ${l.text}${l.sub ? ` - ${l.sub}` : ''}`), ...(st?.quarterlyReview ? ['Quarterly review: ' + st.quarterlyReview.map((r) => r.name).join(', ')] : [])]
+      : []),
     '',
     `Open the dashboard: ${url('/admin')}`,
     '',

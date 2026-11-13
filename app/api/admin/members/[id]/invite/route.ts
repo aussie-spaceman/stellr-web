@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { crewActorType } from '@/lib/activity-log'
 import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
@@ -13,7 +14,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { id } = await params
   const actor = await getSignedInMember()
-  const result = await sendAccountInvite(supabaseServer(), id, { actorMemberId: actor?.id ?? null })
+  const result = await sendAccountInvite(supabaseServer(), id, { actorMemberId: actor?.id ?? null, actorType: await crewActorType() })
 
   if (result.sent) return NextResponse.json({ ok: true })
   switch (result.reason) {

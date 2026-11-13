@@ -6,7 +6,7 @@
     "unauditedMutations": 104,
     "cronHandlers": 24,
     "unauditedCrons": 0,
-    "getMutations": 18,
+    "getMutations": 20,
     "unauditedGetMutations": 4
   },
   "mutations": [

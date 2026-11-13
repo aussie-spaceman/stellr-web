@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { crewActorType } from '@/lib/activity-log'
 import { supabaseServer } from '@/lib/supabase'
 import { hasCapability, requireEventRoute } from '@/lib/authz'
 import { getEventBySlug } from '@/lib/events/repo'
@@ -126,7 +127,7 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
     await logActivity({
       memberId: member.id,
       category: 'account',
-      actorType: 'admin',
+      actorType: await crewActorType(),
       actorMemberId: actor?.id ?? null,
       action: 'pd_credential_issued',
       summary: `PD credential issued: ${formatPdHours(hours)} hours at ${eventTitle} (${result.row.number})`,

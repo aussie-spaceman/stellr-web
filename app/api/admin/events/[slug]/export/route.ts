@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { withAudit } from '@/lib/audit/route'
 import { requireEventRoute } from '@/lib/authz'
 import { getEventRoster } from '@/lib/event-admin'
 import { toCsv } from '@/lib/csv'
+import { logRecordAccess } from '@/lib/record-access-log'
 import { displayGrade } from '@/lib/member-enums'
 import { supabaseServer } from '@/lib/supabase'
 import { MEDIA_REASON_LABEL, mediaForParticipants } from '@/lib/survey/media'
@@ -17,7 +19,7 @@ import { isStellrScope } from '@/lib/tenancy/scope-context'
 // tenant's own answer is.
 const TENANT_MEDIA_NOTE = 'Not available for your organisation yet: check your own records'
 
-export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+async function exportRoster(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const crew = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/export' })
   if (!crew.ok) return crew.response
@@ -65,6 +67,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   )
 
   const csv = toCsv([header, ...rows])
+  // A roster CSV holds minors' medical and emergency details: every export is logged (Staff role phase 4).
+  await logRecordAccess({ action: 'export', route: '/api/admin/events/[slug]/export', eventSlug: slug, rowCount: rows.length, detail: { kind: 'roster_csv' } })
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
@@ -72,3 +76,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     },
   })
 }
+
+// Every export is audited (and in record_access_log): the CSV holds personal data (Staff role phase 4).
+export const GET = withAudit(
+  () => ({ action: 'export.roster' as const, actor: { session: true } as const, tenant: { stellr: true } as const, target: null }),
+  exportRoster,
+)

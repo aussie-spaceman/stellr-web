@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { crewActorType } from '@/lib/activity-log'
 import { hasCapability } from '@/lib/authz'
 import { resolveEmailPair } from '@/lib/member-email'
 import { NextResponse } from 'next/server'
@@ -172,7 +173,7 @@ export async function POST(req: Request) {
   let invite = null
   if (send_invite !== false && !(date_of_birth && gender)) {
     const actor = await getSignedInMember()
-    invite = await sendAccountInvite(db, member.id, { actorMemberId: actor?.id ?? null })
+    invite = await sendAccountInvite(db, member.id, { actorMemberId: actor?.id ?? null, actorType: await crewActorType() })
   }
 
   return NextResponse.json({ member: { id: member.id }, invite }, { status: 201 })

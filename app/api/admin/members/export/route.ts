@@ -1,12 +1,14 @@
 import { hasCapability } from '@/lib/authz'
+import { withAudit } from '@/lib/audit/route'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { toCsv } from '@/lib/csv'
+import { logRecordAccess } from '@/lib/record-access-log'
 import { applyMemberFilters, applyMemberSort, memberFilterEmbeds, parseMemberFilters } from '@/lib/admin-member-filters'
 
 // Takes the members list's filter params (lib/admin-member-filters), so the
 // export is exactly the filtered list on screen. No params: every active member.
-export async function GET(req: Request) {
+async function exportMembers(req: Request) {
   if (!(await hasCapability('export'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const filters = parseMemberFilters(Object.fromEntries(new URL(req.url).searchParams))
@@ -68,6 +70,8 @@ export async function GET(req: Request) {
   })
 
   const csv = toCsv([headers, ...rows])
+  // Every member export is logged, with which filters made it (keys only) (Staff role phase 4).
+  await logRecordAccess({ action: 'export', route: '/api/admin/members/export', rowCount: rows.length, detail: { kind: 'members_csv', filters: Object.keys(Object.fromEntries(new URL(req.url).searchParams)).sort().join(',') || 'none' } })
 
   return new NextResponse(csv, {
     headers: {
@@ -76,3 +80,9 @@ export async function GET(req: Request) {
     },
   })
 }
+
+// Every export is audited (and in record_access_log): the CSV holds personal data (Staff role phase 4).
+export const GET = withAudit(
+  () => ({ action: 'export.members' as const, actor: { session: true } as const, tenant: { stellr: true } as const, target: null }),
+  exportMembers,
+)

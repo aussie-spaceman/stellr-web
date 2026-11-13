@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { crewActorType } from '@/lib/activity-log'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { currentTenantId, requireTenantCrew } from '@/lib/authz'
@@ -71,7 +72,7 @@ async function setCredentialSharing(req: NextRequest, { params }: { params: Prom
     await logActivity({
       memberId: env.member_id,
       category: 'docusign',
-      actorType: 'admin',
+      actorType: await crewActorType(),
       actorLabel: userId ?? null,
       action: body.optOut ? 'credential_sharing_opt_out' : 'credential_sharing_opt_in',
       summary: body.optOut

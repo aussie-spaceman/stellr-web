@@ -189,6 +189,9 @@ export const AUDIT_ACTIONS = [
   'staff.suspend',
   'staff.revoke',
   'staff.expire',
+  // Exports of personal data (Staff role phase 4): also in record_access_log
+  'export.roster',
+  'export.members',
 
   // Events admin: records by id inside an event (C16)
   'agreement.credential_sharing.set',

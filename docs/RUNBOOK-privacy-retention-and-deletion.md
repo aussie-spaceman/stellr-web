@@ -74,7 +74,7 @@ migration that stops `audit_members()` copying `health_conditions` into
    1. **Admin → Members → Delete → Hard delete** (type DELETE). This removes the
       member row and its cascades, deletes the Clerk login (unless staff) and,
       with it, the event check-ins the desk recorded for that login and member
-      (`event_staff_check_ins`, `lib/deletion/staff-check-ins.ts`; owner
+      (`event_crew_check_ins`, `lib/deletion/crew-check-ins.ts`; owner
       decision 13 Nov 2026), cancels any Stripe subscription, voids in-flight
       DocuSign envelopes, and
       withdraws credentials (name removed; number kept so a copy can be checked,

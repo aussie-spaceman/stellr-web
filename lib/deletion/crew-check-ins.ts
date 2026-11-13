@@ -1,8 +1,8 @@
-// Event staff check-ins leave with the account (owner decision, 13 Nov 2026;
+// Event crew check-ins leave with the account (owner decision, 13 Nov 2026;
 // tracker row attendee-email-cohort.4).
 //
-// event_staff_check_ins (migration 20261110120000) holds one row per mentor or
-// event manager the desk checked in, keyed by lib/check-in-desk.ts staffKey:
+// event_crew_check_ins (migration 20261110120000) holds one row per mentor or
+// event manager the desk checked in, keyed by lib/check-in-desk.ts crewKey:
 //   v.<members.id>     a volunteer mentor: member_id is set and the FK is
 //                      ON DELETE CASCADE, so a hard-deleted member's rows go
 //                      with the members row
@@ -23,31 +23,31 @@
 // service-role client its caller already holds.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { STAFF_KEY, staffKey } from '@/lib/check-in-desk'
+import { CREW_KEY, crewKey } from '@/lib/check-in-desk'
 
-export type StaffCheckInPurgeResult = { ok: true; removed: number } | { ok: false; error: string }
+export type CrewCheckInPurgeResult = { ok: true; removed: number } | { ok: false; error: string }
 
-const TABLE = 'event_staff_check_ins'
+const TABLE = 'event_crew_check_ins'
 
 /**
- * Deletes the staff check-ins of one person: the event-manager rows keyed by
+ * Deletes the crew check-ins of one person: the event-manager rows keyed by
  * their Clerk login, and every row naming one of their member rows (by
  * member_id, or by a v.<id> key). Other people's rows are never matched.
  * Idempotent: a second run removes nothing.
  */
-export async function purgeStaffCheckIns(
+export async function purgeCrewCheckIns(
   db: Pick<SupabaseClient, 'from'>,
   who: { clerkUserId?: string | null; memberIds?: readonly (string | null | undefined)[] },
-): Promise<StaffCheckInPurgeResult> {
-  const managerKey = who.clerkUserId ? staffKey('event_manager', who.clerkUserId) : null
+): Promise<CrewCheckInPurgeResult> {
+  const managerKey = who.clerkUserId ? crewKey('event_manager', who.clerkUserId) : null
   const memberIds = [...new Set((who.memberIds ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0))]
   // A key the table's CHECK would refuse cannot be on any row.
-  const volunteerKeys = memberIds.map((id) => staffKey('volunteer', id)).filter((k) => STAFF_KEY.test(k))
+  const volunteerKeys = memberIds.map((id) => crewKey('volunteer', id)).filter((k) => CREW_KEY.test(k))
 
-  const deletes: { column: 'staff_key' | 'member_id'; values: string[] }[] = []
-  if (managerKey && STAFF_KEY.test(managerKey)) deletes.push({ column: 'staff_key', values: [managerKey] })
+  const deletes: { column: 'crew_key' | 'member_id'; values: string[] }[] = []
+  if (managerKey && CREW_KEY.test(managerKey)) deletes.push({ column: 'crew_key', values: [managerKey] })
   if (memberIds.length) deletes.push({ column: 'member_id', values: memberIds })
-  if (volunteerKeys.length) deletes.push({ column: 'staff_key', values: volunteerKeys })
+  if (volunteerKeys.length) deletes.push({ column: 'crew_key', values: volunteerKeys })
 
   let removed = 0
   for (const d of deletes) {

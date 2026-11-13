@@ -264,7 +264,7 @@ describe('executeDeletion — pending_guardian_consent_registration', () => {
 // check-ins leave with the account. Each member removal reaches the Clerk login
 // removal (lib/deletion/external.ts), which deletes the login's m.<id> rows
 // (lib/deletion/external.test.ts); v.<id> rows cascade with the members row.
-describe('executeDeletion — staff check-ins leave with the account', () => {
+describe('executeDeletion — crew check-ins leave with the account', () => {
   it('an admin hard delete (and a privacy request, which runs the same call) runs the Clerk login removal', async () => {
     await executeDeletion('member', 'mem1', { mode: 'hard' })
     expect(runExternalCleanup).toHaveBeenCalledWith(expect.objectContaining({ type: 'member', external: expect.arrayContaining(['clerk']) }), 'mem1', 'hard')

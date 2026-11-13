@@ -354,9 +354,9 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
 // event-manager check-ins (m.<Clerk id>, member_id null, which nothing else
 // would remove) and the check-ins of the member it deactivates (the soft delete
 // keeps the members row, so the FK cascade never fires). Nobody else's go.
-describe('POST /api/webhooks/clerk — user.deleted removes event staff check-ins', () => {
+describe('POST /api/webhooks/clerk — user.deleted removes event crew check-ins', () => {
   type Member = { id: string; clerk_user_id: string | null; is_active: boolean }
-  type StaffRow = { id: string; staff_key: string; member_id: string | null }
+  type StaffRow = { id: string; crew_key: string; member_id: string | null }
   const LEAVING = 'user_leaving_placeholder'
   const LEAVING_MEMBER = '11111111-1111-4111-8111-111111111111'
   const OTHER_MEMBER = '22222222-2222-4222-8222-222222222222'
@@ -372,10 +372,10 @@ describe('POST /api/webhooks/clerk — user.deleted removes event staff check-in
       { id: OTHER_MEMBER, clerk_user_id: 'user_other_placeholder', is_active: true },
     ]
     staff = [
-      { id: 's1', staff_key: `m.${LEAVING}`, member_id: null },
-      { id: 's2', staff_key: `v.${LEAVING_MEMBER}`, member_id: LEAVING_MEMBER },
-      { id: 's3', staff_key: 'm.user_other_placeholder', member_id: null },
-      { id: 's4', staff_key: `v.${OTHER_MEMBER}`, member_id: OTHER_MEMBER },
+      { id: 's1', crew_key: `m.${LEAVING}`, member_id: null },
+      { id: 's2', crew_key: `v.${LEAVING_MEMBER}`, member_id: LEAVING_MEMBER },
+      { id: 's3', crew_key: 'm.user_other_placeholder', member_id: null },
+      { id: 's4', crew_key: `v.${OTHER_MEMBER}`, member_id: OTHER_MEMBER },
     ]
     from.mockImplementation((table: string) => {
       let op: 'select' | 'update' | 'delete' = 'select'
@@ -383,7 +383,7 @@ describe('POST /api/webhooks/clerk — user.deleted removes event staff check-in
       const filters: Array<[string, unknown]> = []
       const run = () => {
         if (failTable === table) return { data: null, error: { message: `${table} unavailable` } }
-        if (table === 'event_staff_check_ins' && op === 'delete') {
+        if (table === 'event_crew_check_ins' && op === 'delete') {
           const gone = staff.filter((r) => filters.every(([c, v]) => (v as string[]).includes(r[c as keyof StaffRow] as string)))
           staff = staff.filter((r) => !gone.includes(r))
           return { data: gone.map((r) => ({ id: r.id })), error: null }
@@ -442,7 +442,7 @@ describe('POST /api/webhooks/clerk — user.deleted removes event staff check-in
 
   it('answers 500 with nothing deactivated when the check-ins cannot be removed, so Clerk retries', async () => {
     fakeDb()
-    failTable = 'event_staff_check_ins'
+    failTable = 'event_crew_check_ins'
     expect(await deliver(deleted())).toBe(500)
     expect(members[0]).toMatchObject({ is_active: true, clerk_user_id: LEAVING })
     expect(startRetentionClock).not.toHaveBeenCalled()

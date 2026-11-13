@@ -3,7 +3,7 @@ import { clerkClient } from '@clerk/nextjs/server'
 import { loadTargetClerkRole } from '@/lib/authz/principal'
 import { supabaseServer } from '@/lib/supabase'
 import { voidEnvelopeRow } from '@/lib/esign/operations'
-import { purgeStaffCheckIns } from './staff-check-ins'
+import { purgeCrewCheckIns } from './crew-check-ins'
 import type { DeleteMode, EntityDef, ExternalCleanupKind, ExternalResult } from './types'
 import { stripeClient } from '@/lib/stripe'
 
@@ -82,7 +82,7 @@ export async function deleteUnsharedClerkLogin(
 
     const client = await clerkClient()
     const { exists, role } = await loadTargetClerkRole(client, clerkUserId)
-    if (!exists) return withStaffCheckInsRemoved(db, clerkUserId, 'Clerk login already removed')
+    if (!exists) return withCrewCheckInsRemoved(db, clerkUserId, 'Clerk login already removed')
     // A staff login is someone's working account, so a member purge never removes
     // one: that is a decision to make in Clerk. If the role tables can't be read the login
     // stays too, and the admin is told that, so they know to come back to it. (lib/authz is
@@ -98,23 +98,23 @@ export async function deleteUnsharedClerkLogin(
     }
 
     await client.users.deleteUser(clerkUserId)
-    return withStaffCheckInsRemoved(db, clerkUserId, `Deleted Clerk login ${clerkUserId}`)
+    return withCrewCheckInsRemoved(db, clerkUserId, `Deleted Clerk login ${clerkUserId}`)
   } catch (e) {
     return { kind: 'clerk', ok: false, detail: e instanceof Error ? e.message : 'Clerk cleanup failed' }
   }
 }
 
-// Owner decision 13 Nov 2026: event staff check-ins leave with the account. Once
+// Owner decision 13 Nov 2026: event crew check-ins leave with the account. Once
 // the login is gone, so are the event-manager check-ins keyed by it
-// (lib/deletion/staff-check-ins.ts). Never while the login stays (shared or
+// (lib/deletion/crew-check-ins.ts). Never while the login stays (shared or
 // staff): that person still holds the account. A failure is reported, not thrown,
 // so the admin sees it; Clerk's user.deleted webhook also retries the same purge.
-async function withStaffCheckInsRemoved(
+async function withCrewCheckInsRemoved(
   db: ReturnType<typeof supabaseServer>,
   clerkUserId: string,
   detail: string,
 ): Promise<ExternalResult> {
-  const purged = await purgeStaffCheckIns(db, { clerkUserId })
+  const purged = await purgeCrewCheckIns(db, { clerkUserId })
   if (!purged.ok) {
     return { kind: 'clerk', ok: false, detail: `${detail}, but its event check-ins were not removed (${purged.error})` }
   }

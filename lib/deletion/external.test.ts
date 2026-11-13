@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Member row + "other rows on this login" count the fake Supabase returns.
 let memberRow: { clerk_user_id: string | null } | null
 let otherLinked: number
-// An in-memory event_staff_check_ins: the login removal deletes this login's
+// An in-memory event_crew_check_ins: the login removal deletes this login's
 // event-manager check-ins once the login is gone (owner decision 13 Nov 2026).
-type StaffRow = { id: string; staff_key: string; member_id: string | null }
+type StaffRow = { id: string; crew_key: string; member_id: string | null }
 let staffRows: StaffRow[]
 let staffDeleteError: string | null
 
@@ -34,7 +34,7 @@ vi.mock('@/lib/supabase', () => ({
         delete: () => ({
           in: (column: keyof StaffRow, values: string[]) => ({
             select: async () => {
-              if (table !== 'event_staff_check_ins') throw new Error(`unexpected delete from ${table}`)
+              if (table !== 'event_crew_check_ins') throw new Error(`unexpected delete from ${table}`)
               if (staffDeleteError) return { data: null, error: { message: staffDeleteError } }
               const gone = staffRows.filter((r) => values.includes(r[column] as string))
               staffRows = staffRows.filter((r) => !gone.includes(r))
@@ -54,17 +54,17 @@ vi.mock('@/lib/stripe', () => ({ stripeClient: () => null }))
 const { cleanupClerkForMember, deleteUnsharedClerkLogin, runExternalCleanup } = await import('./external')
 const { getEntityDef } = await import('./registry')
 
-const staffKeysLeft = () => staffRows.map((r) => r.staff_key).sort()
+const crewKeysLeft = () => staffRows.map((r) => r.crew_key).sort()
 
 beforeEach(() => {
   memberRow = { clerk_user_id: 'user_abc' }
   otherLinked = 0
   staffDeleteError = null
   staffRows = [
-    { id: 's1', staff_key: 'm.user_abc', member_id: null },
-    { id: 's2', staff_key: 'm.user_abc', member_id: null },
-    { id: 's3', staff_key: 'm.user_someone_else', member_id: null },
-    { id: 's4', staff_key: 'v.33333333-3333-4333-8333-333333333333', member_id: '33333333-3333-4333-8333-333333333333' },
+    { id: 's1', crew_key: 'm.user_abc', member_id: null },
+    { id: 's2', crew_key: 'm.user_abc', member_id: null },
+    { id: 's3', crew_key: 'm.user_someone_else', member_id: null },
+    { id: 's4', crew_key: 'v.33333333-3333-4333-8333-333333333333', member_id: '33333333-3333-4333-8333-333333333333' },
   ]
   getUser.mockReset().mockResolvedValue({ publicMetadata: {} })
   deleteUser.mockReset().mockResolvedValue({})
@@ -165,20 +165,20 @@ describe('login removal takes its event-manager check-ins with it', () => {
     const r = await cleanupClerkForMember('m1')
     expect(deleteUser).toHaveBeenCalledWith('user_abc')
     expect(r).toEqual({ kind: 'clerk', ok: true, detail: 'Deleted Clerk login user_abc' })
-    expect(staffKeysLeft()).toEqual(OTHERS)
+    expect(crewKeysLeft()).toEqual(OTHERS)
   })
 
   it('removes them when the login was already gone from Clerk', async () => {
     getUser.mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }))
     const r = await cleanupClerkForMember('m1')
     expect(r).toEqual({ kind: 'clerk', ok: true, detail: 'Clerk login already removed' })
-    expect(staffKeysLeft()).toEqual(OTHERS)
+    expect(crewKeysLeft()).toEqual(OTHERS)
   })
 
   it('removes them for the merge, which names the dropped login directly', async () => {
     const r = await deleteUnsharedClerkLogin('user_abc')
     expect(r.ok).toBe(true)
-    expect(staffKeysLeft()).toEqual(OTHERS)
+    expect(crewKeysLeft()).toEqual(OTHERS)
   })
 
   it('keeps them while the login stays: a staff account', async () => {
@@ -212,7 +212,7 @@ describe('login removal takes its event-manager check-ins with it', () => {
     expect(r).toEqual({
       kind: 'clerk',
       ok: false,
-      detail: 'Deleted Clerk login user_abc, but its event check-ins were not removed (event_staff_check_ins: connection reset)',
+      detail: 'Deleted Clerk login user_abc, but its event check-ins were not removed (event_crew_check_ins: connection reset)',
     })
   })
 
@@ -221,12 +221,12 @@ describe('login removal takes its event-manager check-ins with it', () => {
     await runExternalCleanup(member, 'm1', 'soft')
     expect(staffRows).toHaveLength(4)
     await runExternalCleanup(member, 'm1', 'hard')
-    expect(staffKeysLeft()).toEqual(OTHERS)
+    expect(crewKeysLeft()).toEqual(OTHERS)
   })
 
   it('the pending-consent purge (run as a member) removes them', async () => {
     const pending = getEntityDef('pending_consent_member')!
     await runExternalCleanup({ ...pending, type: pending.actsAs! }, 'm1', 'hard')
-    expect(staffKeysLeft()).toEqual(OTHERS)
+    expect(crewKeysLeft()).toEqual(OTHERS)
   })
 })

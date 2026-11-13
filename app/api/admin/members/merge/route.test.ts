@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// Owner decision 13 Nov 2026 (tracker attendee-email-cohort.4): event staff
+// Owner decision 13 Nov 2026 (tracker attendee-email-cohort.4): event crew
 // check-ins leave with the account. A merge deletes the dropped record's login
 // (unless the kept record takes it over), through the same login removal as a
 // member hard delete (lib/deletion/external.ts), so that login's event-manager
@@ -14,9 +14,9 @@ const DROP = '22222222-2222-4222-8222-222222222222'
 const KEEP_LOGIN = 'user_keep_placeholder'
 const DROP_LOGIN = 'user_drop_placeholder'
 
-type StaffRow = { id: string; staff_key: string; member_id: string | null }
+type CrewRow = { id: string; crew_key: string; member_id: string | null }
 let members: Record<string, unknown>[]
-let staff: StaffRow[]
+let staff: CrewRow[]
 const deleteUser = vi.fn(async (..._a: unknown[]) => ({}))
 const rpc = vi.fn()
 
@@ -28,7 +28,7 @@ vi.mock('@/lib/admin-auth', () => ({ currentUserIsAdmin: async () => true }))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorMemberId: null, actorLabel: 'admin' }) }))
 vi.mock('@/lib/audit/route', () => ({ withAudit: (_spec: unknown, handler: unknown) => handler }))
 vi.mock('@/lib/authz/principal', () => ({ loadTargetClerkRole: async () => ({ exists: true, role: undefined }) }))
-vi.mock('@/lib/authz', () => ({ isStaffTargetOrUnknown: async () => false }))
+vi.mock('@/lib/authz', () => ({ isCrewTargetOrUnknown: async () => false }))
 vi.mock('@/lib/docusign', () => ({ voidEnvelope: vi.fn() }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => null }))
 vi.mock('@/lib/supabase', () => ({
@@ -47,8 +47,8 @@ vi.mock('@/lib/supabase', () => ({
           const ids = filters.find(([c]) => c === 'id')?.[1] as string[]
           return { data: members.filter((m) => ids.includes(m.id as string)), error: null }
         }
-        if (table === 'event_staff_check_ins' && op === 'delete') {
-          const [column, values] = filters[0] as [keyof StaffRow, string[]]
+        if (table === 'event_crew_check_ins' && op === 'delete') {
+          const [column, values] = filters[0] as [keyof CrewRow, string[]]
           const gone = staff.filter((r) => values.includes(r[column] as string))
           staff = staff.filter((r) => !gone.includes(r))
           return { data: gone.map((r) => ({ id: r.id })), error: null }
@@ -94,14 +94,14 @@ beforeEach(() => {
   deleteUser.mockClear()
   rpc.mockReset()
   staff = [
-    { id: 's1', staff_key: `m.${DROP_LOGIN}`, member_id: null },
-    { id: 's2', staff_key: `m.${KEEP_LOGIN}`, member_id: null },
-    { id: 's3', staff_key: `v.${DROP}`, member_id: DROP },
-    { id: 's4', staff_key: 'm.user_someone_else_placeholder', member_id: null },
+    { id: 's1', crew_key: `m.${DROP_LOGIN}`, member_id: null },
+    { id: 's2', crew_key: `m.${KEEP_LOGIN}`, member_id: null },
+    { id: 's3', crew_key: `v.${DROP}`, member_id: DROP },
+    { id: 's4', crew_key: 'm.user_someone_else_placeholder', member_id: null },
   ]
 })
 
-describe('POST /api/admin/members/merge — staff check-ins of the dropped login', () => {
+describe('POST /api/admin/members/merge — crew check-ins of the dropped login', () => {
   it("deletes the dropped login and its event-manager check-ins; the kept login's and everyone else's survive", async () => {
     members = [member(KEEP, KEEP_LOGIN), member(DROP, DROP_LOGIN)]
     mergeRpc(DROP_LOGIN)

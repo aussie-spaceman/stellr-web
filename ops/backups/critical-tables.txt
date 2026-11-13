@@ -30,7 +30,7 @@ public.group_invoices
 public.members
 public.member_memberships
 public.member_roles
-public.staff_roles
+public.admin_duties
 
 # Money (ledger-like tables)
 public.event_refunds

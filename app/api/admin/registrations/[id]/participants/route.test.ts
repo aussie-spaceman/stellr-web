@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  session: { userId: 'user_staff', sessionClaims: { metadata: { role: 'admin' } } } as Record<string, unknown>,
+  session: { userId: 'user_crew', sessionClaims: { metadata: { role: 'admin' } } } as Record<string, unknown>,
   assigned: [] as string[],
   reg: { id: 'reg-1', type: 'group', event_slug: 'nevada', event_title: 'Nevada', school_name: 'S', school_address_state: 'NV' } as Record<string, unknown> | null,
   add: vi.fn(),
@@ -46,7 +46,7 @@ const call = (body: unknown = { first_name: 'A', last_name: 'B', email: 'a@examp
 
 describe('POST /api/admin/registrations/[id]/participants', () => {
   beforeEach(() => {
-    h.session = { userId: 'user_staff', sessionClaims: { metadata: { role: 'admin' } } }
+    h.session = { userId: 'user_crew', sessionClaims: { metadata: { role: 'admin' } } }
     h.assigned = []
     h.reg = { id: 'reg-1', type: 'group', event_slug: 'nevada', event_title: 'Nevada', school_name: 'S', school_address_state: 'NV' }
     h.add.mockReset().mockResolvedValue({ status: 201, body: { participant: { id: 'p-1' } }, memberId: 'm-1' })
@@ -81,7 +81,7 @@ describe('POST /api/admin/registrations/[id]/participants', () => {
     expect(res.status).toBe(201)
     expect(h.add).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'reg-1' }), expect.anything(),
       { memberId: 'staff-1', label: 'admin' })
-    expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ memberId: 'm-1', action: 'roster_added_by_staff' }))
+    expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ memberId: 'm-1', action: 'roster_added_by_crew' }))
   })
 
   it('lets the event manager of that event add', async () => {

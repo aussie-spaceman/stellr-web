@@ -54,10 +54,10 @@ export const POST = withAudit(
 
 async function correctGuardian(req: Request, { params }: Ctx) {
   const { slug, pid } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id: pid })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id: pid })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -73,7 +73,7 @@ async function correctGuardian(req: Request, { params }: Ctx) {
 
   const db = supabaseServer()
   const notFound = () => NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
-  const loaded = await loadRecord<Participant>(staff.scope, 'participants', pid, {
+  const loaded = await loadRecord<Participant>(crew.scope, 'participants', pid, {
     db,
     select: 'id, member_id, first_name, last_name, emergency_contact_email, event_role, date_of_birth, registrations!inner(event_slug, school_address_state)',
     notFound,
@@ -91,7 +91,7 @@ async function correctGuardian(req: Request, { params }: Ctx) {
     if (type) await adoptOpenEnvelope(db, { participantId: pid, memberId: p.member_id, eventSlug: slug, type })
   }
 
-  const live = await liveAgreementForParticipant(stellrOnlyDb(staff.scope, db), pid, LIVE)
+  const live = await liveAgreementForParticipant(stellrOnlyDb(crew.scope, db), pid, LIVE)
   if (live) {
     return NextResponse.json(
       { error: 'Their consent form is already out for signing. Use Correct email on it instead, which keeps any signature.' },

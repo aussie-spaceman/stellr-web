@@ -383,7 +383,7 @@ export function DeleteEntityButton({
 
               {mode === 'hard' && entity === 'member' && (
                 <p className="text-sm text-brand-muted">
-                  Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Staff accounts are left in place.
+                  Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Crew accounts (admins and event managers) are left in place.
                 </p>
               )}
 

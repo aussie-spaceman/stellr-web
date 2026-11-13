@@ -36,10 +36,10 @@ export const DEFAULT_REPLY_TO =
 
 /**
  * The staff inbox for operational alerts: new registrations, and any admin alert
- * that finds no staff_roles recipient (lib/notify.ts). Read at call time so it can
+ * that finds no admin_duties recipient (lib/notify.ts). Read at call time so it can
  * move without a deploy.
  */
-export function staffAlertEmail(): string {
+export function teamInboxEmail(): string {
   return process.env.REGISTRATION_ALERT_EMAIL ?? process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 }
 

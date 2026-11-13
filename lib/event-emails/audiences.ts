@@ -15,7 +15,7 @@ import { eventManagerAudienceClerkIds } from '@/lib/authz/audiences'
 import { loadEventTenantId } from '@/lib/authz/principal'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { AudienceKey, RecipientRole } from './types'
-import { staffKey } from '@/lib/check-in-desk'
+import { crewKey } from '@/lib/check-in-desk'
 import { AWARD_TYPES, EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
 import { familyCertificateUrl, familyCredentialUrl } from '@/lib/credentials-link'
 import type { CredentialLine, PaymentLine, RecipientForRender } from './render'
@@ -132,7 +132,7 @@ export interface MentorContact {
   firstName: string
   lastName: string
   role: 'volunteer' | 'event_manager'
-  /** How the desk names them (lib/check-in-desk staffKey): v.<members.id> or m.<Clerk user id>. */
+  /** How the desk names them (lib/check-in-desk crewKey): v.<members.id> or m.<Clerk user id>. */
   key: string
   /** Their members row, when there is one. */
   memberId: string | null
@@ -365,7 +365,7 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
       const m = (Array.isArray(r.members) ? r.members[0] : r.members) as
         { id: string; first_name: string | null; last_name: string | null; email: string | null } | null
       if (m?.email) {
-        out.push({ email: m.email, firstName: m.first_name ?? '', lastName: m.last_name ?? '', role: 'volunteer', key: staffKey('volunteer', m.id), memberId: m.id })
+        out.push({ email: m.email, firstName: m.first_name ?? '', lastName: m.last_name ?? '', role: 'volunteer', key: crewKey('volunteer', m.id), memberId: m.id })
       }
     }
   }
@@ -388,7 +388,7 @@ export async function loadMentorContacts(db: SupabaseClient, slug: string): Prom
             firstName: u.firstName ?? '',
             lastName: u.lastName ?? '',
             role: 'event_manager',
-            key: staffKey('event_manager', u.id),
+            key: crewKey('event_manager', u.id),
             memberId: memberByClerk.get(u.id) ?? null,
           })
         }
@@ -545,8 +545,8 @@ export async function resolveAudience(
   const attendees = audiences.includes('attendees')
   const mentors = audiences.includes('mentors') || attendees ? await loadMentorContacts(db, event.slug) : []
   if (attendees && mentors.length) {
-    const { loadStaffCheckIns } = await import('@/lib/check-in-staff')
-    const checkedIn = await loadStaffCheckIns(db, event.slug)
+    const { loadCrewCheckIns } = await import('@/lib/check-in-crew')
+    const checkedIn = await loadCrewCheckIns(db, event.slug)
     for (const m of mentors) m.checkedIn = checkedIn.has(m.key)
   }
 

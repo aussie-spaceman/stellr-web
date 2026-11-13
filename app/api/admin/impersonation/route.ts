@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { isStellrAdmin, isViewAsTargetStaff } from '@/lib/authz'
+import { isStellrAdmin, isViewAsTargetCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivityOrThrow, actorFromAuth, type Actor } from '@/lib/activity-log'
 import {
@@ -134,22 +134,22 @@ export async function POST(req: Request) {
   // One staff member must not use it to step into another's account — an admin
   // or an event manager, whose portal shows events and people they manage.
   // Staff status lives in two places, and both are checked:
-  //   - a staff_roles row (platform function scopes, migration 044);
+  //   - an admin_duties row (platform function scopes, migration 044);
   //   - the Clerk publicMetadata.role of the target's Clerk user.
   // Either lookup failing refuses the request. This used to allow on a Clerk
   // error, which made the refusal of an admin target only as strong as Clerk's
   // uptime, and it only refused role 'admin'. The one Clerk error that is an
   // answer is 404: a Clerk user that does not exist cannot sign in or hold a
-  // role (a missed user.deleted webhook leaves such ids behind), and staff_roles
+  // role (a missed user.deleted webhook leaves such ids behind), and admin_duties
   // has already been checked, so that target is not staff.
   const targetClerkId = (member as { clerk_user_id: string | null }).clerk_user_id
   try {
-    if (await isViewAsTargetStaff({ memberId, clerkUserId: targetClerkId }, { route: '/api/admin/impersonation' })) {
-      return refuse(403, 'Cannot view as a staff member.')
+    if (await isViewAsTargetCrew({ memberId, clerkUserId: targetClerkId }, { route: '/api/admin/impersonation' })) {
+      return refuse(403, 'Cannot view as a crew member.')
     }
   } catch (err) {
-    console.error('[impersonation] could not verify the target is not staff:', err)
-    return refuse(503, 'Could not confirm this member is not staff, so view-as was not started. Try again.')
+    console.error('[impersonation] could not verify the target is not crew:', err)
+    return refuse(503, 'Could not confirm this member is not crew, so view-as was not started. Try again.')
   }
 
   // The ticket is bound to the admin who starts it (lib/impersonation

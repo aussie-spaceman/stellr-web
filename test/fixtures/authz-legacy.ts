@@ -12,8 +12,8 @@ import { supabaseServer } from '@/lib/supabase'
 
 type Claims = Record<string, unknown> | null | undefined
 
-export const STAFF_SCOPES = ['all', 'events', 'memberships', 'community', 'academy', 'graduations'] as const
-export type StaffScope = (typeof STAFF_SCOPES)[number]
+export const DUTY_SCOPES = ['all', 'events', 'memberships', 'community', 'academy', 'graduations'] as const
+export type DutyScope = (typeof DUTY_SCOPES)[number]
 
 function roleFromClaims(sessionClaims: Claims): string | undefined {
   return (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -27,10 +27,10 @@ export function isEventManagerClaims(sessionClaims: Claims): boolean {
   return roleFromClaims(sessionClaims) === 'event_manager'
 }
 
-export const STAFF_CLERK_ROLES = ['admin', 'event_manager'] as const
+export const CREW_CLERK_ROLES = ['admin', 'event_manager'] as const
 
-export function isStaffRole(role: unknown): boolean {
-  return typeof role === 'string' && (STAFF_CLERK_ROLES as readonly string[]).includes(role)
+export function isCrewRole(role: unknown): boolean {
+  return typeof role === 'string' && (CREW_CLERK_ROLES as readonly string[]).includes(role)
 }
 
 export async function currentUserIsAdmin(): Promise<boolean> {
@@ -48,7 +48,7 @@ export async function requireAdminPage(): Promise<void> {
   if (!hasAdminPortalAccess(sessionClaims)) notFound()
 }
 
-export async function currentUserHasScope(scope: StaffScope): Promise<boolean> {
+export async function currentUserHasScope(scope: DutyScope): Promise<boolean> {
   const { userId, sessionClaims } = await auth()
   if (!userId) return false
   if (isAdminClaims(sessionClaims)) return true
@@ -57,7 +57,7 @@ export async function currentUserHasScope(scope: StaffScope): Promise<boolean> {
   const { data: member } = await db.from('members').select('id').eq('clerk_user_id', userId).maybeSingle()
   if (!member) return false
 
-  const { data } = await db.from('staff_roles').select('scopes').eq('member_id', member.id).maybeSingle()
+  const { data } = await db.from('admin_duties').select('scopes').eq('member_id', member.id).maybeSingle()
   const scopes = (data?.scopes as string[] | null) ?? []
   return scopes.includes('all') || scopes.includes(scope)
 }

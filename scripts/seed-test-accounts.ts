@@ -135,9 +135,9 @@ const PERSONAS: Persona[] = [
     note: 'College mentor/volunteer; can host Cohort sessions.' },
   { key: 'coach', firstName: 'Cody', lastName: 'Coach', ageBracket: 'adult', eventRole: 'mentor', gender: 'male', dob: '1988-02-02', tier: 'Subscriber', extraRoles: ['coach'],
     note: 'Coach is a member_role (manage axis), not a tier.' },
-  { key: 'event_manager', firstName: 'Evan', lastName: 'Events', ageBracket: 'adult', eventRole: 'teacher', gender: 'other', dob: '1986-07-07', tier: 'Educator', extraRoles: ['staff'], eventManager: true,
-    note: 'Scoped events admin. Verify staff_roles scope=events against live schema.' },
-  { key: 'admin', firstName: 'Alex', lastName: 'Admin', ageBracket: 'adult', eventRole: 'adult', gender: 'other', dob: '1984-12-12', tier: 'Educator', extraRoles: ['staff'], admin: true,
+  { key: 'event_manager', firstName: 'Evan', lastName: 'Events', ageBracket: 'adult', eventRole: 'teacher', gender: 'other', dob: '1986-07-07', tier: 'Educator', eventManager: true,
+    note: 'Scoped events admin. Verify admin_duties scope=events against live schema.' },
+  { key: 'admin', firstName: 'Alex', lastName: 'Admin', ageBracket: 'adult', eventRole: 'adult', gender: 'other', dob: '1984-12-12', tier: 'Educator', admin: true,
     note: 'Full admin via Clerk public_metadata.role=admin. Must re-auth to take effect.' },
 ]
 
@@ -268,11 +268,11 @@ async function ensureSchool(memberId: string): Promise<string> {
 }
 
 async function ensureEventManager(memberId: string): Promise<string> {
-  if (!APPLY) return 'would add staff_roles scopes=[events]'
+  if (!APPLY) return 'would add admin_duties scopes=[events]'
   const { error } = await db
-    .from('staff_roles')
+    .from('admin_duties')
     .upsert({ member_id: memberId, scopes: ['events'] }, { onConflict: 'member_id' })
-  return error ? `staff_roles skipped: ${error.message}` : 'staff_roles scopes=[events]'
+  return error ? `admin_duties skipped: ${error.message}` : 'admin_duties scopes=[events]'
 }
 
 // ── main ────────────────────────────────────────────────────────────────────────

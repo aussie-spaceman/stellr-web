@@ -476,7 +476,7 @@ export async function organiserDecide(
 }
 
 /** An admin or event manager approves or rejects a suggestion (the route checks they may act on the form). */
-export async function staffDecide(
+export async function crewDecide(
   db: SupabaseClient,
   input: { agreementId: string; changeId: string; decision: unknown; memberId: string | null; label: string },
 ): Promise<{ ok: true; decision: 'approve' | 'reject' } | ChangeRefusal> {

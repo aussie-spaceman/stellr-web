@@ -124,7 +124,7 @@ vi.mock('@/lib/volunteer', () => ({
 vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: async () => {} }))
 vi.mock('@/lib/registration-notify', () => ({
   sendAccountConfirmation: async () => { state.sequence.push('email:confirmation') },
-  notifyStaffOfRegistration: async () => {},
+  notifyTeamOfRegistration: async () => {},
 }))
 vi.mock('@/lib/membership-agreement', () => ({
   MEMBERSHIP_SLUG: 'membership',

@@ -21,13 +21,13 @@ const ROUTE = '/api/admin/events/[slug]/merch/commit'
 // event is refused for everyone (refuseUnlessStellrEvent).
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
-  const summary = await getEventBatchSummary(stellrOnlyDb(staff.scope, supabaseServer()), slug)
+  const summary = await getEventBatchSummary(stellrOnlyDb(crew.scope, supabaseServer()), slug)
   return NextResponse.json(summary)
 }
 
@@ -38,10 +38,10 @@ export const POST = withAudit(
 
 async function commitBatch(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -53,7 +53,7 @@ async function commitBatch(req: Request, { params }: Ctx) {
   }
 
   // Resolve committer's member id (best-effort).
-  const db = stellrOnlyDb(staff.scope, supabaseServer())
+  const db = stellrOnlyDb(crew.scope, supabaseServer())
   let committedBy: string | null = null
   const { userId } = await auth()
   if (userId) committedBy = await memberIdForClerkUser(db, userId)

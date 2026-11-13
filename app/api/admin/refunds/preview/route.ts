@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { currentTenantId, requireTenantStaff } from '@/lib/authz'
+import { currentTenantId, requireTenantCrew } from '@/lib/authz'
 import { previewRefundOnStellrEvent } from '@/lib/refunds/preview'
 import { withAudit } from '@/lib/audit/route'
 import { tenantWideScope } from '@/lib/tenancy/scope-context'
@@ -29,7 +29,7 @@ export const GET = withAudit(
 // another tenant's event is refused for everyone, a Stellr admin included: 404, or a
 // retryable 503 when the event's owner cannot be read (previewRefundOnStellrEvent).
 async function preview(req: Request) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

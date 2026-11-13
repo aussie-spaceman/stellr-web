@@ -21,14 +21,14 @@ const arr = <T>(x: T | T[] | null | undefined): T | undefined => (Array.isArray(
 // and a tenant's event is refused for everyone (refuseUnlessStellrEvent).
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
 
-  const { offs, products } = await loadEventOfferings(stellrOnlyDb(staff.scope, supabaseServer()), slug)
+  const { offs, products } = await loadEventOfferings(stellrOnlyDb(crew.scope, supabaseServer()), slug)
 
   const offerings = (offs ?? []).map((o) => {
     const v = arr((o as { variant?: unknown }).variant) as { id: string; sku: string; label: string | null; product?: unknown } | undefined
@@ -53,10 +53,10 @@ export const POST = withAudit(
 
 async function addOffering(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -68,7 +68,7 @@ async function addOffering(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: 'variantId and treatment (included|addon) required' }, { status: 400 })
   }
   noteAuditSubject(req, { detail: { treatment } })
-  const { error } = await addEventOffering(stellrOnlyDb(staff.scope, supabaseServer()), slug, variantId, treatment)
+  const { error } = await addEventOffering(stellrOnlyDb(crew.scope, supabaseServer()), slug, variantId, treatment)
   if (error) {
     console.error('[event/offerings] add:', error)
     return NextResponse.json({ error: 'Could not add offering' }, { status: 500 })
@@ -83,10 +83,10 @@ export const DELETE = withAudit(
 
 async function removeOffering(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -94,7 +94,7 @@ async function removeOffering(req: Request, { params }: Ctx) {
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   noteAuditSubject(req, { id })
-  const { error } = await removeEventOffering(stellrOnlyDb(staff.scope, supabaseServer()), slug, id)
+  const { error } = await removeEventOffering(stellrOnlyDb(crew.scope, supabaseServer()), slug, id)
   if (error) return NextResponse.json({ error: 'Could not remove offering' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

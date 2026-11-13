@@ -58,7 +58,7 @@ export async function cleanupClerkForMember(memberId: string): Promise<ExternalR
 }
 
 // Deletes a Clerk login unless another member row (other than `exceptMemberId`)
-// is linked to it, or it is a staff account. Shared with the member merge,
+// is linked to it, or it is a crew account. Shared with the member merge,
 // which calls it after the dropped row is already gone.
 export async function deleteUnsharedClerkLogin(
   clerkUserId: string | null,
@@ -86,14 +86,14 @@ export async function deleteUnsharedClerkLogin(
     // one: that is a decision to make in Clerk. If the role tables can't be read the login
     // stays too, and the admin is told that, so they know to come back to it. (lib/authz is
     // `server-only`, and scripts load this file under plain tsx, so it loads here.)
-    const { isStaffTargetOrUnknown } = await import('@/lib/authz')
-    const staff = await isStaffTargetOrUnknown({ clerkUserId, clerkRole: role, memberId: exceptMemberId ?? null }, { route: 'deletion/clerk-login' })
-    if (staff === null) {
-      return { kind: 'clerk', ok: false, detail: `Could not confirm Clerk login ${clerkUserId} is not a staff account; left in place` }
+    const { isCrewTargetOrUnknown } = await import('@/lib/authz')
+    const crew = await isCrewTargetOrUnknown({ clerkUserId, clerkRole: role, memberId: exceptMemberId ?? null }, { route: 'deletion/clerk-login' })
+    if (crew === null) {
+      return { kind: 'clerk', ok: false, detail: `Could not confirm Clerk login ${clerkUserId} is not a crew account; left in place` }
     }
-    if (staff) {
+    if (crew) {
       const named = typeof role === 'string' ? ` (${role})` : ''
-      return { kind: 'clerk', ok: false, detail: `Clerk login ${clerkUserId} is a staff account${named}; left in place` }
+      return { kind: 'clerk', ok: false, detail: `Clerk login ${clerkUserId} is a crew account${named}; left in place` }
     }
 
     await client.users.deleteUser(clerkUserId)

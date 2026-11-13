@@ -92,7 +92,7 @@ export const CRON_SCOPES: Readonly<Record<string, CronScopeEntry>> = {
   'training-reminders': { scope: 'stellr_only', why: "Stellr training; reads event-scoped assignments, and skips another tenant's events and cohorts (B11)" },
   'weekly-digest': {
     scope: 'stellr_only',
-    why: "Stellr's staff digest; event-scoped reads limited to Stellr (B11)",
+    why: "Stellr's admin digest; event-scoped reads limited to Stellr (B11)",
     identityRead:
       'new and departed members, new mentors and the verification queue come from members, so a tenant registrant with a member record would be counted. Same owner decision as identityAudience. Reactions name no Space, so they count every tenant too',
   },

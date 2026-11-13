@@ -73,7 +73,7 @@ describe('table registry (S3)', () => {
     const fromExpand = [...expand.matchAll(/ADD COLUMN IF NOT EXISTS tenant_id[^;]*;\s*\n?/g)].length
     // Derived tables created after S3 carry tenant_id, its index and the
     // trigger in their own CREATE TABLE migration (checked by lint:tenancy).
-    const POST_EXPAND = new Set(['public.event_staff_check_ins'])
+    const POST_EXPAND = new Set(['public.event_crew_check_ins'])
     expect(fromExpand).toBe(derivedTables().filter((d) => !POST_EXPAND.has(d.table)).length)
     // The backfill reads its table list from the catalog (every table with the
     // derivation trigger), so it cannot drift; pgTAP section 6 checks the set.

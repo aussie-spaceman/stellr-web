@@ -71,27 +71,27 @@ describe('loadRecord', () => {
 })
 
 describe('loadEventRecord', () => {
-  const staff = (assigned: string[] | null) => ({
-    scope: tenantWideScope(STELLR_TENANT_ID, assigned === null ? 'tenant_admin' : 'staff'),
+  const crew = (assigned: string[] | null) => ({
+    scope: tenantWideScope(STELLR_TENANT_ID, assigned === null ? 'tenant_admin' : 'crew'),
     covers: (s: string | null | undefined) => assigned === null || (!!s && assigned.includes(s)),
   })
   const row = (event_slug: string | null) => fakeDb({ data: { event_slug } }).db
 
   it('hands over a row of a covered event', async () => {
-    expect((await loadEventRecord(staff(['nv']), 'registrations', ID, { db: row('nv'), notFound, mode: 'off' })).ok).toBe(true)
+    expect((await loadEventRecord(crew(['nv']), 'registrations', ID, { db: row('nv'), notFound, mode: 'off' })).ok).toBe(true)
   })
 
   it('answers any other row as notFound, in every mode', async () => {
     for (const mode of ['off', 'shadow', 'enforce'] as const) {
-      const got = await loadEventRecord(staff(['co']), 'registrations', ID, { db: row('nv'), notFound, mode, onMismatch: () => {} })
+      const got = await loadEventRecord(crew(['co']), 'registrations', ID, { db: row('nv'), notFound, mode, onMismatch: () => {} })
       expect(got.ok).toBe(false)
       if (!got.ok) expect(got.response.status).toBe(404)
     }
   })
 
   it('a row with no event is for someone who reaches every event', async () => {
-    expect((await loadEventRecord(staff(['nv']), 'credentials', ID, { db: row(null), notFound, mode: 'off' })).ok).toBe(false)
-    expect((await loadEventRecord(staff(null), 'credentials', ID, { db: row(null), notFound, mode: 'off' })).ok).toBe(true)
+    expect((await loadEventRecord(crew(['nv']), 'credentials', ID, { db: row(null), notFound, mode: 'off' })).ok).toBe(false)
+    expect((await loadEventRecord(crew(null), 'credentials', ID, { db: row(null), notFound, mode: 'off' })).ok).toBe(true)
   })
 })
 
@@ -173,7 +173,7 @@ describe('enforcedTenantFilter', () => {
 
 describe('tenantWideScope', () => {
   it('reaches every event, and never under the event_manager kind', () => {
-    expect(tenantWideScope(STELLR_TENANT_ID, 'staff').eventSlugs).toBeNull()
+    expect(tenantWideScope(STELLR_TENANT_ID, 'crew').eventSlugs).toBeNull()
     expect(() => makeScope({ tenantId: STELLR_TENANT_ID, eventSlugs: null, actor: { kind: 'event_manager' } })).toThrow(TenantContextError)
   })
 })

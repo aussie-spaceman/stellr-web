@@ -30,16 +30,16 @@ export const maxDuration = 60
 // Stellr's Checkr account and shared member records: refused to a tenant's staff.
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/background-reports' })
-  if (!staff.ok) return staff.response
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/background-reports' })
+  if (!crew.ok) return crew.response
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const search = new URL(req.url).searchParams
   const participantId = search.get('participant')
   const memberId = search.get('member')
   const single = !!(participantId || memberId)
-  const mode: ExportMode = exportModeFor(staff.isAdmin, search.get('mode'))
+  const mode: ExportMode = exportModeFor(crew.isAdmin, search.get('mode'))
 
   const db = supabaseServer()
   const [event, allMentors] = await Promise.all([getEventBySlug(slug), loadEventMentors(db, slug)])

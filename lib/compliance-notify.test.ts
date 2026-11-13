@@ -155,7 +155,7 @@ describe('notifyClearanceRequired', () => {
     db = fakeSupabase({
       members: [member('m1', { member_teacher_licenses: [verifiedLicense({ verified_at: null })] })],
     })
-    expect(await notifyClearanceRequired(db.client, input(), { now: NOW })).toEqual({ sent: false, reason: 'staff_review' })
+    expect(await notifyClearanceRequired(db.client, input(), { now: NOW })).toEqual({ sent: false, reason: 'crew_review' })
     expect(sendEmail).not.toHaveBeenCalled()
   })
 
@@ -174,7 +174,7 @@ describe('notifyClearanceRequired', () => {
         })],
       })],
     })
-    expect(await notifyClearanceRequired(db.client, input(), { now: NOW })).toEqual({ sent: false, reason: 'staff_review' })
+    expect(await notifyClearanceRequired(db.client, input(), { now: NOW })).toEqual({ sent: false, reason: 'crew_review' })
   })
 
   it('records nothing when the email fails, so the next attempt sends cleanly', async () => {

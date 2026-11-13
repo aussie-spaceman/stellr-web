@@ -12,13 +12,13 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { notFound, redirect } from 'next/navigation'
-import { PORTAL_CLERK_ROLES, decideStaffTarget, portalRoleFromClaims, type Claims } from '@/lib/authz/decide'
+import { PORTAL_CLERK_ROLES, decideCrewTarget, portalRoleFromClaims, type Claims } from '@/lib/authz/decide'
 import { supabaseServer } from '@/lib/supabase'
 
 // Platform RBAC function scopes (migration 044). 'all' = full admin. This is the
 // seam for granular staff roles; today every admin holds 'all'.
-export const STAFF_SCOPES = ['all', 'events', 'memberships', 'community', 'academy', 'graduations'] as const
-export type StaffScope = (typeof STAFF_SCOPES)[number]
+export const DUTY_SCOPES = ['all', 'events', 'memberships', 'community', 'academy', 'graduations'] as const
+export type DutyScope = (typeof DUTY_SCOPES)[number]
 
 export function isAdminClaims(sessionClaims: Claims): boolean {
   return portalRoleFromClaims(sessionClaims) === 'admin'
@@ -31,10 +31,10 @@ export function isEventManagerClaims(sessionClaims: Claims): boolean {
 }
 
 // Every Clerk role that opens the admin portal.
-export const STAFF_CLERK_ROLES = PORTAL_CLERK_ROLES
+export const CREW_CLERK_ROLES = PORTAL_CLERK_ROLES
 
-export function isStaffRole(role: unknown): boolean {
-  return decideStaffTarget({ clerkRole: role }, 'clerk')
+export function isCrewRole(role: unknown): boolean {
+  return decideCrewTarget({ clerkRole: role }, 'clerk')
 }
 
 // The current request's user is a platform admin. The one-liner most
@@ -74,13 +74,13 @@ export async function requireAdminPage(): Promise<void> {
 
 // Whether the current user holds a function scope. Clerk admins implicitly hold
 // every scope (so existing access is unchanged); otherwise the member must have
-// the scope (or 'all') granted in staff_roles. Use this to gate future
+// the scope (or 'all') granted in admin_duties. Use this to gate future
 // function-scoped admin areas (e.g. graduations) without re-plumbing the gate.
 //
 // Not a shim over hasScope yet: lib/training.ts calls this for any member joining a live
 // class, and docs/AUTHZ.md asks for a sampling decision before a call site serving members
 // moves to lib/authz (shadow reads are not sampled).
-export async function currentUserHasScope(scope: StaffScope): Promise<boolean> {
+export async function currentUserHasScope(scope: DutyScope): Promise<boolean> {
   const { userId, sessionClaims } = await auth()
   if (!userId) return false
   if (isAdminClaims(sessionClaims)) return true // platform admin = all scopes
@@ -94,7 +94,7 @@ export async function currentUserHasScope(scope: StaffScope): Promise<boolean> {
   if (!member) return false
 
   const { data } = await db
-    .from('staff_roles')
+    .from('admin_duties')
     .select('scopes')
     .eq('member_id', member.id)
     .maybeSingle()

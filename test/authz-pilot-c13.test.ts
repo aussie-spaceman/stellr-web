@@ -115,7 +115,7 @@ const REFUSED: [string, unknown][] = [
   ['signed out', { userId: null, sessionClaims: null }],
   ['a member with no role', { userId: 'user_member1', sessionClaims: { metadata: {} } }],
   ['an event manager', { userId: 'user_em1', sessionClaims: { metadata: { role: 'event_manager' } } }],
-  ['a staff role', { userId: 'user_staff1', sessionClaims: { metadata: { role: 'staff' } } }],
+  ['a member role', { userId: 'user_crew1', sessionClaims: { metadata: { role: 'member' } } }],
 ]
 
 /** Answers every query with one row, whatever is asked. */

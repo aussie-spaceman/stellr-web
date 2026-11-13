@@ -75,19 +75,19 @@ export const LEGACY_IDIOMS = [
   { id: 'hasAdminPortalAccess', kind: 'symbol', idiom: 8, file: 'lib/admin-auth.ts' },
   { id: 'isEventManagerClaims', kind: 'symbol', idiom: 8, file: 'lib/admin-auth.ts' },
   { id: 'currentUserHasScope', kind: 'symbol', idiom: 9, file: 'lib/admin-auth.ts' },
-  { id: 'isStaffRole', kind: 'symbol', idiom: 10, file: 'lib/admin-auth.ts' },
-  { id: 'STAFF_CLERK_ROLES', kind: 'symbol', idiom: 10, file: 'lib/admin-auth.ts' },
+  { id: 'isCrewRole', kind: 'symbol', idiom: 10, file: 'lib/admin-auth.ts' },
+  { id: 'CREW_CLERK_ROLES', kind: 'symbol', idiom: 10, file: 'lib/admin-auth.ts' },
   { id: 'portalRoleList', kind: 'role_list', idiom: 10 },
   { id: 'roleTableRead', kind: 'role_table', idiom: 12, also: [9, 10] },
 ]
 
 /** The tables that say who is staff. */
-export const ROLE_TABLES = ['staff_roles', 'event_manager_assignments']
+export const ROLE_TABLES = ['admin_duties', 'event_manager_assignments']
 
 /** Screens whose job is to show or edit a role table. A read here decides nothing, and it stays after C25. */
 export const ROLE_TABLE_MANAGERS = {
   'app/api/admin/event-managers/route.ts': 'the screen that assigns event managers',
-  'app/(stellr)/(admin)/admin/staff/page.tsx': 'lists staff scopes for editing',
+  'app/(stellr)/(admin)/admin/duties/page.tsx': 'lists duty scopes for editing',
   'app/(stellr)/(admin)/admin/competitions/[slug]/page.tsx': 'lists the managers assigned to the event being edited',
   'lib/event-manager.ts': 'the service both assignment screens call to grant, change, remove and sweep event managers',
 }

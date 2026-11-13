@@ -1,7 +1,7 @@
 // Events admin configuration: the first area that reads through tenantDb (multi-tenancy
 // plan S5, C18). The queries behind events/[slug]/{companies,offerings,merch/commit}, moved
 // here from the routes, which test/route-manifest.test.ts holds off a direct .from() now
-// that they are tenant_staff.
+// that they are tenant_crew.
 //
 // The 'events-config' area (lib/tenancy/area-switch.ts) covers an event's companies: the
 // list, the count and a company's name. Each keeps today's supabase-js query as its

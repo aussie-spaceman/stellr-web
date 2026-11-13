@@ -20,7 +20,7 @@ vi.mock('@/lib/cron-runs', () => ({
   lastCronResult,
   startCronRun: async () => ({ fail, finish }),
 }))
-vi.mock('@/lib/email', () => ({ sendEmail, staffAlertEmail: () => 'alerts@example.org' }))
+vi.mock('@/lib/email', () => ({ sendEmail, teamInboxEmail: () => 'alerts@example.org' }))
 vi.mock('@/lib/apollo-reconcile', () => ({ fetchEngagedProspects, reconcileProspects }))
 
 const { GET } = await import('./route')

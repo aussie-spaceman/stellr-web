@@ -47,13 +47,13 @@ const part = (id: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const actor = { userId: 'user_staff', name: 'Event Manager' }
+const actor = { userId: 'user_crew', name: 'Event Manager' }
 
 describe('overrideFields', () => {
   it('records when and by whom; clearing empties all three', () => {
     expect(overrideFields(actor, new Date('2026-10-30T18:00:00Z'))).toEqual({
       team_profile_overridden_at: '2026-10-30T18:00:00.000Z',
-      team_profile_overridden_by: 'user_staff',
+      team_profile_overridden_by: 'user_crew',
       team_profile_overridden_by_name: 'Event Manager',
     })
     expect(Object.keys(CLEARED_OVERRIDE).sort()).toEqual(Object.keys(overrideFields(actor)).sort())
@@ -78,7 +78,7 @@ describe('overrideOutstanding', () => {
     expect(result).toEqual({ overridden: 2 })
     expect(writes).toHaveLength(1)
     expect(writes[0].ids).toEqual(['sent', 'waiting'])
-    expect(writes[0].payload).toMatchObject({ team_profile_overridden_by: 'user_staff', team_profile_overridden_by_name: 'Event Manager' })
+    expect(writes[0].payload).toMatchObject({ team_profile_overridden_by: 'user_crew', team_profile_overridden_by_name: 'Event Manager' })
   })
 
   it('writes nothing when everyone has submitted or is overridden', async () => {

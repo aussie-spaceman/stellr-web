@@ -13,10 +13,10 @@ import {
   decidePlatformAdmin,
   decidePortalAccess,
   decideScope,
-  decideStaffTarget,
+  decideCrewTarget,
   decideStellrAdmin,
   decideTenantRole,
-  decideTenantStaff,
+  decideTenantCrew,
   isEventManager,
   portalRoleFromClaims,
   roleFromClaims,
@@ -70,7 +70,7 @@ describe('claims', () => {
   it('portalRoleFromClaims names only the two portal roles', () => {
     expect(portalRoleFromClaims({ metadata: { role: 'admin' } })).toBe('admin')
     expect(portalRoleFromClaims({ metadata: { role: 'event_manager' } })).toBe('event_manager')
-    expect(portalRoleFromClaims({ metadata: { role: 'staff' } })).toBeNull()
+    expect(portalRoleFromClaims({ metadata: { role: 'member' } })).toBeNull()
     expect(portalRoleFromClaims({ metadata: { role: 'tenant_admin' } })).toBeNull()
     expect(portalRoleFromClaims(null)).toBeNull()
   })
@@ -83,7 +83,7 @@ describe('signed out', () => {
       expect(decidePlatformAdmin(anon, s)).toEqual(DENY_401)
       expect(decideTenantRole(anon, STELLR_TENANT_ID, ['tenant_admin'], s)).toEqual(DENY_401)
       expect(decideStellrAdmin(anon, s)).toEqual(DENY_401)
-      expect(decideTenantStaff(anon, STELLR_TENANT_ID, ['staff'], s)).toEqual(DENY_401)
+      expect(decideTenantCrew(anon, STELLR_TENANT_ID, ['duty_holder'], s)).toEqual(DENY_401)
       expect(decidePortalAccess(anon, s)).toEqual(DENY_401)
       expect(decideEventAccess(anon, { tenantId: STELLR_TENANT_ID, assignments: [] }, s)).toEqual(DENY_401)
       expect(decideScope(anon, ['all'], 'events', s)).toBe(false)
@@ -112,7 +112,7 @@ describe('clerk source', () => {
     expect(decideStellrAdmin(p, 'clerk')).toEqual(DENY_403)
     expect(decidePlatformAdmin(p, 'clerk')).toEqual(DENY_403)
     expect(decidePortalAccess(p, 'clerk')).toEqual(DENY_403)
-    expect(decideTenantStaff(p, STELLR_TENANT_ID, ['tenant_admin'], 'clerk')).toEqual(DENY_403)
+    expect(decideTenantCrew(p, STELLR_TENANT_ID, ['tenant_admin'], 'clerk')).toEqual(DENY_403)
     expect(decideEventAccess(p, { tenantId: STELLR_TENANT_ID, assignments: [] }, 'clerk')).toEqual(DENY_403)
   })
   it('event_manager claim: the portal, but neither admin nor platform', () => {
@@ -133,8 +133,8 @@ describe('clerk source', () => {
     expect(decidePlatformAdmin(p, 'clerk', CANARY_TENANT_ID)).toEqual(DENY_403)
     expect(decideScope(p, ['all'], 'events', 'clerk', CANARY_TENANT_ID)).toBe(false)
   })
-  it('never reports staff from a claim', () => {
-    expect(tenantRoles(principal({ claimsRole: 'staff' }), STELLR_TENANT_ID, 'clerk')).toEqual([])
+  it('never reports duty_holder from a claim', () => {
+    expect(tenantRoles(principal({ claimsRole: 'duty_holder' }), STELLR_TENANT_ID, 'clerk')).toEqual([])
     expect(tenantRoles(principal({ claimsRole: 'event_manager' }), STELLR_TENANT_ID, 'clerk')).toEqual(['event_manager'])
     expect(tenantRoles(principal({ claimsRole: 'admin' }), STELLR_TENANT_ID, 'clerk')).toEqual(['tenant_admin'])
   })
@@ -156,24 +156,24 @@ describe('postgres source', () => {
     expect(decidePlatformAdmin(p, 'postgres', CANARY_TENANT_ID).ok).toBe(true)
     expect(decidePlatformAdmin(p, 'postgres')).toEqual({ ok: true, via: 'platform', tenantId: STELLR_TENANT_ID })
     expect(decideStellrAdmin(p, 'postgres')).toEqual({ ok: true, via: 'platform', tenantId: STELLR_TENANT_ID })
-    expect(decideTenantStaff(p, STELLR_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'platform', tenantId: STELLR_TENANT_ID })
+    expect(decideTenantCrew(p, STELLR_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'platform', tenantId: STELLR_TENANT_ID })
   })
   it('the platform bypass stops at another tenant unless S6 support mode is on (plan decision 18)', () => {
     const normal = principal({ platformAdmin: true })
     const section = { tenantId: CANARY_TENANT_ID, assignments: [] }
-    expect(decideTenantStaff(normal, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
+    expect(decideTenantCrew(normal, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
     expect(decideEventAccess(normal, section, 'postgres')).toEqual(DENY_403)
     expect(decidePortalAccess(normal, 'postgres', CANARY_TENANT_ID)).toEqual(DENY_403)
 
     const support = principal({ platformAdmin: true, mode: 'support_read' })
-    expect(decideTenantStaff(support, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'platform', tenantId: CANARY_TENANT_ID })
+    expect(decideTenantCrew(support, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'platform', tenantId: CANARY_TENANT_ID })
     expect(decideEventAccess(support, section, 'postgres').ok).toBe(true)
     // Support mode is about the bypass; it gives nobody else anything.
-    expect(decideTenantStaff(principal({ mode: 'support_read' }), CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
+    expect(decideTenantCrew(principal({ mode: 'support_read' }), CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
   })
   it('a platform admin with a membership in the tenant gets in through the membership', () => {
     const p = principal({ platformAdmin: true, memberships: [membership('tenant_admin', CANARY_TENANT_ID)] })
-    expect(decideTenantStaff(p, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'membership', tenantId: CANARY_TENANT_ID })
+    expect(decideTenantCrew(p, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'membership', tenantId: CANARY_TENANT_ID })
   })
   it('assertTenantRole does not imply a platform admin', () => {
     expect(decideTenantRole(principal({ platformAdmin: true }), STELLR_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
@@ -186,8 +186,8 @@ describe('postgres source', () => {
   it('a tenant_admin of another tenant is not a Stellr admin', () => {
     const p = principal({ memberships: [membership('tenant_admin', CANARY_TENANT_ID)] })
     expect(decideStellrAdmin(p, 'postgres')).toEqual(DENY_403)
-    expect(decideTenantStaff(p, STELLR_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
-    expect(decideTenantStaff(p, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'membership', tenantId: CANARY_TENANT_ID })
+    expect(decideTenantCrew(p, STELLR_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual(DENY_403)
+    expect(decideTenantCrew(p, CANARY_TENANT_ID, ['tenant_admin'], 'postgres')).toEqual({ ok: true, via: 'membership', tenantId: CANARY_TENANT_ID })
   })
   it('an empty role list grants nothing', () => {
     const p = principal({ memberships: [membership('tenant_admin')] })
@@ -201,24 +201,24 @@ describe('postgres source', () => {
   })
   it('tenantRoles de-duplicates and stays inside the tenant', () => {
     const p = principal({
-      memberships: [membership('staff'), membership('staff'), membership('tenant_admin', CANARY_TENANT_ID)],
+      memberships: [membership('duty_holder'), membership('duty_holder'), membership('tenant_admin', CANARY_TENANT_ID)],
     })
-    expect(tenantRoles(p, STELLR_TENANT_ID, 'postgres')).toEqual(['staff'])
+    expect(tenantRoles(p, STELLR_TENANT_ID, 'postgres')).toEqual(['duty_holder'])
   })
 })
 
 describe('staff never grants the portal', () => {
-  const staff = principal({ memberships: [membership('staff')] })
+  const crew = principal({ memberships: [membership('duty_holder')] })
   it('in the postgres source', () => {
-    expect(decidePortalAccess(staff, 'postgres')).toEqual(DENY_403)
-    expect(decideStellrAdmin(staff, 'postgres')).toEqual(DENY_403)
-    expect(decideEventAccess(staff, { tenantId: STELLR_TENANT_ID, assignments: [] }, 'postgres')).toEqual(DENY_403)
+    expect(decidePortalAccess(crew, 'postgres')).toEqual(DENY_403)
+    expect(decideStellrAdmin(crew, 'postgres')).toEqual(DENY_403)
+    expect(decideEventAccess(crew, { tenantId: STELLR_TENANT_ID, assignments: [] }, 'postgres')).toEqual(DENY_403)
   })
   it('in the clerk source, whatever the claim says', () => {
-    expect(decidePortalAccess(principal({ claimsRole: 'staff' }), 'clerk')).toEqual(DENY_403)
+    expect(decidePortalAccess(principal({ claimsRole: 'duty_holder' }), 'clerk')).toEqual(DENY_403)
   })
-  it('but a staff membership does pass requireTenantStaff when staff is asked for', () => {
-    expect(decideTenantStaff(staff, STELLR_TENANT_ID, ['staff'], 'postgres').ok).toBe(true)
+  it('but a staff membership does pass requireTenantCrew when staff is asked for', () => {
+    expect(decideTenantCrew(crew, STELLR_TENANT_ID, ['duty_holder'], 'postgres').ok).toBe(true)
   })
   it('portal access is per tenant', () => {
     const p = principal({ memberships: [membership('event_manager', CANARY_TENANT_ID)] })
@@ -322,24 +322,24 @@ describe('scopes', () => {
 
 describe('staff targets', () => {
   it('clerk: the two portal roles, strings only', () => {
-    expect(decideStaffTarget({ clerkRole: 'admin' }, 'clerk')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: 'event_manager' }, 'clerk')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: 'staff' }, 'clerk')).toBe(false)
-    expect(decideStaffTarget({ clerkRole: undefined }, 'clerk')).toBe(false)
-    expect(decideStaffTarget({ clerkRole: ['admin'] }, 'clerk')).toBe(false)
+    expect(decideCrewTarget({ clerkRole: 'admin' }, 'clerk')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: 'event_manager' }, 'clerk')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: 'member' }, 'clerk')).toBe(false)
+    expect(decideCrewTarget({ clerkRole: undefined }, 'clerk')).toBe(false)
+    expect(decideCrewTarget({ clerkRole: ['admin'] }, 'clerk')).toBe(false)
   })
   it('clerk ignores table fields', () => {
-    expect(decideStaffTarget({ clerkRole: undefined, platformAdmin: true, memberships: [membership('tenant_admin')] }, 'clerk')).toBe(false)
+    expect(decideCrewTarget({ clerkRole: undefined, platformAdmin: true, memberships: [membership('tenant_admin')] }, 'clerk')).toBe(false)
   })
   it('postgres takes the union: a portal Clerk role is protected with no table row', () => {
-    expect(decideStaffTarget({ clerkRole: 'admin' }, 'postgres')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: 'event_manager', memberships: [] }, 'postgres')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: 'student', memberships: [membership('staff')] }, 'postgres')).toBe(false)
+    expect(decideCrewTarget({ clerkRole: 'admin' }, 'postgres')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: 'event_manager', memberships: [] }, 'postgres')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: 'student', memberships: [membership('duty_holder')] }, 'postgres')).toBe(false)
   })
   it('postgres: platform admin, tenant_admin or event_manager in any tenant; staff alone is not', () => {
-    expect(decideStaffTarget({ clerkRole: undefined, platformAdmin: true }, 'postgres')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: undefined, memberships: [membership('tenant_admin', CANARY_TENANT_ID)] }, 'postgres')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: undefined, memberships: [membership('event_manager')] }, 'postgres')).toBe(true)
-    expect(decideStaffTarget({ clerkRole: undefined, memberships: [membership('staff')] }, 'postgres')).toBe(false)
+    expect(decideCrewTarget({ clerkRole: undefined, platformAdmin: true }, 'postgres')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: undefined, memberships: [membership('tenant_admin', CANARY_TENANT_ID)] }, 'postgres')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: undefined, memberships: [membership('event_manager')] }, 'postgres')).toBe(true)
+    expect(decideCrewTarget({ clerkRole: undefined, memberships: [membership('duty_holder')] }, 'postgres')).toBe(false)
   })
 })

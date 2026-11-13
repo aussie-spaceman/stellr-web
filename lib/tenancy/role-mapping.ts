@@ -1,7 +1,7 @@
 /**
  * Role mapping (multi-tenancy plan S3): today's roles, written into the new
  * tenancy tables as DATA. Nothing reads these rows for authority yet — the
- * Clerk `role` claim, staff_roles and event_manager_assignments remain what
+ * Clerk `role` claim, admin_duties and event_manager_assignments remain what
  * every guard checks until S5. Pure: scripts/map-tenancy-roles.ts does the I/O.
  *
  *   Clerk admin (public_metadata.role = 'admin')
@@ -9,7 +9,7 @@
  *       -> tenant_memberships tenant_admin for Stellr
  *   event_manager_assignments.clerk_user_id
  *       -> tenant_memberships event_manager for Stellr (one per person, not per event)
- *   staff_roles.member_id
+ *   admin_duties.member_id
  *       -> tenant_memberships staff for Stellr (keyed by member, with the
  *          member's Clerk id when it has one)
  *
@@ -20,7 +20,7 @@
  */
 import { STELLR_TENANT_ID } from './constants'
 
-export type TenantRole = 'tenant_admin' | 'event_manager' | 'staff'
+export type TenantRole = 'tenant_admin' | 'event_manager' | 'duty_holder'
 
 export interface MembershipRow {
   tenant_id: string
@@ -34,7 +34,7 @@ export interface RoleMappingInput {
   clerkAdminIds: string[]
   /** tenant_id is the row's derived tenant; null or absent counts as Stellr's, as in lib/authz/decide.ts. */
   eventManagers: { clerk_user_id: string; tenant_id?: string | null }[]
-  staff: { member_id: string; clerk_user_id: string | null }[]
+  duties: { member_id: string; clerk_user_id: string | null }[]
   existingMemberships: { tenant_id: string; clerk_user_id: string | null; member_id: string | null; role: string }[]
   existingPlatformAdmins: { clerk_user_id: string }[]
 }
@@ -74,11 +74,11 @@ export function planRoleMapping(input: RoleMappingInput, tenantId: string = STEL
   })
   for (const id of new Set(input.clerkAdminIds.filter(Boolean))) wanted.push(row(id, null, 'tenant_admin'))
   for (const id of new Set(managersInTenant(input.eventManagers, tenantId))) wanted.push(row(id, null, 'event_manager'))
-  const seenStaff = new Set<string>()
-  for (const s of input.staff) {
-    if (!s.member_id || seenStaff.has(s.member_id)) continue
-    seenStaff.add(s.member_id)
-    wanted.push(row(s.clerk_user_id ?? null, s.member_id, 'staff'))
+  const seenDuty = new Set<string>()
+  for (const s of input.duties) {
+    if (!s.member_id || seenDuty.has(s.member_id)) continue
+    seenDuty.add(s.member_id)
+    wanted.push(row(s.clerk_user_id ?? null, s.member_id, 'duty_holder'))
   }
 
   const memberships: MembershipRow[] = []
@@ -173,13 +173,13 @@ export function diffRoleMapping(input: RoleDiffInput, tenantId: string = STELLR_
   const managers = new Set(managersInTenant(input.eventManagers, tenantId))
   // The Clerk claim names no tenant: any tenant's assignment backs it.
   const assignedAnywhere = new Set(input.eventManagers.map((e) => e.clerk_user_id).filter(Boolean))
-  const staffMembers = new Set(input.staff.map((s) => s.member_id).filter(Boolean))
-  const staffClerks = new Set(input.staff.map((s) => s.clerk_user_id).filter(Boolean))
+  const dutyMembers = new Set(input.duties.map((s) => s.member_id).filter(Boolean))
+  const dutyClerks = new Set(input.duties.map((s) => s.clerk_user_id).filter(Boolean))
 
   const backed = (m: StaleMembership): boolean => {
     if (m.role === 'tenant_admin') return !!m.clerk_user_id && admins.has(m.clerk_user_id)
     if (m.role === 'event_manager') return !!m.clerk_user_id && managers.has(m.clerk_user_id)
-    if (m.role === 'staff') return (!!m.member_id && staffMembers.has(m.member_id)) || (!!m.clerk_user_id && staffClerks.has(m.clerk_user_id))
+    if (m.role === 'duty_holder') return (!!m.member_id && dutyMembers.has(m.member_id)) || (!!m.clerk_user_id && dutyClerks.has(m.clerk_user_id))
     return false
   }
   const stale = input.existingMemberships

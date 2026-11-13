@@ -42,9 +42,9 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
   platform_admin: 0,
   platform_destined: 9,
-  // +1 tenant_staff, -1 stellr_only: admin registrations/[id]/payment-method (C16 follow-up)
-  // +3 tenant_staff, -3 stellr_only: admin events/[slug]/{companies,offerings,merch/commit} (C18)
-  tenant_staff: 38,
+  // +1 tenant_crew, -1 stellr_only: admin registrations/[id]/payment-method (C16 follow-up)
+  // +3 tenant_crew, -3 stellr_only: admin events/[slug]/{companies,offerings,merch/commit} (C18)
+  tenant_crew: 38,
   participant: 131,
   public: 132,
   webhook: 12,
@@ -53,10 +53,10 @@ const MANIFEST_CLASS_COUNTS: Record<RouteClass, number> = {
 }
 // +3 on 9 Nov 2026: members/compliance/external-check (participant) and the
 // admin members/[id]/event-manager and members/[id]/external-check (stellr_only).
-// +5 on 9 Nov 2026: bounced-email fixes: admin agreements/[id]/email-changes/[changeId] (tenant_staff), members/teams/... correct-email and email-changes (participant), sign/email page and API (public).
+// +5 on 9 Nov 2026: bounced-email fixes: admin agreements/[id]/email-changes/[changeId] (tenant_crew), members/teams/... correct-email and email-changes (participant), sign/email page and API (public).
 // +1 on 9 Nov 2026: members/teams/[id]/discount, an organizer's code on their invoice (participant).
 // +1 on 9 Nov 2026: cron/email-outbox (cron).
-// +3 on 9 Nov 2026: saved event email templates, admin events/[slug]/email-templates and [id] (tenant_staff, denied on tenant hosts like every admin route), and the family certificate link credentials/[number]/certificate (public, allowed like the other credential routes).
+// +3 on 9 Nov 2026: saved event email templates, admin events/[slug]/email-templates and [id] (tenant_crew, denied on tenant hosts like every admin route), and the family certificate link credentials/[number]/certificate (public, allowed like the other credential routes).
 const MANIFEST_TOTAL = 508
 
 // The decisions. Moving a route between them is a deliberate diff here.

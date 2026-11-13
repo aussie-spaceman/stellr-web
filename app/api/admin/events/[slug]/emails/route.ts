@@ -23,13 +23,13 @@ type Ctx = { params: Promise<{ slug: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
 
   const db = supabaseServer()
   const [{ data: emails }, { data: history }] = await Promise.all([
-    loadScopedRows(staff.scope, 'event_emails', { db, match: { event_slug: slug }, order: { column: 'created_at', ascending: true }, label: ROUTE }),
-    loadScopedRows(staff.scope, 'event_email_sends', { db, match: { event_slug: slug }, order: { column: 'started_at', ascending: false }, limit: 100, label: ROUTE }),
+    loadScopedRows(crew.scope, 'event_emails', { db, match: { event_slug: slug }, order: { column: 'created_at', ascending: true }, label: ROUTE }),
+    loadScopedRows(crew.scope, 'event_email_sends', { db, match: { event_slug: slug }, order: { column: 'started_at', ascending: false }, limit: 100, label: ROUTE }),
   ])
   return NextResponse.json({ emails: emails ?? [], history: history ?? [] })
 }
@@ -41,20 +41,20 @@ export const POST = withAudit(
 
 async function createEmail(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
 
   const body = await req.json().catch(() => ({}))
   const actor = await actorFromAuth()
-  const createdBy = actor.actorLabel ?? staff.userId
+  const createdBy = actor.actorLabel ?? crew.userId
   const db = supabaseServer()
 
   // Duplicate: copy a (typically sent) email back to a draft. Attachments are
   // not copied — removing one from the copy would delete the stored file the
   // original's history still names — so the author re-attaches what's current.
   if (typeof body?.duplicateOf === 'string') {
-    const src = await loadEventRecord<EventEmailRow>(staff, 'event_emails', body.duplicateOf, {
+    const src = await loadEventRecord<EventEmailRow>(crew, 'event_emails', body.duplicateOf, {
       db,
       notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
       label: ROUTE,
@@ -68,7 +68,7 @@ async function createEmail(req: Request, { params }: Ctx) {
 
   // A saved template: the tenant's, shared across its events.
   if (typeof body?.savedTemplateId === 'string') {
-    const template = await getTemplate(db, staff.tenantId, body.savedTemplateId)
+    const template = await getTemplate(db, crew.tenantId, body.savedTemplateId)
     if (!template) return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     const email = await createFromSavedTemplate(db, slug, template, createdBy)
     if (!email) return NextResponse.json({ error: 'Could not create the email' }, { status: 500 })

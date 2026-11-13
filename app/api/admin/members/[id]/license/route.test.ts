@@ -13,7 +13,7 @@ vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ sessionClaims: {} 
 vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))
 vi.mock('@/lib/activity-log', () => ({
   logActivity,
-  actorFromAuth: async () => ({ actorMemberId: 'admin1', actorLabel: 'Admin', actorType: 'staff' }),
+  actorFromAuth: async () => ({ actorMemberId: 'admin1', actorLabel: 'Admin', actorType: 'admin' }),
 }))
 
 const CURRENT_VERSION = '2026-10-10T10:00:00Z'

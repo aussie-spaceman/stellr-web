@@ -20,7 +20,7 @@ const MUTED = 'color:#6b7280;font-size:14px'
 
 // ── Staff ─────────────────────────────────────────────────────────────────────
 
-export function scholarshipStaffAlertEmail(input: {
+export function scholarshipTeamInboxEmail(input: {
   name: string
   email: string
   phone: string | null

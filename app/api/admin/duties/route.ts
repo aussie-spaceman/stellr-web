@@ -2,15 +2,15 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
-import { STAFF_SCOPES } from '@/lib/admin-auth'
+import { DUTY_SCOPES } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
-import { syncStaffGranted, syncStaffRevoked } from '@/lib/authz/role-sync'
+import { syncDutyGranted, syncDutyRevoked } from '@/lib/authz/role-sync'
 import { reportRoleSyncFailure, roleSyncMetadata } from '@/lib/authz/role-sync-report'
 import { withAudit } from '@/lib/audit/route'
 
-// Admin CRUD for the staff-roles function-scope seam (migration 044).
+// Admin CRUD for the duties function-scope seam (migration 044).
 
-const ROUTE = '/api/admin/staff-roles'
+const ROUTE = '/api/admin/duties'
 
 async function requireAdmin() {
   const { sessionClaims } = await auth()
@@ -25,26 +25,26 @@ export const POST = withAudit(
   ({ args: [req] }) => {
     const a = audited.get(req)
     return {
-      action: 'staff.role.grant',
+      action: 'duty.grant',
       actor: a ? { userId: a.userId } : { session: true },
       tenant: { stellr: true },
-      target: { table: 'staff_roles', id: a?.memberId ?? null },
+      target: { table: 'admin_duties', id: a?.memberId ?? null },
       metadata: { scopes: a?.scopes ?? null },
     }
   },
-  grantStaffRole,
+  grantDuty,
 )
 
 // POST — grant/replace a member's function scopes.
 // Body: { memberId?, email?, scopes: string[] } — member from the picker (id) or email.
-async function grantStaffRole(req: Request) {
+async function grantDuty(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { memberId, email, scopes } = await req.json().catch(() => ({}))
   if ((!memberId && !email) || !Array.isArray(scopes) || scopes.length === 0) {
     return NextResponse.json({ error: 'a member (memberId or email) and a non-empty scopes[] required' }, { status: 400 })
   }
-  const clean = [...new Set(scopes)].filter((s) => (STAFF_SCOPES as readonly string[]).includes(s))
+  const clean = [...new Set(scopes)].filter((s) => (DUTY_SCOPES as readonly string[]).includes(s))
   if (clean.length === 0) return NextResponse.json({ error: 'no valid scopes' }, { status: 400 })
 
   const db = supabaseServer()
@@ -57,18 +57,18 @@ async function grantStaffRole(req: Request) {
   audited.set(req, { memberId: member.id, scopes: clean, userId: (await auth()).userId })
 
   const admin = await getSignedInMember()
-  const { error } = await db.from('staff_roles').upsert(
+  const { error } = await db.from('admin_duties').upsert(
     { member_id: member.id, scopes: clean, granted_by: admin?.id ?? null, updated_at: new Date().toISOString() },
     { onConflict: 'member_id' },
   )
   if (error) {
-    console.error('[staff-roles] upsert error:', error)
-    return NextResponse.json({ error: 'Could not save staff role' }, { status: 500 })
+    console.error('[duties] upsert error:', error)
+    return NextResponse.json({ error: 'Could not save the duty' }, { status: 500 })
   }
 
   // S5 C9 dual-write. A failure here is reported, and never fails the grant.
-  const sync = await syncStaffGranted(db, member.id)
-  await reportRoleSyncFailure('staff_grant', sync, { method: 'POST', routePath: ROUTE })
+  const sync = await syncDutyGranted(db, member.id)
+  await reportRoleSyncFailure('duty_grant', sync, { method: 'POST', routePath: ROUTE })
 
   // deep review AUTH-6: staff function scopes grant admin-area access, so who
   // set them (and to what) must be recoverable. Best-effort, like the rest of
@@ -77,8 +77,8 @@ async function grantStaffRole(req: Request) {
     ...(await actorFromAuth()),
     memberId: member.id,
     category: 'account',
-    action: 'staff_scopes_set',
-    summary: `Staff function scopes set: ${clean.join(', ')}`,
+    action: 'duty_scopes_set',
+    summary: `Duties set: ${clean.join(', ')}`,
     metadata: { scopes: clean, ...roleSyncMetadata(sync) },
   })
 
@@ -89,40 +89,40 @@ export const DELETE = withAudit(
   ({ args: [req] }) => {
     const a = audited.get(req)
     return {
-      action: 'staff.role.revoke',
+      action: 'duty.revoke',
       actor: a ? { userId: a.userId } : { session: true },
       tenant: { stellr: true },
-      target: { table: 'staff_roles', id: a?.memberId ?? null },
+      target: { table: 'admin_duties', id: a?.memberId ?? null },
     }
   },
-  revokeStaffRole,
+  revokeDuty,
 )
 
 // DELETE — remove a member's staff role. Body: { memberId }
-async function revokeStaffRole(req: Request) {
+async function revokeDuty(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { memberId } = await req.json().catch(() => ({}))
   if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
   audited.set(req, { memberId, userId: (await auth()).userId })
 
   const db = supabaseServer()
-  const { error } = await db.from('staff_roles').delete().eq('member_id', memberId)
+  const { error } = await db.from('admin_duties').delete().eq('member_id', memberId)
   if (error) {
-    console.error('[staff-roles] delete error:', error)
-    return NextResponse.json({ error: 'Could not remove staff role' }, { status: 500 })
+    console.error('[duties] delete error:', error)
+    return NextResponse.json({ error: 'Could not remove the duty' }, { status: 500 })
   }
 
   // S5 C9 dual-write. A failure here is reported, and never fails the revoke.
-  const sync = await syncStaffRevoked(db, memberId)
-  await reportRoleSyncFailure('staff_revoke', sync, { method: 'DELETE', routePath: ROUTE })
+  const sync = await syncDutyRevoked(db, memberId)
+  await reportRoleSyncFailure('duty_revoke', sync, { method: 'DELETE', routePath: ROUTE })
 
   // deep review AUTH-6: a revoke is as audit-worthy as a grant.
   await logActivity({
     ...(await actorFromAuth()),
     memberId,
     category: 'account',
-    action: 'staff_scopes_removed',
-    summary: 'Staff function scopes removed',
+    action: 'duty_scopes_removed',
+    summary: 'Duties removed',
     ...(sync.ok ? {} : { metadata: roleSyncMetadata(sync) }),
   })
 

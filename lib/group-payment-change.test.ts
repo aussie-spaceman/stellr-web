@@ -233,7 +233,7 @@ const roster = (n: number, over: (i: number) => Row = () => ({})) => Array.from(
 const OPEN = { id: 'in_orig', number: 'INV-1', status: 'open', customer: 'cus_1', currency: 'usd', subtotal: 145_500, total: 145_500, total_discount_amounts: [], metadata: { registrationId: 'reg-1', seats: '15' }, latest_revision: null }
 const LEDGER = { id: 'l1', registration_id: 'reg-1', stripe_invoice_id: 'in_orig', stripe_invoice_number: 'INV-1', kind: 'seats', status: 'open', seats: 15, per_seat_cents: 9700, currency: 'usd', participant_ids: [], created_at: '2026-11-01T00:00:00Z' }
 
-const STAFF = { memberId: 'm-admin', label: 'admin', by: 'staff' as const }
+const CREW = { memberId: 'm-admin', label: 'admin', by: 'crew' as const }
 const TEACHER = { memberId: 'm-teacher', label: 'teacher', by: 'organizer' as const }
 
 function setup(opts: { reg?: Row; people?: Row[]; ledger?: Row[]; invoice?: Row | null; sessions?: Row[] }) {
@@ -277,14 +277,14 @@ describe('changeGroupPaymentMethod — from invoice', () => {
 
   it('leaves out anyone with no email address, without failing', async () => {
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }], people: roster(3, (i) => (i === 2 ? { email: null } : {})) })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)
     expect(out.ok).toBe(true)
     expect(allEmails().filter((e) => e.subject.startsWith('Complete your payment'))).toHaveLength(2)
   })
 
   it('to card: voids the invoice and emails the pay link', async () => {
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }] })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)
     expect(out).toMatchObject({ ok: true, method: 'card' })
     if (out.ok) expect(out.payUrl).toMatch(/\/register\/msu\/pay\/[a-f0-9]{64}$/)
     expect(f.stripe.invoices.voidInvoice).toHaveBeenCalledWith('in_orig')
@@ -294,7 +294,7 @@ describe('changeGroupPaymentMethod — from invoice', () => {
 
   it('moves an unpaid group an admin had marked confirmed back to pending, or it would read as paid', async () => {
     const f = setup({ reg: { status: 'confirmed' }, invoice: { ...OPEN }, ledger: [{ ...LEDGER }] })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)
     expect(f.reg.status).toBe('pending')
   })
 
@@ -302,7 +302,7 @@ describe('changeGroupPaymentMethod — from invoice', () => {
     const extra = { ...OPEN, id: 'in_extra', number: 'INV-2', metadata: { registrationId: 'reg-1', kind: 'additional' } }
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }, { ...LEDGER, id: 'l2', stripe_invoice_id: 'in_extra', kind: 'additional' }] })
     f.stripe.store.set('in_extra', extra)
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)
     expect(f.stripe.invoices.voidInvoice).toHaveBeenCalledWith('in_extra')
   })
 })
@@ -315,7 +315,7 @@ describe('changeGroupPaymentMethod — from individual', () => {
 
   it('to invoice: bills only the unpaid places, keeps the paid ones, and stands the others down', async () => {
     const f = setup({ reg: INDIVIDUAL, people: roster(15, threePaid) })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', CREW)
 
     expect(out).toMatchObject({ ok: true, method: 'invoice' })
     expect(stripeItemSeats).toEqual([12])
@@ -331,7 +331,7 @@ describe('changeGroupPaymentMethod — from individual', () => {
       { id: 'cs_seat', status: 'open', metadata: { registrationId: 'reg-1', isIndividualGroupPayment: 'true', participantId: 'p5' } },
       { id: 'cs_other', status: 'open', metadata: { registrationId: 'someone-else' } },
     ] })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1)
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledWith('cs_seat')
     expect(f.reg.amount_due_cents).toBe(116_400)
@@ -339,7 +339,7 @@ describe('changeGroupPaymentMethod — from individual', () => {
 
   it('stays billed correctly through a later sync: the paid places never join the invoice', async () => {
     const f = setup({ reg: INDIVIDUAL, people: roster(15, threePaid) })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', CREW)
     f.reg.invoice_sync_due_at = new Date(Date.now() - 1000).toISOString()
     f.stripe.invoices.create.mockClear()
     expect(await syncGroupInvoice(f.db, f.stripe as never, 'reg-1')).toBe('none')
@@ -348,9 +348,9 @@ describe('changeGroupPaymentMethod — from individual', () => {
 
   it('and back again: someone stood down gets a fresh link', async () => {
     const f = setup({ reg: INDIVIDUAL, people: roster(4, threePaid) })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)
     vi.mocked(sendEmail).mockClear()
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)
     expect(allEmails().filter((e) => e.subject.startsWith('Complete your payment')).map((e) => e.to)).toEqual(['p3@example.com'])
   })
 })
@@ -360,7 +360,7 @@ describe('changeGroupPaymentMethod — from card', () => {
 
   it('to invoice: expires the open checkout and sends an invoice with the group price', async () => {
     const f = setup({ reg: CARD, sessions: [{ id: 'cs_card', status: 'open', metadata: { registrationId: 'reg-1', isGroup: 'true' } }] })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', CREW)
     expect(out.ok).toBe(true)
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledWith('cs_card')
     expect(stripeItemSeats).toEqual([15])
@@ -380,13 +380,13 @@ describe('changeGroupPaymentMethod — refusals leave the group as it was', () =
 
   it('an invoice Stripe says is paid, even if the webhook never arrived', async () => {
     const f = setup({ invoice: { ...OPEN, status: 'paid' }, ledger: [{ ...LEDGER }] })
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)).toMatchObject({ ok: false, status: 409, error: expect.stringMatching(/has been paid/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)).toMatchObject({ ok: false, status: 409, error: expect.stringMatching(/has been paid/) })
     unchanged(f)
   })
 
   it('a card payment that has completed but not yet recorded', async () => {
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }], sessions: [{ id: 'cs_paid', status: 'complete', payment_status: 'paid', metadata: { registrationId: 'reg-1', isGroup: 'true' } }] })
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)).toMatchObject({ ok: false, error: expect.stringMatching(/going through/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)).toMatchObject({ ok: false, error: expect.stringMatching(/going through/) })
     unchanged(f)
   })
 
@@ -394,27 +394,27 @@ describe('changeGroupPaymentMethod — refusals leave the group as it was', () =
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }], sessions: [{ id: 'cs_open', status: 'open', metadata: { registrationId: 'reg-1' } }] })
     f.stripe.checkout.sessions.expire.mockRejectedValueOnce(new Error('already complete'))
     f.stripe.checkout.sessions.retrieve.mockResolvedValueOnce({ id: 'cs_open', status: 'complete' } as never)
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)).toMatchObject({ ok: false, status: 409 })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)).toMatchObject({ ok: false, status: 409 })
     unchanged(f)
   })
 
   it('an invoice Stripe will not void: the flags do not move', async () => {
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }] })
     f.stripe.invoices.voidInvoice.mockRejectedValueOnce(new Error('payment processing'))
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)).toMatchObject({ ok: false, error: expect.stringMatching(/couldn’t be cancelled/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)).toMatchObject({ ok: false, error: expect.stringMatching(/couldn’t be cancelled/) })
     expect(f.reg.invoice_requested).toBe(true)
     expect(allEmails()).toHaveLength(0)
   })
 
   it('the method the group already uses', async () => {
     const f = setup({ invoice: { ...OPEN }, ledger: [{ ...LEDGER }] })
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', STAFF)).toMatchObject({ ok: false, error: expect.stringMatching(/already pays/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', CREW)).toMatchObject({ ok: false, error: expect.stringMatching(/already pays/) })
     unchanged(f)
   })
 
   it('another change holding the lock', async () => {
     const f = setup({ reg: { invoice_sync_lock_until: new Date(Date.now() + 60_000).toISOString() }, invoice: { ...OPEN }, ledger: [{ ...LEDGER }] })
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', STAFF)).toMatchObject({ ok: false, status: 409, error: expect.stringMatching(/right now/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'card', CREW)).toMatchObject({ ok: false, status: 409, error: expect.stringMatching(/right now/) })
     expect(f.stripe.invoices.voidInvoice).not.toHaveBeenCalled()
   })
 })
@@ -423,7 +423,7 @@ describe('changeGroupPaymentMethod — a failure once the group has moved', () =
   it('keeps the move, alerts staff, and says so rather than claiming success', async () => {
     const f = setup({ reg: { invoice_requested: false, member_pays_individually: true }, people: roster(2, () => ({ individual_payment_status: 'pending' })) })
     f.stripe.invoices.finalizeInvoice.mockRejectedValueOnce(new Error('Stripe is down'))
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'invoice', CREW)
     expect(out).toMatchObject({ ok: true, message: expect.stringMatching(/Stripe is down.*team has been alerted/) })
     expect(f.reg.invoice_requested).toBe(true)
     expect(notifyCommunityAdmins).toHaveBeenCalledOnce()
@@ -486,7 +486,7 @@ describe('changeGroupPaymentMethod — invoice for some', () => {
 
   it('from individual: invoices the teacher alone, stands down her link, and leaves the students’ links alone', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), CREW)
 
     expect(out).toMatchObject({ ok: true, method: 'invoice_some' })
     expect(stripeItemSeats).toEqual([1])
@@ -515,7 +515,7 @@ describe('changeGroupPaymentMethod — invoice for some', () => {
 
   it('later: moving a student onto the invoice stands their link down and queues the invoice update', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), CREW)
     vi.mocked(sendEmail).mockClear()
     f.reg.invoice_sync_due_at = null
 
@@ -530,7 +530,7 @@ describe('changeGroupPaymentMethod — invoice for some', () => {
 
   it('later joiners on the invoice: unfilled declared places are billed too', async () => {
     const f = setup({ reg: { ...INDIVIDUAL, student_count: 5 }, people: msuGroup() })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0'], 'group'), STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0'], 'group'), CREW)
     expect(stripeItemSeats).toEqual([3]) // the teacher + 2 places nobody has filled yet
   })
 
@@ -542,7 +542,7 @@ describe('changeGroupPaymentMethod — invoice for some', () => {
     const people = msuGroup()
     ;(people[1] as Row).individual_payment_status = 'paid'
     const f = setup({ reg: INDIVIDUAL, people })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(ids), STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(ids), CREW)
     expect(out).toMatchObject({ ok: false, error: expect.stringMatching(reason) })
     expect(f.reg).toMatchObject({ member_pays_individually: true, invoice_requested: false })
     expect(f.stripe.invoices.create).not.toHaveBeenCalled()
@@ -550,16 +550,16 @@ describe('changeGroupPaymentMethod — invoice for some', () => {
 
   it('refuses a change that changes nothing', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), STAFF)
-    const again = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), CREW)
+    const again = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), CREW)
     expect(again).toMatchObject({ ok: false, error: expect.stringMatching(/Nothing would change/) })
   })
 
   it('back to everyone individually: the invoice goes, the teacher gets a link, and the group stops being split', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', split(['p0']), CREW)
     vi.mocked(sendEmail).mockClear()
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)
     expect(out).toMatchObject({ ok: true })
     expect(f.stripe.invoices.voidInvoice).toHaveBeenCalled()
     expect(f.reg).toMatchObject({ member_pays_individually: true, invoice_requested: false, late_joiner_payer: null })
@@ -600,7 +600,7 @@ describe('changeGroupPaymentMethod — students share the teacher’s cost', () 
 
   it('from individual: the teacher is covered and stood down, the students keep their links, and the share is set', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), CREW)
 
     expect(out).toMatchObject({ ok: true, method: 'teacher_share' })
     expect(f.reg).toMatchObject({ member_pays_individually: true, invoice_requested: false, share_estimate: 4, share_unit_cents: 9700, share_cents: 2425 })
@@ -625,12 +625,12 @@ describe('changeGroupPaymentMethod — students share the teacher’s cost', () 
     const people = msuGroup()
     ;(people[0] as Row).individual_payment_status = 'paid'
     const f = setup({ reg: INDIVIDUAL, people })
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), STAFF)).toMatchObject({ ok: false, error: expect.stringMatching(/already paid/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), CREW)).toMatchObject({ ok: false, error: expect.stringMatching(/already paid/) })
   })
 
   it('the estimate can go up any time, but down only before a student has paid', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), CREW)
     expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(2), TEACHER)).toMatchObject({ ok: true })
     expect(f.reg).toMatchObject({ share_estimate: 2, share_cents: 3233 }) // 3 students on the roster beat 2
 
@@ -642,12 +642,12 @@ describe('changeGroupPaymentMethod — students share the teacher’s cost', () 
 
   it('leaving it: shares paid are refunded and the teacher gets a link of their own', async () => {
     const f = setup({ reg: INDIVIDUAL, people: msuGroup() })
-    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), STAFF)
+    await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', share(4), CREW)
     Object.assign(f.tables.participants[1], { individual_payment_status: 'paid', share_paid_cents: 2425, base_paid_cents: 9700, stripe_payment_intent_id: 'pi_p1' })
     f.reg.share_first_paid_at = '2026-11-10T00:00:00Z'
     vi.mocked(sendEmail).mockClear()
 
-    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)
+    const out = await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)
     expect(out).toMatchObject({ ok: true })
     expect(f.stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: 'pi_p1', amount: 2425 }), expect.anything())
     expect(f.reg).toMatchObject({ share_estimate: null, member_pays_individually: true })
@@ -657,7 +657,7 @@ describe('changeGroupPaymentMethod — students share the teacher’s cost', () 
 
   it('after settlement, nothing changes', async () => {
     const f = setup({ reg: { ...INDIVIDUAL, share_estimate: 4, share_unit_cents: 9700, share_cents: 2425, share_settled_at: '2026-11-21T06:00:00Z' }, people: msuGroup() })
-    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', STAFF)).toMatchObject({ ok: false, error: expect.stringMatching(/settled after the event/) })
+    expect(await changeGroupPaymentMethod(f.db, f.stripe as never, 'reg-1', 'individual', CREW)).toMatchObject({ ok: false, error: expect.stringMatching(/settled after the event/) })
   })
 
   it('the view offers it with the numbers the dialog needs', async () => {

@@ -65,6 +65,10 @@
       "class": "stellr_only",
       "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: esign_templates"
     },
+    "app/(stellr)/(admin)/admin/duties/page.tsx": {
+      "class": "stellr_only",
+      "reason": "the Duties page (moved from admin/staff, 13 Nov 2026) lists admin_duties rows with member names for the admin who edits them; admin_duties is Stellr-only and service-role-only under RLS"
+    },
     "app/(stellr)/(admin)/admin/email/page.tsx": {
       "class": "stellr_only",
       "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: email_campaigns, email_templates, membership_tiers"
@@ -120,10 +124,6 @@
     "app/(stellr)/(admin)/admin/schools/page.tsx": {
       "class": "platform",
       "reason": "auto: no tenant or event-scoped table, classed by its platform tables; tables: schools"
-    },
-    "app/(stellr)/(admin)/admin/staff/page.tsx": {
-      "class": "stellr_only",
-      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: staff_roles"
     },
     "app/(stellr)/(admin)/admin/store/discounts/page.tsx": {
       "class": "stellr_only",
@@ -327,7 +327,7 @@
     },
     "app/api/admin/agreements/[id]/email-changes/[changeId]/route.ts": {
       "class": "convert",
-      "reason": "staff decide a student suggestion: requireEventStaff + loadEventRecord scope the agreement first; the decision writes agreement_email_changes and corrects the signer through the engine (lib/esign/email-changes.ts)"
+      "reason": "crew decide a student suggestion: requireEventCrew + loadEventRecord scope the agreement first; the decision writes agreement_email_changes and corrects the signer through the engine (lib/esign/email-changes.ts)"
     },
     "app/api/admin/artwork-defaults/[theme]/badge-templates/preview/route.ts": {
       "class": "convert",
@@ -452,6 +452,10 @@
     "app/api/admin/docusigns/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: agreements"
+    },
+    "app/api/admin/duties/route.ts": {
+      "class": "convert",
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: admin_duties, members"
     },
     "app/api/admin/email/campaigns/[id]/route.ts": {
       "class": "stellr_only",
@@ -808,10 +812,6 @@
     "app/api/admin/schools/[id]/route.ts": {
       "class": "platform",
       "reason": "auto: no tenant or event-scoped table, classed by its platform tables; tables: schools"
-    },
-    "app/api/admin/staff-roles/route.ts": {
-      "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members, staff_roles"
     },
     "app/api/admin/store/discounts/route.ts": {
       "class": "stellr_only",
@@ -1375,7 +1375,7 @@
     },
     "lib/admin-auth.ts": {
       "class": "stellr_only",
-      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: members, staff_roles"
+      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: admin_duties, members"
     },
     "lib/admin-digest.ts": {
       "class": "convert",
@@ -1731,7 +1731,7 @@
     },
     "scripts/seed-test-accounts.ts": {
       "class": "script",
-      "reason": "auto: operator script, run by hand; tables: member_memberships, member_schools, members, membership_tiers, schools, staff_roles"
+      "reason": "auto: operator script, run by hand; tables: admin_duties, member_memberships, member_schools, members, membership_tiers, schools"
     },
     "scripts/seed-two-tenants.ts": {
       "class": "script",

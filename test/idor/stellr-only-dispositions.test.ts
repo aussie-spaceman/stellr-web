@@ -11,7 +11,7 @@ import { DISPOSITION_REGISTER_STATUS, STELLR_ONLY_DISPOSITIONS, dispositionCount
 // Lower only: C16 to C21 take it to 0. It equals the register's count, so a conversion
 // has to lower it and a route cannot be quietly moved into the bucket. The plan's 51 was
 // measured before registrations/[id]/participants and registrations/[id]/payment-method
-// existed. C16 moved 14 of its 15 to tenant_staff: event-managers keeps the Stellr admin
+// existed. C16 moved 14 of its 15 to tenant_crew: event-managers keeps the Stellr admin
 // guard until C21. C17 moved 17 more. registrations/[id]/payment-method (#573) arrived
 // after C16, and its follow-up moved it. C18 moved companies, offerings and merch/commit.
 const MAX_TENANT_DESTINED_STELLR_ONLY = 18

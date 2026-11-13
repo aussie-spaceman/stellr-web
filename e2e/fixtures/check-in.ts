@@ -84,7 +84,7 @@ export async function removeCheckInEvent(slug: string): Promise<void> {
   if (ids.length) await client.from('participants').delete().in('registration_id', ids)
   await client.from('registrations').delete().eq('event_slug', slug)
   await client.from('event_settings').delete().eq('event_slug', slug)
-  await client.from('event_staff_check_ins').delete().eq('event_slug', slug)
+  await client.from('event_crew_check_ins').delete().eq('event_slug', slug)
   // Deleting the container removes its cohort_members rows (ON DELETE CASCADE).
   await client.from('mentoring_cohorts').delete().eq('container_type', 'event_participation').eq('campaign_ref', slug)
 }

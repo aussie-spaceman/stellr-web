@@ -42,10 +42,10 @@ import {
   decidePlatformAdmin,
   decidePortalAccess,
   decideScope,
-  decideStaffTarget,
+  decideCrewTarget,
   decideStellrAdmin,
   decideTenantRole,
-  decideTenantStaff,
+  decideTenantCrew,
   eventAccessCovers,
   isUnrecognisedAuthzSource,
   roleFromClaims,
@@ -61,12 +61,12 @@ import {
   clerkPrincipal,
   loadAssignments,
   loadEventTenantId,
-  loadHoldsStaffRow,
+  loadHoldsDutyRow,
   loadMemberId,
   loadMemberships,
   loadPlatformAdmin,
   loadPostgresPrincipal,
-  loadStaffScopes,
+  loadDutyScopes,
   loadTargetClerkRole,
 } from '@/lib/authz/principal'
 
@@ -157,7 +157,7 @@ async function recordRow(route: string, message: string, digest: string): Promis
  * flip can list them. Never throws.
  *
  * `memberOf` names who the decision is about: the signed-in user, unless it is
- * about someone else (isStaffTarget).
+ * about someone else (isCrewTarget).
  */
 async function logMismatch(decision: string, detail: string, opts: AuthzOptions, memberOf: () => Promise<string | null>): Promise<void> {
   let memberId = 'unknown'
@@ -269,8 +269,8 @@ export async function isStellrAdmin(opts: AuthzOptions = {}): Promise<boolean> {
   return (await requireStellrAdmin(opts)).ok
 }
 
-export async function requireTenantStaff(tenantId: string, roles: readonly TenantRole[], opts: AuthzOptions = {}): Promise<Decision> {
-  return decide('tenant_staff', opts, async (s) => decideTenantStaff(await principalFor(s), tenantId, roles, s), sameOk, DENY_403)
+export async function requireTenantCrew(tenantId: string, roles: readonly TenantRole[], opts: AuthzOptions = {}): Promise<Decision> {
+  return decide('tenant_crew', opts, async (s) => decideTenantCrew(await principalFor(s), tenantId, roles, s), sameOk, DENY_403)
 }
 
 /** Replaces hasAdminPortalAccess: an admin or an event manager. Staff never. */
@@ -320,8 +320,8 @@ export async function requireEventAccess(eventSlug?: string, opts: AuthzOptions 
   )
 }
 
-/** requireEventStaff's answer. Allowed, it carries the scope to load with and the event check to make. */
-export type EventStaff =
+/** requireEventCrew's answer. Allowed, it carries the scope to load with and the event check to make. */
+export type EventCrew =
   | { ok: false; status: 401 | 403 }
   | {
       ok: true
@@ -335,21 +335,21 @@ export type EventStaff =
     }
 
 /**
- * For a tenant_staff route that loads a record by global id: the tenant's admins, and its
+ * For a tenant_crew route that loads a record by global id: the tenant's admins, and its
  * event managers for their own events. Asks who is calling before any record is read.
  * The answer is requireEventAccess's, so nobody's access differs from it. An event manager
  * is confined by `covers`, and the IDOR personas prove each route applies it.
  */
-export async function requireEventStaff(opts: AuthzOptions = {}): Promise<EventStaff> {
-  return eventStaff(opts)
+export async function requireEventCrew(opts: AuthzOptions = {}): Promise<EventCrew> {
+  return eventCrew(opts)
 }
 
 /**
- * requireEventStaff, with the slug passed on to requireEventAccess when one is given. Under
+ * requireEventCrew, with the slug passed on to requireEventAccess when one is given. Under
  * clerk the slug changes no answer (the host's tenant decides, and covers holds the event);
  * under shadow it makes the postgres side compare the event's tenant as well.
  */
-async function eventStaff(opts: AuthzOptions, eventSlug?: string): Promise<EventStaff> {
+async function eventCrew(opts: AuthzOptions, eventSlug?: string): Promise<EventCrew> {
   const access = await requireEventAccess(eventSlug, opts)
   if (!access.ok) return access
   const assigned = access.assignedSlugs
@@ -358,7 +358,7 @@ async function eventStaff(opts: AuthzOptions, eventSlug?: string): Promise<Event
     userId: access.userId,
     isAdmin: access.isAdmin,
     tenantId: access.tenantId,
-    scope: tenantWideScope(access.tenantId, access.isAdmin ? 'tenant_admin' : 'staff'),
+    scope: tenantWideScope(access.tenantId, access.isAdmin ? 'tenant_admin' : 'crew'),
     covers: (eventSlug) => assigned === null || (!!eventSlug && assigned.includes(eventSlug)),
   }
 }
@@ -372,14 +372,14 @@ export type EventRoute =
       isAdmin: boolean
       tenantId: string
       eventSlug: string
-      /** Tenant-wide, as requireEventStaff's: the event is this route's, and `covers` holds a child row to it. */
+      /** Tenant-wide, as requireEventCrew's: the event is this route's, and `covers` holds a child row to it. */
       scope: ScopeContext
       /** Is a child row this route's event's? For loadEventRecord. An admin gets no wider answer. */
       covers: (eventSlug: string | null | undefined) => boolean
     }
 
 /**
- * For a tenant_staff route under events/[slug]: the tenant's admins and the event's managers,
+ * For a tenant_crew route under events/[slug]: the tenant's admins and the event's managers,
  * on an event in that tenant. Nobody's access differs from requireEventAccess(slug) under
  * today's settings: a manager without this event gets its 403, and with LOADSCOPED_MODE off
  * no event is read. Enforced, another tenant's event and a slug nobody knows both answer a
@@ -397,14 +397,14 @@ export async function requireEventRoute(eventSlug: string, opts: AuthzOptions = 
     status,
     response: NextResponse.json({ error: status === 404 ? 'Not found' : 'Forbidden' }, { status }),
   })
-  const staff = await eventStaff(opts, getAuthzSource() === 'shadow' ? eventSlug : undefined)
-  if (!staff.ok) return refused(staff.status)
-  if (!staff.covers(eventSlug)) return refused(403)
+  const crew = await eventCrew(opts, getAuthzSource() === 'shadow' ? eventSlug : undefined)
+  if (!crew.ok) return refused(crew.status)
+  if (!crew.covers(eventSlug)) return refused(403)
   if (getAuthzSource() === 'postgres') {
     const owner = await loadEventTenantId(supabaseServer(), eventSlug).catch(() => null)
-    if (owner !== staff.tenantId) return refused(404)
+    if (owner !== crew.tenantId) return refused(404)
   }
-  const inScope = await eventInScope(staff.scope, eventSlug, {
+  const inScope = await eventInScope(crew.scope, eventSlug, {
     db: () => supabaseServer(),
     existsUnmirrored: async () => {
       const { getEventBySlug } = await import('@/lib/events/repo')
@@ -415,11 +415,11 @@ export async function requireEventRoute(eventSlug: string, opts: AuthzOptions = 
   if (!inScope) return refused(404)
   return {
     ok: true,
-    userId: staff.userId,
-    isAdmin: staff.isAdmin,
-    tenantId: staff.tenantId,
+    userId: crew.userId,
+    isAdmin: crew.isAdmin,
+    tenantId: crew.tenantId,
     eventSlug,
-    scope: staff.scope,
+    scope: crew.scope,
     covers: (slug) => slug === eventSlug,
   }
 }
@@ -441,25 +441,25 @@ export async function accessCoversEvent(access: EventAccess, eventSlug: string):
 }
 
 /**
- * accessCoversEvent for requireEventStaff's answer: the event must be one `covers` holds
+ * accessCoversEvent for requireEventCrew's answer: the event must be one `covers` holds
  * and, from the events mirror, in the caller's tenant. For a route whose loaded row's own
  * tenant stamp is not enough on its own, because the row may predate its event's mirror
  * row. A read error is false, in every source.
  */
-export async function staffCoversEvent(
-  staff: { tenantId: string; covers: (eventSlug: string | null | undefined) => boolean },
+export async function crewCoversEvent(
+  crew: { tenantId: string; covers: (eventSlug: string | null | undefined) => boolean },
   eventSlug: string,
 ): Promise<boolean> {
-  if (!staff.covers(eventSlug)) return false
+  if (!crew.covers(eventSlug)) return false
   try {
-    return (await loadEventTenantId(supabaseServer(), eventSlug)) === staff.tenantId
+    return (await loadEventTenantId(supabaseServer(), eventSlug)) === crew.tenantId
   } catch {
     return false
   }
 }
 
 /**
- * Replaces currentUserHasScope. Stellr only: reads staff_roles, which the S3
+ * Replaces currentUserHasScope. Stellr only: reads admin_duties, which the S3
  * mapping does not carry, and no scope holds on another tenant's host. A read
  * error is "no scope" in every source, as today.
  */
@@ -474,7 +474,7 @@ export async function hasScope(scope: string, opts: AuthzOptions = {}): Promise<
       const db = supabaseServer()
       const memberId = s === 'postgres' ? p.memberId : await loadMemberId(db, p.userId).catch(() => null)
       if (!memberId) return false
-      const scopes = await loadStaffScopes(db, memberId).catch(() => null)
+      const scopes = await loadDutyScopes(db, memberId).catch(() => null)
       return decideScope({ ...p, memberId }, scopes, scope, s)
     },
     sameBool,
@@ -483,63 +483,63 @@ export async function hasScope(scope: string, opts: AuthzOptions = {}): Promise<
 }
 
 /**
- * Is the TARGET of view-as or deletion staff? Replaces isStaffRole and the
+ * Is the TARGET of view-as or deletion staff? Replaces isCrewRole and the
  * duplicate set in lib/deletion/external.ts. Fails closed the protective way:
  * a lookup error under postgres counts as staff, so the action is refused. Pass
  * memberId when you have it: a target with no Clerk id can still hold
  * member-keyed rows.
  */
-export async function isStaffTarget(target: StaffTargetRef, opts: AuthzOptions = {}): Promise<boolean> {
-  return decide('staff_target', opts, (s) => computeStaffTarget(target, s), sameBool, true, () => memberOfTarget(target))
+export async function isCrewTarget(target: CrewTargetRef, opts: AuthzOptions = {}): Promise<boolean> {
+  return decide('crew_target', opts, (s) => computeCrewTarget(target, s), sameBool, true, () => memberOfTarget(target))
 }
 
 /**
- * isStaffTarget, for a caller that has to say what happened: true, false, or null when the
+ * isCrewTarget, for a caller that has to say what happened: true, false, or null when the
  * postgres lookup failed. A refusal is still the caller's to make on null, but "is staff" and
  * "could not tell" are different things to tell an admin. Under clerk and shadow the Clerk
  * answer stands, so null never comes back.
  */
-export async function isStaffTargetOrUnknown(target: StaffTargetRef, opts: AuthzOptions = {}): Promise<boolean | null> {
-  if (getAuthzSource() !== 'postgres') return isStaffTarget(target, opts)
+export async function isCrewTargetOrUnknown(target: CrewTargetRef, opts: AuthzOptions = {}): Promise<boolean | null> {
+  if (getAuthzSource() !== 'postgres') return isCrewTarget(target, opts)
   try {
-    return await computeStaffTarget(target, 'postgres')
+    return await computeCrewTarget(target, 'postgres')
   } catch {
     return null
   }
 }
 
-type StaffTargetRef = { clerkUserId: string | null; clerkRole: unknown; memberId?: string | null }
+type CrewTargetRef = { clerkUserId: string | null; clerkRole: unknown; memberId?: string | null }
 
-async function memberOfTarget(target: StaffTargetRef): Promise<string | null> {
+async function memberOfTarget(target: CrewTargetRef): Promise<string | null> {
   return target.memberId ?? (target.clerkUserId ? loadMemberId(supabaseServer(), target.clerkUserId) : null)
 }
 
-async function computeStaffTarget(target: StaffTargetRef, s: DecisionSource): Promise<boolean> {
+async function computeCrewTarget(target: CrewTargetRef, s: DecisionSource): Promise<boolean> {
   // No id of either kind means no table row can be looked up, so the role is all there is.
-  if (s === 'clerk' || (!target.clerkUserId && !target.memberId)) return decideStaffTarget({ clerkRole: target.clerkRole }, 'clerk')
+  if (s === 'clerk' || (!target.clerkUserId && !target.memberId)) return decideCrewTarget({ clerkRole: target.clerkRole }, 'clerk')
   const db = supabaseServer()
   const memberId = await memberOfTarget(target)
   const [platformAdmin, memberships] = await Promise.all([
     target.clerkUserId ? loadPlatformAdmin(db, target.clerkUserId) : false,
     loadMemberships(db, target.clerkUserId, memberId),
   ])
-  return decideStaffTarget({ clerkRole: target.clerkRole, platformAdmin, memberships }, s)
+  return decideCrewTarget({ clerkRole: target.clerkRole, platformAdmin, memberships }, s)
 }
 
 /**
- * The target's staff_roles row, read for a screen that says up front whether view-as is
- * available. Throws on a read error. isStaffTarget does not count this row ('staff' alone
+ * The target's admin_duties row, read for a screen that says up front whether view-as is
+ * available. Throws on a read error. isCrewTarget does not count this row ('duty_holder' alone
  * is not portal staff), and view-as refuses on it, so the rule for view-as is
- * isViewAsTargetStaff.
+ * isViewAsTargetCrew.
  */
-export async function targetHoldsStaffRow(memberId: string): Promise<boolean> {
-  return loadHoldsStaffRow(supabaseServer(), memberId)
+export async function targetHoldsDutyRow(memberId: string): Promise<boolean> {
+  return loadHoldsDutyRow(supabaseServer(), memberId)
 }
 
 /**
- * Does view-as refuse this member? A staff_roles row of any kind, or isStaffTarget on the
+ * Does view-as refuse this member? An admin_duties row of any kind, or isCrewTarget on the
  * target's Clerk role. The row is read first, and a holder needs no Clerk call. Under
- * postgres, also a 'staff' membership in any tenant: staff_roles is Stellr's, so that is the
+ * postgres, also a 'duty_holder' membership in any tenant: admin_duties is Stellr's, so that is the
  * only record of another tenant's staff.
  *
  * THROWS when the row, the Clerk record or (postgres) a role table cannot be read, so the
@@ -549,14 +549,14 @@ export async function targetHoldsStaffRow(memberId: string): Promise<boolean> {
  * Staff is all this refuses. Before the first non-owner tenant, the start route must also
  * refuse a target tied to that tenant, until S6 support mode exists (plan decision 18).
  */
-export async function isViewAsTargetStaff(target: { memberId: string; clerkUserId: string | null }, opts: AuthzOptions = {}): Promise<boolean> {
+export async function isViewAsTargetCrew(target: { memberId: string; clerkUserId: string | null }, opts: AuthzOptions = {}): Promise<boolean> {
   const db = supabaseServer()
-  if (await loadHoldsStaffRow(db, target.memberId)) return true
+  if (await loadHoldsDutyRow(db, target.memberId)) return true
   const clerkRole = target.clerkUserId ? (await loadTargetClerkRole(await clerkClient(), target.clerkUserId)).role : undefined
-  const staff = await isStaffTargetOrUnknown({ clerkUserId: target.clerkUserId, clerkRole, memberId: target.memberId }, opts)
-  if (staff === null) throw new AuthzLookupError('staff target')
-  if (staff || getAuthzSource() !== 'postgres') return staff
-  return (await loadMemberships(db, target.clerkUserId, target.memberId)).some((m) => m.role === 'staff')
+  const crew = await isCrewTargetOrUnknown({ clerkUserId: target.clerkUserId, clerkRole, memberId: target.memberId }, opts)
+  if (crew === null) throw new AuthzLookupError('crew target')
+  if (crew || getAuthzSource() !== 'postgres') return crew
+  return (await loadMemberships(db, target.clerkUserId, target.memberId)).some((m) => m.role === 'duty_holder')
 }
 
 /**
@@ -587,7 +587,7 @@ export const page = {
    * event manager: proxy.ts does, and only from the Clerk claim, so under
    * postgres a claim of 'admin' with only an event_manager row passes here and
    * reaches every page using it. Before any flip, guard each page with
-   * requireStellrAdmin (a stellr_only page), requireTenantAdmin (a tenant_staff page)
+   * requireStellrAdmin (a stellr_only page), requireTenantAdmin (a tenant_crew page)
    * or requireEventSection instead. test/baselines/authz-legacy-idioms.json counts
    * every use, so the ratchet cannot reach 0 while one is left.
    */
@@ -600,7 +600,7 @@ export const page = {
   async requireTenantAdmin(opts: AuthzOptions = {}): Promise<void> {
     const session = await clerkSession()
     if (!session.userId) redirect('/sign-in')
-    if (!(await requireTenantStaff(currentTenantId(), ['tenant_admin'], opts)).ok) notFound()
+    if (!(await requireTenantCrew(currentTenantId(), ['tenant_admin'], opts)).ok) notFound()
   },
   /** The Events section: admins, and event managers whatever the claim says about them. */
   async requireEventSection(opts: AuthzOptions = {}): Promise<void> {
@@ -631,8 +631,8 @@ export const api = {
     const d = await requireStellrAdmin(opts)
     return d.ok ? { ok: true, value: d } : { ok: false, deny: denyResponse(d.status) }
   },
-  async requireTenantStaff(tenantId: string, roles: readonly TenantRole[], opts: AuthzOptions = {}): Promise<ApiResult<Decision & { ok: true }>> {
-    const d = await requireTenantStaff(tenantId, roles, opts)
+  async requireTenantCrew(tenantId: string, roles: readonly TenantRole[], opts: AuthzOptions = {}): Promise<ApiResult<Decision & { ok: true }>> {
+    const d = await requireTenantCrew(tenantId, roles, opts)
     return d.ok ? { ok: true, value: d } : { ok: false, deny: denyResponse(d.status) }
   },
   async requireEventAccess(eventSlug?: string, opts: AuthzOptions = {}): Promise<ApiResult<EventAccess & { ok: true }>> {
@@ -651,17 +651,17 @@ export const authz = {
   assertTenantRole,
   requireStellrAdmin,
   isStellrAdmin,
-  requireTenantStaff,
+  requireTenantCrew,
   hasPortalAccess,
   requireEventAccess,
-  requireEventStaff,
+  requireEventCrew,
   requireEventRoute,
   accessCoversEvent,
   hasScope,
-  isStaffTarget,
-  isStaffTargetOrUnknown,
-  targetHoldsStaffRow,
-  isViewAsTargetStaff,
+  isCrewTarget,
+  isCrewTargetOrUnknown,
+  targetHoldsDutyRow,
+  isViewAsTargetCrew,
   isStellrAdminOrUnknown,
   page,
   api,

@@ -233,9 +233,9 @@ describe('the routes C16 converted', () => {
     'surveys/responses/[id]/withdraw-quote',
   ].map((r) => `app/api/admin/${r}/route.ts`)
 
-  it('are tenant_staff and have left the disposition register', () => {
+  it('are tenant_crew and have left the disposition register', () => {
     for (const f of CONVERTED) {
-      expect(ROUTE_MANIFEST[f], f).toBe('tenant_staff')
+      expect(ROUTE_MANIFEST[f], f).toBe('tenant_crew')
       expect(STELLR_ONLY_DISPOSITIONS[f], f).toBeUndefined()
     }
   })

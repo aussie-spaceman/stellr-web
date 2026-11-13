@@ -13,7 +13,7 @@ const ID = '22222222-2222-4222-8222-222222222222'
 const OTHER_TENANT = '11111111-1111-4111-8111-111111111111'
 
 const h = vi.hoisted(() => ({
-  requireEventStaff: vi.fn(),
+  requireEventCrew: vi.fn(),
   registration: null as Record<string, unknown> | null,
   // The events mirror: slug → owning tenant. A slug it lacks reads as Stellr's.
   events: {} as Record<string, string | null>,
@@ -51,7 +51,7 @@ function fakeDb() {
   return { from }
 }
 
-vi.mock('@/lib/authz', () => ({ requireEventStaff: h.requireEventStaff }))
+vi.mock('@/lib/authz', () => ({ requireEventCrew: h.requireEventCrew }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => fakeDb() }))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'm-admin' }), logActivity: h.logActivity }))
 vi.mock('@/lib/group-registration-setup', () => ({
@@ -69,8 +69,8 @@ const get = () => GET(new Request(url), ctx())
 const post = (body: unknown = { steps: ['invoice', 'confirmation'] }) =>
   POST(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), ctx())
 
-/** requireEventStaff's answer for a Stellr admin, or an event manager on these events. */
-function staff(opts: { tenantId?: string; assigned?: string[] | null } = {}) {
+/** requireEventCrew's answer for a Stellr admin, or an event manager on these events. */
+function crew(opts: { tenantId?: string; assigned?: string[] | null } = {}) {
   const tenantId = opts.tenantId ?? STELLR_TENANT_ID
   const assigned = opts.assigned ?? null
   return {
@@ -78,7 +78,7 @@ function staff(opts: { tenantId?: string; assigned?: string[] | null } = {}) {
     userId: 'user_testadmin',
     isAdmin: assigned === null,
     tenantId,
-    scope: tenantWideScope(tenantId, assigned === null ? 'tenant_admin' : 'staff'),
+    scope: tenantWideScope(tenantId, assigned === null ? 'tenant_admin' : 'crew'),
     covers: (slug: string | null | undefined) => assigned === null || (!!slug && assigned.includes(slug)),
   }
 }
@@ -88,7 +88,7 @@ const RESULTS = { invoice: 'sent', confirmation: 'sent' }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  h.requireEventStaff.mockImplementation(async () => staff())
+  h.requireEventCrew.mockImplementation(async () => crew())
   h.registration = { ...GROUP }
   h.events = {}
   h.eventsDown = false
@@ -149,9 +149,9 @@ describe('/api/admin/registrations/[id]/finish-setup', () => {
   it('the staff check comes first: a refused caller causes no read at all', async () => {
     h.events = { msu: OTHER_TENANT }
     for (const status of [401, 403] as const) {
-      h.requireEventStaff.mockResolvedValueOnce({ ok: false, status })
+      h.requireEventCrew.mockResolvedValueOnce({ ok: false, status })
       expect((await post()).status).toBe(status)
-      h.requireEventStaff.mockResolvedValueOnce({ ok: false, status })
+      h.requireEventCrew.mockResolvedValueOnce({ ok: false, status })
       expect((await get()).status).toBe(status)
     }
     expect(h.tables).toEqual([])
@@ -159,14 +159,14 @@ describe('/api/admin/registrations/[id]/finish-setup', () => {
 
   it('the registration is read before the owner, and an event manager off the event is refused before it', async () => {
     h.events = { msu: OTHER_TENANT }
-    h.requireEventStaff.mockResolvedValue(staff({ assigned: ['other'] }))
+    h.requireEventCrew.mockResolvedValue(crew({ assigned: ['other'] }))
     const res = await post()
     expect(res.status).toBe(404)
     expect(h.tables).toEqual(['registrations'])
   })
 
   it('a tenant\'s own staff keep the Stellr-only refusal, with no owner read', async () => {
-    h.requireEventStaff.mockResolvedValue(staff({ tenantId: OTHER_TENANT }))
+    h.requireEventCrew.mockResolvedValue(crew({ tenantId: OTHER_TENANT }))
     h.registration = { ...GROUP, tenant_id: OTHER_TENANT }
     const res = await get()
     expect(res.status).toBe(503)

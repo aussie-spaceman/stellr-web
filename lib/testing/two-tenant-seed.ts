@@ -26,7 +26,7 @@ export interface SeedUser {
   firstName: string
   lastName: string
   /** Set for a tenant staff user: the tenant_memberships role. */
-  tenantRole?: 'tenant_admin' | 'event_manager' | 'staff'
+  tenantRole?: 'tenant_admin' | 'event_manager' | 'duty_holder'
 }
 
 export interface SeedPlan {

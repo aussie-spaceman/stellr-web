@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  crewActionName,
+  fromLegacyDetails,
+  fromLegacyQueued,
   bannerNotice,
   buildGroupRows,
   checkInTime,
@@ -13,8 +16,8 @@ import {
   parseCheckInCode,
   pendingFromQueue,
   queuedIds,
-  staffKey,
-  STAFF_KEY,
+  crewKey,
+  CREW_KEY,
   type DeskGroup,
   type DeskParticipant,
 } from './check-in-desk'
@@ -152,21 +155,21 @@ describe('the queue kept on the device', () => {
   })
 
   it('queues a mentor or event manager by their staff key, so an offline tap survives a reload', () => {
-    expect(queuedIds({ action: 'staff_check_in', staffKey: 'm.user_em', label: 'Em' })).toEqual(['m.user_em'])
+    expect(queuedIds({ action: 'crew_check_in', crewKey: 'm.user_em', label: 'Em' })).toEqual(['m.user_em'])
     const pending = pendingFromQueue([
-      { action: 'staff_check_in', staffKey: `v.${ID_A}`, at: '2026-11-06T15:00:00Z', label: 'V' },
-      { action: 'staff_check_in', staffKey: 'm.user_em', at: '2026-11-06T15:01:00Z', label: 'Em' },
-      { action: 'staff_undo', staffKey: 'm.user_em', label: 'Em' },
+      { action: 'crew_check_in', crewKey: `v.${ID_A}`, at: '2026-11-06T15:00:00Z', label: 'V' },
+      { action: 'crew_check_in', crewKey: 'm.user_em', at: '2026-11-06T15:01:00Z', label: 'Em' },
+      { action: 'crew_undo', crewKey: 'm.user_em', label: 'Em' },
     ])
     expect(pending[`v.${ID_A}`]).toEqual({ checkedInAt: '2026-11-06T15:00:00Z', checkInMethod: 'manual' })
     expect(pending['m.user_em']).toEqual({ checkedInAt: null, checkInMethod: null })
   })
 
   it('names staff the way the server checks them', () => {
-    expect(staffKey('volunteer', ID_A)).toBe(`v.${ID_A}`)
-    expect(staffKey('event_manager', 'user_2abcDEF')).toBe('m.user_2abcDEF')
-    expect(STAFF_KEY.test(staffKey('event_manager', 'user_2abcDEF'))).toBe(true)
-    expect(STAFF_KEY.test('m.user_x; drop')).toBe(false)
+    expect(crewKey('volunteer', ID_A)).toBe(`v.${ID_A}`)
+    expect(crewKey('event_manager', 'user_2abcDEF')).toBe('m.user_2abcDEF')
+    expect(CREW_KEY.test(crewKey('event_manager', 'user_2abcDEF'))).toBe(true)
+    expect(CREW_KEY.test('m.user_x; drop')).toBe(false)
   })
 
   it('keeps medical and dietary text off the device', () => {
@@ -208,5 +211,24 @@ describe('the banner, as the desk describes it', () => {
     expect(bannerNotice({ checkInOpen: true, bannerTarget: null, isVirtual: false })).toBeNull()
     expect(bannerNotice({ checkInOpen: false, bannerTarget: false, isVirtual: false })).toBeNull()
     expect(bannerNotice({ checkInOpen: true, bannerTarget: false, isVirtual: true })).toBeNull()
+  })
+})
+
+describe('desk state from before the 13 Nov crew rename', () => {
+  it('reads a queued tap with the old action and key names as crew', () => {
+    const legacy = { action: 'staff_check_in', staffKey: 'm.abc', label: 'Ana' }
+    expect(fromLegacyQueued(legacy)).toEqual({ action: 'crew_check_in', crewKey: 'm.abc', label: 'Ana' })
+    expect(fromLegacyQueued({ action: 'staff_undo', staffKey: 'v.1', label: 'B' }).action).toBe('crew_undo')
+    expect(fromLegacyQueued({ action: 'manual', participantId: 'p1', label: 'C' })).toEqual({ action: 'manual', participantId: 'p1', label: 'C', crewKey: undefined })
+  })
+  it('reads cached details whose mentors list was called staff', () => {
+    const person = { key: 'm.abc', role: 'event_manager' } as never
+    expect(fromLegacyDetails({ flags: {}, contacts: {}, staff: [person] }).crew).toEqual([person])
+    expect(fromLegacyDetails({ flags: {}, contacts: {}, crew: [person] }).crew).toEqual([person])
+  })
+  it('the server accepts the old action names', () => {
+    expect(crewActionName('staff_check_in')).toBe('crew_check_in')
+    expect(crewActionName('scan')).toBe('scan')
+    expect(crewActionName(undefined)).toBeUndefined()
   })
 })

@@ -98,7 +98,7 @@ vi.mock('@/lib/volunteer', () => ({
 vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: async () => {} }))
 vi.mock('@/lib/registration-notify', () => ({
   sendAccountConfirmation: async () => {},
-  notifyStaffOfRegistration: async () => {},
+  notifyTeamOfRegistration: async () => {},
 }))
 vi.mock('@/lib/membership-agreement', () => ({ dispatchMembershipAgreement: async () => ({ signNowUrl: null }) }))
 

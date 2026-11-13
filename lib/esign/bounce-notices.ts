@@ -5,7 +5,7 @@ import { BRAND_NAVY, emailLayout, escapeHtml as esc } from '@/lib/email-layout'
 import { maskEmail } from '@/lib/utils'
 import { AUTH_APP_URL } from '@/lib/env'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { eventManagerAudienceClerkIds, staffAudienceMemberIds } from '@/lib/authz/audiences'
+import { eventManagerAudienceClerkIds, dutyAudienceMemberIds } from '@/lib/authz/audiences'
 import { changeLinkUrl, createChangeLink } from '@/lib/esign/email-change-tokens'
 import { isTenantRow, loadTenantSender } from '@/lib/event-emails/tenant-mail'
 
@@ -268,9 +268,9 @@ async function eventManagers(db: SupabaseClient, tenantId: string, eventSlug: st
   }
 }
 
-async function staffMemberIds(db: SupabaseClient, tenantId: string): Promise<Set<string>> {
+async function crewMemberIds(db: SupabaseClient, tenantId: string): Promise<Set<string>> {
   try {
-    return new Set(await staffAudienceMemberIds(db, tenantId, ['all', 'community']))
+    return new Set(await dutyAudienceMemberIds(db, tenantId, ['all', 'community']))
   } catch {
     return new Set()
   }
@@ -361,7 +361,7 @@ async function deliverBounceNotices(
   const fix = live
     ? 'Reminders will never reach this address. Fix it with Correct email on the event roster: it keeps any signature already given.'
     : 'The form is no longer live, so nothing is waiting on this address.'
-  const staffInput: NotifyInput = {
+  const crewInput: NotifyInput = {
     type: 'action',
     body: `${engine}: a signing email ${what} for ${about} (${event}): ${lines.join('; ')}. ${fix}${told}`,
     referenceType: a.participant_id ? 'participant' : undefined,
@@ -375,21 +375,21 @@ async function deliverBounceNotices(
       text: `${engine}: a signing email ${what} on the form for ${about} (${event}): ${lines.join('; ')}. ${fix}${told}${live ? `\n\nOpen the event roster: ${rosterUrl(a.event_slug)}` : ''}`,
     },
   }
-  await notifyCommunityAdmins(staffInput, { tenantId }).catch(() => {})
-  const staffIds = await staffMemberIds(db, tenantId)
+  await notifyCommunityAdmins(crewInput, { tenantId }).catch(() => {})
+  const crewIds = await crewMemberIds(db, tenantId)
   const managers = (await resolvePeople(db, await eventManagers(db, tenantId, a.event_slug), dead)).filter(
-    (m) => !m.memberId || !staffIds.has(m.memberId),
+    (m) => !m.memberId || !crewIds.has(m.memberId),
   )
-  for (const m of managers) await tell(m, staffInput, stellr)
+  for (const m of managers) await tell(m, crewInput, stellr)
   if (!live) return
   const mail = await signerMailFor(db, a)
 
-  const staffLike = new Set([...managers.map((m) => m.memberId).filter(Boolean), ...staffIds])
-  const staffEmails = new Set(managers.map((m) => m.email).filter(Boolean))
+  const crewLike = new Set([...managers.map((m) => m.memberId).filter(Boolean), ...crewIds])
+  const crewEmails = new Set(managers.map((m) => m.email).filter(Boolean))
 
   // 2. Group organisers.
   for (const o of organisers) {
-    if ((o.memberId && staffLike.has(o.memberId)) || (o.email && staffEmails.has(o.email))) continue
+    if ((o.memberId && crewLike.has(o.memberId)) || (o.email && crewEmails.has(o.email))) continue
     const bodyLines = bounced.map((b) => `${b.name ?? 'The signer'} (${roleLabel(b.role_name)}) at ${b.email}`)
     const text =
       `The email asking ${bodyLines.join(' and ')} to sign ${about}'s form for ${event} could not be delivered. ` +
@@ -425,7 +425,7 @@ async function deliverBounceNotices(
     const other = others.get(b.recipient_id)
     if (!other?.email) continue
     const otherEmail = norm(other.email)
-    if (staffEmails.has(otherEmail) || organiserEmails.has(otherEmail)) continue
+    if (crewEmails.has(otherEmail) || organiserEmails.has(otherEmail)) continue
     const studentBounced = b.role_name !== GUARDIAN
     const { token, expiresAt } = await createChangeLink(db, {
       agreementId: a.id,
@@ -513,33 +513,33 @@ export async function announceCorrection(
         ? input.actor.role === 'student_manager' ? "the group's student manager" : "the group's teacher"
         : input.actor.kind === 'guardian' ? 'the parent/guardian on the form' : input.actor.label
 
-    const staffText = `The ${role}'s signing address on ${about}'s form (${event}) was changed by ${by}: ${input.oldEmail} → ${input.newEmail}. The form was sent to the new address.`
-    const staffInput: NotifyInput = {
+    const crewText = `The ${role}'s signing address on ${about}'s form (${event}) was changed by ${by}: ${input.oldEmail} → ${input.newEmail}. The form was sent to the new address.`
+    const crewInput: NotifyInput = {
       type: 'action',
-      body: staffText,
+      body: crewText,
       referenceType: a.participant_id ? 'participant' : undefined,
       referenceId: a.participant_id ?? undefined,
       email: {
         subject: `Signing address changed for ${about}`,
-        html: `<p>${esc(staffText)}</p><p><a href="${esc(rosterUrl(a.event_slug))}">Open the event roster</a></p>`,
-        text: `${staffText}\n\nOpen the event roster: ${rosterUrl(a.event_slug)}`,
+        html: `<p>${esc(crewText)}</p><p><a href="${esc(rosterUrl(a.event_slug))}">Open the event roster</a></p>`,
+        text: `${crewText}\n\nOpen the event roster: ${rosterUrl(a.event_slug)}`,
       },
     }
-    await notifyCommunityAdmins(staffInput, { tenantId }).catch(() => {})
-    const staffIds = await staffMemberIds(db, tenantId)
+    await notifyCommunityAdmins(crewInput, { tenantId }).catch(() => {})
+    const crewIds = await crewMemberIds(db, tenantId)
     const exclude = new Set([norm(input.oldEmail)])
     const managers = (await resolvePeople(db, await eventManagers(db, tenantId, a.event_slug), exclude)).filter(
-      (m) => !m.memberId || !staffIds.has(m.memberId),
+      (m) => !m.memberId || !crewIds.has(m.memberId),
     )
-    for (const m of managers) await tell(m, staffInput, stellr)
-    const staffLike = new Set([...staffIds, ...managers.map((m) => m.memberId).filter(Boolean)])
+    for (const m of managers) await tell(m, crewInput, stellr)
+    const crewLike = new Set([...crewIds, ...managers.map((m) => m.memberId).filter(Boolean)])
 
     const actorId = input.actor.kind === 'organiser' ? input.actor.memberId : null
     const mail = await signerMailFor(db, a)
     if (ctx.organisers && input.actor.kind !== 'organiser') {
       const orgText = `The ${role}'s address on ${about}'s consent form for ${event} was updated by ${by}, and the form was sent to the new address (${input.newEmail}).`
       for (const o of await resolvePeople(db, ctx.organisers.people, exclude)) {
-        if (o.memberId && (staffLike.has(o.memberId) || o.memberId === actorId)) continue
+        if (o.memberId && (crewLike.has(o.memberId) || o.memberId === actorId)) continue
         await tell(o, { type: 'action', body: orgText, email: { subject: `Consent form address updated for ${about}`, html: emailLayout({ heading: `Consent form address updated for ${about}`, bodyHtml: `<p>${esc(orgText)}</p>` }), text: orgText } }, stellr, mail)
       }
     }
@@ -602,7 +602,7 @@ export async function announceSuggestion(db: SupabaseClient, input: { agreementI
       return
     }
     const text = `${about} suggested a new parent/guardian email (${input.suggested}) for their ${event} consent form, because the old one bounced. Approve or reject it from Correct email on the event roster.`
-    const staffInput: NotifyInput = {
+    const crewInput: NotifyInput = {
       type: 'action',
       body: text,
       referenceType: a.participant_id ? 'participant' : undefined,
@@ -613,11 +613,11 @@ export async function announceSuggestion(db: SupabaseClient, input: { agreementI
         text: `${text}\n\nOpen the event roster: ${rosterUrl(a.event_slug)}`,
       },
     }
-    await notifyCommunityAdmins(staffInput, { tenantId }).catch(() => {})
-    const staffIds = await staffMemberIds(db, tenantId)
+    await notifyCommunityAdmins(crewInput, { tenantId }).catch(() => {})
+    const crewIds = await crewMemberIds(db, tenantId)
     for (const m of await resolvePeople(db, await eventManagers(db, tenantId, a.event_slug), new Set())) {
-      if (m.memberId && staffIds.has(m.memberId)) continue
-      await tell(m, staffInput, stellr)
+      if (m.memberId && crewIds.has(m.memberId)) continue
+      await tell(m, crewInput, stellr)
     }
   } catch (err) {
     console.error('[bounce-notices] suggestion notice failed:', err instanceof Error ? err.message : err)

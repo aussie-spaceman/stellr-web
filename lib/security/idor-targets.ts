@@ -64,20 +64,20 @@ export function idorTargetFor(file: string, cls: RouteClass, src: string): IdorT
 }
 
 /** The classes the staff personas run against. */
-const STAFF_PERSONA_CLASSES: readonly RouteClass[] = ['tenant_staff', 'platform_admin', 'platform_destined']
+const CREW_PERSONA_CLASSES: readonly RouteClass[] = ['tenant_crew', 'platform_admin', 'platform_destined']
 
 /**
- * Every route handler classed tenant_staff, platform_admin or platform_destined, id-bearing
+ * Every route handler classed tenant_crew, platform_admin or platform_destined, id-bearing
  * or not: a list or export names no id, and has to stay inside one tenant all the same.
  * Pages are not here; B10(c) covers what a page renders.
  */
-export function staffTargets(
+export function crewTargets(
   read: (file: string) => string = (f) => readFileSync(f, 'utf8'),
   manifest: Record<string, RouteClass> = ROUTE_MANIFEST,
 ): IdorTarget[] {
   const out: IdorTarget[] = []
   for (const [file, cls] of Object.entries(manifest)) {
-    if (!ROUTE_FILE.test(file) || !STAFF_PERSONA_CLASSES.includes(cls)) continue
+    if (!ROUTE_FILE.test(file) || !CREW_PERSONA_CLASSES.includes(cls)) continue
     const src = read(file)
     const methods = analyzeRoute(file, src)
       .handlers.map((h) => h.name)

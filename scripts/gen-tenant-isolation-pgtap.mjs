@@ -189,7 +189,7 @@ export const FIXTURES = {
   'public.event_participations': (c) => ({ member_id: lit(MEMBER), event_slug: lit(c.ev.slug) }),
   'public.event_refunds': (c) => ({ refund_type: lit('none'), event_slug: lit(c.ev.slug) }),
   'public.event_settings': (c) => ({ event_slug: lit(c.ev.slug) }),
-  'public.event_staff_check_ins': (c) => ({ event_slug: lit(c.ev.slug), staff_key: lit(`m.user_iso_${c.s}`), role: lit('event_manager') }),
+  'public.event_crew_check_ins': (c) => ({ event_slug: lit(c.ev.slug), crew_key: lit(`m.user_iso_${c.s}`), role: lit('event_manager') }),
   'public.event_store_offerings': (c) => ({ event_slug: lit(c.ev.slug), variant_id: lit(VARIANT), treatment: lit('included') }),
   'public.events': (c) => ({
     tenant_id: lit(c.t.id), slug: lit(`iso-own-${c.s}`), sanity_id: lit(`iso-own-sanity-${c.s}`), title: lit('Iso'),
@@ -210,7 +210,7 @@ export const FIXTURES = {
   }),
   'public.store_event_discounts': (c) => ({ percent_off: '10', event_slug: lit(c.ev.slug) }),
   'public.store_orders': (c) => ({ ...(c.seed ? { id: lit(c.t.order) } : {}), email: lit('buyer@example.test'), event_slug: lit(c.ev.slug) }),
-  'public.survey_access_log': (c) => ({ actor: lit('staff'), action: lit('view'), event_slug: lit(c.ev.slug) }),
+  'public.survey_access_log': (c) => ({ actor: lit('crew'), action: lit('view'), event_slug: lit(c.ev.slug) }),
   'public.survey_distributions': (c) => ({
     ...(c.seed ? { id: lit(c.t.distribution) } : {}),
     definition_id: lit(DEFINITION), event_slug: lit(c.ev.slug), event_date: `'2026-11-06'::date`, event_time_zone: lit('UTC'),
@@ -222,7 +222,7 @@ export const FIXTURES = {
   }),
   'public.team_profiles': (c) => ({ event_slug: lit(c.ev.slug), token_hash: lit(`iso-hash-${c.s}`) }),
   'public.tenant_domains': (c) => ({ host: lit(`iso-${c.s}.example.test`), tenant_id: lit(c.t.id) }),
-  'public.tenant_memberships': (c) => ({ tenant_id: lit(c.t.id), role: lit('staff'), clerk_user_id: lit(`user_iso_${c.s}`) }),
+  'public.tenant_memberships': (c) => ({ tenant_id: lit(c.t.id), role: lit('duty_holder'), clerk_user_id: lit(`user_iso_${c.s}`) }),
   'public.training_assignments': (c) => ({ module_id: lit(c.t.module), event_ref: lit(c.ev.sanity), event_role: lit('mentor') }),
   'public.volunteer_event_interest': (c) => ({ member_id: lit(MEMBER), event_slug: lit(c.ev.slug), event_title: lit('Iso') }),
 }

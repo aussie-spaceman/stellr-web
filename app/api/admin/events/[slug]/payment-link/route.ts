@@ -40,10 +40,10 @@ export const POST = withAudit(
 
 async function sendPayLink(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -58,7 +58,7 @@ async function sendPayLink(req: Request, { params }: Ctx) {
   if (bad) return NextResponse.json({ error: `Not an email address: ${bad}` }, { status: 400 })
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<Registration>(staff, 'registrations', registrationId, {
+  const loaded = await loadEventRecord<Registration>(crew, 'registrations', registrationId, {
     db,
     select: 'id, event_slug, status, invoice_requested, member_pays_individually, teacher_member_id',
     notFound: () => NextResponse.json({ error: 'Registration not found for this event' }, { status: 404 }),
@@ -85,7 +85,7 @@ async function sendPayLink(req: Request, { params }: Ctx) {
   }
 
   const actor = await actorFromAuth()
-  const subjectMemberId = reg.teacher_member_id ?? (await firstLinkedMemberId(stellrOnlyDb(staff.scope, db), registrationId)) ?? actor.actorMemberId ?? null
+  const subjectMemberId = reg.teacher_member_id ?? (await firstLinkedMemberId(stellrOnlyDb(crew.scope, db), registrationId)) ?? actor.actorMemberId ?? null
   if (subjectMemberId) {
     await logActivity(
       {

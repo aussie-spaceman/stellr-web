@@ -73,7 +73,7 @@ export async function alertLicenseReview(
         memberId,
         category: 'compliance',
         action: 'license_review_alert_sent',
-        summary: `Staff alerted to verify the teaching license (${kind})`,
+        summary: `Team alerted to verify the teaching license (${kind})`,
         metadata: { kind },
         actorType: 'system',
       },

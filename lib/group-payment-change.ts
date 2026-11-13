@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { rowTenant, TENANT_PAYMENTS_UNAVAILABLE } from '@/lib/registration/event-context'
 import {
-  alertStaff,
+  alertTeam,
   billableSeats,
   billingMode,
   couponTerms,
@@ -440,7 +440,7 @@ export interface PaymentChangeActor {
   memberId: string | null
   label: string
   /** Staff act for the group; an organizer's own change is worth telling staff about. */
-  by: 'staff' | 'organizer'
+  by: 'crew' | 'organizer'
 }
 
 export type PaymentChangeResult =
@@ -631,7 +631,7 @@ async function applyChange(
   const { data: moved, error: moveError } = await move.select('id')
   if (moveError || (moved ?? []).length === 0) {
     const detail = moveError?.message ?? 'another change got there first'
-    await alertStaff(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} was moving to "${label}", but saving it failed (${detail}). ${voided.length ? `Invoice ${voided.join(', ')} was already cancelled. ` : ''}Check the group on the event roster.`)
+    await alertTeam(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} was moving to "${label}", but saving it failed (${detail}). ${voided.length ? `Invoice ${voided.join(', ')} was already cancelled. ` : ''}Check the group on the event roster.`)
     return refuse(502, `The payment method wasn’t saved: ${detail}. Our team has been alerted.`)
   }
 
@@ -752,9 +752,9 @@ async function applyChange(
 
   if (failure) {
     console.error('[group-payment-change] new method did not fully start:', failure, { registrationId, to })
-    await alertStaff(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} moved to "${label}", but ${failure}. Open the event roster and finish it from the group's header.`)
+    await alertTeam(`The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organizer'} moved to "${label}", but ${failure}. Open the event roster and finish it from the group's header.`)
   } else if (actor.by === 'organizer') {
-    await alertStaff(`${reg.teacher_email ?? 'The organizer'} changed how their ${reg.event_title} group pays: "${PAYMENT_METHOD_LABEL[from]}" → "${label}".${voided.length ? ` Invoice ${voided.join(', ')} was cancelled.` : ''}`)
+    await alertTeam(`${reg.teacher_email ?? 'The organizer'} changed how their ${reg.event_title} group pays: "${PAYMENT_METHOD_LABEL[from]}" → "${label}".${voided.length ? ` Invoice ${voided.join(', ')} was cancelled.` : ''}`)
   }
 
   // The organizer always hears, whoever made the change.
@@ -841,9 +841,9 @@ export async function notePaymentAfterMethodChange(
         return
       }
       if (reg.invoice_requested) await markInvoiceSyncDue(db, registrationId)
-      await alertStaff(`A place on the ${reg.event_title} group (${reg.teacher_email ?? 'organizer unknown'}) was paid through an old individual link after the group changed how it pays. The place is recorded as paid. Check the group's balance on the event roster.`)
+      await alertTeam(`A place on the ${reg.event_title} group (${reg.teacher_email ?? 'organizer unknown'}) was paid through an old individual link after the group changed how it pays. The place is recorded as paid. Check the group's balance on the event roster.`)
     } else if (reg.invoice_requested || reg.member_pays_individually) {
-      await alertStaff(`The ${reg.event_title} group (${reg.teacher_email ?? 'organizer unknown'}) paid by card after changing how it pays, so it may have been asked to pay twice. Check the group on the event roster and cancel or refund as needed.`)
+      await alertTeam(`The ${reg.event_title} group (${reg.teacher_email ?? 'organizer unknown'}) paid by card after changing how it pays, so it may have been asked to pay twice. Check the group on the event roster and cancel or refund as needed.`)
     }
   } catch (e) {
     console.error('[group-payment-change] late payment check failed:', e, { registrationId })

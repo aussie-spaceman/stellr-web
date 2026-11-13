@@ -686,7 +686,7 @@ async function writeCounts(
   return (data ?? []).length > 0
 }
 
-export async function alertStaff(body: string) {
+export async function alertTeam(body: string) {
   // Lazy: lib/notify reaches Clerk, which the pure tests never load.
   const { notifyCommunityAdmins } = await import('@/lib/notify')
   await notifyCommunityAdmins({ type: 'action', body }).catch(() => {})
@@ -891,7 +891,7 @@ async function applyRosterChangeToBilling(
 async function billingFailed(reg: GroupRegistration, seatsAfter: number, sizeLine: string, e: unknown): Promise<BillingOutcome> {
   const detail = (e instanceof Error ? e.message : String(e)).replace(/\.+$/, '')
   console.error('[group-billing] invoice update failed:', detail, { registrationId: reg.id })
-  await alertStaff(
+  await alertTeam(
     `The invoice for the ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organiser'} could not be updated after a roster change (${sizeLine}): ${detail}. Open the event roster → the group → "Invoice & discount…" → "Send corrected invoice".`,
   )
   return {
@@ -1061,7 +1061,7 @@ async function settleGroupInvoice(
   }
   const perPlace = perSeatPaidCents(invoice.amount_paid ?? invoice.total ?? 0, invoiceSeats) ?? 0
   const owed = (invoiceSeats - seats) * perPlace
-  await alertStaff(
+  await alertTeam(
     `The ${reg.event_title} group registered by ${reg.teacher_email ?? 'an organiser'} paid invoice ${invoice.number ?? invoice.id} for ${plural(invoiceSeats, 'participant')} just after its roster dropped to ${seats}. Check the roster, and refund ${formatMoney(owed, currency)} in Stripe if the places really came off.`,
   )
   return 'alerted'
@@ -1364,7 +1364,7 @@ export async function voidOpenGroupInvoices(db: Db, stripe: Stripe | null, regis
     }
   } catch (e) {
     console.error('[group-billing] voiding open invoices failed:', e)
-    await alertStaff(`An unpaid invoice for the withdrawn ${reg.event_title} group (${reg.teacher_email ?? 'organiser unknown'}) could not be cancelled automatically. Void it in Stripe.`)
+    await alertTeam(`An unpaid invoice for the withdrawn ${reg.event_title} group (${reg.teacher_email ?? 'organiser unknown'}) could not be cancelled automatically. Void it in Stripe.`)
   }
   return voided
 }

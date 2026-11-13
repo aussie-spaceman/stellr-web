@@ -25,7 +25,7 @@ function builder(table: string) {
 }
 
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => seededClient.current ?? { from: (t: string) => builder(t) } }))
-vi.mock('@/lib/email', () => ({ sendEmail, staffAlertEmail: () => 'staff-inbox@example.org' }))
+vi.mock('@/lib/email', () => ({ sendEmail, teamInboxEmail: () => 'staff-inbox@example.org' }))
 vi.mock('@/lib/admin-digest', () => ({ loadMemberDigest, outstandingCount: () => 4 }))
 vi.mock('@/lib/admin-digest-email', () => ({ renderDigestEmail: () => ({ subject: 'Digest', html: '<p/>', text: 'Digest' }) }))
 
@@ -56,7 +56,7 @@ afterEach(() => {
 
 describe('GET /api/cron/weekly-digest', () => {
   it('sends to every active member holding the all scope, and records the run', async () => {
-    tables.staff_roles = [{ member_id: 'a' }, { member_id: 'b' }]
+    tables.admin_duties = [{ member_id: 'a' }, { member_id: 'b' }]
     tables.members = [{ email: 'Admin@Example.org' }, { email: 'coadmin@example.org' }]
     const res = await call()
     const body = await res.json()
@@ -67,7 +67,7 @@ describe('GET /api/cron/weekly-digest', () => {
   })
 
   it('falls back to the staff inbox when nobody holds the all scope', async () => {
-    tables.staff_roles = []
+    tables.admin_duties = []
     const body = await (await call()).json()
     expect(body).toMatchObject({ sent: true, fallback: true })
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'staff-inbox@example.org' }))
@@ -99,7 +99,7 @@ describe('GET /api/cron/weekly-digest', () => {
 // where every filter runs.
 describe('weekly digest recipients (S5 B17)', () => {
   const seed = () => ({
-    staff_roles: [
+    admin_duties: [
       { member_id: 'm-all', scopes: ['all'] },
       { member_id: 'm-both', scopes: ['all', 'events'] },
       { member_id: 'm-events', scopes: ['events'] },
@@ -127,7 +127,7 @@ describe('weekly digest recipients (S5 B17)', () => {
 
   /** The recipient query the route ran before B17, on the same rows. */
   async function before(db: SupabaseClient): Promise<string[]> {
-    const { data: roles } = await db.from('staff_roles').select('member_id').overlaps('scopes', ['all'])
+    const { data: roles } = await db.from('admin_duties').select('member_id').overlaps('scopes', ['all'])
     const ids = [...new Set((roles ?? []).map((r) => r.member_id as string).filter(Boolean))]
     const { data: members } = await db.from('members').select('email').in('id', ids).eq('is_active', true)
     return [...new Set((members ?? []).map((m) => (m.email as string | null)?.trim().toLowerCase()).filter((e): e is string => !!e))].sort()
@@ -144,8 +144,8 @@ describe('weekly digest recipients (S5 B17)', () => {
     expect(body).toMatchObject({ sent: true, recipients: 2, delivered: 2, fallback: false })
   })
 
-  it('falls back to the staff inbox, and records the failure, when staff_roles cannot be read', async () => {
-    const fake = fakeSupabase(seed(), { failOn: (t) => (t === 'staff_roles' ? 'boom' : null) })
+  it('falls back to the staff inbox, and records the failure, when admin_duties cannot be read', async () => {
+    const fake = fakeSupabase(seed(), { failOn: (t) => (t === 'admin_duties' ? 'boom' : null) })
     seededClient.current = fake.client
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const body = await (await call()).json()

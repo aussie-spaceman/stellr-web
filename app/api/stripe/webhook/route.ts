@@ -560,7 +560,7 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
               memberId,
               category: 'billing',
               action: 'paid_booking_held',
-              summary: `Paid for a mentoring cohort${fmtMoney(session.amount_total, session.currency)} but not added: ${archived ? 'the cohort has been archived' : 'no participation agreement on file'}. Needs staff action.`,
+              summary: `Paid for a mentoring cohort${fmtMoney(session.amount_total, session.currency)} but not added: ${archived ? 'the cohort has been archived' : 'no participation agreement on file'}. Needs action from the Stellr team.`,
               metadata: { kind: 'entitlement_booking', offeringId, cohortId: target.cohortId, bookingId, reason: roster.reason, paymentIntent: intent, sessionId: session.id, amount, currency: session.currency },
               actorType: 'stripe',
             }).catch(() => {})

@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { lastCronResult, startCronRun } from '@/lib/cron-runs'
-import { sendEmail, staffAlertEmail } from '@/lib/email'
+import { sendEmail, teamInboxEmail } from '@/lib/email'
 import { fetchEngagedProspects, reconcileProspects } from '@/lib/apollo-reconcile'
 
 // GET /api/cron/apollo-reconcile — runs daily (see vercel.json).
@@ -132,10 +132,10 @@ export const GET = withCronAudit('apollo-reconcile', async (req: NextRequest) =>
             : '')
 
       await sendEmail({
-        // deep review INT-8: staffAlertEmail() always resolves to a real
+        // deep review INT-8: teamInboxEmail() always resolves to a real
         // address (CONTACT_EMAIL → hello@). The old `CONTACT_EMAIL ?? ''` sent
         // the alert to nowhere when the env was unset — the alert silently lost.
-        to: staffAlertEmail(),
+        to: teamInboxEmail(),
         subject: `Apollo reconciliation repaired ${repaired} deal(s)`,
         text: `${preamble}\n\n${rows.map((r) => `  • ${r}`).join('\n')}\n\n${tail}`,
         html:

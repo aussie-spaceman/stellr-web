@@ -53,7 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   signUpload.mockResolvedValue({ bucket: 'community-resources', path: 'p', token: 't' })
   auth.mockReset()
-  auth.mockResolvedValue({ userId: 'user_2staff' })
+  auth.mockResolvedValue({ userId: 'user_2crew' })
   supabaseServer.mockReturnValue({
     rpc: async (_name: string, args: Record<string, unknown>) => {
       if (audit.fails) throw new Error('audit write failed')
@@ -176,7 +176,7 @@ describe('POST /api/uploads/sign — platform audit', () => {
       expect(auth).toHaveBeenCalled()
       auth.mockRejectedValue(new Error('no session inside after()'))
       await flush()
-      expect(audit.rows[0]).toMatchObject({ p_actor: 'user_2staff', p_actor_kind: 'user' })
+      expect(audit.rows[0]).toMatchObject({ p_actor: 'user_2crew', p_actor_kind: 'user' })
     })
 
     it('caps one user\'s rows per purpose, marks the last one, and never limits the signing', async () => {
@@ -212,7 +212,7 @@ describe('POST /api/uploads/sign — platform audit', () => {
       await flush()
       expect(audit.rows).toEqual([expect.objectContaining({
         p_action: 'upload.sign.create',
-        p_actor: 'user_2staff',
+        p_actor: 'user_2crew',
         p_actor_kind: 'user',
         p_tenant: STELLR_TENANT_ID,
         p_target_table: null,

@@ -41,10 +41,10 @@ export const POST = withAudit(
 
 async function attachFile(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const b = await req.json().catch(() => ({}))
@@ -62,7 +62,7 @@ async function attachFile(req: Request, { params }: Ctx) {
   }
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, {
+  const loaded = await loadEventRecord<EventEmailRow>(crew, 'event_emails', id, {
     db,
     notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
     label: ROUTE,
@@ -76,7 +76,7 @@ async function attachFile(req: Request, { params }: Ctx) {
   // sent ones included — is turned away before anything touches it. Attaching it
   // twice would also share one file between emails: deleting either email, or
   // removing the attachment from it, would take it from the other.
-  const { data: held, error: heldError } = await loadScopedRows(staff.scope, 'event_emails', {
+  const { data: held, error: heldError } = await loadScopedRows(crew.scope, 'event_emails', {
     db,
     select: 'id, attachments',
     match: { event_slug: slug },
@@ -117,7 +117,7 @@ async function attachFile(req: Request, { params }: Ctx) {
     size: claimed.bytes.byteLength,
     contentType: contentTypeFor(claimed.format, sentAs),
   }
-  const { data, error } = await scopedRowWrite(staff.scope, 'event_emails', id, { db })
+  const { data, error } = await scopedRowWrite(crew.scope, 'event_emails', id, { db })
     .update({ attachments: [...email.attachments, attachment] })
     .in('status', EDITABLE)
     .select('*')

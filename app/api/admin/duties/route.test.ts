@@ -37,13 +37,13 @@ function seed(failOn?: (table: string, action: string) => string | null, tables:
 }
 
 const grant = (scopes = ['events', 'community']) =>
-  POST(new Request('https://app.test/api/admin/staff-roles', {
+  POST(new Request('https://app.test/api/admin/duties', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ memberId: 'm1', scopes }),
   }))
 const revoke = () =>
-  DELETE(new Request('https://app.test/api/admin/staff-roles', {
+  DELETE(new Request('https://app.test/api/admin/duties', {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ memberId: 'm1' }),
@@ -56,21 +56,21 @@ beforeEach(() => {
   seed()
 })
 
-describe('POST /api/admin/staff-roles', () => {
-  it('logs staff_scopes_set after a successful grant (AUTH-6)', async () => {
+describe('POST /api/admin/duties', () => {
+  it('logs duty_scopes_set after a successful grant (AUTH-6)', async () => {
     const res = await grant()
     expect(res.status).toBe(200)
     expect(logActivity).toHaveBeenCalledOnce()
     expect(logActivity.mock.calls[0][0]).toMatchObject({
       memberId: 'm1',
-      action: 'staff_scopes_set',
+      action: 'duty_scopes_set',
       metadata: { scopes: ['events', 'community'] },
     })
     expect(logActivity.mock.calls[0][0].metadata).not.toHaveProperty('membership_sync')
   })
 
   it('does not log when the upsert fails', async () => {
-    seed((table) => (table === 'staff_roles' ? 'boom' : null))
+    seed((table) => (table === 'admin_duties' ? 'boom' : null))
     const res = await grant(['events'])
     expect(res.status).toBe(500)
     expect(logActivity).not.toHaveBeenCalled()
@@ -81,7 +81,7 @@ describe('POST /api/admin/staff-roles', () => {
     await grant(['events'])
     await grant(['events', 'community'])
     expect(h.db.table('tenant_memberships')).toMatchObject([
-      { tenant_id: STELLR_TENANT_ID, member_id: 'm1', clerk_user_id: 'user_s', role: 'staff' },
+      { tenant_id: STELLR_TENANT_ID, member_id: 'm1', clerk_user_id: 'user_s', role: 'duty_holder' },
     ])
     expect(h.db.table('tenant_memberships')).toHaveLength(1)
     expect(captureRequestError).not.toHaveBeenCalled()
@@ -91,9 +91,9 @@ describe('POST /api/admin/staff-roles', () => {
     seed((table) => (table === 'tenant_memberships' ? 'boom' : null))
     const res = await grant(['events'])
     expect(res.status).toBe(200)
-    expect(h.db.table('staff_roles')).toHaveLength(1)
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('role_sync_failed staff_grant'))
-    expect((captureRequestError.mock.calls[0][0] as Error).message).toContain('role_sync_failed staff_grant')
+    expect(h.db.table('admin_duties')).toHaveLength(1)
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('role_sync_failed duty_grant'))
+    expect((captureRequestError.mock.calls[0][0] as Error).message).toContain('role_sync_failed duty_grant')
     expect(logActivity.mock.calls[0][0].metadata).toMatchObject({ scopes: ['events'], membership_sync: 'failed' })
   })
 
@@ -104,19 +104,19 @@ describe('POST /api/admin/staff-roles', () => {
   })
 })
 
-describe('DELETE /api/admin/staff-roles', () => {
-  it('logs staff_scopes_removed after a successful revoke (AUTH-6)', async () => {
+describe('DELETE /api/admin/duties', () => {
+  it('logs duty_scopes_removed after a successful revoke (AUTH-6)', async () => {
     const res = await revoke()
     expect(res.status).toBe(200)
-    expect(logActivity.mock.calls[0][0]).toMatchObject({ memberId: 'm1', action: 'staff_scopes_removed' })
+    expect(logActivity.mock.calls[0][0]).toMatchObject({ memberId: 'm1', action: 'duty_scopes_removed' })
     expect(logActivity.mock.calls[0][0]).not.toHaveProperty('metadata')
   })
 
   it('removes the staff membership and leaves other roles (C9)', async () => {
     seed(undefined, {
-      staff_roles: [{ member_id: 'm1', scopes: ['events'] }],
+      admin_duties: [{ member_id: 'm1', scopes: ['events'] }],
       tenant_memberships: [
-        { tenant_id: STELLR_TENANT_ID, member_id: 'm1', clerk_user_id: 'user_s', role: 'staff' },
+        { tenant_id: STELLR_TENANT_ID, member_id: 'm1', clerk_user_id: 'user_s', role: 'duty_holder' },
         { tenant_id: STELLR_TENANT_ID, member_id: null, clerk_user_id: 'user_s', role: 'event_manager' },
       ],
     })
@@ -127,20 +127,20 @@ describe('DELETE /api/admin/staff-roles', () => {
 
   it('a failed membership delete leaves the revoke as it was, and is visible (C9)', async () => {
     seed((table, action) => (table === 'tenant_memberships' && action === 'delete' ? 'boom' : null), {
-      staff_roles: [{ member_id: 'm1', scopes: ['events'] }],
+      admin_duties: [{ member_id: 'm1', scopes: ['events'] }],
     })
     const res = await revoke()
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-    expect(h.db.table('staff_roles')).toHaveLength(0)
+    expect(h.db.table('admin_duties')).toHaveLength(0)
     expect(captureRequestError).toHaveBeenCalledOnce()
     expect(logActivity.mock.calls[0][0].metadata).toEqual({ membership_sync: 'failed' })
   })
 
-  it('a failed staff_roles delete keeps the membership (C9)', async () => {
-    seed((table, action) => (table === 'staff_roles' && action === 'delete' ? 'boom' : null), {
-      staff_roles: [{ member_id: 'm1', scopes: ['events'] }],
-      tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, member_id: 'm1', clerk_user_id: 'user_s', role: 'staff' }],
+  it('a failed admin_duties delete keeps the membership (C9)', async () => {
+    seed((table, action) => (table === 'admin_duties' && action === 'delete' ? 'boom' : null), {
+      admin_duties: [{ member_id: 'm1', scopes: ['events'] }],
+      tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, member_id: 'm1', clerk_user_id: 'user_s', role: 'duty_holder' }],
     })
     const res = await revoke()
     expect(res.status).toBe(500)

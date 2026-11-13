@@ -3,14 +3,14 @@ import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fakeSupabase } from '@/test/fake-supabase'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { eventManagerAudienceClerkIds, staffAudienceEmails, staffAudienceMemberIds } from './audiences'
+import { eventManagerAudienceClerkIds, dutyAudienceEmails, dutyAudienceMemberIds } from './audiences'
 import { AuthzLookupError } from './principal'
 
 const TENANT_A = '11111111-1111-4111-8111-111111111111'
 const TENANT_B = '22222222-2222-4222-8222-222222222222'
 
 const seed = () => ({
-  staff_roles: [
+  admin_duties: [
     { member_id: 'm-all', scopes: ['all'] },
     { member_id: 'm-comm', scopes: ['community', 'events'] },
     { member_id: 'm-events', scopes: ['events'] },
@@ -28,7 +28,7 @@ const seed = () => ({
     { tenant_id: TENANT_A, member_id: 'm-a1', clerk_user_id: null, role: 'tenant_admin' },
     { tenant_id: TENANT_A, member_id: null, clerk_user_id: 'c-a2', role: 'tenant_admin' },
     { tenant_id: TENANT_A, member_id: null, clerk_user_id: 'c-mgr-a', role: 'event_manager' },
-    { tenant_id: TENANT_A, member_id: 'm-comm', clerk_user_id: null, role: 'staff' },
+    { tenant_id: TENANT_A, member_id: 'm-comm', clerk_user_id: null, role: 'duty_holder' },
     { tenant_id: TENANT_B, member_id: null, clerk_user_id: 'c-b1', role: 'tenant_admin' },
     { tenant_id: STELLR_TENANT_ID, member_id: null, clerk_user_id: 'c-gone', role: 'tenant_admin' },
   ],
@@ -46,53 +46,53 @@ function client(fail?: string) {
   return fakeSupabase(seed(), { failOn: (t) => (t === fail ? 'boom' : null) }).client as unknown as SupabaseClient
 }
 
-describe('staffAudienceMemberIds', () => {
-  it("Stellr: holders of any named scope in staff_roles, as today's alert and digest queries", async () => {
-    expect(await staffAudienceMemberIds(client(), STELLR_TENANT_ID, ['all', 'community'])).toEqual(['m-all', 'm-comm'])
-    expect(await staffAudienceMemberIds(client(), STELLR_TENANT_ID, ['all'])).toEqual(['m-all'])
+describe('dutyAudienceMemberIds', () => {
+  it("Stellr: holders of any named scope in admin_duties, as today's alert and digest queries", async () => {
+    expect(await dutyAudienceMemberIds(client(), STELLR_TENANT_ID, ['all', 'community'])).toEqual(['m-all', 'm-comm'])
+    expect(await dutyAudienceMemberIds(client(), STELLR_TENANT_ID, ['all'])).toEqual(['m-all'])
   })
 
   it('Stellr: reads no memberships, so a Stellr membership adds nobody', async () => {
-    expect(await staffAudienceMemberIds(client('tenant_memberships'), STELLR_TENANT_ID, ['all'])).toEqual(['m-all'])
+    expect(await dutyAudienceMemberIds(client('tenant_memberships'), STELLR_TENANT_ID, ['all'])).toEqual(['m-all'])
   })
 
   it('Stellr: no scopes means nobody', async () => {
-    expect(await staffAudienceMemberIds(client(), STELLR_TENANT_ID, [])).toEqual([])
+    expect(await dutyAudienceMemberIds(client(), STELLR_TENANT_ID, [])).toEqual([])
   })
 
-  it("another tenant: its tenant_admins by either key, never staff_roles or a neighbour's", async () => {
-    expect(await staffAudienceMemberIds(client('staff_roles'), TENANT_A, ['all'])).toEqual(['m-a1', 'm-a2'])
-    expect(await staffAudienceMemberIds(client(), TENANT_B, ['all'])).toEqual(['m-b1'])
+  it("another tenant: its tenant_admins by either key, never admin_duties or a neighbour's", async () => {
+    expect(await dutyAudienceMemberIds(client('admin_duties'), TENANT_A, ['all'])).toEqual(['m-a1', 'm-a2'])
+    expect(await dutyAudienceMemberIds(client(), TENANT_B, ['all'])).toEqual(['m-b1'])
   })
 
   it('a tenant with no admins is an empty audience, not a fallback to Stellr', async () => {
-    expect(await staffAudienceMemberIds(client(), '33333333-3333-4333-8333-333333333333', ['all'])).toEqual([])
+    expect(await dutyAudienceMemberIds(client(), '33333333-3333-4333-8333-333333333333', ['all'])).toEqual([])
   })
 
   it.each([
-    [STELLR_TENANT_ID, 'staff_roles'],
+    [STELLR_TENANT_ID, 'admin_duties'],
     [TENANT_A, 'tenant_memberships'],
     [TENANT_A, 'members'],
   ])('throws for tenant %s when %s cannot be read', async (tenant, table) => {
-    await expect(staffAudienceMemberIds(client(table), tenant, ['all'])).rejects.toBeInstanceOf(AuthzLookupError)
+    await expect(dutyAudienceMemberIds(client(table), tenant, ['all'])).rejects.toBeInstanceOf(AuthzLookupError)
   })
 })
 
-describe('staffAudienceEmails', () => {
+describe('dutyAudienceEmails', () => {
   it('active members only, trimmed and lower-cased', async () => {
     const db = fakeSupabase({
       ...seed(),
-      staff_roles: [...seed().staff_roles, { member_id: 'm-gone', scopes: ['all'] }],
+      admin_duties: [...seed().admin_duties, { member_id: 'm-gone', scopes: ['all'] }],
     }).client as unknown as SupabaseClient
-    expect(await staffAudienceEmails(db, STELLR_TENANT_ID, ['all'])).toEqual(['all@example.test'])
+    expect(await dutyAudienceEmails(db, STELLR_TENANT_ID, ['all'])).toEqual(['all@example.test'])
   })
 
   it("another tenant's admins only", async () => {
-    expect(await staffAudienceEmails(client(), TENANT_A, ['all'])).toEqual(['a1@example.test', 'a2@example.test'])
+    expect(await dutyAudienceEmails(client(), TENANT_A, ['all'])).toEqual(['a1@example.test', 'a2@example.test'])
   })
 
   it('throws when the members read fails', async () => {
-    await expect(staffAudienceEmails(client('members'), STELLR_TENANT_ID, ['all'])).rejects.toBeInstanceOf(AuthzLookupError)
+    await expect(dutyAudienceEmails(client('members'), STELLR_TENANT_ID, ['all'])).rejects.toBeInstanceOf(AuthzLookupError)
   })
 })
 

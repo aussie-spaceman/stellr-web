@@ -28,14 +28,14 @@ export const GET = withAudit(
 
 async function previewEmail(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, {
+  const loaded = await loadEventRecord<EventEmailRow>(crew, 'event_emails', id, {
     db,
     notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
     label: ROUTE,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireEventStaff } from '@/lib/authz'
+import { requireEventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/events/repo'
 import { sendEmail, campaignBroadcastEmail } from '@/lib/email'
@@ -29,11 +29,11 @@ export const POST = withAudit(
 // registered in a campaign.
 async function emailCampaign(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Not authorised.' }, { status: staff.status })
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Not authorised.' }, { status: crew.status })
   // Compares against the caller's own list, so it says nothing about whether the event exists.
-  if (!staff.covers(slug)) return NextResponse.json({ error: 'Not authorised.' }, { status: 403 })
-  const event: { slug: string; userId: string; tenantId: string; sent?: number; failed?: number } = { slug, userId: staff.userId, tenantId: staff.tenantId }
+  if (!crew.covers(slug)) return NextResponse.json({ error: 'Not authorised.' }, { status: 403 })
+  const event: { slug: string; userId: string; tenantId: string; sent?: number; failed?: number } = { slug, userId: crew.userId, tenantId: crew.tenantId }
   audited.set(req, event)
 
   const body = await req.json()
@@ -44,7 +44,7 @@ async function emailCampaign(req: NextRequest, { params }: { params: Promise<{ s
   }
 
   const db = supabaseServer()
-  const { data: rows } = await loadScopedRows<{ teacher_first_name: string | null; teacher_email: string | null; event_title: string | null }>(staff.scope, 'registrations', {
+  const { data: rows } = await loadScopedRows<{ teacher_first_name: string | null; teacher_email: string | null; event_title: string | null }>(crew.scope, 'registrations', {
     db,
     select: 'teacher_first_name, teacher_email, event_title',
     match: { type: 'campaign', event_slug: slug },

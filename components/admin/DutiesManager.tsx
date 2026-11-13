@@ -6,7 +6,7 @@ import { X } from 'lucide-react'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 import { MemberLink } from '@/components/admin/RecordLinks'
 
-export interface StaffRole {
+export interface DutyRow {
   member_id: string
   member_name: string | null
   member_email: string | null
@@ -16,11 +16,11 @@ export interface StaffRole {
 // Function-scoped staff (the platform RBAC seam, D10). Platform admins are set in
 // Clerk and implicitly hold every scope; this screen grants narrower scopes to
 // members (e.g. a future Graduations coordinator) without making them full admins.
-export default function StaffRolesManager({
+export default function DutiesManager({
   initial,
   allScopes,
 }: {
-  initial: StaffRole[]
+  initial: DutyRow[]
   allScopes: string[]
 }) {
   const router = useRouter()
@@ -41,7 +41,7 @@ export default function StaffRolesManager({
     if (!member || scopes.length === 0) return
     setBusy(true)
     setError(null)
-    const res = await fetch('/api/admin/staff-roles', {
+    const res = await fetch('/api/admin/duties', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId: member.id, scopes }),
@@ -59,7 +59,7 @@ export default function StaffRolesManager({
 
   async function remove(memberId: string) {
     setBusy(true)
-    await fetch('/api/admin/staff-roles', {
+    await fetch('/api/admin/duties', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId }),
@@ -71,8 +71,8 @@ export default function StaffRolesManager({
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 text-xs text-brand-muted-soft">
-        Full platform admins are configured in Clerk (role metadata) and implicitly hold every scope.
-        Use this to give a member a narrower set of staff scopes without making them a full admin.
+        Admins are set in Clerk and hold every duty already. Give a duty to anyone else who should get
+        an area’s alerts. A duty does not open the admin portal.
       </div>
 
       <div className="rounded-xl border border-brand-border bg-white p-4">
@@ -116,7 +116,7 @@ export default function StaffRolesManager({
 
       <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
         {initial.length === 0 && (
-          <p className="px-4 py-6 text-center text-sm text-brand-muted-soft">No scoped staff yet.</p>
+          <p className="px-4 py-6 text-center text-sm text-brand-muted-soft">No duties given yet.</p>
         )}
         {initial.map((r) => (
           <div
@@ -141,7 +141,7 @@ export default function StaffRolesManager({
             <button
               onClick={() => remove(r.member_id)}
               disabled={busy}
-              aria-label="Remove staff role"
+              aria-label="Remove duty"
               className="shrink-0 text-brand-muted-soft hover:text-brand-muted disabled:opacity-50"
             >
               <X className="h-4 w-4" />

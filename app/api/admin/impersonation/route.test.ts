@@ -11,7 +11,7 @@ import { fakeSupabase, type FakeDb } from '@/test/fake-supabase'
 // the window.
 //
 // S0 (Nov 2026): every check fails closed. Any staff target is refused (admin
-// or event manager, by Clerk role or a staff_roles row), a Clerk or database
+// or event manager, by Clerk role or an admin_duties row), a Clerk or database
 // error refuses, the ticket must name the admin who started it, view-as is off
 // without its own signing secret, and the start and end only happen if their
 // audit rows are written.
@@ -76,7 +76,7 @@ beforeEach(() => {
   logActivityOrThrow.mockResolvedValue(undefined)
   getUser.mockReset()
   getUser.mockResolvedValue({ publicMetadata: {} })
-  h.db = fakeSupabase({ members: [TARGET, OTHER_MEMBER, ADMIN_ROW], staff_roles: [] })
+  h.db = fakeSupabase({ members: [TARGET, OTHER_MEMBER, ADMIN_ROW], admin_duties: [] })
   h.isAdmin = true
   h.configured = true
   h.cookieValue = undefined
@@ -157,13 +157,13 @@ describe('POST /api/admin/impersonation', () => {
     getUser.mockResolvedValue({ publicMetadata: { role } })
     const res = await post()
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'Cannot view as a staff member.' })
+    expect(await res.json()).toEqual({ error: 'Cannot view as a crew member.' })
     expect(logActivityOrThrow).not.toHaveBeenCalled()
     expect(cookieSet(res)).toBeNull()
   })
 
-  it('refuses a target with a staff_roles row, without asking Clerk', async () => {
-    h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], staff_roles: [{ member_id: M1, scopes: ['events'] }] })
+  it('refuses a target with an admin_duties row, without asking Clerk', async () => {
+    h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], admin_duties: [{ member_id: M1, scopes: ['events'] }] })
     const res = await post()
     expect(res.status).toBe(403)
     expect(getUser).not.toHaveBeenCalled()
@@ -196,9 +196,9 @@ describe('POST /api/admin/impersonation', () => {
     expect(cookieSet(res)).toBeNull()
   })
 
-  it('fails closed when the staff_roles lookup errors', async () => {
-    h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], staff_roles: [] }, {
-      failOn: (table) => (table === 'staff_roles' ? 'boom' : null),
+  it('fails closed when the admin_duties lookup errors', async () => {
+    h.db = fakeSupabase({ members: [TARGET, ADMIN_ROW], admin_duties: [] }, {
+      failOn: (table) => (table === 'admin_duties' ? 'boom' : null),
     })
     const res = await post()
     expect(res.status).toBe(503)
@@ -206,14 +206,14 @@ describe('POST /api/admin/impersonation', () => {
   })
 
   it('needs no Clerk check for a member with no Clerk account', async () => {
-    h.db = fakeSupabase({ members: [{ ...TARGET, clerk_user_id: null }, ADMIN_ROW], staff_roles: [] })
+    h.db = fakeSupabase({ members: [{ ...TARGET, clerk_user_id: null }, ADMIN_ROW], admin_duties: [] })
     const res = await post()
     expect(res.status).toBe(200)
     expect(getUser).not.toHaveBeenCalled()
   })
 
   it('refuses an admin with no member row: the ticket could not be bound to them', async () => {
-    h.db = fakeSupabase({ members: [TARGET], staff_roles: [] })
+    h.db = fakeSupabase({ members: [TARGET], admin_duties: [] })
     const res = await post()
     expect(res.status).toBe(403)
     expect(h.encoded).toEqual([])

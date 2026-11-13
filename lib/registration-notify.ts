@@ -15,7 +15,7 @@
 // Every export is best-effort: onboarding must never fail because an email did.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendEmail, DEFAULT_REPLY_TO, staffAlertEmail } from '@/lib/email'
+import { sendEmail, DEFAULT_REPLY_TO, teamInboxEmail } from '@/lib/email'
 import { emailLayout, escapeHtml, BRAND_NAVY, SIGN_OFF_HTML, SIGN_OFF_TEXT } from '@/lib/email-layout'
 import { appUrl } from '@/lib/email-campaigns'
 import { tierGroupOf, type TierGroupKey } from '@/lib/tiers'
@@ -229,7 +229,7 @@ export async function sendAccountConfirmation(db: SupabaseClient, member: Regist
  * (app/api/contact et al) so registrations stop being the one funnel signal
  * nobody is told about.
  */
-export async function notifyStaffOfRegistration(
+export async function notifyTeamOfRegistration(
   db: SupabaseClient,
   member: RegisteredMember,
   extra: { schoolName?: string | null } = {},
@@ -271,13 +271,13 @@ export async function notifyStaffOfRegistration(
     ].join('\n')
 
     await sendEmail({
-      to: staffAlertEmail(),
+      to: teamInboxEmail(),
       replyTo: member.email ?? undefined,
       subject: `New registration: ${name} (${role})`,
       html: emailLayout({ heading: 'New registration', bodyHtml }),
       text,
     })
   } catch (e) {
-    console.error('[registration-notify] staff alert failed (non-fatal):', e)
+    console.error('[registration-notify] team alert failed (non-fatal):', e)
   }
 }

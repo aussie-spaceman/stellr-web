@@ -46,7 +46,7 @@ export const FIXTURES: Record<FixtureRole, Fixture> = {
     email: 'alan.admin+clerk_test@example.com',
     passwordVar: 'E2E_ADMIN_PASSWORD',
     memberId: '00000000-0000-4000-a000-000000000003',
-    covers: '/admin routes — carries the staff role',
+    covers: '/admin routes — carries the admin role',
   },
   // deep review TEST-8: an event manager assigned to ONE event, to prove the
   // "cannot see another event" boundary end-to-end (lib/event-access.ts). CI

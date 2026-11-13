@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// notifyCommunityAdmins must never swallow an alert: when staff_roles has no
+// notifyCommunityAdmins must never swallow an alert: when admin_duties has no
 // 'all'/'community' holder (prod on 28 Sept 2026) or the lookup fails, the alert
 // goes to the staff inbox instead.
 
@@ -11,7 +11,7 @@ const { sendEmail, supabaseServer } = vi.hoisted(() => ({
 
 vi.mock('@/lib/email', () => ({
   sendEmail,
-  staffAlertEmail: () => process.env.REGISTRATION_ALERT_EMAIL ?? 'hello@stellreducation.org',
+  teamInboxEmail: () => process.env.REGISTRATION_ALERT_EMAIL ?? 'hello@stellreducation.org',
 }))
 vi.mock('@/lib/sms', () => ({ sendSms: vi.fn(), SMS_ENABLED: false }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer }))
@@ -23,14 +23,14 @@ type SupabaseClient = import('@supabase/supabase-js').SupabaseClient
 
 type Result = { data: unknown; error: { message: string } | null }
 
-/** A fake client: staff_roles lookup returns `staff`; per-member reads return `members`. */
-function fakeDb(staff: Result, members: Record<string, string> = {}) {
+/** A fake client: admin_duties lookup returns `staff`; per-member reads return `members`. */
+function fakeDb(crew: Result, members: Record<string, string> = {}) {
   const inserted: unknown[] = []
   const db = {
     inserted,
     from(table: string) {
-      if (table === 'staff_roles') {
-        return { select: () => ({ overlaps: async () => staff }) }
+      if (table === 'admin_duties') {
+        return { select: () => ({ overlaps: async () => crew }) }
       }
       if (table === 'community_notifications') {
         return { insert: async (row: unknown) => { inserted.push(row); return { error: null } } }
@@ -93,8 +93,8 @@ describe('notifyCommunityAdmins', () => {
     expect(sent.to).toBe('alerts@stellreducation.org')
     expect(sent.subject).toBe('DocuSign dispatch failed')
     expect(sent.html).toContain('<p>Failed.</p>')
-    expect(sent.text).toMatch(/no staff member holds/)
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('no staff_roles holder'))
+    expect(sent.text).toMatch(/nobody holds/)
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('no admin_duties holder'))
   })
 
   it('falls back to the plain body when the alert has no rich email', async () => {
@@ -118,8 +118,8 @@ describe('notifyCommunityAdmins', () => {
     expect(sent.html).toContain('&lt;img src=x')
   })
 
-  it('falls back when the staff_roles lookup errors', async () => {
-    fakeDb({ data: null, error: { message: 'permission denied for table staff_roles' } })
+  it('falls back when the admin_duties lookup errors', async () => {
+    fakeDb({ data: null, error: { message: 'permission denied for table admin_duties' } })
     await notifyCommunityAdmins(alert)
 
     expect(sendEmail).toHaveBeenCalledTimes(1)
@@ -142,7 +142,7 @@ describe('notifyCommunityAdmins audiences (S5 B17)', () => {
   const TENANT_A = '11111111-1111-4111-8111-111111111111'
 
   const seed = () => ({
-    staff_roles: [
+    admin_duties: [
       { member_id: 'm-all', scopes: ['all'] },
       { member_id: 'm-comm', scopes: ['community', 'events'] },
       { member_id: 'm-events', scopes: ['events'] },
@@ -165,7 +165,7 @@ describe('notifyCommunityAdmins audiences (S5 B17)', () => {
       { tenant_id: TENANT_A, member_id: null, clerk_user_id: 'c-a2', role: 'tenant_admin' },
       // A deactivated member who still holds a tenant_admin row gets no alert.
       { tenant_id: TENANT_A, member_id: 'm-a3', clerk_user_id: null, role: 'tenant_admin' },
-      { tenant_id: TENANT_A, member_id: 'm-comm', clerk_user_id: null, role: 'staff' },
+      { tenant_id: TENANT_A, member_id: 'm-comm', clerk_user_id: null, role: 'duty_holder' },
     ],
   })
 
@@ -177,11 +177,11 @@ describe('notifyCommunityAdmins audiences (S5 B17)', () => {
 
   const sentTo = () => sendEmail.mock.calls.map((c) => (c[0] as { to: string }).to).sort()
 
-  it("Stellr: the same members as the staff_roles query before B17, under the default AUTHZ_SOURCE", async () => {
+  it("Stellr: the same members as the admin_duties query before B17, under the default AUTHZ_SOURCE", async () => {
     vi.stubEnv('AUTHZ_SOURCE', '')
     const fake = seeded()
     // The query notifyCommunityAdmins ran before B17, on the same rows.
-    const { data } = await (fake.client as unknown as SupabaseClient).from('staff_roles').select('member_id').overlaps('scopes', ['all', 'community'])
+    const { data } = await (fake.client as unknown as SupabaseClient).from('admin_duties').select('member_id').overlaps('scopes', ['all', 'community'])
     const before = [...new Set(((data ?? []) as { member_id: string | null }[]).map((r) => r.member_id).filter(Boolean))].sort()
 
     await notifyCommunityAdmins(alert)
@@ -194,15 +194,15 @@ describe('notifyCommunityAdmins audiences (S5 B17)', () => {
     vi.unstubAllEnvs()
   })
 
-  it('Stellr: a failed staff_roles read still falls back to the staff inbox', async () => {
-    seeded('staff_roles')
+  it('Stellr: a failed admin_duties read still falls back to the staff inbox', async () => {
+    seeded('admin_duties')
     await notifyCommunityAdmins(alert)
     expect(sentTo()).toEqual(['alerts@stellreducation.org'])
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('lookup failed'), expect.any(Error))
   })
 
   it("another tenant: its tenant admins by email only, never Stellr's staff or the bell", async () => {
-    const fake = seeded('staff_roles')
+    const fake = seeded('admin_duties')
     await notifyCommunityAdmins(alert, { tenantId: TENANT_A })
     expect(sentTo()).toEqual(['a1@x.org', 'a2@x.org'])
     expect(fake.table('community_notifications')).toEqual([])
@@ -227,7 +227,7 @@ describe('notifyCommunityAdmins audiences (S5 B17)', () => {
     seeded('members', rows)
     await notifyCommunityAdmins(alert, { tenantId: TENANT_B })
     expect(sendEmail).not.toHaveBeenCalled()
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/dropped: its staff lookup failed/))
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/dropped: its admin lookup failed/))
   })
 
   it("another tenant with no admin: dropped and logged, never sent to Stellr's inbox", async () => {
@@ -241,7 +241,7 @@ describe('notifyCommunityAdmins audiences (S5 B17)', () => {
     seeded('tenant_memberships')
     await notifyCommunityAdmins(alert, { tenantId: TENANT_A })
     expect(sendEmail).not.toHaveBeenCalled()
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/dropped: its staff lookup failed/))
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/dropped: its admin lookup failed/))
     // The log names the tenant and the reason, never the alert body.
     for (const call of errorSpy.mock.calls) expect(String(call[0])).not.toContain('Jane Doe')
   })

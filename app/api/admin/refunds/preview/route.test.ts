@@ -12,7 +12,7 @@ const RID = '33333333-3333-4333-8333-333333333333'
 const OTHER_TENANT = '11111111-1111-4111-8111-111111111111'
 
 const h = vi.hoisted(() => ({
-  requireTenantStaff: vi.fn(),
+  requireTenantCrew: vi.fn(),
   tenantId: '',
   participant: null as Record<string, unknown> | null,
   registration: null as Record<string, unknown> | null,
@@ -54,7 +54,7 @@ function fakeDb() {
 }
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: 'user_testadmin' }) }))
-vi.mock('@/lib/authz', () => ({ requireTenantStaff: h.requireTenantStaff, currentTenantId: () => h.tenantId }))
+vi.mock('@/lib/authz', () => ({ requireTenantCrew: h.requireTenantCrew, currentTenantId: () => h.tenantId }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => fakeDb() }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: h.stripe }))
 vi.mock('@/lib/refunds/payment-basis', () => ({ resolveRefundBasis: h.resolveRefundBasis }))
@@ -74,7 +74,7 @@ const PAID_DAYS_AGO = 10
 beforeEach(() => {
   vi.clearAllMocks()
   h.tenantId = STELLR_TENANT_ID
-  h.requireTenantStaff.mockImplementation(async (tenantId: string) => ({ ok: true, via: 'clerk', tenantId }))
+  h.requireTenantCrew.mockImplementation(async (tenantId: string) => ({ ok: true, via: 'clerk', tenantId }))
   h.participant = { id: PID, registration_id: RID, individual_payment_status: 'paid', stripe_payment_intent_id: 'pi_1' }
   h.registration = { event_slug: 'colorado' }
   h.events = {}
@@ -128,7 +128,7 @@ describe('GET /api/admin/refunds/preview', () => {
 
   it('the staff check comes first: a refused caller causes no read at all', async () => {
     h.events = { colorado: OTHER_TENANT }
-    h.requireTenantStaff.mockResolvedValue({ ok: false, status: 403 })
+    h.requireTenantCrew.mockResolvedValue({ ok: false, status: 403 })
     const res = await get()
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'Forbidden' })

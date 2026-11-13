@@ -49,7 +49,7 @@ describe('the admin shell', () => {
     await expect(shell()).rejects.toThrow('redirect /sign-in')
   })
 
-  it.each(['student', 'staff', 'Admin', 7, undefined])('a signed-in role of %s goes to the account page', async (role) => {
+  it.each(['student', 'member', 'Admin', 7, undefined])('a signed-in role of %s goes to the account page', async (role) => {
     h.session = { userId: 'u1', role }
     await expect(shell()).rejects.toThrow('redirect /account')
   })

@@ -78,8 +78,8 @@ describe('authz codemod: golden conversions', () => {
     ],
     [
       'T2: currentUserHasScope, and a type taken with it stays behind',
-      `import { currentUserHasScope, type StaffScope } from '@/lib/admin-auth'\nconst s: StaffScope = 'events'\nexport async function GET() {\n  return await currentUserHasScope(s)\n}\n`,
-      `import { hasScope } from '@/lib/authz'\nimport { type StaffScope } from '@/lib/admin-auth'\nconst s: StaffScope = 'events'\nexport async function GET() {\n  return await hasScope(s, ${R})\n}\n`,
+      `import { currentUserHasScope, type DutyScope } from '@/lib/admin-auth'\nconst s: DutyScope = 'events'\nexport async function GET() {\n  return await currentUserHasScope(s)\n}\n`,
+      `import { hasScope } from '@/lib/authz'\nimport { type DutyScope } from '@/lib/admin-auth'\nconst s: DutyScope = 'events'\nexport async function GET() {\n  return await hasScope(s, ${R})\n}\n`,
     ],
     [
       'T3: an async helper is inlined and deleted, with the comment on it',
@@ -204,10 +204,10 @@ describe('authz codemod: what stays', () => {
     ['a live publicMetadata role, a different source from the session', `import { currentUser } from '@clerk/nextjs/server'\nexport async function GET() {\n  const u = await currentUser()\n  return (u?.publicMetadata as { role?: string })?.role === 'admin'\n}\n`, /clerkRoleRead.*publicMetadata/],
     ['another user\'s role', `export async function GET(c: any) {\n  const u = await c.users.getUser('x')\n  const role = (u.publicMetadata as { role?: unknown })?.role\n  return role\n}\n`, /clerkRoleRead/],
     ['isEventManagerClaims', `${AUTH}import { isEventManagerClaims } from '@/lib/admin-auth'\nexport async function GET() {\n  const { sessionClaims } = await auth()\n  return isEventManagerClaims(sessionClaims)\n}\n`, /isEventManagerClaims.*no claim-only form/],
-    ['isStaffRole', `import { isStaffRole } from '@/lib/admin-auth'\nexport const f = (r: unknown) => isStaffRole(r)\n`, /isStaffRole.*target/],
-    ['STAFF_CLERK_ROLES', `import { STAFF_CLERK_ROLES } from '@/lib/admin-auth'\nexport const f = STAFF_CLERK_ROLES\n`, /STAFF_CLERK_ROLES/],
+    ['isCrewRole', `import { isCrewRole } from '@/lib/admin-auth'\nexport const f = (r: unknown) => isCrewRole(r)\n`, /isCrewRole.*target/],
+    ['CREW_CLERK_ROLES', `import { CREW_CLERK_ROLES } from '@/lib/admin-auth'\nexport const f = CREW_CLERK_ROLES\n`, /CREW_CLERK_ROLES/],
     ['a literal role list', "export const f = new Set(['admin', 'event_manager'])\n", /portalRoleList/],
-    ['a role-table read', "export const f = (db: any) => db.from('staff_roles').select('scopes')\n", /roleTableRead/],
+    ['a role-table read', "export const f = (db: any) => db.from('admin_duties').select('scopes')\n", /roleTableRead/],
     ['a namespace import', "import * as a from '@/lib/admin-auth'\nexport const f = () => a.currentUserIsAdmin()\n", /currentUserIsAdmin/],
     ['a dynamic import', "export async function f() { const { currentUserIsAdmin } = await import('@/lib/admin-auth'); return currentUserIsAdmin() }\n", /currentUserIsAdmin/],
     ['a helper passed by reference', `${adminAuth}export const f = (l: unknown[]) => l.filter(isAdminClaims)\n`, /isAdminClaims/],
@@ -536,7 +536,7 @@ describe('authz codemod: T7, test mocks', () => {
     ['no subject can be found', cases[0][1], /what this test exercises/, () => null],
     ['the mock reads the claims it is handed', "vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: (c: { admin?: boolean } | null) => !!c?.admin }))\n", /reads the claims/, converted()],
     ['the mock is a bare reference, so its arguments are unknown', "vi.mock('@/lib/admin-auth', () => ({ isAdminClaims }))\n", /reads the claims/, converted()],
-    ['an export with no one-for-one name', "vi.mock('@/lib/admin-auth', () => ({ isStaffRole: () => true }))\n", /no one-for-one/, converted()],
+    ['an export with no one-for-one name', "vi.mock('@/lib/admin-auth', () => ({ isCrewRole: () => true }))\n", /no one-for-one/, converted()],
     ['both legacy modules are mocked, and two mocks of lib/authz would replace each other', "vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))\nvi.mock('@/lib/event-access', () => ({ requireEventAccess }))\n", /both legacy/, converted()],
     ['lib/authz is mocked already', "vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))\nvi.mock('@/lib/authz', () => ({}))\n", /already mocks/, converted()],
     ['two helpers would land on one name', "vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true, currentUserIsAdmin: async () => false }))\n", /two helpers/, converted()],
@@ -723,9 +723,9 @@ describe('authz codemod: the idiom list', () => {
 
   it('names as manual exactly the idioms lib/authz has no safe one-for-one form for', () => {
     expect(Object.entries(DISPOSITIONS).filter(([, d]) => d.transform === null).map(([id]) => id).sort()).toEqual([
-      'STAFF_CLERK_ROLES',
+      'CREW_CLERK_ROLES',
+      'isCrewRole',
       'isEventManagerClaims',
-      'isStaffRole',
       'pageRequireAdmin',
       'portalRoleList',
       'roleTableRead',

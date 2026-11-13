@@ -96,10 +96,10 @@ describe('cleanupClerkForMember', () => {
     const r = await cleanupClerkForMember('m1')
     expect(deleteUser).not.toHaveBeenCalled()
     expect(r.ok).toBe(false)
-    expect(r.detail).toBe(`Clerk login user_abc is a staff account (${role}); left in place`)
+    expect(r.detail).toBe(`Clerk login user_abc is a crew account (${role}); left in place`)
   })
 
-  it.each(['student', 'staff', 'Admin', 7, undefined])('deletes a login whose role is %s', async (role) => {
+  it.each(['student', 'member', 'Admin', 7, undefined])('deletes a login whose role is %s', async (role) => {
     getUser.mockResolvedValue({ publicMetadata: { role } })
     const r = await cleanupClerkForMember('m1')
     expect(deleteUser).toHaveBeenCalledWith('user_abc')
@@ -118,7 +118,7 @@ describe('cleanupClerkForMember', () => {
     try {
       const r = await cleanupClerkForMember('m1')
       expect(deleteUser).not.toHaveBeenCalled()
-      expect(r).toMatchObject({ kind: 'clerk', ok: false, detail: 'Could not confirm Clerk login user_abc is not a staff account; left in place' })
+      expect(r).toMatchObject({ kind: 'clerk', ok: false, detail: 'Could not confirm Clerk login user_abc is not a crew account; left in place' })
     } finally {
       vi.unstubAllEnvs()
     }

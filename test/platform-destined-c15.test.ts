@@ -38,10 +38,10 @@ const GUARDS: [file: string, method: string, guard: string, from: string][] = [
   ['app/api/admin/privacy-requests/[id]/route.ts', 'PATCH', 'isAdminClaims', ADMIN_AUTH],
   ['app/api/admin/schools/[id]/route.ts', 'PATCH', 'isAdminClaims', ADMIN_AUTH],
 ]
-/** staff-roles compares the session claim itself. */
+/** duties compares the session claim itself. */
 const INLINE_CLAIM_CHECK: [file: string, method: string][] = [
-  ['app/api/admin/staff-roles/route.ts', 'POST'],
-  ['app/api/admin/staff-roles/route.ts', 'DELETE'],
+  ['app/api/admin/duties/route.ts', 'POST'],
+  ['app/api/admin/duties/route.ts', 'DELETE'],
 ]
 const FILES = [...new Set([...GUARDS.map(([f]) => f), ...INLINE_CLAIM_CHECK.map(([f]) => f)])].sort()
 
@@ -145,8 +145,8 @@ vi.mock('@/lib/activity-log', async (importOriginal) => ({
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: MEMBER, actorLabel: 'Admin' }),
 }))
 vi.mock('@/lib/authz/role-sync', () => ({
-  syncStaffGranted: async () => ({ ok: true }),
-  syncStaffRevoked: async () => ({ ok: true }),
+  syncDutyGranted: async () => ({ ok: true }),
+  syncDutyRevoked: async () => ({ ok: true }),
 }))
 vi.mock('@/lib/authz/role-sync-report', () => ({
   reportRoleSyncFailure: async () => {},
@@ -164,7 +164,7 @@ const REFUSED: [string, unknown][] = [
   ['signed out', { userId: null, sessionClaims: null }],
   ['a member with no role', MEMBER_SESSION],
   ['an event manager', { userId: 'user_em1', sessionClaims: { metadata: { role: 'event_manager' } } }],
-  ['a staff role', { userId: 'user_staff1', sessionClaims: { metadata: { role: 'staff' } } }],
+  ['a member role', { userId: 'user_crew1', sessionClaims: { metadata: { role: 'member' } } }],
 ]
 
 type Handler = (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
@@ -259,8 +259,8 @@ describe('who gets in', () => {
     ['app/api/admin/members/merge/route.ts', 'POST', { body: {} }, 400],
     ['app/api/admin/privacy-requests/[id]/route.ts', 'PATCH', { id: 'not-a-uuid', body: {} }, 404],
     ['app/api/admin/schools/[id]/route.ts', 'PATCH', { body: {} }, 400],
-    ['app/api/admin/staff-roles/route.ts', 'POST', { body: {} }, 400],
-    ['app/api/admin/staff-roles/route.ts', 'DELETE', { body: {} }, 400],
+    ['app/api/admin/duties/route.ts', 'POST', { body: {} }, 400],
+    ['app/api/admin/duties/route.ts', 'DELETE', { body: {} }, 400],
   ]
 
   describe.each(REFUSED)('%s', (_who, session) => {
@@ -329,14 +329,14 @@ describe('who gets in', () => {
     it('lets in the events scope and the all scope', async () => {
       authMock.mockResolvedValue(MEMBER_SESSION)
       for (const scopes of [['events'], ['all']]) {
-        rows = { members: { id: MEMBER }, staff_roles: { scopes } }
+        rows = { members: { id: MEMBER }, admin_duties: { scopes } }
         expect((await call(SLUG_GUARD, 'GET')).status, scopes[0]).toBe(400)
       }
     })
 
     it('refuses another scope, no scope, and no member record', async () => {
       authMock.mockResolvedValue(MEMBER_SESSION)
-      for (const r of [{ members: { id: MEMBER }, staff_roles: { scopes: ['store'] } }, { members: { id: MEMBER } }, {}]) {
+      for (const r of [{ members: { id: MEMBER }, admin_duties: { scopes: ['store'] } }, { members: { id: MEMBER } }, {}]) {
         rows = r
         expect((await call(SLUG_GUARD, 'GET')).status).toBe(403)
       }
@@ -353,11 +353,11 @@ describe('audit', () => {
     ['app/api/admin/members/merge/route.ts', 'POST', 'member.record.merge'],
     ['app/api/admin/privacy-requests/[id]/route.ts', 'PATCH', 'privacy.request.resolve'],
     ['app/api/admin/schools/[id]/route.ts', 'PATCH', 'school.record.update'],
-    ['app/api/admin/staff-roles/route.ts', 'POST', 'staff.role.grant'],
-    ['app/api/admin/staff-roles/route.ts', 'DELETE', 'staff.role.revoke'],
+    ['app/api/admin/duties/route.ts', 'POST', 'duty.grant'],
+    ['app/api/admin/duties/route.ts', 'DELETE', 'duty.revoke'],
   ]
 
-  const STAFF_MEMBER = { id: MEMBER, first_name: 'A', last_name: 'B', email: 'someone@example.invalid' }
+  const CREW_MEMBER = { id: MEMBER, first_name: 'A', last_name: 'B', email: 'someone@example.invalid' }
   const SUCCESS: Record<string, { opts: { body?: unknown; id?: string }; rows?: Record<string, unknown>; answer: unknown; target: { table: string; id: string }; metadata: Record<string, unknown> }> = {
     'deletion.entity.delete': {
       opts: { body: { entity: 'school', id: ROW, mode: 'hard', refundChoice: 'none', refundNote: 'A private reason' } },
@@ -392,17 +392,17 @@ describe('audit', () => {
       target: { table: 'schools', id: ROW },
       metadata: {},
     },
-    'staff.role.grant': {
+    'duty.grant': {
       opts: { body: { email: 'someone@example.invalid', scopes: ['events'] } },
-      rows: { members: STAFF_MEMBER },
-      answer: { ok: true, member: STAFF_MEMBER },
-      target: { table: 'staff_roles', id: MEMBER },
+      rows: { members: CREW_MEMBER },
+      answer: { ok: true, member: CREW_MEMBER },
+      target: { table: 'admin_duties', id: MEMBER },
       metadata: { scopes: ['events'] },
     },
-    'staff.role.revoke': {
+    'duty.revoke': {
       opts: { body: { memberId: MEMBER } },
       answer: { ok: true },
-      target: { table: 'staff_roles', id: MEMBER },
+      target: { table: 'admin_duties', id: MEMBER },
       metadata: {},
     },
   }

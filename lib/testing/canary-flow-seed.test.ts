@@ -249,8 +249,8 @@ function seedDb(extra: Record<string, object[]> = {}): FakeDb {
     tenants: [{ id: STELLR_TENANT_ID, slug: 'stellr', is_platform_owner: true, status: 'active' }],
     events: [STELLR_EVENT],
     tenant_domains: [],
-    tenant_memberships: [{ id: 'm-stellr', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_staff', member_id: null, role: 'tenant_admin', source: 'admin' }],
-    event_manager_assignments: [{ id: 'a-stellr', clerk_user_id: 'user_stellr_staff', event_slug: STELLR_EVENT.slug, tenant_id: STELLR_TENANT_ID }],
+    tenant_memberships: [{ id: 'm-stellr', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_crew', member_id: null, role: 'tenant_admin', source: 'admin' }],
+    event_manager_assignments: [{ id: 'a-stellr', clerk_user_id: 'user_stellr_crew', event_slug: STELLR_EVENT.slug, tenant_id: STELLR_TENANT_ID }],
     registrations: [{ id: 'r-stellr', event_slug: STELLR_EVENT.slug, tenant_id: STELLR_TENANT_ID }],
     event_participations: [],
     ...extra,
@@ -332,7 +332,7 @@ describe('--apply', () => {
     )
     // canary-manager holds no Stellr membership; canary-admin none either
     expect(db.table('tenant_memberships').filter((m) => m.tenant_id === STELLR_TENANT_ID).map((m) => m.clerk_user_id).sort()).toEqual(
-      [CLERK_IDS['stellr-probe-admin'], 'user_stellr_staff'].sort(),
+      [CLERK_IDS['stellr-probe-admin'], 'user_stellr_crew'].sort(),
     )
     expect(JSON.stringify({ t: db.table('tenants')[0], e: db.table('events')[0], r: db.table('registrations') })).toBe(stellrBefore)
     expect(log.join('\n')).not.toMatch(EMAIL)
@@ -418,15 +418,15 @@ describe('--apply', () => {
     // A Stellr baseline with no drift: one Stellr admin who also manages a Stellr event.
     const db = seedDb({
       tenant_memberships: [
-        { id: 'm-stellr', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_staff', member_id: null, role: 'tenant_admin', source: 'admin' },
-        { id: 'm-stellr-em', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_staff', member_id: null, role: 'event_manager', source: 'admin' },
+        { id: 'm-stellr', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_crew', member_id: null, role: 'tenant_admin', source: 'admin' },
+        { id: 'm-stellr-em', tenant_id: STELLR_TENANT_ID, clerk_user_id: 'user_stellr_crew', member_id: null, role: 'event_manager', source: 'admin' },
       ],
     })
     const clerkUsers = [
-      { id: 'user_stellr_staff', role: 'admin' },
+      { id: 'user_stellr_crew', role: 'admin' },
       ...CANARY_PERSONAS.map((p) => ({ id: CLERK_IDS[p.handle], role: p.clerkRole ?? undefined })),
     ]
-    const baseline = diffRoleMapping(await loadRoleInput(wired(db), [{ id: 'user_stellr_staff', role: 'admin' }]))
+    const baseline = diffRoleMapping(await loadRoleInput(wired(db), [{ id: 'user_stellr_crew', role: 'admin' }]))
     expect(formatRoleDrift(baseline)).toEqual([])
     await applyCanaryFlowSeed(plan(), applyDeps(db))
     const drift = diffRoleMapping(await loadRoleInput(wired(db), clerkUsers))

@@ -2,16 +2,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
-const { notifyCommunityAdmins, notifyMember, sendEmail, eventManagerAudienceClerkIds, staffAudienceMemberIds } = vi.hoisted(() => ({
+const { notifyCommunityAdmins, notifyMember, sendEmail, eventManagerAudienceClerkIds, dutyAudienceMemberIds } = vi.hoisted(() => ({
   notifyCommunityAdmins: vi.fn(async (..._a: unknown[]) => {}),
   notifyMember: vi.fn(async (..._a: unknown[]) => {}),
   sendEmail: vi.fn(async (..._a: unknown[]) => ({ id: 're_x' })),
   eventManagerAudienceClerkIds: vi.fn(async (..._a: unknown[]) => [] as string[]),
-  staffAudienceMemberIds: vi.fn(async (..._a: unknown[]) => [] as string[]),
+  dutyAudienceMemberIds: vi.fn(async (..._a: unknown[]) => [] as string[]),
 }))
 vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins, notifyMember }))
 vi.mock('@/lib/email', () => ({ sendEmail }))
-vi.mock('@/lib/authz/audiences', () => ({ eventManagerAudienceClerkIds, staffAudienceMemberIds }))
+vi.mock('@/lib/authz/audiences', () => ({ eventManagerAudienceClerkIds, dutyAudienceMemberIds }))
 
 import { announceBounces, announceCorrection, announceSuggestion, otherSigner, isTwoPersonForm } from './bounce-notices'
 import { hashToken } from './email-change-tokens'
@@ -64,7 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.unstubAllEnvs()
   eventManagerAudienceClerkIds.mockResolvedValue([])
-  staffAudienceMemberIds.mockResolvedValue([])
+  dutyAudienceMemberIds.mockResolvedValue([])
 })
 
 // S5 B14 follow-up: on another tenant's form, the notices to signers and group
@@ -181,11 +181,11 @@ describe('who is told when a guardian’s email bounces (group registration)', (
 
     // Staff: the tenant's admin audience, full address and a roster link.
     expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
-    const [staff, opts] = notifyCommunityAdmins.mock.calls[0] as [{ body: string; email: { html: string } }, { tenantId: string }]
+    const [crew, opts] = notifyCommunityAdmins.mock.calls[0] as [{ body: string; email: { html: string } }, { tenantId: string }]
     expect(opts).toEqual({ tenantId: STELLR_TENANT_ID })
-    expect(staff.body).toContain('ash@dead.test')
-    expect(staff.body).toContain("Also told: the group's teacher and the other signer on the form")
-    expect(staff.email.html).toContain('/admin/competitions/mn-edc')
+    expect(crew.body).toContain('ash@dead.test')
+    expect(crew.body).toContain("Also told: the group's teacher and the other signer on the form")
+    expect(crew.email.html).toContain('/admin/competitions/mn-edc')
 
     // The event manager (a member) and the registrant teacher get their usual channels.
     const told = notifyMember.mock.calls.map((c) => c[0])
@@ -229,7 +229,7 @@ describe('who is told when a guardian’s email bounces (group registration)', (
   })
 
   it('does not tell an organiser or event manager twice when they are also staff', async () => {
-    staffAudienceMemberIds.mockResolvedValue(['m-teacher', 'm-em'])
+    dutyAudienceMemberIds.mockResolvedValue(['m-teacher', 'm-em'])
     eventManagerAudienceClerkIds.mockResolvedValue(['user_em'])
     const fake = setup()
     await announceBounces(fake.client, 'agr-1')
@@ -295,8 +295,8 @@ describe('scope', () => {
   it('a suppressed send reads as not sent, not as bounced', async () => {
     const fake = setup()
     await announceBounces(fake.client, 'agr-1', { kind: 'suppressed' })
-    const [staff] = notifyCommunityAdmins.mock.calls[0] as [{ email: { subject: string } }]
-    expect(staff.email.subject).toBe('Action needed: a signing email was not sent for Olive Stone')
+    const [crew] = notifyCommunityAdmins.mock.calls[0] as [{ email: { subject: string } }]
+    expect(crew.email.subject).toBe('Action needed: a signing email was not sent for Olive Stone')
   })
 })
 
@@ -332,8 +332,8 @@ describe('announceCorrection', () => {
       agreementId: 'agr-1', recipientId: '1', oldEmail: 'ash@dead.test', newEmail: 'ash@new.test',
       actor: { kind: 'organiser', memberId: 'm-teacher', role: 'teacher' },
     })
-    const [staff] = notifyCommunityAdmins.mock.calls[0] as [{ body: string }]
-    expect(staff.body).toContain("changed by the group's teacher: ash@dead.test → ash@new.test")
+    const [crew] = notifyCommunityAdmins.mock.calls[0] as [{ body: string }]
+    expect(crew.body).toContain("changed by the group's teacher: ash@dead.test → ash@new.test")
     expect(notifyMember.mock.calls.map((c) => c[0])).toEqual(['m-em'])
     const student = emailTo('olive@school.test')!
     expect(student.text).toContain('a***@new.test')

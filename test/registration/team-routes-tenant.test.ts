@@ -24,7 +24,7 @@ const s = vi.hoisted(() => ({
   changeGroupPaymentMethod: vi.fn(),
   removeEventParticipation: vi.fn(async () => {}),
   correctFromRosterEdit: vi.fn(async () => null),
-  staff: null as null | Record<string, unknown>,
+  crew: null as null | Record<string, unknown>,
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: 'user_org' }) }))
@@ -62,7 +62,7 @@ vi.mock('@/lib/email', async (orig) => ({ ...(await orig<Record<string, unknown>
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({}), logActivity: async () => {} }))
 vi.mock('@/lib/authz', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
-  requireEventStaff: async () => s.staff,
+  requireEventCrew: async () => s.crew,
 }))
 vi.mock('@/lib/google-sheets', () => ({ isGoogleSheetsConfigured: () => true, watchSheet: async () => ({}), readSheetParticipants: async () => [] }))
 
@@ -76,7 +76,7 @@ const seatLink = await import('@/app/api/members/teams/[id]/payment-link/route')
 const discount = await import('@/app/api/members/teams/[id]/discount/route')
 const paymentMethod = await import('@/app/api/members/teams/[id]/payment-method/route')
 const billingLink = await import('@/app/api/members/billing/payment-link/route')
-const staffAdd = await import('@/app/api/admin/registrations/[id]/participants/route')
+const crewAdd = await import('@/app/api/admin/registrations/[id]/participants/route')
 const { makeScope, stellrScope, tenantWideScope } = await import('@/lib/tenancy/scope-context')
 
 const MISSING = '55555555-5555-4555-8555-555555555555'
@@ -271,14 +271,14 @@ describe('on the tenant’s own host', () => {
 })
 
 describe('the staff roster add (C16’s refusal lifted for a tenant’s own group)', () => {
-  const staffAs = (tenantId: string, scope: unknown, covers: (slug: string) => boolean = () => true) => {
-    s.staff = { ok: true, userId: 'user_staff', isAdmin: true, tenantId, scope, covers }
+  const crewAs = (tenantId: string, scope: unknown, covers: (slug: string) => boolean = () => true) => {
+    s.crew = { ok: true, userId: 'user_crew', isAdmin: true, tenantId, scope, covers }
   }
   const call = (id: string, body: Record<string, unknown> = { first_name: 'E', last_name: 'F', email: 'e@example.com', date_of_birth: ADULT, event_role: 'adult' }) =>
-    staffAdd.POST(new Request('https://app.test/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), { params: Promise.resolve({ id }) })
+    crewAdd.POST(new Request('https://app.test/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), { params: Promise.resolve({ id }) })
 
   it('a tenant’s admin adds to their own group: the tenant row only, no Member ID lookup', async () => {
-    staffAs(TENANT, tenantWideScope(TENANT, 'tenant_admin'))
+    crewAs(TENANT, tenantWideScope(TENANT, 'tenant_admin'))
     const res = await call(tenantGroup.id, { first_name: 'E', last_name: 'F', email: 'e@example.com', date_of_birth: ADULT, event_role: 'adult', linked: true, membership_id: '0000271' })
     expect(res.status).toBe(201)
     const row = db.fake.table('participants').find((p) => p.email === 'e@example.com')
@@ -289,7 +289,7 @@ describe('the staff roster add (C16’s refusal lifted for a tenant’s own grou
   })
 
   it('the event’s manager in that tenant adds too; a 15-year-old is refused', async () => {
-    staffAs(TENANT, makeScope({ tenantId: TENANT, eventSlugs: ['acme-day'], actor: { kind: 'event_manager', memberId: null } }), (slug) => slug === 'acme-day')
+    crewAs(TENANT, makeScope({ tenantId: TENANT, eventSlugs: ['acme-day'], actor: { kind: 'event_manager', memberId: null } }), (slug) => slug === 'acme-day')
     expect((await call(tenantGroup.id)).status).toBe(201)
     const minor = await call(tenantGroup.id, { first_name: 'G', last_name: 'H', email: 'g@example.com', date_of_birth: FIFTEEN })
     expect(minor.status).toBe(400)
@@ -297,9 +297,9 @@ describe('the staff roster add (C16’s refusal lifted for a tenant’s own grou
   })
 
   it('a tenant’s admin naming Stellr’s group, and Stellr’s admin naming the tenant’s, both get the missing group’s answer', async () => {
-    staffAs(TENANT, tenantWideScope(TENANT, 'tenant_admin'))
+    crewAs(TENANT, tenantWideScope(TENANT, 'tenant_admin'))
     const crossed = await call(stellrGroup.id)
-    staffAs(STELLR_TENANT_ID, stellrScope({ kind: 'platform_admin', memberId: null } as never, null))
+    crewAs(STELLR_TENANT_ID, stellrScope({ kind: 'platform_admin', memberId: null } as never, null))
     const reverse = await call(tenantGroup.id)
     const missing = await call(MISSING)
     expect([crossed.status, reverse.status, missing.status]).toEqual([404, 404, 404])

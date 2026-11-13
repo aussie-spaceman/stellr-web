@@ -2,7 +2,7 @@
  * Map today's roles into the S3 tenancy tables (multi-tenancy plan S3, step 5).
  * DATA ONLY: under the default AUTHZ_SOURCE=clerk no guard reads tenant_memberships
  * or platform_admins, so this changes nobody's access. The Clerk `role` claim,
- * staff_roles and event_manager_assignments stay the authority until the flip.
+ * admin_duties and event_manager_assignments stay the authority until the flip.
  *
  *   npx tsx scripts/map-tenancy-roles.ts                                # dry run (default): prints the plan
  *   npx tsx scripts/map-tenancy-roles.ts --check                        # read-only: exit 1 on drift, 0 on none
@@ -14,7 +14,7 @@
  *   Clerk admins (public_metadata.role = 'admin') -> Stellr tenant_admin, and
  *                                                    platform_admins (owner flag only)
  *   event_manager_assignments                     -> Stellr event_manager (one per person)
- *   staff_roles                                   -> Stellr staff (by member)
+ *   admin_duties                                   -> Stellr staff (by member)
  *
  * --check (S5 C9) compares those authorities with the tables: all of Stellr's
  * rows, and for other tenants event_manager rows and assignments. The admin

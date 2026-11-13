@@ -99,10 +99,10 @@ export const scopedWrite = {
   },
 }
 
-// ── Staff personas: the shapes a route takes once it is tenant_staff or platform_admin ──
+// ── Staff personas: the shapes a route takes once it is tenant_crew or platform_admin ──
 
 /** The caller's scope, from lib/authz: the tenant and, for an event manager, their events. */
-async function staffScope(): Promise<ScopeContext | null> {
+async function dutyScope(): Promise<ScopeContext | null> {
   const access = await requireEventAccess()
   if (!access.ok) return null
   return makeScope({
@@ -118,7 +118,7 @@ const forbidden = () => NextResponse.json({ error: 'Forbidden' }, { status: 403 
 /** The conversion target: loadScoped, with the route's own not-found. Must pass as written. */
 export const loadScopedRead = {
   async GET(_req: Request, { params }: Ctx) {
-    const scope = await staffScope()
+    const scope = await dutyScope()
     if (!scope) return forbidden()
     const { id } = await params
     const loaded = await loadScoped(scope, 'registrations', id, { db: supabaseServer(), notFound })
@@ -128,14 +128,14 @@ export const loadScopedRead = {
 }
 
 /** Tenant and event filters written by hand. Each marked line is one a route could forget. */
-export const staffFiltered = {
+export const crewFiltered = {
   async GET(_req: Request, { params }: Ctx) {
-    const scope = await staffScope()
+    const scope = await dutyScope()
     if (!scope) return forbidden()
     const { id } = await params
     let q = supabaseServer().from('registrations').select('*').eq('id', id)
-    q = q.eq('tenant_id', scope.tenantId) // CANARY:staff-tenant-filter
-    if (scope.eventSlugs) q = q.in('event_slug', [...scope.eventSlugs]) // CANARY:staff-event-filter
+    q = q.eq('tenant_id', scope.tenantId) // CANARY:crew-tenant-filter
+    if (scope.eventSlugs) q = q.in('event_slug', [...scope.eventSlugs]) // CANARY:crew-event-filter
     const { data } = await q.maybeSingle()
     if (!data) return notFound()
     return NextResponse.json({ registration: data })
@@ -143,16 +143,16 @@ export const staffFiltered = {
 }
 
 /** A record outside the scope answers as a missing one: no 403 to tell them apart. */
-export const staffUniform = {
+export const crewUniform = {
   async GET(_req: Request, { params }: Ctx) {
-    const scope = await staffScope()
+    const scope = await dutyScope()
     if (!scope) return forbidden()
     const { id } = await params
     const { data } = await supabaseServer().from('registrations').select('*').eq('id', id).maybeSingle()
     let row = data as { tenant_id: string; event_slug: string } | null
     const inScope = (r: { tenant_id: string; event_slug: string }) =>
       r.tenant_id === scope.tenantId && (scope.eventSlugs === null || scope.eventSlugs.includes(r.event_slug))
-    if (row && !inScope(row)) row = null // CANARY:staff-uniform
+    if (row && !inScope(row)) row = null // CANARY:crew-uniform
     if (!row) return notFound()
     if (!inScope(row)) return forbidden()
     return NextResponse.json({ ok: true })
@@ -160,13 +160,13 @@ export const staffUniform = {
 }
 
 /** No id to name: a list. What keeps another tenant out is only the filter on the read. */
-export const staffList = {
+export const crewList = {
   async GET() {
-    const scope = await staffScope()
+    const scope = await dutyScope()
     if (!scope) return forbidden()
     let q = supabaseServer().from('registrations').select('*')
-    q = q.eq('tenant_id', scope.tenantId) // CANARY:staff-list-tenant-filter
-    if (scope.eventSlugs) q = q.in('event_slug', [...scope.eventSlugs]) // CANARY:staff-list-event-filter
+    q = q.eq('tenant_id', scope.tenantId) // CANARY:crew-list-tenant-filter
+    if (scope.eventSlugs) q = q.in('event_slug', [...scope.eventSlugs]) // CANARY:crew-list-event-filter
     const { data } = await q
     return NextResponse.json({ registrations: data })
   },
@@ -229,9 +229,9 @@ export const FIXTURES = {
   tenantFiltered,
   scopedWrite,
   loadScopedRead,
-  staffFiltered,
-  staffUniform,
-  staffList,
+  crewFiltered,
+  crewUniform,
+  crewList,
   platformGuarded,
   hostTokenScoped,
   hostUniform,

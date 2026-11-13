@@ -19,11 +19,11 @@ const TENANT_MEDIA_NOTE = 'Not available for your organisation yet: check your o
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/export' })
-  if (!staff.ok) return staff.response
+  const crew = await requireEventRoute(slug, { route: '/api/admin/events/[slug]/export' })
+  if (!crew.ok) return crew.response
 
-  const roster = await getEventRoster(slug, undefined, { tenant: enforcedTenantFilter(staff.scope, 'registrations') })
-  const media = isStellrScope(staff.scope)
+  const roster = await getEventRoster(slug, undefined, { tenant: enforcedTenantFilter(crew.scope, 'registrations') })
+  const media = isStellrScope(crew.scope)
     ? await mediaForParticipants(supabaseServer(), roster.groups.flatMap((g) => g.participants.map((p) => p.id)))
     : null
 

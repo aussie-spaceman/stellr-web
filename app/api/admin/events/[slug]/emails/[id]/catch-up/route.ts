@@ -30,14 +30,14 @@ export const GET = withAudit(
 
 async function readCatchUp(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const db = supabaseServer()
-  const email = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, { db, notFound, label: ROUTE })
+  const email = await loadEventRecord<EventEmailRow>(crew, 'event_emails', id, { db, notFound, label: ROUTE })
   if (!email.ok) return email.response
   try {
     return NextResponse.json(await catchUpStatus(db, email.row))
@@ -53,19 +53,19 @@ export const POST = withAudit(
 
 async function sendLate(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const db = supabaseServer()
   // Scope check before handing the id to the engine, which does not know the URL.
-  const email = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, { db, select: 'id, event_slug', notFound, label: ROUTE })
+  const email = await loadEventRecord<EventEmailRow>(crew, 'event_emails', id, { db, select: 'id, event_slug', notFound, label: ROUTE })
   if (!email.ok) return email.response
 
   const actor = await actorFromAuth()
-  const out = await sendCatchUp(db, id, { triggeredBy: actor.actorLabel ?? staff.userId })
+  const out = await sendCatchUp(db, id, { triggeredBy: actor.actorLabel ?? crew.userId })
   if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
   return NextResponse.json(out)
 }

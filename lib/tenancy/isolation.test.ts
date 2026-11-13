@@ -33,7 +33,8 @@ const CHILD_MIGRATION = 'supabase/migrations/20261106070726_via_parent_tenant_po
 const LATER_CHILD_MIGRATIONS: Record<string, string> = {
   'public.agreement_email_changes': 'supabase/migrations/20261109200000_agreement_email_changes.sql',
   'public.event_email_templates': 'supabase/migrations/20261109230000_event_email_templates.sql',
-  'public.event_staff_check_ins': 'supabase/migrations/20261110120000_event_staff_check_ins.sql',
+  // Created as event_staff_check_ins (20261110120000); renamed, policies restated, 13 Nov.
+  'public.event_crew_check_ins': 'supabase/migrations/20261113120000_rename_staff_to_duties_and_crew.sql',
 }
 const inheritedTenantTables = () => tenantTables().filter((t) => TABLE_REGISTRY[t].tenantColumn === 'inherited')
 /** The S4 file for a table it wrote, the C0b file for a child table, or the later child's own. */

@@ -90,7 +90,7 @@ Pick what fits. Record each step and the time.
 
 - **Signing links:** void the agreement and reissue (bumps `token_version`, killing the link). For a wide leak, rotate `ESIGN_TOKEN_SECRET`: every link and session dies; reissue outstanding agreements.
 - **Native engine:** set `esign_provider_state.mode = 'docusign_only'` to stop new native agreements.
-- **Admin account:** remove the Clerk `admin` role and `staff_roles` scope; revoke sessions in Clerk.
+- **Admin account:** remove the Clerk `admin` role and `admin_duties` scope; revoke sessions in Clerk.
 - **Keys:** rotate the Supabase service-role key, Google service account key, `CRON_SECRET`, Resend, Stripe, DocuSign, Checkr and HubSpot keys as relevant. If `ESIGN_BACKUP_KEY` is exposed, rotate it, keep the old key escrowed for old copies, and re-encrypt (to confirm a re-encryption procedure; the code reads one key).
 - **Email misdirection:** ask the recipient to delete it and confirm in writing.
 - **Data loss:** restore from the R2 backups (`docs/RUNBOOK-backups.md` §5 and §6): up to 1 hour of loss for the critical tables, 24 hours for the rest. Signed records can also come from the drive with `scripts/esign-restore-drill.ts --restore <id>`. Before reopening, re-apply any deletions made after the backup was taken (runbook §6 step 5).

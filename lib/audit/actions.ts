@@ -176,8 +176,8 @@ export const AUDIT_ACTIONS = [
   'member.record.merge',
   'privacy.request.resolve',
   'school.record.update',
-  'staff.role.grant',
-  'staff.role.revoke',
+  'duty.grant',
+  'duty.revoke',
 
   // Events admin: records by id inside an event (C16)
   'agreement.credential_sharing.set',
@@ -199,7 +199,7 @@ export const AUDIT_ACTIONS = [
   'registration.group_setup.finish',
   'registration.invoice.change',
   'registration.invoice.read',
-  'registration.participant.staff_add',
+  'registration.participant.crew_add',
   'survey.quote.withdraw',
   // C16 follow-up: registrations/[id]/payment-method (its change is catalogued under Registration)
   'registration.payment_method.read',

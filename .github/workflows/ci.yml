@@ -255,6 +255,12 @@ jobs:
       - name: Design-system lint
         run: npm run lint:tokens
 
+      # "staff" means only the Staff role (13 Nov 2026): Duties for the old
+      # staff_roles scopes, crew for admin/staff/event manager/volunteer/mentor.
+      # Also in prebuild; a step of its own so a failure is named.
+      - name: Staff-word lint
+        run: npm run lint:staff-word
+
       # Migration naming, SECURITY DEFINER revokes, and (S3) the table
       # registry: every table classified, tenant/event-scoped tables carry
       # tenant_id + index + RLS (scripts/check-migration-tenancy.mjs). Also in

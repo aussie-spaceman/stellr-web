@@ -395,9 +395,9 @@ const CONVERTED = [
 ].map((r) => `app/api/admin/events/[slug]/${r}/route.ts`)
 
 describe('the routes C17 converted', () => {
-  it('are tenant_staff, on requireEventRoute with the URL\'s slug, and have left the register', () => {
+  it('are tenant_crew, on requireEventRoute with the URL\'s slug, and have left the register', () => {
     for (const f of CONVERTED) {
-      expect(ROUTE_MANIFEST[f], f).toBe('tenant_staff')
+      expect(ROUTE_MANIFEST[f], f).toBe('tenant_crew')
       expect(STELLR_ONLY_DISPOSITIONS[f], f).toBeUndefined()
       const src = readFileSync(f, 'utf8')
       expect(src, f).toMatch(/requireEventRoute\(slug,/)

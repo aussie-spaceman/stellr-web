@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { requireEventStaff } from '@/lib/authz'
+import { requireEventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
 import { loadEventRecord } from '@/lib/tenancy/load-scoped'
-import { staffDecide } from '@/lib/esign/email-changes'
+import { crewDecide } from '@/lib/esign/email-changes'
 
 // POST /api/admin/agreements/[id]/email-changes/[changeId]  body { decision: 'approve' | 'reject' }
 // An admin, or an event manager for their own event, approves or rejects a
@@ -31,12 +31,12 @@ export const POST = withAudit(
 async function decideSuggestion(req: Request, { params }: { params: Promise<{ id: string; changeId: string }> }) {
   const { id, changeId } = await params
   // Who is asking first, so a signed-out caller learns nothing about the id.
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
-  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
+  audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<{ event_slug: string | null }>(staff, 'agreements', id, {
+  const loaded = await loadEventRecord<{ event_slug: string | null }>(crew, 'agreements', id, {
     db,
     select: 'event_slug',
     notFound: () => NextResponse.json({ error: 'Agreement not found' }, { status: 404 }),
@@ -46,7 +46,7 @@ async function decideSuggestion(req: Request, { params }: { params: Promise<{ id
 
   const body = await req.json().catch(() => null)
   const actor = await actorFromAuth()
-  const result = await staffDecide(db, {
+  const result = await crewDecide(db, {
     agreementId: id,
     changeId,
     decision: body?.decision,

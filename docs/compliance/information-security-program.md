@@ -37,7 +37,7 @@ Revised 3 Nov 2026 (multi-tenancy plan S1): mapped to COPPA §312.8(b) and APP 1
 | Developer | (to confirm; today the same person, working with AI coding tools on synthetic data) | Keeps the controls below working; reviews dependencies; runs the restore drill |
 | Admins | Clerk users with `publicMetadata.role = 'admin'` (`lib/admin-auth.ts`) | Full admin portal; can download signed records (every download logged) |
 | Event managers | Clerk role `event_manager`, scoped to assigned events (`event_manager_assignments`) | Competitions admin for their events only; get Checkr summaries, never reports (`lib/background-report-export.ts`) |
-| Alert recipients | Members holding staff scope `all` or `community` in `staff_roles` (`lib/notify.ts`); falls back to the staff inbox if none | Receive integrity, heartbeat and other admin alerts |
+| Alert recipients | Members holding the `all` or `community` duty in `admin_duties` (`lib/notify.ts`); falls back to the team inbox if none | Receive integrity, heartbeat and other admin alerts |
 | AI coding agents | A GitHub machine account with a fine-grained token, and a read-only production database role (`docs/RUNBOOK-agent-controls.md`) | Write code and open PRs; never merge guard files, apply production SQL or read sensitive columns (§13) |
 | Backup operator | Program owner | Holds the backup decryption key; runs the monthly restore drill (§12) |
 
@@ -72,11 +72,11 @@ Systems that hold or process personal data. "In code" means the repo calls or co
 ## 3. Access control
 
 - **Least privilege in the database.** Every table is reached through the service role on the server. The agreement tables and every `esign_*` table revoke all rights from `anon` and `authenticated` (migrations `20261002173459_esign_provider_archive.sql`, `20261002180802_esign_native_engine.sql`). New SQL functions revoke `EXECUTE` from `PUBLIC`.
-- **Admin roles** come from Clerk metadata and are re-checked on every request (`lib/admin-auth.ts`). Staff scopes exist (`STAFF_SCOPES`); today every admin holds `all`.
-- **Impersonation** ("view as member") uses a 30-minute cookie, HMAC-signed with its own `IMPERSONATION_SECRET`, and re-checks admin status each request (`lib/impersonation.ts`). The ticket names the admin who started it and works only for them. Staff targets (an admin or event manager, by Clerk role or a `staff_roles` row) are refused, and a failed staff lookup refuses too (`app/api/admin/impersonation/route.ts`). The start and end are written to the member's activity timeline, and neither takes effect unless its row is written. The session is read only: member writes are refused while it runs, and refused when it cannot be checked. Downloading a signed record under impersonation is refused (`app/api/members/docusigns/[id]/download/route.ts`).
+- **Admin roles** come from Clerk metadata and are re-checked on every request (`lib/admin-auth.ts`). Staff scopes exist (`DUTY_SCOPES`); today every admin holds `all`.
+- **Impersonation** ("view as member") uses a 30-minute cookie, HMAC-signed with its own `IMPERSONATION_SECRET`, and re-checks admin status each request (`lib/impersonation.ts`). The ticket names the admin who started it and works only for them. Staff targets (an admin or event manager, by Clerk role or a `admin_duties` row) are refused, and a failed staff lookup refuses too (`app/api/admin/impersonation/route.ts`). The start and end are written to the member's activity timeline, and neither takes effect unless its row is written. The session is read only: member writes are refused while it runs, and refused when it cannot be checked. Downloading a signed record under impersonation is refused (`app/api/members/docusigns/[id]/download/route.ts`).
 - **Signed records** are served only by a 120-second signed URL after an authorisation check (`lib/esign/archive.ts`, `SIGNED_URL_TTL_SECONDS`), with `Cache-Control: private, no-store` (`lib/esign/download-response.ts`). Restricted records are refused to members and signers; admins can still open them, and the log marks it.
 - **MFA — owner action.** School Data Terms §5 promises "multi-factor sign-in for administrators". This is not enforced in code. The owner must: enforce MFA for admin accounts in Clerk; turn on MFA for the Supabase, Vercel, Resend, Google, Stripe, DocuSign, Checkr, HubSpot and GitHub consoles; record the date done here. **(to confirm)**
-- **Leavers.** Remove the Clerk role, the `staff_roles` scope and every console seat on the day someone leaves (to confirm the procedure).
+- **Leavers.** Remove the Clerk role, the `admin_duties` scope and every console seat on the day someone leaves (to confirm the procedure).
 - **Production changes need the owner.** Guard files (`.github/CODEOWNERS`) merge only with the owner's review once the ruleset is on; production SQL runs only through the owner-approved `Production migration` Action. Agents have no production write path (§13). **(owner setup pending: `docs/RUNBOOK-agent-controls.md`)**
 - **Extend CODEOWNERS with every new guard.** Any PR that adds a guard, a gate or structural test, or a security file (auth, consent, CSP, webhook signature checks, upload checks, email suppression, database tests) adds its path to `.github/CODEOWNERS` in the same PR. A guard missing from that file can be weakened without the owner's review. Reviewers check this before approving.
 
@@ -120,7 +120,7 @@ Systems that hold or process personal data. "In code" means the repo calls or co
 | Access log | `esign_access_log`, append-only | Every view or download of a signed record |
 | Engine card | `lib/esign/state.ts`, admin consent forms page | Storage use (warning at 70% of 1 GB), queue depth, last cron runs |
 | Bounces | `lib/esign/bounces.ts` | Signing emails that bounced |
-| Admin alerts | `lib/notify.ts` | Routed to `staff_roles` holders, staff inbox fallback |
+| Admin alerts | `lib/notify.ts` | Routed to `admin_duties` holders, team inbox fallback |
 | Backup heartbeats | Better Stack, pinged by each backup job (`ops/backups/workflow.yml`) | A backup that failed **or never ran**: hourly within 90 minutes, nightly and storage within 27 hours |
 | Error capture | `app_errors` with a daily digest (plan S1, monitoring lane; to confirm once shipped) | Server errors, which Vercel Hobby keeps for only about an hour |
 

@@ -14,6 +14,7 @@
 
 # Build and migration gates
 /scripts/check-*.mjs                @aussie-spaceman
+/scripts/lint-staff-word.mjs        @aussie-spaceman
 
 # Structural guard and gate tests
 /test/route-guards.test.ts          @aussie-spaceman

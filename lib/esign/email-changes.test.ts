@@ -17,7 +17,7 @@ vi.mock('@/lib/esign/bounce-notices', async (orig) => ({
   announceSuggestion,
 }))
 
-import { correctFromRosterEdit, organiserCorrect, organiserDecide, organiserView, staffDecide, submitLink, viewLink } from './email-changes'
+import { correctFromRosterEdit, organiserCorrect, organiserDecide, organiserView, crewDecide, submitLink, viewLink } from './email-changes'
 import { createChangeLink } from './email-change-tokens'
 
 const TEACHER = { id: 'm-teacher', email: 'teacher@school.test' }
@@ -263,7 +263,7 @@ describe('deciding a suggestion', () => {
     const fake = setup()
     const id = await pending(fake, 'olive@school.test')
     expect(await organiserDecide(fake.client, { member: TEACHER, registrationId: 'reg-1', changeId: id, decision: 'approve' })).toMatchObject({ ok: false, code: 'STUDENT_ADDRESS' })
-    expect(await staffDecide(fake.client, { agreementId: 'agr-1', changeId: id, decision: 'approve', memberId: 'm-admin', label: 'Admin' })).toEqual({ ok: true, decision: 'approve' })
+    expect(await crewDecide(fake.client, { agreementId: 'agr-1', changeId: id, decision: 'approve', memberId: 'm-admin', label: 'Admin' })).toEqual({ ok: true, decision: 'approve' })
   })
 
   it("another group's organiser cannot decide it", async () => {
@@ -276,7 +276,7 @@ describe('deciding a suggestion', () => {
   it('a rejection changes nothing on the form', async () => {
     const fake = setup()
     const id = await pending(fake, 'ash@home.test')
-    expect(await staffDecide(fake.client, { agreementId: 'agr-1', changeId: id, decision: 'reject', memberId: null, label: 'Admin' })).toEqual({ ok: true, decision: 'reject' })
+    expect(await crewDecide(fake.client, { agreementId: 'agr-1', changeId: id, decision: 'reject', memberId: null, label: 'Admin' })).toEqual({ ok: true, decision: 'reject' })
     expect(correctAgreementRecipient).not.toHaveBeenCalled()
     expect(fake.table('agreement_email_changes')[0].status).toBe('rejected')
   })
@@ -284,6 +284,6 @@ describe('deciding a suggestion', () => {
   it('staff deciding on the wrong agreement id is refused', async () => {
     const fake = setup()
     const id = await pending(fake, 'ash@home.test')
-    expect(await staffDecide(fake.client, { agreementId: 'agr-3', changeId: id, decision: 'approve', memberId: null, label: 'Admin' })).toMatchObject({ ok: false, status: 404 })
+    expect(await crewDecide(fake.client, { agreementId: 'agr-3', changeId: id, decision: 'approve', memberId: null, label: 'Admin' })).toMatchObject({ ok: false, status: 404 })
   })
 })

@@ -14,8 +14,8 @@
     "hasAdminPortalAccess",
     "isEventManagerClaims",
     "currentUserHasScope",
-    "isStaffRole",
-    "STAFF_CLERK_ROLES",
+    "isCrewRole",
+    "CREW_CLERK_ROLES",
     "portalRoleList",
     "roleTableRead"
   ],
@@ -23,7 +23,7 @@
     "files": 135,
     "sites": 190,
     "byIdiom": {
-      "STAFF_CLERK_ROLES": 1,
+      "CREW_CLERK_ROLES": 1,
       "adminName": 5,
       "canManageStoreCatalog": 14,
       "clerkRoleRead": 12,
@@ -31,8 +31,8 @@
       "currentUserIsAdmin": 17,
       "hasAdminPortalAccess": 1,
       "isAdminClaims": 77,
+      "isCrewRole": 1,
       "isEventManagerClaims": 2,
-      "isStaffRole": 1,
       "pageRequireAdmin": 1,
       "requireAdminPage": 17,
       "requireEventAccess": 28,
@@ -78,6 +78,9 @@
     "app/(stellr)/(admin)/admin/docusigns/templates/page.tsx": {
       "clerkRoleRead": 1
     },
+    "app/(stellr)/(admin)/admin/duties/page.tsx": {
+      "requireAdminPage": 1
+    },
     "app/(stellr)/(admin)/admin/email/page.tsx": {
       "requireAdminPage": 1
     },
@@ -122,9 +125,6 @@
       "requireAdminPage": 1
     },
     "app/(stellr)/(admin)/admin/schools/page.tsx": {
-      "requireAdminPage": 1
-    },
-    "app/(stellr)/(admin)/admin/staff/page.tsx": {
       "requireAdminPage": 1
     },
     "app/(stellr)/(admin)/admin/store/[id]/page.tsx": {
@@ -209,6 +209,9 @@
       "currentUserIsAdmin": 1
     },
     "app/api/admin/docusigns/route.ts": {
+      "clerkRoleRead": 1
+    },
+    "app/api/admin/duties/route.ts": {
       "clerkRoleRead": 1
     },
     "app/api/admin/email/audience/preview/route.ts": {
@@ -385,9 +388,6 @@
     "app/api/admin/schools/[id]/route.ts": {
       "isAdminClaims": 1
     },
-    "app/api/admin/staff-roles/route.ts": {
-      "clerkRoleRead": 1
-    },
     "app/api/admin/store/discounts/route.ts": {
       "canManageStoreCatalog": 3
     },
@@ -422,13 +422,13 @@
       "clerkRoleRead": 1
     },
     "lib/admin-auth.ts": {
-      "STAFF_CLERK_ROLES": 1,
+      "CREW_CLERK_ROLES": 1,
       "currentUserHasScope": 1,
       "currentUserIsAdmin": 1,
       "hasAdminPortalAccess": 1,
       "isAdminClaims": 2,
+      "isCrewRole": 1,
       "isEventManagerClaims": 1,
-      "isStaffRole": 1,
       "requireAdminPage": 1,
       "roleTableRead": 1
     },

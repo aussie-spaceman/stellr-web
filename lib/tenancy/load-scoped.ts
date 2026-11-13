@@ -471,7 +471,7 @@ export async function loadScoped<T = Record<string, unknown>>(
 
 // ── For route files (S5 C16) ─────────────────────────────────────────────────
 //
-// A file classed tenant_staff may not call .from() on a table holding tenant rows
+// A file classed tenant_crew may not call .from() on a table holding tenant rows
 // (test/route-manifest.test.ts), and that covers the legacy query loadScoped needs in
 // off and shadow modes, and the write after a load. So today's queries live here.
 
@@ -558,13 +558,13 @@ export async function loadRecord<T = Record<string, unknown>>(
  * today's read for event managers as well.
  */
 export async function loadEventRecord<T extends { event_slug?: string | null }>(
-  staff: { scope: ScopeContext; covers: (eventSlug: string | null | undefined) => boolean },
+  crew: { scope: ScopeContext; covers: (eventSlug: string | null | undefined) => boolean },
   table: string,
   id: unknown,
   opts: Omit<LoadScopedOptions<T>, 'legacy'>,
 ): Promise<LoadedRecord<T>> {
-  const loaded = await loadRecord<T>(staff.scope, table, id, opts)
-  if (loaded.ok && !staff.covers(loaded.row.event_slug)) return { ok: false, response: opts.notFound() }
+  const loaded = await loadRecord<T>(crew.scope, table, id, opts)
+  if (loaded.ok && !crew.covers(loaded.row.event_slug)) return { ok: false, response: opts.notFound() }
   return loaded
 }
 

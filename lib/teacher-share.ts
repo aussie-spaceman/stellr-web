@@ -239,9 +239,9 @@ async function refundShare(
   }
 }
 
-async function alertStaff(body: string) {
+async function alertTeam(body: string) {
   // Lazy, through the billing helper: it reaches Clerk, which the pure tests never load.
-  const { alertStaff: alert } = await import('@/lib/group-billing')
+  const { alertTeam: alert } = await import('@/lib/group-billing')
   await alert(body)
 }
 
@@ -263,7 +263,7 @@ export async function settleShare(db: Db, stripe: Stripe, registrationId: string
   }
   const failed = results.filter((r) => r.error)
   if (failed.length > 0) {
-    await alertStaff(`Settling the teacher's cost for the ${loaded.reg.event_title ?? loaded.reg.event_slug} group: ${failed.length} refund${failed.length === 1 ? '' : 's'} couldn't be made (${failed[0].error}). Refund them in Stripe; they're recorded as manual in the refunds log.`)
+    await alertTeam(`Settling the teacher's cost for the ${loaded.reg.event_title ?? loaded.reg.event_slug} group: ${failed.length} refund${failed.length === 1 ? '' : 's'} couldn't be made (${failed[0].error}). Refund them in Stripe; they're recorded as manual in the refunds log.`)
   }
   await db.from('registrations').update({ share_settled_at: new Date().toISOString() }).eq('id', registrationId).is('share_settled_at', null)
   return { refunded: results.filter((r) => !r.error).length, failed: failed.length }
@@ -326,7 +326,7 @@ export async function unwindShares(db: Db, stripe: Stripe, registrationId: strin
   }).eq('id', registrationId)
   const failed = results.filter((r) => r.error)
   if (failed.length > 0) {
-    await alertStaff(`The ${loaded.reg.event_title ?? loaded.reg.event_slug} group stopped sharing the teacher's cost, but ${failed.length} share refund${failed.length === 1 ? '' : 's'} couldn't be made (${failed[0].error}). Refund them in Stripe; they're recorded as manual in the refunds log.`)
+    await alertTeam(`The ${loaded.reg.event_title ?? loaded.reg.event_slug} group stopped sharing the teacher's cost, but ${failed.length} share refund${failed.length === 1 ? '' : 's'} couldn't be made (${failed[0].error}). Refund them in Stripe; they're recorded as manual in the refunds log.`)
   }
   return { refunded: results.length - failed.length, failed: failed.length }
 }

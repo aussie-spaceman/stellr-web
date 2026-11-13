@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 
 const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn(async () => ({ id: 're_1' })) }))
-vi.mock('@/lib/email', () => ({ sendEmail, staffAlertEmail: () => 'staff@example.test' }))
+vi.mock('@/lib/email', () => ({ sendEmail, teamInboxEmail: () => 'staff@example.test' }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => { throw new Error('no env in tests') } }))
 
 import {

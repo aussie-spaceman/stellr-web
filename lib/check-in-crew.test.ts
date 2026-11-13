@@ -10,7 +10,7 @@ import type { MentorContact } from '@/lib/event-emails/audiences'
 const { contacts } = vi.hoisted(() => ({ contacts: { current: [] as MentorContact[] } }))
 vi.mock('@/lib/event-emails/audiences', () => ({ loadMentorContacts: async () => contacts.current }))
 
-const { loadDeskStaff, loadStaffCheckIns, writeStaffCheckIn } = await import('./check-in-staff')
+const { loadDeskCrew, loadCrewCheckIns, writeCrewCheckIn } = await import('./check-in-crew')
 const { fakeSupabase } = await import('@/test/fake-supabase')
 
 const VOL = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -27,7 +27,7 @@ function seeded(extra: Record<string, unknown[]> = {}) {
     participants: [
       { member_id: ROSTERED, 'registrations.event_slug': 'nevada', 'registrations.status': 'confirmed' },
     ],
-    event_staff_check_ins: [],
+    event_crew_check_ins: [],
     ...extra,
   }).client as SupabaseClient
 }
@@ -42,10 +42,10 @@ beforeEach(() => {
   ]
 })
 
-describe('loadDeskStaff', () => {
+describe('loadDeskCrew', () => {
   it('lists each person once, as a mentor first, and leaves off anyone the People tab already has', async () => {
-    const staff = await loadDeskStaff(seeded(), 'nevada')
-    expect(staff.map((s) => [s.id, s.role])).toEqual([
+    const crew = await loadDeskCrew(seeded(), 'nevada')
+    expect(crew.map((s) => [s.id, s.role])).toEqual([
       [`v.${VOL}`, 'volunteer'],
       [`v.${BOTH}`, 'volunteer'],
       ['m.user_em', 'event_manager'],
@@ -53,41 +53,41 @@ describe('loadDeskStaff', () => {
   })
 })
 
-describe('writeStaffCheckIn', () => {
+describe('writeCrewCheckIn', () => {
   it('checks a mentor in with their member id, and a second tap keeps the first time', async () => {
     const db = seeded()
-    expect(await writeStaffCheckIn(db, 'nevada', `v.${VOL}`, { checkIn: true, at: '2026-11-07T15:00:00.000Z', by: 'clerk-desk' })).toEqual({ ok: true })
-    await writeStaffCheckIn(db, 'nevada', `v.${VOL}`, { checkIn: true, at: '2026-11-07T16:00:00.000Z', by: 'clerk-desk' })
-    const { data } = await db.from('event_staff_check_ins').select('*').eq('event_slug', 'nevada')
+    expect(await writeCrewCheckIn(db, 'nevada', `v.${VOL}`, { checkIn: true, at: '2026-11-07T15:00:00.000Z', by: 'clerk-desk' })).toEqual({ ok: true })
+    await writeCrewCheckIn(db, 'nevada', `v.${VOL}`, { checkIn: true, at: '2026-11-07T16:00:00.000Z', by: 'clerk-desk' })
+    const { data } = await db.from('event_crew_check_ins').select('*').eq('event_slug', 'nevada')
     expect(data).toHaveLength(1)
     expect(data?.[0]).toMatchObject({
-      staff_key: `v.${VOL}`, role: 'volunteer', member_id: VOL, checked_in_at: '2026-11-07T15:00:00.000Z', checked_in_by: 'clerk-desk',
+      crew_key: `v.${VOL}`, role: 'volunteer', member_id: VOL, checked_in_at: '2026-11-07T15:00:00.000Z', checked_in_by: 'clerk-desk',
     })
-    expect((await loadStaffCheckIns(db, 'nevada')).get(`v.${VOL}`)).toEqual({ checkedInAt: '2026-11-07T15:00:00.000Z', checkInMethod: 'manual' })
+    expect((await loadCrewCheckIns(db, 'nevada')).get(`v.${VOL}`)).toEqual({ checkedInAt: '2026-11-07T15:00:00.000Z', checkInMethod: 'manual' })
   })
 
   it('undo removes only that person at that event', async () => {
     const db = seeded({
-      event_staff_check_ins: [
-        { event_slug: 'nevada', staff_key: 'm.user_em', checked_in_at: 't1', check_in_method: 'manual' },
-        { event_slug: 'nevada', staff_key: `v.${VOL}`, checked_in_at: 't2', check_in_method: 'manual' },
-        { event_slug: 'colorado', staff_key: 'm.user_em', checked_in_at: 't3', check_in_method: 'manual' },
+      event_crew_check_ins: [
+        { event_slug: 'nevada', crew_key: 'm.user_em', checked_in_at: 't1', check_in_method: 'manual' },
+        { event_slug: 'nevada', crew_key: `v.${VOL}`, checked_in_at: 't2', check_in_method: 'manual' },
+        { event_slug: 'colorado', crew_key: 'm.user_em', checked_in_at: 't3', check_in_method: 'manual' },
       ],
     })
-    expect(await writeStaffCheckIn(db, 'nevada', 'm.user_em', { checkIn: false })).toEqual({ ok: true })
-    expect([...(await loadStaffCheckIns(db, 'nevada')).keys()]).toEqual([`v.${VOL}`])
-    expect([...(await loadStaffCheckIns(db, 'colorado')).keys()]).toEqual(['m.user_em'])
+    expect(await writeCrewCheckIn(db, 'nevada', 'm.user_em', { checkIn: false })).toEqual({ ok: true })
+    expect([...(await loadCrewCheckIns(db, 'nevada')).keys()]).toEqual([`v.${VOL}`])
+    expect([...(await loadCrewCheckIns(db, 'colorado')).keys()]).toEqual(['m.user_em'])
   })
 
   it('refuses a key that is malformed or names someone not on this event’s Mentors tab', async () => {
     const db = seeded()
     const at = { checkIn: true as const, at: '2026-11-07T15:00:00.000Z', by: null }
-    expect(await writeStaffCheckIn(db, 'nevada', undefined, at)).toMatchObject({ ok: false, status: 400 })
-    expect(await writeStaffCheckIn(db, 'nevada', 'x.nope', at)).toMatchObject({ ok: false, status: 400 })
-    expect(await writeStaffCheckIn(db, 'nevada', 'm.user_stranger', at)).toMatchObject({ ok: false, status: 404 })
+    expect(await writeCrewCheckIn(db, 'nevada', undefined, at)).toMatchObject({ ok: false, status: 400 })
+    expect(await writeCrewCheckIn(db, 'nevada', 'x.nope', at)).toMatchObject({ ok: false, status: 400 })
+    expect(await writeCrewCheckIn(db, 'nevada', 'm.user_stranger', at)).toMatchObject({ ok: false, status: 404 })
     // On the roster, so the People tab checks them in, not this one.
-    expect(await writeStaffCheckIn(db, 'nevada', `v.${ROSTERED}`, at)).toMatchObject({ ok: false, status: 404 })
-    const { data } = await db.from('event_staff_check_ins').select('*')
+    expect(await writeCrewCheckIn(db, 'nevada', `v.${ROSTERED}`, at)).toMatchObject({ ok: false, status: 404 })
+    const { data } = await db.from('event_crew_check_ins').select('*')
     expect(data).toEqual([])
   })
 })

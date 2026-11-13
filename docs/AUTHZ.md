@@ -6,10 +6,11 @@ Plan of record: `docs/TENANCY-S5.md`. Built by C1, C5a, C6 and C9. Code wins ove
 
 ## Where it stands
 
-**No route decides through `lib/authz` yet.** The only runtime importers are `lib/authz/role-sync.ts` and `lib/authz/role-sync-report.ts`, used by `app/api/admin/event-managers/route.ts`, `app/api/admin/staff-roles/route.ts` and `lib/deletion/execute.ts` to keep the tables in step. The conversion slices (C13 to C23) move routes on. Until then:
+**Routes now decide through `lib/authz`** (corrected 12 Nov 2026; this section used to say none did). The conversion slices since wave 3 moved them on: on `dev` at `82472e0d`, 89 files under `app/` import `@/lib/authz`, 71 of them under `app/api`, most often through `isStellrAdmin`, `requireEventRoute`, `authz`, `requireEventStaff` and `requireTenantStaff`. The role-sync helpers (`lib/authz/role-sync.ts`, `lib/authz/role-sync-report.ts`) still keep the tables in step from the staff-roles and event-managers routes and `lib/deletion/execute.ts`. What that means:
 
-- every guard in production is a legacy idiom reading the Clerk claim, `staff_roles` or `event_manager_assignments`;
-- `AUTHZ_SOURCE` changes nothing, and **a shadow window run now would show 0 mismatches because nothing is being compared**. It proves nothing.
+- **Guards are mixed.** The converted ones decide through `lib/authz`; 190 legacy sites in 135 files (`test/baselines/authz-legacy-idioms.json`) still read the Clerk claim, `staff_roles` or `event_manager_assignments` directly, until the remaining slices (to C23) and C25.
+- **`AUTHZ_SOURCE=shadow` now compares real decisions** on the converted routes, so a shadow window is evidence for those routes and silent on the legacy ones. Until a flip, `clerk` decides everywhere. `GET /api/admin/health/integrations` shows the resolved source as `tenancy.authzSource` (S5 wave 7, O1).
+- **No shadow window has run in a hosted environment.** Wave 7's P3 is the first, a 7-day rehearsal on `dev` that starts counting only once the first expected canary mismatch row appears, which proves the switch took effect (`docs/TENANCY-S5.md`, Wave 7 status).
 
 `npx tsx scripts/authz-idioms.mjs` measures what is left (`test/baselines/authz-legacy-idioms.json`). Authorisation has converged when that baseline reaches 0, at C25. The flip may be the first S6 step.
 

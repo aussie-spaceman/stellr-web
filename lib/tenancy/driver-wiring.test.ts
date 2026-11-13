@@ -14,6 +14,8 @@ import { importClosure, importClosureOf, readRepoFile, runtimeImports } from '..
 
 const DB = 'lib/tenancy/db.ts'
 const DRIVER = 'lib/tenancy/driver.ts'
+const HEALTH = 'app/api/admin/health/integrations/route.ts'
+const CANARY_SCRIPT = 'scripts/tenant-db-canary.ts'
 const PG = /^postgres(\/|$)/
 
 const SKIP = new Set(['node_modules', '.next', '.git', 'coverage', 'storybook-static', 'dist', 'out', '.vercel', 'playwright-report', 'test-results', '.stryker-tmp', 'reports', '.claude'])
@@ -78,21 +80,30 @@ describe('the tenant database driver stays server-side and off by default', () =
     ])
   })
 
-  it('the driver is loaded only by lib/tenancy/db.ts, and only with a dynamic import', { timeout: 30_000 }, () => {
+  it('the driver is loaded only by lib/tenancy/db.ts and the health route, each only with a dynamic import', { timeout: 30_000 }, () => {
     const importers = files
       .filter((f) => f.path !== DRIVER && f.src.includes('driver') && runtimeImports(f.path, f.src).some((s) => /(?:^|\/)tenancy\/driver$|^\.\/driver$/.test(s)))
       .map((f) => f.path)
-    // The kit (C12) imports it only to close the pools after a run.
+    // The kit (C12) imports it only to close the pools after a run. The health
+    // route (O3) loads it for tenantDbConfigStatus, and only with the flag on.
+    // The canary script (O3) is the owner's, run by hand, and never bundled.
     expect(importers.sort()).toEqual([
+      HEALTH,
       DB,
       'lib/tenancy/driver-tls.test.ts',
       'lib/tenancy/driver.test.ts',
+      CANARY_SCRIPT,
       'test/integration/tenant-db.int.test.ts',
       'test/integration/two-tenant/kit.ts',
     ])
     const db = readFileSync(DB, 'utf8')
     expect(runtimeImports(DB, db, { staticOnly: true })).not.toContain('./driver')
     expect(db).toMatch(/await import\('\.\/driver'\)/)
+    const health = readFileSync(HEALTH, 'utf8')
+    expect(runtimeImports(HEALTH, health, { staticOnly: true })).not.toContain('@/lib/tenancy/driver')
+    // The one load, behind the flag: isTenantDbEnabled() ? … await import(driver) … : the report as it was.
+    expect(withoutComments(health).match(/import\('@\/lib\/tenancy\/driver'\)/g)).toHaveLength(1)
+    expect(withoutComments(health)).toMatch(/isTenantDbEnabled\(\)\s*\?[^?]{0,200}await import\('@\/lib\/tenancy\/driver'\)/)
   })
 
   it('the driver is server-only and takes nothing at run time from db.ts', () => {

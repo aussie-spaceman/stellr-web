@@ -34,6 +34,11 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
+// The tenant database driver (S5 wave 7, O3): the real module, counted each time
+// it is loaded (vi.doMock below), so a test can see the route load it only with
+// TENANT_DB_ENABLED on.
+const driverLoads = vi.hoisted(() => ({ count: 0 }))
+
 import { defaultTenancyReport, SWITCHES } from '@/lib/tenancy/flags'
 import { GET } from './route'
 
@@ -128,8 +133,10 @@ describe('GET /api/admin/health/integrations — tenancy', () => {
   const FIELD_CRYPTO_KEYS = ['FIELD_CRYPTO_MASTER_KEY', 'FIELD_CRYPTO_KEY_ID', 'FIELD_CRYPTO_PREVIOUS_MASTER_KEY', 'FIELD_CRYPTO_PREVIOUS_KEY_ID']
   const asAdmin = () => authMock.mockResolvedValue({ userId: 'u-admin', sessionClaims: { metadata: { role: 'admin' } } })
 
+  const TENANT_DB_SECRETS = ['TENANT_DATABASE_URL', 'TENANT_DATABASE_CA_CERT']
+
   beforeEach(() => {
-    for (const name of [...Object.values(SWITCHES).map((s) => s.name), ...FIELD_CRYPTO_KEYS]) vi.stubEnv(name, undefined)
+    for (const name of [...Object.values(SWITCHES).map((s) => s.name), ...FIELD_CRYPTO_KEYS, ...TENANT_DB_SECRETS]) vi.stubEnv(name, undefined)
     vi.spyOn(console, 'error').mockImplementation(() => {})
     asAdmin()
   })
@@ -210,7 +217,12 @@ describe('GET /api/admin/health/integrations — tenancy', () => {
     expect(tenancy.authzSource).toEqual({ value: 'clerk', unrecognised: true })
     expect(tenancy.rateLimitStore).toEqual({ mode: 'memory', secretUsable: true })
     expect(tenancy.fieldCryptoMode).toBe('shadow')
-    expect(tenancy.tenantDb).toEqual({ enabled: true, areas: [{ area: 'events-config', path: 'shadow', sample: 0.25 }], ignoredEntries: 1 })
+    expect(tenancy.tenantDb).toEqual({
+      enabled: true,
+      areas: [{ area: 'events-config', path: 'shadow', sample: 0.25 }],
+      ignoredEntries: 1,
+      config: { url: 'missing', ca: 'missing' },
+    })
     expect(tenancy.routing).toEqual({ enabled: true, suffixError: null })
     expect(tenancy.unrecognised).toEqual([
       'AUTHZ_SOURCE',
@@ -222,5 +234,68 @@ describe('GET /api/admin/health/integrations — tenancy', () => {
       'TENANT_DB_AREAS',
     ])
     expect(tenancy.invalidCombinations).toEqual([])
+  })
+
+  // O3: the URL and CA checks, only with the flag on, as 'ok' or a fixed reason.
+  describe('tenancy.tenantDb.config (O3)', () => {
+    // Placeholders built at run time: a pooler-shaped URL and a self-signed root
+    // whose key was discarded (the driver tests' TEST_CA).
+    const POOLER_URL = ['postgres://tenant_app_login.placeholderref:', 'pw-placeholder-o3', '@db.placeholder-o3.example.com:6543/postgres'].join('')
+    const CA = [
+      '-----BEGIN CERTIFICATE-----',
+      'MIIBgjCCASigAwIBAgIUALfgo5LYX5L0C3UWJPyP7b0uS08wCgYIKoZIzj0EAwIw',
+      'HjEcMBoGA1UEAwwTc3RlbGxyLXRlc3Qtcm9vdC1jYTAgFw0yNjExMTAxNTM1NTNa',
+      'GA8yMTI2MTAxNzE1MzU1M1owHjEcMBoGA1UEAwwTc3RlbGxyLXRlc3Qtcm9vdC1j',
+      'YTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABA0xyYAYw+X/pdt8y4KvJM30LISZ',
+      'bj1pDUsSG+WBai7YkxDcO34BUY248lJFBy770jim37+3IdyaClHH/2wI8mWjQjBA',
+      'MB0GA1UdDgQWBBTNi5qtSkN1FNswBXKqpxSSXht35zAPBgNVHRMBAf8EBTADAQH/',
+      'MA4GA1UdDwEB/wQEAwIBBjAKBggqhkjOPQQDAgNIADBFAiBJ1s59a959QUA5MjTt',
+      'Nc9/XyTikoqN6z/yEPa9ipIQZwIhALMguIhzXmmwVL4G1MGd3fv2kqAVQw9tDRxr',
+      'qwTU41My',
+      '-----END CERTIFICATE-----',
+    ].join('\n')
+
+    /** A fresh copy of the route, so the driver's load count starts from nothing. */
+    async function freshGet() {
+      vi.resetModules()
+      vi.doMock('@/lib/tenancy/driver', async (importOriginal) => {
+        driverLoads.count++
+        return importOriginal()
+      })
+      const before = driverLoads.count
+      const { GET: fresh } = await import('./route')
+      const text = await (await fresh()).text()
+      return { text, body: JSON.parse(text), loads: driverLoads.count - before }
+    }
+
+    it('with TENANT_DB_ENABLED unset or not exactly true, loads no driver and adds nothing, even with the URL set', async () => {
+      vi.stubEnv('TENANT_DATABASE_URL', 'not a url')
+      for (const flag of [undefined, 'TRUE', '1']) {
+        vi.stubEnv('TENANT_DB_ENABLED', flag)
+        const { body, loads } = await freshGet()
+        expect(loads).toBe(0)
+        expect(body.tenancy.tenantDb).toEqual({ enabled: false, areas: [], ignoredEntries: 0 })
+      }
+    })
+
+    it('with the flag on, reports each check as ok or a fixed reason, never the URL, the password or the PEM', async () => {
+      vi.stubEnv('TENANT_DB_ENABLED', 'true')
+      const cases: [string | undefined, string | undefined, { url: string; ca: string }][] = [
+        [undefined, undefined, { url: 'missing', ca: 'missing' }],
+        [`${POOLER_URL}?sslmode=verify-full`, CA, { url: 'ok', ca: 'ok' }],
+        [`${POOLER_URL}?sslmode=require`, CA, { url: 'not-verify-full', ca: 'ok' }],
+        [`${POOLER_URL}?sslmode=verify-full`, 'not a certificate', { url: 'ok', ca: 'unreadable' }],
+        ['postgres://tenant_app_login:pw-placeholder-o3@127.0.0.1:54322/postgres', undefined, { url: 'ok', ca: 'not-needed' }],
+      ]
+      for (const [url, ca, want] of cases) {
+        vi.stubEnv('TENANT_DATABASE_URL', url)
+        vi.stubEnv('TENANT_DATABASE_CA_CERT', ca)
+        const { text, body, loads } = await freshGet()
+        expect(loads).toBe(1)
+        expect(body.tenancy.tenantDb.config).toEqual(want)
+        expect(text).not.toMatch(/pw-placeholder-o3|placeholder-o3\.example|placeholderref|BEGIN CERTIFICATE|MIIB|not a certificate/)
+        expect(body.ok).toBe(true)
+      }
+    })
   })
 })

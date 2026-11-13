@@ -43,4 +43,10 @@ export const TENANT_DB_CALLERS: readonly string[] = [
   // through the kit and this module, so it is not listed itself.
   'lib/events/admin-config.ts',
   'lib/events/admin-config.test.ts',
+  // The pooler TLS canary (S5 wave 7, O3): a script the owner runs by hand
+  // against the dev pooler, through tenantDb as the app runs it. Never bundled:
+  // scripts/tenant-db-canary.test.ts holds lib/, app/, components/ and packages/
+  // to not importing it, and drives it over a stand-in driver (it reaches
+  // tenantDb only through the script, so it is not listed itself).
+  'scripts/tenant-db-canary.ts',
 ]

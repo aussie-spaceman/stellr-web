@@ -1,5 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// A refused TENANT_DATABASE_URL writes one 'TENANTDB config' row (O3), through
+// these two. Stood in for, so a refusal here never reaches app_errors.
+vi.mock('@/lib/after-response', () => ({ runAfterResponse: () => {} }))
+vi.mock('@/lib/app-errors', () => ({ recordBuiltAppError: async () => true, routeLabel: () => '', errorDigest: () => '' }))
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, normalize } from 'node:path'
 import {

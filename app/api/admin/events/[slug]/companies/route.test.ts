@@ -115,6 +115,29 @@ describe('GET /api/admin/events/[slug]/companies — a failed read', () => {
       logged.mockRestore()
     }
   })
+
+  // S5 wave 7, O3: with the area on tenantDb and a refused URL, the log names the
+  // fixed reason (the error's code), never the URL or its password.
+  it('on tenantDb with a refused URL, logs the refusal reason as the code, never the URL', async () => {
+    const url = ['postgres://tenant_app_login.placeholderref:', 'pw-placeholder-o3', '@db.placeholder-o3.example.com:6543/postgres?sslmode=require'].join('')
+    vi.stubEnv('TENANT_DB_ENABLED', 'true')
+    vi.stubEnv('TENANT_DB_AREAS', 'events-config:tenant')
+    vi.stubEnv('TENANT_DATABASE_URL', url)
+    vi.stubEnv('TENANT_DATABASE_CA_CERT', undefined)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const res = await GET(new Request('https://app.stellreducation.org/api/admin/events/event-a/companies'), {
+        params: Promise.resolve({ slug: 'event-a' }),
+      })
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({ error: 'Database error' })
+      expect(logged).toHaveBeenCalledWith('[companies] list failed:', 'tenantdb_config_not_verify_full')
+      expect(JSON.stringify(logged.mock.calls)).not.toMatch(/pw-placeholder-o3|placeholder-o3\.example|placeholderref/)
+    } finally {
+      logged.mockRestore()
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 describe('POST /api/admin/events/[slug]/companies — move', () => {

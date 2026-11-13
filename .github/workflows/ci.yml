@@ -866,7 +866,7 @@ jobs:
           run=true
           if [ "$EVENT" = pull_request ]; then
             files=$(git diff --name-only --no-renames HEAD^1 HEAD || true)
-            if [ -n "$files" ] && ! echo "$files" | grep -qE '^supabase/|^lib/tenancy/|^lib/events/admin-config\.ts$|^app/api/admin/events/\[slug\]/(companies|offerings|merch/commit)/route\.ts$|^test/integration/|^scripts/ci-db-build\.sh$|^vitest\.integration\.config\.mts$|^package(-lock)?\.json$|^\.github/workflows/ci\.yml$'; then
+            if [ -n "$files" ] && ! echo "$files" | grep -qE '^supabase/|^lib/tenancy/|^lib/events/admin-config\.ts$|^app/api/admin/events/\[slug\]/(companies|offerings|merch/commit)/route\.ts$|^test/integration/|^scripts/ci-db-build\.sh$|^scripts/tenant-db-canary\.ts$|^vitest\.integration\.config\.mts$|^package(-lock)?\.json$|^\.github/workflows/ci\.yml$'; then
               run=false
               echo "No change to the database, lib/tenancy or this job: tenant-db skipped." >> "$GITHUB_STEP_SUMMARY"
             fi

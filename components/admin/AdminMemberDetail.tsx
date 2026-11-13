@@ -756,12 +756,9 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           <Collapsible id="school" title="School" summary={currentSchool?.schools.name ?? 'None linked'} bodyClassName="p-5">
             {currentSchool ? (
               <div className="text-sm">
-                <Link
-                  href={`/admin/schools/${currentSchool.school_id}`}
-                  className="font-medium text-brand-blue hover:text-brand-blue"
-                >
+                <SchoolLink schoolId={currentSchool.school_id} className="font-medium">
                   {currentSchool.schools.name}
-                </Link>
+                </SchoolLink>
                 {(currentSchool.schools.city || currentSchool.schools.state) && (
                   <p className="text-brand-muted-soft mt-0.5">
                     {[currentSchool.schools.city, currentSchool.schools.state].filter(Boolean).join(', ')}

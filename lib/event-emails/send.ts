@@ -26,6 +26,7 @@ import {
 import { MAX_RECIPIENTS_PER_SEND, type EventEmailRow, type EventEmailStatus } from './types'
 import { isTenantRow, TENANT_SENDER_REQUIRED, type EventSender } from './tenant-mail'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { surveySendsHeld } from '@/lib/survey/hold'
 
 // S5 B14: defined in tenant-mail.ts since the signing engine refuses with it too.
 export { TENANT_SENDER_REQUIRED }
@@ -81,13 +82,20 @@ export async function loadEventForEmail(slug: string): Promise<EventForEmail | n
  * The event-level merge values for this email: the event's details, plus the
  * award winners and champion company when the email uses them (read once per
  * send, not per recipient).
+ *
+ * Another tenant's event gets no {{feedback_link}} while its survey is held
+ * (lib/survey/hold.ts, decided from the email row's tenant_id already in hand, no
+ * read): the survey page would answer its token as nobody's, so the value is
+ * empty and renderEventEmail leaves out the line that carries it. Stellr's (a
+ * NULL tenant included) keeps its link.
  */
 export async function eventVarsFor(
   db: SupabaseClient,
-  email: Pick<EventEmailRow, 'subject' | 'body_json'>,
+  email: Pick<EventEmailRow, 'subject' | 'body_json' | 'tenant_id'>,
   event: EventForEmail,
 ): Promise<Record<string, string>> {
   const vars = eventMergeVars(event)
+  if (surveySendsHeld(email.tenant_id ?? STELLR_TENANT_ID)) vars.feedback_link = ''
   const used = new Set([...extractTokens(email.subject), ...extractTokens(JSON.stringify(email.body_json ?? ''))])
   if (AWARD_MERGE_TOKENS.some((t) => used.has(t))) Object.assign(vars, await loadAwardMergeVars(db, event.slug))
   return vars

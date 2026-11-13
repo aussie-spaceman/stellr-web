@@ -10,9 +10,16 @@
  * Every survey send path asks surveySendsHeld, from the distribution row already in hand:
  * no read. Stellr's surveys (a NULL tenant is Stellr's) are not held and send as before.
  *
+ * The same predicate hides the links to another tenant's survey that are not sent as survey
+ * email (owner decision, 13 Nov 2026): an event email's {{feedback_link}} is left out
+ * (lib/event-emails/send.ts eventVarsFor, from the email row's tenant_id, and render.ts
+ * omitHeldLinks drops the line that carries it), and the participant's check-in page shows
+ * no survey (lib/check-in-view.ts, from distributionTenant(d)). Neither reads anything more.
+ *
  * Lift it when tenant-host survey links exist: linksFor builds each link on the
  * distribution's own tenant host, and that host's survey pages and routes serve the token.
- * Lifting is this predicate alone; held invitations are still queued and send on the next run.
+ * Lifting is this predicate alone; held invitations are still queued and send on the next run,
+ * and the links above come back with it.
  */
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 

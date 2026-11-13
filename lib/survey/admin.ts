@@ -8,6 +8,7 @@ import { distributionForEvent, ensureDistribution, planFor, statusNow, type Dist
 import { loadSurveyEvent } from './events'
 import { autoOpensAt, closesAtFor, lateOpenDeadline } from './schedule'
 import { buildRecipientPlan, type RecipientPlan } from './recipients'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 export interface CompletionRow {
   invitationId: string
@@ -64,7 +65,18 @@ export interface AdminSurveyView {
   rows: CompletionRow[]
 }
 
-export async function adminSurveyView(db: SupabaseClient, slug: string, now = new Date()): Promise<AdminSurveyView> {
+/**
+ * `eventTenant` is the event's owner, for the late-open preview: with no distribution yet
+ * there is no row to read it from, and another tenant's preview leaves out its
+ * consent-pending students as the plan made on opening would (S5 A10b). It is asked only
+ * for that preview. Left out, the event is Stellr's and nothing is read.
+ */
+export async function adminSurveyView(
+  db: SupabaseClient,
+  slug: string,
+  now = new Date(),
+  eventTenant: () => Promise<string> = async () => STELLR_TENANT_ID,
+): Promise<AdminSurveyView> {
   let d = await distributionForEvent(db, slug)
   let reason: string | null = null
   // Keep it in step with Sanity (date moved, cancelled) — or create it, for an
@@ -81,7 +93,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     let lateOpen: AdminSurveyView['lateOpen'] = null
     const deadline = event?.lastDay && !event.cancelled && reason === 'past event' ? lateOpenDeadline(event.lastDay, event.timeZone, now) : null
     if (event?.lastDay && deadline) {
-      const plan = await buildRecipientPlan(db, slug, event.lastDay, ['student', 'mentor', 'adult'], { acceptOlderMinorAgreements: true })
+      const plan = await buildRecipientPlan(db, slug, event.lastDay, ['student', 'mentor', 'adult'], { acceptOlderMinorAgreements: true }, await eventTenant())
       const byRole = { student: 0, mentor: 0, adult: 0 }
       for (const p of plan.invitable) byRole[p.role]++
       lateOpen = {

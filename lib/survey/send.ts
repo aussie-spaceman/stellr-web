@@ -7,11 +7,19 @@
  * send_attempts from the value read, a reminder by bumping its counter from
  * the value read. A second runner reading the same row loses the claim and
  * skips it, so nobody gets the same email twice.
+ *
+ * Another tenant's survey re-checks guardian consent when it sends (S5 A10b): an
+ * invitation of a participant whose guardian has not signed that tenant's consent form
+ * (the student's, or the guardian's on their behalf) is never sent for that event
+ * (decision W7-13, default), even if it was made before the plan left them out. That holds
+ * for every path that mails one: the queued send, the reminders, an admin's resend and the
+ * QR page's "email me my link". Stellr's surveys read no guardian consent.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { EmailSendError, sendEmail } from '@/lib/email'
 import { AUTH_APP_URL } from '@/lib/env'
-import type { DistributionRow } from './distributions'
+import { distributionTenant, type DistributionRow } from './distributions'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import type { SurveyDefinition } from './definition'
 import { renderSurveyEmail, type SurveyEmailKind } from './emails'
 import { dueReminder, type ReminderKind } from './schedule'
@@ -58,6 +66,8 @@ export interface InvitationRow {
   last_reminder_at: string | null
   reminders_opted_out_at: string | null
   created_at: string
+  /** The survey's tenant, inherited from its distribution (S5). NULL is Stellr's. */
+  tenant_id: string | null
 }
 
 export function linksFor(inv: Pick<InvitationRow, 'id' | 'token_version'>) {
@@ -96,6 +106,23 @@ async function deliver(inv: InvitationRow, d: DistributionRow, def: SurveyDefini
   })
 }
 
+/**
+ * The participants another tenant's survey may not send to, read once per pass. Null for
+ * Stellr's survey, which reads nothing. A failed read throws, so nothing is sent on a guess.
+ */
+export async function heldForConsent(db: SupabaseClient, d: DistributionRow): Promise<Set<string> | null> {
+  const tenantId = distributionTenant(d)
+  if (tenantId === STELLR_TENANT_ID) return null
+  const { unconsentedParticipantIds } = await import('@/lib/registration/tenant-guardian-consent')
+  return unconsentedParticipantIds(db, tenantId)
+}
+
+/** Is the invitation one heldForConsent's set holds back? Null (Stellr's survey) holds nothing. */
+export const isHeld = (held: Set<string> | null, inv: Pick<InvitationRow, 'participant_id'>) => !!held && !!inv.participant_id && held.has(inv.participant_id)
+
+/** What an admin's resend answers for a held invitation. */
+export const HELD_FOR_CONSENT = 'Not sent: this student’s guardian hasn’t signed the consent form, so the survey isn’t sent for this event.'
+
 export interface SendTally {
   invited: number
   reminded: number
@@ -129,6 +156,7 @@ export async function sendQueued(
     .order('created_at')
     .limit(200)
   if (error) throw new Error(`Reading queued invitations failed: ${error.message}`)
+  const held = data?.length ? await heldForConsent(db, d) : null
 
   for (const inv of (data ?? []) as InvitationRow[]) {
     if (tally.quotaHit) break
@@ -136,7 +164,7 @@ export async function sendQueued(
       tally.deferred++
       continue
     }
-    if (!stillInvitable.has(inv.recipient_key)) {
+    if (!stillInvitable.has(inv.recipient_key) || isHeld(held, inv)) {
       await db.from('survey_invitations').update({ status: 'expired' }).eq('id', inv.id).eq('status', 'queued')
       continue
     }
@@ -187,10 +215,11 @@ export async function sendReminders(
     .is('reminders_opted_out_at', null)
     .limit(1000)
   if (error) throw new Error(`Reading invitations for reminders failed: ${error.message}`)
+  const held = data?.length ? await heldForConsent(db, d) : null
 
   for (const row of (data ?? []) as (InvitationRow & { survey_responses: { last_saved_at: string | null }[] | { last_saved_at: string | null } | null })[]) {
     if (tally.quotaHit) break
-    if (!stillInvitable.has(row.recipient_key)) continue
+    if (!stillInvitable.has(row.recipient_key) || isHeld(held, row)) continue
     const resp = Array.isArray(row.survey_responses) ? row.survey_responses[0] : row.survey_responses
     const kind = dueReminder(row, d, now, resp?.last_saved_at ?? null)
     if (!kind) continue
@@ -228,6 +257,7 @@ async function claimReminder(db: SupabaseClient, inv: InvitationRow, kind: Remin
 /** Admin "resend" to one person: the invitation again, outside the cadence. */
 export async function resendInvitation(db: SupabaseClient, inv: InvitationRow, d: DistributionRow, def: SurveyDefinition): Promise<{ ok: boolean; error?: string }> {
   if (inv.status === 'submitted') return { ok: false, error: 'Already submitted.' }
+  if (isHeld(await heldForConsent(db, d), inv)) return { ok: false, error: HELD_FOR_CONSENT }
   if (!(await claimBudget(db))) return { ok: false, error: 'Today’s survey email budget is spent. Try again tomorrow.' }
   try {
     await deliver(inv, d, def, inv.status === 'started' ? 'resume' : 'invite')
@@ -245,8 +275,19 @@ export async function resendInvitation(db: SupabaseClient, inv: InvitationRow, d
   }
 }
 
-/** The QR page's "email me my link": the same link, to the address on file. */
-export async function sendLinkEmail(db: SupabaseClient, inv: InvitationRow, d: DistributionRow, def: SurveyDefinition): Promise<boolean> {
+/**
+ * The QR page's "email me my link": the same link, to the address on file. A held
+ * invitation is not sent. `held` is heldForConsent's answer when the caller already has
+ * it (one read for several invitations); left out, it is read here.
+ */
+export async function sendLinkEmail(
+  db: SupabaseClient,
+  inv: InvitationRow,
+  d: DistributionRow,
+  def: SurveyDefinition,
+  held?: Set<string> | null,
+): Promise<boolean> {
+  if (isHeld(held === undefined ? await heldForConsent(db, d) : held, inv)) return false
   if (!(await claimBudget(db))) return false
   try {
     await deliver(inv, d, def, 'link')

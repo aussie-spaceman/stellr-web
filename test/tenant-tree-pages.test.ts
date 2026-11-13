@@ -83,7 +83,7 @@ describe('the tenant page tree', () => {
     const walked = closure(treeFiles())
     expect(walked.size).toBeGreaterThan(100)
     for (const file of [
-      'app/(stellr)/(flow)/survey/[token]/page.tsx',
+      'app/(stellr)/(flow)/survey/[token]/survey-body.tsx',
       'app/(stellr)/(flow)/register/[slug]/individual/individual-body.tsx',
       'app/(stellr)/(flow)/register/[slug]/confirmation/confirmation-body.tsx',
       'lib/survey/access.ts',

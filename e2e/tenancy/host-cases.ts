@@ -113,13 +113,17 @@ export const RECORD_PAGES: RecordPageCase[] = [
     path: (o) => `/survey/${o.surveyToken}`,
     missing: `/survey/${MISSING_TOKEN}`,
     ownHost: { kind: 'shows', text: eventTitle },
-    onStellrHost: { kind: 'answers', owner: 'A10', text: eventTitle },
+    // Stellr's page answers another tenant's link as unknown straight after the invitation
+    // is read (A10b); survey-body.test.ts runs it with an open survey.
+    onStellrHost: { kind: 'sameAsUnknown', owner: 'A10' },
   },
   {
     file: 'app/(stellr)/(flow)/survey/[token]/stop-reminders/page.tsx',
     path: (o) => `/survey/${o.surveyToken}/stop-reminders`,
     missing: `/survey/${MISSING_TOKEN}/stop-reminders`,
     ownHost: { kind: 'shows', text: () => 'Stop survey reminders' },
+    // The page reads nothing and shows the same button for any link; the stop it posts
+    // refuses another host's link (A10b).
     onStellrHost: { kind: 'sameAsUnknown', owner: 'A10' },
   },
   {
@@ -127,7 +131,8 @@ export const RECORD_PAGES: RecordPageCase[] = [
     path: (o) => `/survey/event/${o.eventSlug}`,
     missing: `/survey/event/${MISSING_SLUG}`,
     ownHost: { kind: 'shows', text: eventTitle },
-    onStellrHost: { kind: 'answers', owner: 'A10', text: eventTitle },
+    // Stellr's page answers another tenant's event as one with no survey (A10b).
+    onStellrHost: { kind: 'sameAsUnknown', owner: 'A10' },
   },
   {
     file: 'app/(stellr)/(flow)/team-profile/[token]/page.tsx',

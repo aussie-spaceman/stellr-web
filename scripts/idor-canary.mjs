@@ -86,6 +86,43 @@ export const MUTATIONS = [
     label: 'app/api/credentials/[number]/events/route.ts',
     line: /^\s*if \(!\(await recordOnHost\(cred\)\)\) return /,
   },
+  // S5 A10b. The emailed link's stop is signed out, so the host check is its only guard.
+  {
+    name: 'real tenant-host route: host check removed from POST /api/survey/[token]/stop-reminders',
+    kind: 'route',
+    suite: HOST_SUITE,
+    file: 'app/api/survey/[token]/stop-reminders/route.ts',
+    label: 'app/api/survey/[token]/stop-reminders/route.ts',
+    line: /^\s*if \(!\(await recordOnHost\(inv\)\)\) return /,
+  },
+  {
+    name: 'real tenant-host route: host check removed from POST /api/survey/event/[slug]/link',
+    kind: 'route',
+    suite: HOST_SUITE,
+    file: 'app/api/survey/event/[slug]/link/route.ts',
+    label: 'app/api/survey/event/[slug]/link/route.ts',
+    line: /^\s*if \(!\(await recordOnHost\(d\)\)\) return /,
+  },
+  // Host B's event is refused by the owner check on Stellr's host and by the host check on
+  // Canary's, so the suite sees them only together.
+  {
+    name: 'real tenant-host route: owner and host checks removed from POST /api/volunteer/interest',
+    kind: 'route',
+    suite: HOST_SUITE,
+    file: 'app/api/volunteer/interest/route.ts',
+    label: 'app/api/volunteer/interest/route.ts',
+    line: /^\s*if \(owner !== STELLR_TENANT_ID\) return |^\s*if \(!\(await recordOnHost\(\{ tenant_id: owner \}\)\)\) return /,
+    removes: 2,
+  },
+  // The member opt-out on another tenant's host.
+  {
+    name: 'real tenant-host route: host check removed from the member opt-out in POST /api/email/unsubscribe',
+    kind: 'route',
+    suite: HOST_SUITE,
+    file: 'app/api/email/unsubscribe/route.ts',
+    label: 'app/api/email/unsubscribe/route.ts',
+    line: /^\s*if \(!\(await recordOnHost\(STELLR_LIST\)\)\) return htmlResponse\('You have been/,
+  },
   {
     name: 'real route: member filter removed from DELETE /api/members/event-participations/[id]',
     kind: 'route',

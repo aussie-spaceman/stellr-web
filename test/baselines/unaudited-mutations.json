@@ -3,11 +3,11 @@
   "measuredBy": 2,
   "totals": {
     "mutatingHandlers": 286,
-    "unauditedMutations": 109,
+    "unauditedMutations": 104,
     "cronHandlers": 24,
     "unauditedCrons": 0,
     "getMutations": 18,
-    "unauditedGetMutations": 5
+    "unauditedGetMutations": 4
   },
   "mutations": [
     "app/api/admin/access/objects/[id]/contents/route.ts#DELETE",
@@ -104,11 +104,6 @@
     "app/api/stripe/membership-invoice/route.ts#POST",
     "app/api/stripe/webhook/route.ts#POST",
     "app/api/subscribe/route.ts#POST",
-    "app/api/survey/[token]/route.ts#PATCH",
-    "app/api/survey/[token]/stop-reminders/route.ts#POST",
-    "app/api/survey/[token]/submit/route.ts#POST",
-    "app/api/survey/event/[slug]/link/route.ts#POST",
-    "app/api/volunteer/interest/route.ts#POST",
     "app/api/webhooks/apollo/route.ts#POST",
     "app/api/webhooks/background/route.ts#POST",
     "app/api/webhooks/clerk/route.ts#POST",
@@ -125,7 +120,6 @@
     "app/api/members/teams/[id]/discount/route.ts#GET",
     "app/api/members/teams/[id]/payment-method/route.ts#GET",
     "app/api/members/teams/[id]/route.ts#GET",
-    "app/api/registrations/[id]/spreadsheet/route.ts#GET",
-    "app/api/survey/[token]/route.ts#GET"
+    "app/api/registrations/[id]/spreadsheet/route.ts#GET"
   ]
 }

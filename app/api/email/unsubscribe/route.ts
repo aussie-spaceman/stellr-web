@@ -5,6 +5,8 @@ import { HS, NOTIFY_STATUS } from '@/lib/hubspot-fields'
 import { verifyOptOutToken } from '@/lib/waitlist-optout'
 import { escapeHtml } from '@/lib/email-layout'
 import { auditMutation } from '@/lib/audit/route'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { recordOnHost } from '@/lib/tenancy/host-record'
 
 // /api/email/unsubscribe — marketing opt-out (no auth, per CAN-SPAM/CASL).
 // Flips marketing_consent=false; transactional mail (DocuSign, registration,
@@ -31,6 +33,20 @@ import { auditMutation } from '@/lib/audit/route'
 // because it writes again: the timestamp on the member, the status in HubSpot. It goes on
 // Stellr's chain on any host, because the list being left is Stellr's own marketing, and
 // a waitlist event names no target: the address is all that identifies the contact.
+//
+// For the same reason the opt-out is acted on only on Stellr's hosts (S5 A10b). Both lists
+// are Stellr's own (its members' marketing, its HubSpot waitlist), so another tenant's
+// host acts on none of it: a link used there gets the neutral confirmation an unknown
+// link gets, straight after the read, and neither the address nor the write is reached.
+// A members row carries no tenant (an identity record, lib/tenancy/registry.ts), so the
+// record checked is the list. On Stellr's host the token is the holder's own capability,
+// whichever other organisations they also belong to: refusing it there would answer
+// "unsubscribed" while Stellr's campaigns kept coming. That is open as decision W7-15
+// (docs/S5-DECISION-REGISTER.md), and the tenant-host baseline keeps those cases until
+// the owner answers.
+
+/** The list being left: Stellr's own, whoever the member is. */
+const STELLR_LIST = { tenant_id: STELLR_TENANT_ID }
 
 /** Pull the opt-out parameters from the query string, falling back to a POSTed form. */
 async function readParams(req: NextRequest): Promise<{ token?: string; wl?: string; e?: string }> {
@@ -77,6 +93,7 @@ async function unsubscribeMember(token: string): Promise<Response> {
     // Don't leak whether a token is valid; show a neutral confirmation.
     return htmlResponse('You have been unsubscribed from marketing emails.')
   }
+  if (!(await recordOnHost(STELLR_LIST))) return htmlResponse('You have been unsubscribed from marketing emails.')
 
   const { error } = await db
     .from('members')
@@ -113,6 +130,7 @@ async function unsubscribeMember(token: string): Promise<Response> {
 async function unsubscribeWaitlist(email: string, token: string): Promise<Response> {
   const confirmation = 'You will no longer receive event registration updates from Stellr Education.'
 
+  if (!(await recordOnHost(STELLR_LIST))) return htmlResponse(confirmation)
   if (!verifyOptOutToken(email, token)) return htmlResponse(confirmation)
 
   // `Unsubscribed` rather than `Lapsed`: the send targets `Requested` only, so

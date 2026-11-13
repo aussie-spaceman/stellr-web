@@ -64,9 +64,9 @@ vi.mock('@/app/(stellr)/(flow)/register/[slug]/pay-seat/[token]/pay-seat-body', 
 vi.mock('@/app/(stellr)/(flow)/check-in/[slug]/page', () => ({ default: function CheckIn() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/check-in/[slug]/code/page', () => ({ default: function CheckInCode() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/check-in/not-open', () => ({ checkInNotOpen: () => 'not open' }))
-vi.mock('@/app/(stellr)/(flow)/survey/[token]/page', () => ({ default: function Survey() { return null } }))
+vi.mock('@/app/(stellr)/(flow)/survey/[token]/survey-body', () => ({ SurveyBody: function Survey() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/survey/[token]/stop-reminders/page', () => ({ default: function StopReminders() { return null } }))
-vi.mock('@/app/(stellr)/(flow)/survey/event/[slug]/page', () => ({ default: function EventSurvey() { return null } }))
+vi.mock('@/app/(stellr)/(flow)/survey/event/[slug]/qr-body', () => ({ EventSurveyQrBody: function EventSurvey() { return null } }))
 vi.mock('@/app/(stellr)/(flow)/team-profile/[token]/team-profile-body', () => ({ TeamProfileBody: function TeamProfile() { return null } }))
 // The team profile page reads its session after the record check; what that read
 // refuses has its own test (team-profile-body.test.ts).
@@ -255,12 +255,16 @@ describe('the record checks, case by case', () => {
     error.mockRestore()
   })
 
-  it('reuses the Stellr page with no tenant in its params', async () => {
+  it("reuses the Stellr page's body with the token and this tenant's own id (S5 A10b), and no other params", async () => {
     const Page = await load(() => import('@/app/%5Ft/[tenant]/(flow)/survey/[token]/page'))
-    const out = (await call(Page, { tenant: 'alpha', token: TOKEN })) as ReactElement<{ params: Promise<object> }>
+    const out = (await call(Page, { tenant: 'alpha', token: TOKEN })) as ReactElement<Record<string, unknown>>
     expect(isValidElement(out)).toBe(true)
     expect(elementName(out)).toBe('Survey')
-    await expect(out.props.params).resolves.toEqual({ token: TOKEN })
+    expect(out.props).toEqual({ token: TOKEN, tenantId: A.tenantId })
+    const Qr = await load(() => import('@/app/%5Ft/[tenant]/(flow)/survey/event/[slug]/page'))
+    const qr = (await call(Qr, { tenant: 'alpha', slug: 'a-event' })) as ReactElement<Record<string, unknown>>
+    expect(elementName(qr)).toBe('EventSurvey')
+    expect(qr.props).toEqual({ slug: 'a-event', tenantId: A.tenantId })
   })
 })
 

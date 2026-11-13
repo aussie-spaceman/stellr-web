@@ -24,6 +24,7 @@ import { loadSurveyEvent } from '@/lib/survey/events'
 import { runOne } from '@/lib/survey/run'
 import { resendInvitation, type InvitationRow } from '@/lib/survey/send'
 import { loadRecord, refuseOutsideStellr, scopedRowWrite } from '@/lib/tenancy/load-scoped'
+import { loadEventTenantId } from '@/lib/authz/principal'
 
 // /api/admin/events/[slug]/survey — the event's "Survey" tab (admins and the
 // event's assigned managers; handover A1/A2).
@@ -57,7 +58,7 @@ async function readSurvey(req: Request, { params }: Ctx) {
   const refused = refuseOutsideStellr(staff.scope)
   if (refused) return refused
   const db = supabaseServer()
-  const view = await adminSurveyView(db, slug)
+  const view = await adminSurveyView(db, slug, new Date(), () => loadEventTenantId(db, slug))
   if (view.rows.length) {
     await logSurveyAccess(db, { actor: staff.userId, action: 'view', eventSlug: slug, distributionId: view.distribution?.id, rowCount: view.rows.length, detail: { what: 'completion_table' } })
   }

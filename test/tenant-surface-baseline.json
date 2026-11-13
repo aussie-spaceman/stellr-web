@@ -11,8 +11,6 @@
   ],
   "edges": [
     "app/(stellr)/(flow)/register/[slug]/page.tsx > lib/community.ts",
-    "app/(stellr)/(flow)/survey/[token]/page.tsx > lib/community.ts",
-    "app/(stellr)/(flow)/survey/event/[slug]/page.tsx > lib/community.ts",
     "app/(stellr)/(public)/credentials/[number]/page.tsx > lib/community.ts",
     "app/api/credentials/[number]/pdf/route.ts > lib/community.ts",
     "app/api/credentials/[number]/visibility/route.ts > lib/community.ts",

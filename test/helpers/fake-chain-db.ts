@@ -19,7 +19,7 @@ export interface ChainCall {
 
 export type Answer = (call: ChainCall) => { data: unknown; error: { message: string; code?: string } | null }
 
-const FILTERS = ['eq', 'neq', 'in', 'not', 'is', 'or', 'order', 'limit', 'range', 'lte', 'gte', 'lt', 'gt', 'match', 'filter']
+const FILTERS = ['eq', 'neq', 'in', 'not', 'is', 'or', 'order', 'limit', 'range', 'lte', 'gte', 'lt', 'gt', 'match', 'filter', 'ilike']
 
 export type RpcAnswer = (fn: string, args: Row) => { data: unknown; error: { message: string } | null }
 

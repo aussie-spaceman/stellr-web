@@ -198,6 +198,11 @@ describe('zones', () => {
     expect(normaliseZone(' Canary-Zone.Example.TEST. ')).toBe(ZONE)
     expect(canaryHosts('localhost')).toEqual({ mapped: 'canary.localhost', unmapped: 'nobody.localhost' })
     expect(() => normaliseZone(undefined)).toThrow(/--zone is required/)
+    // W7-27: the production tenant zone, its apex and anything under it are refused.
+    for (const z of ['events.stellreducation.org', '.Events.StellrEducation.org.', 'x.events.stellreducation.org']) {
+      expect(() => normaliseZone(z)).toThrow(/production tenant zone/)
+    }
+    expect(normaliseZone('devzone.stellreducation.org')).toBe('devzone.stellreducation.org')
     expect(() => normaliseZone('')).toThrow(/--zone is required/)
     for (const bad of ['a..b', 'bad_zone.test', '-x.test', 'x.test/path', 'x y.test', `${'a'.repeat(64)}.test`]) {
       expect(() => normaliseZone(bad)).toThrow()

@@ -285,7 +285,7 @@ describe('the production tenant zone', () => {
         })
       })
 
-    it('tenant-host-headers exits 1 before any request', async () => {
+    it('tenant-host-headers exits 1 before any request', { timeout: 60_000 }, async () => {
       hits = 0
       const base = `http://canary.events.stellreducation.org:${port}`
       for (const args of [

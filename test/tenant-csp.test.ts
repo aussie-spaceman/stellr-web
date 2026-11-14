@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { readFileSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { NextRequest, type NextFetchEvent } from 'next/server'
 import ts from 'typescript'
@@ -355,8 +356,9 @@ describe('the policy', () => {
     ])
 
     it.each(['connect-src', 'frame-src', 'img-src', 'style-src', 'worker-src', 'form-action', 'default-src'])('%s', async (name) => {
-      // Not in the package's exports map, so by path.
-      const file = '../node_modules/@clerk/nextjs/dist/esm/server/content-security-policy.js'
+      // Not in the package's exports map, so by path, found through the package's
+      // own resolution (a worktree without its own node_modules finds its parent's).
+      const file = path.join(path.dirname(createRequire(import.meta.url).resolve('@clerk/nextjs')), '..', '..', 'dist/esm/server/content-security-policy.js')
       const { createContentSecurityPolicyHeaders } = (await import(/* @vite-ignore */ file)) as {
         createContentSecurityPolicyHeaders: (host: string, options: { strict: boolean }) => { headers: [string, string][] }
       }

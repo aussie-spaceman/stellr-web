@@ -12,14 +12,22 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { getAllEvents } from '@/lib/events/repo'
+import { getAllEvents, getEventsForSurveySchedule } from '@/lib/events/repo'
 
 export type EventRow = {
   slug: string
   date: string
   endDate?: string | null
   registrationOpen?: boolean | null
+  /** Sanity's lifecycle state (lib/sanity.ts SanityEvent.status). */
+  status?: string | null
 }
+
+/**
+ * A cancelled or postponed event's page is not the page people land on, and
+ * its registration may be shut, so it is never the one measured.
+ */
+const NOT_MEASURED = new Set(['cancelled', 'postponed'])
 
 const CANDIDATES = 5
 const ORIGIN = 'http://localhost:3000'
@@ -27,8 +35,10 @@ const ORIGIN = 'http://localhost:3000'
 /**
  * The events most worth measuring, best first: upcoming with registration open
  * (the page people actually land on), other upcoming, then the most recent past.
+ * Cancelled and postponed events are left out.
  */
-export function rankEvents(events: EventRow[], today: string): string[] {
+export function rankEvents(all: EventRow[], today: string): string[] {
+  const events = all.filter((e) => !NOT_MEASURED.has(e.status ?? ''))
   const lastDay = (e: EventRow) => e.endDate ?? e.date
   const upcoming = events.filter((e) => lastDay(e) >= today).sort((a, b) => a.date.localeCompare(b.date))
   const isOpen = (e: EventRow) => e.registrationOpen === true
@@ -49,12 +59,29 @@ async function isOk(url: string): Promise<boolean> {
   }
 }
 
+type SanityRow = { slug: { current: string }; date?: string | null; endDate?: string | null; registrationOpen?: boolean | null; status?: string | null }
+
+/**
+ * The event list joined with each event's status. getAllEvents does not
+ * project `status`; the survey schedule's read does, so the two are joined by slug.
+ */
+export function toEventRows(events: SanityRow[], statuses: SanityRow[]): EventRow[] {
+  const statusBySlug = new Map(statuses.map((e) => [e.slug.current, e.status ?? null]))
+  return events
+    .filter((e): e is SanityRow & { date: string } => !!e.date)
+    .map((e) => ({
+      slug: e.slug.current,
+      date: e.date,
+      endDate: e.endDate,
+      registrationOpen: e.registrationOpen,
+      status: statusBySlug.get(e.slug.current) ?? null,
+    }))
+}
+
 async function fetchEvents(): Promise<EventRow[]> {
-  const events = await getAllEvents()
-  if (!events) throw new Error('NEXT_PUBLIC_SANITY_PROJECT_ID is not set')
-  return (events as (Omit<EventRow, 'slug'> & { slug: { current: string } })[])
-    .filter((e) => e.date)
-    .map((e) => ({ slug: e.slug.current, date: e.date, endDate: e.endDate, registrationOpen: e.registrationOpen }))
+  const [events, statuses] = await Promise.all([getAllEvents(), getEventsForSurveySchedule()])
+  if (!events || !statuses) throw new Error('NEXT_PUBLIC_SANITY_PROJECT_ID is not set')
+  return toEventRows(events as SanityRow[], statuses as SanityRow[])
 }
 
 async function chooseEventUrls(): Promise<string[]> {

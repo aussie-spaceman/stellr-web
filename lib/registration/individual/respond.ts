@@ -4,15 +4,30 @@ import { stripeClient } from '@/lib/stripe'
 import { createRegistrationCheckout, RegistrationCheckoutError, payPageUrl } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { confirmRegistration } from '@/lib/registration-confirm'
+import { SITE_URL } from '@/lib/env'
 import type { GateDeps, GatedRegistration } from './gate'
 import type { IndividualBody } from './parse'
 import type { PersistedRegistration } from './persist'
 import type { IndividualHookResult } from './stellr-hooks'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
-// Where a registrant lands afterwards — the member portal, with a flag the
-// /community page reads to pop the "registration submitted" modal.
+/**
+ * Legacy (TRACKER 8.9): nothing reads these flags, and the "registration
+ * submitted" modal they were for does not exist. Only the duplicate-resume
+ * checkout (lib/registration/individual/duplicates.ts) still uses it; new code
+ * uses individualPaidUrl.
+ */
 export const POST_REGISTER_URL = `${APP_URL}/community?registered=1&type=individual`
+
+/**
+ * Where an individual registrant lands after paying (TRACKER 8.9): the public
+ * confirmation page, where the pay page's checkout already returns
+ * (app/api/register/pay) and where the form sends a registrant it could not sign in.
+ */
+export function individualPaidUrl(eventSlug: string, registrationId: string): string {
+  const params = new URLSearchParams({ id: registrationId, type: 'individual', payment: 'success' })
+  return `${SITE_URL}/register/${encodeURIComponent(eventSlug)}/confirmation?${params.toString()}`
+}
 
 /** POST /api/register/individual, the last step: add-ons, then what is owed, then the answer. */
 export async function respondToIndividualRegistration(
@@ -78,10 +93,8 @@ export async function respondToIndividualRegistration(
       // refuses an unresolved event, and this registration's event is known.
       event: event ?? gated.event,
       customerEmail: email,
-      // After payment, land in the member portal with the registration modal —
-      // the client signs the registrant in before redirecting to Stripe, so the
-      // session cookie is already set when they return here.
-      successUrl: `${POST_REGISTER_URL}&payment=success`,
+      // After payment, the public confirmation page, as from the pay page's checkout.
+      successUrl: individualPaidUrl(event_slug, regId),
       cancelUrl: payPageUrl(event_slug, payToken, { cancelled: true }),
     })
     checkoutUrl = session.url

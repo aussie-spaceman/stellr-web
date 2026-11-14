@@ -278,3 +278,79 @@ describe('executeDeletion — crew check-ins leave with the account', () => {
     expect(deletedTables).toContain('members')
   })
 })
+
+// TRACKER 16.7: the archive snapshot is written before the Clerk login is
+// removed, so a failed archive leaves the login in place, and the snapshot reads
+// clerk_user_id before Clerk's user.deleted webhook can null it.
+describe('executeDeletion — the Clerk login goes after the archive', () => {
+  type Def = { type: string; external?: string[] }
+  // The module-level stub is typed as returning []; these tests return results.
+  const external = runExternalCleanup as unknown as ReturnType<typeof vi.fn<(...a: unknown[]) => Promise<unknown[]>>>
+  const calls = () => external.mock.calls as unknown as [Def, string, string][]
+  const clerkCallIndex = () => calls().findIndex(([def]) => (def.external ?? []).includes('clerk'))
+
+  it('a member hard delete archives, then removes the login, then deletes the row', async () => {
+    const order: string[] = []
+    archiveEntity.mockImplementationOnce(async () => { order.push('archive') })
+    external.mockImplementation(async (...args: unknown[]) => {
+      const def = args[0] as Def
+      order.push(`external:${(def.external ?? []).join('+')}`)
+      if ((def.external ?? []).includes('clerk')) {
+        // The members row is still there for the removal to read clerk_user_id.
+        expect(deletedTables).not.toContain('members')
+        return [{ kind: 'clerk', ok: true, detail: 'Deleted Clerk login' }]
+      }
+      return [{ kind: 'stripe', ok: true, detail: 'No active subscription' }]
+    })
+    try {
+      const result = await executeDeletion('member', 'mem1', { mode: 'hard' })
+      expect(order).toEqual(['external:stripe+docusign', 'archive', 'external:clerk'])
+      expect(calls()[1]).toEqual([expect.objectContaining({ type: 'member', external: ['clerk'] }), 'mem1', 'hard'])
+      expect(result.externalResults).toEqual([
+        { kind: 'stripe', ok: true, detail: 'No active subscription' },
+        { kind: 'clerk', ok: true, detail: 'Deleted Clerk login' },
+      ])
+      expect(deletedTables).toContain('members')
+    } finally {
+      external.mockImplementation(async () => [])
+    }
+  })
+
+  it('a failed archive leaves the login in place and the row undeleted', async () => {
+    archiveEntity.mockRejectedValueOnce(new Error('archive insert failed'))
+    await expect(executeDeletion('member', 'mem1', { mode: 'hard' })).rejects.toThrow('archive insert failed')
+    expect(runExternalCleanup).toHaveBeenCalledTimes(1)
+    expect(calls()[0][0].external).toEqual(['stripe', 'docusign'])
+    expect(clerkCallIndex()).toBe(-1)
+    expect(deletedTables).not.toContain('members')
+  })
+
+  it('the archive-free pending-consent purge still removes the login, before the row', async () => {
+    pendingConsentRow = { member_id: 'mem1' }
+    external.mockImplementation(async (...args: unknown[]) => {
+      if (((args[0] as Def).external ?? []).includes('clerk')) expect(deletedTables).not.toContain('members')
+      return []
+    })
+    try {
+      await executeDeletion('pending_consent_member', 'mem1', { mode: 'hard', deletedBy: null })
+      expect(archiveEntity).not.toHaveBeenCalled()
+      expect(calls().map(([def]) => def.external)).toEqual([['stripe', 'docusign'], ['clerk']])
+      expect(deletedTables).toContain('members')
+    } finally {
+      external.mockImplementation(async () => [])
+    }
+  })
+
+  it('a soft delete runs the external cleanup once, as before (Clerk is hard-only inside it)', async () => {
+    await executeDeletion('member', 'mem1', { mode: 'soft' })
+    expect(runExternalCleanup).toHaveBeenCalledTimes(1)
+    expect(calls()[0]).toEqual([expect.objectContaining({ type: 'member', external: ['stripe', 'docusign', 'clerk'] }), 'mem1', 'soft'])
+    expect(archiveEntity).not.toHaveBeenCalled()
+  })
+
+  it('an entity with no Clerk step makes one external call', async () => {
+    await executeDeletion('participant', 'p1', { mode: 'hard' })
+    expect(runExternalCleanup).toHaveBeenCalledTimes(1)
+    expect(clerkCallIndex()).toBe(-1)
+  })
+})

@@ -113,7 +113,11 @@ const FULL_OFFER = { id: 'offer-1', event_slug: 'colorado', email: 'kid@example.
 const HALF_OFFER = { ...FULL_OFFER, percent_off: 50 }
 const PRICED = { ...OPEN_EVENT, stripePriceId: 'price_1' }
 const UNAVAILABLE = 'Registration is temporarily unavailable. Please try again shortly.'
-const SUCCESS_URL = 'https://app.stellreducation.org/community?registered=1&type=individual&payment=success'
+// TRACKER 8.9: a new registration's checkout returns to the public confirmation
+// page, like the pay page's. The duplicate-resume checkout still uses the old
+// landing (lib/registration/individual/duplicates.ts, outside that fix).
+const SUCCESS_URL = 'https://www.stellreducation.org/register/colorado/confirmation?id=reg-1&type=individual&payment=success'
+const RESUME_SUCCESS_URL = 'https://app.stellreducation.org/community?registered=1&type=individual&payment=success'
 
 /** The writes and hooks of a new adult's registration, up to the add-on pricing. */
 const HAPPY = [
@@ -466,7 +470,7 @@ describe('POST /api/register/individual — someone already on this event', () =
     expect(h.checkout).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'reg-old', {
       event: PRICED,
       customerEmail: 'kid@example.com',
-      successUrl: SUCCESS_URL,
+      successUrl: RESUME_SUCCESS_URL,
       cancelUrl: 'https://pay.test/colorado/paytok-old',
     })
     expect(h.payPageUrl).toHaveBeenCalledWith('colorado', 'paytok-old', { cancelled: true })

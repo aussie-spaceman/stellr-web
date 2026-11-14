@@ -8,6 +8,8 @@ import { ISSUE_FAILED_PREFIX } from '@/lib/docusign-agreements'
 
 /** Failed issues older than this are left for a person: something is wrong that retrying will not fix. */
 const RETRY_WINDOW_DAYS = 14
+/** Markers read per person retried: one person can hold several. */
+const MARKERS_PER_PERSON_READ = 5
 
 export interface ReconcileResult {
   candidates: number
@@ -15,29 +17,88 @@ export interface ReconcileResult {
   outcomes: Record<string, number>
 }
 
+type FailedMarker = {
+  id: string
+  envelope_type: string
+  participant_id: string | null
+  member_id: string | null
+}
+
+/**
+ * Who a marker is for: one participant, or one member's agreement of one type.
+ * A marker naming neither is its own key, so it is cleared on its own.
+ */
+function markerKey(row: FailedMarker): string {
+  if (row.participant_id) return `participant:${row.participant_id}`
+  if (row.member_id) return `member:${row.member_id}:${row.envelope_type}`
+  return `row:${row.id}`
+}
+
+/**
+ * Removes every marker the pass is about to retry for this person, the ones
+ * fetched and any older ones, all recorded before the pass began. A retry that
+ * fails again records a fresh one, so markers never pile up for one person.
+ */
+async function clearMarkers(db: SupabaseClient, row: FailedMarker, passStartedAt: string): Promise<void> {
+  if (row.participant_id) {
+    await db
+      .from('agreements')
+      .delete()
+      .eq('participant_id', row.participant_id)
+      .like('envelope_id', `${ISSUE_FAILED_PREFIX}%`)
+      .lte('created_at', passStartedAt)
+  } else if (row.member_id) {
+    await db
+      .from('agreements')
+      .delete()
+      .eq('member_id', row.member_id)
+      .eq('envelope_type', row.envelope_type)
+      .is('participant_id', null)
+      .like('envelope_id', `${ISSUE_FAILED_PREFIX}%`)
+      .lte('created_at', passStartedAt)
+  } else {
+    await db.from('agreements').delete().eq('id', row.id)
+  }
+}
+
+/**
+ * group-registration-followups.2: one retry per person per pass. A person with
+ * three markers used to be retried three times a day, with three alerts; now
+ * the oldest marker stands for all of them, and all of them are cleared
+ * before the one retry. `limit` counts people, not markers.
+ */
 export async function retryFailedIssues(
   db: SupabaseClient,
   opts: { limit?: number; dryRun?: boolean; now?: Date } = {},
 ): Promise<ReconcileResult> {
   const now = opts.now ?? new Date()
+  const passStartedAt = now.toISOString()
   const since = new Date(now.getTime() - RETRY_WINDOW_DAYS * 86_400_000).toISOString()
+  const limit = opts.limit ?? 20
   const { data, error } = await db
     .from('agreements')
     .select('id, envelope_id, envelope_type, participant_id, member_id, created_at')
     .like('envelope_id', `${ISSUE_FAILED_PREFIX}%`)
     .gte('created_at', since)
     .order('created_at', { ascending: true })
-    .limit(opts.limit ?? 20)
+    // Room for several markers per person, so `limit` people still fit.
+    .limit(limit * MARKERS_PER_PERSON_READ)
   if (error) throw new Error(`Failed-issue query failed: ${error.message}`)
 
-  const rows = (data ?? []) as { id: string; envelope_type: string; participant_id: string | null; member_id: string | null }[]
+  // Oldest marker first, so each person is retried in the order they failed.
+  const people = new Map<string, FailedMarker>()
+  for (const row of (data ?? []) as FailedMarker[]) {
+    const k = markerKey(row)
+    if (!people.has(k)) people.set(k, row)
+    if (people.size >= limit) break
+  }
+  const rows = [...people.values()]
   const result: ReconcileResult = { candidates: rows.length, retried: 0, outcomes: {} }
   if (opts.dryRun) return result
 
   for (const row of rows) {
-    // Remove the marker first: a retry that fails again records a fresh one,
-    // so markers never pile up for the same person.
-    await db.from('agreements').delete().eq('id', row.id)
+    // Clear first: a retry that fails again records a fresh marker.
+    await clearMarkers(db, row, passStartedAt)
     let outcome = 'skipped'
     try {
       if (row.participant_id) {

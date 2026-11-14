@@ -19,7 +19,7 @@ to a date. It must not be the devDependency: a PR that edits
 checker that always passes. To bump it, change the version (and the date) in
 `security.yml` and in `package.json` together; a test checks they match.
 | Migration report with RED FLAGS | `security.yml` → `migration-report` (PRs touching `supabase/migrations`) | Never: summary + warning | — |
-| Stryker mutation testing | `mutation.yml`, nightly 03:17 UTC and by hand | Never. Skipped with a warning while the pinned vitest-runner cannot activate mutants; on a supported runner, fails if no mutant is killed | Bump Stryker to 10.1.x, then set `thresholds.break` in `stryker.config.mjs` |
+| Stryker mutation testing | `mutation.yml`, nightly 03:17 UTC and by hand | Never blocks a PR. The nightly job fails when the overall score is under 80% (`thresholds.break` in `stryker.config.mjs`) or when no mutant is killed | Done: Stryker 10.1.1, `thresholds.break: 80`. Do not lower it; add tests |
 
 A report-only job still shows red on the PR; it cannot fail the workflow.
 Repo variables live at Settings → Secrets and variables → Actions → Variables.
@@ -70,18 +70,28 @@ seeded dangerous migration that must trip every flag.
 
 `npm run test:mutation` (or `npx stryker run --mutate lib/impersonation.ts`).
 
-The pinned `@stryker-mutator/vitest-runner` 10.0.0 does not activate mutants
-under Vitest 5: every test shows "(covered 0)" and nothing is killed. 10.1.0
-fixed it, and the 14-day rule allows it from 6 Nov 2026. Until then
-`mutation.yml` checks the pair first (`scripts/stryker-runner-support.mjs`) and
-skips the run with a warning in the job summary rather than failing red every
-night. After the bump the run switches on with no workflow edit:
+`@stryker-mutator/core` and `@stryker-mutator/vitest-runner` are pinned at
+10.1.1. The earlier 10.0.0 runner did not activate mutants under Vitest 5:
+every test showed "(covered 0)" and nothing was killed. They were bumped with:
 
 ```sh
 npm install --save-dev --save-exact --before=2026-10-24 @stryker-mutator/core@10.1.1 @stryker-mutator/vitest-runner@10.1.1
 ```
-Reports land in `reports/mutation/` (gitignored). Add tenancy, field-crypto and
-ledger modules to `mutate` in `stryker.config.mjs` as those stages land.
+
+`mutation.yml` still checks the pair first (`scripts/stryker-runner-support.mjs`)
+and skips the run with a warning if a later change brings back a runner older
+than 10.1.0 under Vitest 5. A supported run that kills no mutant fails.
+
+`thresholds.break` is 80: a run whose overall score is under 80% fails the
+nightly job. The Score step still writes the per-file table to the job summary.
+If the score drops, kill the surviving mutants with better tests; do not lower
+the threshold.
+
+Reports land in `reports/mutation/` (gitignored). `mutate` in
+`stryker.config.mjs` covers authorisation, impersonation, the tenancy loader
+and tenant client (`lib/tenancy/db.ts`), field crypto (`lib/field-crypto*.ts`,
+tests excluded) and the platform audit trail (`lib/audit/platform.ts`). Add the
+ledger when S9 lands it.
 
 Instrumented code runs 20-130x slower. When `STRYKER_MUTATOR_WORKER` is set,
 `lib/pdf-page-count.test.ts` stops asserting its wall-clock budgets and skips

@@ -3,16 +3,17 @@ name: Mutation testing
 # Stryker on the trust-boundary modules listed in stryker.config.mjs
 # (multi-tenant plan, S2). Nightly and on demand, NEVER on pull requests: a
 # full run takes tens of minutes and its score moves slowly, so it is a trend
-# to watch, not a merge gate. Report-only: the score lands in the job summary
-# and the HTML report in an artifact.
+# to watch, not a merge gate. The score lands in the job summary and the HTML
+# report in an artifact. stryker.config.mjs sets thresholds.break = 80, so a
+# run scoring under 80% fails this job (the Score step still writes the
+# per-file table); it never blocks a pull request.
 #
 # Two guards keep a meaningless score off the summary:
-#   - Runner support: @stryker-mutator/vitest-runner 10.0.0 never activates a
-#     mutant under Vitest 5 (fixed in 10.1.0, which the 14-day rule allows from
-#     6 Nov 2026). On such a pair the run is SKIPPED with a warning and a
-#     summary line, rather than failing red every night
-#     (scripts/stryker-runner-support.mjs). Bumping both @stryker-mutator
-#     packages to 10.1.x turns the run on with no edit here.
+#   - Runner support: @stryker-mutator/vitest-runner 10.0.0 never activated a
+#     mutant under Vitest 5 (fixed in 10.1.0). The repo now pins 10.1.1, so
+#     the check passes; it stays as a guard against a downgrade. On an
+#     unsupported pair the run is SKIPPED with a warning and a summary line,
+#     rather than failing red every night (scripts/stryker-runner-support.mjs).
 #   - Zero kills: on a supported pair, a run that kills no mutant at all still
 #     fails the job, because that means mutants are not being activated.
 

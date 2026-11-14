@@ -7,6 +7,9 @@ import {
   MIGRATIONS_DIR,
   GRANDFATHERED_PREEXISTING,
   FROZEN_RLS_HELPERS,
+  scanTableRevokes,
+  isTableRuleGrandfathered,
+  TABLE_REVOKE_CUTOFF,
 } from '../scripts/check-migration-security.mjs'
 
 // deep review DB-N3: a SECURITY DEFINER function bypasses RLS and is EXECUTE-able
@@ -170,5 +173,157 @@ describe('check-migration-security (DB-N3)', () => {
         { name: NEW, sql: 'REVOKE EXECUTE ON FUNCTION public.survey_current_member_id() FROM PUBLIC, anon;' },
       ]).offenders,
     ).toEqual([])
+  })
+})
+
+// S2-revoke-lint (THREAT-MODEL TB5 E, R4a): baseline.sql's default privileges
+// GRANT ALL on every new public table to anon and authenticated, so a new table
+// must revoke both in the same migration, or a permissive policy exposes it to
+// the public anon key.
+describe('check-migration-security: new public tables revoke anon + authenticated (S2-revoke-lint)', () => {
+  const tableOffenders = (text: string, name = NEW) => scanTableRevokes([{ name, sql: text }]).offenders
+
+  it('passes on the current repo, and actually sees the tables', () => {
+    const { offenders, tables } = scanTableRevokes(readMigrationFiles(MIGRATIONS_DIR))
+    expect(tables.length).toBeGreaterThan(100)
+    expect(offenders).toEqual([])
+  })
+
+  it('flags a new CREATE TABLE with no REVOKE, naming the file and the table', () => {
+    const offenders = tableOffenders('CREATE TABLE public.widgets (id uuid PRIMARY KEY);')
+    expect(offenders).toEqual([{ file: NEW, table: 'public.widgets', missing: ['anon', 'authenticated'] }])
+  })
+
+  it('flags an unqualified CREATE TABLE IF NOT EXISTS with no REVOKE', () => {
+    expect(tableOffenders('CREATE TABLE IF NOT EXISTS widgets (id uuid);')).toHaveLength(1)
+  })
+
+  it('accepts REVOKE ALL ... FROM PUBLIC, anon, authenticated in the same file', () => {
+    expect(
+      tableOffenders(`
+        CREATE TABLE IF NOT EXISTS public.widgets (id uuid PRIMARY KEY);
+        ALTER TABLE public.widgets ENABLE ROW LEVEL SECURITY;
+        REVOKE ALL ON public.widgets FROM PUBLIC, anon, authenticated;
+        GRANT SELECT ON public.widgets TO service_role;
+      `),
+    ).toEqual([])
+  })
+
+  it('accepts FROM anon, authenticated without PUBLIC, and the TABLE keyword / PRIVILEGES form', () => {
+    expect(
+      tableOffenders(`
+        CREATE TABLE public.widgets (id uuid);
+        REVOKE ALL PRIVILEGES ON TABLE widgets FROM anon, authenticated;
+      `),
+    ).toEqual([])
+  })
+
+  it('accepts the two roles revoked in separate statements of the same file', () => {
+    expect(
+      tableOffenders(`
+        CREATE TABLE public.widgets (id uuid);
+        REVOKE ALL ON public.widgets FROM anon;
+        REVOKE ALL ON public.widgets FROM authenticated;
+      `),
+    ).toEqual([])
+  })
+
+  it('flags a revoke that misses authenticated, or names only PUBLIC', () => {
+    expect(
+      tableOffenders('CREATE TABLE public.widgets (id uuid);\nREVOKE ALL ON public.widgets FROM PUBLIC, anon;'),
+    ).toEqual([{ file: NEW, table: 'public.widgets', missing: ['authenticated'] }])
+    expect(tableOffenders('CREATE TABLE public.widgets (id uuid);\nREVOKE ALL ON public.widgets FROM PUBLIC;')).toHaveLength(1)
+  })
+
+  it('flags a revoke of a narrower privilege (SELECT) instead of ALL', () => {
+    expect(
+      tableOffenders('CREATE TABLE public.widgets (id uuid);\nREVOKE SELECT ON public.widgets FROM anon, authenticated;'),
+    ).toHaveLength(1)
+  })
+
+  it('flags a revoke of a DIFFERENT table', () => {
+    expect(
+      tableOffenders('CREATE TABLE public.widgets (id uuid);\nREVOKE ALL ON public.gadgets FROM anon, authenticated;'),
+    ).toHaveLength(1)
+  })
+
+  it('handles quoted identifiers, quoted or unquoted on either side, and multi-table revokes', () => {
+    expect(
+      tableOffenders(`
+        CREATE TABLE IF NOT EXISTS "public"."widgets" (id uuid);
+        CREATE TABLE "Gadgets" (id uuid);
+        REVOKE ALL ON public.widgets, public."Gadgets" FROM "anon", "authenticated";
+      `),
+    ).toEqual([])
+    // "Gadgets" is case-sensitive: revoking unquoted gadgets (= gadgets) misses it.
+    expect(
+      tableOffenders(`
+        CREATE TABLE "Gadgets" (id uuid);
+        REVOKE ALL ON gadgets FROM anon, authenticated;
+      `),
+    ).toEqual([{ file: NEW, table: 'public.Gadgets', missing: ['anon', 'authenticated'] }])
+  })
+
+  it('accepts REVOKE ALL ON ALL TABLES IN SCHEMA public only when it comes after the CREATE TABLE', () => {
+    expect(
+      tableOffenders(
+        'CREATE TABLE public.widgets (id uuid);\nREVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;',
+      ),
+    ).toEqual([])
+    expect(
+      tableOffenders(
+        'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;\nCREATE TABLE public.widgets (id uuid);',
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('sees a CREATE TABLE and its REVOKE inside a DO block', () => {
+    const body = (revoke: string) => `
+      DO $$
+      BEGIN
+        CREATE TABLE IF NOT EXISTS public.widgets (id uuid);
+        ${revoke}
+      END
+      $$;`
+    expect(tableOffenders(body(''))).toHaveLength(1)
+    expect(tableOffenders(body('REVOKE ALL ON public.widgets FROM anon, authenticated;'))).toEqual([])
+  })
+
+  it('ignores tables outside schema public, temporary tables, and CREATE TABLE in comments or strings', () => {
+    expect(tableOffenders('CREATE TABLE entitlements.ledger (id uuid);')).toEqual([])
+    expect(tableOffenders('CREATE TEMP TABLE scratch (id uuid);')).toEqual([])
+    expect(
+      tableOffenders(`
+        -- CREATE TABLE public.widgets (id uuid);
+        /* CREATE TABLE public.gadgets (id uuid); */
+        COMMENT ON SCHEMA public IS 'CREATE TABLE public.sprockets';
+      `),
+    ).toEqual([])
+  })
+
+  it('does not accept a REVOKE in a later migration: the table is open between deploys', () => {
+    const { offenders } = scanTableRevokes([
+      { name: NEW, sql: 'CREATE TABLE public.widgets (id uuid);' },
+      { name: '20991231000001_seal.sql', sql: 'REVOKE ALL ON public.widgets FROM anon, authenticated;' },
+    ])
+    expect(offenders).toHaveLength(1)
+  })
+
+  it('grandfathers every migration at or before the cutoff, and nothing after it', () => {
+    const bare = 'CREATE TABLE public.widgets (id uuid);'
+    expect(TABLE_REVOKE_CUTOFF).toBe('20261114090000')
+    expect(isTableRuleGrandfathered('042_old_sequential.sql')).toBe(true)
+    expect(isTableRuleGrandfathered('20260928180000_cron_runs.sql')).toBe(true)
+    expect(isTableRuleGrandfathered(`${TABLE_REVOKE_CUTOFF}_record_access_log.sql`)).toBe(true)
+    expect(isTableRuleGrandfathered('20261114090001_next.sql')).toBe(false)
+    expect(tableOffenders(bare, '20260928180000_cron_runs.sql')).toEqual([])
+    expect(tableOffenders(bare, '20261114090001_next.sql')).toHaveLength(1)
+  })
+
+  it('the cutoff is not later than the newest migration in the repo', () => {
+    // Moving the cutoff forward past real files would silently grandfather a
+    // new violation; the cutoff must name a migration that exists.
+    const names = readMigrationFiles(MIGRATIONS_DIR).map((f) => f.name)
+    expect(names.some((n) => n.startsWith(`${TABLE_REVOKE_CUTOFF}_`))).toBe(true)
   })
 })

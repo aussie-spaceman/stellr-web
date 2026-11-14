@@ -61,6 +61,29 @@
  * later migration, 20261102220634. Their one RLS helper, which must keep
  * `authenticated`, is named in FROZEN_RLS_HELPERS and must still lose PUBLIC and
  * anon.
+ *
+ * ── Second rule: a new public table revokes the API roles (S2-revoke-lint) ──
+ * `supabase/baseline.sql` sets default privileges that GRANT ALL on every new
+ * table in schema `public` to `anon` and `authenticated`. RLS is linted
+ * (check-migration-tenancy.mjs), but a permissive policy plus that default
+ * grant still exposes the table to the public anon key (THREAT-MODEL TB5 E,
+ * R4a). So a migration that runs `CREATE TABLE` in schema `public` must, in
+ * the SAME file, revoke both roles:
+ *
+ *     REVOKE ALL ON public.<table> FROM PUBLIC, anon, authenticated;
+ *
+ * Names may be quoted or unquoted and schema-qualified or not; `PUBLIC` is
+ * optional (tables get no PUBLIC grant by default) but anon AND authenticated
+ * must both be named, in one statement or several in that file. `REVOKE ALL ON
+ * ALL TABLES IN SCHEMA public FROM anon, authenticated` placed AFTER the
+ * `CREATE TABLE` also counts. Temporary tables are exempt (session-local).
+ * Unlike the definer rule, a later migration does not cure it: between the two
+ * deploys the table is open, so the revoke must ship with the table.
+ *
+ * Every migration at or before TABLE_REVOKE_CUTOFF (the newest migration on
+ * `dev` when this rule landed) is grandfathered: it is applied history, and
+ * editing it would not re-run it. The grant revoke for those tables is S0's
+ * job, not this lint's.
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -267,6 +290,136 @@ export function scanMigrations(files) {
   return { offenders, sdFunctions, schemaSealed, funcSealed }
 }
 
+/**
+ * Table rule cutoff: the newest migration on origin/dev when the REVOKE rule
+ * landed (20261114090000_record_access_log.sql, 13 Nov 2026). Every migration
+ * whose timestamp is at or before this, and every sequential legacy migration,
+ * is grandfathered by the table rule. Never move this forward to silence a new
+ * migration: add the REVOKE instead.
+ */
+export const TABLE_REVOKE_CUTOFF = '20261114090000'
+
+/** The roles a new public table must revoke ALL from (PUBLIC is optional). */
+export const TABLE_REQUIRED_REVOKES = ['anon', 'authenticated']
+
+/** Whether a migration file predates the table REVOKE rule. */
+export function isTableRuleGrandfathered(file) {
+  const base = file.replace(/^.*\//, '')
+  if (/^\d{1,3}_/.test(base)) return true
+  const ts = /^(\d{14})_/.exec(base)
+  return !!ts && ts[1] <= TABLE_REVOKE_CUTOFF
+}
+
+// An identifier: "quoted" (case kept, "" escapes) or unquoted (folded to lower case).
+const IDENT = String.raw`(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)`
+const QUALIFIED = String.raw`${IDENT}(?:\s*\.\s*${IDENT})?`
+
+/** Normalise one identifier the way Postgres does. */
+function normIdent(raw) {
+  const t = raw.trim()
+  return t.startsWith('"') ? t.slice(1, -1).replace(/""/g, '"') : t.toLowerCase()
+}
+
+/** { schema, table } for a possibly schema-qualified name (default schema public). */
+function parseQualified(raw) {
+  const parts = []
+  const re = new RegExp(IDENT, 'g')
+  let m
+  while ((m = re.exec(raw))) parts.push(normIdent(m[0]))
+  return parts.length === 2 ? { schema: parts[0], table: parts[1] } : { schema: 'public', table: parts[0] }
+}
+
+const CREATE_TABLE = new RegExp(
+  String.raw`^create\s+(?:(global|local)\s+)?(temp|temporary|unlogged)?\s*table\s+(?:if\s+not\s+exists\s+)?(${QUALIFIED})`,
+  'i',
+)
+const REVOKE_ALL_ON = /^revoke\s+(?:grant\s+option\s+for\s+)?all(?:\s+privileges)?\s+on\s+/i
+const ALL_TABLES_IN_SCHEMA = new RegExp(String.raw`^all\s+tables\s+in\s+schema\s+(${IDENT})`, 'i')
+
+/** Roles named in a REVOKE's FROM clause, normalised ('public' for PUBLIC). */
+function revokeFromRoles(stmt) {
+  const m = /\bfrom\b([\s\S]*)$/i.exec(stmt)
+  if (!m) return []
+  const list = m[1].replace(/\b(?:cascade|restrict)\b\s*$/i, '').replace(/\bgranted\s+by\b[\s\S]*$/i, '')
+  return list
+    .split(',')
+    .map((r) => r.trim().replace(/^group\s+/i, ''))
+    .filter(Boolean)
+    .map(normIdent)
+}
+
+/** Top-level statements plus the statements inside each `DO $$ … $$` body. */
+function flatStatements(sql) {
+  const out = []
+  for (const st of splitStatements(sql)) {
+    const t = st.text
+    const doBody = /^do\s+(?:language\s+\S+\s+)?(\$[A-Za-z_]*\$)([\s\S]*)\1/i.exec(t)
+    if (doBody) {
+      // A PL/pgSQL body: strip BEGIN/END and DECLARE scaffolding enough that
+      // a CREATE TABLE or REVOKE inside is seen at the start of a statement.
+      for (const inner of splitStatements(doBody[2])) {
+        out.push(inner.text.replace(/^(?:declare[\s\S]*?\bbegin|begin)\s+/i, '').replace(/^end\s*(?:if|loop)?\s*/i, ''))
+      }
+      continue
+    }
+    out.push(t)
+  }
+  return out
+}
+
+/**
+ * S2-revoke-lint: every public table a non-grandfathered migration creates must
+ * have ALL revoked from anon AND authenticated in the same file. Returns the
+ * offenders ({ file, table }) and every public table seen (for the self-test).
+ */
+export function scanTableRevokes(files) {
+  const offenders = []
+  const tables = []
+  for (const { name: file, sql } of files) {
+    const created = [] // { key, index }
+    const revoked = new Map() // key -> Set<role>
+    const schemaRevokes = [] // { schema, index, roles }
+    const statements = flatStatements(sql)
+    statements.forEach((s, index) => {
+      const ct = CREATE_TABLE.exec(s)
+      if (ct) {
+        if (ct[2] && /^temp/i.test(ct[2])) return
+        const { schema, table } = parseQualified(ct[3])
+        if (schema === 'public') created.push({ key: `${schema}.${table}`, table, index })
+        return
+      }
+      const rv = REVOKE_ALL_ON.exec(s)
+      if (!rv) return
+      const rest = s.slice(rv[0].length)
+      const roles = revokeFromRoles(rest)
+      const all = ALL_TABLES_IN_SCHEMA.exec(rest)
+      if (all) {
+        schemaRevokes.push({ schema: normIdent(all[1]), index, roles })
+        return
+      }
+      const target = /^(?:table\s+)?([\s\S]*?)\s+from\b/i.exec(rest)
+      if (!target) return
+      for (const raw of target[1].split(',')) {
+        if (!raw.trim()) continue
+        const { schema, table } = parseQualified(raw)
+        const key = `${schema}.${table}`
+        const cur = revoked.get(key) ?? new Set()
+        for (const r of roles) cur.add(r)
+        revoked.set(key, cur)
+      }
+    })
+    for (const c of created) {
+      tables.push({ file, table: c.key })
+      if (isTableRuleGrandfathered(file)) continue
+      const roles = new Set(revoked.get(c.key) ?? [])
+      for (const sr of schemaRevokes) if (sr.schema === 'public' && sr.index > c.index) for (const r of sr.roles) roles.add(r)
+      if (TABLE_REQUIRED_REVOKES.every((r) => roles.has(r))) continue
+      offenders.push({ file, table: c.key, missing: TABLE_REQUIRED_REVOKES.filter((r) => !roles.has(r)) })
+    }
+  }
+  return { offenders, tables }
+}
+
 export function readMigrationFiles(dir) {
   return readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
@@ -275,7 +428,9 @@ export function readMigrationFiles(dir) {
 }
 
 function main() {
-  const { offenders, sdFunctions } = scanMigrations(readMigrationFiles(MIGRATIONS_DIR))
+  const files = readMigrationFiles(MIGRATIONS_DIR)
+  const { offenders, sdFunctions } = scanMigrations(files)
+  const tableScan = scanTableRevokes(files)
   if (offenders.length) {
     console.error('\n✗ migration security: SECURITY DEFINER function(s) reachable by anon/authenticated\n')
     for (const o of offenders) console.error(`  ${o.file}\n    ${o.fn}`)
@@ -290,10 +445,26 @@ function main() {
         '  (anon still reaches it through PUBLIC). If the function MUST keep a public\n' +
         '  role EXECUTE (an RLS helper), annotate it:  -- rls-helper: keep authenticated EXECUTE\n',
     )
-    process.exit(1)
   }
+  if (tableScan.offenders.length) {
+    console.error('\n✗ migration security: new public table(s) without REVOKE ALL FROM anon, authenticated\n')
+    for (const o of tableScan.offenders) {
+      console.error(`  ${o.file}\n    table ${o.table} (not revoked from: ${o.missing.join(', ')})`)
+    }
+    console.error(
+      '\n  Default privileges GRANT ALL on every new public table to anon and\n' +
+        '  authenticated, so the public anon key can reach it through any permissive\n' +
+        '  policy. In the SAME migration that creates the table, add:\n\n' +
+        '      REVOKE ALL ON public.<table> FROM PUBLIC, anon, authenticated;\n\n' +
+        '  then GRANT back only what the app needs (usually to service_role).\n',
+    )
+  }
+  if (offenders.length || tableScan.offenders.length) process.exit(1)
   console.log(
     `✓ migration security: ${sdFunctions.length} SECURITY DEFINER function(s), all revoked from public+anon+authenticated, schema-sealed, or allowlisted`,
+  )
+  console.log(
+    `✓ migration security: ${tableScan.tables.length} public table(s) created; every one after ${TABLE_REVOKE_CUTOFF} revokes ALL from anon+authenticated`,
   )
 }
 

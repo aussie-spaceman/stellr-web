@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { CANARY_TENANT_ID, membership, principal } from '@/test/fixtures/authz-principal'
 import { anonymousPrincipal, decideEventAccess, decidePortalAccess, decideCrewTarget, decideTenantRole, isStaffHiddenAdminPath, isStellrStaff, portalRoleFromClaims, tenantRoles } from './decide'
-import { CAPABILITIES, STAFF_CAPABILITIES, capabilitiesOf, decideCapability } from './capabilities'
+import {
+  CAPABILITIES,
+  STAFF_CAPABILITIES,
+  STAFF_MFA_CACHE_MS,
+  capabilitiesOf,
+  createStaffSecondFactorCheck,
+  decideCapability,
+  gateStaffOnSecondFactor,
+  secondFactorFromSession,
+} from './capabilities'
 
 const ADMIN_ONLY = CAPABILITIES.filter((c) => !STAFF_CAPABILITIES.includes(c))
 const clerkStaff = principal({ claimsRole: 'staff' })
@@ -88,5 +97,86 @@ describe('pages hidden from Staff', () => {
   })
   it.each(['/admin', '/admin/members', '/admin/members/123', '/admin/competitions/nv', '/admin/schools', '/admin/scholarships', '/admin/dutiesx'])('%s is not', (path) => {
     expect(isStaffHiddenAdminPath(path)).toBe(false)
+  })
+})
+
+describe('Staff needs a second factor on the session (staff-role.8)', () => {
+  it('reads Clerk’s factorVerificationAge: -1 is none, a number of minutes is verified, no field is unknown', () => {
+    expect(secondFactorFromSession([3, 3])).toBe('verified')
+    expect(secondFactorFromSession([30, 0])).toBe('verified')
+    expect(secondFactorFromSession([3, -1])).toBe('absent')
+    expect(secondFactorFromSession([3, null])).toBe('absent')
+    expect(secondFactorFromSession([3])).toBe('absent')
+    expect(secondFactorFromSession(null)).toBe('unknown')
+    expect(secondFactorFromSession(undefined)).toBe('unknown')
+  })
+  it('gates a Staff decision only, never an admin’s or a denial', () => {
+    expect(gateStaffOnSecondFactor({ ok: true, via: 'staff' }, false)).toEqual({ ok: false, status: 403 })
+    expect(gateStaffOnSecondFactor({ ok: true, via: 'staff' }, true)).toEqual({ ok: true, via: 'staff' })
+    expect(gateStaffOnSecondFactor({ ok: true, via: 'admin' }, false)).toEqual({ ok: true, via: 'admin' })
+    expect(gateStaffOnSecondFactor({ ok: false, status: 401 }, false)).toEqual({ ok: false, status: 401 })
+  })
+  it.each([['clerk', clerkStaff], ['postgres', pgStaff]] as const)('%s: capabilitiesOf drops every Staff capability without one, and keeps an admin’s', (source, staff) => {
+    expect(capabilitiesOf(staff, source, STELLR_TENANT_ID, { staffSecondFactor: false })).toEqual([])
+    expect(capabilitiesOf(staff, source, STELLR_TENANT_ID, { staffSecondFactor: true }).sort()).toEqual([...STAFF_CAPABILITIES].sort())
+    expect(capabilitiesOf(principal({ claimsRole: 'admin' }), 'clerk', STELLR_TENANT_ID, { staffSecondFactor: false })).toEqual([...CAPABILITIES])
+  })
+})
+
+describe('createStaffSecondFactorCheck', () => {
+  function rig(account: () => boolean | Promise<boolean>) {
+    let t = 1_000_000
+    const reads: string[] = []
+    const missing: string[] = []
+    const check = createStaffSecondFactorCheck({
+      readTwoFactorEnabled: async (id) => { reads.push(id); return account() },
+      onMissing: (id) => { missing.push(id) },
+      now: () => t,
+    })
+    return { check, reads, missing, tick: (ms: number) => { t += ms } }
+  }
+
+  it('the session decides when it can, with no Clerk read', async () => {
+    const r = rig(() => true)
+    expect(await r.check('u1', [2, 2])).toBe(true)
+    expect(await r.check('u1', [2, -1])).toBe(false)
+    expect(r.reads).toEqual([])
+    expect(r.missing).toEqual(['u1'])
+  })
+  it('without the session field, reads the account setting and reuses it for at most 60 s', async () => {
+    let on = true
+    const r = rig(() => on)
+    expect(await r.check('u1', null)).toBe(true)
+    on = false
+    r.tick(STAFF_MFA_CACHE_MS - 1)
+    expect(await r.check('u1', null)).toBe(true) // still the cached read
+    expect(r.reads).toHaveLength(1)
+    r.tick(1)
+    expect(await r.check('u1', null)).toBe(false) // a fresh read
+    expect(r.reads).toHaveLength(2)
+    expect(r.missing).toEqual(['u1'])
+  })
+  it('asks for a reconcile at most once a minute per person', async () => {
+    const r = rig(() => false)
+    await r.check('u1', [1, -1])
+    await r.check('u1', [1, -1])
+    await r.check('u2', [1, -1])
+    expect(r.missing).toEqual(['u1', 'u2'])
+    r.tick(STAFF_MFA_CACHE_MS)
+    await r.check('u1', [1, -1])
+    expect(r.missing).toEqual(['u1', 'u2', 'u1'])
+  })
+  it('fails closed when Clerk cannot be read, without caching that or pausing anyone', async () => {
+    let down = true
+    const r = rig(() => { if (down) throw new Error('clerk down'); return true })
+    expect(await r.check('u1', null)).toBe(false)
+    expect(r.missing).toEqual([])
+    down = false
+    expect(await r.check('u1', null)).toBe(true)
+    expect(r.reads).toHaveLength(2)
+  })
+  it('a reconcile hook that throws does not fail the request', async () => {
+    const check = createStaffSecondFactorCheck({ readTwoFactorEnabled: async () => false, onMissing: () => { throw new Error('boom') } })
+    expect(await check('u1', [1, -1])).toBe(false)
   })
 })

@@ -24,8 +24,9 @@
 // (FERPA's "school official" and HIPAA's "workforce" both include volunteers).
 //
 // The Clerk role 'staff' is what lib/authz reads; staff_grants is what decides
-// it. reconcileStaffGrant is the one writer of both, called on every event
-// that can change a prerequisite and by the daily sweep as a backstop.
+// it. reconcileStaffGrant is the one writer of both (and of the member_roles
+// 'staff' mirror), called on every event that can change a prerequisite and by
+// the daily sweep as a backstop.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
@@ -413,6 +414,34 @@ async function record(
 
 const SYSTEM: Actor = { actorType: 'system', actorLabel: 'Staff role check' }
 
+// ── The member_roles mirror (staff-role.P2) ──────────────────────────────────
+
+/** member_roles.source on the row that mirrors an active Staff grant. */
+export const STAFF_MEMBER_ROLE_SOURCE = 'staff_grant'
+
+/**
+ * Keep the global member_roles 'staff' row in step with the grant: present while
+ * it is active, gone once it is paused, revoked or expired. member_role 'staff'
+ * means only this (migration 20261113120000 deleted the old backfilled rows), so
+ * removal takes any global 'staff' row, whatever its source. Idempotent, and
+ * never throws: the Clerk role is what grants access, this is a mirror.
+ */
+export async function mirrorStaffMemberRole(db: SupabaseClient, memberId: string, held: boolean): Promise<void> {
+  try {
+    const { error } = held
+      ? await db
+          .from('member_roles')
+          .upsert(
+            { member_id: memberId, role: 'staff', scope: 'global', object_type: null, object_id: null, source: STAFF_MEMBER_ROLE_SOURCE },
+            { onConflict: 'member_id,role,object_type,object_id', ignoreDuplicates: true },
+          )
+      : await db.from('member_roles').delete().eq('member_id', memberId).eq('role', 'staff').eq('scope', 'global')
+    if (error) throw new Error(error.message)
+  } catch (err) {
+    console.error(`[staff] member_roles mirror ${held ? 'add' : 'remove'} failed (non-fatal):`, err instanceof Error ? err.message : err)
+  }
+}
+
 // ── Grant ───────────────────────────────────────────────────────────────────
 
 export type GrantResult =
@@ -532,6 +561,7 @@ export async function reconcileStaffGrant(
       if (role === 'failed') return { grant, decision, transition: 'none' }
       const next = await update({ status: 'active', clerk_user_id: member.clerk_user_id, activated_at: t.activatedAt, expires_at: t.expiresAt, suspended_at: null, missing: [] })
       await reportRoleSyncFailure('staff_grant', await syncStaffGranted(db, member.clerk_user_id), { method: 'POST', routePath: 'lib/staff' })
+      await mirrorStaffMemberRole(db, memberId, true)
       await record(db, memberId, SYSTEM, 'staff.activate', `Staff access started (until ${formatDateShort(day(new Date(t.expiresAt)))})`, { grantId: grant.id, reason: opts.reason, expiresAt: t.expiresAt, resumed: !t.first })
       await tell(
         member,
@@ -543,6 +573,8 @@ export async function reconcileStaffGrant(
       return { grant: next, decision, transition: 'active' }
     }
     case 'active_refresh': {
+      // Heals a mirror write that failed on activation; a no-op otherwise.
+      await mirrorStaffMemberRole(db, memberId, true)
       if (grant.expires_at === t.expiresAt) return { grant, decision, transition: 'none' }
       const next = await update({ expires_at: t.expiresAt })
       return { grant: next, decision, transition: 'active_refresh' }
@@ -553,6 +585,7 @@ export async function reconcileStaffGrant(
         await clearStaffRole(db, clerk, grant.clerk_user_id, now)
         await reportRoleSyncFailure('staff_revoke', await syncStaffRevoked(db, grant.clerk_user_id), { method: 'POST', routePath: 'lib/staff' })
       }
+      await mirrorStaffMemberRole(db, memberId, false)
       await record(db, memberId, SYSTEM, 'staff.suspend', `Staff access paused: ${t.missing.map((k) => PREREQ_LABEL[k]).join(', ')} no longer in place`, { grantId: grant.id, reason: opts.reason, missing: t.missing })
       await tell(
         member,
@@ -569,6 +602,7 @@ export async function reconcileStaffGrant(
         await clearStaffRole(db, clerk, grant.clerk_user_id, now)
         await reportRoleSyncFailure('staff_revoke', await syncStaffRevoked(db, grant.clerk_user_id), { method: 'POST', routePath: 'lib/staff' })
       }
+      await mirrorStaffMemberRole(db, memberId, false)
       await record(db, memberId, SYSTEM, 'staff.expire', 'Staff access ended: the term ran out', { grantId: grant.id })
       await tell(
         member,
@@ -617,6 +651,7 @@ export async function revokeStaff(
     await clearStaffRole(db, clerk, clerkUserId, now)
     await reportRoleSyncFailure('staff_revoke', await syncStaffRevoked(db, clerkUserId), { method: 'DELETE', routePath: 'lib/staff' })
   }
+  await mirrorStaffMemberRole(db, args.memberId, false)
   await record(db, args.memberId, args.actor, 'staff.revoke', `Removed Staff: ${reason.slice(0, 200)}`, { grantId: grant.id, from: grant.status })
   if (grant.status !== 'pending') {
     const member = await loadMemberBasics(db, args.memberId)

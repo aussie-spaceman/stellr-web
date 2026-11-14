@@ -10,7 +10,12 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({
-  auth: async () => ({ userId: h.session.userId, sessionClaims: h.session.userId ? { metadata: { role: h.session.role } } : null }),
+  // A second factor on the session: Staff capabilities need one (staff-role.8, lib/authz/staff-mfa.test.ts).
+  auth: async () => ({
+    userId: h.session.userId,
+    sessionClaims: h.session.userId ? { metadata: { role: h.session.role } } : null,
+    factorVerificationAge: h.session.userId ? [5, 5] : null,
+  }),
 }))
 vi.mock('@clerk/nextjs', () => ({ ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('next/navigation', () => ({

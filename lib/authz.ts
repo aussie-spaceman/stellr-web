@@ -35,7 +35,14 @@ import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { eventInScope } from '@/lib/tenancy/event-in-scope'
 import { tenantWideScope, type ScopeContext } from '@/lib/tenancy/scope-context'
 import { currentTenantId } from '@/lib/authz/tenant'
-import { capabilitiesOf, decideCapability, type Capability, type CapabilityDecision } from '@/lib/authz/capabilities'
+import {
+  capabilitiesOf,
+  createStaffSecondFactorCheck,
+  decideCapability,
+  gateStaffOnSecondFactor,
+  type Capability,
+  type CapabilityDecision,
+} from '@/lib/authz/capabilities'
 import {
   anonymousPrincipal,
   authzSource,
@@ -105,6 +112,23 @@ const clerkSession = cache(async (): Promise<Principal> => {
 const postgresPrincipal = cache(async (): Promise<Principal> => {
   const session = await clerkSession()
   return loadPostgresPrincipal(supabaseServer(), session.userId, session.claimsRole)
+})
+
+// staff-role.8: Staff capabilities need a second factor on this session; the
+// account read is reused for a minute. No onMissing here yet: reconciling the
+// grant from this path makes the audit gate (lib/security/audit-coverage.ts)
+// count every capability-guarded GET as a write, which needs the owner's
+// decision first. Until then the Clerk user.updated webhook and the daily sweep
+// pause the grant.
+const staffSecondFactorCheck = createStaffSecondFactorCheck({
+  async readTwoFactorEnabled(userId) {
+    return (await (await clerkClient()).users.getUser(userId)).twoFactorEnabled === true
+  },
+})
+
+const sessionHasStaffSecondFactor = cache(async (): Promise<boolean> => {
+  const { userId, factorVerificationAge } = await auth()
+  return userId ? staffSecondFactorCheck(userId, factorVerificationAge) : false
 })
 
 function principalFor(source: DecisionSource): Promise<Principal> {
@@ -267,13 +291,15 @@ export async function assertTenantRole(tenantId: string, roles: readonly TenantR
  * capability, Stellr Staff its named set, anyone else none. Deny by default.
  */
 export async function requireCapability(cap: Capability, opts: AuthzOptions = {}): Promise<CapabilityDecision> {
-  return decide(
+  const d = await decide(
     `capability:${cap}`,
     opts,
     async (s) => decideCapability(await principalFor(s), cap, s, currentTenantId()),
     sameOk,
     DENY_403,
   )
+  // A Staff decision stands only on a session with a second factor (staff-role.8).
+  return d.ok && d.via === 'staff' ? gateStaffOnSecondFactor(d, await sessionHasStaffSecondFactor()) : d
 }
 
 export async function hasCapability(cap: Capability, opts: AuthzOptions = {}): Promise<boolean> {
@@ -283,7 +309,11 @@ export async function hasCapability(cap: Capability, opts: AuthzOptions = {}): P
 /** Every capability the caller holds, by the configured source. For the admin layout to hide controls; never a guard. */
 export async function currentCapabilities(): Promise<Capability[]> {
   const s: DecisionSource = getAuthzSource() === 'postgres' ? 'postgres' : 'clerk'
-  return capabilitiesOf(await getPrincipal(), s, currentTenantId())
+  const p = await getPrincipal()
+  const tenantId = currentTenantId()
+  const read = decideCapability(p, 'portal:read', s, tenantId)
+  const staffSecondFactor = read.ok && read.via === 'staff' ? await sessionHasStaffSecondFactor() : true
+  return capabilitiesOf(p, s, tenantId, { staffSecondFactor })
 }
 
 /** Replaces isAdminClaims / currentUserIsAdmin and the admin-only wrappers. */

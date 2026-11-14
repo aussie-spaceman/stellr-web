@@ -20,7 +20,9 @@
  *     store catalogue, the access console, view-as, privacy requests.
  *
  * Event Managers are not here: their access is per event (decideEventAccess).
- * Pure and DB-free, like lib/authz/decide.ts, so proxy.ts and tests can import it.
+ * DB-free and Clerk-free, like lib/authz/decide.ts, so proxy.ts and tests can
+ * import it. The one stateful piece, createStaffSecondFactorCheck, is handed its
+ * Clerk read by lib/authz.ts.
  */
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { decideStellrAdmin, isStellrStaff, type DecisionSource, type Principal } from './decide'
@@ -83,7 +85,104 @@ export function decideCapability(
   return { ok: false, status: 403 }
 }
 
-/** Every capability this principal holds, for the admin layout to hide what it cannot use. */
-export function capabilitiesOf(p: Principal, source: DecisionSource, contextTenantId: string = STELLR_TENANT_ID): Capability[] {
-  return CAPABILITIES.filter((c) => decideCapability(p, c, source, contextTenantId).ok)
+/**
+ * Every capability this principal holds, for the admin layout to hide what it
+ * cannot use. `staffSecondFactor: false` drops what Staff alone would give
+ * (gateStaffOnSecondFactor); lib/authz.ts passes the session's answer.
+ */
+export function capabilitiesOf(
+  p: Principal,
+  source: DecisionSource,
+  contextTenantId: string = STELLR_TENANT_ID,
+  opts: { staffSecondFactor?: boolean } = {},
+): Capability[] {
+  const secondFactor = opts.staffSecondFactor ?? true
+  return CAPABILITIES.filter((c) => gateStaffOnSecondFactor(decideCapability(p, c, source, contextTenantId), secondFactor).ok)
+}
+
+// ── Staff needs a second factor on the session (staff-role.8) ───────────────
+//
+// MFA is a Staff prerequisite (lib/staff.ts). The grant pauses when it lapses,
+// but only once something reconciles it. So every request that would be allowed
+// BECAUSE the caller is Staff also checks this session: with no second factor
+// the caller holds no Staff capability. An admin decision is never gated here.
+// The check can also ask for a reconcile (onMissing); lib/authz.ts does not wire
+// that yet (see the note there).
+
+/** What the session says about a second factor. 'unknown' when the token does not carry it. */
+export type SessionSecondFactor = 'verified' | 'absent' | 'unknown'
+
+/**
+ * Pure: Clerk's auth().factorVerificationAge is [minutes since the first factor,
+ * minutes since the second], with -1 for a factor never verified in this session,
+ * and null when the session token does not carry it.
+ */
+export function secondFactorFromSession(factorVerificationAge: unknown): SessionSecondFactor {
+  if (!Array.isArray(factorVerificationAge)) return 'unknown'
+  const second: unknown = factorVerificationAge[1]
+  return typeof second === 'number' && Number.isFinite(second) && second >= 0 ? 'verified' : 'absent'
+}
+
+/** Pure: a decision that passed only because the caller is Staff stands only with a second factor. */
+export function gateStaffOnSecondFactor(d: CapabilityDecision, hasSecondFactor: boolean): CapabilityDecision {
+  return d.ok && d.via === 'staff' && !hasSecondFactor ? { ok: false, status: 403 } : d
+}
+
+/** How long an account's two-step setting read from Clerk is reused. */
+export const STAFF_MFA_CACHE_MS = 60_000
+/** Cap on the in-memory maps; Staff is a handful of people, so this only bounds a leak. */
+const STAFF_MFA_CACHE_MAX = 500
+
+export interface StaffSecondFactorDeps {
+  /** twoFactorEnabled on the Clerk user. Throws when it cannot be read. */
+  readTwoFactorEnabled(userId: string): Promise<boolean>
+  /** Fire and forget: reconcile this user's Staff grant. Must not throw or be awaited. Optional: see lib/authz.ts. */
+  onMissing?(userId: string): void
+  now?: () => number
+}
+
+/**
+ * The per-request check, with its state. From the session when the token says;
+ * otherwise from the account's two-step setting, reused for at most
+ * STAFF_MFA_CACHE_MS. A failed read is no second factor (fail closed) and is not
+ * cached. A definite "no" asks for a reconcile, at most once per user per
+ * STAFF_MFA_CACHE_MS; a failed read does not, so a Clerk outage pauses no one.
+ */
+export function createStaffSecondFactorCheck(deps: StaffSecondFactorDeps): (userId: string, factorVerificationAge: unknown) => Promise<boolean> {
+  const accountSetting = new Map<string, { value: boolean; at: number }>()
+  const reconciled = new Map<string, number>()
+  const now = () => deps.now?.() ?? Date.now()
+  const remember = <V>(m: Map<string, V>, k: string, v: V) => {
+    if (m.size >= STAFF_MFA_CACHE_MAX) m.clear()
+    m.set(k, v)
+  }
+
+  async function fromAccount(userId: string): Promise<boolean | null> {
+    const hit = accountSetting.get(userId)
+    if (hit && now() - hit.at < STAFF_MFA_CACHE_MS) return hit.value
+    try {
+      const value = (await deps.readTwoFactorEnabled(userId)) === true
+      remember(accountSetting, userId, { value, at: now() })
+      return value
+    } catch {
+      return null
+    }
+  }
+
+  return async function hasStaffSecondFactor(userId, factorVerificationAge) {
+    const session = secondFactorFromSession(factorVerificationAge)
+    const ok = session === 'unknown' ? await fromAccount(userId) : session === 'verified'
+    if (ok === false) {
+      const last = reconciled.get(userId)
+      if (last === undefined || now() - last >= STAFF_MFA_CACHE_MS) {
+        remember(reconciled, userId, now())
+        try {
+          deps.onMissing?.(userId)
+        } catch {
+          // Best effort: the daily sweep is the backstop.
+        }
+      }
+    }
+    return ok === true
+  }
 }

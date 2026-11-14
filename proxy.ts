@@ -4,7 +4,7 @@ import { APP_HOST, SITE_URL } from '@/lib/env'
 import { STRICT_REGION_COOKIE, isStrictRegion } from '@/lib/consent'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
-import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
+import { isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { authPath } from '@/lib/auth-path'
 import { safeNext } from '@/lib/safe-next'
@@ -144,7 +144,6 @@ function tenantRequestHeaders(req: NextRequest): Headers {
   const headers = new Headers(req.headers)
   headers.delete(TENANT_ID_HEADER)
   headers.delete(TENANT_SLUG_HEADER)
-  headers.delete(PRIVATE_ROUTE_HEADER)
   headers.delete(ENFORCING_CSP_HEADER)
   headers.delete(CSP_HEADER)
   headers.delete(NONCE_HEADER)
@@ -247,7 +246,6 @@ const tenantClerkHandler = clerkMiddleware(async (auth, req) => {
 
   const pathname = req.nextUrl.pathname
   const headers = tenantRequestHeaders(req)
-  if (isPrivatePath(pathname)) headers.set(PRIVATE_ROUTE_HEADER, '1')
 
   // An API cannot live in the tenant tree, so it gets the trusted headers
   // (lib/tenancy/request-tenant.ts). A page gets the tenant from its URL instead,
@@ -282,7 +280,9 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
   const url = new URL(req.url)
 
-  const privateRoute = isPrivatePath(url.pathname)
+  // The query counts too: a sign-in link whose ?next is a pay or join link
+  // carries that link's token (lib/private-routes.ts).
+  const privateRoute = isPrivatePath(url.pathname, url.search)
 
   // AEO measurement: count public-site page requests from search and AI
   // crawlers (lib/crawlers.ts). waitUntil, so the write never delays or fails
@@ -370,12 +370,9 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
     }
   }
 
-  // Tell the root layout to load no tracking on a private-link page. Set here,
-  // overwriting anything the client sent, so it cannot be spoofed to switch
-  // tracking off elsewhere (or on here).
+  // Tracking on a private-link page is decided in the browser
+  // (components/analytics/SiteTracking.tsx), so no header tells the page.
   const headers = new Headers(req.headers)
-  headers.delete(PRIVATE_ROUTE_HEADER)
-  if (privateRoute) headers.set(PRIVATE_ROUTE_HEADER, '1')
   // Only the tenant handler above sets these, on a host mapped to a tenant.
   headers.delete(TENANT_ID_HEADER)
   headers.delete(TENANT_SLUG_HEADER)
@@ -419,7 +416,8 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 // to stop the throw, which would leave only the page guards, so the third entry always
 // runs the proxy under the gated prefixes. No real file is served from them, so normal
 // traffic gains no runs. /check-in-desk-sw.js is a root file, not under /check-in/. A new
-// gated route group needs its prefix added here.
+// gated route folder needs its prefix added here: test/proxy-gated-folders.test.ts fails
+// until it is. `_next` is skipped only as a whole segment, so /_nextfoo runs the proxy.
 //
 // The last two entries are for tenant routing (S5, B5), and neither adds a proxy run for
 // normal Stellr traffic:
@@ -434,9 +432,9 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
 //     here and in host-pure.ts, or each of its static files runs the proxy and Clerk.
 export const config = {
   matcher: [
-    '/((?!_next|_vercel/|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
+    '/((?!_next(?:/|$)|_vercel/|api/img(?:/|$)|api/csp-report(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|wasm)).*)',
     '/((?!api/img(?:/|$)|api/csp-report(?:/|$))(?:api|trpc).*)',
-    '/((?:admin|account|community|home|campaigns|credentials|team-profile|survey|register|sign|check-in|scholarship/offer)(?:/.*)?)',
+    '/((?:admin|account|community|home|campaigns|credentials|team-profile|survey|register|sign|check-in|scholarship/offer|privacy/request)(?:/.*)?)',
     '/((?:%|_(?:[tT](?:/|$)|%)).*)',
     {
       source: '/((?!_next(?:/|$)|api/img(?:/|$)|api/csp-report(?:/|$)).*)',

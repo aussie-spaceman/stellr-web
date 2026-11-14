@@ -10,6 +10,7 @@ import {
   gradeIsCurrent,
   holderIsMinor,
   holderMinorFacts,
+  issueCredential,
   issuedEmailRoute,
   readMinorConsent,
   consentForMinor,
@@ -26,9 +27,21 @@ import {
 interface Person { date_of_birth?: string | null; grade?: string | null; age_bracket?: string | null; updated_at?: string | null; created_at?: string | null }
 interface People { member?: Person; participant?: Person; state?: string | null; error?: boolean; agreement?: { completed_at: string; opt_out?: boolean } | 'error' }
 
-function makeDb(people: People) {
+function makeDb(people: People, inserted: Record<string, unknown>[] = []) {
   return {
     from(table: string) {
+      if (table === 'credentials') {
+        // issueCredential: no existing credential, then the insert comes back.
+        let payload: Record<string, unknown> = {}
+        const c: Record<string, unknown> = {}
+        Object.assign(c, {
+          select: () => c, eq: () => c,
+          maybeSingle: async () => ({ data: null, error: null }),
+          insert: (row: Record<string, unknown>) => { payload = row; inserted.push(row); return c },
+          single: async () => ({ data: { id: 'new', ...payload }, error: null }),
+        })
+        return c
+      }
       const err = people.error ? { message: 'down' } : null
       const data =
         table === 'members' ? people.member ?? null
@@ -97,14 +110,25 @@ describe('holderMinorFacts: a stale grade or bracket is unknown', () => {
   })
   it('keeps a grade written this school year, and a participant’s from a registration this year', async () => {
     const db = makeDb({
-      member: { grade: null, age_bracket: 'unknown', updated_at: lastSchoolYear },
+      member: { date_of_birth: '2000-01-01', grade: null, age_bracket: 'unknown', updated_at: lastSchoolYear },
       participant: { grade: '12', age_bracket: 'high_school', created_at: now },
     })
     expect(await holderMinorFacts(db, { memberId: 'm1', participantId: 'p1' })).toMatchObject({ grade: '12', ageBracket: 'high_school' })
   })
-  it('drops a participant’s grade from an earlier school year’s registration', async () => {
-    const db = makeDb({ participant: { date_of_birth: null, grade: '12', age_bracket: 'high_school', created_at: lastSchoolYear } })
+  it('drops a participant’s grade from an earlier school year’s registration when the DOB is known', async () => {
+    const db = makeDb({ participant: { date_of_birth: '2000-01-01', grade: '12', age_bracket: 'high_school', created_at: lastSchoolYear } })
     expect(await holderMinorFacts(db, { memberId: null, participantId: 'p1' })).toMatchObject({ grade: null, ageBracket: null })
+  })
+  it('with no DOB anywhere, keeps a stale grade and bracket: they are the only sign of a student', async () => {
+    const db = makeDb({ member: { date_of_birth: null, grade: 'grade_9', age_bracket: 'high_school', updated_at: lastSchoolYear } })
+    expect(await holderMinorFacts(db, { memberId: 'm1', participantId: null })).toMatchObject({
+      dateOfBirth: null, grade: 'grade_9', ageBracket: 'high_school',
+    })
+  })
+  it('a DOB the caller holds counts as known even when the records have none', async () => {
+    const db = makeDb({ member: { date_of_birth: null, grade: 'grade_12', age_bracket: 'high_school', updated_at: lastSchoolYear } })
+    expect(await holderMinorFacts(db, { memberId: 'm1', participantId: null }, { dateOfBirth: '2000-01-01' }))
+      .toMatchObject({ grade: null, ageBracket: null })
   })
 })
 
@@ -124,13 +148,38 @@ describe('shareConsentFor with a stale grade (.5)', () => {
 })
 
 describe('holderIsMinor with a stale grade (who the email goes to)', () => {
-  it('a graduate with no DOB whose grade is from last school year hears directly', async () => {
-    const db = makeDb({ member: { date_of_birth: null, grade: 'grade_12', age_bracket: 'high_school', updated_at: lastSchoolYear } })
-    expect(await holderIsMinor(db, row())).toBe(false)
+  it('a no-DOB student whose school grade is from last school year still goes to the guardian', async () => {
+    // grade_9 last school year: in 10th grade now, still a Minor under the policy.
+    const db = makeDb({ member: { date_of_birth: null, grade: 'grade_9', age_bracket: 'high_school', updated_at: lastSchoolYear } })
+    expect(await holderIsMinor(db, row())).toBe(true)
   })
-  it('the same record written this school year still goes to the guardian', async () => {
+  it('the same record written this school year goes to the guardian too', async () => {
     const db = makeDb({ member: { date_of_birth: null, grade: 'grade_12', updated_at: now } })
     expect(await holderIsMinor(db, row())).toBe(true)
+  })
+  it('with a DOB, a stale grade is unknown and the DOB decides: an adult hears directly', async () => {
+    const db = makeDb({ member: { date_of_birth: bornYearsAgo(25), grade: 'grade_12', age_bracket: 'high_school', updated_at: lastSchoolYear }, state: 'CO' })
+    expect(await holderIsMinor(db, row())).toBe(false)
+    const noRecordDob = makeDb({ member: { date_of_birth: null, grade: 'grade_12', updated_at: lastSchoolYear }, state: 'CO' })
+    expect(await holderIsMinor(noRecordDob, { ...row(), date_of_birth: bornYearsAgo(25) })).toBe(false)
+  })
+})
+
+describe('issueCredential stamps is_minor with a stale grade', () => {
+  const course = (dateOfBirth: string | null) => ({
+    source: 'course' as const, memberId: 'm1', moduleId: 'mod1',
+    recipient: { firstName: 'Student', lastName: 'One', dateOfBirth }, title: 'Course',
+  })
+  const stamped = async (people: People, dateOfBirth: string | null) => {
+    const inserted: Record<string, unknown>[] = []
+    await issueCredential(makeDb(people, inserted), course(dateOfBirth))
+    return inserted[0].is_minor
+  }
+  it('a no-DOB student whose school grade is from last school year is stamped a Minor', async () => {
+    expect(await stamped({ member: { date_of_birth: null, grade: 'grade_9', age_bracket: 'high_school', updated_at: lastSchoolYear } }, null)).toBe(true)
+  })
+  it('with a DOB, a stale grade does not make an adult a Minor for good', async () => {
+    expect(await stamped({ member: { date_of_birth: null, grade: 'grade_12', updated_at: lastSchoolYear }, state: 'CO' }, bornYearsAgo(25))).toBe(false)
   })
 })
 

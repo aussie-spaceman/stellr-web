@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { agreementValid } from '@/lib/docusign-agreements'
 import { relabelIssuedAward } from '@/lib/event-awards'
 import { isMinorPerPolicy, type MinorFacts } from '@/lib/minor-policy'
-import { appToday, isKnownMinorOn, onDate } from '@/lib/age'
+import { appToday, isKnownMinorOn, isValidDob, onDate } from '@/lib/age'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import {
   CREDENTIAL_COLUMNS,
@@ -159,15 +159,21 @@ export function gradeIsCurrent(recordedAt: string | null | undefined, today: Dat
  * participant row, field by field. Null when a read fails, so callers can
  * fail closed.
  *
- * A grade or age bracket recorded in an earlier school year is left out, as
- * unknown (legal-credential-family-link.5): a member's row is dated by its
- * updated_at, a participant's by when they registered. Then a date of birth
- * decides on its own, and with none the person is presumed a Minor wherever
- * lib/minor-policy presumes one (a page stays private).
+ * When a date of birth is known, a grade or age bracket recorded in an earlier
+ * school year is left out, as unknown (legal-credential-family-link.5): a
+ * member's row is dated by its updated_at, a participant's by when they
+ * registered. The date of birth then decides on its own. With no usable date
+ * of birth the grade and bracket are kept, stale or not: they are then the only
+ * sign of a student, and the email and the permanent is_minor read an unknown
+ * date of birth as "not a Minor" (minorPerPolicyIfDobKnown), so dropping them
+ * would turn a no-DOB student into an adult. A page stays private either way
+ * (ageBlock: dob_unknown). `opts.dateOfBirth` is a date of birth the caller
+ * already holds; it counts as known even when the records have none.
  */
 export async function holderMinorFacts(
   db: SupabaseClient,
   who: { memberId: string | null; participantId: string | null },
+  opts: { dateOfBirth?: string | null } = {},
 ): Promise<MinorFacts | null> {
   const [m, ms, p] = await Promise.all([
     who.memberId
@@ -189,11 +195,13 @@ export async function holderMinorFacts(
   const mem = (m?.data ?? null) as (Person & { updated_at?: string | null }) | null
   const part = (p?.data ?? null) as (Person & { created_at?: string | null; registrations?: unknown }) | null
   const school = one<{ schools?: unknown }>(ms?.data)?.schools
+  const dateOfBirth = mem?.date_of_birth ?? part?.date_of_birth ?? null
+  const dobKnown = isValidDob(opts.dateOfBirth ?? dateOfBirth)
   const today = appToday()
-  const memCurrent = gradeIsCurrent(mem?.updated_at, today)
-  const partCurrent = gradeIsCurrent(part?.created_at, today)
+  const memCurrent = !dobKnown || gradeIsCurrent(mem?.updated_at, today)
+  const partCurrent = !dobKnown || gradeIsCurrent(part?.created_at, today)
   return {
-    dateOfBirth: mem?.date_of_birth ?? part?.date_of_birth ?? null,
+    dateOfBirth,
     grade:       (memCurrent ? mem?.grade : null) ?? (partCurrent ? part?.grade : null) ?? null,
     ageBracket:  (memCurrent ? mem?.age_bracket : null) ?? (partCurrent ? part?.age_bracket : null) ?? null,
     state:       one<{ state?: string | null }>(school)?.state
@@ -214,7 +222,7 @@ export async function holderIsMinor(
 ): Promise<boolean> {
   if (c.is_minor) return true
   const known = 'date_of_birth' in c ? (c.date_of_birth ?? null) : null
-  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id })
+  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id }, { dateOfBirth: known })
   if (!facts) return isKnownMinorOn(known)
   return minorPerPolicyIfDobKnown({ ...facts, dateOfBirth: known ?? facts.dateOfBirth })
 }
@@ -268,7 +276,8 @@ async function resolveShareConsent(
   strict: boolean,
 ): Promise<ShareConsent | 'unreadable'> {
   const who = { memberId: c.member_id, participantId: c.participant_id }
-  const facts = await holderMinorFacts(db, who)
+  const known = 'date_of_birth' in c ? (c.date_of_birth ?? null) : null
+  const facts = await holderMinorFacts(db, who, { dateOfBirth: known })
   if (!facts && strict) return 'unreadable'
   const dob = 'date_of_birth' in c ? (c.date_of_birth ?? null) : (facts?.dateOfBirth ?? null)
   const blocked = ageBlock(dob)
@@ -409,7 +418,11 @@ export async function issueCredential(
   // Minor per the policy, not just under 18 (holderMinorFacts). If the records
   // cannot be read, fall back to the DOB alone rather than storing a guess:
   // the consent check and the email re-read the records anyway.
-  const facts = await holderMinorFacts(db, { memberId: input.memberId ?? null, participantId: input.participantId ?? null })
+  const facts = await holderMinorFacts(
+    db,
+    { memberId: input.memberId ?? null, participantId: input.participantId ?? null },
+    { dateOfBirth: input.recipient.dateOfBirth ?? null },
+  )
   const isMinor = facts
     ? minorPerPolicyIfDobKnown({ ...facts, dateOfBirth: input.recipient.dateOfBirth ?? facts.dateOfBirth })
     : isKnownMinorOn(input.recipient.dateOfBirth)

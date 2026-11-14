@@ -23,6 +23,7 @@ interface Member {
   ec_email?: string | null
   ec_first_name?: string | null
   ec_last_name?: string | null
+  ec_relationship?: string | null
 }
 
 function makeDb(member: Member, state: string | null | undefined, opts: { factsError?: boolean } = {}) {
@@ -61,7 +62,7 @@ function bornYearsAgo(years: number): string {
   d.setUTCMonth(d.getUTCMonth() - 3)
   return d.toISOString().slice(0, 10)
 }
-const guardian = { ec_email: 'guardian@example.test', ec_first_name: 'Guardian', ec_last_name: 'One' }
+const guardian = { ec_email: 'guardian@example.test', ec_first_name: 'Guardian', ec_last_name: 'One', ec_relationship: 'Parent' }
 const lastSchoolYear = `${schoolYearOf(new Date()) - 1}-10-01T00:00:00Z`
 const params = () => h.dispatchTyped.mock.calls[0][3] as Record<string, unknown>
 
@@ -93,6 +94,52 @@ describe('dispatchMembershipAgreement: Minor per the policy', () => {
 
   it('a grade from an earlier school year does not: the date of birth decides', async () => {
     await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(25), grade: 'grade_12', updated_at: lastSchoolYear, ...guardian }, 'CO'), 'm1')
+    expect(params()).not.toHaveProperty('guardianEmail')
+  })
+})
+
+describe('dispatchMembershipAgreement: the emergency contact must be a parent or guardian', () => {
+  const warn = () => vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+  it('an 18-year-old at a Nebraska school whose emergency contact is a spouse is not issued anything', async () => {
+    const log = warn()
+    const out = await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(18), ...guardian, ec_relationship: 'Spouse' }, 'NE'), 'm1')
+    expect(out).toEqual({ outcome: 'not_required' })
+    expect(h.dispatchTyped).not.toHaveBeenCalled()
+    // members.id only: no name or email in the log.
+    expect(log.mock.calls[0][0]).toContain('m1')
+    expect(log.mock.calls[0][0]).not.toMatch(/@|Guardian/)
+    log.mockRestore()
+  })
+
+  it('a 20-year-old at a Mississippi school whose emergency contact is a friend, or not given, is not issued anything', async () => {
+    const log = warn()
+    for (const ec_relationship of ['Friend', 'Grandparent', null]) {
+      expect(await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(20), ...guardian, ec_relationship }, 'MS'), 'm1'))
+        .toEqual({ outcome: 'not_required' })
+    }
+    expect(h.dispatchTyped).not.toHaveBeenCalled()
+    log.mockRestore()
+  })
+
+  it('a Minor whose parent contact email is their own address is not issued anything', async () => {
+    const log = warn()
+    expect(await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(20), ...guardian, ec_email: ' Member@Example.test ' }, 'MS'), 'm1'))
+      .toEqual({ outcome: 'not_required' })
+    expect(h.dispatchTyped).not.toHaveBeenCalled()
+    log.mockRestore()
+  })
+
+  it('a 20-year-old in Mississippi with a parent contact, and a 15-year-old with a legal guardian, are issued the Minor document', async () => {
+    await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(20), ...guardian }, 'MS'), 'm1')
+    expect(params()).toMatchObject({ state: 'MS', guardianEmail: 'guardian@example.test', relationship: 'Parent' })
+    h.dispatchTyped.mockClear()
+    await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(15), ...guardian, ec_relationship: 'Legal Guardian' }, 'CO'), 'm1')
+    expect(params()).toMatchObject({ guardianEmail: 'guardian@example.test', relationship: 'Legal Guardian' })
+  })
+
+  it('an adult’s emergency contact is never asked to sign: the adult document goes to the member', async () => {
+    await dispatchMembershipAgreement(makeDb({ date_of_birth: bornYearsAgo(30), ...guardian, ec_relationship: 'Spouse' }, 'MS'), 'm1')
     expect(params()).not.toHaveProperty('guardianEmail')
   })
 })

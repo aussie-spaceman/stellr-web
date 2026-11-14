@@ -4,6 +4,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { deleteUnsharedClerkLogin } from '@/lib/deletion/external'
+import { isCrewTargetOrUnknown } from '@/lib/authz'
+import { loadTargetClerkRole } from '@/lib/authz/principal'
 import { withAudit } from '@/lib/audit/route'
 import {
   MERGE_COLUMNS,
@@ -175,14 +177,18 @@ async function mergeMembers(req: NextRequest) {
         removable: addressesRemovedByMerge(keep, drop, toWrite),
       })
       : null
-    if (loginEmail && (loginEmail.status === 'updated' || loginEmail.status === 'failed')) {
+    if (loginEmail && (loginEmail.status === 'updated' || loginEmail.status === 'failed' || loginEmail.status === 'skipped_staff')) {
       await logActivity({
         memberId: keep.id,
         category: 'account',
-        action: loginEmail.ok ? 'login_email_updated' : 'login_email_update_failed',
-        summary: loginEmail.ok
+        action: loginEmail.status === 'updated'
+          ? 'login_email_updated'
+          : loginEmail.status === 'skipped_staff' ? 'login_email_skipped_staff' : 'login_email_update_failed',
+        summary: loginEmail.status === 'updated'
           ? 'Login email updated to match the merged record'
-          : 'Login email could not be updated after the merge',
+          : loginEmail.status === 'skipped_staff'
+            ? 'Login email left as it was after the merge: the login belongs to staff'
+            : 'Login email could not be updated after the merge',
         metadata: { step: loginEmail.step ?? null, removedOldAddress: loginEmail.removedOldAddress ?? false },
         ...actor,
       })
@@ -197,7 +203,7 @@ async function mergeMembers(req: NextRequest) {
 
 interface LoginEmailResult {
   ok: boolean
-  status: 'no_login' | 'unchanged' | 'updated' | 'failed'
+  status: 'no_login' | 'unchanged' | 'updated' | 'failed' | 'skipped_staff'
   detail: string
   /** The Clerk step that failed, when one did. */
   step?: string
@@ -220,6 +226,13 @@ const lower = (s: string) => s.trim().toLowerCase()
  * primary off the login only if the merge removed that address from the member.
  * Matching addresses mean no Clerk write. A failure is logged and returned to
  * the admin; the merge itself has already committed and stands.
+ *
+ * Never on a staff login. Putting a verified, primary address on a login hands
+ * whoever controls that address the account (email code, password reset), so
+ * a merge must not be a way round the rule view-as and login deletion already
+ * keep: a staff target is refused. The same check as deleteUnsharedClerkLogin
+ * runs before any write, and "could not tell" is refused too. A staff login's
+ * email is changed in Clerk, by hand.
  */
 async function syncLoginEmail(args: {
   memberId: string
@@ -239,6 +252,29 @@ async function syncLoginEmail(args: {
     const primary = user.emailAddresses.find((a) => a.id === user.primaryEmailAddressId) ?? null
     if (primary && lower(primary.emailAddress) === email) {
       return { ok: true, status: 'unchanged', detail: "The login's email already matches the kept record." }
+    }
+
+    step = 'check the login is not a staff account'
+    const { role } = await loadTargetClerkRole(client, clerkUserId)
+    const crew = await isCrewTargetOrUnknown({ clerkUserId, clerkRole: role, memberId }, { route: 'admin/members/merge/login-email' })
+    if (crew !== false) {
+      // Member id and step only: no addresses in the log.
+      console.error('[admin/members/merge] login email not changed:', { memberId, step, crew })
+      return crew
+        ? {
+          ok: false,
+          status: 'skipped_staff',
+          step,
+          removedOldAddress: false,
+          detail: 'This login belongs to staff, so its email was not changed. Update it in Clerk.',
+        }
+        : {
+          ok: false,
+          status: 'failed',
+          step,
+          removedOldAddress: false,
+          detail: "The merge is complete, but we could not confirm this login isn't a staff account, so its email was not changed. Update it in Clerk.",
+        }
     }
 
     step = 'add the kept email to the login'

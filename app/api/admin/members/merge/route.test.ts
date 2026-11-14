@@ -54,8 +54,11 @@ vi.mock('@/lib/activity-log', () => ({
   logActivity,
 }))
 vi.mock('@/lib/audit/route', () => ({ withAudit: (_spec: unknown, handler: unknown) => handler }))
-vi.mock('@/lib/authz/principal', () => ({ loadTargetClerkRole: async () => ({ exists: true, role: undefined }) }))
-vi.mock('@/lib/authz', () => ({ isCrewTargetOrUnknown: async () => false }))
+// The staff check every Clerk write in the merge runs first. Not staff unless a test says so.
+const loadTargetClerkRole = vi.fn(async (..._a: unknown[]) => ({ exists: true, role: undefined as unknown }))
+const isCrewTargetOrUnknown = vi.fn(async (..._a: unknown[]): Promise<boolean | null> => false)
+vi.mock('@/lib/authz/principal', () => ({ loadTargetClerkRole }))
+vi.mock('@/lib/authz', () => ({ isCrewTargetOrUnknown }))
 vi.mock('@/lib/docusign', () => ({ voidEnvelope: vi.fn() }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => null }))
 vi.mock('@/lib/supabase', () => ({
@@ -119,7 +122,7 @@ const merge = () => POST(new NextRequest('https://app.test/api/admin/members/mer
 
 beforeEach(() => {
   deleteUser.mockClear()
-  for (const f of [getUser, updateUser, createEmailAddress, updateEmailAddress, deleteEmailAddress, logActivity]) f.mockClear()
+  for (const f of [getUser, updateUser, createEmailAddress, updateEmailAddress, deleteEmailAddress, logActivity, loadTargetClerkRole, isCrewTargetOrUnknown]) f.mockClear()
   // By default the kept login's primary already matches the kept record's email.
   clerkUser = {
     id: KEEP_LOGIN,
@@ -300,6 +303,93 @@ describe("POST /api/admin/members/merge — the kept login's email follows the k
       expect(body.loginEmail.detail).toContain("now signs in with the kept record's email")
     } finally {
       consoleError.mockRestore()
+    }
+  })
+
+  // Review finding on PR #694: a verified, primary address on a staff login
+  // hands that account to whoever controls the address. View-as and login
+  // deletion already refuse staff targets; the merge must too.
+  const expectNoClerkWrite = () => {
+    expect(createEmailAddress).not.toHaveBeenCalled()
+    expect(updateEmailAddress).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+    expect(deleteEmailAddress).not.toHaveBeenCalled()
+  }
+
+  it('writes nothing to a staff login and reports it', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    loadTargetClerkRole.mockResolvedValueOnce({ exists: true, role: 'admin' })
+    isCrewTargetOrUnknown.mockResolvedValueOnce(true)
+    try {
+      const res = await mergeWith({ email: PERSONAL, school_email: null })
+      expect(res.status).toBe(200)
+      expect(isCrewTargetOrUnknown).toHaveBeenCalledWith(
+        { clerkUserId: KEEP_LOGIN, clerkRole: 'admin', memberId: KEEP },
+        { route: 'admin/members/merge/login-email' },
+      )
+      expectNoClerkWrite()
+      const body = await res.json()
+      expect(body.ok).toBe(true)
+      expect(body.loginEmail).toMatchObject({ ok: false, status: 'skipped_staff', step: 'check the login is not a staff account' })
+      expect(body.loginEmail.detail).toContain('belongs to staff')
+      expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({ memberId: KEEP, action: 'login_email_skipped_staff' }))
+      expect(JSON.stringify(consoleError.mock.calls)).not.toContain(PERSONAL)
+      expect(JSON.stringify(consoleError.mock.calls)).not.toContain(SCHOOL)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('refuses the same way when it cannot tell whether the login is staff', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    isCrewTargetOrUnknown.mockResolvedValueOnce(null)
+    try {
+      const res = await mergeWith({ email: PERSONAL, school_email: null })
+      expect(res.status).toBe(200)
+      expectNoClerkWrite()
+      const body = await res.json()
+      expect(body.loginEmail).toMatchObject({ ok: false, status: 'failed', step: 'check the login is not a staff account' })
+      expect(body.loginEmail.detail).toContain('could not confirm')
+      expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({ memberId: KEEP, action: 'login_email_update_failed' }))
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('checks a login the kept record inherits, and writes nothing when it is staff', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    members = [{ ...member(KEEP, null), email: SCHOOL }, { ...member(DROP, DROP_LOGIN), email: PERSONAL }]
+    clerkUser = {
+      id: DROP_LOGIN,
+      primaryEmailAddressId: 'idn_personal',
+      emailAddresses: [{ id: 'idn_personal', emailAddress: PERSONAL, verification: { status: 'verified' } }],
+    }
+    mergeRpc(DROP_LOGIN)
+    isCrewTargetOrUnknown.mockResolvedValueOnce(true)
+    try {
+      const res = await mergeWith({ email: SCHOOL })
+      expect(res.status).toBe(200)
+      expect(isCrewTargetOrUnknown).toHaveBeenCalledWith(
+        expect.objectContaining({ clerkUserId: DROP_LOGIN, memberId: KEEP }),
+        expect.anything(),
+      )
+      expectNoClerkWrite()
+      expect((await res.json()).loginEmail).toMatchObject({ ok: false, status: 'skipped_staff' })
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('a staff login whose email already matches is reported unchanged, with no write', async () => {
+    clerkUser.emailAddresses.push({ id: 'idn_personal', emailAddress: PERSONAL, verification: { status: 'verified' } })
+    clerkUser.primaryEmailAddressId = 'idn_personal'
+    isCrewTargetOrUnknown.mockResolvedValue(true)
+    try {
+      const res = await mergeWith({ email: PERSONAL, school_email: null })
+      expectNoClerkWrite()
+      expect((await res.json()).loginEmail).toMatchObject({ ok: true, status: 'unchanged' })
+    } finally {
+      isCrewTargetOrUnknown.mockResolvedValue(false)
     }
   })
 })

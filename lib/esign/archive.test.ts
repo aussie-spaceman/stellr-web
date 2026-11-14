@@ -11,6 +11,7 @@ import {
   archiveEnvelope,
   archivePending,
   loadSignedRecord,
+  logRecordAccess,
   putImmutable,
   retainUntilOnCompletion,
   sha256Hex,
@@ -181,5 +182,25 @@ describe('loadSignedRecord', () => {
     // The signed document itself is unaffected.
     expect(agreementFilename(completed({ provider: 'native', envelope_type: 'minor', minor_name: 'Sam Rivera' }), 'pdf'))
       .toBe('consent-sam-rivera.pdf')
+  })
+})
+
+// staff-role.10: a Staff download is written down as Staff. The column's CHECK takes 'staff'
+// from migration esign_access_log_staff_actor (pgTAP: esign_access_log_staff_actor.test.sql).
+describe('logRecordAccess', () => {
+  it('records the actor type it is given, Staff included', async () => {
+    const db = fakeSupabase()
+    await logRecordAccess(db.client, { envelopeRow: 'row-1', action: 'download', actorType: 'staff', actorId: 'user_placeholder_staff' })
+    expect(db.table('esign_access_log')).toEqual([
+      expect.objectContaining({ envelope_row: 'row-1', action: 'download', actor_type: 'staff', actor_id: 'user_placeholder_staff', detail: {} }),
+    ])
+  })
+
+  it('never throws when the write fails', async () => {
+    const db = fakeSupabase({}, { failOn: (t, a) => (t === 'esign_access_log' && a === 'insert' ? 'down' : null) })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(logRecordAccess(db.client, { envelopeRow: 'row-1', action: 'view', actorType: 'admin', actorId: null })).resolves.toBeUndefined()
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
   })
 })

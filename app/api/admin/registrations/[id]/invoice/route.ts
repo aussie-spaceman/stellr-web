@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requireEventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
-import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { actorFromAuth, crewActorType, logActivity } from '@/lib/activity-log'
 import {
   groupInvoiceSummary,
   previewGroupDiscount,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/group-billing'
 import { withAudit } from '@/lib/audit/route'
 import { loadEventRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
+import { rowTenant } from '@/lib/registration/event-context'
 
 // "Invoice & discount…" on a group in the event roster.
 //   GET  → the group's places, current invoice and invoice history.
@@ -38,18 +39,28 @@ type Args = [Request, { params: Promise<{ id: string }> }]
 
 const notFound = () => NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
 
+type GroupRow = { event_slug: string; type: string | null; teacher_member_id: string | null; tenant_id?: string | null }
+
+/** Who changed the invoice, as the billing helpers record it. Staff is named as Staff (staff-role.10). */
+type InvoiceActorLabel = 'admin' | 'staff' | 'event_manager'
+
 async function guard(db: Db, id: string, req: Request) {
   const crew = await requireEventCrew({ route: ROUTE })
   if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
   audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
-  const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(crew, 'registrations', id, {
+  const loaded = await loadEventRecord<GroupRow>(crew, 'registrations', id, {
     db,
-    select: 'event_slug, type, teacher_member_id',
+    select: 'event_slug, type, teacher_member_id, tenant_id',
     notFound,
     label: ROUTE,
   })
   if (!loaded.ok) return loaded.response
   if (loaded.row.type !== 'group') return notFound()
+  // A group stamped with another tenant answers as a missing one, in every LOADSCOPED_MODE,
+  // as the payment-method route does (C16 follow-up). Off and shadow do not narrow the read,
+  // so this check is what holds there. A row with no stamp is Stellr's, as the enforced read
+  // takes it to be.
+  if (rowTenant(loaded.row.tenant_id) !== crew.tenantId) return notFound()
   // Every action here reads or changes Stellr's Stripe account, its coupons included.
   const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
@@ -57,11 +68,14 @@ async function guard(db: Db, id: string, req: Request) {
   // as a missing group; a failed read of the event's owner is a retryable 503.
   const foreign = await refuseUnlessStellrEvent(db, loaded.row.event_slug, ROUTE)
   if (foreign) return foreign.status === 404 ? notFound() : foreign
-  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, actorLabel: crew.isAdmin ? 'admin' as const : 'event_manager' as const }
+  const actorLabel: InvoiceActorLabel = (await crewActorType()) === 'staff' ? 'staff' : crew.isAdmin ? 'admin' : 'event_manager'
+  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, isAdmin: crew.isAdmin, actorLabel }
 }
 
 // What this request acted on, which withAudit's spec cannot read for itself. A discount code
-// is what a person typed, so only the Stripe coupon it resolved to is recorded.
+// is what a person typed, so only the Stripe coupon it resolved to is recorded. A 5xx before
+// the staff check names no caller yet: the row is the URL's, and its chain is marked as
+// unresolved rather than shown as a deliberate platform event (as payment-method does).
 const audited = new WeakMap<Request, { id: string; userId: string; tenantId: string; action?: string; invoiceId?: string | null; couponId?: string | null }>()
 
 function eventFor(req: Request) {
@@ -69,8 +83,13 @@ function eventFor(req: Request) {
   return {
     actor: a ? { userId: a.userId } : { session: true as const },
     tenant: { tenantId: a?.tenantId ?? null },
-    target: { table: 'registrations', id: a?.id ?? null },
-    metadata: { invoiceAction: a?.action ?? null, invoiceId: a?.invoiceId ?? null, couponId: a?.couponId ?? null },
+    target: { table: 'registrations', id: a?.id ?? new URL(req.url).pathname.split('/').at(-2) ?? null },
+    metadata: {
+      invoiceAction: a?.action ?? null,
+      invoiceId: a?.invoiceId ?? null,
+      couponId: a?.couponId ?? null,
+      ...(a ? {} : { tenant_unresolved: true }),
+    },
   }
 }
 
@@ -129,7 +148,7 @@ async function changeInvoice(req: Request, { params }: { params: Promise<{ id: s
   }
 
   // An internal coupon id (the scholarship coupons) is for admins; a manager enters codes.
-  const discount = body.action === 'remove' ? null : await resolveDiscountCode(stripe, body.code, { promotionCodesOnly: g.actorLabel !== 'admin' })
+  const discount = body.action === 'remove' ? null : await resolveDiscountCode(stripe, body.code, { promotionCodesOnly: !g.isAdmin })
   if (body.action !== 'remove' && !discount) {
     return NextResponse.json({ error: `"${body.code}" isn't an active discount code or coupon in Stripe.` }, { status: 404 })
   }

@@ -6,6 +6,7 @@ import { auditHandlers } from '@/lib/security/audit-coverage'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 import { STELLR_ONLY_DISPOSITIONS } from '@/lib/security/stellr-only-dispositions'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { LOADSCOPED_MODES } from '@/lib/tenancy/load-scoped-mode'
 
 // C16 (docs/TENANCY-S5.md): events admin routes that load a record by id.
 //
@@ -432,6 +433,62 @@ describe('event managers keep the events they have', () => {
     ]
     expect(answers.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403, 403, 403])
     for (const t of ['agreements', 'event_participations', 'participants', 'survey_responses']) expect(queries(t), t).toEqual([])
+  })
+})
+
+// C16-INVOICE (docs/TENANCY-S5.md, "invoice alongside payment-method"): the invoice route
+// takes the payment-method route's stamped-tenant check on the loaded row. Off and shadow do
+// not narrow the read, so without it a Stellr admin reached a group another tenant stamped.
+// A body the route can't read is answered after the guard, so nothing asks Stripe.
+describe('the invoice route, on a group stamped with another tenant', () => {
+  for (const mode of LOADSCOPED_MODES) {
+    it(`answers exactly as a missing group under LOADSCOPED_MODE=${mode}, before the event's owner is read`, async () => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+      const invoice = await import('@/app/api/admin/registrations/[id]/invoice/route')
+      state.rows.registrations = { ...GROUP, tenant_id: OTHER_TENANT }
+      const foreign = await invoice.POST(req({ action: 'nope' }), idCtx)
+      const foreignRead = await invoice.GET(req(), idCtx)
+      expect(foreign.status).toBe(404)
+      expect(foreignRead.status).toBe(404)
+      expect(queries('events')).toEqual([])
+      // The stamp comes in the existing select, so the reads are the ones a missing group costs.
+      const foreignReads = queries('registrations').map((q) => q.select)
+      expect(foreignReads.every((cols) => cols?.includes('tenant_id'))).toBe(true)
+      state.queries = []
+      state.rows.registrations = null
+      expect(await foreign.text()).toBe(await (await invoice.POST(req({ action: 'nope' }), idCtx)).text())
+      expect(await foreignRead.text()).toBe(await (await invoice.GET(req(), idCtx)).text())
+      expect(queries('registrations').map((q) => q.select)).toEqual(foreignReads)
+    })
+
+    it(`goes on for its own tenant's group under LOADSCOPED_MODE=${mode}`, async () => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+      const invoice = await import('@/app/api/admin/registrations/[id]/invoice/route')
+      state.rows.registrations = { ...GROUP, tenant_id: STELLR_TENANT_ID }
+      const own = await invoice.POST(req({ action: 'nope' }), idCtx)
+      expect(own.status).toBe(400)
+      expect(await own.json()).toEqual({ error: 'Enter a discount code' })
+    })
+  }
+
+  it('an event manager of that event gets the same missing answer', async () => {
+    asEventManager('nevada')
+    const invoice = await import('@/app/api/admin/registrations/[id]/invoice/route')
+    state.rows.registrations = { ...GROUP, tenant_id: OTHER_TENANT }
+    const foreign = await invoice.POST(req({ action: 'nope' }), idCtx)
+    expect(foreign.status).toBe(404)
+    state.rows.registrations = null
+    expect(await foreign.text()).toBe(await (await invoice.POST(req({ action: 'nope' }), idCtx)).text())
+  })
+
+  it('Staff, who reaches every Stellr event, gets the same missing answer', async () => {
+    state.session = { userId: 'user_staff', sessionClaims: { metadata: { role: 'staff' } } }
+    const invoice = await import('@/app/api/admin/registrations/[id]/invoice/route')
+    state.rows.registrations = { ...GROUP, tenant_id: OTHER_TENANT }
+    const foreign = await invoice.POST(req({ action: 'nope' }), idCtx)
+    expect(foreign.status).toBe(404)
+    state.rows.registrations = { ...GROUP, tenant_id: STELLR_TENANT_ID }
+    expect((await invoice.POST(req({ action: 'nope' }), idCtx)).status).toBe(400)
   })
 })
 

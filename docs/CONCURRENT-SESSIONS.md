@@ -87,8 +87,15 @@ promotion. On 28 Sept four did, and they blocked each other in two ways:
 - Every close-out inserted a section at the same line of
   `docs/handovers/TRACKER.md`, so the second one to merge went `DIRTY`.
 - Every docs PR, and every push to `dev` it caused, took a turn in the
-  repo-wide e2e queue (`ci.yml`: one run at a time, one pending). Runs that were
-  waiting got cancelled and their PRs stayed blocked.
+  repo-wide e2e queue (`ci.yml` then: one run at a time, one pending). Runs that
+  were waiting got cancelled and their PRs stayed blocked.
+
+Since 5 Nov 2026 (#541) `e2e-tests` waits for the lock with `queue: max`: still
+one run at a time, but several pending runs can queue (up to 100, roughly
+FIFO) instead of a third arrival cancelling the one waiting. And any merge into
+`dev` restarts an open promotion PR's CI, because its head is `dev` and the
+workflow cancels a PR's running checks when its head moves. Check
+`gh pr list --base main --head dev --state open` before merging into `dev`.
 
 Now:
 - Each session writes `docs/handovers/tracker/YYYY-MM-DD-<slug>.md`.

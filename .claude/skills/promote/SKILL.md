@@ -142,6 +142,15 @@ report, then ask me before Step 6". The click resumes the CI read, not the
 merge. Step 6's confirmation is still its own question, because a promotion's
 merge always gets its own yes (rule 1).
 
+**Any merge into `dev` while this PR is open restarts its CI.** The PR's head
+is `dev`, so another session's merge moves it, and `ci.yml`'s concurrency group
+(`cancel-in-progress` for pull requests) cancels the running checks, e2e
+included, and starts them on the new head. Read the checks for the head you are
+about to merge, not an earlier one, and say in the PR body which head passed.
+Its `e2e-tests` then queues for the shared lock behind other runs (`queue: max`),
+and several pending runs can be waiting there at once, so the restart can take
+longer than one suite.
+
 `BEHIND` is common because protection is strict and `dev` moves. Update, never
 rebase:
 

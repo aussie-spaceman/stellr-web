@@ -28,33 +28,7 @@
  *   #    first (pass --pdf and --export as above) and refuses on any problem.
  *   npx tsx scripts/esign-template.ts approve minor 1 --by "David Shaw" [--apply]
  *
- *   # 5. DEV ONLY: the placeholder for the tenant guardian-consent document
- *   #    (S5 wave 7, K5; owner decision W7-6). The real consent wording is a
- *   #    legal item for production and is not in this repo. The placeholder is
- *   #    titled "DEV PLACEHOLDER – NOT A CONSENT FORM" and says so on every page.
- *   #    Every hosted step refuses unless .env.local points at the dev project
- *   #    (or a stack on this machine) and NEXT_PUBLIC_APP_ENV is not prod. There
- *   #    is no override. Nothing is approved unless 5d runs with --apply. Each
- *   #    hosted step (--apply) needs the owner's yes at the time.
- *   #
- *   #    5a. Build it locally: esign-out/tenant_guardian_consent.pdf, .fields.json
- *   #        (from lib/esign/native/templates/tenant-guardian-consent-v1.fields.json)
- *   #        and .html. Writes no database.
- *   npx tsx scripts/esign-template.ts dev-placeholder tenant_guardian_consent
- *   #    5b. Upload it as a new, unapproved, inactive version, under the placeholder title.
- *   npx tsx scripts/esign-template.ts check tenant_guardian_consent
- *   npx tsx scripts/esign-template.ts publish tenant_guardian_consent --dev-placeholder [--apply]
- *   #    5c. K0: sign that version end to end on dev. It needs the publish, not the
- *   #        approval: the envelope names the version, and signing reads it by id.
- *   npx tsx scripts/esign-dev-issue.ts tenant_guardian_consent --version <version>
- *   #    5d. K7b: approve it on dev (it becomes the one consent envelopes use there).
- *   npx tsx scripts/esign-template.ts approve tenant_guardian_consent <version> --dev-placeholder --by "<who checked it>" [--apply]
- *
- *   #    A placeholder can be published or approved only with --dev-placeholder,
- *   #    and --dev-placeholder only on the whole placeholder. A PDF with the mark
- *   #    on any page, in any spelling, counts as a placeholder for every key.
- *   #    Admin → Agreement documents refuses one outside dev as well
- *   #    (lib/esign/native/template-admin.ts).
+ *   # 5. DEV ONLY, the placeholder (dev-placeholder, --dev-placeholder): docs/esign/RUNBOOK-esign-templates.md, "Placeholder script usage".
  *
  * Output lands in esign-out/ (gitignored). Field maps and overrides are
  * reviewed in the repo; PDFs live in the private agreement-templates bucket.

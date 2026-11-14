@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { AWARD_TYPES, EVENT_AWARDS, type AwardType } from '@/lib/event-awards'
 import { ARTWORK_THEME_LABEL, type ArtworkTheme } from '@/lib/artwork-theme'
+import { PlacementSlider } from './PlacementSlider'
 
 // Certificate artwork + print, one row per award (lib/event-awards.ts).
 // The artwork carries every word; the renderer adds only the recipient's name,
@@ -290,15 +291,8 @@ function NamePositioner({
     }
   }
 
-  const slider = (key: keyof Placement, label: string, min: number, max: number, step: number, show: (v: number) => string) => (
-    <label className="block text-xs text-brand-muted-soft space-y-1">
-      <span className="flex justify-between"><span>{label}</span><span className="text-brand-muted">{show(p[key])}</span></span>
-      <input
-        type="range" min={min} max={max} step={step} value={p[key]}
-        onChange={(e) => setP({ ...p, [key]: Number(e.target.value) })}
-        className="w-full accent-brand-blue"
-      />
-    </label>
+  const slider = (key: keyof Placement, label: string, min: number, max: number, step: number, opts: { scale?: number; unit?: string; suffix?: string }) => (
+    <PlacementSlider label={label} value={p[key]} onChange={(v) => setP({ ...p, [key]: v })} min={min} max={max} step={step} {...opts} />
   )
 
   return (
@@ -315,9 +309,9 @@ function NamePositioner({
             onChange={(e) => setSample(e.target.value)}
           />
         </label>
-        {slider('name_y', 'Height on the page', 0.3, 0.8, 0.005, (v) => `${Math.round(v * 1000) / 10}% down`)}
-        {slider('name_max_width', 'Widest the name may run', 0.2, 0.9, 0.01, (v) => `${Math.round(v * 100)}% of width`)}
-        {slider('name_size', 'Name size', 16, 72, 1, (v) => `${v} pt`)}
+        {slider('name_y', 'Height on the page', 0.3, 0.8, 0.005, { scale: 100, unit: '%', suffix: 'down' })}
+        {slider('name_max_width', 'Widest the name may run', 0.2, 0.9, 0.01, { scale: 100, unit: '%', suffix: 'of width' })}
+        {slider('name_size', 'Name size', 16, 72, 1, { unit: 'pt' })}
         <p className="text-xs text-brand-muted-soft">Long names shrink to fit the width. Try the longest name on your roster.</p>
         <div className="flex gap-3">
           <button

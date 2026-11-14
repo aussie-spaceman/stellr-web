@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { DEFAULT_PD_LAYOUT, PD_FIELDS, type FieldPlacement, type PdField, type PdLayout } from '@/lib/pd-certificate-layout'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { ARTWORK_THEME_LABEL, type ArtworkTheme } from '@/lib/artwork-theme'
+import { PlacementSlider } from './PlacementSlider'
 
 // The educator PD certificate's artwork: upload the front and back pages, then
 // position the four fields on the front with a live preview (the same pattern
@@ -181,17 +182,9 @@ function FieldPositioner({ theme, eventSlug, initial, onSaved, onError }: {
 
   const p = layout[field]
   const set = (key: keyof FieldPlacement, v: number) => setLayout({ ...layout, [field]: { ...p, [key]: v } })
-  const slider = (key: keyof FieldPlacement, label: string, min: number, max: number, step: number, show: (v: number) => string) => (
-    <label className="block text-xs text-brand-muted-soft space-y-1">
-      <span className="flex justify-between"><span>{label}</span><span className="text-brand-muted">{show(p[key])}</span></span>
-      <input
-        type="range" min={min} max={max} step={step} value={p[key]}
-        onChange={(e) => set(key, Number(e.target.value))}
-        className="w-full accent-brand-blue"
-      />
-    </label>
+  const slider = (key: keyof FieldPlacement, label: string, min: number, max: number, step: number, opts: { scale?: number; unit?: string; suffix?: string }) => (
+    <PlacementSlider label={label} value={p[key]} onChange={(v) => set(key, v)} min={min} max={max} step={step} {...opts} />
   )
-  const pct = (v: number) => `${Math.round(v * 1000) / 10}%`
 
   return (
     <div className="grid md:grid-cols-[minmax(0,1fr)_16rem] gap-4 rounded-lg bg-brand-canvas p-3">
@@ -217,10 +210,10 @@ function FieldPositioner({ theme, eventSlug, initial, onSaved, onError }: {
             />
           </label>
         )}
-        {slider('x', 'Across the page (centre)', 0.05, 0.95, 0.002, (v) => `${pct(v)} from left`)}
-        {slider('y', 'Height on the page', 0.05, 0.95, 0.002, (v) => `${pct(v)} down`)}
-        {slider('maxWidth', 'Widest it may run', 0.02, 0.9, 0.005, (v) => `${pct(v)} of width`)}
-        {slider('size', 'Size (as in Canva)', 12, 120, 1, (v) => `${v}`)}
+        {slider('x', 'Across the page (centre)', 0.05, 0.95, 0.002, { scale: 100, unit: '%', suffix: 'from left' })}
+        {slider('y', 'Height on the page', 0.05, 0.95, 0.002, { scale: 100, unit: '%', suffix: 'down' })}
+        {slider('maxWidth', 'Widest it may run', 0.02, 0.9, 0.005, { scale: 100, unit: '%', suffix: 'of width' })}
+        {slider('size', 'Size (as in Canva)', 12, 120, 1, {})}
         <p className="text-xs text-brand-muted-soft">
           {field === 'name' ? 'Long names shrink to fit the width.' : 'Shrinks only if it would run past the width.'}{' '}
           The preview uses a 7.5-hour sample at STEM School.

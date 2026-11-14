@@ -28,6 +28,16 @@ describe('proxy matcher', () => {
     expect(matches('/events/nevada-space-design-challenge')).toBe(true)
   })
 
+  // proxy-matcher-gated-prefixes.7: `_next` is skipped as a whole segment only.
+  it('skips _next as a whole segment, and runs on a path that only starts with it', () => {
+    expect(matches('/_next')).toBe(false)
+    expect(matches('/_next/static/chunks/main.js')).toBe(false)
+    expect(matches('/_next/static/media/font.woff2')).toBe(false)
+    expect(matches('/_nextfoo')).toBe(true)
+    expect(matches('/_next-admin')).toBe(true)
+    expect(matches('/_nextx/y')).toBe(true)
+  })
+
   it('skips Vercel beacons by exact path', () => {
     expect(matches('/_vercel/insights/view')).toBe(false)
     expect(matches('/_vercel/speed-insights/vitals')).toBe(false)
@@ -88,6 +98,8 @@ describe('proxy matcher', () => {
     '/check-in/x.css',
     '/check-in/x.css/code',
     '/scholarship/offer/tok.css',
+    '/privacy/request/x.css',
+    '/privacy/request/confirm/x.png',
   ])('runs on %s, a gated path with a file extension', (path) => {
     expect(matches(path)).toBe(true)
   })
@@ -104,6 +116,8 @@ describe('proxy matcher', () => {
     '/accounts.css',
     '/scholarship/x.png',
     '/scholarship/offers.png',
+    '/privacy/x.png',
+    '/privacy/requests.png',
     '/team/headshot.jpg',
     '/images/logo-icon.svg',
     '/fonts/x.woff2',

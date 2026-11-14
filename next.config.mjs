@@ -71,6 +71,9 @@ export function imagesConfig(env = process.env) {
     // throws, and a production build gets a 400 and shows the alt text. So add
     // a new image folder here.
     localPatterns: [
+      // A pattern here cannot constrain the query, so this allows any `src`.
+      // app/api/img/route.ts checks it instead: only an image in this
+      // deployment's own Sanity project and dataset, anything else a 400.
       { pathname: '/api/img' },
       { pathname: '/images/**', search: '' },
       { pathname: '/team/**', search: '' },

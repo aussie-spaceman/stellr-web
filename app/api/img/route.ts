@@ -12,7 +12,10 @@ import { SANITY_IMAGE_QUALITY, isSiteSanityImage, sanityAssetSize, sanityImageCa
 // docs/RUNBOOK-privacy-retention-and-deletion.md, Part C.
 //
 // Locked to Stellr's own Sanity project so this can't be used as an open image
-// proxy. Sanity URLs already carry the asset hash + transform params, so they
+// proxy. This is the only check on `src`: next.config.mjs's images.localPatterns
+// lets next/image request /api/img with any query, because a pattern there can't
+// match one. Media-host and /public images are not fetched here: next/image
+// serves them directly, so any other `src` is a 400 before anything is fetched. Sanity URLs already carry the asset hash + transform params, so they
 // cache cleanly. It serves only the widths and transforms the site's pages ask
 // for (lib/sanity-image-params), so each image has a few fixed URLs.
 

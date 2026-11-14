@@ -30,8 +30,11 @@
 //                               (mostly minors) enter a name and date of birth,
 //                               so no tags load and no cookie banner covers the
 //                               form on a phone.
-
-export const PRIVATE_ROUTE_HEADER = 'x-stellr-private-route'
+//   /sign-in, /sign-up, /account/onboarding
+//                               only when a query value (?next, ?redirect_url, …)
+//                               is itself a private link. A guest who opens a pay
+//                               or join link is sent to sign in with that link in
+//                               ?next, so the token is in this page's address too.
 
 const PRIVATE = [
   /^\/sign(\/|$)/,
@@ -44,6 +47,44 @@ const PRIVATE = [
   /^\/check-in(\/|$)/,
 ]
 
-export function isPrivatePath(pathname: string): boolean {
-  return PRIVATE.some((re) => re.test(pathname))
+// Pages that send the visitor on to a URL named in their query.
+const HANDOFF = /^\/(sign-in|sign-up|account\/onboarding)(\/|$)/
+
+// Onboarding's own ?next can name sign-in again, and so on. Two levels is
+// every real chain; anything deeper is treated as private.
+const MAX_HANDOFF_DEPTH = 3
+
+/** A same-site path or absolute http(s) URL named in a query value, or null. */
+function linkedUrl(value: string): URL | null {
+  if (!value.startsWith('/') && !/^https?:\/\//i.test(value)) return null
+  try {
+    return new URL(value, 'https://placeholder.invalid')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether a page's address is a private link (see above). `pathname` may carry
+ * its own `?query`; `search` is the query when it is passed separately, as
+ * `URL.search` or `URLSearchParams`. Without either, only the path decides.
+ */
+export function isPrivatePath(pathname: string, search?: string | URLSearchParams): boolean {
+  return isPrivateAt(pathname, search, 0)
+}
+
+function isPrivateAt(pathname: string, search: string | URLSearchParams | undefined, depth: number): boolean {
+  const q = pathname.indexOf('?')
+  const path = q === -1 ? pathname : pathname.slice(0, q)
+  if (PRIVATE.some((re) => re.test(path))) return true
+  if (!HANDOFF.test(path)) return false
+
+  const params = new URLSearchParams(search ?? (q === -1 ? '' : pathname.slice(q)))
+  for (const value of params.values()) {
+    const target = linkedUrl(value)
+    if (!target) continue
+    if (depth + 1 >= MAX_HANDOFF_DEPTH) return true
+    if (isPrivateAt(target.pathname, target.search, depth + 1)) return true
+  }
+  return false
 }

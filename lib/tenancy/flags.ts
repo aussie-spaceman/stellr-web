@@ -29,7 +29,12 @@ import { AUDIT_FLAG, auditEnabled } from '@/lib/audit/platform'
 import { TENANT_EVENT_MAIL_FLAG, tenantEventMailEnabled } from '@/lib/event-emails/tenant-mail'
 import { FIELD_CRYPTO_MODES, fieldCryptoActive, fieldCryptoMode, type FieldCryptoMode } from '@/lib/field-crypto'
 import { MIN_SECRET_LENGTH, rateLimitStoreMode, type RateLimitStoreMode } from '@/lib/rate-limit-store'
-import { TENANT_GUARDIAN_CONSENT_FLAG, tenantGuardianConsentEnabled } from '@/lib/registration/eligibility'
+import {
+  TENANT_GUARDIAN_CONSENT_FLAG,
+  tenantGuardianConsentEnabled,
+  tenantGuardianConsentMissingPreconditions,
+  tenantGuardianConsentReady,
+} from '@/lib/registration/eligibility'
 import { DERIVATION_MODES, type DerivationMode } from './constants'
 import { TENANT_HOST_SUFFIX_VAR, TENANT_ROUTING_FLAG, tenantRoutingConfig } from './host'
 import { LOADSCOPED_MODE_ENV, LOADSCOPED_MODES, loadScopedMode, type LoadScopedMode } from './load-scoped-mode'
@@ -116,10 +121,12 @@ export const SWITCHES = {
   guardianConsent: {
     name: TENANT_GUARDIAN_CONSENT_FLAG,
     default: false,
-    resolve: () => tenantGuardianConsentEnabled(),
+    /** Whether a tenant-event minor can be admitted: the flag and every precondition (the readiness guard). */
+    resolve: () => tenantGuardianConsentReady(),
     accepts: exactBoolean,
-    // tenantGuardianConsentReadiness needs the tenant's sender, which needs tenant mail.
-    dependsOn: [TENANT_EVENT_MAIL_FLAG],
+    // The readiness guard's preconditions (lib/registration/eligibility.ts
+    // TENANT_GUARDIAN_CONSENT_PRECONDITIONS, owner decision W7-14).
+    dependsOn: [LOADSCOPED_MODE_ENV, TENANT_EVENT_MAIL_FLAG],
   } satisfies SwitchSpec<boolean>,
   fieldCryptoMode: {
     name: FIELD_CRYPTO_MODE_ENV,
@@ -218,10 +225,13 @@ export const INVALID_COMBINATIONS: readonly CombinationRule[] = [
     },
   },
   {
-    id: 'guardian_consent_without_tenant_mail',
-    switches: [TENANT_GUARDIAN_CONSENT_FLAG, TENANT_EVENT_MAIL_FLAG],
-    effect: "Every minor at another tenant's event is refused: the guardian invitation has no sender.",
-    holds: () => tenantGuardianConsentEnabled() && !tenantEventMailEnabled(),
+    // The readiness guard (tracker s5-programme.20): the flag is on, but a
+    // precondition is not, so nothing is admitted consent-pending.
+    id: 'guardian_consent_not_ready',
+    switches: [TENANT_GUARDIAN_CONSENT_FLAG, LOADSCOPED_MODE_ENV, TENANT_EVENT_MAIL_FLAG],
+    effect:
+      "Every minor at another tenant's event is refused, as with the flag off: guardian consent needs LOADSCOPED_MODE=enforce and TENANT_EVENT_MAIL_ENABLED=true. The sweep still settles existing consents.",
+    holds: () => tenantGuardianConsentEnabled() && tenantGuardianConsentMissingPreconditions().length > 0,
   },
   {
     id: 'field_crypto_mode_without_key',

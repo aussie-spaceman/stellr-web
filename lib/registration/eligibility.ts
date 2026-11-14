@@ -38,6 +38,7 @@
 import { checkRegistrationAge, type RegistrationAgeOk, type RegistrationAgeRefused, type RegistrationAgeResult } from '@/lib/registration-eligibility'
 import { onDate } from '@/lib/age'
 import { isValidTimeZone, localDate } from '@/lib/survey/timezone'
+import { LOADSCOPED_MODE_ENV, loadScopedMode } from '@/lib/tenancy/load-scoped-mode'
 import { STELLR_TENANT_ID, TENANT_MIN_PARTICIPANT_AGE } from '@/lib/tenancy/constants'
 
 /** Stellr's own events: today's rules, unchanged. */
@@ -109,7 +110,7 @@ export interface AssertRegistrableOptions extends AssertEligibleOptions {
   /**
    * The route can collect a parent's or guardian's name and email and run the
    * tenant guardian-consent flow (S5 wave 6). Only register/individual does.
-   * Has no effect unless TENANT_GUARDIAN_CONSENT_ENABLED is exactly "true".
+   * Has no effect unless tenantGuardianConsentReady(): the flag exactly "true" and its preconditions met.
    */
   guardianConsent?: boolean
 }
@@ -123,8 +124,74 @@ export type RegistrableResult = EligibilityResult | (RegistrationAgeOk & { guard
  * before. Read at call time, so a flip needs a redeploy only.
  */
 export const TENANT_GUARDIAN_CONSENT_FLAG = 'TENANT_GUARDIAN_CONSENT_ENABLED'
+
+/**
+ * Whether the flag itself is exactly "true". This is the sweep's gate (the
+ * membership-expiry cron): with the flag on, pending, declined and expired rows go
+ * on being settled even while a precondition below is missing, since settling only
+ * expires, removes and voids. Nothing that admits a minor reads it: admission reads
+ * tenantGuardianConsentReady(), which also needs every precondition.
+ */
 export function tenantGuardianConsentEnabled(): boolean {
   return process.env[TENANT_GUARDIAN_CONSENT_FLAG] === 'true'
+}
+
+// TENANT_EVENT_MAIL_FLAG and tenantEventMailEnabled() in lib/event-emails/tenant-mail.ts,
+// read here as that module reads it. Not imported: many register-route tests mock
+// that module whole, and this file is on their import path.
+// lib/registration/eligibility.test.ts holds the two equal.
+export const CONSENT_TENANT_MAIL_FLAG = 'TENANT_EVENT_MAIL_ENABLED'
+
+/**
+ * What the flag needs in the same environment before it admits anyone (the
+ * readiness guard, tracker s5-programme.20, docs/ENV-MATRIX.md): each variable and
+ * the value it must resolve to. Lane C's tenant-event refusals (#624) are code, live
+ * wherever this code runs, so they need no switch. Signing and the published consent
+ * document are not switches: tenantGuardianConsentReadiness
+ * (lib/registration/tenant-guardian-consent.ts) checks them per registration.
+ */
+export const TENANT_GUARDIAN_CONSENT_PRECONDITIONS = [
+  // Owner decision W7-14, 13 Nov 2026: tenant-scoped loads are enforced.
+  { name: LOADSCOPED_MODE_ENV, needs: 'enforce', holds: () => loadScopedMode() === 'enforce' },
+  // The guardian's invitation and the registrant's notices go from the tenant's sender.
+  { name: CONSENT_TENANT_MAIL_FLAG, needs: 'true', holds: () => process.env[CONSENT_TENANT_MAIL_FLAG] === 'true' },
+] as const
+
+/** The preconditions not met now, as NAME=needed. Never a set value. */
+export function tenantGuardianConsentMissingPreconditions(): string[] {
+  return TENANT_GUARDIAN_CONSENT_PRECONDITIONS.filter((p) => !p.holds()).map((p) => `${p.name}=${p.needs}`)
+}
+
+// The last missing set logged, so a misconfigured instance says so once per change
+// rather than on every registration.
+let loggedMissing: string | null = null
+
+/** Test seam: forget what was logged, so the next refusal logs again. */
+export function resetGuardianConsentReadinessLog(): void {
+  loggedMissing = null
+}
+
+/**
+ * The readiness guard (tracker s5-programme.20): whether a tenant-event minor may be
+ * admitted consent-pending at all. True only when the flag is exactly "true" and
+ * every precondition holds. With the flag on and a precondition missing it answers
+ * false, so every tenant-event minor is refused as with the flag off, and logs the
+ * missing preconditions by name (once per change of the missing set). With the flag
+ * unset, as on production, it answers false and logs nothing.
+ */
+export function tenantGuardianConsentReady(): boolean {
+  if (!tenantGuardianConsentEnabled()) return false
+  const missing = tenantGuardianConsentMissingPreconditions()
+  if (missing.length === 0) {
+    loggedMissing = null
+    return true
+  }
+  const key = missing.join(', ')
+  if (loggedMissing !== key) {
+    loggedMissing = key
+    console.error(`[tenant-guardian-consent] ${TENANT_GUARDIAN_CONSENT_FLAG} is on but minors are refused; missing preconditions: ${key}`)
+  }
+  return false
 }
 
 /** Safe to show the person filling in the form. Wording is a proposal for the owner (S5 A7). */
@@ -222,7 +289,7 @@ export function assertEligible(
  * the `under_minimum_age` reason so every route answers it as it does an age refusal.
  * Wording approved by the owner on 10 Nov 2026.
  *
- * S5 wave 6: with TENANT_GUARDIAN_CONSENT_ENABLED on and `guardianConsent` passed, a
+ * S5 wave 6: with tenantGuardianConsentReady() and `guardianConsent` passed, a
  * minor who passes assertEligible is admitted with `guardianConsentRequired`, and the
  * route must save them consent-pending (lib/registration/tenant-guardian-consent.ts).
  * Group and group-join pass no `guardianConsent`, so they still refuse every minor.
@@ -237,7 +304,7 @@ export function assertRegistrable(
   // S5 wave 6 (owner decision, 10 Nov 2026): a minor who passed assertEligible is
   // 14 or older on the day and 13 or older today. Where the route can take a
   // guardian and the flag is on, they may register pending a guardian's consent.
-  if (opts.guardianConsent && tenantGuardianConsentEnabled()) return { ...result, guardianConsentRequired: true }
+  if (opts.guardianConsent && tenantGuardianConsentReady()) return { ...result, guardianConsentRequired: true }
   return minorRefusal(opts)
 }
 

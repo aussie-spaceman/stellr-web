@@ -346,6 +346,13 @@ describe('assertRegistrable: the register routes’ consent rule (S5 A7)', () =>
 
   describe('S5 wave 6: guardian consent', () => {
     afterEach(() => vi.unstubAllEnvs())
+    // The flag with the readiness guard's preconditions (s5-programme.20): what
+    // "flag on" means below. lib/registration/eligibility.consent-guard.test.ts
+    // covers each precondition missing.
+    beforeEach(() => {
+      vi.stubEnv('LOADSCOPED_MODE', 'enforce')
+      vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    })
 
     it('flag off: guardianConsent changes nothing, every minor is refused', () => {
       expect(assertRegistrable('2010-06-01', ctx, { guardianConsent: true })).toEqual({ ok: false, reason: 'under_minimum_age', error: CONSENT })

@@ -10,12 +10,19 @@
 -- consent row goes with its participant; and that every tenant-event minor gets a
 -- pending consent row in the same statement that saves it, whoever writes it, so
 -- no participant can be a minor on a tenant event without one; and that a
--- date-of-birth correction to 18 or over removes a still-pending row (not a
+-- date-of-birth correction to 18 or over settles a still-pending row (not a
 -- declined one), so the adult checks in.
+--
+-- And, since 20261114072142_tenant_guardian_consent_edges.sql (A16-DBTESTS): the
+-- settled row is kept as the trace (T-25) and re-opens if a correction makes the
+-- participant a minor again; a move onto a Stellr event's registration drops the
+-- pending row (fixA-notdone-move); a group registration's minor gets a pending row;
+-- a Stellr participant saved already checked in gets none; and escalated_at exists
+-- for the sweep's retry cap.
 BEGIN;
 SET LOCAL search_path = extensions, public;
 
-SELECT plan(37);
+SELECT plan(45);
 
 -- ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -177,15 +184,24 @@ UPDATE public.participants SET date_of_birth = (pg_temp.event_day() - interval '
 SELECT is((SELECT status FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000005'),
   'pending', 'a date-of-birth correction that makes a tenant participant a minor opens a pending consent');
 
--- And a correction back to 18 or over removes that still-pending row, so the adult
--- checks in, is mailed and is never swept.
+-- And a correction back to 18 or over settles that still-pending row (T-25: kept,
+-- with when, rather than deleted), so the adult checks in, is mailed and is never
+-- swept.
 UPDATE public.participants SET date_of_birth = (pg_temp.event_day() - interval '20 years')::date
  WHERE id = 'c2000000-0000-4000-8000-000000000005';
-SELECT is((SELECT count(*)::int FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000005'),
-  0, 'a date-of-birth correction to 18 or over removes a consent row still pending');
+SELECT ok((SELECT status = 'settled' AND settled_at IS NOT NULL
+             FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000005'),
+  'a date-of-birth correction to 18 or over keeps the pending row, settled, with settled_at');
 SELECT lives_ok(
   $$UPDATE public.participants SET checked_in_at = now(), check_in_method = 'manual' WHERE id = 'c2000000-0000-4000-8000-000000000005'$$,
   'after the correction to 18 or over, the participant checks in');
+
+-- A further correction that makes them a minor again re-opens the settled row.
+UPDATE public.participants SET date_of_birth = (pg_temp.event_day() - interval '16 years')::date
+ WHERE id = 'c2000000-0000-4000-8000-000000000005';
+SELECT ok((SELECT status = 'pending' AND settled_at IS NULL AND agreement_id IS NULL
+             FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000005'),
+  'a correction back under 18 re-opens a settled consent as pending');
 
 -- A declined consent is not undone by a correction: its removal goes on.
 UPDATE public.participants SET date_of_birth = (pg_temp.event_day() - interval '20 years')::date
@@ -199,6 +215,45 @@ UPDATE public.participants SET registration_id = 'b2000000-0000-4000-8000-000000
 SELECT ok((SELECT status = 'pending' AND settled_at IS NULL AND registration_id = 'b2000000-0000-4000-8000-000000000006'
              FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000002'),
   'moving a signed minor to another registration resets their consent to pending');
+
+-- ── 3b. The edges (20261114072142) ────────────────────────────────────────────
+
+SELECT has_column('public', 'tenant_guardian_consents', 'escalated_at', 'tenant_guardian_consents has escalated_at for the retry cap');
+SELECT throws_ok(
+  $$UPDATE public.tenant_guardian_consents SET status = 'settled', settled_at = NULL WHERE id = 'd2000000-0000-4000-8000-000000000002'$$,
+  '23514', NULL, 'a settled status with no settled_at is refused');
+
+INSERT INTO public.registrations (id, event_slug, event_title, type, tenant_id) VALUES
+  ('b2000000-0000-4000-8000-000000000008', 'tgc-live', 'tgc group', 'group', 'a2000000-0000-4000-8000-000000000001'),
+  ('b2000000-0000-4000-8000-000000000009', 'tgc-live', 'tgc to stellr', 'individual', 'a2000000-0000-4000-8000-000000000001');
+INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role) VALUES
+  ('c2000000-0000-4000-8000-000000000008', 'b2000000-0000-4000-8000-000000000008', 'Pg', 'Group', 'tgc-group@example.com', '0',
+   (pg_temp.event_day() - interval '15 years')::date, '', 'M', '', 'high_school', 'participant'),
+  ('c2000000-0000-4000-8000-000000000009', 'b2000000-0000-4000-8000-000000000009', 'Pg', 'Mover', 'tgc-mover@example.com', '0',
+   (pg_temp.event_day() - interval '15 years')::date, '', 'M', '', 'high_school', 'participant');
+
+-- Whoever writes it: a group registration's minor is consent-pending too.
+SELECT is((SELECT status FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000008'),
+  'pending', 'a group registration''s minor on a tenant event gets a pending consent row');
+
+-- fixA-notdone-move: a move onto a Stellr event's registration drops the pending row,
+-- so Stellr's participant is not held by another organiser's consent.
+UPDATE public.participants SET registration_id = 'b2000000-0000-4000-8000-000000000004'
+ WHERE id = 'c2000000-0000-4000-8000-000000000009';
+SELECT is((SELECT count(*)::int FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000009'),
+  0, 'moving a consent-pending minor onto a Stellr event''s registration drops their pending row');
+SELECT lives_ok(
+  $$UPDATE public.participants SET checked_in_at = now(), check_in_method = 'manual' WHERE id = 'c2000000-0000-4000-8000-000000000009'$$,
+  'after the move onto Stellr''s event, the participant checks in');
+
+-- A Stellr participant saved already checked in is admitted, with no consent row.
+SELECT lives_ok(
+  $$INSERT INTO public.participants (id, registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role, checked_in_at, check_in_method)
+    VALUES ('c2000000-0000-4000-8000-000000000010', 'b2000000-0000-4000-8000-000000000004', 'Pg', 'StellrWalkIn', 'tgc-stellr-walkin@example.com', '0',
+            (pg_temp.event_day() - interval '15 years')::date, '', 'M', '', 'high_school', 'participant', now(), 'manual')$$,
+  'a Stellr event''s minor can be inserted already checked in');
+SELECT is((SELECT count(*)::int FROM public.tenant_guardian_consents WHERE participant_id = 'c2000000-0000-4000-8000-000000000010'),
+  0, 'a Stellr participant inserted already checked in gets no consent row');
 
 -- ── 4. The consent envelope's type ────────────────────────────────────────────
 

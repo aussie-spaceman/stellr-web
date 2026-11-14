@@ -7,12 +7,14 @@ import { HOUR_MS } from '@/lib/rate-limit'
 import { limit as limitRequests } from '@/lib/rate-limit-async'
 import type { AuditAction } from '@/lib/audit/actions'
 import { isTenantRow, loadTenantSender } from '@/lib/event-emails/tenant-mail'
+// Type only: a tenant host may not reach lib/notify at run time (RemovalOptions.notifyStaff).
+import type { notifyCommunityAdmins } from '@/lib/notify'
 import {
   issueTenantGuardianConsent,
   tenantGuardianConsentDocumentReady,
   TENANT_GUARDIAN_CONSENT_ENVELOPE_TYPE,
 } from '@/lib/esign/tenant-guardian-consent'
-import { tenantGuardianConsentEnabled } from './eligibility'
+import { tenantGuardianConsentReady } from './eligibility'
 import { sendTenantRegistrationConfirmation, type TenantConfirmationKind } from './tenant-confirmation'
 
 // Guardian consent on another organiser's event (S5 wave 6, owner decision
@@ -68,6 +70,15 @@ export const TENANT_GUARDIAN_CONSENT_WINDOW_DAYS = 14
 
 /** How long a failed removal waits before the sweep tries again. Under a day, so the next daily run takes it. */
 export const REMOVAL_RETRY_MS = 20 * 60 * 60 * 1000
+
+/**
+ * Failed removals before the sweep stops retrying a row (tracker s5-programme.26).
+ * The row is then marked escalated_at, staff are alerted once, and the participant
+ * stays held from check-in and event mail until someone removes it. The cap takes
+ * effect only when a staff alert is wired (RemovalOptions.notifyStaff): without one,
+ * the row keeps being retried, as before the cap, so it is never left with nobody told.
+ */
+export const MAX_REMOVAL_ATTEMPTS = 5
 
 /** Rows per sweep run, so it fits beside the cron's other work. */
 export const SWEEP_BATCH = 25
@@ -178,14 +189,15 @@ export function consentWindowEnd(now: Date, eventStartsAt: string | null | undef
 export type ConsentReadiness = { ready: true; organiserName: string } | { ready: false; reason: string }
 
 /**
- * Whether the flow can run for this tenant: the flag, signing and the published
+ * Whether the flow can run for this tenant: the flag and its preconditions
+ * (tenantGuardianConsentReady, the readiness guard), signing and the published
  * consent document, the tenant's sender (which also needs
  * TENANT_EVENT_MAIL_ENABLED) and its display name. Never throws: a failed read
  * is "not ready", so the minor is refused rather than left waiting on an
  * invitation that cannot go.
  */
 export async function tenantGuardianConsentReadiness(db: SupabaseClient, tenantId: string): Promise<ConsentReadiness> {
-  if (!tenantGuardianConsentEnabled()) return { ready: false, reason: 'disabled' }
+  if (!tenantGuardianConsentReady()) return { ready: false, reason: 'disabled' }
   if (!isTenantRow(tenantId)) return { ready: false, reason: 'stellr' }
   if (!(await tenantGuardianConsentDocumentReady(db))) return { ready: false, reason: 'document' }
   if (!(await loadTenantSender(db, tenantId))) return { ready: false, reason: 'sender' }
@@ -289,12 +301,28 @@ export function guardianInvitationOutcome(invite: GuardianInvite): { invitation:
 
 // ── Audit ───────────────────────────────────────────────────────────────────
 
+/**
+ * tenant_guardian_consents.status (migrations 20261110164339 and
+ * 20261114072142). `settled`: a date-of-birth correction made the participant 18
+ * or over while the consent was pending; the row is kept as the trace that the
+ * hold was lifted, and it holds nobody.
+ */
+export const CONSENT_STATUSES = ['pending', 'signed', 'declined', 'expired', 'settled'] as const
+export type ConsentStatus = (typeof CONSENT_STATUSES)[number]
+
+/**
+ * The statuses that hold a participant: from check-in (the database trigger) and
+ * from tenant event mail (unconsentedParticipantIds). Pending, or declined or
+ * expired and awaiting removal. Not signed, and not settled.
+ */
+export const HELD_CONSENT_STATUSES = ['pending', 'declined', 'expired'] as const satisfies readonly ConsentStatus[]
+
 interface ConsentRow {
   id: string
   tenant_id: string
   registration_id: string
   participant_id: string
-  status: string
+  status: ConsentStatus
   removal_attempts?: number | null
   /** The consent envelope the row was opened with; NULL until linked, and again after a move. */
   agreement_id?: string | null
@@ -502,7 +530,65 @@ export async function settleTenantGuardianConsentDeclined(
 export interface RemovalOptions {
   /** The deletion registry call, replaceable in tests. */
   deleteRegistration?: (registrationId: string) => Promise<void>
+  /**
+   * The staff alert for a removal escalated at MAX_REMOVAL_ATTEMPTS: pass
+   * notifyCommunityAdmins (lib/notify.ts). It is passed in, not imported, because
+   * this module is reachable from a tenant host's register route, and a tenant host
+   * may not reach lib/notify (test/tenant-surface.test.ts, whose baseline only
+   * falls). The sweep's caller, the membership-expiry cron, runs on Stellr's side.
+   * Without it nothing is escalated: a removal past MAX_REMOVAL_ATTEMPTS keeps being
+   * rescheduled, and each failure logs (ids only) that the cap waits on an alert.
+   */
+  notifyStaff?: typeof notifyCommunityAdmins
   now?: Date
+}
+
+/**
+ * The removal failed MAX_REMOVAL_ATTEMPTS times: stop rescheduling it, mark the row
+ * for staff attention (escalated_at; the sweep's retry read leaves it out), and
+ * alert the event's tenant's staff once (RemovalOptions.notifyStaff). The mark is
+ * written only where none is, so a second caller alerts nobody. The alert and the log
+ * carry ids only: never a name, an email or a date of birth. The tenant comes from the
+ * consent row, as notifyCommunityAdmins asks. Never throws: a failed alert is logged,
+ * and the row stays marked.
+ */
+async function escalateRemoval(
+  db: SupabaseClient,
+  row: ConsentRow,
+  attempts: number,
+  notifyStaff: NonNullable<RemovalOptions['notifyStaff']>,
+  now: Date,
+): Promise<'escalated' | 'retry'> {
+  const { data, error } = await db
+    .from('tenant_guardian_consents')
+    .update({ removal_attempts: attempts, next_attempt_at: null, escalated_at: now.toISOString() })
+    .eq('id', row.id)
+    .is('escalated_at', null)
+    .select('id')
+  if (error) {
+    console.error(`[tenant-guardian-consent] could not mark consent ${row.id} for staff attention:`, error.message)
+    return 'retry'
+  }
+  if (!data?.length) return 'escalated' // already marked, and staff already alerted
+  console.error(`[tenant-guardian-consent] removal of registration ${row.registration_id} failed ${attempts} times; consent ${row.id} escalated to staff`)
+  const body =
+    `Guardian consent: registration ${row.registration_id} could not be removed after ${attempts} attempts, so it is no longer retried. ` +
+    `Consent ${row.id}, participant ${row.participant_id}. The participant stays held from check-in and event email until the registration is removed.`
+  try {
+    await notifyStaff(
+      {
+        type: 'action',
+        body,
+        referenceType: 'tenant_guardian_consent',
+        referenceId: row.id,
+        email: { subject: 'Action needed: a guardian consent registration could not be removed', html: `<p>${body}</p>`, text: body },
+      },
+      { tenantId: row.tenant_id },
+    )
+  } catch (err) {
+    console.error(`[tenant-guardian-consent] staff alert for consent ${row.id} failed:`, err instanceof Error ? err.message : err)
+  }
+  return 'escalated'
 }
 
 async function registryDelete(registrationId: string): Promise<void> {
@@ -520,16 +606,23 @@ async function removeUnconsentedRegistration(
   row: ConsentRow,
   reason: 'declined' | 'expired',
   opts: RemovalOptions = {},
-): Promise<'removed' | 'retry'> {
+): Promise<'removed' | 'retry' | 'escalated'> {
   const now = opts.now ?? new Date()
   const notice = await noticeFor(db, row.participant_id)
   try {
     await (opts.deleteRegistration ?? registryDelete)(row.registration_id)
   } catch (err) {
     console.error(`[tenant-guardian-consent] removal of registration ${row.registration_id} failed:`, err instanceof Error ? err.message : err)
+    const attempts = (row.removal_attempts ?? 0) + 1
+    if (attempts >= MAX_REMOVAL_ATTEMPTS) {
+      // Escalate only when someone will be told. With no alert wired, keep retrying:
+      // an escalated row leaves the retry read, and nothing else would clear it.
+      if (opts.notifyStaff) return escalateRemoval(db, row, attempts, opts.notifyStaff, now)
+      console.error(`[tenant-guardian-consent] consent ${row.id} (tenant ${row.tenant_id}) reached the removal cap, but no staff alert is wired for the sweep; rescheduled instead of escalated`)
+    }
     await db
       .from('tenant_guardian_consents')
-      .update({ removal_attempts: (row.removal_attempts ?? 0) + 1, next_attempt_at: new Date(now.getTime() + REMOVAL_RETRY_MS).toISOString() })
+      .update({ removal_attempts: attempts, next_attempt_at: new Date(now.getTime() + REMOVAL_RETRY_MS).toISOString() })
       .eq('id', row.id)
     return 'retry'
   }
@@ -548,6 +641,8 @@ export interface ConsentSweepResult {
   held: string[]
   /** Consent envelopes voided because their participant no longer needs consent (agreements ids). */
   voided: string[]
+  /** Removals that failed MAX_REMOVAL_ATTEMPTS times: no longer retried, and staff alerted. Empty while no alert is wired. */
+  escalated: string[]
   errors: Array<{ consentId: string; error: string }>
 }
 
@@ -555,9 +650,9 @@ export interface ConsentSweepResult {
  * Settles what the hooks did not: a pending consent past its window is expired and
  * its registration removed, unless the guardian signed (a missed completion, which
  * settles it signed) or is part-way through finalising (held). A declined or
- * expired consent whose removal failed is tried again. A consent envelope left open
- * after a correction to 18 or over removed its pending row, or left from an earlier
- * registration, is voided. Run daily, behind the flag,
+ * expired consent whose removal failed is tried again, up to MAX_REMOVAL_ATTEMPTS,
+ * then escalated to staff, if a staff alert is passed (otherwise it keeps being retried). A consent envelope left open after a correction to 18 or
+ * over settled its pending row, or left from an earlier registration, is voided. Run daily, behind the flag,
  * from the membership-expiry cron.
  */
 export async function sweepTenantGuardianConsents(
@@ -567,13 +662,14 @@ export async function sweepTenantGuardianConsents(
   const now = opts.now ?? new Date()
   const nowIso = now.toISOString()
   const limit = opts.limit ?? SWEEP_BATCH
-  const result: ConsentSweepResult = { scanned: 0, signed: [], expired: [], removed: [], held: [], voided: [], errors: [] }
+  const result: ConsentSweepResult = { scanned: 0, signed: [], expired: [], removed: [], held: [], voided: [], escalated: [], errors: [] }
 
-  // Removals that failed before, longest-waiting first.
+  // Removals that failed before, longest-waiting first. Escalated rows wait for staff.
   const { data: retries, error: retryError } = await db
     .from('tenant_guardian_consents')
     .select(CONSENT_COLUMNS)
     .in('status', ['declined', 'expired'])
+    .is('escalated_at', null)
     .or(`next_attempt_at.is.null,next_attempt_at.lte.${nowIso}`)
     .order('next_attempt_at', { ascending: true, nullsFirst: true })
     .limit(limit)
@@ -581,9 +677,9 @@ export async function sweepTenantGuardianConsents(
   for (const row of (retries ?? []) as ConsentRow[]) {
     result.scanned += 1
     try {
-      if ((await removeUnconsentedRegistration(db, row, row.status === 'declined' ? 'declined' : 'expired', { ...opts, now })) === 'removed') {
-        result.removed.push(row.id)
-      }
+      const outcome = await removeUnconsentedRegistration(db, row, row.status === 'declined' ? 'declined' : 'expired', { ...opts, now })
+      if (outcome === 'removed') result.removed.push(row.id)
+      if (outcome === 'escalated') result.escalated.push(row.id)
     } catch (err) {
       result.errors.push({ consentId: row.id, error: err instanceof Error ? err.message : String(err) })
     }
@@ -622,9 +718,9 @@ export async function sweepTenantGuardianConsents(
       if (!moved?.length) continue // settled meanwhile
       result.expired.push(row.id)
       await recordConsentAudit('registration.guardian_consent.expire', row, {}, { db })
-      if ((await removeUnconsentedRegistration(db, { ...row, status: 'expired' }, 'expired', { ...opts, now })) === 'removed') {
-        result.removed.push(row.id)
-      }
+      const outcome = await removeUnconsentedRegistration(db, { ...row, status: 'expired' }, 'expired', { ...opts, now })
+      if (outcome === 'removed') result.removed.push(row.id)
+      if (outcome === 'escalated') result.escalated.push(row.id)
     } catch (err) {
       result.errors.push({ consentId: row.id, error: err instanceof Error ? err.message : String(err) })
     }
@@ -651,13 +747,14 @@ async function engineVoid(db: SupabaseClient, row: { envelope_id: string; provid
  * Voids a consent envelope still out for signature that no consent needs, so the
  * guardian is not left with a form to sign:
  *
- *   - lifted: its participant has no consent row any more. A date-of-birth
- *     correction made them 18 or over, and the database removed the still-pending
- *     row (zzz_participants_open_tenant_guardian_consent). Every consent envelope is
- *     issued after its participant's row exists, so an envelope with no row is one of
- *     these. The database records nothing when it lifts a consent, so the void is
- *     audited (registration.guardian_consent.lift): the trace that the hold was
- *     lifted, and which envelope it left.
+ *   - lifted: its participant's consent row is settled, or gone. A date-of-birth
+ *     correction made them 18 or over, and the database settled the still-pending
+ *     row (zzz_participants_open_tenant_guardian_consent, since migration
+ *     20261114072142; before it, the row was deleted, and a move onto a Stellr
+ *     event's registration still deletes it). Every consent envelope is issued after
+ *     its participant's row exists, so an envelope with no row is one of these. The
+ *     void is audited (registration.guardian_consent.lift): which envelope the lift
+ *     left, beside the settled row's own trace.
  *   - superseded: the participant's consent row is for another registration (the
  *     participant moved, and the database started a new consent), so this envelope
  *     is not the row's (envelopeBelongsToConsent). Audited as
@@ -699,17 +796,20 @@ async function voidOrphanedConsentEnvelopes(
       const participants = [...new Set(envelopes.map((e) => e.participant_id))]
       const { data: rows, error: rowError } = await db
         .from('tenant_guardian_consents')
-        .select('participant_id, registration_id, agreement_id')
+        .select('participant_id, registration_id, agreement_id, status')
         .in('participant_id', participants)
       if (rowError) throw new Error(`Reading consents for open envelopes failed: ${rowError.message}`)
       const consentFor = new Map(
-        ((rows ?? []) as Array<{ participant_id: string; registration_id: string; agreement_id: string | null }>).map((r) => [r.participant_id, r]),
+        ((rows ?? []) as Array<{ participant_id: string; registration_id: string; agreement_id: string | null; status: ConsentStatus }>).map((r) => [
+          r.participant_id,
+          r,
+        ]),
       )
       const eventSlugs = new Map<string, string | null>()
 
       for (const e of envelopes) {
         const consent = consentFor.get(e.participant_id)
-        const reason = !consent
+        const reason = !consent || consent.status === 'settled'
           ? 'lifted'
           : (await envelopeBelongsToConsent(db, consent, { id: e.id, event_slug: e.event_slug ?? null }, eventSlugs))
             ? null
@@ -783,9 +883,9 @@ async function consentEnvelopeState(
 export const CONSENT_READ_PAGE = 1000
 
 /**
- * The tenant's participants whose consent is not signed (pending, or declined or
- * expired and awaiting removal). Tenant event emails leave them out
- * (lib/event-emails/audiences.ts). Throws on a failed read, so a send fails and is
+ * The tenant's participants whose consent holds them (HELD_CONSENT_STATUSES:
+ * pending, or declined or expired and awaiting removal; not signed or settled).
+ * Tenant event emails leave them out (lib/event-emails/audiences.ts). Throws on a failed read, so a send fails and is
  * retried rather than reaching a participant it must not.
  */
 export async function unconsentedParticipantIds(db: SupabaseClient, tenantId: string): Promise<Set<string>> {
@@ -801,7 +901,7 @@ export async function unconsentedParticipantIds(db: SupabaseClient, tenantId: st
       .from('tenant_guardian_consents')
       .select('participant_id')
       .eq('tenant_id', tenantId)
-      .neq('status', 'signed')
+      .in('status', [...HELD_CONSENT_STATUSES])
     if (after) query = query.gt('participant_id', after)
     const { data, error } = await query.order('participant_id', { ascending: true }).limit(CONSENT_READ_PAGE)
     if (error) throw new Error(`Reading guardian consents failed: ${error.message}`)

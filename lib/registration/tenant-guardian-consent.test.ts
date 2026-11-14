@@ -323,6 +323,30 @@ describe('the daily sweep', () => {
     expect(h.confirmation).not.toHaveBeenCalled()
   })
 
+  it('T-25: an open consent envelope whose consent row was settled by a correction to 18 or over is voided as lifted', async () => {
+    arrange({
+      openEnvelopes: [{ id: 'agr-1', envelope_id: 'native-1', provider: 'native', participant_id: 'p-1', tenant_id: CANARY, event_slug: 'canary-cup' }],
+      // The row is kept, settled, still linked to its envelope.
+      consentsFor: [{ participant_id: 'p-1', registration_id: 'reg-1', agreement_id: 'agr-1', status: 'settled' }],
+    })
+    const voidEnvelope = vi.fn(async (_row: { envelope_id: string; provider: string | null }) => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: vi.fn(), voidEnvelope })
+    expect(voidEnvelope.mock.calls).toEqual([[{ envelope_id: 'native-1', provider: 'native' }]])
+    expect(r).toMatchObject({ voided: ['agr-1'], errors: [] })
+    expect(h.audit.mock.calls.map(([m]) => [m.action, (m.metadata as { reason: string }).reason])).toEqual([['registration.guardian_consent.lift', 'lifted']])
+  })
+
+  it('a pending consent row still linked to its open envelope is not voided', async () => {
+    arrange({
+      openEnvelopes: [{ id: 'agr-1', envelope_id: 'native-1', provider: 'native', participant_id: 'p-1', tenant_id: CANARY, event_slug: 'canary-cup' }],
+      consentsFor: [{ participant_id: 'p-1', registration_id: 'reg-1', agreement_id: 'agr-1', status: 'pending' }],
+    })
+    const voidEnvelope = vi.fn(async () => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: vi.fn(), voidEnvelope })
+    expect(voidEnvelope).not.toHaveBeenCalled()
+    expect(r.voided).toEqual([])
+  })
+
   it('a failed read of open envelopes voids nothing and is recorded', async () => {
     arrange({ openEnvelopesError: true })
     const voidEnvelope = vi.fn(async () => {})
@@ -333,13 +357,148 @@ describe('the daily sweep', () => {
   })
 })
 
+describe('the retry cap (s5-programme.26)', () => {
+  const NOW = new Date('2026-12-01T12:00:00Z')
+  const failing = () => vi.fn(async () => { throw new Error('blocked') })
+
+  /** The sweep's retry read answers `retries`; the escalation's marking update answers `marked`. */
+  function arrangeRetries(retries: unknown[], marked: unknown[] | 'error' = [{ id: 'tgc-1' }]) {
+    rec.respond((c: DbCall): DbResult | undefined => {
+      if (c.table === 'tenant_guardian_consents' && c.op === 'update' && 'escalated_at' in (c.payload as object)) {
+        return marked === 'error' ? { data: null, error: { message: 'down' } as never } : { data: marked, error: null }
+      }
+      if (c.table === 'tenant_guardian_consents' && c.op === 'select' && c.filters.some((f) => f[0] === 'in' && f[1] === 'status')) {
+        return { data: retries, error: null }
+      }
+      if (c.table === 'participants' && c.op === 'select') return { data: PARTICIPANT, error: null }
+      if (c.op === 'select') return { data: [], error: null }
+      return undefined
+    })
+  }
+
+  it('the cap is five failed removals', async () => {
+    const { MAX_REMOVAL_ATTEMPTS } = await import('./tenant-guardian-consent')
+    expect(MAX_REMOVAL_ATTEMPTS).toBe(5)
+  })
+
+  it('the retry read leaves out rows already escalated to staff', async () => {
+    arrangeRetries([])
+    await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: vi.fn(), voidEnvelope: vi.fn() })
+    const read = rec.calls.find((c) => c.table === 'tenant_guardian_consents' && c.filters.some((f) => f[0] === 'in' && f[1] === 'status'))!
+    expect(read.filters).toEqual(expect.arrayContaining([['in', 'status', ['declined', 'expired']], ['is', 'escalated_at', null]]))
+  })
+
+  it('below the cap, a failed removal is rescheduled and nobody is alerted', async () => {
+    arrangeRetries([{ ...ROW, status: 'expired', removal_attempts: 3 }])
+    const notifyStaff = vi.fn(async () => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn(), notifyStaff })
+    expect(r).toMatchObject({ removed: [], escalated: [] })
+    const retry = rec.calls.filter((c) => c.op === 'update').at(-1)!
+    expect(retry.payload).toEqual({ removal_attempts: 4, next_attempt_at: new Date(NOW.getTime() + 20 * 3600_000).toISOString() })
+    expect(notifyStaff).not.toHaveBeenCalled()
+  })
+
+  it('at the cap, rescheduling stops: the row is marked for staff, and the event’s tenant’s staff are alerted once, with ids only', async () => {
+    arrangeRetries([{ ...ROW, status: 'declined', removal_attempts: 4 }])
+    const notifyStaff = vi.fn(async (_input: { body: string; email?: { html: string; text?: string } }, _opts?: { tenantId?: string }) => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn(), notifyStaff })
+    expect(r).toMatchObject({ removed: [], escalated: ['tgc-1'], errors: [] })
+
+    const mark = rec.calls.filter((c) => c.op === 'update').at(-1)!
+    expect(mark.payload).toEqual({ removal_attempts: 5, next_attempt_at: null, escalated_at: NOW.toISOString() })
+    expect(mark.filters).toEqual(expect.arrayContaining([['eq', 'id', 'tgc-1'], ['is', 'escalated_at', null]]))
+
+    expect(notifyStaff).toHaveBeenCalledTimes(1)
+    const [input, opts] = notifyStaff.mock.calls[0]
+    expect(opts).toEqual({ tenantId: CANARY })
+    expect(input).toMatchObject({ type: 'action', referenceType: 'tenant_guardian_consent', referenceId: 'tgc-1' })
+    for (const text of [input.body, input.email?.html, input.email?.text]) {
+      expect(text).toContain('reg-1')
+      expect(text).toContain('tgc-1')
+      expect(text).toContain('p-1')
+      expect(text).not.toContain(PARTICIPANT.email)
+      expect(text).not.toContain(PARTICIPANT.first_name)
+      expect(text).not.toContain(PARTICIPANT.registrations.event_title)
+    }
+    // The registrant is told nothing: the registration is still there.
+    expect(h.confirmation).not.toHaveBeenCalled()
+  })
+
+  it('a row another run already marked alerts nobody again', async () => {
+    arrangeRetries([{ ...ROW, status: 'declined', removal_attempts: 4 }], [])
+    const notifyStaff = vi.fn(async () => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn(), notifyStaff })
+    expect(r.escalated).toEqual(['tgc-1'])
+    expect(notifyStaff).not.toHaveBeenCalled()
+  })
+
+  it('a failed mark alerts nobody and leaves the row for the next run', async () => {
+    arrangeRetries([{ ...ROW, status: 'declined', removal_attempts: 4 }], 'error')
+    const notifyStaff = vi.fn(async () => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn(), notifyStaff })
+    expect(r).toMatchObject({ escalated: [], removed: [] })
+    expect(notifyStaff).not.toHaveBeenCalled()
+  })
+
+  it('a failed alert does not throw: the row stays marked', async () => {
+    arrangeRetries([{ ...ROW, status: 'expired', removal_attempts: 7 }])
+    const notifyStaff = vi.fn(async () => { throw new Error('mail down') })
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn(), notifyStaff })
+    expect(r).toMatchObject({ escalated: ['tgc-1'], errors: [] })
+    expect(notifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('with no staff alert passed, the cap does not escalate: the row is rescheduled as before, and the log carries ids only', async () => {
+    arrangeRetries([{ ...ROW, status: 'declined', removal_attempts: 4 }])
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn() })
+    expect(r).toMatchObject({ removed: [], escalated: [], errors: [] })
+    const updates = rec.calls.filter((c) => c.table === 'tenant_guardian_consents' && c.op === 'update')
+    expect(updates.some((c) => 'escalated_at' in (c.payload as object))).toBe(false)
+    expect(updates.at(-1)!.payload).toEqual({ removal_attempts: 5, next_attempt_at: new Date(NOW.getTime() + 20 * 3600_000).toISOString() })
+    expect(updates.at(-1)!.filters).toEqual(expect.arrayContaining([['eq', 'id', 'tgc-1']]))
+    const logged = errors.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+    expect(logged).toContain('tgc-1')
+    expect(logged).toContain('no staff alert is wired')
+    expect(logged).not.toContain(PARTICIPANT.email)
+    expect(logged).not.toContain(PARTICIPANT.first_name)
+    errors.mockRestore()
+  })
+
+  it('with no staff alert passed, a row well past the cap is still retried each run', async () => {
+    arrangeRetries([{ ...ROW, status: 'expired', removal_attempts: 9 }])
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn() })
+    expect(r.escalated).toEqual([])
+    const last = rec.calls.filter((c) => c.table === 'tenant_guardian_consents' && c.op === 'update').at(-1)!
+    expect(last.payload).toEqual({ removal_attempts: 10, next_attempt_at: new Date(NOW.getTime() + 20 * 3600_000).toISOString() })
+    errors.mockRestore()
+  })
+
+  it('the module does not load lib/notify at run time: a tenant host reaches it', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('lib/registration/tenant-guardian-consent.ts', 'utf8')
+    expect(src).not.toMatch(/import\(\s*['"]@\/lib\/notify['"]\s*\)/)
+    expect(src).not.toMatch(/^import \{[^}]*\} from '@\/lib\/notify'/m)
+  })
+
+  it('a decline whose first removal fails is rescheduled, not escalated', async () => {
+    arrange()
+    const notifyStaff = vi.fn(async () => {})
+    await settleTenantGuardianConsentDeclined(db, ENVELOPE, { deleteRegistration: failing(), notifyStaff })
+    expect(notifyStaff).not.toHaveBeenCalled()
+    expect(rec.calls.filter((c) => c.op === 'update').at(-1)!.payload).toMatchObject({ removal_attempts: 1 })
+  })
+})
+
 describe('helpers', () => {
-  it('unconsentedParticipantIds reads this tenant’s unsigned consents, and nothing for Stellr', async () => {
+  it('unconsentedParticipantIds reads this tenant’s held consents, and nothing for Stellr', async () => {
     rec.respond((c) => (c.table === 'tenant_guardian_consents'
       ? { data: c.filters.some((f) => f[0] === 'gt') ? [] : [{ participant_id: 'p-1' }], error: null }
       : undefined))
     expect([...(await unconsentedParticipantIds(db, CANARY))]).toEqual(['p-1'])
-    expect(rec.calls[0].filters).toEqual([['eq', 'tenant_id', CANARY], ['neq', 'status', 'signed']])
+    // Held: pending, declined, expired. Not signed, and not settled (a correction to 18 or over).
+    expect(rec.calls[0].filters).toEqual([['eq', 'tenant_id', CANARY], ['in', 'status', ['pending', 'declined', 'expired']]])
     rec.reset()
     expect((await unconsentedParticipantIds(db, STELLR_TENANT_ID)).size).toBe(0)
     expect(rec.calls).toEqual([])

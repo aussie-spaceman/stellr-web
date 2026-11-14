@@ -2,12 +2,14 @@ import Link from 'next/link'
 import { vercelTarget } from '@/lib/env'
 import { integrationEnvironments, isRealProductionApp, type IntegrationEnvironment } from '@/lib/env-guards'
 import { requireAdminPage } from '@/lib/admin-auth'
+import { assertPlatformAdmin } from '@/lib/authz'
 import { DIGEST_PERIODS, loadMemberDigest, outstandingCount, roleLabel, type Metric, type PersonRef } from '@/lib/admin-digest'
 import { localDate } from '@/lib/survey/timezone'
 import { formatDateShort } from '@/lib/utils'
 import { formatUsd } from '@/lib/mentoring-format'
 import { MetricRow, Panel, PeopleList, StatTile, daysSince } from '@/components/admin/dashboard/DashboardParts'
 import { SendDigestButton } from '@/components/admin/dashboard/SendDigestButton'
+import { MailHealth } from '@/components/admin/dashboard/MailHealth'
 import { CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
 
 export const metadata = { title: 'Admin — Dashboard' }
@@ -151,7 +153,11 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   await requireAdminPage()
   const { days: rawDays } = await searchParams
   const days = (DIGEST_PERIODS as readonly number[]).includes(Number(rawDays)) ? Number(rawDays) : 7
-  const digest = await loadMemberDigest(days)
+  const [digest, platformAdmin] = await Promise.all([
+    loadMemberDigest(days),
+    // The held signing invitations are other tenants' mail: platform admins only.
+    assertPlatformAdmin().then((d) => d.ok, () => false),
+  ])
   const { growth, left, engagement, mentoring, outstanding: o } = digest
   const now = new Date(digest.generatedAt)
 
@@ -215,6 +221,8 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
           Some sections didn&rsquo;t load, so their figures may read low: {digest.errors.join(', ')}. Reload to try again.
         </div>
       )}
+
+      <MailHealth outboxes={digest.outboxes} heldSigningInvites={digest.heldSigningInvites} showHeld={platformAdmin} />
 
       {/* Headline figures */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">

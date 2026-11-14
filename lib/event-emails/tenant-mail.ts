@@ -124,26 +124,53 @@ export async function loadTenantSender(db: SupabaseClient, tenantId: string): Pr
   }
 }
 
+/** Rows per page when reading every tenant: well under PostgREST's 1,000-row cap. */
+export const TENANT_SENDERS_PAGE_SIZE = 200
+/** A guard against a read that never ends (100,000 tenants): past it, the read fails rather than loops. */
+const TENANT_SENDERS_MAX_PAGES = 500
+
 /**
- * Every other tenant that has a usable sender, by tenant id: one read of the
- * tenants table. Empty when the flag is off or the read fails (logged). Never
- * throws. The signing outbox uses it to read only the waiting signers it can
- * send, so one tenant without a sender cannot fill the batch for the rest.
+ * Every other tenant that has a usable sender, by tenant id. Read in pages
+ * ordered by id, so the list stays whole however many tenants there are (an
+ * unpaged read stops at PostgREST's row cap). Throws when a page cannot be read,
+ * and reads nothing when the flag is off. loadTenantSenders is the never-throws
+ * form; a caller that must tell "no senders" from "unreadable" uses this one.
  */
-export async function loadTenantSenders(db: SupabaseClient): Promise<Map<string, EventSender>> {
+export async function readTenantSenders(db: SupabaseClient): Promise<Map<string, EventSender>> {
   const out = new Map<string, EventSender>()
   if (!tenantEventMailEnabled()) return out
-  try {
-    const { data, error } = await db.from('tenants').select('id, display_name, branding').neq('id', STELLR_TENANT_ID)
+  for (let pageNo = 0; pageNo < TENANT_SENDERS_MAX_PAGES; pageNo++) {
+    const from = pageNo * TENANT_SENDERS_PAGE_SIZE
+    const { data, error } = await db
+      .from('tenants')
+      .select('id, display_name, branding')
+      .neq('id', STELLR_TENANT_ID)
+      .order('id', { ascending: true })
+      .range(from, from + TENANT_SENDERS_PAGE_SIZE - 1)
     if (error) throw new Error(error.message)
-    for (const t of (data ?? []) as (TenantForSender & { id: string })[]) {
+    const page = (data ?? []) as (TenantForSender & { id: string })[]
+    for (const t of page) {
       const sender = isTenantRow(t.id) ? tenantEventSender(t) : null
       if (sender) out.set(t.id, sender)
     }
+    if (page.length < TENANT_SENDERS_PAGE_SIZE) return out
+  }
+  throw new Error(`more than ${TENANT_SENDERS_MAX_PAGES} pages of tenants`)
+}
+
+/**
+ * Every other tenant that has a usable sender, by tenant id (readTenantSenders).
+ * Empty when the flag is off or any page fails (logged), never a partial map.
+ * Never throws. The signing outbox uses it to read only the waiting signers it
+ * can send, so one tenant without a sender cannot fill the batch for the rest.
+ */
+export async function loadTenantSenders(db: SupabaseClient): Promise<Map<string, EventSender>> {
+  try {
+    return await readTenantSenders(db)
   } catch (err) {
     console.error('[tenant-mail] senders read failed:', err instanceof Error ? err.message : err)
+    return new Map()
   }
-  return out
 }
 
 export type TenantConfirmationOutcome =

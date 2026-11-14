@@ -22,6 +22,7 @@ import { loadPaperworkGaps, type PaperworkGap } from '@/lib/esign/needs-paperwor
 import { ISSUE_FAILED_PREFIX } from '@/lib/docusign-agreements'
 import { otherTenantEvents, stellrRows } from '@/lib/tenancy/stellr-scope'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { heldSigningInvites } from '@/lib/esign/outbox'
 
 export const DIGEST_PERIODS = [7, 30, 90] as const
 export type DigestPeriod = (typeof DIGEST_PERIODS)[number]
@@ -147,8 +148,169 @@ export interface MemberDigest {
   }
   /** The Staff role (phase 4): grants, exports, unusual minor-record viewing, quarterly review. */
   staff?: StaffDigest
+  /**
+   * The mail outboxes' latest runs, from cron_runs (resend-quota-outbox.5). One
+   * entry per outbox that has ever recorded a run; an outbox with none (crons
+   * skip outside production) is left out rather than shown as stuck.
+   */
+  outboxes?: OutboxHealth[]
+  /**
+   * Other tenants' signing invitations held because their tenant has no usable
+   * sender (B14b). A count only. Null when tenant mail is off or the count could
+   * not be read. The dashboard shows it to platform admins only.
+   */
+  heldSigningInvites?: number | null
   /** Sections that failed to load, so a partial digest says so instead of showing zeros. */
   errors: string[]
+}
+
+// ── Outbox health (resend-quota-outbox.5) ───────────────────────────────────
+
+export interface OutboxHealth {
+  key: 'email' | 'signing'
+  label: string
+  /**
+   * ok: the latest run succeeded, within the expected window. failed: the
+   * latest run failed. overdue: the latest run did not fail, but nothing has
+   * succeeded within the window (runs stopped, or were killed part-way).
+   */
+  state: 'ok' | 'failed' | 'overdue'
+  lastRunAt: string
+  /** Null when no recorded run has succeeded. */
+  lastSuccessAt: string | null
+  /** What the latest run reported, in plain words with counts only; never an address or an error's text. */
+  detail: string | null
+  windowHours: number
+}
+
+/** A finished cron_runs row, as the outbox check reads it. */
+export interface OutboxRunRow {
+  started_at: string
+  finished_at: string | null
+  ok: boolean | null
+  errors: Array<{ where?: string; message?: string }> | null
+  result: Record<string, unknown> | null
+}
+
+interface OutboxSpec {
+  key: OutboxHealth['key']
+  label: string
+  job: string
+  /** How long after a success the next one is due, with slack for a late run. */
+  windowHours: number
+  /**
+   * For a job that does more than send mail: the step whose failure is the
+   * outbox's. Null when any failure of the run is the outbox's.
+   */
+  step: string | null
+}
+
+/**
+ * The outboxes that record cron_runs. The email outbox runs four times a day
+ * (00:05, 06:05, 12:05, 18:05 UTC), so two hours past a slot is late. Signing
+ * invitations waiting on the daily budget are drained as the 'outbox' step of
+ * the daily esign-maintenance run (09:15 UTC); the event-emails and
+ * docusign-reminders crons drain them too, but as a side task.
+ */
+export const OUTBOX_JOBS: readonly OutboxSpec[] = [
+  { key: 'email', label: 'Email outbox', job: 'email-outbox', windowHours: 8, step: null },
+  { key: 'signing', label: 'Signing invitations outbox', job: 'esign-maintenance', windowHours: 30, step: 'outbox' },
+]
+
+const OUTBOX_FAILURES: Record<string, string> = {
+  stale: 'Mail has been waiting more than two days',
+  rejected: 'Resend rejected some mail as invalid',
+  drain: 'The run stopped with an error',
+  outbox: 'Sending the waiting invitations failed',
+}
+
+function runFailed(run: OutboxRunRow, step: string | null): boolean {
+  if (step === null) return run.ok === false
+  return (run.errors ?? []).some((e) => e?.where === step)
+}
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+/** Counts from the latest run, as words. Reads numbers only, so no address or error text can reach the page. */
+function outboxDetail(spec: OutboxSpec, run: OutboxRunRow, failed: boolean): string | null {
+  const parts: string[] = []
+  if (failed) {
+    const wheres = [...new Set((run.errors ?? []).map((e) => e?.where).filter((w): w is string => !!w))]
+      .filter((w) => spec.step === null || w === spec.step)
+    for (const w of wheres) parts.push(OUTBOX_FAILURES[w] ?? 'The run reported a failure')
+  }
+  const result = (spec.step ? (run.result?.[spec.step] as Record<string, unknown> | undefined) : run.result) ?? {}
+  const waiting = num(result.waiting)
+  const oldest = num(result.oldestWaitingHours)
+  if (spec.key === 'email' && waiting) parts.push(`${waiting} waiting${oldest != null ? `, the oldest for ${oldest} hours` : ''}`)
+  return parts.length ? parts.join('. ') : null
+}
+
+/**
+ * One outbox's health from its newest finished runs (newest first) and, when
+ * none of those succeeded, the newest success found further back. Null when it
+ * has no recorded run at all. Pure.
+ */
+export function outboxHealth(
+  spec: OutboxSpec,
+  runs: readonly OutboxRunRow[],
+  olderSuccessAt: string | null,
+  now: Date,
+): OutboxHealth | null {
+  const latest = runs[0]
+  if (!latest) return null
+  const success = runs.find((r) => !runFailed(r, spec.step))
+  const lastSuccessAt = success ? success.finished_at ?? success.started_at : olderSuccessAt
+  const latestFailed = runFailed(latest, spec.step)
+  const overdue = !lastSuccessAt || now.getTime() - new Date(lastSuccessAt).getTime() > spec.windowHours * 3_600_000
+  return {
+    key: spec.key,
+    label: spec.label,
+    state: latestFailed ? 'failed' : overdue ? 'overdue' : 'ok',
+    lastRunAt: latest.finished_at ?? latest.started_at,
+    lastSuccessAt,
+    detail: outboxDetail(spec, latest, latestFailed),
+    windowHours: spec.windowHours,
+  }
+}
+
+/** How many of a job's newest finished runs to look through for a success. */
+const OUTBOX_RUNS_READ = 30
+
+/** Every outbox's health, from cron_runs. Throws on a failed read so the section is reported, not hidden. */
+export async function loadOutboxHealth(db: SupabaseClient, now = new Date()): Promise<OutboxHealth[]> {
+  const cols = 'started_at, finished_at, ok, errors, result'
+  const out = await Promise.all(OUTBOX_JOBS.map(async (spec) => {
+    // Per-tenant child rows are never written for these jobs, so no parent_id
+    // filter is needed (and naming the column would fail where it is missing).
+    const runs = await rows(`${spec.job} runs`, db
+      .from('cron_runs')
+      .select(cols)
+      .eq('job', spec.job)
+      .not('finished_at', 'is', null)
+      .order('started_at', { ascending: false })
+      .limit(OUTBOX_RUNS_READ)) as unknown as OutboxRunRow[]
+    let olderSuccessAt: string | null = null
+    if (runs.length && !runs.some((r) => !runFailed(r, spec.step))) {
+      // ok=true means every step succeeded, the outbox's included.
+      const older = await rows(`${spec.job} last success`, db
+        .from('cron_runs')
+        .select(cols)
+        .eq('job', spec.job)
+        .eq('ok', true)
+        .not('finished_at', 'is', null)
+        .order('started_at', { ascending: false })
+        .limit(1)) as unknown as OutboxRunRow[]
+      olderSuccessAt = older[0] ? older[0].finished_at ?? older[0].started_at : null
+    }
+    return outboxHealth(spec, runs, olderSuccessAt, now)
+  }))
+  return out.filter((h): h is OutboxHealth => h !== null)
+}
+
+/** The outboxes that need a look: the latest run failed, or nothing has succeeded in time. */
+export function stuckOutboxes(outboxes: readonly OutboxHealth[] | undefined): OutboxHealth[] {
+  return (outboxes ?? []).filter((o) => o.state !== 'ok')
 }
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
@@ -560,9 +722,17 @@ export async function loadMemberDigest(days: number, opts: { now?: Date; db?: Su
 
     loadOutstanding(db, section),
   ])
-  const staff = await section('staff', EMPTY_STAFF_DIGEST, () => loadStaffDigest(db, { start: w.start, end: w.end }, opts.now))
+  const [staff, outboxes, held] = await Promise.all([
+    section('staff', EMPTY_STAFF_DIGEST, () => loadStaffDigest(db, { start: w.start, end: w.end }, opts.now)),
+    section('Mail outboxes', [] as OutboxHealth[], () => loadOutboxHealth(db, opts.now)),
+    // Never throws: null when tenant mail is off or the count is unreadable.
+    heldSigningInvites(db),
+  ])
 
-  return { window: w, generatedAt: new Date().toISOString(), growth, left, engagement, mentoring, outstanding, staff, errors }
+  return {
+    window: w, generatedAt: new Date().toISOString(), growth, left, engagement, mentoring, outstanding, staff,
+    outboxes, heldSigningInvites: held, errors,
+  }
 }
 
 type Section = <T>(name: string, fallback: T, load: () => Promise<T>) => Promise<T>

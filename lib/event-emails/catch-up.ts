@@ -17,7 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveAudience, type ResolvedRecipient } from './audiences'
 import { daysUntil } from './schedule'
 import { todayInMountain } from './render'
-import { deliver, loadAttachments, loadEventForEmail, rowInTenant, TENANT_SENDER_REQUIRED, type SendOutcome } from './send'
+import { deliver, loadAttachments, loadEventForEmail, rowInTenant, sendableRecipients, TENANT_SENDER_REQUIRED, type SendOutcome } from './send'
 import { isTenantRow, type EventSender } from './tenant-mail'
 // alreadyTriedAddresses / missedRecipients live in ./history so send.ts can read
 // the history without importing this module (which imports send.ts). Re-export
@@ -127,7 +127,9 @@ export async function sendCatchUp(
       resolveAudience(db, event, audiences, ...tenantAudience(email)),
       alreadyTriedAddresses(db, email.id),
     ])
-    const owed = missedRecipients(recipients, tried).slice(0, MAX_RECIPIENTS_PER_SEND)
+    // An address that cannot be an email is never owed: left in, it would be
+    // tried, fail and be retried by every run until the event.
+    const owed = missedRecipients(sendableRecipients(recipients, email.id), tried).slice(0, MAX_RECIPIENTS_PER_SEND)
     if (!owed.length) return { ok: true, sendId: null, recipients: 0, sent: 0, failed: 0, docusignResent: 0 }
 
     const attachments = await loadAttachments(db, email)

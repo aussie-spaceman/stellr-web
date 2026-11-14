@@ -191,6 +191,20 @@ describe('sendCatchUp', () => {
     expect(db.state.inserted).toEqual([])
   })
 
+  // member-merge-school-email.12: an address that cannot be an email is never
+  // owed, so a catch-up neither sends to it nor writes a History row for it on
+  // every run until the event.
+  it('never owes an invalid address: no send, no History row', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    resolveAudience.mockResolvedValue({ recipients: [R('al@example.com', 'Al'), R('none', 'Guardian', 'guardian')], docusignParticipantIds: [] })
+    const db = fakeDb(EMAIL, [ORIGINAL])
+    expect(await sendCatchUp(db as never, 'e1', { spacingMs: 0, today: '2026-10-02' })).toMatchObject({ ok: true, recipients: 0 })
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(db.state.inserted).toEqual([])
+    expect(String(warn.mock.calls[0][0])).not.toContain('none')
+    warn.mockRestore()
+  })
+
   it('only catches up the groups the email went to', async () => {
     const db = fakeDb({ ...EMAIL, audiences: ['participants', 'mentors'] }, [ORIGINAL])
     await sendCatchUp(db as never, 'e1', { spacingMs: 0, today: '2026-10-02' })

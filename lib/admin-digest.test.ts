@@ -5,7 +5,8 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/sanity', () => ({ getEventsBySlugs: vi.fn() }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: vi.fn() }))
 
-const { buildPaymentItems, countMetric, digestWindow, personName, windowOf } = await import('./admin-digest')
+const { buildPaymentItems, countMetric, digestWindow, personName, windowOf, outboxHealth, loadOutboxHealth, stuckOutboxes, OUTBOX_JOBS } = await import('./admin-digest')
+const { fakeSupabase } = await import('@/test/fake-supabase')
 
 const NOW = new Date('2026-10-30T18:00:00Z')
 
@@ -97,5 +98,111 @@ describe('buildPaymentItems', () => {
       reg({ id: 'old', created_at: '2026-09-01T00:00:00Z' }),
     ])
     expect(items.map((i) => i.key)).toEqual(['checkout:old', 'checkout:new'])
+  })
+})
+
+// ── resend-quota-outbox.5: staff see a stuck outbox ──────────────────────────
+
+describe('outbox health', () => {
+  const now = new Date('2026-11-13T15:00:00Z')
+  const [EMAIL, SIGNING] = OUTBOX_JOBS
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000).toISOString()
+  const run = (h: number, ok: boolean, over: Record<string, unknown> = {}) => ({
+    started_at: hoursAgo(h + 0.01), finished_at: hoursAgo(h), ok, errors: [], result: {}, ...over,
+  })
+
+  it('healthy: the latest email-outbox run succeeded inside its window', () => {
+    const h = outboxHealth(EMAIL, [run(3, true), run(9, true)], null, now)
+    expect(h).toMatchObject({ key: 'email', state: 'ok', lastRunAt: hoursAgo(3), lastSuccessAt: hoursAgo(3), detail: null })
+    expect(stuckOutboxes([h!])).toEqual([])
+  })
+
+  it('stuck: the latest run failed on stale mail, with the last success time and counts only', () => {
+    const latest = run(1, false, {
+      errors: [{ where: 'stale', message: '7 email(s) waiting; the oldest for 50h' }],
+      result: { waiting: 7, oldestWaitingHours: 50, sent: 0 },
+    })
+    const h = outboxHealth(EMAIL, [latest, run(7, false), run(13, true)], null, now)!
+    expect(h.state).toBe('failed')
+    expect(h.lastSuccessAt).toBe(hoursAgo(13))
+    expect(h.detail).toBe('Mail has been waiting more than two days. 7 waiting, the oldest for 50 hours')
+    expect(stuckOutboxes([h])).toEqual([h])
+  })
+
+  it('never shows an error’s own text, which could carry an address', () => {
+    const latest = run(1, false, { errors: [{ where: 'drain', message: 'refused for someone@example.org' }] })
+    const h = outboxHealth(EMAIL, [latest], null, now)!
+    expect(h.detail).toBe('The run stopped with an error')
+    expect(JSON.stringify(h)).not.toContain('example.org')
+  })
+
+  it('overdue: the latest run did not fail, but nothing has succeeded within the window', () => {
+    const h = outboxHealth(EMAIL, [run(20, true)], null, now)!
+    expect(h).toMatchObject({ state: 'overdue', lastSuccessAt: hoursAgo(20) })
+  })
+
+  it('every recorded run failed: the success found further back is used, or none', () => {
+    expect(outboxHealth(EMAIL, [run(1, false)], hoursAgo(100), now)).toMatchObject({ state: 'failed', lastSuccessAt: hoursAgo(100) })
+    expect(outboxHealth(EMAIL, [run(1, false)], null, now)).toMatchObject({ state: 'failed', lastSuccessAt: null })
+  })
+
+  it('an outbox with no recorded run is left out, not shown as stuck', () => {
+    expect(outboxHealth(EMAIL, [], null, now)).toBeNull()
+  })
+
+  it('signing: only the maintenance run’s outbox step counts, not its other steps', () => {
+    const otherStep = run(2, false, { errors: [{ where: 'archive', message: 'x' }] })
+    expect(outboxHealth(SIGNING, [otherStep], null, now)).toMatchObject({ state: 'ok', lastSuccessAt: hoursAgo(2) })
+    const outboxStep = run(2, false, { errors: [{ where: 'outbox', message: 'x' }] })
+    expect(outboxHealth(SIGNING, [outboxStep, run(26, true)], null, now)).toMatchObject({
+      state: 'failed', lastSuccessAt: hoursAgo(26), detail: 'Sending the waiting invitations failed',
+    })
+    // Daily: 26 hours since the last success is still inside the window.
+    expect(outboxHealth(SIGNING, [run(26, true)], null, now)).toMatchObject({ state: 'ok' })
+    expect(outboxHealth(SIGNING, [run(31, true)], null, now)).toMatchObject({ state: 'overdue' })
+  })
+
+  describe('loadOutboxHealth (the digest and dashboard data)', () => {
+    const cron = (job: string, h: number, ok: boolean, over: Record<string, unknown> = {}) => ({ job, ...run(h, ok), ...over })
+
+    it('stuck: reports the failed email outbox with its last success, and a healthy signing outbox', async () => {
+      const db = fakeSupabase({
+        cron_runs: [
+          cron('email-outbox', 1, false, { errors: [{ where: 'rejected', message: '2 email(s) rejected' }], result: { waiting: 0, failed: 2 } }),
+          cron('email-outbox', 7, true),
+          cron('esign-maintenance', 5, true),
+          cron('event-emails', 0.5, false),
+          // Still running: not a result yet.
+          { job: 'email-outbox', started_at: hoursAgo(0.1), finished_at: null, ok: null, errors: [], result: null },
+        ],
+      })
+      const health = await loadOutboxHealth(db.client as never, now)
+      expect(health).toEqual([
+        expect.objectContaining({ key: 'email', state: 'failed', lastRunAt: hoursAgo(1), lastSuccessAt: hoursAgo(7), detail: 'Resend rejected some mail as invalid' }),
+        expect.objectContaining({ key: 'signing', state: 'ok', lastSuccessAt: hoursAgo(5) }),
+      ])
+      expect(stuckOutboxes(health).map((o) => o.key)).toEqual(['email'])
+    })
+
+    it('healthy: nothing to show', async () => {
+      const db = fakeSupabase({ cron_runs: [cron('email-outbox', 2, true), cron('esign-maintenance', 10, true)] })
+      expect(stuckOutboxes(await loadOutboxHealth(db.client as never, now))).toEqual([])
+    })
+
+    it('no runs recorded (crons skip outside production): no entries', async () => {
+      expect(await loadOutboxHealth(fakeSupabase({ cron_runs: [] }).client as never, now)).toEqual([])
+    })
+
+    it('looks further back for the last success when every recent run failed', async () => {
+      const failures = Array.from({ length: 30 }, (_, i) => cron('email-outbox', 1 + i * 6, false, { errors: [{ where: 'stale' }] }))
+      const db = fakeSupabase({ cron_runs: [...failures, cron('email-outbox', 400, true)] })
+      const [email] = await loadOutboxHealth(db.client as never, now)
+      expect(email).toMatchObject({ state: 'failed', lastSuccessAt: hoursAgo(400) })
+    })
+
+    it('a failed read throws, so the digest reports the section instead of hiding it', async () => {
+      const db = fakeSupabase({ cron_runs: [] }, { failOn: (t) => (t === 'cron_runs' ? 'cron_runs unreadable' : null) })
+      await expect(loadOutboxHealth(db.client as never, now)).rejects.toThrow('cron_runs unreadable')
+    })
   })
 })

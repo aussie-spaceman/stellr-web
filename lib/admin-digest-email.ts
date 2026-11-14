@@ -9,7 +9,7 @@
 
 import { emailLayout, escapeHtml, BRAND_NAVY } from '@/lib/email-layout'
 import { formatUsd } from '@/lib/mentoring-format'
-import { roleLabel, outstandingCount, type MemberDigest, type Metric } from '@/lib/admin-digest'
+import { roleLabel, outstandingCount, stuckOutboxes, type MemberDigest, type Metric, type OutboxHealth } from '@/lib/admin-digest'
 
 const TOP = 5
 const TZ = 'America/Denver'
@@ -32,6 +32,35 @@ function day(iso: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(iso))
 }
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+function dayTime(iso: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  }).format(new Date(iso))
+}
+
+/**
+ * One line per outbox that needs a look (resend-quota-outbox.5): what went
+ * wrong, when it last worked, and the run's counts. Never an address.
+ */
+export function outboxAlertLines(outboxes: readonly OutboxHealth[] | undefined): string[] {
+  return stuckOutboxes(outboxes).map((o) => {
+    const lastGood = o.lastSuccessAt ? `Last successful run ${dayTime(o.lastSuccessAt)}.` : 'No successful run on record.'
+    const what = o.state === 'failed'
+      ? `${o.label}: the latest run failed (${dayTime(o.lastRunAt)}).`
+      : `${o.label}: no successful run in the last ${o.windowHours} hours.`
+    return [what, lastGood, o.detail ? `${o.detail}.` : null].filter(Boolean).join(' ')
+  })
+}
+
+/** The held signing invitations line (B14b), or null when there are none. A count only. */
+export function heldInvitesLine(held: number | null | undefined): string | null {
+  if (!held) return null
+  return `${plural(held, 'signing invitation')} for other organisers ${held === 1 ? 'is' : 'are'} held: ` +
+    `${held === 1 ? 'its organiser has' : 'their organisers have'} no email sender set up yet, so nothing has been sent.`
+}
+
 function daysWaiting(iso: string, now: Date): string {
   const d = Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000))
   return d === 0 ? 'today' : d === 1 ? '1 day' : `${d} days`
@@ -42,8 +71,6 @@ function delta(m: Metric): string {
   if (diff === 0) return 'same as last week'
   return `${diff > 0 ? '+' : '−'}${Math.abs(diff)} on last week`
 }
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 /** "3 participants, 2 mentors" from a role tally. */
 function byRoleWords(byRole: Record<string, number>): string {
@@ -214,6 +241,17 @@ export function renderDigestEmail(
     <ul style="margin:0;padding-left:20px">${staffLines.map((l) => `<li style="margin:4px 0">${escapeHtml(l.text)}${l.sub ? `<br/><span style="font-size:13px;color:${MUTED}">${escapeHtml(l.sub)}</span>` : ''}</li>`).join('')}</ul>${reviewHtml}`
     : ''
 
+  // Mail that may not be going out comes first: it is the one thing here that
+  // gets worse by waiting.
+  const mailAlerts = [...outboxAlertLines(digest.outboxes), heldInvitesLine(digest.heldSigningInvites)].filter((l): l is string => !!l)
+  const mailAlertsHtml = mailAlerts.length
+    ? `<div style="margin:16px 0;padding:12px;background:#fdf6e8;border-radius:8px;font-size:14px">
+    <p style="margin:0 0 4px"><strong>Mail needing a look</strong></p>
+    <ul style="margin:0;padding-left:20px">${mailAlerts.map((l) => `<li style="margin:4px 0">${escapeHtml(l)}</li>`).join('')}</ul>
+    <p style="margin:4px 0 0;font-size:13px"><a href="${url('/admin')}" style="color:${BRAND_NAVY}">Open the dashboard</a></p>
+  </div>`
+    : ''
+
   const errorsHtml = digest.errors.length
     ? `<p style="margin:16px 0;padding:12px;background:#fdf1f0;border-radius:8px;font-size:14px">Some sections didn’t load and may read low: ${escapeHtml(digest.errors.join(', '))}. Check the dashboard.</p>`
     : ''
@@ -221,6 +259,7 @@ export function renderDigestEmail(
   const bodyHtml = `
     <p style="margin:0 0 8px">Member activity from ${escapeHtml(period)} (Mountain time), compared with the week before.</p>
     ${leftTotal || growth.newMembers.current ? '' : '<p style="margin:0 0 8px">A quiet week: no one joined or left.</p>'}
+    ${mailAlertsHtml}
     ${errorsHtml}
     ${groupsHtml}
     <p style="margin:32px 0 4px;font-size:13px;font-weight:bold;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND_NAVY}">Waiting on you (${waiting})</p>
@@ -239,6 +278,7 @@ export function renderDigestEmail(
   const text = [
     'Your weekly member digest',
     `Member activity from ${period} (Mountain time), compared with the week before.`,
+    ...(mailAlerts.length ? ['', 'MAIL NEEDING A LOOK', ...mailAlerts.map((l) => `- ${l}`)] : []),
     ...(digest.errors.length ? ['', `Some sections didn't load and may read low: ${digest.errors.join(', ')}.`] : []),
     ...groups.flatMap((g) => [
       '',

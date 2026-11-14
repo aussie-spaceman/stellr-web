@@ -213,7 +213,11 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     }
     expect(alert.body).toContain('Ada Lovelace')
     expect(alert.body).toContain('ENVELOPE_LIMIT_EXCEEDED')
-    expect(alert.body).toContain('NO paperwork')
+    // TRACKER 22.6: it says what is known (no signed agreement of this kind yet,
+    // nothing out for signature), not "NO paperwork on file", and makes no claim
+    // about the caller ("Registration succeeded" was wrong on the admin paths).
+    expect(alert.body).toContain('No signed Participation Agreement — Educator / Chaperone has been found for them yet, and none is out for signature.')
+    expect(alert.body).not.toMatch(/NO paperwork|Registration succeeded/i)
     expect(alert.email.subject).toContain('Ada Lovelace')
   })
 

@@ -147,3 +147,46 @@ describe('the Staff section (phase 4)', () => {
     expect(html).not.toContain('Staff access')
   })
 })
+
+// resend-quota-outbox.5 and B14b: mail that may not be going out.
+describe('mail needing a look', () => {
+  const failedEmail = {
+    key: 'email' as const, label: 'Email outbox', state: 'failed' as const, windowHours: 8,
+    lastRunAt: '2026-10-30T18:05:00Z', lastSuccessAt: '2026-10-28T12:05:00Z',
+    detail: 'Mail has been waiting more than two days. 7 waiting, the oldest for 50 hours',
+  }
+  const healthySigning = {
+    key: 'signing' as const, label: 'Signing invitations outbox', state: 'ok' as const, windowHours: 30,
+    lastRunAt: '2026-10-30T09:15:00Z', lastSuccessAt: '2026-10-30T09:15:00Z', detail: null,
+  }
+
+  it('a stuck outbox: says it failed, when it last worked, and the counts', () => {
+    const { html, text } = render({ ...digest(), outboxes: [failedEmail, healthySigning] })
+    expect(text).toContain('MAIL NEEDING A LOOK')
+    expect(text).toContain('- Email outbox: the latest run failed (Fri, Oct 30, 12:05 PM MDT). Last successful run Wed, Oct 28, 6:05 AM MDT. Mail has been waiting more than two days. 7 waiting, the oldest for 50 hours.')
+    expect(html).toContain('Mail needing a look')
+    expect(text).not.toContain('Signing invitations outbox')
+  })
+
+  it('an overdue outbox with no success on record', () => {
+    const { text } = render({ ...digest(), outboxes: [{ ...failedEmail, state: 'overdue', lastSuccessAt: null, detail: null }] })
+    expect(text).toContain('- Email outbox: no successful run in the last 8 hours. No successful run on record.')
+  })
+
+  it('healthy outboxes and no held invitations: nothing is said', () => {
+    for (const d of [digest(), { ...digest(), outboxes: [healthySigning], heldSigningInvites: 0 }, { ...digest(), heldSigningInvites: null }]) {
+      const { html, text } = render(d)
+      expect(text).not.toContain('MAIL NEEDING A LOOK')
+      expect(html).not.toContain('Mail needing a look')
+    }
+  })
+
+  it('held signing invitations: a count only, when non-zero', () => {
+    expect(render({ ...digest(), heldSigningInvites: 3 }).text).toContain(
+      '- 3 signing invitations for other organisers are held: their organisers have no email sender set up yet, so nothing has been sent.',
+    )
+    expect(render({ ...digest(), heldSigningInvites: 1 }).text).toContain(
+      '- 1 signing invitation for other organisers is held: its organiser has no email sender set up yet, so nothing has been sent.',
+    )
+  })
+})

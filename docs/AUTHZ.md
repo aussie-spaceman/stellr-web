@@ -32,7 +32,7 @@ Staff is a portal role between Event Manager and Admin, **Stellr only**: the Cle
 
 **Routes now decide through `lib/authz`** (corrected 12 Nov 2026; this section used to say none did). The conversion slices since wave 3 moved them on: on `dev` at `82472e0d`, 89 files under `app/` import `@/lib/authz`, 71 of them under `app/api`, most often through `isStellrAdmin`, `requireEventRoute`, `authz`, `requireEventCrew` and `requireTenantCrew`. The role-sync helpers (`lib/authz/role-sync.ts`, `lib/authz/role-sync-report.ts`) still keep the tables in step from the duties and event-managers routes and `lib/deletion/execute.ts`. What that means:
 
-- **Guards are mixed.** The converted ones decide through `lib/authz`; 190 legacy sites in 135 files (`test/baselines/authz-legacy-idioms.json`) still read the Clerk claim, `admin_duties` or `event_manager_assignments` directly, until the remaining slices (to C23) and C25.
+- **Guards are mixed.** The converted ones decide through `lib/authz`; 117 legacy sites in 82 files (`test/baselines/authz-legacy-idioms.json`, read 14 Nov 2026) still read the Clerk claim, `admin_duties` or `event_manager_assignments` directly, until the remaining slices (to C23) and C25.
 - **`AUTHZ_SOURCE=shadow` now compares real decisions** on the converted routes, so a shadow window is evidence for those routes and silent on the legacy ones. Until a flip, `clerk` decides everywhere. `GET /api/admin/health/integrations` shows the resolved source as `tenancy.authzSource` (S5 wave 7, O1).
 - **No shadow window has run in a hosted environment.** Wave 7's P3 is the first, a 7-day rehearsal on `dev` that starts counting only once the first expected canary mismatch row appears, which proves the switch took effect (`docs/TENANCY-S5.md`, Wave 7 status).
 
@@ -182,21 +182,36 @@ Set `AUTHZ_SOURCE=clerk` (or remove it) and redeploy. This works because `script
 
 ## The authz codemod
 
-**Not built yet (C10).** `ts-morph` is awaiting the owner's approval; the fallback is the TypeScript compiler API, which `lib/security/route-ast.ts` and `scripts/codemods/events-facade.ts` already use. The events-facade codemod is the working model: dry run by default, and a second run reports nothing to change.
+**Built (C10, #564, S5 wave 3), and first run by C13 (#579, wave 4).** Section corrected 14 Nov 2026 (review id `X-authz-doc-stale`); it used to say the codemod was not built. Source: `scripts/codemods/authz.ts`; tests: `authz.test.ts` and `authz.equivalence.test.ts` beside it, with fixtures in `scripts/codemods/fixtures/authz/`. It is built on the TypeScript compiler API, as `scripts/codemods/events-facade.ts` is, not on `ts-morph`. The usage and every rule are in the file's header; this section is the summary.
 
-The planned transforms:
+**What it does.** It moves the legacy guards that `scripts/authz-idioms.mjs` counts (`LEGACY_IDIOMS`) onto `lib/authz` by swapping the predicate only: every if-branch and deny response keeps its bytes. `authz.equivalence.test.ts` runs each conversion over the whole role truth table. It edits text at each node's position, and a second run changes nothing.
 
 | | Change |
 |---|---|
-| T1 | `isAdminClaims` and the inline role read become an authz predicate. The if-branch and response stay |
-| T2 | `currentUserIsAdmin()` becomes the authz call |
-| T3 | Same-file `requireAdmin` or `isAdmin` wrappers are inlined and deleted |
-| T4 | `requireAdminPage()` becomes `page.requireAdmin()`. Not progress on its own: the ratchet keeps counting it |
-| T5 | `requireEventAccess` is re-pointed at `lib/authz`. The shape is unchanged |
-| T6 | Domain wrappers (`requireScholarshipAdmin`, `requireSurveyAdmin`, `canManageStoreCatalog`, `adminName`) are re-implemented over authz in their own files. Their callers then drop out of the ratchet |
-| T7 | Test mocks move to `@/lib/authz` |
+| T1 | `isAdminClaims(claims)`, `hasAdminPortalAccess(claims)` and the inline session-claims role read compared to `'admin'` become `await isStellrAdmin()` or `await hasPortalAccess()` |
+| T2 | `currentUserIsAdmin()` and `currentUserHasScope(s)` become `isStellrAdmin()` and `hasScope(s)` |
+| T3 | A same-file helper that only wraps one of those is inlined and deleted |
+| T4 | `requireAdminPage()` becomes `authz.page.requireAdmin()`. The ratchet keeps counting it (`pageRequireAdmin`): moving a page onto an adapter that confines an event manager is a decision about who may see it, so a person makes it |
+| T5 | `requireEventAccess` moves to `lib/authz` only when its answer is read field by field. A section-level answer whose `isAdmin` or `assignedSlugs` is trusted stays, and is still counted: under `lib/authz` those hold for one tenant only, so what it loads by id moves to `accessCoversEvent` or `loadScoped` by hand (item 12 of "What must hold before a flip") |
+| T6 | The domain wrappers (`requireScholarshipAdmin`, `requireSurveyAdmin`, `canManageStoreCatalog`, `adminName`) are T1 and T2 run on their own files with `--file`. `HELD_WRAPPERS` holds `lib/store/auth.ts` until the sampling decision, because a route serving any signed-in member calls it |
+| T7 | Test mocks of `lib/admin-auth` and `lib/event-access` move to `lib/authz`, once nothing the test still loads for real reads the legacy module |
 
-Anything it cannot match is reported, never rewritten. It runs on one feature area per PR, and a person adds `loadScoped` or `tenantDb`, the events facade, audit and the two-tenant tests in the same PR.
+**What it leaves.** It rewrites only what it can prove from the file. Anything else is reported as MANUAL, with the reason, and left as it was; `--check` exits 1 on a selected file that holds one. It converts only the admin surface (`app/api/admin/**`, `app/(stellr)/(admin)/**` and the wrapper files): code that can serve people who are not crew waits for a person, because shadow reads are not sampled. Client components are left too, since `lib/authz` is server-only. `isEventManagerClaims`, `isCrewRole`, `CREW_CLERK_ROLES`, `portalRoleList` and `roleTableRead` have no one-for-one call and are always left (`DISPOSITIONS` in the script gives each reason).
+
+**How to run it.** Dry run by default:
+
+```bash
+npx tsx scripts/codemods/authz.ts --area 'app/api/admin/community/**'           # what would change
+npx tsx scripts/codemods/authz.ts --area 'app/api/admin/community/**' --write
+npx tsx scripts/codemods/authz.ts --file lib/store/auth.ts [--write]
+npx tsx scripts/codemods/authz.ts --all                                          # whole-tree report; never writes
+```
+
+After `--write`, run the conversion's own route tests, then regenerate both baselines: `npx tsx scripts/authz-idioms.mjs --write`, then `npx tsx scripts/s5-inventory.mjs --write`. Expect one kind of test failure: a Clerk mock that gives admin claims with no `userId`, or has no `auth` export, answers 403 after conversion, because `lib/authz` refuses claims with no user. Real Clerk never sends those. Give the fixture a real `userId`; do not loosen `lib/authz`.
+
+**The C13 run (#579, merged to `dev` 9 Nov 2026).** The first run on the app: `--area` over the Stellr-only pilot, which `test/authz-pilot-c13.test.ts` lists as `app/api/admin/{community,training,coaching,containers,membership,entitlements}/**` and `app/(stellr)/(admin)/admin/{academy,community}/**`, 45 files in all. The same PR added platform audit to 42 of its handlers and put its pages behind the Stellr admin guard. All 45 stay `stellr_only`. The pilot test pins that every answer under `AUTHZ_SOURCE=clerk` and every refusal keeps its bytes, and that with `PLATFORM_AUDIT_ENABLED` off a handler reads no session for audit and writes nothing. The authz-idiom, audit and IDOR baselines were regenerated in the same PR. Later slices (to C23) run it one feature area per PR, and a person adds `loadScoped` or `tenantDb`, the events facade, audit and the two-tenant tests in the same PR.
+
+**What is left (14 Nov 2026, `dev` at `1d9b6977`).** `test/baselines/authz-legacy-idioms.json` counts **117 legacy sites in 82 files**: `isAdminClaims` 44, `requireEventAccess` 28, `requireAdminPage` 17, `clerkRoleRead` 8, `adminName` 5, `currentUserIsAdmin` 4, `currentUserHasScope` 3, `isEventManagerClaims` 2, `roleTableRead` 2, and one each of `CREW_CLERK_ROLES`, `hasAdminPortalAccess`, `isCrewRole` and `pageRequireAdmin`. The baseline is shrink-only and reaches 0 at C25. A dry run of `--all` the same day reported 69 files it would change (test mocks included) and 36 sites left for a person, most of them outside the admin surface.
 
 ## Moving a route to another class
 

@@ -204,3 +204,47 @@ else, never in `.env.local`, a commit or chat.
 | `CANARY_SESSION_ID_<HANDLE>` | The operator's shell, for one K9 window | That persona's steps are skipped, which is never green | A Clerk session id (`sess_…`) on the **dev** instance, for `CANARY_MANAGER`, `CANARY_ADMIN` or `STELLR_PROBE_ADMIN` | K8 (#659), `scripts/canary-tenant-flow.ts`. The runner mints a fresh token for it just before each use, with `.env.local`'s `CLERK_SECRET_KEY`, which must be `sk_test_`. Sign the sessions out after the window |
 | `CANARY_SESSION_<HANDLE>` | The operator's shell, for a short check | As above | A session token copied by hand. It lives about a minute | Checked before each use: an expired token, or one not from a `*.clerk.accounts.dev` instance, is not used |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | The operator's shell, optional | Requests to a protected `stellr-web-dev` deployment are refused by Vercel | The dev project's protection bypass | Sent by the K8 tools only on a request to a `stellr-web-dev` deployment |
+
+## 7. Platform plan S0 to S4 variables, and the enforcement switches
+
+Added 14 Nov 2026 (review ids `S0-env-matrix-rows` and
+`legal-credential-family-link.10`). Names, defaults and gates only: **never
+write a value here**, and never paste one into a PR, an issue or chat. "Both
+projects" means `stellr-web` and `stellr-web-dev`, each with its own value
+unless a row says otherwise. Read each row's code before relying on it: the
+code wins over this table.
+
+### Vercel variables
+
+| Variable | Purpose | Unset or default | Environments | Who sets it | Gate |
+|---|---|---|---|---|---|
+| `IMPERSONATION_SECRET` | Signs the admin "view as member" ticket, and nothing else (`lib/impersonation.ts`) | View-as is off: the start route says so, and nothing else is affected. Shorter than 32 characters, or a copy of `CLERK_SECRET_KEY` or `CRON_SECRET`, counts as unset | Both projects, a different value on each. Server-only, never `NEXT_PUBLIC_` | The owner, in Vercel. Rotating it ends every open view-as session and nothing more | **S0** (#500). Owner action in `docs/compliance/information-security-program.md` §4. Recorded as set on production before the 3 Nov 2026 promotion (`.claude/releases/promote-2026-11-03.md`) |
+| `MINOR_SELF_SIGNUP_ENABLED` | Lets a 13 to 17-year-old register themselves, pending a guardian's consent, with the 30-day purge (`lib/pending-consent.ts`, onboarding) | Off: minors keep the 2 Oct 2026 behaviour and finish onboarding only through an invite, an event registration or a consent envelope. Only exactly `true` turns it on | Dev first, then production | The owner's yes, then set in Vercel; dev first | **S1**, decision 24. The owner approves the revised Terms §4.1 and Privacy §2 (`docs/legal/drafts/2026-11-minor-self-registration.md`), and the words go live at the same time. Also before it goes on: S5 item A14 (consent audit rows and the purge, `docs/TENANCY-S5.md`) if `PLATFORM_AUDIT_ENABLED` is on too. Recorded as unset on both projects on 6 Nov 2026 |
+| `RESEND_WEBHOOK_SECRET` | Verifies Resend's svix-signed delivery events at `/api/webhooks/resend`: Stellr-signing bounces (`lib/esign/bounces.ts`) and the suppression list (`lib/email/suppressions.ts`) | Every call is refused (500), so bounces and complaints are not recorded and suppressed addresses keep getting non-critical mail | Both projects, each with its own Resend webhook pointing at its own app host, so a different secret per project | The owner creates the webhook in Resend (`email.bounced`, `email.complained`) and sets the secret | Arrived with the signing engine (#273), before the S plan; S0 to S4 do not depend on it. Open as `esign-prod-switch-on.4` (not in production on 7 Oct 2026) |
+| `FIELD_CRYPTO_MODE` | Field encryption: `off`, `shadow` (dual-write ciphertext beside the plaintext; reads unchanged) or `read` (reserved for the cut-over) (`lib/field-crypto.ts`, `docs/FIELD-CRYPTO.md`) | `off`; anything unrecognised also means `off`. Inert in any mode without a well-formed master key, and health then reports `field_crypto_mode_without_key` | Dev first, then production | The owner's yes, then set in Vercel | **S4**. `docs/FIELD-CRYPTO.md`, "Gates" and "Owner actions": migration applied, key escrowed, dev first with a dev-only key, backfill, then `scan --gate coverage --verify`. Not flipped in S5 wave 7 |
+| `FIELD_CRYPTO_MASTER_KEY`, `FIELD_CRYPTO_KEY_ID` | The master key (32 random bytes, base64) that wraps each tenant's data key, and its id (`[A-Za-z0-9_-]{1,32}`) | Field encryption is inert whatever the mode. Malformed counts as unset | Both projects, **never the production key on dev**. Production key in the Production scope only. Server-only | The owner generates it offline and escrows it (password manager plus a sealed offline copy) **before** setting it. Losing it makes every ciphertext unreadable | **S4**, same as the mode |
+| `FIELD_CRYPTO_PREVIOUS_MASTER_KEY`, `FIELD_CRYPTO_PREVIOUS_KEY_ID` | The outgoing key during a master-key rotation, so data keys it wrapped still open | Normal: no rotation in progress | Wherever a rotation is running, for its duration only | The owner, then removed once `scripts/backfill-field-crypto.ts --rewrap --apply` has re-wrapped every data key | **S4**, rotation in `docs/FIELD-CRYPTO.md`, "Runbooks" |
+| `MEMBERSHIP_AGREEMENT_ENFORCE` | Holds the member area until the membership agreement is signed (`lib/membership-agreement.ts`) | Report-only: the gate records, nothing is blocked. Only exactly `true` enforces | Both projects | The owner's decision on what is blocked and from when (`docs/PLAN-esign-2026-10-02.md`, Phase 3) | Not an S-stage gate. Arrived with #273 |
+| `ACCESS_GATES_ENFORCE` | Makes the access gates (paid membership, required paperwork) deny instead of report (`lib/access-gates.ts`) | Report-only. Only exactly `true` enforces | Both projects | The owner, once rosters reflect real paid and signed members | Not an S-stage gate. `docs/ACCESS-CONVERGENCE-PLAN.md`, P4 |
+
+### Secret coupling: credential family links sign with `SURVEY_TOKEN_SECRET`
+
+| Variable | What depends on it | Rule |
+|---|---|---|
+| `SURVEY_TOKEN_SECRET` (with `CREDENTIAL_LINK_SECRET` unset) | Each of these takes the first of its own secret, then `SURVEY_TOKEN_SECRET`, then `ESIGN_TOKEN_SECRET` (32+ characters). Production has no `CREDENTIAL_LINK_SECRET`, so `SURVEY_TOKEN_SECRET` signs: emailed survey links (`lib/survey/tokens.ts`); the family link in the "credential issued" email (`lib/credentials-link.ts`); the event check-in cookie and codes (`lib/check-in.ts`); and gated download links while `ASSET_LINK_SECRET` is unset (`lib/gated-download-link.ts`) | **Leave it as it is** (`legal-credential-family-link.10`). Rotating it breaks every survey link and family link already emailed, and every check-in cookie. Setting `CREDENTIAL_LINK_SECRET` now does the same to family links and check-in, because it takes precedence. If a rotation is ever needed, decide it with the owner as a planned change, knowing what it breaks |
+
+### GitHub repository variables (Actions, not Vercel)
+
+Each makes a report-only CI job blocking. Set by the owner in Settings → Secrets
+and variables → Actions → Variables, only after the job has passed by step
+outcome; then record the change in the enforcement ledger in
+`docs/RUNBOOK-ci-database.md`, which on 12 Nov 2026 found none of them set.
+Unset, or any value but `true`, keeps the job at `continue-on-error`.
+
+| Variable | Job | Gate |
+|---|---|---|
+| `DB_CI_ENFORCE` | `db` in `ci.yml`: ephemeral Postgres from the baseline plus migrations, then pgTAP | **S1**. `docs/RUNBOOK-ci-database.md`, "First run, then making it a required check" |
+| `SEMGREP_ENFORCE` | `semgrep` in `security.yml` | `docs/RUNBOOK-security-scans.md` |
+| `OSV_ENFORCE` | `osv-scanner` in `security.yml` | `docs/RUNBOOK-security-scans.md` (accepted advisories in `osv-scanner.toml`) |
+| `GITLEAKS_ENFORCE` | `gitleaks` in `security.yml` | `docs/RUNBOOK-security-scans.md`: after a first green run |
+| `CANARY_ENFORCE` | `idor-canary.yml` | `docs/SECURITY-route-manifest.md` |

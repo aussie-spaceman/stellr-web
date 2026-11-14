@@ -126,9 +126,12 @@ the unit suite, and a full build.
 
 `verify` and `e2e` are the required checks, and each is a gate over jobs that
 do the work: `verify` over `verify-build` and `unit`, `e2e` over `e2e-tests`
-(the suite, behind the repo-wide lock) and `storybook`. A gate that reads
-"cancelled" in its log means another run took the one pending place in the
-queue: re-run the failed jobs. After the merge, the `dev` push reports `e2e`
+(the suite, behind the repo-wide lock) and `storybook`. `e2e-tests` waits for
+that lock in a queue (`queue: max` since #541, 5 Nov 2026), so several pending
+runs, from several PRs and `dev`, can wait at once, in roughly FIFO order; a
+wait does not count against the job's timeout. A gate that reads "cancelled"
+now usually means a newer push to the same PR replaced the run (past 100
+waiting, GitHub cancels too): re-run the failed jobs. After the merge, the `dev` push reports `e2e`
 without running the suite if your PR already passed that exact tree. Its
 `changes` job names the run that did, and any other tree runs in full.
 
@@ -213,6 +216,18 @@ If GitHub reports `BEHIND` (protection is strict), update rather than rebase:
 ```bash
 gh pr update-branch <n>
 ```
+
+**A merge into `dev` restarts an open promotion's CI.** The promotion PR's
+head is `dev`, so your merge moves it, and `ci.yml`'s concurrency group cancels
+the promotion's running checks, e2e included, and starts them again. Before
+merging, look:
+
+```bash
+gh pr list --base main --head dev --state open
+```
+
+If a promotion is open with CI running, merge after it lands, or tell the
+promoter, since its merge then waits for a fresh run.
 
 Cleaning up is not housekeeping. It is what stops the branch being reused
 after its squash. When the merge runs from the main checkout, `--delete-branch`

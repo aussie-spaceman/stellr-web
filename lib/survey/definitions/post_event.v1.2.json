@@ -61,7 +61,7 @@
     "heading": "Tell us about {event_title}",
     "body_student": "This takes about 5 minutes. Your answers save as you go, so you can finish later. Your answers are linked to your Stellr account and seen only by Stellr staff. We share results publicly only as combined totals. Answers marked \"may be quoted\" could appear in Stellr materials as your first name, last initial, grade and school or state (for example, \"Jordan M., Grade 11, Nebraska\"), unless you or your parent have opted out. You can also tick \"Don't quote this response\" at the end. Once you submit, answers can't be changed.",
     "body_adult": "This takes about 3-4 minutes. Your answers save as you go, so you can finish later. Your answers are linked to your Stellr record and seen only by Stellr staff. We share results publicly only as combined totals, and we'll only quote you if you say yes at the end. Once you submit, answers can't be changed.",
-    "status": "DRAFT - needs David's sign-off"
+    "status": "DRAFT - needs the owner's sign-off"
   },
   "context_fields_never_asked": [
     "role",

@@ -6,6 +6,10 @@
 #
 # Add a table here in the same PR that creates it when it holds consent,
 # agreements, registrations, members, money or credentials.
+#
+# The hourly job reads the copy in the owner's private backups repo, not this
+# one. After a change here merges, the owner copies this file there the same
+# day (docs/RUNBOOK-backups.md, 2.6).
 
 # Consent, agreements and the e-sign audit trail
 public.agreements
@@ -52,3 +56,10 @@ public.credentials
 public.credential_events
 public.member_background_checks
 public.member_teacher_licenses
+
+# Tenancy and the platform audit chain (S3; on production since 4 Nov 2026)
+public.tenants
+public.tenant_memberships
+public.platform_admins
+public.events
+public.platform_audit_events

@@ -10,14 +10,20 @@ Tracker: [`tracker/2026-11-10-account-migration.md`](tracker/2026-11-10-account-
 
 ## 1. What changed on 10-Nov-2026
 
-Until 10-Nov-2026, the AI-assisted development of this platform ran on an individual's personal Claude account. On 10-Nov-2026 that work moved to **Stellr Education's Claude Team (non-profit) account**, which Stellr owns, and the personal account was closed.
+Until 10-Nov-2026, the AI-assisted development of this platform ran on an individual's personal Claude account. On 10-Nov-2026 that work moved to **Stellr Education's Claude Team (non-profit) account**, which Stellr owns, and the personal account was downgraded (corrected 14 Nov 2026; see the note below).
 
 **What moved, and how:**
 - **Repo knowledge** (this folder, `CLAUDE.md`, the skills, release records) needed no move. It lives in git.
 - **Claude Code's working memory** for this repo (about 160 notes) stays on the development Mac. It was curated and re-pointed at the new account. The untouched originals are archived privately.
-- **Everything that existed only on the personal account** was exported to Stellr's private Drive before the account closed. That covers 22 artifacts (reports, run-sheets, plans), 6 scheduled cloud routines, the cloud memory store, account skills, claude.ai Docs, chats and Projects, and Claude Design files. Design files that are safe to publish are in `design/handoff/`.
+- **Everything that existed only on the personal account** was exported to Stellr's private Drive before the account was downgraded. That covers 22 artifacts (reports, run-sheets, plans), 6 scheduled cloud routines, the cloud memory store, account skills, claude.ai Docs, chats and Projects, and Claude Design files. The Claude Design export is not in this repo yet (corrected 14 Nov 2026; see the note below).
 - **Connectors** (Google Workspace, HubSpot, Stripe, Supabase, Vercel, GitHub, DocuSign and others) were re-authorised on the Team account with least privilege. Production database access by agents still needs the owner's explicit yes per migration (see `CLAUDE.md`).
 - **Services on personal identities** move to Stellr-owned accounts in order of blast radius: GitHub, then Vercel, then Supabase and Clerk, then the rest, with DNS last. Progress is tracked in the tracker above and in the private ownership register.
+
+> **Correction, 14 Nov 2026** (review id `ph-design-handoff`). Two statements in this handover, as first written on 10 Nov 2026, were wrong:
+> - It said the personal account "was closed". It was **downgraded** to a free plan, not closed or deleted.
+> - It said Design files that are safe to publish "are in `design/handoff/`". That folder does not exist. The Claude Design export is held privately and is **not in the repo yet**. Before any of it is published here, it needs a personal-data read; until then it stays private. `design/` holds only the token build, the contrast gate and `tokens.json`.
+>
+> The sentences that carried them (above, and the knowledge-map row for the exports) are amended in place and point here; nothing else in this handover was changed.
 
 ---
 
@@ -73,7 +79,7 @@ The design system, V2, is the default on every surface. Tokens come from `design
 | Sessions open at the switch | §9 B5: the S5 multi-tenant and Ad Grants handovers | Each has its own handover and tracker |
 | Scheduled tasks | Claude desktop app on the development Mac (8 tasks: AEO monthly panel, three Ad Grants reviews, older one-offs) | Local files. Re-approve each once ("Run now") after the account switch |
 | Names, account ownership, secrets inventory, incidents, per-session Doc snapshots | Owner-only private handover and Docs in Stellr's Google Drive | Never in the repo |
-| Exports from the closed personal Claude account | Owner-only, encrypted, in Stellr's Google Drive | Chats are kept encrypted with a delete-by date |
+| Exports from the downgraded personal Claude account (corrected 14 Nov 2026, see §1) | Owner-only, encrypted, in Stellr's Google Drive | Chats are kept encrypted with a delete-by date |
 
 ## 6. Minors' data: where it is and how it is protected
 

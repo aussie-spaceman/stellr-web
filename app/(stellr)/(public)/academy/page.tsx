@@ -310,7 +310,7 @@ export default function AcademyPage() {
               <p className="text-xs font-subheading font-bold uppercase tracking-[0.12em] text-[#C3B6FF]">Earn it</p>
               <h3 className="text-xl font-bold mt-2">Win mentoring &amp; coaching</h3>
               <p className="text-[15px] text-hero-lead mt-3 leading-relaxed flex-1">
-                Joining our Competitions — attending in-person events or our remote Campaigns — gives Members
+                Joining our Competitions — attending in-person events or entering the Classroom Qualifier — gives Members
                 the opportunity to access higher training tiers, customized mentoring groups, and dedicated
                 coaching sessions. Compete to unlock.
               </p>

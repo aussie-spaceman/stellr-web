@@ -26,7 +26,7 @@ export const EARNINGS: { what: string; detail: string; amount: number }[] = [
     amount: GRANT_AMOUNTS.challenge,
   },
   {
-    what: 'Run a Campaign at your school',
+    what: 'Enter the Classroom Qualifier at your school',
     detail: `in class or as a club, with at least ${GRANT_THRESHOLDS.campaignStudents} students registered`,
     amount: GRANT_AMOUNTS.campaign,
   },
@@ -72,7 +72,7 @@ export const HOW_IT_WORKS: { title: string; body: string }[] = [
   },
   {
     title: 'Do the work.',
-    body: 'Your team joins a Competition — either by you bringing students to a live Challenge, or by you supporting them through a Campaign at your school. We supply the curriculum, lesson plans, and delivery guides.',
+    body: 'Your team joins a Competition — either by you bringing students to a live Challenge, or by you supporting them through the Classroom Qualifier at your school. We supply the curriculum, lesson plans, and delivery guides.',
   },
   {
     title: 'Close out.',
@@ -96,16 +96,16 @@ export const FAQS: { q: string; text: string; node?: React.ReactNode }[] = [
     text: `Checks post on ${GRANT_PAYMENT_DATE} each year and cover everything you completed since the last payout. Sign up in January and you're paid that same ${GRANT_PAYMENT_DATE}. Anything you finish after ${GRANT_PAYMENT_DATE} rolls into the next year's check.`,
   },
   {
-    q: 'What is the difference between a Challenge and a Campaign?',
-    text: 'Both are ways of running a Competition. A Challenge is the live version — you bring a team to a venue for the event. A Campaign is the remote version — you run it at your own school, in class or as a club. Each is worth the same amount.',
+    q: 'What is the difference between a Challenge and the Classroom Qualifier?',
+    text: 'Both are ways of running a Competition. A Challenge is the live version — you bring a team to a venue for the event. The Classroom Qualifier is the curriculum version — you run it at your own school, in class or as a club. Each is worth the same amount.',
   },
   {
-    q: 'Do I need to do both a Challenge and a Campaign?',
+    q: 'Do I need to do both a Challenge and the Classroom Qualifier?',
     text: `No. Each is worth ${grantAmount(GRANT_AMOUNTS.challenge)}. Doing both is how you reach the ${grantAmount(GRANT_AMOUNTS.annualMaximum)} maximum.`,
   },
   {
     q: 'What counts as "at least two-thirds of student responses"?',
-    text: `Two-thirds of the students who took part, rounded up. Bring ${GRANT_THRESHOLDS.challengeStudents} students to a Challenge and ${closeOutThreshold(GRANT_THRESHOLDS.challengeStudents)} of them need to submit; run a Campaign with ${GRANT_THRESHOLDS.campaignStudents} students and ${closeOutThreshold(GRANT_THRESHOLDS.campaignStudents)} need to submit. We'll give you the links and a reminder schedule to make this straightforward.`,
+    text: `Two-thirds of the students who took part, rounded up. Bring ${GRANT_THRESHOLDS.challengeStudents} students to a Challenge and ${closeOutThreshold(GRANT_THRESHOLDS.challengeStudents)} of them need to submit; enter the Classroom Qualifier with ${GRANT_THRESHOLDS.campaignStudents} students and ${closeOutThreshold(GRANT_THRESHOLDS.campaignStudents)} need to submit. We'll give you the links and a reminder schedule to make this straightforward.`,
   },
   {
     q: 'Does this count for CTE credit?',
@@ -117,10 +117,10 @@ export const FAQS: { q: string; text: string; node?: React.ReactNode }[] = [
   },
   {
     q: 'What about my students’ information?',
-    text: 'For Campaigns we ask for a roster with student names and email addresses so we can send them their survey. It is handled under our privacy policy, stored securely, and never shared or sold.',
+    text: 'For the Classroom Qualifier we ask for a roster with student names and email addresses so we can send them their survey. It is handled under our privacy policy, stored securely, and never shared or sold.',
     node: (
       <>
-        For Campaigns we ask for a roster with student names and email addresses so we can send
+        For the Classroom Qualifier we ask for a roster with student names and email addresses so we can send
         them their survey. It&rsquo;s handled under our{' '}
         <Link href="/privacy" className="text-primary-deep font-medium hover:underline">
           privacy policy

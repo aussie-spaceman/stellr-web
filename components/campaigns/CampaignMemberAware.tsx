@@ -39,7 +39,7 @@ export function CampaignCta({
   if (!registered && !isOpen) return <p className={closedClassName}>{closedNote}</p>
   return (
     <Button href={registered ? `${APP_URL}/events` : `/register/${slug}/group`} variant="primaryStrong" className={className}>
-      {registered ? 'Access Campaign →' : 'Compete Now →'}
+      {registered ? 'Open your Qualifier →' : 'Compete Now →'}
     </Button>
   )
 }
@@ -60,7 +60,7 @@ export function CampaignMembershipNote({
       {membership.roleLabel ? ` · ${membership.roleLabel}` : ''} — no payment needed.
     </p>
   ) : (
-    <p className={className}>Free — no payment required for Campaigns.</p>
+    <p className={className}>Free — no payment required for the Classroom Qualifier.</p>
   )
 }
 

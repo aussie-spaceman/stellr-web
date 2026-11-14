@@ -144,13 +144,13 @@ export const PROGRAMS: readonly Program[] = [
     sources: ['https://usaeop.com/program/ecybermission/'],
   },
   {
-    name: 'Stellr Campaign',
+    name: 'Stellr Classroom Qualifier',
     organizer: 'Stellr Education',
     grades: '7–12',
-    team: 'Groups; a school can enter as many as it likes',
+    team: 'Teams of 2–12; a school can enter as many as it likes',
     cost: 'Free (Educator membership)',
     equipment: 'None — no lab, no kit',
-    format: 'In class or as a club, over 4 or 10 weeks; one written proposal per group',
+    format: 'In class or as a club, over 4–10 weeks; one 10–20 page team proposal per group',
     professionals: 'Yes — a judging panel returns written feedback on every proposal',
     sources: ['https://www.stellreducation.org/events/space-design-campaign-fall'],
     stellr: true,
@@ -173,15 +173,15 @@ export const PROGRAMS: readonly Program[] = [
 export const FAQS: readonly { q: string; a: string }[] = [
   {
     q: 'Which STEM competitions are free for schools?',
-    a: 'Of the programs compared here, NASA TechRise, eCYBERMISSION and Stellr Campaigns are free to enter. StellarXplorers waives its $250 fee for Title I schools. Future City costs $25 per organization for middle school.',
+    a: 'Of the programs compared here, NASA TechRise, eCYBERMISSION and the Stellr Classroom Qualifier are free to enter. StellarXplorers waives its $250 fee for Title I schools. Future City costs $25 per organization for middle school.',
   },
   {
     q: 'Which STEM competitions need no lab or equipment?',
-    a: 'eCYBERMISSION, NASA TechRise (to enter), Stellr Campaigns and Stellr live Challenges need no lab or kit. StellarXplorers needs only Windows PCs. Robotics programs such as FIRST and VEX need robot hardware and build space.',
+    a: 'eCYBERMISSION, NASA TechRise (to enter), the Stellr Classroom Qualifier and Stellr live Challenges need no lab or kit. StellarXplorers needs only Windows PCs. Robotics programs such as FIRST and VEX need robot hardware and build space.',
   },
   {
     q: 'Do I need an engineering background to coach a STEM competition?',
-    a: 'Usually not. FIRST says anyone can join regardless of technical experience, StellarXplorers and Future City pair teams with volunteer mentors, and Stellr Campaigns and Challenges are designed to be run by teachers with no engineering background.',
+    a: 'Usually not. FIRST says anyone can join regardless of technical experience, StellarXplorers and Future City pair teams with volunteer mentors, and the Stellr Classroom Qualifier and Challenges are designed to be run by teachers with no engineering background.',
   },
   {
     q: 'What is an industry-simulation design competition?',

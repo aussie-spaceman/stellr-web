@@ -59,7 +59,7 @@ Each row needs a window, a note of what was seen, and the owner's sign-off.
 
 ## The crons
 
-All 23, from `vercel.json` and `lib/cron-scope.ts`. Schedules are UTC. Evidence is the `cron_runs` ledger, which every cron writes through `lib/cron-runs.ts`. `ok` is false when any failure was recorded, and a run killed mid-way never finishes.
+All 24, from `vercel.json` and `lib/cron-scope.ts` (`email-outbox`, added in #600, made the 24th; re-counted 14 Nov 2026). Schedules are UTC. Evidence is the `cron_runs` ledger, which every cron writes through `lib/cron-runs.ts`. `ok` is false when any failure was recorded, and a run killed mid-way never finishes.
 
 ```sql
 SELECT job,
@@ -88,6 +88,7 @@ On `dev` these rows prove little: the crons decline there, because `guardCron()`
 | `deletion-archive-retention` | 04:00 on the 2nd | Platform | | |
 | `docusign-form-data` | 09:15 daily. Also writes job `esign-maintenance` | Stellr-only | | |
 | `docusign-reminders` | 09:00 daily | Per tenant | | |
+| `email-outbox` | 00:05, 06:05, 12:05, 18:05 daily | Platform | | |
 | `entitlements` | 05:00 daily. Also sends the error digest | Platform | | |
 | `event-emails` | 15:00, 17:00, 19:00 daily | Per tenant | | |
 | `group-invoice-sync` | 09:45 daily | Per tenant | | |
@@ -105,7 +106,29 @@ On `dev` these rows prove little: the crons decline there, because `guardCron()`
 
 A monthly cron shows one run in 30 days, so read that one run closely.
 
-**The inbox matters as well as the ledger.** For `weekly-digest`, `entitlements`' error digest, `event-emails`, `surveys` and `docusign-reminders`, also confirm that a real message arrived. The ledger says a send ran, not that it reached an inbox.
+**The inbox matters as well as the ledger.** For `email-outbox` (mail Resend refused, sent later), `weekly-digest`, `entitlements`' error digest, `event-emails`, `surveys` and `docusign-reminders`, also confirm that a real message arrived. The ledger says a send ran, not that it reached an inbox.
+
+## Steps owed from waves 4 to 6
+
+Sign-off steps the waves named (`docs/TENANCY-S5.md`, "Docs owed after wave 4", "after wave 5" and "after wave 6"), and dev proofs that no list carried after the account move, added on 14 Nov 2026. None has evidence yet. Production reads are the owner's (tracker `s5-programme.34`); `dev` proofs are Claude's (`s5-programme.35`).
+
+| Step | Where | Evidence source | Pass | What was seen (no personal data) | Owner sign-off |
+|---|---|---|---|---|---|
+| Stellr-host rows by route (B10(c)) | `dev`, then production | `e2e/tenancy/host-cases.ts`, a person by route | Each recorded outcome is accepted by route, or its slice has landed | | |
+| B6's canary checks | hosted canary host (K9 Phase B) | `scripts/canary/tenant-host-headers.mjs`; raw headers on `/sign`, `/survey/x`, `/_next`, `/api/img`, `/api/csp-report` | One enforcing CSP; Clerk sign-in and sign-up with Turnstile under it, 0 violations | | |
+| Trackers and hydration in a browser | `dev`, once a CMS fixture exists | A person opens the register form and the check-in page | 0 tracker requests on a tenant host; no hydration error | | |
+| One real registration per kind after A7 | `dev` | `registrations`, `participants`; the derivation log filtered by route and time | Individual, group by invoice, group by card and group-join each write, through A7's owner read | | |
+| A Stellr registration writes after A3 | `dev` | The same, through the register routes, not seeded rows | The row is written with Stellr's `tenant_id` | | |
+| No tenant mirror row shares a slug with an e2e Sanity event | `dev` | `events` mirror against the e2e event slugs | 0 shared slugs | | |
+| A7's three CMS rows on the Stellr host | `dev` | `register/[slug]`, `individual`, `group` in the harness | No longer `noCms` | | |
+| The team page's linked-row view in a browser | `dev` | A person, on a team with a linked member | The linked details show and save as the unit tests say | | |
+| B9: `object_created` rule state | `dev`, then production | `tier_grant_rules` where `trigger_type = 'object_created'` (counts; the query is under `s5-programme.34`) | Every active `attach_object` rule names a target | | |
+| B14's two crons in `cron_runs` | production | `event-emails`, `docusign-reminders` | Result keys unchanged; no `tenantHeld`; no `tenants` failure | | |
+| The first tenant send | `dev`, once `TENANT_EVENT_MAIL_ENABLED` is considered | `cron_runs` and a test inbox | The send ran and arrived | | |
+| A tenant consent signed end to end | `dev`, at P12 | K8 S5 and S6; `tenant_guardian_consents` | Signed and declined both settle | | |
+| B14b's outbox read in `cron_runs` | production | `esign-maintenance` with its `outbox` step | Finishes ok, no `outbox` failure | | |
+| One A8 roster round on a Stellr group | `dev` | `participants` for the group, before and after | Add, edit and sheet import write correctly | | |
+| The A16 check-in path | `dev`, once batch 1 is there | The check-in desk and QR on a Stellr event | Stellr's check-in is unchanged; the tenant branch (a minor pending consent is refused) waits for P12 | | |
 
 ## Closing it
 

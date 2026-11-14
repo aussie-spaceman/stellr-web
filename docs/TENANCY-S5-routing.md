@@ -6,15 +6,13 @@ How a request on a tenant host reaches the app, what fails closed, how to classi
 
 `TENANT_ROUTING_ENABLED` defaults to off, and nothing in this work sets it. With it off, the tenant branch in `proxy.ts` is one string comparison. Attaching a real zone is an owner gate that has not happened. The dev canary zone, `.devzone.stellreducation.org` on `stellr-web-dev` only, is approved and its cookie review done (13 Nov 2026), but it is not attached yet: [The dev canary zone (K6)](#the-dev-canary-zone-k6).
 
-**Tenant hosts are not ready to serve anyone.** Every one of these has to pass before a real zone gets the flag:
+**Tenant hosts are not ready to serve anyone.** The code this table used to list is built and on production: B5b, B8 and B10a merged in #563 and B5c, B6, B9 and B10 in #578, both promoted in #587 (9 Nov 2026); A7 merged in #594 and was promoted in #600; the production zone guard (`W7-27`) is on production since #680 (14 Nov 2026 UTC). What still has to pass before a real zone gets the flag (re-checked 14 Nov 2026):
 
 | Needs | Because |
 |---|---|
-| B5b | Without it, all 16 `app/(flow)` pages 404 on a tenant host |
-| B5c, B10(d) | `app/layout.tsx` still wraps the tree, with Stellr's metadata and the `ConsentMode` head script |
-| A7, C6's cap at 0, B10(c) | The under-14 API gate, and tenant checks on token and slug lookups. Allowed routes read by global id until then |
-| B6 | The CSP is still Report-Only |
-| B8, B9 | Import-closure lint and the community CHECK. The allow-list already denies community routes |
+| B5c's fallback rewrite on Vercel | The `missing: host` rewrite and `experimental.globalNotFound` have run only on harness builds (`docs/TENANCY-S5.md`, wave 4, Not yet proven) |
+| B6 on a hosted canary, and B10(d) in a browser | One enforcing CSP on `/sign` and `/survey/x`, Clerk sign-in and sign-up with Turnstile under it with 0 violations, and 0 trackers on a tenant host: none has run on a deployment |
+| C6's cap at 0, and B10(c) | 48 tenant-host cases still fail and 18 are unproven (`test/baselines/tenant-host-idor.json`); A11 and A12 remain. The Stellr-host rows in `e2e/tenancy/host-cases.ts` are recorded outcomes, which a person checks at sign-off |
 | The `Real tenant hosts` owner gate | G5 subzone, Vercel Pro, Clerk session sharing and FAPI origins, the cookie review below |
 
 ## How a host resolves
@@ -203,7 +201,7 @@ A read-only review on 13 Nov 2026, before the zone was approved. Nothing was cha
 - **Not refused on the wrong project.** `isDevZoneSuffix` knows only `.localhost` and `.test`, so this suffix set on production (with the flag on) would be accepted, and real tenant hosts under `.events.stellreducation.org` would fall outside the zone and get the Stellr surface. The reverse, the production zone set on `stellr-web-dev`, is not refused either, and the canary runner's production-host list is exact, so it would not refuse `canary.events.stellreducation.org`. The devzone hosts themselves cannot reach production, because Vercel attaches a host to one project only. While production's flag is off its suffix is never read, so this does not block K6. **Since built (`W7-27`, #675, on `dev`, not promoted):** the production zone guard (`W7-27`, below).
 - **Vercel and DNS.** `stellreducation.org` is on the `stellreducation` team, with GoDaddy nameservers (`ns05` and `ns06.domaincontrol.com`), not Vercel DNS. `stellr-web` holds the apex, www and app; `stellr-mta-sts` holds `mta-sts`; `stellr-web-dev` has no custom domain. A subdomain can normally be attached to a second project in the same team without an ownership record; if Vercel asks, it shows a `_vercel` TXT record. Hobby allows 50 domains per project. On 13 Nov 2026 `canary.devzone`, `nobody.devzone`, `devzone` and a random label were all NXDOMAIN, so there is no wildcard; the apex has no CAA record, so Vercel's certificates are not blocked.
 - **Search engines.** Tenant hosts already answer `/robots.txt` with `Disallow: /`, the tenant layout and flow pages set `noindex, nofollow`, and the proxy's 404 and 503 carry `X-Robots-Tag: noindex`. A disallowed URL could still be indexed URL-only if something linked to it; nothing does. Optional hardening: `X-Robots-Tag: noindex, nofollow` on every tenant-host response. Never add these hosts to Search Console.
-- **Analytics.** Trackers are off on the devzone hosts by allow-list (`isStellrTrackingHost`), whatever the zone, and `test/tenant-tree-no-analytics.test.ts` guards the import closure. Until B5c the `ConsentMode` head script still runs there, with no network request.
+- **Analytics.** Trackers are off on the devzone hosts by allow-list (`isStellrTrackingHost`), whatever the zone, and `test/tenant-tree-no-analytics.test.ts` guards the import closure. B5c (#578, on production since #587) gave the tenant tree its own root, so the `ConsentMode` head script does not run on a tenant host.
 
 ### Conditions
 
@@ -214,7 +212,7 @@ A read-only review on 13 Nov 2026, before the zone was approved. Nothing was cha
 5. `dev` email that carries canary-host links goes only to test inboxes and the canary personas.
 6. Keep the `robots.txt` Disallow and the noindex on tenant hosts, do not add the hosts to Search Console, and confirm 0 tracker requests on the canary host in K9 Phase B.
 7. Rollback: detach both domains in Vercel first, then delete the two CNAMEs at GoDaddy, then remove the flag and suffix and redeploy the newest READY deployment.
-8. Before production's `TENANT_ROUTING_ENABLED` flip (not before K6): the production zone guard (`W7-27`) in `tenantRoutingConfig`, and the canary runner refusing every host under `.events.stellreducation.org`, on production. Both are built (below); they apply once promoted.
+8. Before production's `TENANT_ROUTING_ENABLED` flip (not before K6): the production zone guard (`W7-27`) in `tenantRoutingConfig`, and the canary runner refusing every host under `.events.stellreducation.org`, on production. Both are built (below) and on production since #680 (14 Nov 2026 UTC).
 
 **The canary hosts are public for the K9 window.** A custom domain on `stellr-web-dev`'s production target is outside Standard Deployment Protection. The owner accepted that for the K9 window on 13 Nov 2026 (`W7-25`): the hosts serve the tenant tree only, allow-listed pages, and `dev` data.
 
@@ -236,7 +234,7 @@ Results are recorded with hostnames, status codes and header names only.
 
 ### The production zone guard (`W7-27`)
 
-**Built** (approved 13 Nov 2026 as a small wave 7 slice; not yet promoted). It is a hard gate before production's `TENANT_ROUTING_ENABLED` flip: it must be on production first.
+**Built and on production** (approved 13 Nov 2026 as a small wave 7 slice, #675; promoted in #680, `fba19669`, 14 Nov 2026 UTC). It was a hard gate before production's `TENANT_ROUTING_ENABLED` flip: it had to be on production first, and now is.
 
 - **One constant.** `PRODUCTION_TENANT_ZONE` (`.events.stellreducation.org`) in `lib/tenancy/host-pure.ts`, with `isInProductionTenantZone(host)` (the zone apex or any host under it). `lib/tenancy/host.ts` re-exports it. `scripts/canary/tenant-host-headers.mjs` is plain JavaScript and holds a copy, which its test holds equal.
 - **`tenantRoutingConfig`.** On the real production app (`isRealProductionApp()`), only `PRODUCTION_TENANT_ZONE` is accepted; any other suffix sets `suffix` to null and `suffixError` to "`TENANT_HOST_SUFFIX` is not the production tenant zone; …". A `.localhost` or `.test` zone keeps its own reason ("a development zone on production"). Off production (local runs, previews and `stellr-web-dev`, which declares `NEXT_PUBLIC_APP_ENV=dev`), the production zone and any zone under it are refused: "`TENANT_HOST_SUFFIX` is the production tenant zone, which is refused off production; …". The earlier rules (an unsafe suffix; routing on with no suffix) are unchanged. Either refusal fails closed like any unusable zone: known Stellr hosts keep working and every other host answers 503. The reasons are fixed text and never name the zone.
@@ -251,15 +249,15 @@ No owner question from the cookie review is open: `W7-25` to `W7-31` were answer
 - K6 steps 0 to 8 on `stellr-web-dev` and the `dev` database, with the owner adding the two CNAME records at GoDaddy (`W7-30`).
 - K6 step 9, in K9: record the `Domain` attribute of both `__client_uat` cookies, and add to the Clerk dev instance only what sign-in shows is needed (`W7-29`). Then K8's Phase B.
 - After K9: decide whether the dev zone stays under `stellreducation.org` or moves to a separate domain (`W7-28`).
-- Before production's routing flip: the production zone guard on production (`W7-27`), and the no-ads question again before a production tenant zone under `stellreducation.org` (`W7-26`).
+- Before production's routing flip: the no-ads question again before a production tenant zone under `stellreducation.org` (`W7-26`). The production zone guard (`W7-27`) is on production since #680.
 
 ## Gates
 
 | Gate | Proof | Status |
 |---|---|---|
-| Flag off changes nothing on Stellr hosts | `test/proxy-tenant-routing.test.ts`; B10a's body hash over all pages | Test built. B10a not built |
+| Flag off changes nothing on Stellr hosts | `test/proxy-tenant-routing.test.ts`; B10a's body hash over all pages | Built: test, and B10a (#563, on production via #587) |
 | Flag on adds no database call on a Stellr host | same test | Built |
-| Forged headers change nothing, the tree 404s by every spelling | same test; B10(c) on the production build | Test built. B10 not built |
+| Forged headers change nothing, the tree 404s by every spelling | same test; B10(c) on the production build | Built: test, and B10 (#578, on production via #587). B10(c)'s Stellr-host rows are checked by a person at sign-off |
 | Warm-cache hash per tenant | B10(b), with two non-owner tenants | Not built |
-| 0 trackers on tenant hosts | `test/tenant-tree-no-analytics.test.ts`; B10(d) in a browser | Test built. B10 not built |
-| 0 community routes on tenant hosts | `test/tenant-surface-routes.test.ts`; B9 | Allow-list built. B9 not built |
+| 0 trackers on tenant hosts | `test/tenant-tree-no-analytics.test.ts`; B10(d) in a browser | Test and B10 built (#578). B10(d) in a browser on a hosted canary host: not run (K9 Phase B) |
+| 0 community routes on tenant hosts | `test/tenant-surface-routes.test.ts`; B9 | Built: the allow-list, and B9 (#578; its CHECK applied to `dev` and production on 9 Nov 2026) |

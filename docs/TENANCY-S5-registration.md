@@ -171,7 +171,7 @@ WHERE e.starts_at IS NOT NULL
 
 ## Rollout order
 
-1. **`dev` migration.** Applied 5 Nov 2026, and the ledger re-read. Still owed: confirm a Stellr registration on `dev` still writes.
+1. **`dev` migration.** Applied 5 Nov 2026, and the ledger re-read. Still owed: confirm a Stellr registration on `dev` still writes (tracker `s5-programme.35` and `docs/TENANCY-S5-flow-checklist.md`, "Steps owed from waves 4 to 6", since 14 Nov 2026).
 2. **Parity query on `dev`, then production.** `dev`, 5 Nov 2026: 0 mismatches across 9 dated events, after `scripts/backfill-events-mirror.ts` filled the mirror (11 rows, all Stellr's). Production's backfill and query are still owed.
 3. **Production migration.** Applied 5 Nov 2026 with the owner's yes, through the Supabase MCP, and the ledger re-read (`.claude/releases/promote-2026-11-05.md`). It is a no-op for Stellr apart from the one lookup above.
 4. **A7** wires `assertEligible` into the register routes, supplies `tenant_id` on every write, Stellr's too, and refuses priced tenant events. From #594, since promoted in #600. For Stellr it adds an owner read of `public.events` to each register, pay and pay-seat request (one read, or two when the row for the CMS document holds another slug or is missing, so that the owner agrees with the slug's row the trigger uses), and a failed read, or two rows naming different owners, answers a retryable 503. **A8** does the same for team-leader add and edit and the roster sheet import, from the registration's tenant (#625, since promoted in #643 on 12 Nov 2026).

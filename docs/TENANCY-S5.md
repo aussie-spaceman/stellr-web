@@ -162,7 +162,7 @@ The route counts use one regex: `MUT='export[[:space:]]+(async[[:space:]]+)?(fun
 
 **The authz count.** The figure depends on the idiom list: scoping's list gave 222 and the review's gave 194. C5a commits the script and the idiom list, and the generated baseline is the only number the ratchet may use. Neither 222 nor 295 may be hand-entered.
 
-**Stale in code, for Lane C to fix:** the `API routes (305)` header in `route-manifest.ts` (there are 306), and the IDOR doc and `MIN_TARGETS` comment that still say 226 and 130.
+**Stale in code:** #535 fixed the `API routes (305)` header and the 226 and 130 counts (the IDOR comment now reads 228 and `MIN_TARGETS` is 215). The header has drifted again: on 14 Nov 2026 `lib/security/route-manifest.ts` says `API routes (307)` while `app/api` holds 324 route files. It is not corrected here, because open PR #684 edits that file; correct it once #684 has merged.
 
 ## PRs
 
@@ -270,7 +270,7 @@ B5d is added by this file: the review listed the gap but no fix. It has hunks in
 | D6 | Crons, limiter and SMMA record; WAF runbook; SMMA memo | B3, B4, B8 | later |
 | D7 + | 30-day Stellr flow checklist | | later |
 
-**D7** lists each flow, its evidence source and a sign-off row: individual registration; group by invoice and by card; group-join; signing; survey; the check-in desk and QR; credentials; refunds; scholarship; the admin event screens; and each of the 22 crons. The sign-off itself is the owner's, at M1. The list is `docs/TENANCY-S5-flow-checklist.md`.
+**D7** lists each flow, its evidence source and a sign-off row: individual registration; group by invoice and by card; group-join; signing; survey; the check-in desk and QR; credentials; refunds; scholarship; the admin event screens; and each of the 24 crons (`email-outbox`, added in #600, is the 24th). The sign-off itself is the owner's, at M1. The list is `docs/TENANCY-S5-flow-checklist.md`.
 
 ## Wave 2 status
 
@@ -309,7 +309,7 @@ B5d is added by this file: the review listed the gap but no fix. It has hunks in
 **Not yet proven.**
 
 - **The real-registration witness for A4 to A6 was waived, not done.** The owner waived it for the promotion on 5 Nov, and #549's own list likewise. No real registration has been seen through the split routes, on `dev` or production, so coverage is unit and characterisation tests.
-- The team page's linked-row view has unit tests only. It has not been opened in a browser, and `details_from_member` was true on 0 production rows on 5 Nov.
+- The team page's linked-row view has unit tests only. It has not been opened in a browser, and `details_from_member` was true on 0 production rows on 5 Nov. Owned by tracker `s5-programme.35` since 14 Nov 2026.
 - A real participant write through A3's trigger on production has not been confirmed.
 - Active CPU under real traffic with B5's matcher entry is unmeasured.
 - The parity query proves nothing on production yet: `events` had 0 rows there on 5 Nov, and the mirror backfill is owed.
@@ -502,7 +502,7 @@ It is on no database. Apply to `dev` after the merge's `db` job passes, then rea
 - **B6 on a hosted canary, before any real zone gets the routing flag.** Read the raw headers on `/sign` and `/survey/x`: there must be one enforcing policy, starting `script-src 'nonce-`. Locally the proxy's header replaces `next.config.mjs`'s private-link policy, but that is proved on `next start` only. Read the `/_next`, `/api/img` and `/api/csp-report` header there too. Then run Clerk sign-in, sign-up with Turnstile, and a signed-in registration under the enforcing policy against a real Clerk dev instance, with 0 violations. None of that has run, and a miss stops a family's registration on a tenant host.
 - **B10(c) on Stellr's hosts.** 7 record pages answer with the record and 4 are unproven without a CMS. Owners: A7 6, A10 3, A12 2 (`e2e/tenancy/host-cases.ts`). The job stays green while these rows hold, so the gate is met only by those slices or an owner approval by route.
 - **A9's store paths** have run only against a mocked store. The first real run is a shadow flip on `dev`. `RATE_LIMIT_STORE`'s value on `dev` was not read.
-- **B9's pgTAP** has not run locally; CI's `db` job is its first run. No `object_created` rule state was checked on any database.
+- **B9's pgTAP** has not run locally; CI's `db` job is its first run. No `object_created` rule state was checked on any database. Owned by tracker `s5-programme.34` (production) and `.35` (`dev`) since 14 Nov 2026.
 - **B13** proves nothing until production crons run. After promotion, confirm in `cron_runs` that `surveys` still opens and invites.
 - **C16's scope check** relies on a module-private `WeakSet`. On `dev`, make one real admin call to a route that uses `loadRecord` (refund preview or the correct-recipient dialog) and one as an event manager inside their event, and read `loadScopedMode` on the health route.
 - **The audit actor.** C13's 42 handlers use `{ session: true }`, read inside `after()`, as wave 3's routes do: check one real row from a pilot route on `dev` before `PLATFORM_AUDIT_ENABLED` goes on. C15's seven pass `{ userId }`. B16's route tests cover 9 member handlers end to end; the other audited member and community handlers are covered by the coverage gate only, not for what each records.
@@ -556,7 +556,7 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Slice reports hold 
 ### Docs owed after wave 4
 
 - **D4, delivered in wave 5** (`docs/TENANCY-S5-data.md` and `docs/SECURITY-route-manifest.md`), except the `docs/PLATFORM-AUDIT.md` sentence on member uuids, which waits for the owner's C13 answer. What was owed: a `platform_destined` row in `docs/SECURITY-route-manifest.md` and why it is not `platform_admin`; the end of "every `/api/admin` route is `stellr_only`"; the participant-refusal rule for every staff class, not `stellr_only` alone; and, in the audit runbook, that C15's seven events sit on Stellr's chain pending the owner's answer. Still owed: `docs/PLATFORM-AUDIT.md` states whether a member uuid may sit in `target_id` or metadata, once the owner decides (C13).
-- **D7:** add the sign-off steps this wave names: the Stellr-host rows by route, B6's canary checks, and a person opening the register form and check-in page in a browser for trackers and hydration once a CMS fixture exists.
+- **D7:** add the sign-off steps this wave names: the Stellr-host rows by route, B6's canary checks, and a person opening the register form and check-in page in a browser for trackers and hydration once a CMS fixture exists. **Added** to `docs/TENANCY-S5-flow-checklist.md`, "Steps owed from waves 4 to 6", on 14 Nov 2026, with no evidence yet.
 
 ## Wave 5 status
 
@@ -587,7 +587,7 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Slice reports hold 
 **Not yet proven.**
 
 - **`tenant-db` is still report-only.** One green run; it is not a required check, so a later failure blocks nothing (owner decision below).
-- **A7 on a deployment.** No real registration has gone through the owner read. One real registration per kind on `dev` (individual, group by invoice, group by card, group-join), and a check that no tenant-owned mirror row shares a slug with a Sanity event an e2e registers on Stellr's host.
+- **A7 on a deployment.** No real registration has gone through the owner read. One real registration per kind on `dev` (individual, group by invoice, group by card, group-join), and a check that no tenant-owned mirror row shares a slug with a Sanity event an e2e registers on Stellr's host. Owned by tracker `s5-programme.35` since 14 Nov 2026.
 - **A7's three CMS rows on the Stellr host** (`register/[slug]`, `individual`, `group`) are still `noCms` in the harness, so the amendment's Stellr-host check for them stays open.
 - **B14 proves nothing until production crons run,** because crons decline on `dev`. After promotion, confirm in `cron_runs` that `event-emails` and `docusign-reminders` keep their result keys, with no `tenantHeld` and no `tenants` failure.
 - **B14's flag-on path** has run only against mocks. A tenant event's date still comes from the CMS read until the events facade has a Postgres path (C8 amendment, C25), so the flag cannot send for a tenant event the CMS does not hold.
@@ -635,7 +635,7 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-
 
 ### Docs owed after wave 5
 
-- **D7:** one real registration per kind on `dev` now that A7 has merged; A7's three CMS rows on the Stellr host; after promotion, B14's two crons read in `cron_runs`; and, once `TENANT_EVENT_MAIL_ENABLED` is considered, the first tenant send read in `cron_runs` and an inbox.
+- **D7:** one real registration per kind on `dev` now that A7 has merged; A7's three CMS rows on the Stellr host; after promotion, B14's two crons read in `cron_runs`; and, once `TENANT_EVENT_MAIL_ENABLED` is considered, the first tenant send read in `cron_runs` and an inbox. **Added** to the checklist on 14 Nov 2026, with no evidence yet (tracker `s5-programme.34` and `.35`).
 - **`docs/PLATFORM-AUDIT.md`:** the member-uuid sentence, once the owner answers C13.
 
 ## Wave 6 status
@@ -742,16 +742,16 @@ On top of [Owner gates](#owner-gates) and the earlier lists. Each is built fail-
 
 ### Docs owed after wave 6
 
-- **D7:** a tenant consent signed end to end on `dev`, once a document is published, both flags are on there and the consent flag's precondition above is met; the B14b outbox read in `cron_runs` on production; one A8 roster round on a Stellr group on `dev`.
+- **D7:** a tenant consent signed end to end on `dev`, once a document is published, both flags are on there and the consent flag's precondition above is met; the B14b outbox read in `cron_runs` on production; one A8 roster round on a Stellr group on `dev`. **Added** to the checklist on 14 Nov 2026, with no evidence yet.
 - **The wave 7 plan,** with an owner slice for each unassigned need (tracker `s5-programme.43`).
 - **`docs/PLATFORM-AUDIT.md`:** the member-uuid sentence, once the owner answers C13.
-- **The template PDF-hash test** (tracker `s5-programme.18`): not yet identified, so it is not recorded here. The requester is asked what it refers to.
+- **The template PDF-hash test** (tracker `s5-programme.18`), defined 14 Nov 2026: the golden PDF-hash test from the 4 Nov scope, fixed-input renders of the badge and certificate PDFs whose normalised bytes are hashed and pinned. Built as `test/pdf-golden-hash.test.ts` in PR #710 (open, not merged). It lands before C19 and before P8 or P9.
 
 ## Wave 7 status
 
-Wave 7 proves the switches on `dev` one at a time, runs a fictitious canary tenant there end to end, and closes the consent and isolation gaps a second tenant would hit first. **Merged** means squashed into `dev`, one PR per slice, on 12 and 13 Nov 2026; none is promoted. Owner decisions are in `docs/S5-DECISION-REGISTER.md` (`W7-1` to `W7-32`, and the answers given in PR review). Every flip goes in the tracker's "Wave 7 flip log" (`s5-programme.31`). **No tenancy switch has yet been on in a hosted environment:** on 13 Nov 2026 the flip log holds only the P0 baseline, with every S5 switch unset on `stellr-web-dev`. Checked against the code on `dev` at `bac59d66`.
+Wave 7 proves the switches on `dev` one at a time, runs a fictitious canary tenant there end to end, and closes the consent and isolation gaps a second tenant would hit first. **Merged** means squashed into `dev`, one PR per slice, on 12 and 13 Nov 2026. **Since promoted:** all of wave 7, with #675 and #677, reached production in #680 (`fba19669`, 14 Nov 2026 UTC) with the owner's yes (`.claude/releases/promote-2026-11-13.md`). Owner decisions are in `docs/S5-DECISION-REGISTER.md` (`W7-1` to `W7-32`, and the answers given in PR review). Every flip goes in the tracker's "Wave 7 flip log" (`s5-programme.31`). **No tenancy switch has yet been on in a hosted environment:** on 13 Nov 2026 the flip log holds only the P0 baseline, with every S5 switch unset on `stellr-web-dev`. Checked against the code on `dev` at `bac59d66`; the promotion lines re-checked on 14 Nov 2026 at `1d9b6977`.
 
-**Merged so far:** batches 1 to 4 (W7-pre to A10b, below), the survey hold #661 and docs train D2 #662. **Follow-ups, all merged on 13 Nov 2026 (#665 to #671):** #665 enters `W7-15`'s two Stellr-host unsubscribe cases in `TENANT_HOST_ACCEPTED`; #666 hides another tenant's survey links in event emails and on check-in (`PR661-1`); #667 is the A10a follow-up (`PR655-3`: "skipped" in bulk issue, 409 from `pd-credentials`); #668 removes event staff check-ins with the account (`attendee-email-cohort.4`); #669 takes a signed-in organiser's name from their account (`promote-s5-wave3.17`); #670 fixes the PD credential e2e flake; #671 is docs train D3. The production zone guard (`W7-27`) was approved on 13 Nov 2026 as a small wave 7 slice and is built in #675 (`docs/TENANCY-S5-routing.md`, "The production zone guard"); it is not promoted.
+**Merged so far:** batches 1 to 4 (W7-pre to A10b, below), the survey hold #661 and docs train D2 #662. **Follow-ups, all merged on 13 Nov 2026 (#665 to #671):** #665 enters `W7-15`'s two Stellr-host unsubscribe cases in `TENANT_HOST_ACCEPTED`; #666 hides another tenant's survey links in event emails and on check-in (`PR661-1`); #667 is the A10a follow-up (`PR655-3`: "skipped" in bulk issue, 409 from `pd-credentials`); #668 removes event staff check-ins with the account (`attendee-email-cohort.4`); #669 takes a signed-in organiser's name from their account (`promote-s5-wave3.17`); #670 fixes the PD credential e2e flake; #671 is docs train D3. The production zone guard (`W7-27`) was approved on 13 Nov 2026 as a small wave 7 slice and is built in #675 (`docs/TENANCY-S5-routing.md`, "The production zone guard") and is on production since #680.
 
 | Slice | PR | Flag, or why it is a no-op for Stellr |
 |---|---|---|
@@ -827,12 +827,12 @@ Generated baselines are regenerated at merge and win over any number here.
 
 | The S5 docs said | Now | Source |
 |---|---|---|
-| Tenant-host cases failing: 82 (leak 14, honey_write 22, 4xx-oracle 42, oracle 4), 18 unproven | **74** after A10a, **50** after A10b: leak 10, honey_write 12, 4xx-oracle 28, oracle 0; unproven 18. The 2 Stellr-host unsubscribe leaks are accepted (`W7-15`) but not yet entered in `TENANT_HOST_ACCEPTED` | `test/baselines/tenant-host-idor.json` |
+| Tenant-host cases failing: 82 (leak 14, honey_write 22, 4xx-oracle 42, oracle 4), 18 unproven | **74** after A10a, **50** after A10b, **48** since #665 entered the 2 accepted Stellr-host unsubscribe leaks (`W7-15`) in `TENANT_HOST_ACCEPTED`. By outcome: leak 10 (the 2 accepted among them), honey_write 12, 4xx-oracle 28, oracle 0; unproven 18 | `test/baselines/tenant-host-idor.json` |
 | Unaudited: 112 mutating handlers and 6 GET writers | **104 and 4** (108 in all) after A10a and A10b | `test/baselines/unaudited-mutations.json` |
 | `tenant-host-routing` is report-only | **Required through the `e2e` gate** (B10r) | `.github/workflows/ci.yml`, `test/ci-tenant-host-routing-required.test.ts` |
 | No route decides through `lib/authz` | Converted routes decide through it, so `AUTHZ_SOURCE=shadow` compares real decisions (`docs/AUTHZ.md`) | `lib/authz.ts` |
 | The mirror sync writes a NULL minimum on every sync | **A non-owner row keeps its minimum and time zone** (K4) | `lib/events/sync.ts` |
-| Credentials and surveys do not leave out consent-pending participants (A10, tracker `s5-programme.22`) | **Built in A10a and A10b,** on `dev` | `test/participant-mail-consent-guard.test.ts` |
+| Credentials and surveys do not leave out consent-pending participants (A10, tracker `s5-programme.22`) | **Built in A10a and A10b,** on production since #680 | `test/participant-mail-consent-guard.test.ts` |
 
 ### Owner decisions wave 7 raised
 
@@ -849,14 +849,28 @@ All in `docs/S5-DECISION-REGISTER.md`. Answered on 12 Nov 2026: `W7-9` to `W7-13
 | Survey hold (#661) | Hide `feedback_link` and the check-in survey link for another tenant's events; the held label's wording | Both approved (`PR661-1`, in #666; `PR661-2`) |
 | A16 (#625) | Keep the CODEOWNERS lines for `lib/esign/completion.ts` and `lib/esign/native/flow.ts`? | Kept (`PR625-1`) |
 
-**The 13 Nov cookie review's questions, answered the same day** ("Accept all seven"): `W7-25`, the canary hosts may be public for the K9 window; `W7-26`, the no-ads gap is accepted for now and no setter is built; `W7-27`, the production zone guard is built now as a small slice, and stays a hard gate before production's routing flip; `W7-28`, keeping the zone after K9 is decided after K9; `W7-29`, the Clerk dev instance settings are found out at K9's sign-in; `W7-30`, the owner adds the two CNAME records; `W7-31`, both `canary.localhost` and the devzone rows are kept. No entry in the register is open.
+**The 13 Nov cookie review's questions, answered the same day** ("Accept all seven"): `W7-25`, the canary hosts may be public for the K9 window; `W7-26`, the no-ads gap is accepted for now and no setter is built; `W7-27`, the production zone guard is built now as a small slice, and stays a hard gate before production's routing flip; `W7-28`, keeping the zone after K9 is decided after K9; `W7-29`, the Clerk dev instance settings are found out at K9's sign-in; `W7-30`, the owner adds the two CNAME records; `W7-31`, both `canary.localhost` and the devzone rows are kept. No entry in the register was open on 13 Nov 2026; on 14 Nov 2026 the reviews of batch 1's S5 PRs added five open ones (`PR624-1`, `PR701-1`, `PR705-1`, `PR708-1`, `PR708-2`).
 
 ### Docs owed after wave 7
 
 - **D3, in part (13 Nov 2026):** the owner's 13 Nov answers, K6's zone steps and the cookie review in `docs/TENANCY-S5-routing.md`, and the K8 scenario table in `docs/TENANCY-S5-flow-checklist.md` are written. **Still owed after K9:** the dev canary record (what was proven, scenario results by mode, gaps by slice, re-run and rollback order), the K6 results (including the `Domain` attribute of both `__client_uat` cookies), and the canary's keep-or-tear-down record (the zone itself: `W7-28`, decided after K9).
 - **The P6 result:** the PEM choice in tracker `s5-programme.30` and `docs/TENANCY-S5-data.md`.
 - **K2's dataset** in `docs/ENV-MATRIX.md`, once done.
-- **The e-sign runbook's placeholder script usage** (K5); for now it lives in `scripts/esign-template.ts`'s header.
+- **The e-sign runbook's placeholder script usage** (K5); for now it lives in `scripts/esign-template.ts`'s header. PR #707 (open, not merged) adds it as `docs/esign/RUNBOOK-esign-templates.md`.
+
+### Backlog batch 1 (14 Nov 2026): S5 PRs open
+
+Batch 1 of the 14 Nov review's backlog opened these S5 PRs into `dev`. None is merged and none has been applied to a database; each keeps Stellr's behaviour with the switches at their defaults, as its PR body shows. The full batch is `docs/handovers/tracker/2026-11-14-backlog-batch1.md`.
+
+| Slice | PR | What it does, and what is left |
+|---|---|---|
+| B22 | #701 | `group-invoice-sync` splits rows by tenant and runs through `runPerTenant`; only Stellr runs until S9; Stellr's reads are filtered to Stellr's or unstamped rows; unstarted registrations are deferred after 270 s. The route holds its own copies of the two sweeps (tracker `s5-programme.49`; `PR701-1`) |
+| C8-PG | #702 | A tenant-explicit Postgres reader for the events facade, not wired to any caller. Caller conversion and the cron tenant loops are wave 8 (`s5-programme.50`) |
+| Lane C follow-ups | #705 | The agreements list and page read only Stellr's or unstamped rows in every mode, with a shrink-only ratchet over `stellr_only` lists; the C17 route comments; stronger C17 Stellr-event tests (`s5-programme.29`, `.51`; `PR705-1`) |
+| Consent guard and edges | #708 | `tenantGuardianConsentReady()` (the flag, `LOADSCOPED_MODE=enforce` and `TENANT_EVENT_MAIL_ENABLED`) gates every admission path, and the switch registry's `guardian_consent_without_tenant_mail` becomes `guardian_consent_not_ready`; the retry cap; move-to-Stellr and date-of-birth-lift edges, the pending row kept as `settled`; a guard over later participant writers; more A16 pgTAP cases. One migration (`20261114072142`), applied nowhere (`s5-programme.12`, `.20`, `.25`, `.26`; `PR708-1`, `PR708-2`) |
+| Plans | #706 | Docs only: `docs/PLAN-multi-tenant.md`, the DRAFT wave 8 and S6 plans, the decision backfill draft and the S1 to S4 owner checklist (`s5-programme.37`, `.39`, `.41`, `.43`, `.44`) |
+
+The S0 database PRs (#687, #689, #690, #691) and the mutation runner (#692, `s5-programme.40`) are outside S5 but gate it: see the batch tracker.
 
 ## PR amendments
 

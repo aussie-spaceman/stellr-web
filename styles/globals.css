@@ -174,6 +174,21 @@
     scroll-padding-bottom: 5rem;
   }
 
+  /* Keyboard focus ring for everything focusable (WCAG 2.4.7; a11y REC item
+     9). :focus-visible, so a mouse click shows nothing on links and buttons.
+     Dual ring from design/tokens.json focusRing: a halo as wide as the offset
+     fills the gap beside the element, and the ring sits outside it, so it
+     shows on the midnight hero, on white and surface, and on primary fills.
+     It sits in the base layer, so a component with its own ring (the .btn-*
+     classes below, the @stellr/web-ui Button and fields, any outline-hidden +
+     ring utilities) replaces both the outline and the halo: never two rings.
+     tabindex="-1" targets (the Dialog panel) only take focus from script. */
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+    box-shadow: 0 0 0 var(--focus-ring-offset) var(--focus-ring-halo);
+  }
+
   /* The app's bottom tab bar (member and admin, below lg), so the cookie
      banner and toasts sit above it instead of covering it. The bar is 44px of
      buttons, 8px above, at least 10px below (more on a phone with a home
@@ -243,19 +258,19 @@
   }
   /* High-intent CTA (Register / Start) — orange energy variant of btn-primary. */
   .btn-energy {
-    @apply inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-orange-alt text-ink font-subheading font-medium text-sm transition-colors hover:bg-brand-orange-deep focus:outline-hidden focus:ring-2 focus:ring-brand-orange-alt focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-orange-alt text-ink font-subheading font-medium text-sm transition-colors hover:bg-brand-orange-deep focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-orange-alt focus-visible:ring-offset-2;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-brand-white-text focus:outline-hidden focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-brand-white-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2;
   }
 
   .btn-outline-white {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-white-text text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-white hover:text-brand-blue-dark focus:outline-hidden focus:ring-2 focus:ring-brand-white-text focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-white-text text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-white hover:text-brand-blue-dark focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-white-text focus-visible:ring-offset-2;
   }
 
   .section-padding {
@@ -277,7 +292,7 @@
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2;
   }
 }
 

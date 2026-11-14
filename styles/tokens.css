@@ -85,4 +85,8 @@
   --shadow-card-lift: 0 18px 40px -30px rgba(20,26,61,0.4);
   --shadow-featured: 0 18px 40px -28px rgba(60,109,246,0.6);
   --shadow-panel: 0 18px 50px -40px rgba(20,26,61,0.4);
+  --focus-ring-color: #3562e4; /** Outer ring */
+  --focus-ring-halo: #ffffff; /** Inner halo between the element and the ring */
+  --focus-ring-width: 2px; /** Ring thickness */
+  --focus-ring-offset: 2px; /** Gap between the element and the ring; the halo fills it */
 }

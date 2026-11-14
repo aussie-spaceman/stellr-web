@@ -33,7 +33,7 @@ export const FAQS: readonly { q: string; a: string }[] = [
   },
   {
     q: 'How long does a classroom engineering design challenge take?',
-    a: 'Stellr Campaigns come with a 4-week and a 10-week schedule, so you can fit the challenge to the time you have. Either way it runs through the same eight stages, from reading the brief to submitting a proposal.',
+    a: 'Stellr curriculum comes with a 4-week and a 10-week schedule, so you can fit the challenge to the time you have. Either way it runs through the same eight stages, from reading the brief to submitting a proposal.',
   },
   {
     q: 'What equipment or lab do I need?',
@@ -49,6 +49,6 @@ export const FAQS: readonly { q: string; a: string }[] = [
   },
   {
     q: 'Is the material free?',
-    a: 'Yes. A free Stellr Educator account includes the abridged Request for Proposal and Mission Handbook, teacher and student Campaign guides, and optional submission with written feedback from Stellr’s judging panel. Paid educator tiers add session-by-session facilitation, worked examples and full judging packs.',
+    a: 'Yes. A free Stellr Educator account includes the abridged Request for Proposal and Mission Handbook, teacher and student curriculum guides, and optional Classroom Qualifier submission with written feedback from Stellr’s judging panel. Paid educator tiers add session-by-session facilitation, worked examples and full judging packs.',
   },
 ]

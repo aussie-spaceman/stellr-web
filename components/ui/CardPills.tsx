@@ -56,7 +56,7 @@ export function CardPills({
             : 'bg-blue-50 text-brand-blue'
         }`}
       >
-        {kind === 'campaign' ? 'Campaign' : 'Event'}
+        {kind === 'campaign' ? 'Classroom Qualifier' : 'Event'}
       </span>
 
       {/* 2. Grade */}

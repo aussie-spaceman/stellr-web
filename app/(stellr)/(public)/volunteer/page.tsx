@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/volunteer' },
   title: 'Volunteer with Stellr',
   description:
-    'Support Stellr events and campaigns as a volunteer. Create a free account, complete volunteer training, and tell us which events you can help with.',
+    'Support Stellr events and the Classroom Qualifier as a volunteer. Create a free account, complete volunteer training, and tell us which events you can help with.',
 }
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -38,7 +38,7 @@ const steps = [
     icon: CalendarCheck,
     title: '4. Tell us where you can help',
     description:
-      'Browse upcoming events and campaigns, raise your hand for the ones that fit your schedule, and we’ll confirm your assignments.',
+      'Browse upcoming events and Classroom Qualifier windows, raise your hand for the ones that fit your schedule, and we’ll confirm your assignments.',
   },
 ]
 
@@ -51,9 +51,9 @@ const roles = [
   },
   {
     icon: Megaphone,
-    title: 'Campaign support',
+    title: 'Classroom Qualifier support',
     description:
-      'Support asynchronous campaigns and outreach — reviewing submissions, cheering teams on, and helping us reach more schools.',
+      'Support the Classroom Qualifier and outreach — reviewing team proposals, cheering teams on, and helping us reach more schools.',
   },
   {
     icon: ShieldCheck,
@@ -76,7 +76,7 @@ export default function VolunteerPage() {
             Lend a hand where the future is being built.
           </h1>
           <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
-            Stellr volunteers keep our events and campaigns running — from check-in desks to
+            Stellr volunteers keep our events and the Classroom Qualifier running — from check-in desks to
             competition floors. No STEM background required: just your time, energy, and a
             commitment to our students.
           </p>
@@ -127,7 +127,7 @@ export default function VolunteerPage() {
           <div className="text-center max-w-2xl mx-auto mb-12">
             <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">What volunteers do</h2>
             <p className="text-brand-grey-dark leading-relaxed">
-              You choose the events and campaigns you can support — we handle the rest.
+              You choose the events and Qualifier windows you can support — we handle the rest.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -24,7 +24,7 @@ import { BENEFITS, EARNINGS, FAQS, HOW_IT_WORKS } from './content'
 export const metadata: Metadata = {
   alternates: { canonical: '/grant' },
   title: 'Teacher Grant Program',
-  description: `Stellr pays US high school teachers to bring a team to a live Challenge or run a Campaign at their own school — up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year, plus documented PD contact hours and free Catalyst membership. ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
+  description: `Stellr pays US high school teachers to bring a team to a live Challenge or enter the Classroom Qualifier at their own school — up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year, plus documented PD contact hours and free Catalyst membership. ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
 }
 
 const ONE_PAGER = mediaUrl('/files/Stellr-Teacher-Grant-Overview.pdf')
@@ -54,7 +54,7 @@ export default async function GrantPage() {
             We support the teachers who want to offer Stellr activities to their students
           </h1>
           <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[640px] short:mt-3 short:text-base short:leading-snug short:line-clamp-3">
-            Taking a team to a live Challenge or running a Campaign at your school takes real
+            Taking a team to a live Challenge or entering the Classroom Qualifier at your school takes real
             time — recruiting students, coordinating logistics, and following through afterward.
             The Teacher Grant Program is how we recognize that work. The grant pays as you
             participate, supporting both your students and yourself.
@@ -123,7 +123,7 @@ export default async function GrantPage() {
           </div>
 
           <p className="mt-3 text-sm text-content-muted">
-            You can do one Challenge and one Campaign each year. Payment comes as a single check,
+            You can do one Challenge and one Classroom Qualifier entry each year. Payment comes as a single check,
             posted {GRANT_PAYMENT_DATE}.
           </p>
         </div>
@@ -165,7 +165,7 @@ export default async function GrantPage() {
                 <p>
                   You&rsquo;re a <span className="font-semibold text-ink">high school teacher</span>,
                   and during the school year you can bring students to a live Challenge, supervise a
-                  Campaign at your school, or both. Open to U.S. high school teachers only.
+                  Classroom Qualifier team at your school, or both. Open to U.S. high school teachers only.
                 </p>
                 <p className="mt-3">
                   {`Expect to spend somewhere between ${GRANT_PD_HOURS} hours across the year.`}{' '}
@@ -278,7 +278,7 @@ export default async function GrantPage() {
                   !
                 </span>
                 <p className="text-[13.5px] text-content-body leading-relaxed">
-                  {`A live Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${GRANT_THRESHOLDS.campaignStudents} students registered. Closing out needs two-thirds of them to submit their responses.`}{' '}
+                  {`A live Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; the Classroom Qualifier needs at least ${GRANT_THRESHOLDS.campaignStudents} students registered. Closing out needs two-thirds of them to submit their responses.`}{' '}
                   Apply anyway if you&rsquo;re close — we&rsquo;d rather talk it through.
                 </p>
               </div>

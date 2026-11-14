@@ -5,6 +5,7 @@ import { Collapsible } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { BADGE_FORMATS, DEFAULT_BADGE_FORMAT, type BadgeAudience, type BadgeFormat } from '@/lib/badge-layout'
 import { ARTWORK_THEME_LABEL, type ArtworkTheme } from '@/lib/artwork-theme'
+import { PlacementSlider } from './PlacementSlider'
 
 // Name badges, like EventCertificates: pick the Avery stock, give it a
 // background, check where the name lands, download the sheet.
@@ -361,17 +362,9 @@ function NamePositioner({
     try { await onSave(body) } finally { setSaving(false) }
   }
 
-  const slider = (key: keyof Placement, label: string, min: number, max: number, step: number, show: (v: number) => string) => (
-    <label className="block text-xs text-brand-muted-soft space-y-1">
-      <span className="flex justify-between"><span>{label}</span><span className="text-brand-muted">{show(p[key])}</span></span>
-      <input
-        type="range" min={min} max={max} step={step} value={p[key]}
-        onChange={(e) => setP({ ...p, [key]: Number(e.target.value) })}
-        className="w-full accent-brand-blue"
-      />
-    </label>
+  const slider = (key: keyof Placement, label: string, min: number, max: number, step: number, opts: { scale?: number; unit?: string; suffix?: string }) => (
+    <PlacementSlider label={label} value={p[key]} onChange={(v) => setP({ ...p, [key]: v })} min={min} max={max} step={step} {...opts} />
   )
-  const pct = (v: number) => `${Math.round(v * 1000) / 10}%`
 
   return (
     <div className="grid md:grid-cols-[minmax(0,1fr)_16rem] gap-4 rounded-lg bg-brand-canvas p-3">
@@ -387,10 +380,10 @@ function NamePositioner({
             onChange={(e) => setSample(e.target.value)}
           />
         </label>
-        {slider('name_y', 'Height on the badge', 0.15, 0.9, 0.005, (v) => `${pct(v)} down`)}
-        {slider('name_x', 'Across', 0.2, 0.8, 0.005, (v) => `${pct(v)} across`)}
-        {slider('name_max_width', 'Widest the name may run', 0.2, 1, 0.01, (v) => `${Math.round(v * 100)}% of width`)}
-        {slider('name_size', 'Name size', 8, 40, 1, (v) => `${v} pt`)}
+        {slider('name_y', 'Height on the badge', 0.15, 0.9, 0.005, { scale: 100, unit: '%', suffix: 'down' })}
+        {slider('name_x', 'Across', 0.2, 0.8, 0.005, { scale: 100, unit: '%', suffix: 'across' })}
+        {slider('name_max_width', 'Widest the name may run', 0.2, 1, 0.01, { scale: 100, unit: '%', suffix: 'of width' })}
+        {slider('name_size', 'Name size', 8, 40, 1, { unit: 'pt' })}
         <p className="text-xs text-brand-muted-soft">Long names shrink to fit the width. Try the longest name on your roster.</p>
         <div className="flex flex-wrap gap-3">
           <button

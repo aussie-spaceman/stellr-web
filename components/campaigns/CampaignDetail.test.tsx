@@ -32,8 +32,8 @@ function campaign(overrides: Partial<StellarEvent> = {}): StellarEvent {
     campaignYear: 2027,
     gradeLevel: 'High School',
     type: 'Space Design Challenge',
-    deadline: '2026-12-11',
-    deliverable: '40-page written proposal',
+    deadline: '2027-01-31',
+    deliverable: '10–20 page team proposal',
     registrationOpen: true,
     ...overrides,
   } as StellarEvent
@@ -52,7 +52,7 @@ describe('CampaignDetail', () => {
   it('withdraws the CTA when the toggle is off, instead of linking to a 403', () => {
     render(<CampaignDetail campaign={campaign({ registrationOpen: false })} />)
     expect(screen.queryByText('Compete Now →')).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Registration is closed for this campaign/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Registration is closed for this Qualifier window/).length).toBeGreaterThan(0)
     expect(screen.getByText('Registration Closed')).toBeInTheDocument()
   })
 
@@ -64,7 +64,7 @@ describe('CampaignDetail', () => {
   // An existing member keeps their way back in regardless of the window.
   it('still links a registered member to the campaign, even when closed', () => {
     render(<CampaignDetail campaign={campaign({ registrationOpen: false })} registered />)
-    expect(screen.getAllByText('Access Campaign →').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Open your Qualifier →').length).toBeGreaterThan(0)
   })
 
   it('states the freemium cost, group-only entry, and the included tier', () => {

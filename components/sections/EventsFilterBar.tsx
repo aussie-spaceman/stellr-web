@@ -13,7 +13,7 @@ export const THEME_OPTIONS = [
 export const LOCATION_OPTIONS = [
   { value: '', label: 'All Locations' },
   { value: 'event', label: 'Live Events' },
-  { value: 'campaign', label: 'Async Campaigns' },
+  { value: 'campaign', label: 'Classroom Qualifier' },
 ]
 
 export const GRADE_OPTIONS = [

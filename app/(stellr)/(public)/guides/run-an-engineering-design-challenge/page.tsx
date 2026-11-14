@@ -122,14 +122,14 @@ export default function RunADesignChallengePage() {
 
       <CtaBand
         title="Get the brief, the handbook and the guides — free"
-        body="A free Educator account gives you the Request for Proposal, the Mission Handbook, teacher and student Campaign guides, and written judging feedback if your class submits."
+        body="A free Educator account gives you the Request for Proposal, the Mission Handbook, teacher and student curriculum guides, and written judging feedback if your class enters the Classroom Qualifier."
         actions={
           <>
             <Button href="/curriculum" as={Link} variant="primary">
               Get the material — free
             </Button>
             <Button href="/events/space-design-campaign-fall" as={Link} variant="outlineWhite">
-              Enter the Fall Campaign
+              Enter the Classroom Qualifier
             </Button>
           </>
         }

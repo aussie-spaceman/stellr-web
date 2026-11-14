@@ -446,7 +446,7 @@ export default function TermsPage() {
         </h3>
         <p>
           Every purchase from Stellr is covered by our 100% money-back guarantee. That includes
-          competition and event registrations, Campaign fees, memberships (each renewal included),
+          competition and event registrations, Classroom Qualifier fees, memberships (each renewal included),
           Academy coaching and mentoring, and Store merchandise.
         </p>
         <ul className="list-disc pl-6 space-y-2">
@@ -495,7 +495,7 @@ export default function TermsPage() {
             <tbody>
               {[
                 ['Membership fees', 'You can cancel anytime to stop future renewals. A renewal is a new payment, with its own 45 days. Fees already paid more than 45 days ago are non-refundable except where required by law.'],
-                ['Competition, event and Campaign fees', 'Non-refundable, except where required by law.'],
+                ['Competition, event and Classroom Qualifier fees', 'Non-refundable, except where required by law.'],
                 ['Academy coaching and mentoring', 'Non-refundable, except where required by law.'],
                 ['Store merchandise', 'Non-refundable, except where required by law. Contact us about an item that arrives faulty or damaged.'],
                 ['If Stellr cancels a competition', 'We will offer either a full credit toward a future competition, or as much of a refund as we can.'],

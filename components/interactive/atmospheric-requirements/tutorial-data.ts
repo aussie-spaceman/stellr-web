@@ -116,7 +116,7 @@ export const SOURCES = [
         href: 'https://en.wikipedia.org/wiki/Carbon_dioxide_scrubber',
       },
       {
-        title: 'Deviations from ideal-gas behaviour (van der Waals) — Purdue ChemEd',
+        title: 'Deviations from ideal-gas behavior (van der Waals) — Purdue ChemEd',
         href: 'https://chemed.chem.purdue.edu/genchem/topicreview/bp/ch4/deviation5.html',
       },
     ],

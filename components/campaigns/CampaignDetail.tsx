@@ -3,9 +3,8 @@ import { Check } from 'lucide-react'
 import type { StellarEvent } from '@/lib/sanity'
 import {
   themeFromType,
-  seasonLabel,
+  qualifierWindowName,
   deadlineInfo,
-  getCampaignDates,
   campaignStatus,
 } from '@/lib/campaigns'
 import {
@@ -33,12 +32,8 @@ interface Props {
 // aware register card. Amber = Campaign; the theme keeps its violet/green coding.
 export function CampaignDetail({ campaign, membership, registered }: Props) {
   const theme = themeFromType(campaign.type)
-  const season = seasonLabel(campaign.season, campaign.campaignYear)
+  const windowName = qualifierWindowName(campaign.season, campaign.campaignYear)
   const dl = deadlineInfo(campaign.deadline)
-  const dates =
-    campaign.season && campaign.campaignYear
-      ? getCampaignDates(campaign.season, campaign.campaignYear)
-      : null
 
   // `campaignStatus()` is the one display resolver — the admin console, the
   // member portal and /curriculum all call it. This page did not, so a campaign
@@ -52,8 +47,8 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
   // (CampaignCta), so this page can be cached; `registered` is the start value.
   const closedNote =
     status === 'Coming soon'
-      ? 'Registration for this campaign opens closer to the season.'
-      : 'Registration is closed for this campaign.'
+      ? 'Registration for this Qualifier window opens closer to its start.'
+      : 'Registration is closed for this Qualifier window.'
 
   return (
     <>
@@ -63,7 +58,7 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
             (flex order; the reading order is unchanged), so it is on screen. */}
         <div className="mx-auto max-w-content short:flex short:flex-col short:items-start">
           <Link href="/events" className="text-sm text-hero-dim hover:text-white">
-            ← All events &amp; campaigns
+            ← All events &amp; the Classroom Qualifier
           </Link>
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -87,9 +82,9 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
           )}
 
           <dl className="mt-8 flex flex-wrap gap-x-12 gap-y-4 short:order-last short:mt-4 short:gap-y-2">
-            {/* Calendar year, not the school-year brand — Fall 2027 runs in 2026. */}
-            <Stat label="Runs" value={dates ? `${dayMonth(dates.startDate)} – ${dayMonth(dates.endDate)} ${dates.calendarYear}` : season} />
-            <Stat label="Deadline" value={dl?.label ?? 'TBC'} valueClassName="text-star-gold" />
+            {/* Start any time; the deadline below is what fixes the window. */}
+            <Stat label="Window" value={windowName} />
+            <Stat label="Submit by" value={dl?.label ?? 'TBA'} valueClassName="text-star-gold" />
             <Stat label="Cost" value="Free with membership" />
           </dl>
 
@@ -162,7 +157,7 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
           <div className="overflow-hidden rounded-panel border border-line border-t-4 border-t-pathway-amber bg-white p-6 shadow-card-lift">
             <p className="font-heading text-ds-h3 font-bold text-ink">Register your group</p>
             <p className="mt-2 text-sm text-content-secondary">
-              {campaign.deliverable ?? 'A written proposal'} · due {dl?.label ?? 'the deadline'}.
+              {campaign.deliverable ?? 'A 10–20 page team proposal'} · due {dl?.label ?? 'the deadline'}.
             </p>
 
             <CampaignMembershipNote
@@ -217,12 +212,4 @@ function Stat({
       <dd className={`mt-1 font-heading text-lg font-bold ${valueClassName}`}>{value}</dd>
     </div>
   )
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-/** "2026-08-15" → "15 Aug". String maths, not Date, so no timezone can shift the day. */
-function dayMonth(iso: string): string {
-  const [, m, d] = iso.split('-').map(Number)
-  return `${d} ${MONTHS[m - 1]}`
 }

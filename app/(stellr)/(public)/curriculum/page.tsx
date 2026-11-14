@@ -9,14 +9,19 @@ import { PageMedia } from '@/components/sections/PageMedia'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { PHOTOS, VIDEOS, STUDENT_WORK, RFP_2026_PREVIEW_HREF } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/events/repo'
-import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
+import {
+  getCampaignDates,
+  campaignStatusFromDates,
+  qualifierWindowLabel,
+  type CampaignSeason,
+} from '@/lib/campaigns'
 import { GuideFaq } from '@/components/guides/GuideFaq'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/curriculum' },
   title: 'Curriculum',
   description:
-    'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to our International Summer Camp.',
+    'Free engineering curriculum for grades 7–12: download it and run it in your classroom any time. Optionally enter the Classroom Qualifier for a path to our International Summer Camp.',
 }
 
 export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
@@ -27,7 +32,7 @@ export const revalidate = 21600 // 6 hours; see PUBLISHED_CACHE in lib/sanity.ts
 const CURRICULUM_FAQS = [
   {
     q: 'What does the free Stellr curriculum include?',
-    a: 'A free Educator account gives you the competition material — the Request for Proposal (RFP) and the Mission Handbook — plus teacher and student Campaign guides. Paid educator tiers add lesson plans, worksheets, marking rubrics, PD hours and standards alignment.',
+    a: 'A free Educator account gives you the competition material — the Request for Proposal (RFP) and the Mission Handbook — plus teacher and student curriculum guides. Paid educator tiers add lesson plans, worksheets, marking rubrics, PD hours and standards alignment.',
   },
   {
     q: 'Do I need a lab, kit or engineering background?',
@@ -35,15 +40,15 @@ const CURRICULUM_FAQS = [
   },
   {
     q: 'How long does it take to run?',
-    a: 'As long as you choose. Use the material on your own schedule, or enter a Campaign, which comes with 4-week and 10-week indicative schedules.',
+    a: 'As long as you choose — most classes spend 4–10 weeks. Use the curriculum on your own schedule; it comes with 4-week and 10-week indicative schedules whether or not you enter the Classroom Qualifier.',
   },
   {
-    q: 'What is the difference between using the material and entering a Campaign?',
-    a: 'The material is yours to use any time, with no deadline. Entering a Fall or Spring Campaign is optional and free: your group submits a proposal by the deadline, receives written feedback from Stellr’s judging panel, and can be invited to our International Summer Camp.',
+    q: 'What is the difference between using the curriculum and entering the Classroom Qualifier?',
+    a: 'The curriculum is yours to use any time, with no deadline. Entering the Classroom Qualifier is optional and free: your team of 2–12 students submits a 10–20 page proposal by the deadline (January 31, 2027 for the current window, or May 14, 2027 for spring), receives written feedback from Stellr’s judging panel, and can be invited to our International Summer Camp.',
   },
   {
     q: 'What grades is it for?',
-    a: 'Campaigns are available for grades 7–12, although due to the advanced nature of the content we generally recommend teams that include at least some high school students (to mentor less experienced students). That said, if you have some incredible middle schoolers (and we’ve met plenty!) don’t let us hold you back!',
+    a: 'The curriculum and the Classroom Qualifier are for grades 7–12, although due to the advanced nature of the content we generally recommend teams that include at least some high school students (to mentor less experienced students). That said, if you have some incredible middle schoolers (and we’ve met plenty!) don’t let us hold you back!',
   },
 ] as const
 
@@ -58,8 +63,8 @@ interface Campaign {
 
 // campaignYear is the school year — both terms of 2026/27 are 2027.
 const FALLBACK_CAMPAIGNS: Campaign[] = [
-  { _id: 'fallback-1', title: '2027 Space Design Campaign', season: 'fall', campaignYear: 2027 },
-  { _id: 'fallback-2', title: '2027 Environmental Design Campaign', season: 'spring', campaignYear: 2027 },
+  { _id: 'fallback-1', title: 'Space Design Challenge', season: 'fall', campaignYear: 2027, deadline: '2027-01-31' },
+  { _id: 'fallback-2', title: 'Environmental Design Challenge', season: 'spring', campaignYear: 2027, deadline: '2027-05-14' },
 ]
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -90,13 +95,13 @@ const gettingStarted = [
   {
     n: 3,
     title: 'Teach it on your schedule',
-    body: 'Run the challenge whenever suits your class. No deadlines unless you choose to enter a Campaign.',
+    body: 'Run the curriculum whenever suits your class. No deadlines unless you choose to enter the Classroom Qualifier.',
     amber: false,
   },
   {
     n: 4,
-    title: 'Optionally, enter a Campaign',
-    body: 'Want it to count? Submit in the Fall or Spring window for a shot at an invitation to our International Summer Camp.',
+    title: 'Optionally, enter the Classroom Qualifier',
+    body: 'Want it to count? Submit your team’s proposal in the fall or spring window for a shot at an invitation to our International Summer Camp.',
     amber: true,
   },
 ]
@@ -144,20 +149,28 @@ const paidBullets = [
   'A path to the International Summer Camp',
 ]
 
-// `fallbackYear` is a school year, matching campaignYear.
-function pickWindow(campaigns: Campaign[], season: CampaignSeason, fallbackYear: number) {
+// `fallbackYear` is a school year, matching campaignYear. `fallbackDeadline` is
+// shown only when no document exists for the window yet; a document's own
+// deadline (Sanity) always wins.
+function pickWindow(
+  campaigns: Campaign[],
+  season: CampaignSeason,
+  fallbackYear: number,
+  fallbackDeadline: string
+) {
   const match = campaigns.find((c) => c.season === season && c.campaignYear)
   const year = match?.campaignYear ?? fallbackYear
   const dates = getCampaignDates(season, year)
   const status = campaignStatusFromDates(dates, match?.registrationOpen, match?.deadline)
-  return { label: dates.label, status }
+  const deadline = match ? match.deadline : fallbackDeadline
+  return { label: qualifierWindowLabel(season, year, deadline), status }
 }
 
 export default async function CampaignsPage() {
   const sanityData = await getAllCampaigns().catch(() => null)
   const campaigns: Campaign[] = (sanityData as Campaign[] | null) ?? FALLBACK_CAMPAIGNS
-  const fall = pickWindow(campaigns, 'fall', 2027)
-  const spring = pickWindow(campaigns, 'spring', 2027)
+  const fall = pickWindow(campaigns, 'fall', 2027, '2027-01-31')
+  const spring = pickWindow(campaigns, 'spring', 2027, '2027-05-14')
 
   return (
     <>
@@ -165,14 +178,14 @@ export default async function CampaignsPage() {
       <Hero
         breadcrumb="Competitions · Curriculum"
         title="Real engineering challenges, ready for your classroom."
-        lead="Download the material and use it any time you like — it's yours to run on your own schedule. Or enter a seasonal Campaign and give your students a path all the way to our International Summer Camp."
+        lead="Download the material and use it any time you like — it's yours to run on your own schedule. Or enter the Classroom Qualifier and give your students a path all the way to our International Summer Camp."
       >
         <div className="flex flex-wrap gap-3 mt-8">
           <Button href={SIGNUP_URL} variant="primary">
             Get the material — free
           </Button>
           <Button href="#campaigns" variant="outlineWhite">
-            Explore Campaigns <ArrowRight size={16} />
+            About the Qualifier <ArrowRight size={16} />
           </Button>
         </div>
         <div className="flex flex-wrap gap-x-7 gap-y-2 mt-10">
@@ -193,7 +206,7 @@ export default async function CampaignsPage() {
           {/* Active — Campaigns */}
           <div className="bg-white border-[1.5px] border-pathway-amber rounded-[10px] px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="font-subheading font-bold text-ink text-sm">Campaigns</span>
+              <span className="font-subheading font-bold text-ink text-sm">Classroom Qualifier</span>
               <span className="rounded-full bg-pathway-amber text-ink text-xs font-bold uppercase tracking-wide px-2 py-0.5">
                 You are here
               </span>
@@ -213,7 +226,7 @@ export default async function CampaignsPage() {
             <ArrowRight size={16} className="text-primary" />
           </Link>
           <p className="text-[13.5px] text-gold-ink max-w-[300px] leading-snug">
-            Both are Stellr Competitions. Campaigns bring the same challenges into your classroom.
+            Both are Stellr Competitions. The Classroom Qualifier brings the same challenges into your classroom.
           </p>
         </div>
       </section>
@@ -230,7 +243,7 @@ export default async function CampaignsPage() {
                 and communication durable skills.&rdquo;
               </blockquote>
               <figcaption className="mt-5 text-sm font-semibold text-content-secondary">
-                Mr Jim Christensen{' '}
+                Mr. Jim Christensen{' '}
                 <span className="font-normal text-content-muted">· Chief Innovation Officer, The Aldrin Family Foundation</span>
               </figcaption>
             </figure>
@@ -244,8 +257,8 @@ export default async function CampaignsPage() {
           <Eyebrow>How it works</Eyebrow>
           <h2 className="text-3xl font-bold text-ink mt-3">Use the material your way.</h2>
           <p className="text-content-secondary mt-3 max-w-xl leading-relaxed">
-            Take the material into your classroom whenever it suits you — and enter a Campaign only if you
-            want the competition edge.
+            Take the curriculum into your classroom whenever it suits you — and enter the Classroom Qualifier
+            only if you want the competition edge.
           </p>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-9 items-stretch">
@@ -285,12 +298,12 @@ export default async function CampaignsPage() {
               <p className="text-xs font-subheading font-semibold uppercase tracking-[0.1em] text-gold-ink mt-5">
                 Twice a year · Fall &amp; Spring
               </p>
-              <h3 className="text-xl font-bold text-ink mt-1">Enter a Campaign</h3>
+              <h3 className="text-xl font-bold text-ink mt-1">Enter the Classroom Qualifier</h3>
               <ul className="mt-4 space-y-2.5 flex-1">
                 {[
-                  'Two windows a year — Fall and Spring',
+                  'Two Qualifier windows a year: fall and spring',
                   'A path to International Summer Camp invitations',
-                  'Register in minutes — not required to use the material',
+                  'Register in minutes — not required to use the curriculum',
                 ].map((b) => (
                   <li key={b} className="flex gap-2.5 text-sm text-content-secondary leading-relaxed">
                     <Check size={18} className="shrink-0 mt-0.5 text-gold-ink" /> {b}
@@ -298,7 +311,7 @@ export default async function CampaignsPage() {
                 ))}
               </ul>
               <Button href="/events?type=campaign" variant="energy" className="mt-6 self-start">
-                See the Campaigns <ArrowRight size={16} />
+                See the Qualifier <ArrowRight size={16} />
               </Button>
             </div>
           </div>
@@ -345,8 +358,8 @@ export default async function CampaignsPage() {
           <h2 className="text-3xl font-bold text-ink mt-3">Competition Themes</h2>
           <p className="text-content-secondary mt-3 max-w-2xl leading-relaxed">
             Both build from first principles — no prior experience needed. Download and teach either one
-            today, and you can enter your students into either Campaign if you want to give them that extra
-            edge.
+            today, and you can enter your students into the Classroom Qualifier with either theme if you want
+            to give them that extra edge.
           </p>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-9 items-stretch">
@@ -379,7 +392,7 @@ export default async function CampaignsPage() {
                     href="#campaigns"
                     className={`inline-flex items-center gap-1 text-sm font-semibold ${t.linkColor}`}
                   >
-                    Enter a Campaign <ArrowRight size={14} />
+                    Enter the Qualifier <ArrowRight size={14} />
                   </a>
                 </div>
               </div>
@@ -411,13 +424,13 @@ export default async function CampaignsPage() {
         <div className="container-max">
           <div className="rounded-cta overflow-hidden bg-gradient-to-br from-[#1B2350] to-[#10153A] text-white">
             <div className="px-7 sm:px-11 pt-10">
-              <Eyebrow className="text-[#F0B864]">Campaigns · optional</Eyebrow>
+              <Eyebrow className="text-[#F0B864]">Classroom Qualifier · optional</Eyebrow>
               <h2 className="text-ds-h2 font-bold mt-3 max-w-xl leading-tight">
-                Two Campaigns a year. A path to the International Summer Camp.
+                Two Qualifier windows a year. A path to the International Summer Camp.
               </h2>
               <p className="text-hero-lead mt-4 max-w-2xl leading-relaxed">
-                Classes, clubs, and student groups can choose to take the Competition material and
-                participate in a Campaign — competing with others nationally. Submitting student work opens
+                Classes, clubs, and student groups can choose to take the curriculum and enter the Classroom
+                Qualifier — competing with others nationally. Submitting student work opens
                 the door to award winners receiving industry-leading mentoring and coaching, and the
                 possibility of invites to our International Summer Camp!
               </p>
@@ -430,9 +443,9 @@ export default async function CampaignsPage() {
                   {fall.status === 'Open' ? 'Open now' : fall.status}
                 </span>
                 <p className="text-hero-dim text-sm font-semibold mt-3">{fall.label}</p>
-                <h3 className="text-xl font-bold mt-1">Fall Campaign</h3>
+                <h3 className="text-xl font-bold mt-1">Fall window</h3>
                 <p className="text-hero-lead text-sm mt-2 leading-relaxed">
-                  Kick off in the autumn term and submit before the winter break.
+                  Start anytime this school year and submit your team’s 10–20 page proposal by the deadline.
                 </p>
                 <Button href={SIGNUP_URL} variant="energy" className="mt-5">
                   Register your class <ArrowRight size={16} />
@@ -444,9 +457,9 @@ export default async function CampaignsPage() {
                   {spring.status === 'Open' ? 'Open now' : 'Opens later'}
                 </span>
                 <p className="text-hero-dim text-sm font-semibold mt-3">{spring.label}</p>
-                <h3 className="text-xl font-bold mt-1">Spring Campaign</h3>
+                <h3 className="text-xl font-bold mt-1">Spring window</h3>
                 <p className="text-hero-lead text-sm mt-2 leading-relaxed">
-                  Run it in the new year — perfect for a spring-semester project.
+                  Opens in January — perfect for a spring-semester project.
                 </p>
                 <Button href="/contact" variant="outlineWhite" className="mt-5">
                   Register interest
@@ -459,7 +472,7 @@ export default async function CampaignsPage() {
           <div className="mt-9 flex flex-wrap items-stretch justify-center gap-3.5">
             {[
               { title: 'Run the challenge', sub: 'In your classroom', highlight: false },
-              { title: 'Participate in a Campaign', sub: 'Fall or Spring window', highlight: false },
+              { title: 'Enter the Classroom Qualifier', sub: 'Fall or spring window', highlight: false },
               { title: 'International Summer Camp', sub: 'Award winners receive invitations', highlight: true },
             ].map((node, i, arr) => (
               <div key={node.title} className="flex items-center gap-3.5">
@@ -606,15 +619,15 @@ export default async function CampaignsPage() {
             Bring a real engineering challenge to your class.
           </h2>
           <p className="text-hero-lead mt-4 max-w-lg mx-auto leading-relaxed">
-            Download the material for free and teach it on your schedule — then enter a Campaign whenever
-            you&rsquo;re ready.
+            Download the curriculum for free and teach it on your schedule — then enter the Classroom Qualifier
+            whenever you&rsquo;re ready.
           </p>
           <div className="flex flex-wrap justify-center gap-3 mt-8">
             <Button href={SIGNUP_URL} variant="primary">
               Get the material — free
             </Button>
             <Button href="#campaigns" variant="outlineWhite">
-              Explore Campaigns <ArrowRight size={16} />
+              About the Qualifier <ArrowRight size={16} />
             </Button>
           </div>
         </div>

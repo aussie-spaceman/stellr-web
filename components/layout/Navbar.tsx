@@ -37,7 +37,7 @@ const navLinks: NavLink[] = [
       { label: 'Competitions', href: '/competitions' },
       { label: 'Curriculum', href: '/curriculum' },
       { label: 'Teacher Grant', href: '/grant' },
-      { label: 'Events & Campaigns', href: '/events' },
+      { label: 'Events & Classroom Qualifier', href: '/events' },
       { label: 'Scholarships', href: '/scholarship' },
       { label: 'Host An Event', href: '/host-an-event' },
     ],

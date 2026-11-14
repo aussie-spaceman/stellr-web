@@ -34,15 +34,15 @@ import { BookCallButton } from '@/components/sections/BookCallButton'
 const EDUCATOR_FAQS = [
   {
     q: 'How can a teacher bring Stellr competitions to their school?',
-    a: 'Two ways. Run a free Campaign in class or as a club using Stellr’s material, or bring a team to a one-day live Challenge. Registering as a Stellr Educator is free.',
+    a: 'Two ways. Run Stellr’s free curriculum in class or as a club and enter the Classroom Qualifier, or bring a team to a one-day live Challenge. Registering as a Stellr Educator is free.',
   },
   {
     q: 'Is there funding for teachers who run Stellr activities?',
-    a: `Yes. The Teacher Grant Program pays US high school teachers up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year for bringing a team to a live Challenge and running a Campaign, plus ${GRANT_PD_HOURS} documented PD contact hours and free Catalyst membership. There are ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
+    a: `Yes. The Teacher Grant Program pays US high school teachers up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year for bringing a team to a live Challenge and entering the Classroom Qualifier, plus ${GRANT_PD_HOURS} documented PD contact hours and free Catalyst membership. There are ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
   },
   {
     q: 'Do Stellr activities count toward PD or CTE hours?',
-    a: `Every educator who supports a Challenge or Campaign receives a PD certificate for ${EVENT_PD_HOURS} hours, depending on the event, with the Common Core standards covered mapped on the back. Whether they count toward CTE or recertification is decided by your district or state.`,
+    a: `Every educator who supports a Challenge or Classroom Qualifier team receives a PD certificate for ${EVENT_PD_HOURS} hours, depending on the event, with the Common Core standards covered mapped on the back. Whether they count toward CTE or recertification is decided by your district or state.`,
   },
   {
     q: 'Do I have to stay with students at a live Challenge?',
@@ -80,7 +80,7 @@ const educatorBenefits = [
     icon: BookOpen,
     title: 'Classroom-Ready Curriculum',
     description:
-      'Run a Stellr Campaign with lesson plans, worksheets, and delivery guides designed to drop straight into your classroom.',
+      'Run Stellr curriculum with lesson plans, worksheets, and delivery guides designed to drop straight into your classroom.',
   },
   {
     icon: Award,
@@ -156,7 +156,7 @@ export default function EducatorsPage() {
               Everything you need to deliver
             </h2>
             <p className="text-brand-grey-dark leading-relaxed">
-              Whether you run a single Campaign in one class or coordinate across a whole department,
+              Whether you run the curriculum in one class or coordinate across a whole department,
               Stellr gives you the material and the backing to make it a success.
             </p>
           </div>
@@ -193,7 +193,7 @@ export default function EducatorsPage() {
           <Eyebrow>Professional development</Eyebrow>
           <h2 className="text-3xl font-bold text-ink mt-3 max-w-3xl">Earn PD hours for supporting your students</h2>
           <p className="text-lg text-content-secondary mt-3 max-w-3xl leading-relaxed">
-            Every educator who supports a Challenge or Campaign receives a two-page certificate: your PD
+            Every educator who supports a Challenge or Classroom Qualifier team receives a two-page certificate: your PD
             hours on the front, and a map of the Common Core standards your students worked on, on the back.
             Take it to your district for recertification or CTE hours.
           </p>
@@ -226,7 +226,7 @@ export default function EducatorsPage() {
               <dl className="mt-3 divide-y divide-line-light rounded-ds-card border border-line bg-white">
                 {[
                   ['Bring a team to a live Challenge', `${EVENT_PD_HOURS} hours, depending on the event`],
-                  ['Run a Campaign with your students', `${EVENT_PD_HOURS} hours, depending on the Campaign`],
+                  ['Enter the Classroom Qualifier with your students', `${EVENT_PD_HOURS} hours, depending on the Qualifier window`],
                   ['Join the Teacher Grant Program', `${GRANT_PD_HOURS} documented contact hours`],
                 ].map(([how, hours]) => (
                   <div key={how} className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
@@ -291,7 +291,7 @@ export default function EducatorsPage() {
               We support the teachers who want to offer Stellr activities to their students
             </h2>
             <p className="text-brand-grey-dark leading-relaxed mb-6">
-              Taking a team to a live Challenge or running a Campaign at your school takes real
+              Taking a team to a live Challenge or entering the Classroom Qualifier at your school takes real
               time. The Teacher Grant Program is how we recognize that work —{' '}
               {grantAmount(GRANT_AMOUNTS.annualMaximum)}{' '}
               a year at most, plus {GRANT_PD_HOURS} documented PD contact hours and free Catalyst
@@ -329,7 +329,7 @@ export default function EducatorsPage() {
               {/* NOTE: Schools section was blank in source doc — placeholder copy. */}
               <p className="text-brand-grey-dark leading-relaxed mb-4">
                 Stellr works with schools and districts to bring STEM competitions to whole cohorts
-                of students. Group registration, district-wide campaigns, and dedicated support make
+                of students. Group registration, district-wide curriculum, and dedicated support make
                 it simple to scale beyond a single classroom.
               </p>
               <p className="text-brand-grey-dark leading-relaxed">
@@ -344,7 +344,7 @@ export default function EducatorsPage() {
               <ul className="space-y-3 text-sm text-brand-grey-dark">
                 {[
                   'Register a group of students for a live event',
-                  'Run a curriculum Campaign across multiple classes',
+                  'Run the curriculum and Classroom Qualifier across multiple classes',
                   'Host a Stellr event at your facility',
                   'Set up CTE pathways for participating educators',
                 ].map((item) => (

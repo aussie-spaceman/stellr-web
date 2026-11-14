@@ -165,7 +165,7 @@ export const THEME_META: Record<
 // ── Deadline ────────────────────────────────────────────────────────────────
 export interface DeadlineInfo {
   iso: string
-  /** e.g. "15 May 2026" (en-GB, British spelling per Stellr voice). */
+  /** e.g. "January 31, 2027" (en-US — the site uses US dates). */
   label: string
   /** Whole days from today until the deadline (negative once passed). */
   daysLeft: number
@@ -181,7 +181,7 @@ export function deadlineInfo(deadline?: string | null): DeadlineInfo | null {
   const daysLeft = Math.round((due.getTime() - today.getTime()) / 86_400_000)
   return {
     iso: deadline,
-    label: due.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    label: due.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
     daysLeft,
     passed: daysLeft < 0,
   }
@@ -200,6 +200,36 @@ export function deadlinePhrase(info: DeadlineInfo | null): string {
 export function seasonLabel(season?: string | null, year?: number | null): string {
   if (!season || !year) return ''
   return `${season === 'fall' ? 'Fall' : 'Spring'} ${year}`
+}
+
+/** Compact US date from an ISO day — "2027-01-31" → "1/31/27". '' when invalid. */
+export function shortUsDate(iso?: string | null): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '')
+  if (!m) return ''
+  return `${Number(m[2])}/${Number(m[3])}/${m[1].slice(2)}`
+}
+
+/**
+ * Public name of a Classroom Qualifier window. The fall window carries the
+ * school year ("2026–27 Classroom Qualifier"); spring carries its term
+ * ("Spring 2027 Classroom Qualifier"). `year` is the stored school year.
+ */
+export function qualifierWindowName(season?: string | null, year?: number | null): string {
+  if (!season || !year) return 'Classroom Qualifier'
+  return season === 'fall'
+    ? `${year - 1}–${String(year).slice(2)} Classroom Qualifier`
+    : `Spring ${year} Classroom Qualifier`
+}
+
+/** The window name plus its deadline — "2026–27 Classroom Qualifier · submit by 1/31/27". */
+export function qualifierWindowLabel(
+  season?: string | null,
+  year?: number | null,
+  deadline?: string | null
+): string {
+  const due = shortUsDate(deadline)
+  const name = qualifierWindowName(season, year)
+  return due ? `${name} · submit by ${due}` : name
 }
 
 // ── View model ──────────────────────────────────────────────────────────────
@@ -226,7 +256,8 @@ export function toCampaignCardData(e: StellarEvent): CampaignCardData {
     title: e.title,
     theme,
     themeLabel: THEME_META[theme].label,
-    seasonLabel: seasonLabel(e.season, e.campaignYear),
+    // Public window name ("2026–27 Classroom Qualifier"), not the internal season label.
+    seasonLabel: qualifierWindowName(e.season, e.campaignYear),
     // Pill text, not the raw bracket — an event with an explicit band shows
     // "Grades 7–12" rather than "Both". See lib/grade-band.ts.
     gradeLevel: gradeBand(e).label,

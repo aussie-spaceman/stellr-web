@@ -50,7 +50,7 @@ interface PageProps {
 
 function eventKind(event: EventData): string {
   return event.activityType === 'campaign'
-    ? 'Online STEM Campaign'
+    ? 'Classroom Qualifier'
     : event.setting === 'virtual'
     ? 'Virtual STEM Competition'
     : 'In-Person STEM Competition'
@@ -62,6 +62,10 @@ function eventKind(event: EventData): string {
  */
 function eventSummary(event: EventData): string {
   const audience = gradeBand(event).audienceShort
+  if (event.activityType === 'campaign') {
+    // Proper noun — keep its capitals rather than run it through the lower-casing below.
+    return `A Stellr ${event.type ?? 'design competition'} — classroom curriculum and the Classroom Qualifier for ${audience} students.`
+  }
   // Title-case kind → sentence case, keeping the acronym: "an in-person STEM competition".
   const kind = eventKind(event).toLowerCase().replace('stem', 'STEM')
   const article = /^[aeiou]/.test(kind) ? 'an' : 'a'

@@ -18,7 +18,7 @@ const year = storyYear(CURRENT_SCHOOL_YEAR)
 
 export const metadata: Metadata = {
   title: 'Future History',
-  description: `Every Stellr competition is set in a forecast future, 20 to 35 years ahead. This year: ${era.name}, ${year}. See the world students step into and what they do in it, at a live Challenge or in a classroom Campaign.`,
+  description: `Every Stellr competition is set in a forecast future, 20 to 35 years ahead. This year: ${era.name}, ${year}. See the world students step into and what they do in it, at a live Challenge or in the Classroom Qualifier.`,
   alternates: { canonical: '/competitions/mission' },
 }
 
@@ -33,7 +33,7 @@ const roles = [
   {
     Icon: Team,
     title: 'Your company',
-    body: 'One of three rival engineering companies bidding for the same contract, each with its own history, strengths, weaknesses and finances. At a Challenge you’re placed in one on the day; in a Campaign, your group becomes one.',
+    body: 'One of three rival engineering companies bidding for the same contract, each with its own history, strengths, weaknesses and finances. At a Challenge you’re placed in one on the day; in the Classroom Qualifier, your group becomes one.',
   },
   {
     Icon: Satellite,
@@ -52,7 +52,7 @@ const steps = [
   { n: 2, title: 'Get the brief', body: 'A Request for Proposal: what the client needs — never how to build it.' },
   { n: 3, title: 'Organize your company', body: 'Choose leaders, split the requirements across departments, set your own deadlines.' },
   { n: 4, title: 'Design and decide', body: 'Research, calculate and run trade studies. Choose your subcontractors and hold them to account.' },
-  { n: 5, title: 'Deliver the proposal', body: 'A live presentation to judges at a Challenge, or a written proposal in a Campaign.' },
+  { n: 5, title: 'Deliver the proposal', body: 'A live presentation to judges at a Challenge, or a 10–20 page team proposal in the Classroom Qualifier.' },
   { n: 6, title: 'Win the contract', body: 'Judges choose the winning company; mentors choose standout individuals for awards.' },
 ]
 
@@ -72,13 +72,13 @@ const pathways = [
   },
   {
     eyebrow: 'At school',
-    name: 'Campaign',
+    name: 'Classroom Qualifier',
     tagline: 'In class or as a club, on your schedule',
     headerClass: 'bg-gradient-to-br from-pathway-amber to-pathway-amber-deep',
     rows: [
       ['Your company', 'Your group'],
       ['Time', 'You set the pace'],
-      ['You deliver', 'A written proposal'],
+      ['You deliver', 'A 10–20 page team proposal'],
       ['Judged by', 'Stellr’s panel, with written feedback'],
     ] as [string, string][],
     cta: { label: 'Download curriculum', href: '/curriculum', className: 'bg-pathway-amber-bg text-gold-ink hover:bg-pathway-amber/15' },
@@ -92,7 +92,7 @@ export default function FutureHistoryPage() {
         breadcrumb="Educate → Competitions → Future History"
         pill={{ accent: 'Future History', rest: `This year: ${era.name}, ${year}` }}
         title="Your competition is set in the future"
-        lead="Every Stellr competition drops students into a future history: a forecast world 20 to 35 years from now, with a client, a contract and a deadline. At a live Challenge or in a classroom Campaign, the job is the same — win the contract."
+        lead="Every Stellr competition drops students into a future history: a forecast world 20 to 35 years from now, with a client, a contract and a deadline. At a live Challenge or in the Classroom Qualifier, the job is the same — win the contract."
       >
         <div className="mt-8 flex flex-wrap gap-3">
           <Button href="/events" as={Link} variant="primary">
@@ -222,7 +222,7 @@ export default function FutureHistoryPage() {
 
       <CtaBand
         title={`Step into ${year}`}
-        body="Register for a live Challenge, or run a Campaign with your class."
+        body="Register for a live Challenge, or enter the Classroom Qualifier with your class."
         actions={
           <>
             <Button href="/events" as={Link} variant="primary">

@@ -35,7 +35,7 @@ import { CURRENT_SCHOOL_YEAR, eraForSchoolYear, inSentence, storyYear } from '@/
 export const metadata: Metadata = {
   title: 'Competitions',
   description:
-    'Industry-simulation STEM Design Competitions for grades 7–12, on Space and Environmental themes: free classroom Campaigns, or one-day live events judged by industry professionals. No lab, kit or engineering background needed.',
+    'Industry-simulation STEM Design Competitions for grades 7–12, on Space and Environmental themes: the free Classroom Qualifier, or one-day live events judged by industry professionals. No lab, kit or engineering background needed.',
   alternates: { canonical: '/competitions' },
 }
 
@@ -67,7 +67,7 @@ const awardSteps = [
   {
     n: 3,
     title: 'Winners are recognized',
-    body: 'Awards are announced at the closing ceremony, or with Campaign results. Each comes with a certificate and a digital credential to add to LinkedIn.',
+    body: 'Awards are announced at the closing ceremony, or with Classroom Qualifier results. Each comes with a certificate and a digital credential to add to LinkedIn.',
   },
 ]
 
@@ -88,7 +88,7 @@ const pathways = [
   },
   {
     eyebrow: 'Pathway 2',
-    name: 'Curriculum Campaign',
+    name: 'Classroom Qualifier',
     tagline: 'You run it in class, from our curriculum',
     headerClass: 'bg-gradient-to-br from-pathway-amber to-[#C2722A]',
     rows: [
@@ -96,7 +96,7 @@ const pathways = [
       ['Where', 'Your school or classroom'],
       ['Delivered via', 'Stellr curriculum & lesson plans'],
       ['How long', 'Flexible — you set the pace'],
-      ['Students deliver', 'Written proposal or presentation'],
+      ['Students deliver', 'A 10–20 page team proposal'],
       ['Best for', 'Fitting STEM into your semester'],
     ] as [string, string][],
     cta: { label: 'Download curriculum', href: '/curriculum', className: 'bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15' },
@@ -169,23 +169,23 @@ const TIER_ITEMS: Record<string, string[]> = Object.fromEntries(
 const COMPETITION_FAQS = [
   {
     q: 'How much does a Stellr competition cost?',
-    a: 'Classroom Campaigns are free — the entry-level Educator membership covers the core material for teachers and students. Live Challenges charge a per-participant fee that varies by event and includes a year of Stellr membership, meals and materials. Scholarships are available so cost is never a barrier.',
+    a: 'The Classroom Qualifier is free — the entry-level Educator membership covers the core curriculum for teachers and students. Live Challenges charge a per-participant fee that varies by event and includes a year of Stellr membership, meals and materials. Scholarships are available so cost is never a barrier.',
   },
   {
     q: 'What grades can take part?',
-    a: 'Live Challenges are open to grades 7–12. Campaigns are for grades 7–12.',
+    a: 'Live Challenges are open to grades 7–12. The Classroom Qualifier is for grades 7–12.',
   },
   {
     q: 'Do students need to prepare or have prior experience?',
-    a: 'No. Live Challenges are designed for students to arrive and compete with no preparation, and Campaigns include everything a group needs. Teachers do not need to be engineers or scientists.',
+    a: 'No. Live Challenges are designed for students to arrive and compete with no preparation, and the Classroom Qualifier curriculum includes everything a group needs. Teachers do not need to be engineers or scientists.',
   },
   {
     q: 'How are teams organized?',
-    a: 'At live Challenges, students register individually or in groups of 2–12 and are formed into engineering companies on the day. Campaigns are entered as a group registered by a teacher, mentor or student manager; a school can enter as many groups as it likes.',
+    a: 'At live Challenges, students register individually or in groups of 2–12 and are formed into engineering companies on the day. Classroom Qualifier teams of 2–12 are registered as a group by a teacher, mentor or student manager; a school can enter as many groups as it likes.',
   },
   {
     q: 'What do students produce, and who judges it?',
-    a: 'Each team responds to a Request for Proposal with a written proposal (Campaigns) or a live presentation (Challenges). Work is judged by professionals from aerospace, engineering and science industries, and Campaign groups receive written feedback.',
+    a: 'Each team responds to a Request for Proposal with a written proposal (Classroom Qualifier) or a live presentation (Challenges). Work is judged by professionals from aerospace, engineering and science industries, and Classroom Qualifier teams receive written feedback.',
   },
   {
     q: 'What awards can students win?',
@@ -193,7 +193,7 @@ const COMPETITION_FAQS = [
   },
   {
     q: 'Can I progress to a future event by winning an event I attend?',
-    a: `Yes. Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every Challenge and Campaign are invited to the ${SUMMER_CAMP.name}, held in ${SUMMER_CAMP.when} and run by our partner ${SUMMER_CAMP.partner}. Attendance carries a fee.`,
+    a: `Yes. Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every Challenge and Classroom Qualifier window are invited to the ${SUMMER_CAMP.name}, held in ${SUMMER_CAMP.when} and run by our partner ${SUMMER_CAMP.partner}. Attendance carries a fee.`,
   },
 ] as const
 
@@ -227,7 +227,7 @@ export default async function CompetitionsPage() {
         pill={{ accent: 'Themed Competitions', rest: 'In class, or join an event' }}
         title="Design Competitions"
         lead="Real professional STEM skills for middle and high school students — delivered through competitive, industry-simulation activities."
-        pills={['Grades 7–12', 'State & national', 'Campaigns free to enter']}
+        pills={['Grades 7–12', 'State & national', 'Classroom Qualifier free to enter']}
         media={
           <ResponsivePhoto
             photo={PHOTOS['competitions-3']}
@@ -456,7 +456,7 @@ export default async function CompetitionsPage() {
         <div className="container-max">
           <SectionHeading step="STEP 4" stepClassName="text-gold-ink" title="Compete for awards" className="mb-2" />
           <p className="text-lg text-content-secondary mb-9 max-w-3xl leading-relaxed">
-            Every Challenge and Campaign ends with four awards. Judges choose the winning company; the
+            Every Challenge and Classroom Qualifier window ends with four awards. Judges choose the winning company; the
             mentors who work alongside students choose the individuals. Select an award to see how it&rsquo;s
             decided.
           </p>
@@ -478,7 +478,7 @@ export default async function CompetitionsPage() {
               <h3 className="mt-2 text-2xl font-bold text-ink">Win an individual award, earn an invitation</h3>
               <p className="mt-2 text-content-secondary leading-relaxed">
                 Creative Vision Award, Quiet Leadership Award and Engineering Excellence Award winners from every
-                Challenge and Campaign are invited to the {SUMMER_CAMP.name}, run by our partner {SUMMER_CAMP.partner}.
+                Challenge and Classroom Qualifier window are invited to the {SUMMER_CAMP.name}, run by our partner {SUMMER_CAMP.partner}.
                 Attendance carries a fee.
               </p>
             </div>
@@ -500,7 +500,7 @@ export default async function CompetitionsPage() {
       {/* ── CTA ───────────────────────────────────────────────────────── */}
       <CtaBand
         title="Ready to start?"
-        body="Register for an upcoming live event, or download curriculum to run a campaign in your classroom."
+        body="Register for an upcoming live event, or download the curriculum and enter the Classroom Qualifier from your classroom."
         actions={
           <>
             <Button href="/events" as={Link} variant="primary">

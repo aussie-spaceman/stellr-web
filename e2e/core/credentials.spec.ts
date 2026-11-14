@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 import { attachConsoleGuard } from '../fixtures/console-guard'
+import { freshClerkSession } from '../fixtures/fresh-session'
 import { createHmac } from 'node:crypto'
 
 /**
@@ -38,8 +39,12 @@ const AFTER_TOGGLE = { timeout: 20_000 }
 // Signed-in API calls go through a page that has loaded, never the `request`
 // fixture: its saved Clerk session cookie is short-lived and nothing renews it,
 // so the call answers 401 once the suite has been running for a minute or so.
+// Loading the page is not enough on its own: a saved token with a few seconds
+// left survives the navigation and expires before the call (CI, 12–13 Nov
+// 2026), so a fresh one is minted first (fixtures/fresh-session.ts).
 async function makeGracePrivate(page: Page) {
   await page.goto('/account')
+  await freshClerkSession(page)
   const res = await page.request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
     data: { visibility: 'private' },
   })
@@ -118,6 +123,8 @@ test.describe('as Ada (minor, consent outstanding)', () => {
 
   test('the server refuses to publish it even if asked directly', async ({ page }) => {
     await page.goto('/account')
+    // A stale cookie answers 401, which is not the refusal this proves.
+    await freshClerkSession(page)
     const res = await page.request.post('/api/credentials/STL-2026-E2EADA01/visibility', {
       data: { visibility: 'public' },
     })
@@ -126,6 +133,7 @@ test.describe('as Ada (minor, consent outstanding)', () => {
 
   test("she cannot change someone else's credential", async ({ page }) => {
     await page.goto('/account')
+    await freshClerkSession(page) // a stale cookie's 401 is not the 404 this proves
     const res = await page.request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
       data: { visibility: 'public' },
     })

@@ -1,0 +1,11 @@
+{
+  "_about": "SHA-256 of Stellr's printed badge sheets and award certificates for a fixture event, after normalising CreationDate, ModDate and /ID. Pinned by test/pdf-golden-hash.test.ts.",
+  "_update": "Only when a change is meant to alter the printed output: UPDATE_PDF_GOLDEN=1 npx vitest run test/pdf-golden-hash.test.ts, then review the diff and name the printed change in the PR.",
+  "hashes": {
+    "badges.avery_5392.plain": "bc89649877844a9b408d158cbe24d8c612d23f72b3313f90798817fcecfa5a0d",
+    "badges.avery_8395.artwork": "b3eb455ebec99407812c7996ad34514393cb56e642383fe91bd43095f92784a6",
+    "badges.avery_5392.single-preview": "be448c09a1fbcc1684e25f00107dd26b5649ba81cd96aeeaf83d19f55f65e33c",
+    "certificate.us_letter.default-placement": "39b10535c4eb818f3ff5a6565c8a09853b081666673c3b267e2f1a0b696c3128",
+    "certificate.a4.custom-placement": "7ada0a4fdc654160e27eb3119fe8a45e160b08e5e71126786ae8a93d24032ce0"
+  }
+}

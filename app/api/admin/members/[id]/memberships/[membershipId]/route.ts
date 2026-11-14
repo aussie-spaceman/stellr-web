@@ -7,12 +7,30 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 // PATCH  /api/admin/members/[id]/memberships/[membershipId] — edit one membership
 //        (expiry, status, complimentary flag).
 // DELETE /api/admin/members/[id]/memberships/[membershipId] — soft-revoke it
-//        (renewal_status='revoked'), preserving history.
+//        (renewal_status='cancelled'), preserving history: the row stays, and
+//        its updated_at (set by trg_member_memberships_updated_at) records when.
 //
 // Both are admin-only and scoped to the member, so an admin can't edit another
 // member's membership by guessing an id.
+//
+// renewal_status is the membership_renewal_status enum, which has no 'revoked'
+// and spells it 'cancelled' (tracker training-resources-space-tab.5: a revoke
+// failed on production writing 'revoked'). Only enum values are stored; the
+// American 'canceled' and the old 'revoked' are accepted and stored as
+// 'cancelled'. Adding 'revoked' to the enum would need a production migration.
 
-const STATUSES = ['active', 'expired', 'canceled', 'revoked'] as const
+const RENEWAL_STATUSES = ['active', 'pending_renewal', 'expired', 'cancelled', 'complimentary'] as const
+type RenewalStatus = (typeof RENEWAL_STATUSES)[number]
+
+const STATUS_ALIASES: Record<string, RenewalStatus> = { canceled: 'cancelled', revoked: 'cancelled' }
+
+/** The enum value an admin's status input means, or null if it means none. */
+function toRenewalStatus(input: unknown): RenewalStatus | null {
+  if (typeof input !== 'string') return null
+  const v = input.trim().toLowerCase()
+  if ((RENEWAL_STATUSES as readonly string[]).includes(v)) return v as RenewalStatus
+  return STATUS_ALIASES[v] ?? null
+}
 
 type Joined = {
   id: string
@@ -54,11 +72,12 @@ export async function PATCH(
     changes.push(`expiry → ${body.expires_at || 'none'}`)
   }
   if ('renewal_status' in body) {
-    if (!STATUSES.includes(body.renewal_status)) {
+    const status = toRenewalStatus(body.renewal_status)
+    if (!status) {
       return NextResponse.json({ error: 'Invalid renewal_status' }, { status: 400 })
     }
-    updates.renewal_status = body.renewal_status
-    changes.push(`status → ${body.renewal_status}`)
+    updates.renewal_status = status
+    changes.push(`status → ${status}`)
   }
   if ('is_complimentary' in body) {
     updates.is_complimentary = !!body.is_complimentary
@@ -113,7 +132,7 @@ export async function DELETE(
 
   const { error } = await db
     .from('member_memberships')
-    .update({ renewal_status: 'revoked' })
+    .update({ renewal_status: 'cancelled' satisfies RenewalStatus })
     .eq('id', membershipId)
     .eq('member_id', memberId)
   if (error) {
@@ -127,7 +146,7 @@ export async function DELETE(
     category: 'membership',
     action: 'tier_revoked',
     summary: `Revoked ${tierName(existing)} membership`,
-    metadata: { membershipId },
+    metadata: { membershipId, renewal_status: 'cancelled', previous_status: existing.renewal_status },
     ...actor,
   })
 

@@ -18,6 +18,64 @@ function norm(v: unknown): string {
   return v === null || v === undefined ? '' : String(v).trim()
 }
 
+// Labels for the columns an admin edits, as the profile form names them.
+const FIELD_LABEL: Record<string, string> = {
+  first_name: 'First name', last_name: 'Last name', nickname: 'Nickname', phone: 'Phone',
+  email: 'Email', school_email: 'School email', discord_handle: 'Discord handle',
+  date_of_birth: 'Date of birth', gender: 'Gender', age_bracket: 'Age bracket', event_role: 'Role',
+  grade: 'Grade', grade_auto_promote: 'Grade auto-promote', tshirt_size: 'T-shirt size',
+  ec_first_name: 'Emergency contact first name', ec_last_name: 'Emergency contact last name',
+  ec_email: 'Emergency contact email', ec_phone: 'Emergency contact phone',
+  ec_relationship: 'Emergency contact relationship', health_conditions: 'Health conditions',
+  is_active: 'Active',
+}
+// Enum types on members, so an invalid-value error can name its field.
+const ENUM_FIELD: Record<string, string> = {
+  grade_type: 'grade', tshirt_size_type: 'tshirt_size', gender_type: 'gender',
+  age_bracket_type: 'age_bracket', event_role_type: 'event_role',
+}
+
+type DbError = { code?: string; message?: string; details?: string | null }
+
+/**
+ * Why a member save failed, in words an admin can act on (TRACKER 20.5).
+ * Reads the Postgres error code and names the field where it can; the raw
+ * error is logged by the caller and never returned. Only fields this request
+ * tried to change are named.
+ */
+function describeMemberUpdateError(error: DbError, sent: string[]): { status: number; error: string } {
+  const text = `${error.message ?? ''} ${error.details ?? ''}`
+  const label = (col: string | undefined) => (col && sent.includes(col) ? FIELD_LABEL[col] : undefined)
+  switch (error.code) {
+    case '23505': { // unique_violation: members_email_key, members_email_lower_idx, members_clerk_user_id_key
+      if (/email/i.test(text)) {
+        return { status: 409, error: 'Another member already uses that email address. Use a different one, or merge the two records.' }
+      }
+      return { status: 409, error: 'Another member already has that value. Nothing was saved.' }
+    }
+    case '23502': { // not_null_violation: null value in column "x" of relation "members"
+      const field = label(/column "([^"]+)"/.exec(text)?.[1])
+      return { status: 400, error: field ? `${field} is required.` : 'A required field is empty. Nothing was saved.' }
+    }
+    case '22P02': { // invalid_text_representation: invalid input value for enum grade_type: "x"
+      const enumType = /enum (?:public\.)?(\w+)/.exec(text)?.[1]
+      const field = label(enumType ? ENUM_FIELD[enumType] : undefined)
+      return { status: 400, error: field ? `That ${field.toLowerCase()} is not one of the options.` : 'One of the values is not in the expected format. Nothing was saved.' }
+    }
+    case '22007': // invalid_datetime_format
+    case '22008': // datetime_field_overflow
+      return { status: 400, error: label('date_of_birth') ? 'Date of birth is not a valid date.' : 'A date is not valid. Nothing was saved.' }
+    case '22001': // string_data_right_truncation
+      return { status: 400, error: 'One of the values is too long. Nothing was saved.' }
+    case '23514': // check_violation: new row for relation "members" violates check constraint "x"
+      return { status: 400, error: 'One of the values is outside what a member record allows. Nothing was saved.' }
+    case 'PGRST116': // .single() found no row
+      return { status: 404, error: 'This member no longer exists.' }
+    default:
+      return { status: 500, error: 'The save did not go through. Nothing was changed; try again.' }
+  }
+}
+
 function sameSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
   const sa = new Set(a)
@@ -76,8 +134,10 @@ export async function PATCH(
     .single()
 
   if (error) {
+    // The raw error stays in the server log; the admin gets a reason to act on.
     console.error('Admin member update error:', error)
-    return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+    const reason = describeMemberUpdateError(error, Object.keys(updates))
+    return NextResponse.json({ error: reason.error }, { status: reason.status })
   }
   // S4 field encryption: inert unless FIELD_CRYPTO_MODE=shadow; never fails this write.
   shadowSyncFields('members', [id])

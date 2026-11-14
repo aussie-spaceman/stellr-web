@@ -113,7 +113,7 @@ export function CookieConsent({ disabled = false }: { disabled?: boolean }) {
         <p className="text-xs leading-snug text-content-body sm:text-sm sm:leading-5 short:text-xs short:leading-4">
           We use essential and analytics cookies to run this site. With your
           permission we&apos;d also use advertising cookies to measure our
-          campaigns.{' '}
+          ads.{' '}
           <Link href="/privacy" className="underline hover:no-underline">
             Read our privacy policy
           </Link>

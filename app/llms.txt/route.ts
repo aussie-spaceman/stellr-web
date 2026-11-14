@@ -19,23 +19,23 @@ const BODY = `# Stellr Education
 > Stellr Education is a US 501(c)(3) nonprofit, founded in May 2021, that runs
 > industry-simulation STEM design competitions connecting middle and high school
 > students (grades 7–12) with practicing aerospace, engineering and
-> environmental professionals. Classroom Campaigns and the core curriculum are
-> free; live competition events carry a per-participant fee, with scholarships
+> environmental professionals. The core curriculum and the Classroom Qualifier
+> are free; live competition events carry a per-participant fee, with scholarships
 > so cost is never a barrier. Membership has a permanently free tier for school
 > students, college students and educators.
 
 Two competition themes run each year: the Space Design Challenge and the
 Environmental Design Challenge. Both are delivered either as one-day live
 events (in person or virtual; grades 7–12; no preparation required) or as
-seasonal Campaigns that
-teachers run in class over 4 or 10 weeks (grades 7–12, free), with a path to
-our International Summer Camp. Students work as an engineering company answering
+free curriculum that teachers run in class over 4–10 weeks (grades 7–12). Teams
+of 2–12 can optionally enter the Classroom Qualifier — a 10–20 page team proposal,
+submitted in a fall or spring window — with a path to our International Summer Camp. Students work as an engineering company answering
 a client's Request for Proposal, judged by industry professionals. No lab, kit
 or engineering background is needed.
 
 ## Programs
 - [Design Competitions](${BASE_URL}/competitions): The Space Design Challenge and Environmental Design Challenge — formats, themes, what a competition day involves, and how to enter.
-- [Upcoming events and campaigns](${BASE_URL}/events): Live competition dates, locations and registration status.
+- [Upcoming events and the Classroom Qualifier](${BASE_URL}/events): Live competition dates, locations, Qualifier windows and registration status.
 - [Curriculum](${BASE_URL}/curriculum): Free core engineering challenge material — the Request for Proposal, Mission Handbook and teacher and student guides — to run in class at any time; paid educator tiers add lesson plans, PD hours and standards alignment.
 - [Academy](${BASE_URL}/academy): Mentoring, coaching, competition training and the STEM Power Skills program.
 - [Membership](${BASE_URL}/membership): Tier structure for students, alumni and educators, including what stays free.
@@ -66,7 +66,7 @@ or engineering background is needed.
 
 ## Optional
 - [Host an event](${BASE_URL}/host-an-event): For facilities interested in running a live competition.
-- [Volunteer](${BASE_URL}/volunteer): Event and campaign volunteering.
+- [Volunteer](${BASE_URL}/volunteer): Event and Classroom Qualifier volunteering.
 - [Donate](${BASE_URL}/donate): Supporting Stellr's work.
 `
 

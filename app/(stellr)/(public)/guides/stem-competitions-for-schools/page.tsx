@@ -38,11 +38,11 @@ const articleSchema = {
 const CHOOSE = [
   {
     need: 'No budget',
-    pick: 'NASA TechRise, eCYBERMISSION and Stellr Campaigns are free to enter. StellarXplorers is free for Title I schools.',
+    pick: 'NASA TechRise, eCYBERMISSION and the Stellr Classroom Qualifier are free to enter. StellarXplorers is free for Title I schools.',
   },
   {
     need: 'No lab, kit or build space',
-    pick: 'eCYBERMISSION, Stellr Campaigns and Stellr live Challenges need none. StellarXplorers needs only Windows PCs.',
+    pick: 'eCYBERMISSION, the Stellr Classroom Qualifier and Stellr live Challenges need none. StellarXplorers needs only Windows PCs.',
   },
   {
     need: 'Students who want to build a robot',
@@ -50,7 +50,7 @@ const CHOOSE = [
   },
   {
     need: 'Fits inside class time',
-    pick: 'Stellr Campaigns run in class over 4 or 10 weeks. TSA TEAMS is a single competition day.',
+    pick: 'The Stellr Classroom Qualifier runs in class over 4–10 weeks. TSA TEAMS is a single competition day.',
   },
   {
     need: 'Contact with working professionals',
@@ -74,7 +74,7 @@ export default function StemCompetitionsComparedPage() {
         <div className="container-max max-w-content">
           <Eyebrow>In short</Eyebrow>
           <p className="text-xl text-ink mt-3 leading-relaxed">
-            For a school with no budget or lab, NASA TechRise, eCYBERMISSION and Stellr Campaigns are free and need
+            For a school with no budget or lab, NASA TechRise, eCYBERMISSION and the Stellr Classroom Qualifier are free and need
             no equipment. Robotics programs — FIRST and VEX — suit schools with build space and a hardware budget.
             Science Olympiad covers the widest range of subjects. Future City, StellarXplorers and Stellr put students
             in front of working STEM professionals.
@@ -151,7 +151,7 @@ export default function StemCompetitionsComparedPage() {
           <p className="text-content-secondary mt-4 leading-relaxed">
             Stellr competitions are industry simulations. Your students become an engineering company answering a
             client’s Request for Proposal — for a settlement in space or a net-zero town on Earth — and are judged by
-            working professionals. Run it in class as a free Campaign, or bring a team to a one-day live Challenge.
+            working professionals. Run it in class as free curriculum and enter the Classroom Qualifier, or bring a team to a one-day live Challenge.
             Nobody needs a lab, a kit or an engineering degree, you included.
           </p>
           <div className="flex flex-wrap gap-3 mt-6">
@@ -190,7 +190,7 @@ export default function StemCompetitionsComparedPage() {
 
       <CtaBand
         title="Bring a real engineering challenge to your class"
-        body="The core Campaign material is free: the Request for Proposal, the Mission Handbook and teacher and student guides."
+        body="The core curriculum is free: the Request for Proposal, the Mission Handbook and teacher and student guides."
         actions={
           <>
             <Button href="/curriculum" as={Link} variant="primary">

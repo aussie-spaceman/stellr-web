@@ -18,7 +18,7 @@ const components = [
   },
   {
     label: 'Stellr.Educate',
-    description: 'All Campaigns',
+    description: 'Curriculum and the Classroom Qualifier',
     icon: BookOpen,
     href: '/curriculum',
   },
@@ -44,9 +44,9 @@ const educateLinks = [
     href: '/competitions',
   },
   {
-    label: 'Curriculum Campaigns',
+    label: 'Curriculum and Classroom Qualifier',
     description:
-      'Download curriculum material and run a Campaign in your classroom, on your schedule.',
+      'Download the curriculum, run it in your classroom on your schedule, and optionally enter the Classroom Qualifier.',
     href: '/curriculum',
   },
   {

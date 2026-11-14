@@ -22,7 +22,7 @@ const COMPONENTS = [
     chip: 'bg-space-violet-bg text-space-violet-text',
     points: [
       'An inert filler that dilutes the oxygen — a built-in safety margin against fire and sudden pressure loss.',
-      'All life needs nitrogen to build cells. Plants can’t use N₂ directly; they rely on nitrogen-fixing bacteria or fertiliser, and animals get it by eating plants.',
+      'All life needs nitrogen to build cells. Plants can’t use N₂ directly; they rely on nitrogen-fixing bacteria or fertilizer, and animals get it by eating plants.',
     ],
   },
   {
@@ -179,7 +179,7 @@ export function AtmosphericRequirements() {
             <div className="space-y-4 text-content-secondary leading-relaxed">
               <p>
                 A fire needs three things at once: <strong className="text-ink">fuel, heat, and oxygen</strong> (an
-                oxidiser). Remove any one and it can’t burn — that’s the fire triangle.
+                oxidizer). Remove any one and it can’t burn — that’s the fire triangle.
               </p>
               <p>
                 The Apollo 1 tragedy showed the stakes: a spark in a{' '}
@@ -200,7 +200,7 @@ export function AtmosphericRequirements() {
               <ul className="mt-4 space-y-2 text-sm text-content-secondary">
                 <li className="rounded-ds-card bg-surface border border-line px-4 py-3">🔥 Heat — an ignition source</li>
                 <li className="rounded-ds-card bg-surface border border-line px-4 py-3">🪵 Fuel — anything that burns</li>
-                <li className="rounded-ds-card bg-surface border border-line px-4 py-3">💨 Oxygen — the oxidiser</li>
+                <li className="rounded-ds-card bg-surface border border-line px-4 py-3">💨 Oxygen — the oxidizer</li>
               </ul>
             </div>
           </div>

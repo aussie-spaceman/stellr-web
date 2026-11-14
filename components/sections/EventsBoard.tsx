@@ -78,7 +78,7 @@ export function EventsBoard({ items, children }: { items: BoardItem[]; children:
             </div>
           ) : (
             <div className="py-16 text-center text-content-muted">
-              <p className="text-lg">No events or campaigns match your filters.</p>
+              <p className="text-lg">No events or Qualifier windows match your filters.</p>
               <button type="button" onClick={() => change(EMPTY)} className="mt-4 min-h-11 text-sm text-primary-deep hover:underline">
                 Clear filters
               </button>

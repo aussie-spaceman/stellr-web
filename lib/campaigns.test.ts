@@ -6,7 +6,13 @@ import {
   campaignStatusKey,
   campaignHasEnded,
   seasonLabel,
+  deadlineInfo,
+  shortUsDate,
+  qualifierWindowName,
+  qualifierWindowLabel,
+  toCampaignCardData,
 } from './campaigns'
+import type { StellarEvent } from './sanity'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -165,5 +171,40 @@ describe('a proposal deadline after the season window', () => {
 
   it('never shortens the window for an earlier deadline', () => {
     expect(campaignHasEnded({ season: 'fall', campaignYear: 2027, deadline: '2026-12-11' }, '2026-12-14')).toBe(false)
+  })
+})
+
+describe('public Classroom Qualifier labels', () => {
+  it('formats deadlines as US dates', () => {
+    expect(deadlineInfo('2027-01-31')?.label).toBe('January 31, 2027')
+    expect(shortUsDate('2027-01-31')).toBe('1/31/27')
+    expect(shortUsDate('2027-05-14')).toBe('5/14/27')
+    expect(shortUsDate('not a date')).toBe('')
+    expect(shortUsDate(null)).toBe('')
+  })
+
+  it('names the fall window by school year and spring by term', () => {
+    expect(qualifierWindowName('fall', 2027)).toBe('2026–27 Classroom Qualifier')
+    expect(qualifierWindowName('spring', 2027)).toBe('Spring 2027 Classroom Qualifier')
+    expect(qualifierWindowName(null, 2027)).toBe('Classroom Qualifier')
+  })
+
+  it('adds the deadline from the document when there is one', () => {
+    expect(qualifierWindowLabel('fall', 2027, '2027-01-31')).toBe('2026–27 Classroom Qualifier · submit by 1/31/27')
+    expect(qualifierWindowLabel('spring', 2027, '2027-05-14')).toBe('Spring 2027 Classroom Qualifier · submit by 5/14/27')
+    expect(qualifierWindowLabel('spring', 2027, null)).toBe('Spring 2027 Classroom Qualifier')
+  })
+
+  it('gives the public card the Qualifier window name, never "Campaign"', () => {
+    const card = toCampaignCardData({
+      _id: 'c1',
+      title: 'Space Design Challenge',
+      slug: { current: 'space' },
+      season: 'fall',
+      campaignYear: 2027,
+      deadline: '2027-01-31',
+    } as StellarEvent)
+    expect(card.seasonLabel).toBe('2026–27 Classroom Qualifier')
+    expect(card.deadlineLabel).toBe('January 31, 2027')
   })
 })

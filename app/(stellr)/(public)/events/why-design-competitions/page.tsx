@@ -107,7 +107,7 @@ export default function WhyDesignCompetitionsPage() {
             and communication durable skills.&rdquo;
           </blockquote>
           <figcaption className="mt-6 font-medium text-star-gold">
-            Mr Jim Christensen &middot; Chief Innovation Officer, The Aldrin Family Foundation
+            Mr. Jim Christensen &middot; Chief Innovation Officer, The Aldrin Family Foundation
           </figcaption>
         </figure>
       </section>

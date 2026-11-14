@@ -37,8 +37,8 @@ import { gradeBand, type GradeBandInput } from './grade-band'
 
 export function campaignEligibilityCopy(campaign: GradeBandInput): string {
   return (
-    `Open to all ${gradeBand(campaign).audience}. Campaigns are entered as a group rather than ` +
-    'by individual students — a teacher, mentor or student manager registers the group, and ' +
+    `Open to all ${gradeBand(campaign).audience}. The Classroom Qualifier is entered as a group rather than ` +
+    'by individual students, in teams of 2–12 — a teacher, mentor or student manager registers the group, and ' +
     'schools can enter as many groups as they like.'
   )
 }
@@ -50,9 +50,9 @@ export function campaignEligibilityCopy(campaign: GradeBandInput): string {
  */
 export const CAMPAIGN_INCLUDED: string[] = [
   'Annual Stellr Educator membership for teachers and students — always free',
-  'The campaign Request For Proposal (RFP) and Mission Handbook, abridged editions',
-  'Teacher campaign guide, with 4-week and 10-week indicative schedules',
-  'Student campaign guide and assessment tools',
+  'The curriculum’s Request for Proposal (RFP) and Mission Handbook, abridged editions',
+  'Teacher curriculum guide, with 4-week and 10-week indicative schedules',
+  'Student curriculum guide and assessment tools',
   'Optional proposal submission, with written feedback from our judging panel',
 ]
 
@@ -72,19 +72,19 @@ export const CAMPAIGN_INCLUDED_NOTE_HREF = '/membership'
 export const CAMPAIGN_STEPS: { title: string; body: string }[] = [
   {
     title: 'Register your group',
-    body: 'A teacher, mentor or student manager registers the group and gets access to your campaign workspace.',
+    body: 'A teacher, mentor or student manager registers the group and gets access to your Qualifier workspace.',
   },
   {
     title: 'Run the workshops with your group',
-    body: 'Use the theme workshop slides and starter pack from your campaign workspace to get your students up to speed.',
+    body: 'Use the curriculum’s workshop slides and starter pack from your Qualifier workspace to get your students up to speed.',
   },
   {
     title: 'Develop your design and write it up',
-    body: 'Groups work at their own pace across the season, turning their ideas into a structured proposal.',
+    body: 'Groups work at their own pace — typically 4–10 weeks of class time — turning their ideas into a 10–20 page team proposal.',
   },
   {
     title: 'Submit a proposal before the deadline',
-    body: 'Upload the finished proposal from your campaign workspace. You can replace it any time until the deadline.',
+    body: 'Upload the finished proposal from your Qualifier workspace. You can replace it any time until the deadline.',
   },
   {
     title: 'Receive written judging feedback',
@@ -95,28 +95,28 @@ export const CAMPAIGN_STEPS: { title: string; body: string }[] = [
 export const CAMPAIGN_FAQS: { q: string; a: string; text: string }[] = [
   {
     q: 'How are teams structured?',
-    a: 'Campaigns are entered as a group rather than by individual students. A teacher, mentor or student manager registers the group, and a school can enter as many groups as it likes.',
-    text: 'Campaigns are entered as a group rather than by individual students. A teacher, mentor or student manager registers the group, and a school can enter as many groups as it likes.',
+    a: 'The Classroom Qualifier is entered as a group rather than by individual students, in teams of 2–12. A teacher, mentor or student manager registers the group, and a school can enter as many groups as it likes.',
+    text: 'The Classroom Qualifier is entered as a group rather than by individual students, in teams of 2–12. A teacher, mentor or student manager registers the group, and a school can enter as many groups as it likes.',
   },
   {
     q: 'Is there a cost to take part?',
-    a: 'No. Taking part in a campaign requires a Stellr membership, and the entry-level Educator membership is free — it is included for every group and covers the core campaign material for both teachers and students. Paid tiers are optional and add more.',
-    text: 'No. Taking part in a campaign requires a Stellr membership, and the entry-level Educator membership is free — it is included for every group and covers the core campaign material for both teachers and students. Paid tiers are optional and add more.',
+    a: 'No. Entering the Classroom Qualifier requires a Stellr membership, and the entry-level Educator membership is free — it is included for every group and covers the core curriculum for both teachers and students. Paid tiers are optional and add more.',
+    text: 'No. Entering the Classroom Qualifier requires a Stellr membership, and the entry-level Educator membership is free — it is included for every group and covers the core curriculum for both teachers and students. Paid tiers are optional and add more.',
   },
   {
     q: 'This seems like a really challenging activity! What are the preparation expectations?',
-    a: 'Nothing beforehand. Everything your group needs arrives with the campaign — the RFP, the Mission Handbook, workshop material and the teacher and student guides. You do not need to be a specialist engineer or scientist to run one.',
-    text: 'Nothing beforehand. Everything your group needs arrives with the campaign — the RFP, the Mission Handbook, workshop material and the teacher and student guides. You do not need to be a specialist engineer or scientist to run one.',
+    a: 'Nothing beforehand. Everything your group needs comes with the curriculum — the RFP, the Mission Handbook, workshop material and the teacher and student guides. You do not need to be a specialist engineer or scientist to run it.',
+    text: 'Nothing beforehand. Everything your group needs comes with the curriculum — the RFP, the Mission Handbook, workshop material and the teacher and student guides. You do not need to be a specialist engineer or scientist to run it.',
   },
   {
-    q: 'How much time does a campaign take?',
-    a: 'Groups work at their own pace across the season rather than to a fixed timetable. Your Educator membership includes both a 4-week and a 10-week indicative schedule, so you can fit the campaign to the time you actually have.',
-    text: 'Groups work at their own pace across the season rather than to a fixed timetable. Your Educator membership includes both a 4-week and a 10-week indicative schedule, so you can fit the campaign to the time you actually have.',
+    q: 'How much time does the Classroom Qualifier take?',
+    a: 'Groups work at their own pace rather than to a fixed timetable — typically 4–10 weeks of class time. Your Educator membership includes both a 4-week and a 10-week indicative schedule, so you can fit the curriculum to the time you actually have.',
+    text: 'Groups work at their own pace rather than to a fixed timetable — typically 4–10 weeks of class time. Your Educator membership includes both a 4-week and a 10-week indicative schedule, so you can fit the curriculum to the time you actually have.',
   },
   {
     q: 'What do we submit, and how?',
-    a: 'Each group submits one written proposal through its campaign workspace, before the campaign deadline. You can replace the file as many times as you like up to that point, so an early upload is never a commitment.',
-    text: 'Each group submits one written proposal through its campaign workspace, before the campaign deadline. You can replace the file as many times as you like up to that point, so an early upload is never a commitment.',
+    a: 'Each group submits one 10–20 page team proposal through its Qualifier workspace, before the deadline. You can replace the file as many times as you like up to that point, so an early upload is never a commitment.',
+    text: 'Each group submits one 10–20 page team proposal through its Qualifier workspace, before the deadline. You can replace the file as many times as you like up to that point, so an early upload is never a commitment.',
   },
   {
     q: 'What happens after we submit?',
@@ -125,7 +125,7 @@ export const CAMPAIGN_FAQS: { q: string; a: string; text: string }[] = [
   },
   {
     q: 'What if our group can’t finish?',
-    a: 'Let us know. There is no penalty for withdrawing from a campaign, and the material your group has already been given stays available to you.',
-    text: 'Let us know. There is no penalty for withdrawing from a campaign, and the material your group has already been given stays available to you.',
+    a: 'Let us know. There is no penalty for withdrawing from the Classroom Qualifier, and the material your group has already been given stays available to you.',
+    text: 'Let us know. There is no penalty for withdrawing from the Classroom Qualifier, and the material your group has already been given stays available to you.',
   },
 ]

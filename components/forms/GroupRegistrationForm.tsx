@@ -1380,7 +1380,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         <div className="bg-enviro-green-bg border border-enviro-green-chip rounded-xl p-6">
           <p className="font-semibold text-enviro-green-text">
             {isCampaign
-              ? 'No Payment Required For Campaigns — Good Luck!'
+              ? 'No Payment Required For the Classroom Qualifier — Good Luck!'
               : 'No Payment Required — This Event Is Free Of Charge'}
           </p>
           {!isCampaign && (

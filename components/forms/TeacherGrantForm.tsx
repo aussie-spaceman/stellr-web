@@ -265,8 +265,8 @@ export default function TeacherGrantForm({
               },
               {
                 value: 'campaign',
-                label: 'Run a Campaign at my school',
-                hint: 'You run it remotely, in class or as a club.',
+                label: 'Enter the Classroom Qualifier at my school',
+                hint: 'You run the curriculum at school, in class or as a club.',
               },
               { value: 'both', label: 'Both', hint: 'The only route to the $500 maximum.' },
             ].map((opt) => (
@@ -290,14 +290,14 @@ export default function TeacherGrantForm({
             label="Students you expect to involve"
             required
             error={errors.expectedStudents?.message}
-            hint={`A rough number is fine. A Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${GRANT_THRESHOLDS.campaignStudents} registered.`}
+            hint={`A rough number is fine. A Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; the Classroom Qualifier needs at least ${GRANT_THRESHOLDS.campaignStudents} registered.`}
             className="sm:max-w-xs"
           >
             <Input id="expectedStudents" type="text" inputMode="numeric" {...register('expectedStudents')} />
           </Field>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Field label="Run a Stellr Challenge or Campaign before?" hint="Optional. First-timers are welcome.">
+            <Field label="Run a Stellr Challenge or Classroom Qualifier before?" hint="Optional. First-timers are welcome.">
               <Select id="priorStellr" {...register('priorStellr')} defaultValue="">
                 <option value="">Select…</option>
                 <option value="yes">Yes</option>

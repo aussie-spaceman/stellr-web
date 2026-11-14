@@ -13,9 +13,9 @@ import { matchesGradeFilter } from '@/lib/grade-band'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/events' },
-  title: 'Events & Campaigns',
+  title: 'Events & Classroom Qualifier',
   description:
-    'Live, in-person design competitions and asynchronous Campaigns your school runs on its own schedule — for middle and high school students.',
+    'Live, in-person design competitions and the Classroom Qualifier — curriculum your school runs on its own schedule — for middle and high school students.',
 }
 
 // Static, refreshed hourly (the Sanity reads carry the same window). The filter
@@ -75,12 +75,12 @@ export default async function EventsPage() {
   return (
     <>
       <Hero
-        title="Events & Campaigns"
+        title="Events & Classroom Qualifier"
         lead={
           <>
             Events = Live, In-Person Competitions
             <br />
-            Campaigns = Async Competitions At Your School
+            Classroom Qualifier = Curriculum-Based Competition At Your School
             <br />
             Register Today!
           </>

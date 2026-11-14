@@ -213,3 +213,41 @@ export function validateMergeChoice(chosen: Record<string, unknown>, keep: Merge
   }
   return { ok: true }
 }
+
+/**
+ * The kept record's addresses once a merge has written `toWrite` to it.
+ * Tracker member-merge-school-email.3: a merge can change members.email while
+ * the Clerk login still has the old (often school) address as its primary.
+ */
+export function mergedAddresses(
+  keep: MergeMember,
+  toWrite: Record<string, unknown>,
+): { email: string; school_email: string | null } {
+  const pick = (column: 'email' | 'school_email') => {
+    const v = column in toWrite ? toWrite[column] : keep[column]
+    return typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null
+  }
+  return { email: pick('email') ?? '', school_email: pick('school_email') }
+}
+
+/**
+ * Addresses either record held before the merge that the kept record no longer
+ * holds after it, lower-cased. Only these may be taken off the Clerk login: an
+ * address the member still has (as personal or school) stays on it.
+ */
+export function addressesRemovedByMerge(
+  keep: MergeMember,
+  drop: MergeMember,
+  toWrite: Record<string, unknown>,
+): string[] {
+  const after = mergedAddresses(keep, toWrite)
+  const kept = new Set([after.email, after.school_email].filter(Boolean))
+  const before = new Set<string>()
+  for (const m of [keep, drop]) {
+    for (const column of ['email', 'school_email']) {
+      const v = m[column]
+      if (typeof v === 'string' && v.trim()) before.add(v.trim().toLowerCase())
+    }
+  }
+  return [...before].filter((a) => !kept.has(a))
+}

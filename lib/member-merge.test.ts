@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
+  addressesRemovedByMerge,
   defaultSurvivor,
   fieldsToWrite,
+  mergedAddresses,
   proposeMerge,
   validateMergeChoice,
   type MergeMember,
@@ -117,5 +119,30 @@ describe('member-email', () => {
     for (const e of ['a@gmail.com', 'a@outlook.com', 'a@icloud.com', 'a@proton.me']) {
       expect(isLikelySchoolEmail(e)).toBe(false)
     }
+  })
+})
+
+describe('mergedAddresses and addressesRemovedByMerge (member-merge-school-email.3)', () => {
+  it('reads the written values over the kept record, lower-cased', () => {
+    expect(mergedAddresses(older(), { email: 'Sam.Student@Gmail.com' })).toEqual({
+      email: 'sam.student@gmail.com', school_email: null,
+    })
+    expect(mergedAddresses(older({ school_email: 'x@nv.ccsd.net' }), {})).toEqual({
+      email: 'sam.student@nv.ccsd.net', school_email: 'x@nv.ccsd.net',
+    })
+  })
+
+  it('a school address moved to school_email is not removed', () => {
+    const toWrite = { email: 'sam.student@gmail.com', school_email: 'sam.student@nv.ccsd.net' }
+    expect(addressesRemovedByMerge(older(), newer(), toWrite)).toEqual([])
+  })
+
+  it('a school address the merge dropped is removed', () => {
+    const toWrite = { email: 'sam.student@gmail.com' }
+    expect(addressesRemovedByMerge(older(), newer(), toWrite)).toEqual(['sam.student@nv.ccsd.net'])
+  })
+
+  it('nothing is removed when no address changed', () => {
+    expect(addressesRemovedByMerge(older(), newer({ email: 'sam.student@nv.ccsd.net' }), {})).toEqual([])
   })
 })

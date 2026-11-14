@@ -32,11 +32,21 @@ const SOURCE_LABEL: Record<string, string> = {
 }
 const STATUS_CLS: Record<string, string> = {
   active: 'bg-green-100 text-green-700',
+  pending_renewal: 'bg-brand-hairline text-brand-muted-soft',
   expired: 'bg-brand-hairline text-brand-muted-soft',
-  canceled: 'bg-red-100 text-red-600',
-  revoked: 'bg-red-100 text-red-600',
+  cancelled: 'bg-red-100 text-red-600',
+  complimentary: 'bg-green-100 text-green-700',
 }
-const STATUSES = ['active', 'expired', 'canceled', 'revoked']
+// The membership_renewal_status enum, in its own spelling. Revoking a
+// membership sets it to cancelled; there is no separate revoked state.
+const STATUSES = ['active', 'pending_renewal', 'expired', 'cancelled', 'complimentary']
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Active',
+  pending_renewal: 'Pending renewal',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+  complimentary: 'Complimentary',
+}
 
 function fmt(d: string | null): string {
   return d ? formatDateShort(d) : '—'
@@ -223,7 +233,7 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
                   </Field>
                   <Field label="Status" labelSize="small">
                     <Select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                     </Select>
                   </Field>
                   <Choice checked={editComp} onChange={(e) => setEditComp(e.target.checked)} label="Complimentary" />
@@ -244,7 +254,7 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-brand-blue-dark">{tierName(m)}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${STATUS_CLS[m.renewal_status] ?? 'bg-brand-hairline text-brand-muted-soft'}`}>
-                        {m.renewal_status}
+                        {STATUS_LABEL[m.renewal_status] ?? m.renewal_status}
                       </span>
                     </div>
                     <p className="text-xs text-brand-muted-soft mt-0.5">
@@ -259,7 +269,7 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
                     <button onClick={() => startEdit(m)} title="Edit" className="p-1 text-brand-muted-soft hover:text-brand-blue">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    {m.renewal_status !== 'revoked' && (
+                    {m.renewal_status !== 'cancelled' && (
                       <button onClick={() => remove(m.id)} title="Revoke" className="p-1 text-brand-muted-soft hover:text-red-600">
                         <X className="h-4 w-4" />
                       </button>

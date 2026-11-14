@@ -26,7 +26,7 @@ vi.mock('@/lib/docusign-reissue', () => ({ reissueParticipantAgreement: (...a: u
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async () => ({ title: 'CO SDC', date: '2026-10-03', venue: 'STEM School' }) }))
 vi.mock('./audiences', () => ({ resolveAudience }))
 
-const { sendEventEmail, reclaimStuckSending } = await import('./send')
+const { sendEventEmail, reclaimStuckSending, sendableRecipients } = await import('./send')
 const { markdownToTiptap } = await import('./defaults')
 
 const EMAIL = {
@@ -311,5 +311,54 @@ describe('reclaimStuckSending', () => {
     expect(out).toMatchObject({ reclaimed: 0 })
     expect(sendEmail).not.toHaveBeenCalled()
     expect(db.state.row.status).toBe('sending')
+  })
+})
+
+// member-merge-school-email.12: Resend refused `to: none` from this cron. An
+// address that cannot be an email is left out before anything is sent, and the
+// log gives a count, never the address.
+describe('recipients with no valid email address', () => {
+  it('sendableRecipients keeps real addresses and logs only how many were skipped', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const list = [
+      R('a@example.com', 'Al'), R('none', 'Guardian'), R('', 'Blank'), R('no-at-sign.example.com', 'NoAt'),
+      R('two@@example.com', 'Two'), R('  ', 'Space'), { ...R('x', 'Missing'), email: undefined as unknown as string },
+    ]
+    expect(sendableRecipients(list, 'e1').map((r) => r.email)).toEqual(['a@example.com'])
+    expect(warn).toHaveBeenCalledTimes(1)
+    const line = String(warn.mock.calls[0][0])
+    expect(line).toContain('skipped 6 recipient(s)')
+    expect(line).toContain('e1')
+    expect(line).not.toContain('none')
+    expect(line).not.toContain('no-at-sign')
+    warn.mockClear()
+    sendableRecipients([R('b@example.com', 'Bo')], 'e1')
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('the cron’s send skips "none", empty and @-less addresses and records only the real ones', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    resolveAudience.mockResolvedValue({
+      recipients: [R('a@example.com', 'Al'), R('none', 'Guardian'), R('', 'Blank'), R('bo-at-example.com', 'Bo')],
+      docusignParticipantIds: [],
+    })
+    const db = fakeDb({ ...EMAIL, resend_docusign: false })
+    const out = await sendEventEmail(db as never, 'e1', { trigger: 'schedule', spacingMs: 0 })
+    expect(out).toMatchObject({ ok: true, recipients: 1, sent: 1, failed: 0 })
+    expect(sendEmail.mock.calls.map((c) => c[0].to)).toEqual(['a@example.com'])
+    expect(db.state.sends[0]).toMatchObject({ recipient_count: 1, sent_count: 1, failed_count: 0 })
+    expect(JSON.stringify(db.state.sends)).not.toContain('"none"')
+    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual(['[event-emails] email e1: skipped 3 recipient(s) with no valid email address'])
+    warn.mockRestore()
+  })
+
+  it('a manual send whose only recipients are invalid sends nothing and says so', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    resolveAudience.mockResolvedValue({ recipients: [R('none', 'Guardian')], docusignParticipantIds: [] })
+    const db = fakeDb({ ...EMAIL, status: 'draft', resend_docusign: false })
+    const out = await sendEventEmail(db as never, 'e1', { trigger: 'manual', spacingMs: 0 })
+    expect(out).toMatchObject({ ok: false, status: 400 })
+    expect(sendEmail).not.toHaveBeenCalled()
   })
 })

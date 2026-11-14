@@ -10,7 +10,7 @@ import type { NativeRecipient } from '@/lib/esign/native/flow'
 import { escapeHtml } from '@/lib/email-layout'
 import { announceBounces } from '@/lib/esign/bounce-notices'
 import { maskEmail } from '@/lib/utils'
-import { isTenantRow, loadTenantSender, loadTenantSenders, tenantEventMailEnabled, type EventSender } from '@/lib/event-emails/tenant-mail'
+import { isTenantRow, loadTenantSender, loadTenantSenders, readTenantSenders, tenantEventMailEnabled, type EventSender } from '@/lib/event-emails/tenant-mail'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { STELLR_OR_NULL } from '@/lib/tenancy/stellr-scope'
 
@@ -422,4 +422,41 @@ export async function outboxDepth(db: SupabaseClient): Promise<number> {
     .in('envelope.status', ['sent', 'delivered'])
     .or(STELLR_OR_NULL, { referencedTable: 'envelope' })
   return count ?? 0
+}
+
+/**
+ * Other tenants' signing invitations held for want of a sender (B14b's admin
+ * count): signers waiting in the outbox whose envelope belongs to a tenant with
+ * no usable sender. drainOutbox neither reads nor counts these, so without this
+ * they wait unseen. A count only: no names, addresses or tenant details.
+ *
+ * Null when the flag is off (tenant signing mail is off altogether, so nothing
+ * is held for a sender and nothing new is shown) or when the count cannot be
+ * read. Never throws.
+ */
+export async function heldSigningInvites(db: SupabaseClient): Promise<number | null> {
+  if (!tenantEventMailEnabled()) return null
+  try {
+    // readTenantSenders throws on a failed read: an empty map here would count
+    // every tenant's waiting signers as held.
+    const senders = await readTenantSenders(db)
+    const query = db
+      .from('agreement_recipients')
+      .select('id, envelope:agreements!inner(provider, status, tenant_id)', { count: 'exact', head: true })
+      .eq('status', 'sent')
+      .is('invite_sent_at', null)
+      .eq('envelope.provider', 'native')
+      .in('envelope.status', ['sent', 'delivered'])
+      .not('envelope.tenant_id', 'is', null)
+      .neq('envelope.tenant_id', STELLR_TENANT_ID)
+    // Tenant ids are uuids from our own table, so they are safe in the list.
+    const { count, error } = senders.size
+      ? await query.not('envelope.tenant_id', 'in', `(${[...senders.keys()].join(',')})`)
+      : await query
+    if (error) throw new Error(error.message)
+    return count ?? 0
+  } catch (err) {
+    console.error('[esign-outbox] held invitations count failed:', err instanceof Error ? err.message : err)
+    return null
+  }
 }

@@ -412,18 +412,39 @@ async function issueOrReuse(
     // be re-issued, and nothing treats it as in flight.
     await recordIssueFailure(db, ctx, type, message)
 
-    await notifyCommunityAdmins({
-      type: 'action',
-      body: `No ${label} could be issued for ${who} (${ctx.eventTitle}) — ${reason}. Registration succeeded but the participant has NO paperwork on file. ${fix}`,
-      referenceType: 'participant',
-      referenceId: ctx.participantId ?? undefined,
-      email: {
-        subject: `Action needed: no ${label} issued for ${who}`,
-        html: `<p><strong>${esc(who)}</strong> (${esc(ctx.email)}) registered for <strong>${esc(ctx.eventTitle)}</strong>, but no ${esc(label)} could be issued — ${esc(reason)}.</p><p>The registration went through. The participant currently has <strong>no paperwork on file</strong>.</p><p>${esc(fix)}</p>`,
-        text: `${who} (${ctx.email}) registered for ${ctx.eventTitle}, but no ${label} could be issued — ${reason}. The registration went through; the participant has no paperwork on file. ${fix}`,
-      },
-    }).catch(() => {})
+    await notifyCommunityAdmins(issueFailureAlert({ label, who, email: ctx.email, eventTitle: ctx.eventTitle, reason, fix, participantId: ctx.participantId })).catch(() => {})
     return { outcome: 'failed' }
+  }
+}
+
+/**
+ * The admin alert for an agreement that could not be issued (TRACKER 22.6).
+ * It says only what is known when it is raised: which agreement failed, for
+ * whom and why, and that the checks just run found none of that kind signed or
+ * out for signature. It makes no claim about the caller (a registration, an
+ * admin's Issue, an event assignment), so it is true on every path. Admin-facing.
+ */
+export function issueFailureAlert(input: {
+  label: string
+  who: string
+  email: string
+  eventTitle: string
+  reason: string
+  fix: string
+  participantId?: string | null
+}) {
+  const { label, who, email, eventTitle, reason, fix } = input
+  const known = `No signed ${label} has been found for them yet, and none is out for signature.`
+  return {
+    type: 'action' as const,
+    body: `No ${label} could be issued for ${who} (${eventTitle}): ${reason}. ${known} ${fix}`,
+    referenceType: 'participant',
+    referenceId: input.participantId ?? undefined,
+    email: {
+      subject: `Action needed: no ${label} issued for ${who}`,
+      html: `<p>No ${esc(label)} could be issued for <strong>${esc(who)}</strong> (${esc(email)}) for <strong>${esc(eventTitle)}</strong>: ${esc(reason)}.</p><p>${esc(known)}</p><p>${esc(fix)}</p>`,
+      text: `No ${label} could be issued for ${who} (${email}) for ${eventTitle}: ${reason}. ${known} ${fix}`,
+    },
   }
 }
 

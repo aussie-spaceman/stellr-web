@@ -27,6 +27,7 @@ import { MAX_RECIPIENTS_PER_SEND, type EventEmailRow, type EventEmailStatus } fr
 import { isTenantRow, TENANT_SENDER_REQUIRED, type EventSender } from './tenant-mail'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { surveySendsHeld } from '@/lib/survey/hold'
+import { isValidEmail } from '@/lib/member-enums'
 
 // S5 B14: defined in tenant-mail.ts since the signing engine refuses with it too.
 export { TENANT_SENDER_REQUIRED }
@@ -34,6 +35,20 @@ export { TENANT_SENDER_REQUIRED }
 /** Does a row's tenant_id file it under this tenant? NULL counts as Stellr's, as derivation stamps. */
 export function rowInTenant(rowTenantId: string | null | undefined, tenantId: string): boolean {
   return (rowTenantId ?? STELLR_TENANT_ID) === tenantId
+}
+
+/**
+ * Recipients whose address could be an email (member-merge-school-email.12). A
+ * guardian typed as "none", a blank, or an address with no @ is left out before
+ * anything is claimed, recorded or sent: Resend refuses it anyway, and each
+ * refusal is a failed row in History and a wasted call. Logs how many were left
+ * out and for which email, never the addresses themselves.
+ */
+export function sendableRecipients<T extends { email: string | null | undefined }>(recipients: T[], emailId: string): T[] {
+  const ok = recipients.filter((r) => isValidEmail(r.email))
+  const skipped = recipients.length - ok.length
+  if (skipped) console.warn(`[event-emails] email ${emailId}: skipped ${skipped} recipient(s) with no valid email address`)
+  return ok
 }
 
 /** Resend's default limit is 2 requests/second per team. */
@@ -190,7 +205,7 @@ export async function sendEventEmail(
       // S5 wave 6: another tenant's email leaves out its consent-pending participants.
       ...(isTenantRow(email.tenant_id) ? { tenantId: email.tenant_id } : {}),
     })
-    let recipients: ResolvedRecipient[] = audience.recipients
+    let recipients: ResolvedRecipient[] = sendableRecipients(audience.recipients, email.id)
 
     // deep review INT-1: skip anyone a prior (non-test) send of this email
     // already tried. For a fresh send this set is empty; for a resumed stuck

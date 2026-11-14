@@ -158,10 +158,7 @@ const WEBHOOKS: Record<string, { how: string; pattern: RegExp }> = {
   'app/api/webhooks/motion/route.ts': { how: 'HMAC, constant-time compare', pattern: /timingSafeEqual/ },
   'app/api/webhooks/apollo/route.ts': { how: 'shared secret, constant-time compare', pattern: /timingSafeEqual/ },
   'app/api/webhooks/sanity/route.ts': { how: 'shared secret; refused when unset', pattern: /SANITY_REVALIDATE_SECRET/ },
-  'app/api/webhooks/google-sheets/route.ts': {
-    how: 'acts only on a channel id it registered (sheet_watch_channels), unexpired',
-    pattern: /sheet_watch_channels/,
-  },
+  'app/api/webhooks/google-sheets/route.ts': { how: 'per-channel token, constant-time compare', pattern: /safeStrEqual/ },
   'app/api/stripe/webhook/route.ts': { how: 'Stripe signature', pattern: /constructEvent/ },
   'app/api/printful/webhook/route.ts': { how: 'shared secret', pattern: /verifyPrintfulWebhook/ },
 }

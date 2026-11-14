@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { agreementValid } from '@/lib/docusign-agreements'
 import { relabelIssuedAward } from '@/lib/event-awards'
 import { isMinorPerPolicy, type MinorFacts } from '@/lib/minor-policy'
-import { isKnownMinorOn } from '@/lib/age'
+import { appToday, isKnownMinorOn, isValidDob, onDate } from '@/lib/age'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import {
   CREDENTIAL_COLUMNS,
@@ -66,6 +66,26 @@ export async function consentForMinor(
   who: { memberId: string | null; participantId: string | null },
   now = new Date(),
 ): Promise<Exclude<ShareConsent, 'not_required'>> {
+  // Fail CLOSED on any read error (deep review QUAL-5). This value gates whether
+  // a minor's credential may be made public against a guardian's recorded
+  // opt-out. A discarded error used to read as "no agreement", which the caller
+  // treats as unprotected; a transient 5xx while publishing could then expose a
+  // child whose guardian had declined. Any error → 'none' (no consent on
+  // record), which blocks publication rather than permitting it.
+  const consent = await readMinorConsent(db, who, now)
+  return consent === 'unreadable' ? 'none' : consent
+}
+
+/**
+ * consentForMinor, with a failed read told apart ('unreadable') rather than
+ * folded into 'none'. For the daily sweep (lib/credential-minor-sweep), which
+ * skips a holder it cannot read instead of unpublishing on a transient error.
+ */
+export async function readMinorConsent(
+  db: SupabaseClient,
+  who: { memberId: string | null; participantId: string | null },
+  now = new Date(),
+): Promise<Exclude<ShareConsent, 'not_required'> | 'unreadable'> {
   if (!who.memberId && !who.participantId) return 'none'
 
   const filters = [
@@ -82,13 +102,7 @@ export async function consentForMinor(
     .order('completed_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  // Fail CLOSED on any read error (deep review QUAL-5). This value gates whether
-  // a minor's credential may be made public against a guardian's recorded
-  // opt-out. A discarded error used to read as "no agreement", which the caller
-  // treats as unprotected; a transient 5xx while publishing could then expose a
-  // child whose guardian had declined. Any error → 'none' (no consent on
-  // record), which blocks publication rather than permitting it.
-  if (error) return 'none'
+  if (error) return 'unreadable'
   if (!data?.completed_at) return 'none'
   if (!agreementValid(data, now)) return 'none'
 
@@ -102,7 +116,8 @@ export async function consentForMinor(
       .select('credential_sharing_opt_out')
       .eq('id', data.reused_from)
       .maybeSingle()
-    if (rootError || !root) return 'none'
+    if (rootError) return 'unreadable'
+    if (!root) return 'none'
     optOut = optOut || Boolean(root.credential_sharing_opt_out)
   }
   return optOut ? 'declined' : 'granted'
@@ -116,26 +131,60 @@ export async function consentForMinor(
 // or guardian, and a public page needed no guardian's consent.
 
 /**
+ * The school year a date falls in, named by the calendar year it starts in.
+ * July onward is the next school year: lib/grade-logic's rollover month.
+ */
+export function schoolYearOf(date: Date | string): number {
+  const d = onDate(date)
+  return d.getUTCMonth() + 1 >= 7 ? d.getUTCFullYear() : d.getUTCFullYear() - 1
+}
+
+/**
+ * Whether a grade or age bracket recorded at `recordedAt` still describes this
+ * school year (legal-credential-family-link.5). Nothing rolls a member's grade
+ * over reliably, so a record last written in an earlier school year says where
+ * the person WAS, not that they are still in school. No timestamp at all keeps
+ * the record: that reads it as current, which is the cautious way for a page
+ * (a Minor needs consent) and is how every record was read before.
+ */
+export function gradeIsCurrent(recordedAt: string | null | undefined, today: Date = appToday()): boolean {
+  if (!recordedAt || !/^\d{4}-\d{2}-\d{2}/.test(recordedAt)) return true
+  return schoolYearOf(recordedAt) >= schoolYearOf(today)
+}
+
+/**
  * The facts the policy's Minor definition turns on (lib/minor-policy), read
  * from the holder's records: date of birth, grade, age bracket, and the
  * school's state standing in for the home state. Member first, then the
  * participant row, field by field. Null when a read fails, so callers can
  * fail closed.
+ *
+ * When a date of birth is known, a grade or age bracket recorded in an earlier
+ * school year is left out, as unknown (legal-credential-family-link.5): a
+ * member's row is dated by its updated_at, a participant's by when they
+ * registered. The date of birth then decides on its own. With no usable date
+ * of birth the grade and bracket are kept, stale or not: they are then the only
+ * sign of a student, and the email and the permanent is_minor read an unknown
+ * date of birth as "not a Minor" (minorPerPolicyIfDobKnown), so dropping them
+ * would turn a no-DOB student into an adult. A page stays private either way
+ * (ageBlock: dob_unknown). `opts.dateOfBirth` is a date of birth the caller
+ * already holds; it counts as known even when the records have none.
  */
 export async function holderMinorFacts(
   db: SupabaseClient,
   who: { memberId: string | null; participantId: string | null },
+  opts: { dateOfBirth?: string | null } = {},
 ): Promise<MinorFacts | null> {
   const [m, ms, p] = await Promise.all([
     who.memberId
-      ? db.from('members').select('date_of_birth, grade, age_bracket').eq('id', who.memberId).maybeSingle()
+      ? db.from('members').select('date_of_birth, grade, age_bracket, updated_at').eq('id', who.memberId).maybeSingle()
       : null,
     who.memberId
       ? db.from('member_schools').select('is_current, schools(state)').eq('member_id', who.memberId)
           .order('is_current', { ascending: false }).limit(1)
       : null,
     who.participantId
-      ? db.from('participants').select('date_of_birth, grade, age_bracket, registrations(school_address_state)')
+      ? db.from('participants').select('date_of_birth, grade, age_bracket, created_at, registrations(school_address_state)')
           .eq('id', who.participantId).maybeSingle()
       : null,
   ])
@@ -143,13 +192,18 @@ export async function holderMinorFacts(
 
   type Person = { date_of_birth?: string | null; grade?: string | null; age_bracket?: string | null }
   const one = <T,>(v: unknown) => (Array.isArray(v) ? v[0] : v) as T | null | undefined
-  const mem = (m?.data ?? null) as Person | null
-  const part = (p?.data ?? null) as (Person & { registrations?: unknown }) | null
+  const mem = (m?.data ?? null) as (Person & { updated_at?: string | null }) | null
+  const part = (p?.data ?? null) as (Person & { created_at?: string | null; registrations?: unknown }) | null
   const school = one<{ schools?: unknown }>(ms?.data)?.schools
+  const dateOfBirth = mem?.date_of_birth ?? part?.date_of_birth ?? null
+  const dobKnown = isValidDob(opts.dateOfBirth ?? dateOfBirth)
+  const today = appToday()
+  const memCurrent = !dobKnown || gradeIsCurrent(mem?.updated_at, today)
+  const partCurrent = !dobKnown || gradeIsCurrent(part?.created_at, today)
   return {
-    dateOfBirth: mem?.date_of_birth ?? part?.date_of_birth ?? null,
-    grade:       mem?.grade ?? part?.grade ?? null,
-    ageBracket:  mem?.age_bracket ?? part?.age_bracket ?? null,
+    dateOfBirth,
+    grade:       (memCurrent ? mem?.grade : null) ?? (partCurrent ? part?.grade : null) ?? null,
+    ageBracket:  (memCurrent ? mem?.age_bracket : null) ?? (partCurrent ? part?.age_bracket : null) ?? null,
     state:       one<{ state?: string | null }>(school)?.state
                    ?? one<{ school_address_state?: string | null }>(part?.registrations)?.school_address_state
                    ?? null,
@@ -168,7 +222,7 @@ export async function holderIsMinor(
 ): Promise<boolean> {
   if (c.is_minor) return true
   const known = 'date_of_birth' in c ? (c.date_of_birth ?? null) : null
-  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id })
+  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id }, { dateOfBirth: known })
   if (!facts) return isKnownMinorOn(known)
   return minorPerPolicyIfDobKnown({ ...facts, dateOfBirth: known ?? facts.dateOfBirth })
 }
@@ -198,13 +252,41 @@ export async function shareConsentFor(
   db: SupabaseClient,
   c: CredentialRow & { date_of_birth?: string | null },
 ): Promise<ShareConsent> {
-  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id })
+  return (await resolveShareConsent(db, c, false)) as ShareConsent
+}
+
+/**
+ * shareConsentFor for the daily sweep (lib/credential-minor-sweep): the same
+ * rule, but a failed read of the holder's records or of the consent answers
+ * 'unreadable' instead of being folded into "needs consent". The sweep skips
+ * that holder and records the error, so a transient outage cannot take down
+ * every consented page in one run. (The public page already re-checks consent
+ * on every view, publicShareAllowed, so a skipped page shows no name meanwhile.)
+ */
+export async function shareConsentOrUnreadable(
+  db: SupabaseClient,
+  c: Pick<CredentialRow, 'member_id' | 'participant_id' | 'is_minor'> & { date_of_birth?: string | null },
+): Promise<ShareConsent | 'unreadable'> {
+  return resolveShareConsent(db, c, true)
+}
+
+async function resolveShareConsent(
+  db: SupabaseClient,
+  c: Pick<CredentialRow, 'member_id' | 'participant_id' | 'is_minor'> & { date_of_birth?: string | null },
+  strict: boolean,
+): Promise<ShareConsent | 'unreadable'> {
+  const who = { memberId: c.member_id, participantId: c.participant_id }
+  const known = 'date_of_birth' in c ? (c.date_of_birth ?? null) : null
+  const facts = await holderMinorFacts(db, who, { dateOfBirth: known })
+  if (!facts && strict) return 'unreadable'
   const dob = 'date_of_birth' in c ? (c.date_of_birth ?? null) : (facts?.dateOfBirth ?? null)
   const blocked = ageBlock(dob)
   if (blocked) return blocked
   const minor = c.is_minor || !facts || isMinorPerPolicy({ ...facts, dateOfBirth: dob })
   if (!minor) return 'not_required'
-  return consentForMinor(db, { memberId: c.member_id, participantId: c.participant_id })
+  const consent = await readMinorConsent(db, who)
+  if (consent === 'unreadable') return strict ? 'unreadable' : 'none'
+  return consent
 }
 
 // ── Issue / revoke / visibility ──────────────────────────────────────────────
@@ -336,7 +418,11 @@ export async function issueCredential(
   // Minor per the policy, not just under 18 (holderMinorFacts). If the records
   // cannot be read, fall back to the DOB alone rather than storing a guess:
   // the consent check and the email re-read the records anyway.
-  const facts = await holderMinorFacts(db, { memberId: input.memberId ?? null, participantId: input.participantId ?? null })
+  const facts = await holderMinorFacts(
+    db,
+    { memberId: input.memberId ?? null, participantId: input.participantId ?? null },
+    { dateOfBirth: input.recipient.dateOfBirth ?? null },
+  )
   const isMinor = facts
     ? minorPerPolicyIfDobKnown({ ...facts, dateOfBirth: input.recipient.dateOfBirth ?? facts.dateOfBirth })
     : isKnownMinorOn(input.recipient.dateOfBirth)
@@ -492,10 +578,14 @@ export async function setVisibility(
  * the intended outcome here: the family has asked for the name to come down.
  * Returns the rows that changed so the caller can tell the family. With a tenant,
  * only that tenant's credentials change or count; with none, every one the person holds.
+ * Also the daily sweep's write (lib/credential-minor-sweep), for a holder who is a
+ * Minor under the policy with no consent that permits a public page; it passes
+ * throwOnError so a failed write is counted rather than only logged.
  */
 export async function unpublishCredentialsFor(
   db: SupabaseClient,
   who: { memberId: string | null; participantId: string | null; tenant?: { value: string; includeNull: boolean } | null },
+  opts: { throwOnError?: boolean } = {},
 ): Promise<CredentialRow[]> {
   const filters = [
     who.memberId ? `member_id.eq.${who.memberId}` : null,
@@ -514,7 +604,11 @@ export async function unpublishCredentialsFor(
       ? scoped.or(`tenant_id.eq.${who.tenant.value},tenant_id.is.null`)
       : scoped.eq('tenant_id', who.tenant.value)
   const { data, error } = await inTenant.select(CREDENTIAL_COLUMNS)
-  if (error) console.error('[credentials] unpublish failed:', error.message)
+  if (error) {
+    // The sweep counts a failed write as an error for its cron run.
+    if (opts.throwOnError) throw new Error(`[credentials] unpublish failed: ${error.message}`)
+    console.error('[credentials] unpublish failed:', error.message)
+  }
   return (data ?? []) as CredentialRow[]
 }
 

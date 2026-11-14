@@ -1,14 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isMinorOn } from '@/lib/age'
-import { denormalizeGrade } from '@/lib/member-enums'
+import { denormalizeGrade, normalizeEmail } from '@/lib/member-enums'
 import { agreementValid, dispatchTyped, type DispatchResult } from '@/lib/docusign-agreements'
+import { holderMinorFacts } from '@/lib/credentials'
+import { isMinorPerPolicy } from '@/lib/minor-policy'
+import { GUARDIAN_RELATIONSHIPS } from '@/lib/pending-consent'
+import type { MembershipPlanParams } from '@/lib/esign/native/plan'
 
 // The Membership Agreement, for people who join Stellr without first attending
 // an event (self-serve sign-up, an admin invite, /join). Always issued on
 // Stellr signing: it never spends a DocuSign envelope. An adult signs it
-// themselves; for an under-18, their parent or guardian signs first and then
-// the member. A Minor signs the Student / Minor agreement (V2.3), which covers
-// membership and every event, and is recorded as one.
+// themselves; for a Minor, their parent or guardian signs first and then the
+// member. A Minor signs the Student / Minor agreement (V2.3), which covers
+// membership and every event, and is recorded as one. "Minor" is the policy's
+// (Privacy Policy §2; legal-credential-family-link.7), read the way credentials
+// read it (holderMinorFacts + isMinorPerPolicy): under the age of majority in
+// their school's state, or still in school. Until 14 Nov 2026 this was under 18
+// alone, so an 18-year-old in Nebraska or still in high school signed the adult
+// document and their credential pages could never go public.
 //
 // Defaults agreed in the plan (docs/PLAN-esign-2026-10-02.md §7):
 //  • not issued while a valid signed event agreement is on file;
@@ -74,12 +83,36 @@ export async function dispatchMembershipAgreement(db: SupabaseClient, memberId: 
   if (await agreementOnFile(db, member.id)) return { outcome: 'on_file' }
   if (await agreementInFlight(db, member.id)) return { outcome: 'in_flight' }
 
-  const minor = isMinorOn(member.date_of_birth)
+  const { minor, state } = await membershipMinor(db, member)
   const guardianName = [member.ec_first_name, member.ec_last_name].filter(Boolean).join(' ').trim()
-  if (minor && (!member.ec_email || !guardianName)) {
-    // Onboarding requires the guardian's details for an under-18, so this is
-    // a record created another way. Nothing can be issued without them.
+  if (minor && !hasGuardianContact(member, guardianName)) {
+    // A Minor's emergency contact signs first, as their parent or guardian, so
+    // it has to be one: a Parent or Legal Guardian, with a name and an email
+    // that is not the member's own. Onboarding insists on that only for an
+    // under-18 registering themselves; an 18-to-20-year-old who is a Minor by
+    // their state, or a student 18 or over, may have given a partner, sibling
+    // or friend, who must not be sent the member's agreement to sign as their
+    // guardian. Nothing is issued until staff record the guardian (members.id
+    // only in the log).
+    console.warn(`[membership] member ${member.id} is a Minor with no parent or guardian contact on file; agreement not issued`)
     return { outcome: 'not_required' }
+  }
+
+  // The member's state rides along so the native plan applies the same rule
+  // (lib/esign/native/plan, MembershipPlanParams).
+  const membership: Omit<MembershipPlanParams, 'firstName' | 'lastName' | 'email' | 'phone'> = {
+    memberId: member.id,
+    dateOfBirth: member.date_of_birth ?? undefined,
+    ...(state ? { state } : {}),
+    ...(minor
+      ? {
+          grade: member.grade ? (denormalizeGrade(member.grade) ?? member.grade) : undefined,
+          guardianName,
+          guardianEmail: member.ec_email ?? undefined,
+          guardianPhone: member.ec_phone ?? undefined,
+          relationship: member.ec_relationship ?? undefined,
+        }
+      : {}),
   }
 
   return dispatchTyped(
@@ -96,20 +129,42 @@ export async function dispatchMembershipAgreement(db: SupabaseClient, memberId: 
       dateOfBirth: member.date_of_birth,
     },
     'membership',
-    {
-      memberId: member.id,
-      dateOfBirth: member.date_of_birth ?? undefined,
-      ...(minor
-        ? {
-            grade: member.grade ? (denormalizeGrade(member.grade) ?? member.grade) : undefined,
-            guardianName,
-            guardianEmail: member.ec_email ?? undefined,
-            guardianPhone: member.ec_phone ?? undefined,
-            relationship: member.ec_relationship ?? undefined,
-          }
-        : {}),
-    },
+    membership,
   )
+}
+
+/**
+ * Whether the member's emergency contact can sign as their parent or guardian:
+ * a Parent or Legal Guardian (lib/pending-consent, the rule onboarding applies
+ * to a self-registered under-18), with a name and an email that differs from
+ * the member's own.
+ */
+function hasGuardianContact(
+  member: Pick<MemberForAgreement, 'email' | 'ec_email' | 'ec_relationship'>,
+  guardianName: string,
+): boolean {
+  if (!guardianName || !member.ec_email) return false
+  if (!(GUARDIAN_RELATIONSHIPS as readonly string[]).includes(String(member.ec_relationship ?? '').trim())) return false
+  const own = normalizeEmail(member.email)
+  return !own || normalizeEmail(member.ec_email) !== own
+}
+
+/**
+ * Whether the member signs as a Minor, and their school's state, read as
+ * credentials read them (holderMinorFacts: with a date of birth known, a grade
+ * or bracket from an earlier school year counts as unknown). If the records cannot be read, under 18 by
+ * the date of birth decides, with an unknown date presumed a Minor, as before.
+ */
+export async function membershipMinor(
+  db: SupabaseClient,
+  member: Pick<MemberForAgreement, 'id' | 'date_of_birth'>,
+): Promise<{ minor: boolean; state: string | null }> {
+  const facts = await holderMinorFacts(db, { memberId: member.id, participantId: null }, { dateOfBirth: member.date_of_birth })
+  if (!facts) return { minor: isMinorOn(member.date_of_birth), state: null }
+  return {
+    minor: isMinorPerPolicy({ ...facts, dateOfBirth: member.date_of_birth ?? facts.dateOfBirth }),
+    state: facts.state ?? null,
+  }
 }
 
 /** Whether this member still owes the membership agreement: nothing signed, nothing in flight. */

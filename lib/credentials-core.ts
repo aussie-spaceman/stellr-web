@@ -176,3 +176,36 @@ export function canShare(
 export function publicShareAllowed(visibility: CredentialVisibility, consent: ShareConsent): boolean {
   return visibility === 'public' && (consent === 'not_required' || consent === 'granted')
 }
+
+// ── Who the issued email goes to ─────────────────────────────────────────────
+
+/**
+ * Where the "you've earned a credential" email goes (Privacy Policy §7.4: a
+ * Minor's email "goes to their parent or legal guardian"). An adult hears
+ * directly. A Minor's guardian is the addressee, with the Minor copied when
+ * they have an address. A Minor with no guardian name and email on file is
+ * held (legal-credential-family-link.6): the email is not sent to the Minor
+ * instead, and the caller tells staff so they can add the guardian and resend.
+ * Nobody to write to at all is 'none'.
+ *
+ * Not wired in yet: lib/credentials-notify still sends the Minor's email
+ * directly. Its staff alert (lib/notify) would add an import edge the tenant
+ * surface ratchet (test/tenant-surface.test.ts) refuses without an owner-reviewed
+ * baseline change, so the wiring waits for that decision.
+ */
+export type IssuedEmailRoute =
+  | { kind: 'guardian'; to: string; cc: string | null }
+  | { kind: 'direct'; to: string }
+  | { kind: 'hold' }
+  | { kind: 'none' }
+
+export function issuedEmailRoute(
+  isMinor: boolean,
+  to: { email: string | null; guardianEmail?: string | null; guardianFirstName?: string | null },
+): IssuedEmailRoute {
+  if (isMinor) {
+    if (!to.guardianEmail || !to.guardianFirstName) return { kind: 'hold' }
+    return { kind: 'guardian', to: to.guardianEmail, cc: to.email || null }
+  }
+  return to.email ? { kind: 'direct', to: to.email } : { kind: 'none' }
+}

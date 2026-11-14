@@ -57,7 +57,8 @@ const config = {
   // node_modules (test/csp-script-nonces.test.tsx loads Clerk's script-tag
   // module by path) to '/node_modules/…', which fails the initial test run.
   // Stryker keeps the originals in tempDirName and puts them back when done;
-  // if a local run is killed, the next run restores them first.
+  // if a local run is killed, the next run restores them first. The backups
+  // include rewritten test files, so vitest.config.mts excludes .stryker-tmp.
   inPlace: true,
   // The initial run executes every test related to the mutated files; on a
   // 4-vCPU runner that can pass the 5-minute default.

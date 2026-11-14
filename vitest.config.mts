@@ -12,7 +12,11 @@ export default defineConfig({
     // in there ran and reported ~130 failing files (21 Sept 2026).
     // test/integration needs a real database: CI's tenant-db job runs it with
     // vitest.integration.config.mts.
-    exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next', 'test/integration/**'],
+    // .stryker-tmp/**: Stryker runs in place (stryker.config.mjs) and backs up
+    // every file it rewrites, test files included, under .stryker-tmp/backup-*;
+    // without this the mutation run's initial test run also ran those copies,
+    // which then failed on relative paths and missing file snapshots.
+    exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next', 'test/integration/**', '.stryker-tmp/**'],
     // Building a jsdom per file was 44% of the suite's summed time (4 Nov 2026),
     // and most *.test.ts files never touch a DOM. Component tests (*.test.tsx)
     // keep jsdom. A *.test.ts file that needs one says so on its first line:

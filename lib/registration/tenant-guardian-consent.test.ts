@@ -448,15 +448,30 @@ describe('the retry cap (s5-programme.26)', () => {
     expect(notifyStaff).toHaveBeenCalledTimes(1)
   })
 
-  it('with no staff alert passed, the row is still marked and escalated, and the log carries ids only', async () => {
+  it('with no staff alert passed, the cap does not escalate: the row is rescheduled as before, and the log carries ids only', async () => {
     arrangeRetries([{ ...ROW, status: 'declined', removal_attempts: 4 }])
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn() })
-    expect(r.escalated).toEqual(['tgc-1'])
-    expect(rec.calls.filter((c) => c.op === 'update').at(-1)!.payload).toMatchObject({ escalated_at: NOW.toISOString() })
+    expect(r).toMatchObject({ removed: [], escalated: [], errors: [] })
+    const updates = rec.calls.filter((c) => c.table === 'tenant_guardian_consents' && c.op === 'update')
+    expect(updates.some((c) => 'escalated_at' in (c.payload as object))).toBe(false)
+    expect(updates.at(-1)!.payload).toEqual({ removal_attempts: 5, next_attempt_at: new Date(NOW.getTime() + 20 * 3600_000).toISOString() })
+    expect(updates.at(-1)!.filters).toEqual(expect.arrayContaining([['eq', 'id', 'tgc-1']]))
     const logged = errors.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
     expect(logged).toContain('tgc-1')
+    expect(logged).toContain('no staff alert is wired')
     expect(logged).not.toContain(PARTICIPANT.email)
+    expect(logged).not.toContain(PARTICIPANT.first_name)
+    errors.mockRestore()
+  })
+
+  it('with no staff alert passed, a row well past the cap is still retried each run', async () => {
+    arrangeRetries([{ ...ROW, status: 'expired', removal_attempts: 9 }])
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await sweepTenantGuardianConsents(db, { now: NOW, deleteRegistration: failing(), voidEnvelope: vi.fn() })
+    expect(r.escalated).toEqual([])
+    const last = rec.calls.filter((c) => c.table === 'tenant_guardian_consents' && c.op === 'update').at(-1)!
+    expect(last.payload).toEqual({ removal_attempts: 10, next_attempt_at: new Date(NOW.getTime() + 20 * 3600_000).toISOString() })
     errors.mockRestore()
   })
 

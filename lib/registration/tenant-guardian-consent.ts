@@ -74,7 +74,9 @@ export const REMOVAL_RETRY_MS = 20 * 60 * 60 * 1000
 /**
  * Failed removals before the sweep stops retrying a row (tracker s5-programme.26).
  * The row is then marked escalated_at, staff are alerted once, and the participant
- * stays held from check-in and event mail until someone removes it.
+ * stays held from check-in and event mail until someone removes it. The cap takes
+ * effect only when a staff alert is wired (RemovalOptions.notifyStaff): without one,
+ * the row keeps being retried, as before the cap, so it is never left with nobody told.
  */
 export const MAX_REMOVAL_ATTEMPTS = 5
 
@@ -534,7 +536,8 @@ export interface RemovalOptions {
    * this module is reachable from a tenant host's register route, and a tenant host
    * may not reach lib/notify (test/tenant-surface.test.ts, whose baseline only
    * falls). The sweep's caller, the membership-expiry cron, runs on Stellr's side.
-   * Without it the escalation is still marked (escalated_at) and logged with ids.
+   * Without it nothing is escalated: a removal past MAX_REMOVAL_ATTEMPTS keeps being
+   * rescheduled, and each failure logs (ids only) that the cap waits on an alert.
    */
   notifyStaff?: typeof notifyCommunityAdmins
   now?: Date
@@ -553,7 +556,7 @@ async function escalateRemoval(
   db: SupabaseClient,
   row: ConsentRow,
   attempts: number,
-  notifyStaff: RemovalOptions['notifyStaff'],
+  notifyStaff: NonNullable<RemovalOptions['notifyStaff']>,
   now: Date,
 ): Promise<'escalated' | 'retry'> {
   const { data, error } = await db
@@ -568,10 +571,6 @@ async function escalateRemoval(
   }
   if (!data?.length) return 'escalated' // already marked, and staff already alerted
   console.error(`[tenant-guardian-consent] removal of registration ${row.registration_id} failed ${attempts} times; consent ${row.id} escalated to staff`)
-  if (!notifyStaff) {
-    console.error(`[tenant-guardian-consent] no staff alert is wired for the sweep; consent ${row.id} (tenant ${row.tenant_id}) is marked escalated_at only`)
-    return 'escalated'
-  }
   const body =
     `Guardian consent: registration ${row.registration_id} could not be removed after ${attempts} attempts, so it is no longer retried. ` +
     `Consent ${row.id}, participant ${row.participant_id}. The participant stays held from check-in and event email until the registration is removed.`
@@ -615,7 +614,12 @@ async function removeUnconsentedRegistration(
   } catch (err) {
     console.error(`[tenant-guardian-consent] removal of registration ${row.registration_id} failed:`, err instanceof Error ? err.message : err)
     const attempts = (row.removal_attempts ?? 0) + 1
-    if (attempts >= MAX_REMOVAL_ATTEMPTS) return escalateRemoval(db, row, attempts, opts.notifyStaff, now)
+    if (attempts >= MAX_REMOVAL_ATTEMPTS) {
+      // Escalate only when someone will be told. With no alert wired, keep retrying:
+      // an escalated row leaves the retry read, and nothing else would clear it.
+      if (opts.notifyStaff) return escalateRemoval(db, row, attempts, opts.notifyStaff, now)
+      console.error(`[tenant-guardian-consent] consent ${row.id} (tenant ${row.tenant_id}) reached the removal cap, but no staff alert is wired for the sweep; rescheduled instead of escalated`)
+    }
     await db
       .from('tenant_guardian_consents')
       .update({ removal_attempts: attempts, next_attempt_at: new Date(now.getTime() + REMOVAL_RETRY_MS).toISOString() })
@@ -637,7 +641,7 @@ export interface ConsentSweepResult {
   held: string[]
   /** Consent envelopes voided because their participant no longer needs consent (agreements ids). */
   voided: string[]
-  /** Removals that failed MAX_REMOVAL_ATTEMPTS times: no longer retried, and staff alerted. */
+  /** Removals that failed MAX_REMOVAL_ATTEMPTS times: no longer retried, and staff alerted. Empty while no alert is wired. */
   escalated: string[]
   errors: Array<{ consentId: string; error: string }>
 }
@@ -647,7 +651,7 @@ export interface ConsentSweepResult {
  * its registration removed, unless the guardian signed (a missed completion, which
  * settles it signed) or is part-way through finalising (held). A declined or
  * expired consent whose removal failed is tried again, up to MAX_REMOVAL_ATTEMPTS,
- * then escalated to staff. A consent envelope left open after a correction to 18 or
+ * then escalated to staff, if a staff alert is passed (otherwise it keeps being retried). A consent envelope left open after a correction to 18 or
  * over settled its pending row, or left from an earlier registration, is voided. Run daily, behind the flag,
  * from the membership-expiry cron.
  */

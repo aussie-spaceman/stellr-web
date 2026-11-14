@@ -31,7 +31,25 @@ A grant runs 3 years from when it starts, and never past the background check's,
 
 ## When something lapses
 
-If a prerequisite stops holding (MFA turned off, the background check expires or is not cleared, the agreement or training lapses), Staff **pauses at once**: the role is removed, every session ends, and they are emailed. It comes back on its own when the prerequisite is restored. The daily `membership-expiry` cron is the backstop for anything a hook missed.
+When a prerequisite stops holding, Staff **pauses**: the grant is suspended, the role is removed (back to Event Manager if they still manage an event in force), every session ends, the `member_roles` 'staff' row goes, and they are emailed. It comes back on its own when the prerequisite is restored.
+
+How soon it pauses depends on what changed.
+
+**At once**, because something reconciles the grant as it happens:
+
+- **MFA, checked on every request.** When someone holding the Staff role makes a request, their session is checked for a second factor (Clerk's factor verification age; when the session doesn't carry it, their account's two-step setting, read at most once a minute). Without one they are treated as not Staff on that request: no Staff capability, no admin portal (the admin pages answer "not found" and the shell sends them to their account page), no event or roster reached through Staff, and no Staff-only agreement downloads. Once roles come from the platform tables (`AUTHZ_SOURCE=postgres`), someone who also holds an Event Manager role keeps the events assigned to them; today, with roles from Clerk, they get nothing until they sign in with a second factor. A session started before they turned MFA on keeps being refused until they sign in again. The check refuses but doesn't pause the grant: that comes from the next item.
+- **MFA turned off on their account.** The Clerk `user.updated` webhook reconciles the grant, and it pauses.
+- **Clearance changes.** Adjudication, a verified or unverified uploaded check or teaching license, and the compliance routes all reconcile the grant.
+
+**At the next daily `membership-expiry` run** (`sweepStaffGrants`), because nothing reconciles the grant when these happen:
+
+- a background check, agreement or training reaching its end date;
+- the grant's own end date (3 years, or the earliest prerequisite);
+- a background check result arriving from the screening provider's webhook, which does not reconcile Staff;
+- a Staff agreement voided, or an unsigned one that the e-sign retention job expires after 30 days. Only an agreement still out for signature can be voided, so this changes a waiting grant's checklist, never an active grant;
+- anything a hook above missed: a webhook that never arrived, or a reconcile that failed.
+
+So a lapsed prerequisite leaves the grant active for a day at most. For MFA, a request without a second factor gets nothing even before the grant pauses.
 
 ## Removing Staff (leavers)
 
@@ -53,6 +71,7 @@ On the day someone leaves, or stops volunteering:
 |---|---|
 | Grants, status, what is missing | `staff_grants` |
 | The training module | `staff_role_settings` |
+| Who holds Staff now, for role lists | `member_roles`, role `staff` (source `staff_grant`): added when a grant starts, removed when it pauses, ends or is removed |
 | Every grant, activation, pause, removal, expiry | the member's activity log, and the audit chain when `PLATFORM_AUDIT_ENABLED` is on |
 | Views of minors' records, roster views, exports | `record_access_log` (append-only, IDs only) |
 

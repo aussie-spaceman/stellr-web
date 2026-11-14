@@ -28,6 +28,7 @@ const {
   clearStaffRole,
   setStaffRole,
   loadTrainingCompletion,
+  STAFF_MEMBER_ROLE_SOURCE,
 } = await import('./staff')
 type StaffFacts = import('./staff').StaffFacts
 type StaffClerk = import('./staff').StaffClerk
@@ -134,6 +135,7 @@ beforeEach(() => {
     event_manager_assignments: [],
     tenant_memberships: [],
     agreements: [],
+    member_roles: [],
   })
 })
 
@@ -225,6 +227,80 @@ describe('grantStaff', () => {
     db.table('staff_grants').push(grantRow())
     const r = await grantStaff(db.client, { memberId: MEMBER, actor: { actorType: 'admin' }, clerk: fakeClerk(null).clerk, now: NOW })
     expect(r).toMatchObject({ ok: false, status: 409 })
+  })
+})
+
+describe('the member_roles mirror (staff-role.P2)', () => {
+  const ACTIVE = { status: 'active', clerk_user_id: CLERK, activated_at: '2026-11-01T00:00:00Z', expires_at: '2028-06-30T23:59:59.999Z' }
+  const staffRows = () => db.table('member_roles').filter((r) => r.member_id === MEMBER && r.role === 'staff')
+  const baseRole = { id: 'r-base', member_id: MEMBER, role: 'member', scope: 'global', object_type: null, object_id: null, source: 'registration' }
+
+  it('activation adds a global staff role, sourced to the grant', async () => {
+    db.table('staff_grants').push(grantRow())
+    db.table('member_roles').push({ ...baseRole })
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'test', clerk: fakeClerk(null).clerk, now: NOW, facts: allMet() })
+    expect(staffRows()).toMatchObject([{ role: 'staff', scope: 'global', object_type: null, object_id: null, source: STAFF_MEMBER_ROLE_SOURCE }])
+    expect(db.table('member_roles').filter((r) => r.role === 'member')).toHaveLength(1)
+  })
+  it('a pending grant that is still missing something adds no role', async () => {
+    db.table('staff_grants').push(grantRow())
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'test', clerk: fakeClerk(null).clerk, now: NOW, facts: allMet({ mfa: false }) })
+    expect(staffRows()).toEqual([])
+  })
+  it('a pause removes it, and leaves their other roles alone', async () => {
+    db.table('staff_grants').push(grantRow(ACTIVE))
+    db.table('member_roles').push({ ...baseRole }, { id: 'r-s', member_id: MEMBER, role: 'staff', scope: 'global', object_type: null, object_id: null, source: STAFF_MEMBER_ROLE_SOURCE })
+    const r = await reconcileStaffGrant(db.client, MEMBER, { reason: 'test', clerk: fakeClerk('staff').clerk, now: NOW, facts: allMet({ mfa: false }) })
+    expect(r.transition).toBe('suspended')
+    expect(staffRows()).toEqual([])
+    expect(db.table('member_roles')).toMatchObject([{ id: 'r-base', role: 'member' }])
+  })
+  it('expiry removes it', async () => {
+    db.table('staff_grants').push(grantRow({ ...ACTIVE, activated_at: '2023-01-01T00:00:00Z', expires_at: '2026-01-01T00:00:00Z' }))
+    db.table('member_roles').push({ id: 'r-s', member_id: MEMBER, role: 'staff', scope: 'global', object_type: null, object_id: null, source: STAFF_MEMBER_ROLE_SOURCE })
+    const r = await reconcileStaffGrant(db.client, MEMBER, { reason: 'test', clerk: fakeClerk('staff').clerk, now: NOW, facts: allMet() })
+    expect(r.transition).toBe('expired')
+    expect(staffRows()).toEqual([])
+  })
+  it('a revoke removes it', async () => {
+    db.table('staff_grants').push(grantRow(ACTIVE))
+    db.table('member_roles').push({ id: 'r-s', member_id: MEMBER, role: 'staff', scope: 'global', object_type: null, object_id: null, source: STAFF_MEMBER_ROLE_SOURCE })
+    const r = await revokeStaff(db.client, { memberId: MEMBER, reason: 'Left the team', actor: { actorType: 'admin' }, clerk: fakeClerk('staff').clerk, now: NOW })
+    expect(r.ok).toBe(true)
+    expect(staffRows()).toEqual([])
+  })
+  it('a revoke takes a staff role whatever wrote it: the value means a Staff grant and nothing else', async () => {
+    db.table('staff_grants').push(grantRow(ACTIVE))
+    db.table('member_roles').push({ id: 'r-s', member_id: MEMBER, role: 'staff', scope: 'global', object_type: null, object_id: null, source: 'admin' })
+    await revokeStaff(db.client, { memberId: MEMBER, reason: 'Left the team', actor: { actorType: 'admin' }, clerk: fakeClerk('staff').clerk, now: NOW })
+    expect(staffRows()).toEqual([])
+  })
+  it('a paused grant that resumes adds it again', async () => {
+    db.table('staff_grants').push(grantRow(ACTIVE))
+    const { clerk } = fakeClerk('staff')
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'mfa_off', clerk, now: NOW, facts: allMet({ mfa: false }) })
+    expect(staffRows()).toEqual([])
+    const r = await reconcileStaffGrant(db.client, MEMBER, { reason: 'mfa_on', clerk, now: NOW, facts: allMet() })
+    expect(r.transition).toBe('active')
+    expect(staffRows()).toMatchObject([{ source: STAFF_MEMBER_ROLE_SOURCE }])
+  })
+  it('is idempotent: reconciling an active grant again keeps one row, and heals a missing one', async () => {
+    db.table('staff_grants').push(grantRow())
+    const { clerk } = fakeClerk(null)
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'first', clerk, now: NOW, facts: allMet() })
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'again', clerk, now: NOW, facts: allMet() })
+    expect(staffRows()).toHaveLength(1)
+    db.table('member_roles').length = 0 // the activation's mirror write was lost
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'sweep', clerk, now: NOW, facts: allMet() })
+    expect(staffRows()).toHaveLength(1)
+  })
+  it('removing it twice, or when it was never there, is harmless', async () => {
+    db.table('staff_grants').push(grantRow(ACTIVE))
+    const { clerk } = fakeClerk('staff')
+    await reconcileStaffGrant(db.client, MEMBER, { reason: 'test', clerk, now: NOW, facts: allMet({ training: null }) })
+    await revokeStaff(db.client, { memberId: MEMBER, reason: 'Left the team', actor: { actorType: 'admin' }, clerk, now: NOW })
+    expect(staffRows()).toEqual([])
+    expect(db.table('staff_grants')[0]).toMatchObject({ status: 'revoked' })
   })
 })
 

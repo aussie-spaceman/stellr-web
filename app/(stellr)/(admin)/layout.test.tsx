@@ -5,12 +5,17 @@ import { render, screen } from '@testing-library/react'
 // S5 C14, with the answers below, which are what the claim checks gave before it.
 
 const h = vi.hoisted(() => ({
-  session: { userId: null as string | null, role: null as unknown },
+  session: { userId: null as string | null, role: null as unknown, secondFactor: true },
   reads: 0,
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({
-  auth: async () => ({ userId: h.session.userId, sessionClaims: h.session.userId ? { metadata: { role: h.session.role } } : null }),
+  // A second factor on the session unless a test says not: the Staff role needs one (staff-role.8, lib/authz/staff-mfa.test.ts).
+  auth: async () => ({
+    userId: h.session.userId,
+    sessionClaims: h.session.userId ? { metadata: { role: h.session.role } } : null,
+    factorVerificationAge: h.session.userId ? [5, h.session.secondFactor ? 5 : -1] : null,
+  }),
 }))
 vi.mock('@clerk/nextjs', () => ({ ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('next/navigation', () => ({
@@ -40,7 +45,7 @@ const { default: AdminLayout } = await import('./layout')
 const shell = () => AdminLayout({ children: <p>content</p> })
 
 beforeEach(() => {
-  h.session = { userId: null, role: null }
+  h.session = { userId: null, role: null, secondFactor: true }
   h.reads = 0
 })
 
@@ -50,12 +55,12 @@ describe('the admin shell', () => {
   })
 
   it.each(['student', 'member', 'Admin', 7, undefined])('a signed-in role of %s goes to the account page', async (role) => {
-    h.session = { userId: 'u1', role }
+    h.session = { userId: 'u1', role, secondFactor: true }
     await expect(shell()).rejects.toThrow('redirect /account')
   })
 
   it('an admin gets the full nav and the Admin badge', async () => {
-    h.session = { userId: 'u1', role: 'admin' }
+    h.session = { userId: 'u1', role: 'admin', secondFactor: true }
     render(await shell())
     expect(screen.getByTestId('sidebar')).toHaveTextContent('admin')
     expect(screen.getByText('Admin')).toBeInTheDocument()
@@ -63,7 +68,7 @@ describe('the admin shell', () => {
   })
 
   it('an event manager gets the shell, the short nav and the Event Manager badge, with no assignment read', async () => {
-    h.session = { userId: 'u1', role: 'event_manager' }
+    h.session = { userId: 'u1', role: 'event_manager', secondFactor: true }
     render(await shell())
     expect(screen.getByTestId('sidebar')).toHaveTextContent('event_manager')
     expect(screen.getByText('Event Manager')).toBeInTheDocument()
@@ -71,11 +76,17 @@ describe('the admin shell', () => {
   })
 
   it('Staff get the Staff nav and badge, and the note on where they can make changes', async () => {
-    h.session = { userId: 'u1', role: 'staff' }
+    h.session = { userId: 'u1', role: 'staff', secondFactor: true }
     render(await shell())
     expect(screen.getByTestId('sidebar')).toHaveTextContent('staff')
     expect(screen.getByText('Staff')).toBeInTheDocument()
     expect(screen.getByText(/Changes are open in Competitions and Members/)).toBeInTheDocument()
     expect(screen.getByText('content')).toBeInTheDocument()
+  })
+
+  it('Staff with no second factor on the session goes to the account page, not an Event Manager shell', async () => {
+    h.session = { userId: 'u1', role: 'staff', secondFactor: false }
+    await expect(shell()).rejects.toThrow('redirect /account')
+    expect(h.reads).toBe(0)
   })
 })

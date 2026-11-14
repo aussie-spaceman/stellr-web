@@ -39,9 +39,10 @@ permissions:
 jobs:
   stryker:
     runs-on: ubuntu-latest
-    # A full local run (6 workers) took 61 minutes; the 4-vCPU public
-    # runner is slower. Six hours is the GitHub-hosted maximum.
-    timeout-minutes: 300
+    # The first full run on the 4-vCPU public runner, with tenancy, field
+    # crypto and the platform audit trail added, took 232 minutes of Stryker
+    # (14 Nov 2026). Six hours is the GitHub-hosted maximum.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

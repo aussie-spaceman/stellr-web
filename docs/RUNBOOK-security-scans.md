@@ -87,6 +87,16 @@ nightly job. The Score step still writes the per-file table to the job summary.
 If the score drops, kill the surviving mutants with better tests; do not lower
 the threshold.
 
+The first full run on 10.1.1 (14 Nov 2026, 232 minutes on the 4-vCPU runner)
+scored 73.3% (3925 of 5352 mutants killed), so the nightly job fails until
+the tests reach 80%. The weakest files: `lib/field-crypto-fields.ts` (16.5%),
+`lib/field-crypto-store.ts` (19.6%), `lib/access-gates.ts` (51.7%),
+`lib/esign/backup-crypto.ts` (60.0%), `lib/audit/platform.ts` (64.6%) and
+`lib/pdf-scan.ts` (67.5%; the most survivors, 400). The Score step's table in
+the job summary has every file. The job's timeout is 360 minutes, the
+GitHub-hosted maximum. If runs come close to it, split `mutate` across a
+matrix rather than cutting files.
+
 Stryker runs in place (`inPlace: true`), not in a `.stryker-tmp` sandbox: in
 the sandbox `node_modules` is a symlink, and a test that imports a module by a
 relative path into `node_modules` failed the initial test run. In place, it

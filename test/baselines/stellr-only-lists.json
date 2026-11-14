@@ -1,0 +1,86 @@
+{
+  "$comment": "Shrink-only. Stellr-only admin list reads of tenant-scoped tables that do not yet keep to Stellr's rows (tracker s5-programme.29). test/stellr-only-lists-ratchet.test.ts fails on a new unfiltered site and on a listed site that is now filtered or gone. Keys are '<file> :: <table>'. A new entry needs a reason a person wrote; prefer filtering with stellrRows (lib/tenancy/stellr-scope.ts).",
+  "sites": {
+    "app/(stellr)/(admin)/admin/academy/training/page.tsx :: public.training_modules": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The academy training editor lists every training module and its reminder settings; a module tied to an event carries that event's tenant through event_ref. Filter with stellrRows before a tenant event can own a module."
+    },
+    "app/(stellr)/(admin)/admin/activity-log/page.tsx :: public.event_participations": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The activity log lists recent event participations across all events with the member joined. Filter with stellrRows before a tenant event writes participations."
+    },
+    "app/(stellr)/(admin)/admin/community/moderation/page.tsx :: public.community_resources": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Moderation looks up resource titles by the ids of flagged items it has already loaded, not a list of its own. Follows the flagged-items read; filter if that read becomes tenant-aware."
+    },
+    "app/(stellr)/(admin)/admin/community/moderation/page.tsx :: public.mentoring_cohorts": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Moderation looks up container names by the ids of flagged items it has already loaded, not a list of its own. Follows the flagged-items read; filter if that read becomes tenant-aware."
+    },
+    "app/(stellr)/(admin)/admin/community/spaces/page.tsx :: public.community_spaces": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The community spaces admin lists every unarchived space. B9 skips space sync for another tenant's event, so other tenants' spaces are not expected; filter with stellrRows to make that explicit."
+    },
+    "app/(stellr)/(admin)/admin/competitions/page.tsx :: public.registrations": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Counts participants per competition, keyed by the slugs of Stellr's Sanity competitions it lists. A slug shared with a tenant event would merge counts until S8 makes slugs unique per tenant."
+    },
+    "app/(stellr)/(admin)/admin/media/page.tsx :: public.registrations": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The media page builds its event picker from every registration's event slug and title. Filter with stellrRows so another tenant's events do not appear in the picker."
+    },
+    "app/(stellr)/(admin)/admin/members/volunteers/page.tsx :: public.event_participations": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Volunteer roles per member, keyed by the member ids already on the page (members are identity rows shared across tenants). Filter with stellrRows so a tenant event's volunteer roles are not shown."
+    },
+    "app/(stellr)/(admin)/admin/members/volunteers/page.tsx :: public.volunteer_event_interest": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Volunteer interest per member, keyed by the member ids already on the page. Filter with stellrRows so interest raised on a tenant event is not counted."
+    },
+    "app/(stellr)/(admin)/admin/scholarships/page.tsx :: public.scholarship_applications": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The scholarships admin lists every application. Filter with stellrRows before a tenant event can take scholarship applications."
+    },
+    "app/(stellr)/(admin)/admin/surveys/page.tsx :: public.survey_distributions": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The surveys admin lists every distribution by event date. Filter with stellrRows before surveys run on tenant events (docs/TENANCY-S5.md, \"Surveys on tenant events\")."
+    },
+    "app/(stellr)/(admin)/admin/surveys/page.tsx :: public.survey_invitations": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Counts invitations per distribution for the list above, reading every invitation. Filter with stellrRows together with the distributions read."
+    },
+    "app/(stellr)/(admin)/admin/surveys/questions/page.tsx :: public.survey_distributions": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Counts how many distributions use each survey definition. Reads definition ids only; filter with stellrRows together with the surveys list."
+    },
+    "app/api/admin/access/objects/route.ts :: public.community_resources": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The access editor's object picker lists every resource. Filter with stellrRows before a tenant can own community resources."
+    },
+    "app/api/admin/access/objects/route.ts :: public.community_spaces": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The access editor's object picker lists every space. Filter with stellrRows together with the spaces admin."
+    },
+    "app/api/admin/access/objects/route.ts :: public.mentoring_cohorts": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The access editor's object picker lists every container. Filter with stellrRows before a tenant event can own a container."
+    },
+    "app/api/admin/access/objects/route.ts :: public.training_modules": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The access editor's object picker lists every training module. Filter with stellrRows together with the academy training editor."
+    },
+    "app/api/admin/coaching/route.ts :: public.mentoring_cohorts": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The coaching admin lists coaching cohorts with coach and members. Coaching is a Stellr product; filter with stellrRows to keep a tenant event's containers out."
+    },
+    "app/api/admin/community/resources/route.ts :: public.community_resources": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The community resources admin lists every resource with its space. Filter with stellrRows before a tenant can own community resources."
+    },
+    "app/api/admin/community/resources/search/route.ts :: public.community_resources": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The resource search for linking lists every stored resource. Filter with stellrRows together with the resources admin."
+    },
+    "app/api/admin/community/spaces/route.ts :: public.community_spaces": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The spaces API lists every space for the admin editor. Filter with stellrRows together with the spaces page."
+    },
+    "app/api/admin/community/spaces/sources/search/route.ts :: public.mentoring_cohorts": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The space source picker searches containers by name. Filter with stellrRows before a tenant event can own a container."
+    },
+    "app/api/admin/community/spaces/sources/search/route.ts :: public.training_modules": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The space source picker searches training modules by title. Filter with stellrRows together with the academy training editor."
+    },
+    "app/api/admin/community/training/modules/route.ts :: public.training_modules": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The training modules API lists every module for the admin editor. Filter with stellrRows together with the academy training editor."
+    },
+    "app/api/admin/event-managers/route.ts :: public.event_manager_assignments": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Lists event manager assignments, optionally for one event. Stays stellr_only until C21 (lib/security/stellr-only-dispositions.ts), which converts it or filters it."
+    },
+    "app/api/admin/staff-settings/route.ts :: public.training_modules": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). The Staff settings page offers every training module as the staff training module. Filter with stellrRows together with the academy training editor."
+    },
+    "app/api/admin/training/cert-preview/route.ts :: public.training_modules": {
+      "reason": "Unfiltered when this ratchet started (s5-programme.29 follow-up). Reads one training module by the id in the query to preview its certificate; not a list. Filter with stellrRows together with the academy training editor."
+    }
+  }
+}

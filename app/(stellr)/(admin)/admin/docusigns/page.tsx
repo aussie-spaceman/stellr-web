@@ -8,6 +8,7 @@ import { NeedsPaperwork } from '@/components/admin/NeedsPaperwork'
 import { Collapsible, CollapsibleGroup, CollapseAllControls } from '@stellr/web-ui'
 import { loadPaperworkGaps } from '@/lib/esign/needs-paperwork'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
+import { stellrRows } from '@/lib/tenancy/stellr-scope'
 
 export const metadata = { title: 'Admin — Consent Forms' }
 
@@ -23,9 +24,14 @@ export default async function AdminDocusignsPage() {
   // roster called the same row "Partially Complete" (4 Sept 2026).
   // deep review DS-9: an explicit range defeats PostgREST's default 1000-row
   // cap, which otherwise truncates the list and the pending/completed counters.
-  const { data: envelopes } = await db
-    .from('agreements')
-    .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, reminder_count, participant_id, member_id, reused_from, signers_total, signers_completed, credential_sharing_opt_out, media_opt_out, quote_opt_out, digital_comms_opt_out, agreement_version')
+  // Stellr-only (tracker s5-programme.29): Stellr's rows and rows with no tenant yet, in
+  // every LOADSCOPED_MODE, never another tenant's. The recipients below are read for these
+  // ids only, so they follow.
+  const { data: envelopes } = await stellrRows(
+    db
+      .from('agreements')
+      .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, reminder_count, participant_id, member_id, reused_from, signers_total, signers_completed, credential_sharing_opt_out, media_opt_out, quote_opt_out, digital_comms_opt_out, agreement_version'),
+  )
     .order('sent_at', { ascending: false })
     .range(0, 99_999)
 

@@ -18,7 +18,11 @@ import { enforcedTenantFilter, refuseOutsideStellr, refuseUnlessStellrEvent } fr
 // Recipients: the participant; CC the emergency contact for minors and the
 // teacher / student manager for group registrations.
 //
-// Stellr's sender and its pay pages: B14 opens this to a tenant.
+// Stellr's sender and its pay pages. Refused outside Stellr (refuseOutsideStellr: a tenant's
+// staff get 503), and another tenant's event is refused for everyone, a Stellr admin
+// included (refuseUnlessStellrEvent: 404), until the tenant-filtered admin-records helpers
+// exist (AMD-C17-HELPERS) and the route sends through the tenant's own sender. B14 did not
+// lift either refusal.
 
 const ROUTE = '/api/admin/events/[slug]/remind'
 

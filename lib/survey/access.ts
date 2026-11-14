@@ -18,7 +18,6 @@ import { ageIfKnown, isMinorPerPolicy } from './minor'
 import { defaultAllowQuotes, loadMinorConsents } from './consent'
 import { logActivity } from '@/lib/activity-log'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { schoolYearFor } from '@/lib/hubspot-fields'
 
 export type OpenedFrom = 'email' | 'dashboard' | 'qr'
 
@@ -215,13 +214,6 @@ async function quoteEligibleByAgreement(db: SupabaseClient, inv: InvitationRow, 
   return allow ?? defaultAllowQuotes(age, profile.schoolState)
 }
 
-/** The school year an event day (YYYY-MM-DD) falls in, or null when it is not a date. */
-export function surveyEventYear(eventDate: string | null | undefined): number | null {
-  if (!eventDate || !/^\d{4}-\d{2}-\d{2}/.test(eventDate)) return null
-  const day = new Date(`${eventDate.slice(0, 10)}T00:00:00Z`)
-  return Number.isNaN(day.getTime()) ? null : schoolYearFor(day)
-}
-
 export async function buildContext(db: SupabaseClient, s: SurveySession): Promise<SurveyContext> {
   const inv = s.invitation
   const memberId = await memberIdOf(db, inv)
@@ -233,10 +225,7 @@ export async function buildContext(db: SupabaseClient, s: SurveySession): Promis
     if (!profile.grade) missing.push('grade')
     if (!profile.school) missing.push('school')
   }
-  // The school year of the event day (rolls over in August, schoolYearFor), not
-  // its calendar year, so an autumn event's responses carry the same year as
-  // its HubSpot record and its event_participations row (hubspot-event-options.8).
-  const year = surveyEventYear(s.distribution.event_date)
+  const year = Number(s.distribution.event_date.slice(0, 4))
   return {
     role: inv.respondent_role,
     first_time: await isFirstTime(db, inv, s.distribution.event_slug, memberId, inv.send_via === 'self' ? inv.email : profile.email),
@@ -246,7 +235,7 @@ export async function buildContext(db: SupabaseClient, s: SurveySession): Promis
     profile_missing: missing,
     event_title: s.distribution.event_title ?? s.distribution.event_slug,
     event_slug: s.distribution.event_slug,
-    event_year: year,
+    event_year: Number.isFinite(year) ? year : null,
     first_name: profile.firstName,
   }
 }

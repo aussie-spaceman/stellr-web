@@ -53,7 +53,8 @@ function resolveSoftSet(def: EntityDef): Record<string, unknown> {
 // Orchestrates a single entity deletion:
 //  1. preflight — abort if any blocker remains (caller renders the list)
 //  2. external cleanup (Stripe / DocuSign), collecting partial failures
-//  3. soft: apply soft-delete columns | hard: archive snapshot, then delete rows
+//  3. soft: apply soft-delete columns | hard: archive snapshot, then the Clerk
+//     login, then delete rows
 export async function executeDeletion(
   entity: string,
   id: string,
@@ -142,7 +143,17 @@ export async function executeDeletion(
     await voidOpenGroupInvoices(db, stripeClient(), id, 'Cancelled: the group registration was withdrawn')
   }
 
-  const externalResults = await runExternalCleanup(def, id, mode)
+  // TRACKER 16.7: a hard delete removes the Clerk login only after the archive
+  // snapshot is confirmed written (see below). Run first, Clerk's user.deleted
+  // webhook could null clerk_user_id before the snapshot read it, and a purge
+  // whose snapshot failed still took the login. Everything else external
+  // (Stripe, DocuSign) still runs here, while the agreement rows it voids exist.
+  const loginAfterArchive = mode === 'hard' && (def.external ?? []).includes('clerk')
+  const externalResults = await runExternalCleanup(
+    loginAfterArchive ? { ...def, external: (def.external ?? []).filter((k) => k !== 'clerk') } : def,
+    id,
+    mode,
+  )
 
   if (mode === 'soft') {
     const { error } = await db.from(def.table).update(resolveSoftSet(def)).eq(def.pk, id)
@@ -195,7 +206,25 @@ export async function executeDeletion(
   }
 
   // Hard purge: snapshot first, then delete primary + spanned rows.
-  if (ownDef.archive !== false) await archiveEntity(def, id, opts.deletedBy ?? null)
+  if (ownDef.archive !== false) {
+    // archiveEntity is best-effort: a failed insert is logged and it returns
+    // normally. For most entities that is deliberate (a missing audit table
+    // must not block a delete). A purge that also removes a Clerk login cannot
+    // be undone by support without the snapshot, so for that one the snapshot
+    // is a precondition: count this entity's archive rows before and after,
+    // and stop, login and row untouched, if no new row landed.
+    const before = loginAfterArchive ? await archiveRowCount(db, def, id) : 0
+    await archiveEntity(def, id, opts.deletedBy ?? null)
+    if (loginAfterArchive && (await archiveRowCount(db, def, id)) <= before) {
+      throw new Error(`Archive snapshot was not written for ${def.type} ${id}; the login and the record were left in place`)
+    }
+  }
+
+  // The login goes once the snapshot is confirmed (or, for an archive-free
+  // purge, here too), and before the row: the removal reads clerk_user_id from it.
+  if (loginAfterArchive) {
+    externalResults.push(...await runExternalCleanup({ ...def, external: ['clerk'] }, id, mode))
+  }
 
   // Deleting the sole attendee of an individual registration leaves an empty
   // booking behind. For individual registrations that's just clutter, so we
@@ -256,6 +285,19 @@ export async function executeDeletion(
   }
 
   return { entity, id, mode, deleted: true, externalResults, refunds, billingMessage, scholarshipsCancelled }
+}
+
+/** How many deletion_archive rows this entity has. A failed read throws: the caller cannot confirm the snapshot. */
+async function archiveRowCount(db: Db, def: EntityDef, id: string): Promise<number> {
+  const { count, error } = await db
+    .from('deletion_archive')
+    .select('id', { count: 'exact', head: true })
+    .eq('entity_type', def.type)
+    .eq('entity_id', id)
+  if (error || count === null) {
+    throw new Error(`Could not confirm the archive snapshot for ${def.type} ${id}; the login and the record were left in place`)
+  }
+  return count
 }
 
 /** The group registration a participant holds a place in, or null for an individual. */

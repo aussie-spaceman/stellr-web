@@ -55,6 +55,17 @@ const CONTRACT = {
 }
 const TEXT_KINDS = new Set(['textTabs', 'numberTabs', 'ssnTabs', 'zipTabs'])
 
+/** JSON paths of every extensionData key (not null) anywhere in the template. */
+function findExtensionData(node, path = '$') {
+  if (Array.isArray(node)) return node.flatMap((v, i) => findExtensionData(v, `${path}[${i}]`))
+  if (!node || typeof node !== 'object') return []
+  return Object.entries(node).flatMap(([k, v]) => [
+    ...(k === 'extensionData' && v != null ? [labelled(node, `${path}.${k}`)] : []),
+    ...findExtensionData(v, `${path}.${k}`),
+  ])
+}
+const labelled = (node, path) => (node.tabLabel ? `${path} (tab "${node.tabLabel}")` : path)
+
 const [kind, file] = process.argv.slice(2)
 const contract = CONTRACT[kind]
 if (!contract || !file) {
@@ -90,6 +101,13 @@ for (const want of contract.tabs) {
     if (want.unticked && String(t.selected) === 'true') problems.push(`${where}: must be unticked by default`)
     if (want.type === 'text' && t.value) problems.push(`${where}: has default text "${t.value}" — clear it, or it shows when no value is sent`)
   }
+}
+
+// Extension drift (TRACKER 22.8): the sandbox allows DocuSign Extensions, but
+// the production plan rejects every envelope whose template uses one. Any
+// extensionData anywhere in the template, on a tab or elsewhere, fails it.
+for (const where of findExtensionData(tpl)) {
+  problems.push(`extensionData at ${where}: DocuSign Extensions are not on the production plan, so every envelope from this template would be rejected. Remove the extension from that field.`)
 }
 
 // Unlabelled fields are fine for signature/name/date-signed/email; anything

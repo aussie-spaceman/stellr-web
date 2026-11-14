@@ -1,8 +1,15 @@
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { isValidElement, type ReactElement } from 'react'
 import { render } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+/** A file inside @clerk/nextjs, located by resolving the package (its main entry is dist/cjs/index.js). */
+function clerkNextjsFile(file: string): string {
+  return join(dirname(createRequire(import.meta.url).resolve('@clerk/nextjs')), '..', '..', file)
+}
 
 // S1 CSP (lib/csp.ts): the scripts on a nonce route that 'strict-dynamic' does
 // NOT cover, because no trusted script inserts them, and how each is allowed.
@@ -38,10 +45,13 @@ afterEach(() => {
 
 describe('clerk-js carries the request nonce', () => {
   it('Clerk stamps a nonce on its script tag only when one is passed', async () => {
-    // Not in the package's exports map, so by path. It is what both the
-    // client ClerkScripts and the server DynamicClerkScripts render.
-    const path = '../node_modules/@clerk/nextjs/dist/esm/utils/clerk-script-tags.js'
-    const { ClerkScriptTags } = (await import(/* @vite-ignore */ path)) as typeof import('../node_modules/@clerk/nextjs/dist/types/utils/clerk-script-tags')
+    // Not in the package's exports map, so by path, found through the package's
+    // own resolution (a worktree without its own node_modules finds its parent's).
+    // It is what both the client ClerkScripts and the server DynamicClerkScripts render.
+    const path = clerkNextjsFile('dist/esm/utils/clerk-script-tags.js')
+    const { ClerkScriptTags } = (await import(/* @vite-ignore */ path)) as {
+      ClerkScriptTags: (props: { publishableKey: string; nonce?: string }) => React.JSX.Element
+    }
     const key = `pk_test_${Buffer.from('clerk.example.org$').toString('base64')}`
     const without = renderToStaticMarkup(<ClerkScriptTags publishableKey={key} />)
     const withNonce = renderToStaticMarkup(<ClerkScriptTags publishableKey={key} nonce={NONCE} />)

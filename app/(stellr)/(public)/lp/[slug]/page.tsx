@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { LandingPage } from '@/components/lp/LandingPage'
-import { getLandingPage, LANDING_PAGE_SLUGS } from '@/content/lp'
+import { CurriculumLandingPage } from '@/components/lp/CurriculumLandingPage'
+import { getCurriculumLandingPage, getLandingPage, LANDING_PAGE_SLUGS } from '@/content/lp'
 import { countLocations, fillCounts, getMapLocations } from '@/lib/locations'
 
 /**
@@ -24,6 +25,19 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug } = await params
+
+  // Classroom Qualifier curriculum pages (e.g. the MnCOSE26 booth page).
+  const cq = getCurriculumLandingPage(slug)
+  if (cq) {
+    return {
+      title: { absolute: cq.seo.title },
+      description: cq.seo.description,
+      alternates: { canonical: `/lp/${cq.slug}` },
+      robots: cq.noindex ? { index: false, follow: true } : undefined,
+      openGraph: { title: cq.seo.title, description: cq.seo.description, url: `/lp/${cq.slug}` },
+    }
+  }
+
   const config = getLandingPage(slug)
   if (!config) return {}
 
@@ -54,6 +68,9 @@ export default async function LandingPageRoute({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
+  const cq = getCurriculumLandingPage(slug)
+  if (cq) return <CurriculumLandingPage config={cq} />
+
   const config = getLandingPage(slug)
   if (!config) notFound()
 

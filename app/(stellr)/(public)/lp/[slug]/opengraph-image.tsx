@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og'
-import { getLandingPage } from '@/content/lp'
+import { getCurriculumLandingPage, getLandingPage } from '@/content/lp'
 import { tokens } from '@/lib/tokens'
 
 /**
@@ -31,9 +31,13 @@ export const contentType = 'image/png'
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const config = getLandingPage(slug)
+  // Curriculum pages share the card. TODO(owner): the handover wants Flyer B
+  // page 1 as this page's OG image; swap in the exported PNG when it is in
+  // the repo.
+  const cq = getCurriculumLandingPage(slug)
 
-  const headline = config?.hero.headline ?? 'Space Design Competitions'
-  const kicker = config?.hero.kicker ?? 'Real-world STEM for grades 7–12'
+  const headline = cq?.hero.headline ?? config?.hero.headline ?? 'Space Design Competitions'
+  const kicker = cq?.hero.tagline ?? config?.hero.kicker ?? 'Real-world STEM for grades 7–12'
   const accent =
     config?.theme === 'enviro' ? tokens.color.enviroGreen : tokens.color.spaceViolet
 

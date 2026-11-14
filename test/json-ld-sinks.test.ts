@@ -71,9 +71,10 @@ describe('JSON-LD sinks (static inventory)', () => {
 
   it('renders every former sink through <JsonLd>', () => {
     // The 12 hand-written blocks this replaced, plus the 4 pages that already
-    // used the component. Fewer means a page lost its structured data; more
+    // used the component, plus the Classroom Qualifier curriculum page's FAQ
+    // (components/lp/CurriculumLandingPage.tsx, Nov 2026). Fewer means a page lost its structured data; more
     // means this count — and a reviewer — should know about the new one.
     const uses = files.reduce((n, f) => n + count(/<JsonLd\b/g, readFileSync(f, 'utf8')), 0)
-    expect(uses).toBe(16)
+    expect(uses).toBe(17)
   })
 })

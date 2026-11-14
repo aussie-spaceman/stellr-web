@@ -233,6 +233,7 @@ export const TENANT_SURFACE_DENY: readonly TenantSurfaceRule[] = [
   { match: 'app/api/host-event/route.ts', reason: 'Stellr lead capture' },
   { match: 'app/api/join-network/route.ts', reason: 'Stellr lead capture' },
   { match: 'app/api/lp-lead/route.ts', reason: 'Stellr lead capture' },
+  { match: 'app/api/cq-lead/route.ts', reason: 'Stellr lead capture' },
   { match: 'app/api/scholarship/route.ts', reason: 'Stellr scholarships' },
   { match: 'app/api/subscribe/route.ts', reason: 'Stellr newsletter' },
   { match: 'app/api/teacher-grant/route.ts', reason: 'Stellr lead capture' },

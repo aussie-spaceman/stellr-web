@@ -75,6 +75,8 @@ describe('sitemap static route coverage', () => {
       '/lp/first-robotics-teachers',
       '/lp/homeschool-students',
     ])
+    // The MnCOSE26 booth page is noindex, so it stays out.
+    expect(LANDING_PAGE_SITEMAP_PATHS).not.toContain('/lp/mncose26')
     for (const path of LANDING_PAGE_SITEMAP_PATHS) {
       expect(STATIC_SITEMAP_PATHS).not.toContain(path)
     }

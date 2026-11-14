@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { getAllEvents, getAllCampaigns } from '@/lib/events/repo'
 import { getAllNewsPosts } from '@/lib/sanity'
-import { LANDING_PAGE_SLUGS } from '@/content/lp'
+import { INDEXABLE_LANDING_PAGE_SLUGS } from '@/content/lp'
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -83,7 +83,9 @@ export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)
  * a registry line — a third place to remember would be the thing that goes
  * stale. Indexed deliberately; see app/(stellr)/(public)/lp/[slug]/page.tsx.
  */
-export const LANDING_PAGE_SITEMAP_PATHS = LANDING_PAGE_SLUGS.map((slug) => `/lp/${slug}`)
+// noindex pages (the MnCOSE26 booth page) stay out: a sitemap must not list
+// a URL that asks not to be indexed.
+export const LANDING_PAGE_SITEMAP_PATHS = INDEXABLE_LANDING_PAGE_SLUGS.map((slug) => `/lp/${slug}`)
 
 /**
  * Store product pages (/store/[slug]) that are indexed. Listed by hand: only

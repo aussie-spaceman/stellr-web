@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import type { EntityDef } from './types'
 
 // executeDeletion orchestrates a lot of collaborators; stub every side-effecting
 // one so the test can assert the erasure/removal CALLS the orchestrator makes
@@ -10,7 +11,12 @@ const removeEventParticipation = vi.fn(async () => {})
 const retainSignedRecords = vi.fn(async () => {})
 const startRetentionClock = vi.fn(async () => {})
 const purgeSurveyDataFor = vi.fn(async () => {})
-const archiveEntity = vi.fn(async () => {})
+// deletion_archive rows the fake database holds. By default the archive stub
+// writes one, as the real archiveEntity does when its insert succeeds.
+const archivedRows: { entity_type: string; entity_id: string }[] = []
+const archiveEntity = vi.fn(async (def: EntityDef, id: string, _by: string | null) => {
+  archivedRows.push({ entity_type: def.type, entity_id: id })
+})
 const runExternalCleanup = vi.fn(async () => [])
 const deletionPreflight = vi.fn(async () => ({ canDelete: true, blockers: [], entity: '', id: '' }))
 const liveScholarshipOffers = vi.fn(async (_db: unknown, regId: string) => (regId === 'r1' ? ['sch-1'] : []))
@@ -44,6 +50,12 @@ const participantMembers: Record<string, unknown>[] = [{ member_id: 'mem1' }, { 
 // erasure/teardown aborts (throws) instead of silently treating the failed read
 // as an empty result. Mutated per-test; cleared in beforeEach.
 const readErrors: Record<string, unknown> = {}
+// An insert error per table (the real archiveEntity logs one and returns).
+const insertErrors: Record<string, unknown> = {}
+function countOf(table: string, filters: Record<string, unknown>): number {
+  if (table !== 'deletion_archive') return 0
+  return archivedRows.filter((r) => r.entity_type === filters.entity_type && r.entity_id === filters.entity_id).length
+}
 // The registration's type for the "is this an individual registration left
 // empty?" read. Mutated per-test; reset in beforeEach.
 let registrationType = 'group'
@@ -54,11 +66,13 @@ vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from(table: string) {
       const b: Record<string, unknown> = { table, op: 'select', cols: '', count: false }
+      const filters: Record<string, unknown> = {}
       const chain = {
         select: (cols: string, opts?: { head?: boolean }) => { b.cols = cols; b.count = !!opts?.head; return chain },
         delete: () => { b.op = 'delete'; deletedTables.push(table); return chain },
         update: () => { b.op = 'update'; return chain },
-        eq: () => chain,
+        insert: (row: Record<string, unknown>) => { b.op = 'insert'; b.row = row; return chain },
+        eq: (col: string, val: unknown) => { filters[col] = val; return chain },
         neq: () => chain,
         in: () => chain,
         is: () => chain,
@@ -67,9 +81,14 @@ vi.mock('@/lib/supabase', () => ({
           return { data: e ? null : single(table, b.cols as string), error: e }
         },
         then: (resolve: (v: unknown) => unknown) => {
+          if (b.op === 'insert') {
+            const ie = insertErrors[table] ?? null
+            if (!ie && table === 'deletion_archive') archivedRows.push(b.row as { entity_type: string; entity_id: string })
+            return resolve({ data: null, error: ie })
+          }
           if (b.op !== 'select') return resolve({ data: null, error: null })
           const e = readErrors[table] ?? null
-          if (b.count) return resolve({ count: e ? null : 0, error: e })
+          if (b.count) return resolve({ count: e ? null : countOf(table, filters), error: e })
           return resolve({ data: e ? null : list(table, b.cols as string), error: e })
         },
       }
@@ -104,6 +123,8 @@ beforeEach(() => {
     startRetentionClock, purgeSurveyDataFor, archiveEntity, runExternalCleanup,
     liveScholarshipOffers, cancelScholarshipsOnWithdrawal]) fn.mockClear()
   for (const k of Object.keys(readErrors)) delete readErrors[k]
+  for (const k of Object.keys(insertErrors)) delete insertErrors[k]
+  archivedRows.length = 0
   registrationType = 'group'
   refusedConsents = []
   pendingConsentRow = null
@@ -279,9 +300,10 @@ describe('executeDeletion — crew check-ins leave with the account', () => {
   })
 })
 
-// TRACKER 16.7: the archive snapshot is written before the Clerk login is
-// removed, so a failed archive leaves the login in place, and the snapshot reads
-// clerk_user_id before Clerk's user.deleted webhook can null it.
+// TRACKER 16.7: the archive snapshot is written, and confirmed by a new
+// deletion_archive row, before the Clerk login is removed. So a failed archive
+// leaves the login and the row in place, and the snapshot reads clerk_user_id
+// before Clerk's user.deleted webhook can null it.
 describe('executeDeletion — the Clerk login goes after the archive', () => {
   type Def = { type: string; external?: string[] }
   // The module-level stub is typed as returning []; these tests return results.
@@ -291,7 +313,10 @@ describe('executeDeletion — the Clerk login goes after the archive', () => {
 
   it('a member hard delete archives, then removes the login, then deletes the row', async () => {
     const order: string[] = []
-    archiveEntity.mockImplementationOnce(async () => { order.push('archive') })
+    archiveEntity.mockImplementationOnce(async (def: EntityDef, id: string) => {
+      order.push('archive')
+      archivedRows.push({ entity_type: def.type, entity_id: id })
+    })
     external.mockImplementation(async (...args: unknown[]) => {
       const def = args[0] as Def
       order.push(`external:${(def.external ?? []).join('+')}`)
@@ -316,13 +341,63 @@ describe('executeDeletion — the Clerk login goes after the archive', () => {
     }
   })
 
-  it('a failed archive leaves the login in place and the row undeleted', async () => {
-    archiveEntity.mockRejectedValueOnce(new Error('archive insert failed'))
-    await expect(executeDeletion('member', 'mem1', { mode: 'hard' })).rejects.toThrow('archive insert failed')
+  // The real archiveEntity never rejects: a failed insert is logged and it
+  // returns. These run the real function against an insert that errors.
+  it('a failed archive insert leaves the login in place and the row undeleted', async () => {
+    const { archiveEntity: realArchive } = await vi.importActual<typeof import('./archive')>('./archive')
+    archiveEntity.mockImplementationOnce(realArchive)
+    insertErrors.deletion_archive = { message: 'insert failed' }
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await expect(executeDeletion('member', 'mem1', { mode: 'hard' })).rejects.toThrow('Archive snapshot was not written for member mem1')
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining('archive snapshot skipped for member/mem1'))
+    } finally {
+      logged.mockRestore()
+    }
     expect(runExternalCleanup).toHaveBeenCalledTimes(1)
     expect(calls()[0][0].external).toEqual(['stripe', 'docusign'])
     expect(clerkCallIndex()).toBe(-1)
     expect(deletedTables).not.toContain('members')
+  })
+
+  it('a real archive insert that succeeds lets the login and the row go', async () => {
+    const { archiveEntity: realArchive } = await vi.importActual<typeof import('./archive')>('./archive')
+    archiveEntity.mockImplementationOnce(realArchive)
+    const result = await executeDeletion('member', 'mem1', { mode: 'hard' })
+    expect(result.deleted).toBe(true)
+    expect(archivedRows).toEqual([expect.objectContaining({ entity_type: 'member', entity_id: 'mem1' })])
+    expect(calls().map(([def]) => def.external)).toEqual([['stripe', 'docusign'], ['clerk']])
+    expect(deletedTables).toContain('members')
+  })
+
+  it('an earlier snapshot of the same member does not count as this one', async () => {
+    archivedRows.push({ entity_type: 'member', entity_id: 'mem1' })
+    archiveEntity.mockImplementationOnce(async () => {})
+    await expect(executeDeletion('member', 'mem1', { mode: 'hard' })).rejects.toThrow('Archive snapshot was not written')
+    expect(clerkCallIndex()).toBe(-1)
+    expect(deletedTables).not.toContain('members')
+  })
+
+  it('an unreadable archive table stops the purge before the login and the row', async () => {
+    readErrors.deletion_archive = { message: 'relation does not exist' }
+    await expect(executeDeletion('member', 'mem1', { mode: 'hard' })).rejects.toThrow('Could not confirm the archive snapshot for member mem1')
+    expect(archiveEntity).not.toHaveBeenCalled()
+    expect(clerkCallIndex()).toBe(-1)
+    expect(deletedTables).not.toContain('members')
+  })
+
+  it('an entity with no login keeps the best-effort archive: a failed insert does not stop it', async () => {
+    const { archiveEntity: realArchive } = await vi.importActual<typeof import('./archive')>('./archive')
+    archiveEntity.mockImplementationOnce(realArchive)
+    insertErrors.deletion_archive = { message: 'insert failed' }
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await executeDeletion('participant', 'p1', { mode: 'hard' })
+      expect(result.deleted).toBe(true)
+    } finally {
+      logged.mockRestore()
+    }
+    expect(deletedTables).toContain('participants')
   })
 
   it('the archive-free pending-consent purge still removes the login, before the row', async () => {

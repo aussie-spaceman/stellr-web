@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { watchSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ownsTeam } from '@/lib/team-access'
 import { SHEET_SYNC_COLUMNS, SheetSyncRefused, syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
-import { randomUUID } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { withAudit } from '@/lib/audit/route'
 import { requestTenant } from '@/lib/tenancy/request-tenant'
@@ -94,15 +94,22 @@ async function syncSheet(
     .limit(1)
     .maybeSingle()
 
+  // A new channel (first sync, or renewal once the last one expired) always carries a
+  // fresh random token: Google sends it back in X-Goog-Channel-Token and the webhook
+  // refuses a notification without it (threat model §6.11). Channels registered
+  // before tokens existed have none and are honoured only until they expire, so the
+  // first sync after that re-registers the sheet with a token.
   if (!existingChannel || new Date(existingChannel.expiration) <= new Date()) {
     try {
       const channelId = randomUUID()
-      const result = await watchSheet(registration.spreadsheet_id, channelId)
+      const token = randomBytes(32).toString('base64url')
+      const result = await watchSheet(registration.spreadsheet_id, channelId, token)
       await db.from('sheet_watch_channels').insert({
         registration_id: registrationId,
         channel_id: result.channel_id,
         resource_id: result.resource_id,
         expiration: result.expiration.toISOString(),
+        token,
       })
       watchActive = true
     } catch (err) {

@@ -136,19 +136,15 @@ export function createOrder(args: {
 
 // --- Webhook verification ---------------------------------------------------
 //
-// Printful v1 webhooks are not HMAC-signed; the documented practice is to put a
-// secret in the configured webhook URL and verify it on receipt. We accept the
-// secret either as an `x-printful-secret` header or a `secret` query param and
-// match it against PRINTFUL_WEBHOOK_SECRET. Fails closed when no secret is set.
+// Printful v1 webhooks are not HMAC-signed, so the delivery must carry a shared
+// secret. It is accepted ONLY from the `x-printful-secret` request header and
+// compared in constant time with PRINTFUL_WEBHOOK_SECRET; fails closed when no
+// secret is set. A `?secret=` query parameter is refused, even when it is right:
+// a secret in the URL ends up in request logs and in the provider's dashboard
+// (threat model §6.11, R4b). Setup: docs/WEB-STORE-PRINTFUL-SETUP.md §4.
 export function verifyPrintfulWebhook(request: Request): boolean {
   const expected = process.env.PRINTFUL_WEBHOOK_SECRET
   if (!expected) return false
   const headerSecret = request.headers.get('x-printful-secret')
-  const url = new URL(request.url)
-  const querySecret = url.searchParams.get('secret')
-  // Constant-time compare against each supplied form (header preferred).
-  return (
-    (headerSecret != null && safeStrEqual(headerSecret, expected)) ||
-    (querySecret != null && safeStrEqual(querySecret, expected))
-  )
+  return headerSecret != null && safeStrEqual(headerSecret, expected)
 }

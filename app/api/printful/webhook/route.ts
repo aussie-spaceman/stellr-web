@@ -5,9 +5,11 @@ import { auditMutation } from '@/lib/audit/route'
 
 export const dynamic = 'force-dynamic'
 
-// Printful fulfilment webhook (PRD §12). Configure the endpoint URL in Printful
-// with ?secret=<PRINTFUL_WEBHOOK_SECRET>. Handles shipment + failure events for
-// direct storefront orders (event-batch tracking lands in Phase 4).
+// Printful fulfilment webhook (PRD §12). Authenticated by PRINTFUL_WEBHOOK_SECRET in
+// the `x-printful-secret` request header, and only there: a `?secret=` query
+// parameter is refused (threat model R4b; setup in docs/WEB-STORE-PRINTFUL-SETUP.md
+// §4). Handles shipment + failure events for direct storefront orders (event-batch
+// tracking lands in Phase 4).
 //
 // One audit event for an event that changed a row (docs/TENANCY-S5.md, B18). Anything
 // else answers ok before the write, as it always has, and records nothing. A tracking

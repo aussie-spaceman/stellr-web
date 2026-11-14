@@ -164,7 +164,11 @@ export interface WatchChannelResult {
   expiration: Date
 }
 
-export async function watchSheet(spreadsheetId: string, channelId: string): Promise<WatchChannelResult> {
+// Registers a Drive push channel on the sheet. `token` is the channel's shared
+// secret (threat model §6.11): Google echoes it in X-Goog-Channel-Token on every
+// notification, and app/api/webhooks/google-sheets compares it with the copy stored
+// in sheet_watch_channels.token. Google allows up to 256 characters.
+export async function watchSheet(spreadsheetId: string, channelId: string, token: string): Promise<WatchChannelResult> {
   const auth = getAuth()
   if (!auth) throw new Error('Google service account not configured')
 
@@ -179,6 +183,7 @@ export async function watchSheet(spreadsheetId: string, channelId: string): Prom
       id: channelId,
       type: 'web_hook',
       address: `${siteUrl}/api/webhooks/google-sheets`,
+      token,
       expiration: String(expirationMs),
     },
   })

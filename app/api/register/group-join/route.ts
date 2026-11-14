@@ -13,6 +13,7 @@ import { identifyNewParticipant, identifySignedInMember } from '@/lib/registrati
 import { persistGroupJoin } from '@/lib/registration/group-join/persist'
 import { respondToGroupJoin } from '@/lib/registration/group-join/respond'
 import { runGroupJoinHooks } from '@/lib/registration/group-join/stellr-hooks'
+import { reportError, responseError } from '@/lib/app-errors'
 
 // POST /api/register/group-join — self-register via a join token.
 //   • Signed-in members join with one click (their profile is authoritative).
@@ -52,10 +53,21 @@ async function recordJoin(note: AuditNote): Promise<void> {
   )
 }
 
+/** The app_errors label: a fixed pattern, never a concrete path. */
+const ERROR_ROUTE = 'POST /api/register/group-join'
+
 export async function POST(req: NextRequest) {
   const note: AuditNote = { status: 500, userId: null, participantId: null, eventTenantId: null }
   const answer = (res: Response): Response => {
     note.status = res.status
+    return res
+  }
+  // A failed insert the persist step caught and answered with its own 500 never
+  // reaches Next's onRequestError, so it is reported here (lib/app-errors). This
+  // handler has no catch: anything it throws reaches Next, and onRequestError
+  // records it (captureRequestError) under this same route.
+  const reportFailure = async (res: Response): Promise<Response> => {
+    if (res.status >= 500) await reportError(await responseError(res), { route: ERROR_ROUTE })
     return res
   }
   try {
@@ -123,7 +135,7 @@ export async function POST(req: NextRequest) {
     note.eventTenantId = link.context.tenantId
 
     const saved = await persistGroupJoin(db, link, joiner)
-    if (!saved.ok) return answer(saved.response)
+    if (!saved.ok) return answer(await reportFailure(saved.response))
     note.participantId = saved.participantId
 
     await runGroupJoinHooks(db, link, joiner, saved.participantId)

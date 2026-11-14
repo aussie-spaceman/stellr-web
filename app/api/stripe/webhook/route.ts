@@ -20,6 +20,7 @@ import { recordGroupInvoicePaid } from '@/lib/group-billing'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { PRICE_CHANGE_EVENTS, revalidatePriceCaches } from '@/lib/price-cache'
 import { checkInCodeLink } from '@/lib/check-in-codes'
+import { reportError } from '@/lib/app-errors'
 
 // Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
 function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
@@ -844,6 +845,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error('[stripe/webhook] Handler error:', err)
+    await reportError(err, { route: 'POST /api/stripe/webhook' })
     // Do NOT record the event as processed — returning 500 asks Stripe to retry,
     // and the idempotency guard above must let that retry through.
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })

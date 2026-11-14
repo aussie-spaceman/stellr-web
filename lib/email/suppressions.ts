@@ -22,7 +22,17 @@ import { maskEmail } from '@/lib/utils'
 //                            app/api/cron/docusign-reminders);
 //                          - account sign-in invites (lib/member-invite.ts);
 //                          - the privacy-request confirmation link
-//                            (lib/privacy-requests.ts).
+//                            (lib/privacy-requests.ts);
+//                          - every staff alert, to duty holders and to the
+//                            team-inbox fallback (lib/notify.ts
+//                            notifyCommunityAdmins);
+//                          - safeguarding clearance notices
+//                            (lib/compliance-notify.ts notifyClearanceRequired);
+//                          - the daily error digest (lib/app-errors.ts).
+//                        And sendEmail treats mail to the staff inbox
+//                        (teamInboxEmail(), DEFAULT_REPLY_TO) as critical
+//                        whatever the caller says, so a bounce on a staff
+//                        inbox can never silence staff alerts.
 //                        Critical mail still goes through Resend, so an address
 //                        on Resend's own list bounces there and the bounce
 //                        webhook reports it (the roster's Email Bounced pill).

@@ -79,6 +79,30 @@ describe('sendEmail', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('never suppresses mail to the staff inbox, even when the caller did not mark it critical', async () => {
+    vi.stubEnv('REGISTRATION_ALERT_EMAIL', 'alerts@example.test')
+    setup([{ email: 'alerts@example.test', reason: 'bounce' }])
+    const { sendEmail } = await load()
+    expect(await sendEmail({ to: ' Alerts@Example.test ', ...msg })).toEqual({ id: 're_sent' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never suppresses mail to the monitored reply-to mailbox, marketing included', async () => {
+    vi.stubEnv('TRANSACTIONAL_REPLY_TO', 'replies@example.test')
+    setup([{ email: 'replies@example.test', reason: 'unsubscribe' }])
+    const { sendEmail } = await load()
+    expect(await sendEmail({ to: 'REPLIES@example.test', kind: 'marketing', ...msg })).toEqual({ id: 're_sent' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('still suppresses an ordinary address that only resembles the staff inbox', async () => {
+    vi.stubEnv('REGISTRATION_ALERT_EMAIL', 'alerts@example.test')
+    setup([{ email: 'alerts@example.test.evil', reason: 'bounce' }])
+    const { sendEmail } = await load()
+    expect(await sendEmail({ to: 'alerts@example.test.evil', ...msg })).toEqual({ id: null, suppressed: true })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('an unsubscribe stops marketing but not a receipt', async () => {
     setup([{ email: 'quiet@example.test', reason: 'unsubscribe' }])
     const { sendEmail } = await load()

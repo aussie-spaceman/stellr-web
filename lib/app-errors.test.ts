@@ -13,7 +13,9 @@ import {
   MAX_WRITES_PER_MINUTE,
   recordBuiltAppError,
   renderErrorDigest,
+  reportError,
   resetErrorCaptureState,
+  responseError,
   routeLabel,
   scrubMessage,
   sendDailyErrorDigest,
@@ -124,6 +126,68 @@ describe('captureRequestError', () => {
   })
 })
 
+describe('reportError (errors a route or cron caught itself)', () => {
+  function db() {
+    const fake = fakeSupabase()
+    const calls: Record<string, unknown>[] = []
+    fake.rpcs.record_app_error = (args) => { calls.push(args); return null }
+    return { fake, calls }
+  }
+
+  it('records a scrubbed error under the given route label, query string dropped', async () => {
+    const { fake, calls } = db()
+    await reportError(new Error('insert failed for kid@example.test'), { route: 'POST /api/register/individual?x=1', db: fake.client, now: 5 })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({ p_route: 'POST /api/register/individual', p_message: 'Error: insert failed for [email]', p_count: 1 })
+    expect(String(calls[0].p_digest)).toMatch(/^[0-9a-f]{32}$/)
+  })
+
+  it('scrubs the label too', async () => {
+    const { fake, calls } = db()
+    await reportError(new Error('boom'), { route: 'CRON job for kid@example.test', db: fake.client, now: 5 })
+    expect(calls[0].p_route).toBe('CRON job for [email]')
+  })
+
+  it('digests and rate-limits exactly as captureRequestError does', async () => {
+    const { fake, calls } = db()
+    await captureRequestError(new Error('boom'), { method: 'POST' }, { routePath: '/api/check-in' }, { db: fake.client, now: 50 })
+    // The same error, the same label, inside the window: counted, not written.
+    for (let i = 1; i < 4; i++) await reportError(new Error('boom'), { route: 'POST /api/check-in', db: fake.client, now: 50 + i })
+    expect(calls).toHaveLength(1)
+    // After the window the held-back repeats are folded into the next write.
+    await reportError(new Error('boom'), { route: 'POST /api/check-in', db: fake.client, now: 50 + WRITE_WINDOW_MS })
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).toMatchObject({ p_count: 4, p_digest: calls[0].p_digest })
+  })
+
+  it('ignores Next control flow', async () => {
+    const { fake, calls } = db()
+    await reportError(Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT;replace;/x;307;' }), { route: 'POST /a', db: fake.client })
+    expect(calls).toHaveLength(0)
+  })
+
+  it('never throws: not when the write fails, not when there is no database', async () => {
+    const { fake } = db()
+    fake.rpcs.record_app_error = () => { throw new Error('db down') }
+    await expect(reportError(new Error('a'), { route: 'POST /a', db: fake.client })).resolves.toBeUndefined()
+    // No injected db → supabaseServer() throws (mocked) → swallowed.
+    await expect(reportError(new Error('no db'), { route: 'CRON y' })).resolves.toBeUndefined()
+    await expect(reportError(null, { route: undefined as unknown as string })).resolves.toBeUndefined()
+  })
+})
+
+describe('responseError', () => {
+  it('names the status and the JSON error, and leaves the response readable', async () => {
+    const res = Response.json({ error: 'Failed to create registration' }, { status: 500 })
+    expect((await responseError(res)).message).toBe('HTTP 500: Failed to create registration')
+    expect(await res.json()).toEqual({ error: 'Failed to create registration' })
+  })
+
+  it('falls back to the status for a body that is not JSON', async () => {
+    expect((await responseError(new Response('oops', { status: 503 }))).message).toBe('HTTP 503')
+  })
+})
+
 describe('recordBuiltAppError', () => {
   it('never throws, and says a failed write failed', async () => {
     // supabaseServer() throws (mocked). lib/authz/authz.test.ts covers the write itself.
@@ -168,6 +232,23 @@ describe('daily digest', () => {
     expect(sent.subject).toBe('[Stellr] 1 server error in the last day')
     expect(fake.table('app_errors').map((r) => r.digest)).toEqual(['recent', 'yesterday'])
     expect(fake.table('cron_runs').some((r) => r.job === 'error-digest')).toBe(true)
+  })
+
+  it('sends the digest as critical mail', async () => {
+    const fake = fakeSupabase({ cron_runs: [], app_errors: [row({ digest: 'recent' })] })
+    await sendDailyErrorDigest(fake.client, now)
+    expect((sendEmail.mock.calls[0] as unknown as [{ critical?: boolean }])[0].critical).toBe(true)
+  })
+
+  it('records alerted only when the provider accepted the send', async () => {
+    for (const result of [{ id: null, suppressed: true }, { id: null }, { id: null, queued: true }]) {
+      sendEmail.mockClear()
+      sendEmail.mockResolvedValueOnce(result as never)
+      const fake = fakeSupabase({ cron_runs: [], app_errors: [row({ digest: 'recent' })] })
+      expect(await sendDailyErrorDigest(fake.client, now)).toEqual({ errors: 1, alerted: false })
+      const run = fake.table('cron_runs').find((r) => r.job === 'error-digest')
+      expect((run?.result as { alerted?: boolean } | undefined)?.alerted).toBe(false)
+    }
   })
 
   it('sends nothing on a quiet day', async () => {

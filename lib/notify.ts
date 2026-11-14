@@ -31,6 +31,13 @@ export interface NotifyInput {
   actorMemberId?: string
   /** Optional richer email; falls back to `body` when omitted. */
   email?: { subject: string; html: string; text?: string }
+  /**
+   * Send the email even to an address on the suppression list (see
+   * lib/email/suppressions.ts). notifyCommunityAdmins always sets it: a staff
+   * alert (a bounced consent form, a safeguarding flag) must not be lost to
+   * one bad bounce on a staff address. Off by default for notifyMember.
+   */
+  critical?: boolean
 }
 
 export async function notifyMember(memberId: string, input: NotifyInput): Promise<void> {
@@ -40,9 +47,10 @@ export async function notifyMember(memberId: string, input: NotifyInput): Promis
 /**
  * One member's notification. `allowInApp` false skips the in-app row:
  * community_notifications is Stellr's community table, so another tenant's
- * alert goes by email (and SMS) only.
+ * alert goes by email (and SMS) only. Resolves true when the member gets email
+ * at all (email on and an address on file), whether or not the send succeeded.
  */
-async function deliver(memberId: string, input: NotifyInput, allowInApp: boolean): Promise<void> {
+async function deliver(memberId: string, input: NotifyInput, allowInApp: boolean): Promise<boolean> {
   const db = supabaseServer()
 
   const [{ data: member }, { data: prefs }] = await Promise.all([
@@ -66,6 +74,7 @@ async function deliver(memberId: string, input: NotifyInput, allowInApp: boolean
     })
   }
 
+  const emailed = !!(email && member?.email)
   if (email && member?.email) {
     try {
       await sendEmail({
@@ -77,6 +86,7 @@ async function deliver(memberId: string, input: NotifyInput, allowInApp: boolean
         // already-built HTML and is the caller's responsibility to escape.
         html: input.email?.html ?? `<p>${escapeHtml(input.body)}</p>`,
         text: input.email?.text ?? input.body,
+        critical: input.critical === true,
       })
     } catch (e) {
       console.error('[notify] email failed:', e)
@@ -86,6 +96,7 @@ async function deliver(memberId: string, input: NotifyInput, allowInApp: boolean
   if (sms && SMS_ENABLED && prefs?.sms_number) {
     await sendSms({ to: prefs.sms_number, body: input.body })
   }
+  return emailed
 }
 
 /** Notify several members (e.g. a whole cohort). Best-effort, sequential. */
@@ -132,7 +143,11 @@ async function activeMemberIds(ids: string[]): Promise<string[]> {
  *
  * When a Stellr lookup fails or finds nobody, the alert goes to the staff inbox
  * instead: on 28 Sept 2026 prod had zero admin_duties rows and every admin alert
- * silently reached nobody.
+ * silently reached nobody. The same when every Stellr holder has email turned
+ * off (or no address on file): they still get the in-app notification, and the
+ * staff inbox gets the email, so somebody reads it.
+ *
+ * Every email here is critical (never held back by the suppression list).
  *
  * Another tenant's alert never goes to Stellr's inbox, because its body can hold
  * that tenant's personal data. Tenants have no alert contact of their own yet, so
@@ -142,7 +157,9 @@ async function activeMemberIds(ids: string[]): Promise<string[]> {
  * community table. tenants.status is not read yet. Whether a suspended tenant's
  * admins keep getting alerts is an open owner decision.
  */
-export async function notifyCommunityAdmins(input: NotifyInput, opts: TeamAlertOptions = {}): Promise<void> {
+export async function notifyCommunityAdmins(notice: NotifyInput, opts: TeamAlertOptions = {}): Promise<void> {
+  // Staff alerts are never held back by the suppression list.
+  const input: NotifyInput = { ...notice, critical: true }
   const tenantId = opts.tenantId ?? STELLR_TENANT_ID
   const stellr = tenantId === STELLR_TENANT_ID
   let ids: string[] = []
@@ -160,7 +177,21 @@ export async function notifyCommunityAdmins(input: NotifyInput, opts: TeamAlertO
     )
   }
   if (ids.length > 0) {
-    for (const id of ids) await deliver(id, input, stellr)
+    let emailed = 0
+    for (const id of ids) if (await deliver(id, input, stellr)) emailed++
+    // legacy-23.4: holders who all have email off would leave an alert nobody
+    // reads unless they open the bell. Stellr only: another tenant's alert
+    // never goes to Stellr's inbox.
+    if (emailed > 0 || !stellr) return
+    const to = teamInboxEmail()
+    console.error(
+      `[notify] every admin_duties holder of 'all' or 'community' has email off — admin alert also sent to ${to}. ` +
+        'Turn email on for one of them, or give a duty on /admin/duties to someone who reads email.',
+    )
+    await alertTeamInbox(
+      input,
+      `Sent to ${to} because every holder of the 'all' or 'community' duty has email notifications turned off, so nobody received this by email. Turn one back on, or give a duty on /admin/duties.`,
+    )
     return
   }
 
@@ -178,16 +209,24 @@ export async function notifyCommunityAdmins(input: NotifyInput, opts: TeamAlertO
     `[notify] no admin_duties holder of 'all' or 'community' — admin alert sent to ${to} instead. ` +
       'Give a duty on /admin/duties so alerts reach a named person.',
   )
-  const note = `Sent to ${to} because nobody holds the 'all' or 'community' duty. Give one on /admin/duties.`
+  await alertTeamInbox(input, `Sent to ${to} because nobody holds the 'all' or 'community' duty. Give one on /admin/duties.`)
+}
+
+/**
+ * A Stellr staff alert to the team inbox, with a note saying why nobody else
+ * received it. `note` is server-built text. Critical, and never throws.
+ */
+async function alertTeamInbox(input: NotifyInput, note: string): Promise<void> {
   try {
     await sendEmail({
-      to,
+      to: teamInboxEmail(),
       subject: input.email?.subject ?? input.body,
       // deep review PUB-2: same as notifyMember — escape the plain-text body
       // when it falls through to the HTML body. `note` is a server-built
       // constant.
       html: `${input.email?.html ?? `<p>${escapeHtml(input.body)}</p>`}<p><em>${note}</em></p>`,
       text: `${input.email?.text ?? input.body}\n\n${note}`,
+      critical: true,
     })
   } catch (e) {
     console.error('[notify] fallback admin alert email failed:', e)

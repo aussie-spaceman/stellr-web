@@ -17,6 +17,7 @@ import {
   saveGroupMembers,
 } from '@/lib/registration/group/persist'
 import { respondToGroupRegistration } from '@/lib/registration/group/respond'
+import { reportError, responseError } from '@/lib/app-errors'
 import {
   provisionRegistrantLogin,
   runGroupMemberHooks,
@@ -65,11 +66,20 @@ async function recordRegistration(note: AuditNote): Promise<void> {
   )
 }
 
+/** The app_errors label: a fixed pattern, never a concrete path. */
+const ERROR_ROUTE = 'POST /api/register/group'
+
 export async function POST(req: NextRequest) {
   const requestStartedAt = Date.now()
   const note: AuditNote = { status: 500, userId: null, registrationId: null, eventTenantId: null }
   const answer = (res: Response): Response => {
     note.status = res.status
+    return res
+  }
+  // A failed write a persist step caught and answered with its own 500 never
+  // reaches Next's onRequestError, so it is reported here (lib/app-errors).
+  const reportFailure = async (res: Response): Promise<Response> => {
+    if (res.status >= 500) await reportError(await responseError(res), { route: ERROR_ROUTE })
     return res
   }
   try {
@@ -172,12 +182,12 @@ export async function POST(req: NextRequest) {
     // The order of these writes is part of the route's behaviour: see the note on
     // partial state in lib/registration/group/persist.
     const saved = await insertGroupRegistration(group, fields)
-    if (!saved.ok) return answer(saved.response)
+    if (!saved.ok) return answer(await reportFailure(saved.response))
     const { regId } = saved.registration
     note.registrationId = regId
 
     const savedMembers = await saveGroupMembers(group, fields, regId)
-    if (!savedMembers.ok) return answer(savedMembers.response)
+    if (!savedMembers.ok) return answer(await reportFailure(savedMembers.response))
     const { members } = savedMembers
 
     await runGroupMemberHooks(group, fields, regId, members)
@@ -185,7 +195,7 @@ export async function POST(req: NextRequest) {
     const signInToken = await provisionRegistrantLogin(group, members)
 
     const savedParticipants = await insertGroupParticipants(group, fields, regId, members)
-    if (!savedParticipants.ok) return answer(savedParticipants.response)
+    if (!savedParticipants.ok) return answer(await reportFailure(savedParticipants.response))
     const { participants } = savedParticipants
 
     scheduleGroupFollowUp(group, fields, regId, participants, requestStartedAt)
@@ -193,6 +203,7 @@ export async function POST(req: NextRequest) {
     return answer(await respondToGroupRegistration(group, fields, saved.registration, members, participants, signInToken, getEventBySlug))
   } catch (e) {
     console.error('Group registration error:', e)
+    await reportError(e, { route: ERROR_ROUTE })
     note.status = 500
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   } finally {

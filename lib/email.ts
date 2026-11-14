@@ -191,6 +191,11 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
   // unreadable list does not block mail: the send goes ahead and the failure is
   // logged, because silently dropping a consent email on a database hiccup is
   // the worse outcome.
+  //
+  // Mail to Stellr's own staff inbox is never suppressed, whatever the caller
+  // says: one bad bounce there would silently stop every staff alert, the
+  // error digest included.
+  if (isStaffInbox(to)) critical = true
   let ccOut = routed.cc
   if (quotaDb) {
     try {
@@ -261,6 +266,12 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
   // since the mail has already been sent.
   if (quotaDb) await recordSend(quotaDb)
   return { id: sent.id }
+}
+
+/** The staff alert inbox (teamInboxEmail()) or the monitored reply-to mailbox. */
+function isStaffInbox(to: string): boolean {
+  const addr = normaliseEmail(to ?? '')
+  return addr !== '' && (addr === normaliseEmail(teamInboxEmail()) || addr === normaliseEmail(DEFAULT_REPLY_TO))
 }
 
 // deep review INT-2 / PUB-4: the shared budget lives in Supabase (service role).

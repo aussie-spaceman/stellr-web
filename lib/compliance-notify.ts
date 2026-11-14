@@ -258,8 +258,10 @@ export async function notifyClearanceRequired(
     // cleanly, without a second in-app notification.
     let emailed = false
     if (member.email) {
-      await sendEmail({ to: member.email as string, ...email })
-      emailed = true
+      // critical: a safeguarding clearance notice is never held back by the
+      // suppression list. `emailed` only when the send was not suppressed.
+      const sent = await sendEmail({ to: member.email as string, ...email, critical: true })
+      emailed = !sent?.suppressed
     }
 
     const { error: inAppError } = await db.from('community_notifications').insert({

@@ -12,6 +12,7 @@ import type { IndividualBody } from '@/lib/registration/individual/parse'
 import { persistIndividualRegistration } from '@/lib/registration/individual/persist'
 import { respondToIndividualRegistration } from '@/lib/registration/individual/respond'
 import { runIndividualHooks } from '@/lib/registration/individual/stellr-hooks'
+import { reportError, responseError } from '@/lib/app-errors'
 
 // deep review QUAL-7: this handler dispatches a consent agreement, provisions a
 // Clerk user and creates a Stripe checkout inline. Pin the ceiling to the plan
@@ -51,10 +52,19 @@ async function recordRegistration(note: AuditNote): Promise<void> {
   )
 }
 
+/** The app_errors label: a fixed pattern, never a concrete path. */
+const ERROR_ROUTE = 'POST /api/register/individual'
+
 export async function POST(req: NextRequest) {
   const note: AuditNote = { status: 500, userId: null, registrationId: null, eventTenantId: null }
   const answer = (res: Response): Response => {
     note.status = res.status
+    return res
+  }
+  // A failed write the persist step caught and answered with its own 500 never
+  // reaches Next's onRequestError, so it is reported here (lib/app-errors).
+  const reportFailure = async (res: Response): Promise<Response> => {
+    if (res.status >= 500) await reportError(await responseError(res), { route: ERROR_ROUTE })
     return res
   }
   try {
@@ -128,13 +138,14 @@ export async function POST(req: NextRequest) {
     note.eventTenantId = gate.registration.context.tenantId
 
     const saved = await persistIndividualRegistration(gate.registration, fields)
-    if (!saved.ok) return answer(saved.response)
+    if (!saved.ok) return answer(await reportFailure(saved.response))
     note.registrationId = saved.row.regId
 
     const hooks = await runIndividualHooks(gate.registration, saved.row, fields)
     return answer(await respondToIndividualRegistration(gate.registration, saved.row, hooks, fields, getEventBySlug))
   } catch (e) {
     console.error('Individual registration error:', e)
+    await reportError(e, { route: ERROR_ROUTE })
     note.status = 500
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   } finally {

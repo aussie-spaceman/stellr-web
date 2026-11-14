@@ -1,6 +1,7 @@
 import { formatFormDate } from '@/lib/docusign-form-data'
-import { isKnownMinorOn, isMinorOn } from '@/lib/age'
-import type { CreateAgreementRequest } from '@/lib/esign/types'
+import { isKnownMinorOn } from '@/lib/age'
+import { isMinorPerPolicy } from '@/lib/minor-policy'
+import type { CreateAgreementRequest, MembershipAgreementParams } from '@/lib/esign/types'
 import type { Role } from '@/lib/esign/native/template'
 
 // How an agreement request becomes a document, pre-fill data and an ordered
@@ -54,6 +55,26 @@ export interface IssuePlan {
   minorSubject: boolean
   /** The child's year of birth, for that check. */
   subjectBirthYear: string | null
+}
+
+/**
+ * The membership request as lib/membership-agreement builds it: the member's
+ * state travels with it, where known, so the plan reads "Minor" by the same
+ * policy rule (MembershipAgreementParams has no field for it yet).
+ */
+export type MembershipPlanParams = MembershipAgreementParams & { state?: string | null }
+
+/**
+ * Whether a membership request is a Minor's (legal-credential-family-link.7):
+ * the policy's rule (lib/minor-policy: under the age of majority in their
+ * state, or still in school; an unknown date of birth presumes a Minor), the
+ * same rule credentials use. Guardian details on the request also mean a Minor:
+ * lib/membership-agreement adds them only for one, and dispatchTyped records
+ * the agreement as the minor document whenever they are there.
+ */
+export function membershipIsMinor(p: MembershipPlanParams): boolean {
+  if ((p.guardianEmail ?? '').trim()) return true
+  return isMinorPerPolicy({ dateOfBirth: p.dateOfBirth, state: p.state ?? null, grade: p.grade ?? null })
 }
 
 const clean = (s: string | null | undefined) => (s ?? '').trim()
@@ -158,11 +179,11 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
     }
 
     case 'membership': {
-      const p = req.params
+      const p = req.params as MembershipPlanParams
       const name = `${clean(p.firstName)} ${clean(p.lastName)}`.trim()
-      if (isMinorOn(p.dateOfBirth)) {
+      if (membershipIsMinor(p)) {
         if (!clean(p.guardianEmail) || !clean(p.guardianName)) {
-          throw new Error('A parent or guardian name and email are required for an under-18 membership agreement')
+          throw new Error('A parent or guardian name and email are required for a Minor’s membership agreement')
         }
         // V2.3: the Student / Minor agreement covers membership as well as
         // every event, so a Minor joining signs that same document.

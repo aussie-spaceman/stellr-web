@@ -216,7 +216,7 @@ export async function loadSignedRecord(
 export interface AccessEntry {
   envelopeRow: string
   action: 'view' | 'download' | 'certificate' | 'export'
-  actorType: 'admin' | 'member' | 'signer' | 'system'
+  actorType: 'admin' | 'staff' | 'member' | 'signer' | 'system'
   actorId: string | null
   detail?: Record<string, unknown>
 }

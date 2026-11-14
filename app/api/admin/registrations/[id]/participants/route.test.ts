@@ -10,7 +10,9 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => h.session }))
-vi.mock('@/lib/activity-log', () => ({
+// crewActorType is the real one, reading the session above.
+vi.mock('@/lib/activity-log', async (importOriginal) => ({
+  crewActorType: (await importOriginal<typeof import('@/lib/activity-log')>()).crewActorType,
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'staff-1', actorLabel: 'Staff' }),
   logActivity: h.log,
 }))
@@ -87,6 +89,26 @@ describe('POST /api/admin/registrations/[id]/participants', () => {
   it('lets the event manager of that event add', async () => {
     asEventManager(['nevada'])
     expect((await call()).status).toBe(201)
+  })
+
+  // staff-role.10: the activity log names who added the person.
+  it('records an admin as admin', async () => {
+    expect((await call()).status).toBe(201)
+    expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ actorType: 'admin', action: 'roster_added_by_crew' }))
+  })
+
+  it('records Staff as staff, not as a member', async () => {
+    h.session = { userId: 'user_staff', sessionClaims: { metadata: { role: 'staff' } } }
+    expect((await call()).status).toBe(201)
+    expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ actorType: 'staff', action: 'roster_added_by_crew' }))
+    // The shared add still takes its crew path for Staff.
+    expect(h.add).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), { memberId: 'staff-1', label: 'admin' })
+  })
+
+  it('records an event manager on the event as a member, as the activity log has no event manager actor', async () => {
+    asEventManager(['nevada'])
+    expect((await call()).status).toBe(201)
+    expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ actorType: 'member', action: 'roster_added_by_crew' }))
   })
 
   it('passes a refusal from the shared add straight through and records nothing', async () => {

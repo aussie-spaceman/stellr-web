@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { tenantWideScope } from '@/lib/tenancy/scope-context'
+import { LOADSCOPED_MODES } from '@/lib/tenancy/load-scoped-mode'
 
 // "Invoice & discount…" on a group. Every action reads or changes Stellr's Stripe account and
 // its coupons, so after loadEventRecord the group's event must be Stellr's, for a Stellr admin
@@ -25,6 +26,10 @@ const h = vi.hoisted(() => ({
   reissue: vi.fn(),
   resolveCode: vi.fn(),
   logActivity: vi.fn(async (_entry: unknown, _db: unknown) => {}),
+  // What lib/activity-log's crewActorType reads from the session: 'staff' for Staff, else 'admin'.
+  crewActorType: vi.fn(async (): Promise<'admin' | 'staff'> => 'admin'),
+  authzThrows: false,
+  audits: [] as unknown[],
 }))
 
 function fakeDb() {
@@ -52,10 +57,35 @@ function fakeDb() {
   return { from }
 }
 
-vi.mock('@/lib/authz', () => ({ requireEventCrew: h.requireEventCrew }))
+vi.mock('@/lib/authz', () => ({
+  requireEventCrew: async (...args: unknown[]) => {
+    if (h.authzThrows) throw new Error('clerk unavailable')
+    return h.requireEventCrew(...args)
+  },
+}))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => fakeDb() }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: h.stripe }))
-vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'm-admin' }), logActivity: h.logActivity }))
+vi.mock('@/lib/activity-log', () => ({
+  actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'm-admin' }),
+  crewActorType: h.crewActorType,
+  logActivity: h.logActivity,
+}))
+vi.mock('@/lib/audit/platform', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  audit: async (input: unknown) => {
+    h.audits.push(input)
+    return { ok: true, id: 1, seq: 1 }
+  },
+}))
+let pending: Promise<unknown>[] = []
+vi.mock('@/lib/after-response', () => ({
+  runAfterResponse: (_label: string, task: () => Promise<unknown>) => {
+    pending.push(task())
+  },
+}))
+const flush = async () => {
+  await Promise.all(pending.splice(0))
+}
 vi.mock('@/lib/group-billing', () => ({
   groupInvoiceSummary: h.summary,
   previewGroupDiscount: h.preview,
@@ -96,6 +126,10 @@ beforeEach(() => {
   h.events = {}
   h.eventsDown = false
   h.tables = []
+  h.authzThrows = false
+  h.audits = []
+  pending = []
+  h.crewActorType.mockResolvedValue('admin')
   h.summary.mockResolvedValue(SUMMARY)
   h.resolveCode.mockResolvedValue({ couponId: 'coupon_1', label: '10% off' })
   h.setDiscount.mockResolvedValue({ ok: true, message: 'Applied.', invoiceId: 'in_1' })
@@ -184,5 +218,142 @@ describe('/api/admin/registrations/[id]/invoice', () => {
     h.registration = { ...GROUP, type: 'individual' }
     expect((await get()).status).toBe(404)
     expect(h.tables).toEqual(['registrations'])
+  })
+})
+
+// staff-role.10: whoever changes the invoice is named as they are. Staff passes the crew check
+// as a non-admin with every event (lib/authz/decide.ts decideEventAccess), so before this it
+// was written down as an event manager.
+describe('who the billing helpers are told changed the invoice', () => {
+  const staffCrew = () => ({ ...crew(), isAdmin: false, scope: tenantWideScope(STELLR_TENANT_ID, 'crew') })
+
+  it('an admin is admin, and may use an internal coupon id', async () => {
+    expect((await post()).status).toBe(200)
+    expect(h.setDiscount).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, expect.anything(), { memberId: 'm-admin', label: 'admin' })
+    expect(h.resolveCode).toHaveBeenCalledWith(expect.anything(), 'SAVE10', { promotionCodesOnly: false })
+  })
+
+  it('Staff is staff, and enters promotion codes only, as before', async () => {
+    h.requireEventCrew.mockResolvedValue(staffCrew())
+    h.crewActorType.mockResolvedValue('staff')
+    expect((await post()).status).toBe(200)
+    expect(h.setDiscount).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, expect.anything(), { memberId: 'm-admin', label: 'staff' })
+    expect(h.resolveCode).toHaveBeenCalledWith(expect.anything(), 'SAVE10', { promotionCodesOnly: true })
+  })
+
+  it('an event manager on the event is event_manager, and enters promotion codes only', async () => {
+    h.requireEventCrew.mockResolvedValue(crew({ assigned: ['msu'] }))
+    // crewActorType answers 'admin' for anyone who is not Staff; the crew check decides the rest.
+    h.crewActorType.mockResolvedValue('admin')
+    expect((await post()).status).toBe(200)
+    expect(h.setDiscount).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, expect.anything(), { memberId: 'm-admin', label: 'event_manager' })
+    expect(h.resolveCode).toHaveBeenCalledWith(expect.anything(), 'SAVE10', { promotionCodesOnly: true })
+  })
+
+  it('a reissue carries the same label', async () => {
+    h.requireEventCrew.mockResolvedValue(staffCrew())
+    h.crewActorType.mockResolvedValue('staff')
+    h.reissue.mockResolvedValue({ ok: true, message: 'Corrected.', invoiceId: 'in_2' })
+    expect((await post({ action: 'reissue' })).status).toBe(200)
+    expect(h.reissue).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, { memberId: 'm-admin', label: 'staff' })
+  })
+})
+
+// C16-INVOICE (docs/TENANCY-S5.md, "invoice alongside payment-method"): the stamped-tenant
+// check on the loaded row. The fake database here answers the row whatever the filter, so
+// each mode shows the route's own check, not the enforced read's.
+describe('a group stamped with another tenant', () => {
+  for (const mode of LOADSCOPED_MODES) {
+    it(`answers exactly as a missing group, under LOADSCOPED_MODE=${mode}, with no read past the row and no Stripe`, async () => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+      h.registration = { ...GROUP, tenant_id: OTHER_TENANT }
+      const read = await get()
+      const change = await post()
+      expect(read.status).toBe(404)
+      expect(change.status).toBe(404)
+      // The stamp is read in the existing select: no owner read, and no query a missing
+      // group would not cost in the same mode (shadow reads the row both ways).
+      const foreignTables = h.tables.splice(0)
+      expect(foreignTables).not.toContain('events')
+      expect(h.summary).not.toHaveBeenCalled()
+      expect(h.stripe).not.toHaveBeenCalled()
+      expect(h.resolveCode).not.toHaveBeenCalled()
+      expect(h.setDiscount).not.toHaveBeenCalled()
+      expect(h.logActivity).not.toHaveBeenCalled()
+      h.registration = null
+      expect(await read.text()).toBe(await (await get()).text())
+      expect(await change.text()).toBe(await (await post()).text())
+      expect(foreignTables).toEqual(h.tables)
+    })
+
+    it(`its own tenant's group goes on as before, under LOADSCOPED_MODE=${mode}`, async () => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+      h.registration = { ...GROUP, tenant_id: STELLR_TENANT_ID }
+      expect((await get()).status).toBe(200)
+      expect((await post()).status).toBe(200)
+      expect(h.setDiscount).toHaveBeenCalledTimes(1)
+    })
+  }
+
+  it('an event manager on the event gets the same missing answer', async () => {
+    h.requireEventCrew.mockResolvedValue(crew({ assigned: ['msu'] }))
+    h.registration = { ...GROUP, tenant_id: OTHER_TENANT }
+    const foreign = await post()
+    expect(foreign.status).toBe(404)
+    h.registration = null
+    expect(await foreign.text()).toBe(await (await post()).text())
+  })
+
+  it('a row with no stamp is Stellr\'s, as the enforced read takes it to be', async () => {
+    h.registration = { ...GROUP, tenant_id: null }
+    expect((await post()).status).toBe(200)
+  })
+
+  it('the selected columns include the stamp', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('./route.ts', import.meta.url), 'utf8')
+    expect(src).toContain("select: 'event_slug, type, teacher_member_id, tenant_id'")
+  })
+})
+
+describe('audit, with PLATFORM_AUDIT_ENABLED=true', () => {
+  beforeEach(() => {
+    vi.stubEnv('PLATFORM_AUDIT_ENABLED', 'true')
+    h.events = { msu: STELLR_TENANT_ID }
+  })
+
+  it('a change records the caller, Stellr\'s chain and the group', async () => {
+    expect((await post()).status).toBe(200)
+    await flush()
+    expect(h.audits).toHaveLength(1)
+    expect(h.audits[0]).toMatchObject({
+      action: 'registration.invoice.change',
+      actor: 'user_testadmin',
+      tenantId: STELLR_TENANT_ID,
+      target: { table: 'registrations', id: ID },
+      metadata: { invoiceAction: 'apply', couponId: 'coupon_1', invoiceId: 'in_1' },
+    })
+  })
+
+  it('a failure before the staff check still names the row, and marks its chain unresolved', async () => {
+    h.authzThrows = true
+    await expect(post()).rejects.toThrow()
+    await expect(get()).rejects.toThrow()
+    await flush()
+    expect(h.audits).toHaveLength(2)
+    for (const [i, action] of ['registration.invoice.change', 'registration.invoice.read'].entries()) {
+      expect(h.audits[i]).toMatchObject({
+        action,
+        tenantId: null,
+        target: { table: 'registrations', id: ID },
+        metadata: { tenant_unresolved: true },
+      })
+    }
+  })
+
+  it('a group stamped with another tenant records nothing, as any refusal', async () => {
+    h.registration = { ...GROUP, tenant_id: OTHER_TENANT }
+    expect((await post()).status).toBe(404)
+    await flush()
+    expect(h.audits).toEqual([])
   })
 })

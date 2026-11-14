@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireEventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { actorFromAuth, crewActorType, logActivity } from '@/lib/activity-log'
 import { addParticipantToGroup, GROUP_FOR_ADD_COLUMNS, type GroupForAdd } from '@/lib/group-participant-add'
 import { withAudit } from '@/lib/audit/route'
 import { loadEventRecord } from '@/lib/tenancy/load-scoped'
@@ -67,6 +67,7 @@ async function addParticipant(req: Request, { params }: { params: Promise<{ id: 
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
   const actor = await actorFromAuth()
+  // 'admin' here is the shared add's crew path (lib/group-participant-add.ts), not who acted.
   const result = await addParticipantToGroup(db, reg, body as Record<string, unknown>, {
     memberId: actor.actorMemberId ?? null,
     label: 'admin',
@@ -75,7 +76,9 @@ async function addParticipant(req: Request, { params }: { params: Promise<{ id: 
   if (result.status === 201 && result.memberId) {
     await logActivity({
       memberId: result.memberId,
-      actorType: crew.isAdmin ? 'admin' : 'member',
+      // Staff is named as Staff (staff-role.10); an event manager stays a member, as the
+      // activity log has no event manager actor.
+      actorType: (await crewActorType()) === 'staff' ? 'staff' : crew.isAdmin ? 'admin' : 'member',
       actorMemberId: actor.actorMemberId ?? null,
       actorLabel: actor.actorLabel ?? null,
       category: 'event',

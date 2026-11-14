@@ -46,9 +46,10 @@ Medical information is `participants.health_conditions` (per event) and
    90 days ago (staff laptops, Drive, email attachments).
 6. Note the run date in the privacy requests log ("Medical retention run").
 
-Follow-up ticket: a Vercel cron that does steps 1–3 automatically, and a
+Follow-up ticket: a Vercel cron that does steps 1–3 automatically. The
 migration that stops `audit_members()` copying `health_conditions` into
-`audit_log` at all.
+`audit_log` is written (S0 audit scrub, Part E); until the owner applies it,
+step 3 of the generated SQL still matters for `audit_log`.
 
 ## Part B — Deletion requests (school, parent, guardian, or student)
 
@@ -218,3 +219,82 @@ Same as Part B, with two differences:
 - The request may cover a **whole cohort**. List every student from that school's
   registrations, log one row per student under one request reference, and close
   the request when the last student is done.
+
+## Part E — Audit and archive copies of health and emergency-contact data (S0 audit scrub)
+
+**Why.** `audit_log` and `deletion_archive` held plaintext copies of health,
+dietary and emergency-contact details (`docs/THREAT-MODEL.md`, TB4 I). Two
+pieces close that: a migration that stops new copies, and a script that
+scrubs the old ones. Neither has been applied or run anywhere yet.
+
+**What the trigger now leaves out.** Migration
+`supabase/migrations/20261114030557_s0_audit_scrub_trigger.sql` replaces
+`audit_members()`, the function behind `trg_audit_members` on `members`. Every
+`old_data` and `new_data` image it writes loses these keys:
+
+- health: `health_conditions`
+- dietary: `dietary_requirements`
+- emergency contact on a member: `ec_first_name`, `ec_last_name`, `ec_email`,
+  `ec_phone`, `ec_relationship`
+- emergency contact on a participant: `emergency_contact_first_name`,
+  `emergency_contact_last_name`, `emergency_contact_email`,
+  `emergency_contact_phone`, `emergency_contact_relationship`
+- guardian contact: `guardian_name`, `guardian_email`
+- the S4 shadow of each: `<column>_enc` (ciphertext) and, for the email and
+  phone columns, `<column>_bidx` (blind index)
+
+The list is the S4 sensitive-column catalogue (`lib/field-crypto-fields.ts`).
+`scripts/scrub-audit-health.ts` holds the same list as `SCRUB_KEYS`, and its
+test fails if the migration, the script and the catalogue ever disagree: add a
+new sensitive column to the catalogue and the test says where else to add it.
+Everything else in the row is still recorded, so `audit_log` still shows who
+changed which member, when, and which other fields changed. A change to a
+health or emergency-contact field alone now shows as a row whose only visible
+difference is `updated_at`.
+
+The migration changes no existing row. It is forward-only: no rollback is
+needed, but restoring the earlier function from `supabase/baseline.sql` would
+undo it.
+
+**What it does not cover.**
+
+- `deletion_archive` snapshots written after the migration still hold the
+  values: `lib/deletion/archive.ts` snapshots with `select('*')`. Rerun the
+  scrub (step 4 below) until that file scrubs at write time.
+- `member_allergies` (join rows to a fixed option list), the e-sign copies in
+  `agreements.prefill` and `agreement_recipients.signer_values`, signed PDFs
+  and Google Sheets are out of scope, as in `docs/FIELD-CRYPTO.md`.
+
+**Owner steps.** Production only, in this order. The scrub cannot be undone,
+so the backup comes first.
+
+1. **Apply the migration** through the normal promotion route (the promote
+   skill, or the `Production migration` Action once it is proven). Its version
+   sorts before `20261114090000_record_access_log`, so if that one reaches
+   production first, apply this one by name rather than relying on order.
+2. **Take a backup** that holds `audit_log` and `deletion_archive`, using the
+   owner's backup routine, and confirm it restores. Do not go on without one.
+3. **Dry run** from a checkout whose `.env.local` names production:
+   ```bash
+   npx tsx scripts/scrub-audit-health.ts --i-have-a-backup --production
+   ```
+   It prints, per table, the rows read, the rows holding any of the keys, and
+   a count per key name. It never prints a value or a row id.
+4. **Scrub:**
+   ```bash
+   npx tsx scripts/scrub-audit-health.ts --i-have-a-backup --production --apply
+   ```
+   It removes the keys at any depth, including the nested `{ table: [rows] }`
+   shape of a snapshot, and stops after 5,000 updated rows per table
+   (`--max-rows`). If it says "stopped at --max-rows", run it again. A rerun
+   only reads rows that are already clean. `--table audit_log` or
+   `--table deletion_archive` limits it to one table.
+5. **Check:** run the dry run again (both tables should report 0 rows holding
+   keys), then `npx tsx scripts/scan-plaintext-sensitive.ts` and confirm the
+   `audit_log` and `deletion_archive` lines report no sensitive plaintext.
+6. Note the run date in the privacy requests log ("Audit scrub run"). Keep the
+   backup only as long as the retention rules allow, because it still holds
+   the values.
+
+The script refuses to run at all without `--i-have-a-backup`, refuses a
+production URL without `--production`, and refuses any flag it does not know.

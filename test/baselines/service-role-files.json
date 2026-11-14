@@ -1737,6 +1737,10 @@
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements, audit_log, deletion_archive, tenant_data_keys"
     },
+    "scripts/scrub-audit-health.ts": {
+      "class": "script",
+      "reason": "S0 audit scrub backfill, run by hand by the operator once the trigger migration is applied: rewrites audit_log and deletion_archive rows to drop health and emergency-contact fields. Those tables are service-role only, so no lesser client can read or update them."
+    },
     "scripts/seed-e2e-stack.ts": {
       "class": "script",
       "reason": "CI seed for the disposable e2e-local stack: writes fixture esign_templates and links members to Clerk users. Refuses any URL not on loopback, and any Clerk key not sk_test_, so it holds only the CLI's local default key."

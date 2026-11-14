@@ -241,6 +241,19 @@ describe('check-migration-security: new public tables revoke anon + authenticate
     ).toHaveLength(1)
   })
 
+  it('flags REVOKE GRANT OPTION FOR ALL, which leaves every privilege in place', () => {
+    const offenders = tableOffenders(
+      'CREATE TABLE public.widgets (id uuid);\nREVOKE GRANT OPTION FOR ALL ON public.widgets FROM anon, authenticated;',
+    )
+    expect(offenders).toHaveLength(1)
+    expect(offenders[0].missing).toEqual(['anon', 'authenticated'])
+    expect(
+      tableOffenders(
+        'CREATE TABLE public.widgets (id uuid);\nREVOKE GRANT OPTION FOR ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated;',
+      ),
+    ).toHaveLength(1)
+  })
+
   it('flags a revoke of a DIFFERENT table', () => {
     expect(
       tableOffenders('CREATE TABLE public.widgets (id uuid);\nREVOKE ALL ON public.gadgets FROM anon, authenticated;'),

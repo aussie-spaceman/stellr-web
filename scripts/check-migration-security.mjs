@@ -333,7 +333,10 @@ const CREATE_TABLE = new RegExp(
   String.raw`^create\s+(?:(global|local)\s+)?(temp|temporary|unlogged)?\s*table\s+(?:if\s+not\s+exists\s+)?(${QUALIFIED})`,
   'i',
 )
-const REVOKE_ALL_ON = /^revoke\s+(?:grant\s+option\s+for\s+)?all(?:\s+privileges)?\s+on\s+/i
+// `REVOKE GRANT OPTION FOR ALL ON …` is deliberately NOT matched: it removes
+// only the right to re-grant, so anon/authenticated keep every privilege the
+// default grant gave them. It does not count as a revoke.
+const REVOKE_ALL_ON = /^revoke\s+all(?:\s+privileges)?\s+on\s+/i
 const ALL_TABLES_IN_SCHEMA = new RegExp(String.raw`^all\s+tables\s+in\s+schema\s+(${IDENT})`, 'i')
 
 /** Roles named in a REVOKE's FROM clause, normalised ('public' for PUBLIC). */

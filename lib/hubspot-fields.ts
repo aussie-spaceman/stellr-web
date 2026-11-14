@@ -82,7 +82,22 @@ export const HS = {
   lpUtmCampaign: 'lp_utm_campaign',
   lpUtmContent: 'lp_utm_content',
   lpUtmTerm: 'lp_utm_term',
+
+  // Classroom Qualifier curriculum requests (/lp/mncose26 and the Phase 1 hub).
+  // Named by the V2 handover §3.5. Created by scripts/hubspot-setup.ts.
+  cqTheme: 'cq_theme',
+  cqWindow: 'cq_window',
+  cqTeacherGrantInterest: 'cq_teacher_grant_interest',
+  cqStudentsBand: 'cq_students_band',
+  cqCourseSubject: 'cq_course_subject',
 } as const
+
+/** `lp_audience` / `lp_program_interest` values a curriculum request writes. */
+export const CQ_LP_AUDIENCE = 'classroom_qualifier_teacher'
+export const CQ_PROGRAM_INTEREST = 'classroom-qualifier'
+export const CQ_THEMES = ['space', 'enviro', 'not_sure'] as const
+export const CQ_WINDOWS = ['2026-27', 'spring-2027'] as const
+export const CQ_STUDENTS_BANDS = ['1-25', '26-75', '76-150', '150+'] as const
 
 /* ── Lead sources ────────────────────────────────────────────────────────── */
 
@@ -99,6 +114,12 @@ export const LEAD_SOURCES = {
   // lp_audience and lp_source_page, so the next six pages need no new HubSpot
   // objects, no new workflows and no new form.
   landing_page: 'Landing Page',
+  // Classroom Qualifier curriculum requests. Its own source and its own form
+  // because the request carries fields (theme, window, band, subject, school)
+  // that the Landing Page form does not declare, and HubSpot rejects a
+  // submission naming a field the form lacks. Per-page reporting still comes
+  // from lp_source_page (e.g. mncose26).
+  classroom_qualifier: 'Classroom Qualifier',
 } as const
 
 export type LeadSource = keyof typeof LEAD_SOURCES
@@ -118,6 +139,7 @@ const FORM_ENV_VARS: Record<LeadSource, string> = {
   host_event: 'HUBSPOT_FORM_HOST_EVENT',
   teacher_grant: 'HUBSPOT_FORM_TEACHER_GRANT',
   landing_page: 'HUBSPOT_FORM_LANDING_PAGE',
+  classroom_qualifier: 'HUBSPOT_FORM_CLASSROOM_QUALIFIER',
 }
 
 export function formIdFor(source: LeadSource): string | undefined {
@@ -154,6 +176,8 @@ export const LEAD_SOURCE_LIFECYCLE: Record<LeadSource, 'subscriber' | 'lead'> = 
   // Every landing-page submission is a request for a call, so it is a lead from
   // the first touch — not a subscriber who might be marketed to later.
   landing_page: 'lead',
+  // A teacher asking for curriculum they intend to run with a class.
+  classroom_qualifier: 'lead',
 }
 
 /** Routes whose contacts HubSpot will wrongly leave at Lead. */

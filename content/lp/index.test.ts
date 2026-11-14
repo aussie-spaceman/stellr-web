@@ -6,8 +6,13 @@ import { PHOTOS } from '@/lib/media-manifest'
 const configs = Object.values(LANDING_PAGES)
 
 describe('landing page registry', () => {
-  it('registers both audience pages', () => {
-    expect(LANDING_PAGE_SLUGS).toEqual(['first-robotics-teachers', 'homeschool-students'])
+  it('registers both audience pages and the curriculum pages', () => {
+    expect(LANDING_PAGE_SLUGS).toEqual(['first-robotics-teachers', 'homeschool-students', 'mncose26'])
+  })
+
+  it('never hands a curriculum page to the booking-call lead route', () => {
+    // /api/lp-lead validates its slug with getLandingPage().
+    expect(getLandingPage('mncose26')).toBeUndefined()
   })
 
   it('keys every config by its own slug', () => {

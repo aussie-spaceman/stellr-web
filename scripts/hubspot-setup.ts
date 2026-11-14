@@ -51,6 +51,11 @@ import {
   GRANT_PRIOR,
   GRANT_STATUS,
   HS,
+  CQ_LP_AUDIENCE,
+  CQ_PROGRAM_INTEREST,
+  CQ_STUDENTS_BANDS,
+  CQ_THEMES,
+  CQ_WINDOWS,
 } from '../lib/hubspot-fields'
 
 // Same convention as the other operational scripts: read .env.local so the
@@ -357,6 +362,49 @@ const PROPERTIES: PropertyDef[] = [
     type: 'string',
     fieldType: 'text',
   },
+  // ── Classroom Qualifier curriculum requests (V2 handover §3.5) ──────────
+  {
+    name: HS.cqTheme,
+    label: 'CQ Theme',
+    description: 'Classroom Qualifier theme the teacher picked: Space, Environmental or not sure yet.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts([...CQ_THEMES]),
+  },
+  {
+    name: HS.cqWindow,
+    label: 'CQ Window',
+    description: 'Classroom Qualifier window the curriculum request was made for.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts([...CQ_WINDOWS]),
+  },
+  {
+    name: HS.cqTeacherGrantInterest,
+    label: 'CQ Teacher Grant Interest',
+    description: 'Ticked "I’m interested in the Teacher Grant" on a Classroom Qualifier form.',
+    type: 'bool',
+    fieldType: 'booleancheckbox',
+    options: [
+      { label: 'Yes', value: 'true', displayOrder: 0 },
+      { label: 'No', value: 'false', displayOrder: 1 },
+    ],
+  },
+  {
+    name: HS.cqStudentsBand,
+    label: 'CQ Students Band',
+    description: 'Roughly how many students the teacher expects, as a band.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts([...CQ_STUDENTS_BANDS]),
+  },
+  {
+    name: HS.cqCourseSubject,
+    label: 'CQ Course / Subject',
+    description: 'The course or subject the teacher will run the curriculum in.',
+    type: 'string',
+    fieldType: 'text',
+  },
 ]
 
 /**
@@ -447,6 +495,30 @@ const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[
     key: 'landing_page',
     name: 'Website — Landing Page Enquiry',
     fields: [...COMMON_FIELDS, ...LANDING_PAGE_FIELDS],
+  },
+  {
+    // The handover's cq-curriculum-request: one form for every Qualifier page,
+    // separated in reporting by lp_source_page (mncose26, hub, window pages).
+    key: 'classroom_qualifier',
+    name: 'Website — Classroom Qualifier Curriculum Request',
+    fields: [
+      ...COMMON_FIELDS,
+      HS.school,
+      HS.stellrRole,
+      HS.lpAudience,
+      HS.lpSourcePage,
+      HS.lpProgramInterest,
+      HS.lpUtmSource,
+      HS.lpUtmMedium,
+      HS.lpUtmCampaign,
+      HS.lpUtmContent,
+      HS.lpUtmTerm,
+      HS.cqTheme,
+      HS.cqWindow,
+      HS.cqTeacherGrantInterest,
+      HS.cqStudentsBand,
+      HS.cqCourseSubject,
+    ],
   },
 ]
 
@@ -870,6 +942,9 @@ async function main() {
   await convertDemographicToMultiSelect()
   await ensureEnumOptions(HS.notifyStatus, Object.values(NOTIFY_STATUS), 'notify statuses')
   await ensureEnumOptions(HS.leadSource, Object.values(LEAD_SOURCES), 'lead sources')
+  // Classroom Qualifier pages write new values into two existing LP selects.
+  await ensureEnumOptions(HS.lpAudience, ['first_robotics_teacher', 'homeschool', CQ_LP_AUDIENCE], 'LP audiences')
+  await ensureEnumOptions(HS.lpProgramInterest, ['space-design-competition', 'environmental-design-competition', CQ_PROGRAM_INTEREST], 'LP program interests')
   // The event_* option lists (location, year, theme, demographic) follow Sanity
   // and are owned by `npm run hubspot:sync-event-options`. The year step that
   // used to live here PATCHed a fixed 2023–2030 list, which would have wiped

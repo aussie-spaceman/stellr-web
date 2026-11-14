@@ -177,6 +177,14 @@ export const CASE_FIXTURES: Record<string, CaseFixture> = {
     body: { role: 'teacher', consent: true, students: 10, audience: 'teachers' },
     inputs: { pageSlug: 'first-robotics-teachers' },
   },
+  'app/api/cq-lead/route.ts': {
+    reason: 'every field has a fixed shape; pageSlug is a static page key, not a tenant record',
+    body: {
+      firstName: 'Idor', lastName: 'Case', school: 'Idor High', subject: 'Physics',
+      studentsBand: '1-25', theme: 'space', grantInterest: false, consent: true,
+    },
+    inputs: { pageSlug: 'mncose26' },
+  },
   'app/api/teacher-grant/route.ts': {
     reason: 'every answer is validated by shape',
     body: {

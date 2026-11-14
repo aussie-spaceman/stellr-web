@@ -34,6 +34,12 @@ export const LANDING_PAGE_SLUGS: string[] = [
   ...CURRICULUM_PAGES.map((p) => p.slug),
 ]
 
+/** Slugs that belong in the sitemap: every page except a noindex one. */
+export const INDEXABLE_LANDING_PAGE_SLUGS: string[] = [
+  ...PAGES.map((p) => p.slug),
+  ...CURRICULUM_PAGES.filter((p) => !p.noindex).map((p) => p.slug),
+]
+
 export function getCurriculumLandingPage(slug: string): CurriculumLandingPageConfig | undefined {
   return CURRICULUM_BY_SLUG[slug]
 }

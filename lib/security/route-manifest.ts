@@ -293,6 +293,7 @@ export const ROUTE_MANIFEST: Record<string, RouteClass> = {
   'app/api/img/route.ts': 'public',
   'app/api/join-network/route.ts': 'public',
   'app/api/lp-lead/route.ts': 'public',
+  'app/api/cq-lead/route.ts': 'public',
   'app/api/members/addresses/route.ts': 'participant',
   'app/api/members/billing/payment-link/route.ts': 'participant',
   'app/api/members/billing/receipt/route.ts': 'participant',

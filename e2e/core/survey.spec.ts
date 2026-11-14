@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
 import { attachConsoleGuard } from '../fixtures/console-guard'
+import { freshClerkSession } from '../fixtures/fresh-session'
 import { storageStatePath } from '../fixtures/users'
 import { createSurveyEvent, issueSurveyCredential, removeSurveyEvent, setCertificateGate, surveyConfigured, surveyPath } from '../fixtures/survey'
 
@@ -26,9 +27,11 @@ const ANSWERS = {
 }
 
 /**
- * Load a page before calling admin APIs: Clerk refreshes its short-lived
- * session cookie on navigation, not on API calls, so a request made long
- * after sign-in (CI queues) arrives signed out.
+ * Load a page that loads Clerk, then mint a fresh session token on it, before
+ * calling APIs with `page.request`. Navigation alone is not enough: a saved
+ * token with a few seconds left survives it and expires before the call, which
+ * failed this spec in the first 90 seconds of CI runs on 12–13 Nov 2026
+ * (fixtures/fresh-session.ts).
  */
 async function refreshSession(page: Page, as: 'admin' | 'member' = 'admin') {
   if (as === 'admin') {
@@ -38,6 +41,7 @@ async function refreshSession(page: Page, as: 'admin' | 'member' = 'admin') {
     await page.goto('/community/surveys')
     await expect(page.getByRole('heading', { name: 'My surveys', exact: true })).toBeVisible()
   }
+  await freshClerkSession(page)
 }
 
 async function expectAccessible(page: Page, step: string) {
@@ -132,6 +136,7 @@ test.describe('Post-event survey', () => {
       await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible()
 
       const invitationId = page.url().split('/open/')[1].split('?')[0]
+      await freshClerkSession(page) // the member area loads Clerk
       const res = await page.request.post(`/api/members/surveys/${invitationId}/submit`, {
         data: { answers: { overall_rating: 'Excellent', nps: 10, stem_intent_before: 'Not sure', stem_intent_after: 'Likely', highlight: 'Testing the rover' } },
       })
@@ -172,6 +177,8 @@ test.describe('Post-event survey', () => {
       await expect(page.getByRole('link', { name: 'Finish the survey to download the certificate' })).toHaveAttribute('href', surveyUrl)
 
       const invitationId = surveyUrl.split('/open/')[1]
+      // Several navigations later: mint again before the next calls (on Credentials, which loads Clerk).
+      await freshClerkSession(page)
       const res = await page.request.post(`/api/members/surveys/${invitationId}/submit`, {
         data: { answers: { overall_rating: 'Good', nps: 7, stem_intent_before: 'Likely', stem_intent_after: 'Likely' } },
       })
@@ -194,11 +201,7 @@ test.describe('Post-event survey', () => {
     })
 
     test('preview counts, send live, completion table updates', async ({ page }) => {
-      // Load a page first: Clerk refreshes its short-lived session cookie on
-      // navigation, not on API calls, so a request straight after a long
-      // queue (CI) arrives signed out.
-      await page.goto('/admin/surveys')
-      await expect(page.getByRole('heading', { name: 'Surveys', exact: true })).toBeVisible()
+      await refreshSession(page)
 
       const api = `/api/admin/events/${slug}/survey`
       const getView = async () => {

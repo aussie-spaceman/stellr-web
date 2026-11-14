@@ -355,8 +355,6 @@ export const GUARD_EXCEPTIONS: Record<string, string> = {
     'liveness probe for the provider dashboard; returns {ok:true} and reads nothing',
   'app/api/webhooks/docusign/route.ts#GET':
     'liveness probe for DocuSign Connect; returns {ok:true} and reads nothing',
-  'app/api/webhooks/google-sheets/route.ts#POST':
-    'Google push channels carry no signature; acts only on a channel id it registered (sheet_watch_channels), unexpired',
 
   // ── platform_destined ───────────────────────────────────────────────────
   'app/api/admin/impersonation/route.ts#DELETE':

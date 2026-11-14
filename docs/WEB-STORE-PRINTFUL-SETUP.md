@@ -36,14 +36,35 @@ for an account-level token spanning multiple stores, in which case requests carr
 store via the `X-PF-Store-Id` header (the client in `lib/store/printful.ts` already
 sends it when the var is set).
 
-## 4. Generate the webhook secret
-Printful v1 webhooks aren't HMAC-signed, so we embed a secret in the webhook URL and
-verify it on receipt. Generate one:
-```
-openssl rand -hex 32
-```
-Keep it for `PRINTFUL_WEBHOOK_SECRET`. Registering the webhook endpoint in Printful
-happens in Phase 2 (when `app/api/printful/webhook` exists).
+## 4. Generate the webhook secret and send it in a header
+Printful v1 webhooks aren't HMAC-signed, so each delivery must carry a shared secret.
+`app/api/printful/webhook` accepts it **only** in the `x-printful-secret` request
+header and compares it in constant time with `PRINTFUL_WEBHOOK_SECRET`. A secret in
+the URL (`?secret=...`) is refused with 401, even when the value is right: a URL
+secret ends up in request logs and in the provider's dashboard (threat model R4b).
+
+1. Generate a secret:
+   ```
+   openssl rand -hex 32
+   ```
+   Keep it for `PRINTFUL_WEBHOOK_SECRET` (step 5).
+2. Register the endpoint `https://www.stellreducation.org/api/printful/webhook`
+   **without** any query string, and configure the delivery to send the header
+   `x-printful-secret: <the secret>`.
+3. Check before relying on it: confirm in Printful's current webhook documentation
+   that the configuration can attach a custom header to each delivery. If Printful
+   cannot send one, do not fall back to the URL form; deliveries will answer 401
+   until the code is changed to a form Printful can sign or send.
+
+### Rotating the secret
+Do this whenever the secret may have been exposed, and once when moving off the old
+URL form (where it sat in the webhook URL):
+1. Generate a new secret (step 1 above).
+2. Set the new value of `PRINTFUL_WEBHOOK_SECRET` in Vercel and redeploy.
+3. Update the header in the Printful webhook configuration to the new value, and
+   remove any `?secret=` from the registered URL.
+4. Send a test event from Printful and check it answers 200. Between steps 2 and 3
+   deliveries answer 401 and their shipment updates are lost, so keep the gap short.
 
 ## 5. Set the env vars — local and production
 `.env.local` (repo root; documented in `.env.local.example`):

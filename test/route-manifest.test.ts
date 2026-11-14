@@ -45,7 +45,7 @@ import { TABLE_REGISTRY } from '@/lib/tenancy/registry'
 
 // The number of grandfathered handlers in GUARD_EXCEPTIONS. Changing it is a
 // deliberate act: an exception added without moving this number fails here.
-const EXPECTED_EXCEPTIONS = 18
+const EXPECTED_EXCEPTIONS = 17
 // Likewise for PUBLIC_DATA_GATES (public metadata routes that read the database).
 const EXPECTED_DATA_GATES = 1
 

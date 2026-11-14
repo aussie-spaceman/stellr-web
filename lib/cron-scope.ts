@@ -4,7 +4,7 @@
 // classified when it is added.
 //
 //   per_tenant   works over event data that belongs to any tenant; moves onto
-//                runPerTenant (lib/cron-tenants.ts) in B13 and B14
+//                runPerTenant (lib/cron-tenants.ts) in B13, B14 and B22
 //   stellr_only  Stellr's own products, integrations or staff inbox; limited to
 //                Stellr data where it reads event-scoped tables (B11, stellrRows
 //                in lib/tenancy/stellr-scope.ts). Rows with a NULL tenant_id
@@ -66,7 +66,10 @@ export const CRON_SCOPES: Readonly<Record<string, CronScopeEntry>> = {
   'docusign-reminders': { scope: 'per_tenant', why: 'native e-sign reminders (B14); the DocuSign part stays Stellr-only' },
   entitlements: { scope: 'platform', why: 'entitlement lifecycle and the daily platform error digest' },
   'event-emails': { scope: 'per_tenant', why: 'event emails for any tenant (B14)' },
-  'group-invoice-sync': { scope: 'per_tenant', why: "a group's own unpaid invoice, for any tenant" },
+  'group-invoice-sync': {
+    scope: 'per_tenant',
+    why: "a group's own unpaid invoice, for any tenant (B22); another tenant's rows are held until S9 brings priced tenant events",
+  },
   'hubspot-event-options': { scope: 'stellr_only', why: "Stellr's HubSpot; syncs only Stellr events (B11)" },
   'hubspot-lifecycle': { scope: 'stellr_only', why: "Stellr's HubSpot" },
   'email-outbox': {

@@ -1400,4 +1400,105 @@ describe("Stellr-only routes on another tenant's event", () => {
     }
     expect(state.sendEmail.mock.calls.length + state.reissue.mock.calls.length).toBeGreaterThan(0)
   })
+
+  // fixrev-low-c-test: a status code alone does not show that Stellr's own event still gets
+  // what it got before C17. In every LOADSCOPED_MODE, mirrored or not: the reminder reaches the
+  // participant with the guardian copied, the reissue asks for this participant's envelope on
+  // this event, the guardian correction saves the new address before the new form goes out,
+  // and each leaves its activity entry and exactly one audit row.
+  describe.each(['', 'shadow', 'enforce'])("on Stellr's own event, LOADSCOPED_MODE=%s", (mode) => {
+    const EVENTS: [string, Row[]][] = [
+      ['mirrored', [{ slug: SLUG, tenant_id: STELLR_TENANT_ID }]],
+      ['only in Sanity', []],
+    ]
+    beforeEach(() => {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+      vi.stubEnv('PLATFORM_AUDIT_ENABLED', 'true')
+      state.rows.participants = [{ ...PARTICIPANT, tenant_id: STELLR_TENANT_ID }]
+    })
+    /** The response body, once the deferred audit write has run. */
+    const settled = async (res: Response) => {
+      const body = await res.json()
+      await Promise.all(pending)
+      return body
+    }
+    const writes = () =>
+      (state.queries as Query[]).filter((q) => q.op !== 'select').map((q) => ({ table: q.table, op: q.op, payload: q.payload, filters: q.filters }))
+    const auditRow = (action: string, metadata: Row) =>
+      expect.objectContaining({ tenantId: STELLR_TENANT_ID, actor: 'user_admin', action, metadata: expect.objectContaining({ event_slug: SLUG, status: 200, ...metadata }) })
+
+    it.each(EVENTS)('sending reminders mails the participant once, the guardian copied (%s)', async (_name, events) => {
+      state.rows.events = events
+      const res = await ROUTES[0][1]()
+      expect(res.status).toBe(200)
+      expect(await settled(res)).toEqual({ sent: 1, failed: 0 })
+      const tenant = mode === 'enforce' ? { column: 'tenant_id', value: STELLR_TENANT_ID, includeNull: true } : null
+      expect(state.getEventRoster.mock.calls).toEqual([[SLUG, '2026-12-01', { tenant }]])
+      expect(state.sendEmail).toHaveBeenCalledTimes(1)
+      expect(state.sendEmail.mock.calls[0][0]).toMatchObject({ to: 'a@example.invalid', cc: ['g@example.invalid'], subject: 'Action required — Nevada' })
+      expect(state.reissue).not.toHaveBeenCalled()
+      expect(writes()).toEqual([])
+      expect(state.audits).toEqual([auditRow('event.reminder.send', { sent: 1, failed: 0 })])
+    })
+
+    it.each(EVENTS)("reissuing asks for this participant's new envelope on this event, and logs it (%s)", async (_name, events) => {
+      state.rows.events = events
+      const res = await ROUTES[1][1]()
+      expect(res.status).toBe(200)
+      expect(await settled(res)).toEqual({ ok: true, action: 'reissued', outcome: 'issued' })
+      expect(state.reissue).toHaveBeenCalledTimes(1)
+      expect(state.reissue.mock.calls[0].slice(1)).toEqual([ID, { eventSlug: SLUG, allowNewEnvelope: true }])
+      expect(state.logActivity).toHaveBeenCalledTimes(1)
+      expect(state.logActivity.mock.calls[0][0]).toMatchObject({
+        memberId: 'm',
+        category: 'docusign',
+        action: 'docusign_reissued',
+        summary: `New DocuSign issued for ${SLUG}`,
+        metadata: expect.objectContaining({ participantId: ID, eventSlug: SLUG, kind: 'reissued', outcome: 'issued' }),
+      })
+      expect(state.sendEmail).not.toHaveBeenCalled()
+      expect(writes()).toEqual([])
+      expect(state.audits).toEqual([auditRow('agreement.participant.reissue', {})])
+      expect(state.audits[0]).toMatchObject({ target: { table: 'participants', id: ID } })
+    })
+
+    it('reissuing a live envelope resends it, and logs a resend rather than a new envelope', async () => {
+      state.rows.events = EVENTS[0][1]
+      state.reissue.mockResolvedValue({ kind: 'resent', recipients: 2 })
+      const res = await ROUTES[1][1]()
+      expect(await settled(res)).toEqual({ ok: true, action: 'resent', recipients: 2 })
+      expect(state.logActivity.mock.calls.map((c) => (c[0] as Row).action)).toEqual(['docusign_resent'])
+      expect(state.logActivity.mock.calls[0][0]).toMatchObject({ summary: `DocuSign re-sent for ${SLUG} (2 outstanding signers)` })
+      expect(state.audits).toEqual([auditRow('agreement.participant.reissue', {})])
+    })
+
+    it.each(EVENTS)('correcting a guardian saves the new address, then sends the form to it (%s)', async (_name, events) => {
+      state.rows.events = events
+      let writesBeforeReissue: ReturnType<typeof writes> | null = null
+      state.reissue.mockImplementationOnce(async () => {
+        writesBeforeReissue = writes()
+        return { kind: 'reissued', outcome: 'issued' }
+      })
+      const res = await ROUTES[2][1]()
+      expect(res.status).toBe(200)
+      expect(await settled(res)).toEqual({ saved: true, outcome: 'issued' })
+      const saved = [
+        { table: 'participants', op: 'update', payload: { emergency_contact_email: 'new@example.invalid' }, filters: [['eq', 'id', ID]] },
+        { table: 'members', op: 'update', payload: { ec_email: 'new@example.invalid' }, filters: [['eq', 'id', 'm'], ['eq', 'ec_email', 'old@example.invalid']] },
+      ]
+      expect(writes()).toEqual(saved)
+      expect(writesBeforeReissue).toEqual(saved)
+      expect(state.reissue).toHaveBeenCalledTimes(1)
+      expect(state.reissue.mock.calls[0].slice(1)).toEqual([ID, { eventSlug: SLUG, allowNewEnvelope: true }])
+      expect(state.logActivity).toHaveBeenCalledTimes(1)
+      const entry = state.logActivity.mock.calls[0][0] as Row
+      expect(entry).toMatchObject({ memberId: 'm', category: 'docusign', action: 'guardian_email_corrected', metadata: { participantId: ID, eventSlug: SLUG } })
+      // The history masks both addresses.
+      expect(String(entry.summary)).not.toContain('old@example.invalid')
+      expect(String(entry.summary)).not.toContain('new@example.invalid')
+      expect(state.sendEmail).not.toHaveBeenCalled()
+      expect(state.audits).toEqual([auditRow('participant.guardian_email.correct', {})])
+      expect(state.audits[0]).toMatchObject({ target: { table: 'participants', id: ID } })
+    })
+  })
 })

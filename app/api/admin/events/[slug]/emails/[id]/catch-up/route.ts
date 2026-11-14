@@ -15,7 +15,10 @@ export const maxDuration = 60
 //   GET  → { eligible, open, audiences, pending: [{ email, name, roles }] }
 //   POST → send it to them now (the cron does the same three times a day)
 //
-// Both resolve the audience and send through Stellr's sender: B14 opens them to a tenant.
+// Both resolve the audience and send through Stellr's sender. Both are refused outside
+// Stellr (refuseOutsideStellr: a tenant's staff get 503) until the tenant-filtered
+// admin-records helpers exist (AMD-C17-HELPERS) and POST passes loadTenantSender's result to
+// sendCatchUp. B14 did not lift the refusal.
 
 const ROUTE = '/api/admin/events/[slug]/emails/[id]/catch-up'
 

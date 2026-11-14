@@ -497,8 +497,9 @@ describe('S7: the isolation table', () => {
     for (const p of ISOLATION_PROBES) for (const m of ALL_RUN_MODES) expect(p.expect(m), `${p.id} ${m.authzSource}/${m.loadScopedMode}`).toBeTruthy()
   })
 
-  it('names each known gap by its slice, and every one of A11, A12, .23, .24 and .29 appears', () => {
-    expect(Object.keys(KNOWN_GAPS).sort()).toEqual(['.23', '.24', '.29', 'A11', 'A12'])
+  it('names each known gap by its slice, and every one of A11, A12, .23 and .24 appears', () => {
+    // .29 closed: the agreements list reads only Stellr's rows (P14 now expects no marker).
+    expect(Object.keys(KNOWN_GAPS).sort()).toEqual(['.23', '.24', 'A11', 'A12'])
     const named = new Set(ALL_RUN_MODES.flatMap((m) => ISOLATION_PROBES.map((p) => p.expect(m)).map((e) => ('gap' in e ? e.gap : undefined))))
     for (const gap of Object.keys(KNOWN_GAPS)) expect(named.has(gap as keyof typeof KNOWN_GAPS), gap).toBe(true)
   })
@@ -583,8 +584,10 @@ describe('S7: the isolation table', () => {
     const closed = judgeProbe(probe('P6'), m, { status: 404, marker: null })
     expect(closed.verdict).toBe('differs')
     expect(closed.note).toMatch(/update this table/)
-    expect(judgeProbe(probe('P14'), m, { status: 200, marker: true }).verdict).toBe('known-gap')
-    expect(judgeProbe(probe('P14'), m, { status: 200, marker: false }).verdict).toBe('differs')
+    // P14: dev-canary's agreement absent from Stellr's list passes; present again differs.
+    expect(judgeProbe(probe('P14'), m, { status: 200, marker: false }).verdict).toBe('pass')
+    expect(judgeProbe(probe('P14'), m, { status: 200, marker: true }).verdict).toBe('differs')
+    for (const mm of ALL_RUN_MODES) expect(probe('P14').expect(mm), `${mm.authzSource}/${mm.loadScopedMode}`).toEqual({ status: 200, marker: false })
     expect(judgeProbe(probe('P7'), m, { status: 200, marker: null }).verdict).toBe('differs')
     expect(judgeProbe(probe('P8'), m, null, 'no canary-manager session')).toMatchObject({ verdict: 'skipped', note: 'no canary-manager session' })
     expect(judgeProbe(probe('P15'), m, null)).toMatchObject({ verdict: 'not-run', gap: 'A11' })
@@ -598,7 +601,7 @@ describe('S7: the isolation table', () => {
     })
     const s7 = judgeIsolation(good)
     expect(s7.status).toBe('pass')
-    expect(s7.facts).toContainEqual(['gaps named', 'A12 .23 .24 .29 A11'])
+    expect(s7.facts).toContainEqual(['gaps named', 'A12 .23 .24 A11'])
     expect(judgeIsolation([...good, judgeProbe(probe('P1'), m, { status: 200, marker: null })]).status).toBe('fail')
     expect(judgeIsolation([...good, judgeProbe(probe('P1'), m, null)]).status).toBe('fail')
   })

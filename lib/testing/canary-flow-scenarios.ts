@@ -725,14 +725,13 @@ export function judgeStellrUnchanged(input: {
  * known gap, not a failure. One that answers as the closed state says is reported
  * as differing, so the table is updated in the same change that closes the gap.
  */
-export type KnownGapId = 'A11' | 'A12' | '.23' | '.24' | '.29'
+export type KnownGapId = 'A11' | 'A12' | '.23' | '.24'
 
 export const KNOWN_GAPS: Record<KnownGapId, { owner: string; what: string }> = {
   A11: { owner: 'slice A11', what: "e-sign participant side: dev-canary's signing link and envelope have no tenant check on Stellr's host" },
   A12: { owner: 'slice A12', what: "check-in participant side: /check-in/<slug> answers for dev-canary's event on Stellr's host" },
   '.23': { owner: 'tracker s5-programme.23', what: 'the desk shows no "waiting for guardian consent" marker' },
   '.24': { owner: 'tracker s5-programme.24', what: 'a group check-in with one pending minor refuses the whole group' },
-  '.29': { owner: 'tracker s5-programme.29', what: "a Stellr-only admin list (agreements) includes dev-canary's rows" },
 }
 
 export type ProbePersona = 'anonymous' | CanaryPersonaHandle
@@ -959,7 +958,9 @@ export const ISOLATION_PROBES: readonly IsolationProbe[] = [
     host: 'stellr',
     request: (c) => (c.pendingAgreementId ? { method: 'GET', path: '/api/admin/docusigns' } : null),
     marker: (body, c) => (c.pendingAgreementId ? body.includes(c.pendingAgreementId) : null),
-    expect: () => ({ status: 200, marker: true, gap: '.29' }),
+    // Closed (tracker s5-programme.29): the list reads only Stellr's rows and rows with no
+    // tenant yet, in every mode, so dev-canary's agreement is not in it.
+    expect: () => ({ status: 200, marker: false }),
   },
   {
     id: 'P15',

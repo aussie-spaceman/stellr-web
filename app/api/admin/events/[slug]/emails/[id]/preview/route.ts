@@ -15,7 +15,9 @@ import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 // right now, and how it reads for one of them (?as=<email> picks which).
 // Read-only: pay links show as a placeholder rather than minting tokens.
 //
-// The audience is built from Stellr's mentor containers and Clerk: B14 opens this to a tenant.
+// The audience is built from Stellr's mentor containers and Clerk. Refused outside Stellr
+// (refuseOutsideStellr: a tenant's staff get 503) until the tenant-filtered admin-records
+// helpers exist (AMD-C17-HELPERS). B14 did not lift the refusal.
 
 const ROUTE = '/api/admin/events/[slug]/emails/[id]/preview'
 
@@ -47,7 +49,7 @@ async function previewEmail(req: Request, { params }: Ctx) {
 
   // S5 wave 6: as the send does (lib/event-emails/send.ts), another tenant's email
   // leaves out its consent-pending participants, All attendees included. Stellr's
-  // emails pass nothing. Refused outside Stellr above until B14 opens this route.
+  // emails pass nothing. Refused outside Stellr above until AMD-C17-HELPERS lifts it.
   const { recipients, docusignParticipantIds } = await resolveAudience(
     db,
     event,

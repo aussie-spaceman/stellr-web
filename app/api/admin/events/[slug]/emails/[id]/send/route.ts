@@ -13,7 +13,10 @@ export const maxDuration = 60
 // POST /api/admin/events/[slug]/emails/[id]/send — "Send now", or with
 // { test: true } a single copy to the person pressing the button.
 //
-// Stellr's sender, and its daily budget: B14 opens this to a tenant.
+// Stellr's sender, and its daily budget. Refused outside Stellr (refuseOutsideStellr: a
+// tenant's staff get 503) until the tenant-filtered admin-records helpers exist
+// (AMD-C17-HELPERS) and this route passes loadTenantSender's result to sendEventEmail.
+// B14 did not lift the refusal.
 
 const ROUTE = '/api/admin/events/[slug]/emails/[id]/send'
 

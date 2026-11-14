@@ -78,8 +78,14 @@ describe('the registry', () => {
       ['tenantDbEnabled', ['true', 'false'], ['on']],
       ['routingEnabled', ['true', 'false'], ['1']],
     ]
+    // What a switch needs set before a recognised value moves it: guardian consent
+    // resolves on only with the readiness guard's preconditions (s5-programme.20).
+    const given: Partial<Record<keyof typeof SWITCHES, Record<string, string>>> = {
+      guardianConsent: { LOADSCOPED_MODE: 'enforce', TENANT_EVENT_MAIL_ENABLED: 'true' },
+    }
     for (const [key, good, bad] of cases) {
       const spec = SWITCHES[key]
+      for (const [name, value] of Object.entries(given[key] ?? {})) vi.stubEnv(name, value)
       for (const raw of good) {
         expect(spec.accepts(raw), `${spec.name}=${raw}`).toBe(true)
         vi.stubEnv(spec.name, raw)
@@ -93,6 +99,7 @@ describe('the registry', () => {
         expect(unrecognisedSwitches()).toEqual([spec.name])
       }
       vi.stubEnv(spec.name, undefined)
+      for (const name of Object.keys(given[key] ?? {})) vi.stubEnv(name, undefined)
     }
   })
 
@@ -127,7 +134,8 @@ describe('tenancyReport', () => {
 
   it('reports each flip the dev sequence makes', () => {
     vi.stubEnv('PLATFORM_AUDIT_ENABLED', 'true')
-    vi.stubEnv('LOADSCOPED_MODE', 'shadow')
+    // P4 (enforce) comes before P12 (the consent flag), which needs it (W7-14).
+    vi.stubEnv('LOADSCOPED_MODE', 'enforce')
     vi.stubEnv('AUTHZ_SOURCE', 'shadow')
     vi.stubEnv('RATE_LIMIT_KEY_SECRET', 'k'.repeat(40))
     vi.stubEnv('RATE_LIMIT_STORE', 'shadow')
@@ -139,7 +147,7 @@ describe('tenancyReport', () => {
     vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
     expect(tenancyReport('log')).toEqual({
       authzSource: { value: 'shadow', unrecognised: false },
-      loadScopedMode: 'shadow',
+      loadScopedMode: 'enforce',
       rateLimitStore: { mode: 'shadow', secretUsable: true },
       platformAudit: true,
       tenantEventMail: true,
@@ -169,7 +177,7 @@ describe('tenancyReport', () => {
       'rate_limit_store_without_secret',
       'tenant_db_areas_without_flag',
       'routing_without_usable_suffix',
-      'guardian_consent_without_tenant_mail',
+      'guardian_consent_not_ready',
       'field_crypto_mode_without_key',
     ])
 
@@ -184,15 +192,45 @@ describe('tenancyReport', () => {
     expect(ids()).toEqual([])
 
     vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
-    expect(ids()).toEqual(['guardian_consent_without_tenant_mail'])
+    expect(ids()).toEqual(['guardian_consent_not_ready'])
     vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    expect(ids()).toEqual(['guardian_consent_not_ready'])
+    vi.stubEnv('LOADSCOPED_MODE', 'shadow')
+    expect(ids()).toEqual(['guardian_consent_not_ready'])
+    vi.stubEnv('LOADSCOPED_MODE', 'enforce')
     expect(ids()).toEqual([])
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'false')
+    expect(ids()).toEqual(['guardian_consent_not_ready'])
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
 
     vi.stubEnv('FIELD_CRYPTO_MODE', 'shadow')
     expect(ids()).toEqual(['field_crypto_mode_without_key'])
     vi.stubEnv('FIELD_CRYPTO_KEY_ID', 'testkey1')
     vi.stubEnv('FIELD_CRYPTO_MASTER_KEY', randomBytes(32).toString('base64'))
     expect(ids()).toEqual([])
+  })
+
+  // s5-programme.20: the readiness guard, as the registry reports it.
+  it('reports guardian consent off, and an invalid combination, until every precondition holds', () => {
+    const consent = () => {
+      const r = tenancyReport('log')
+      return { on: r.guardianConsent, invalid: r.invalidCombinations.filter((c) => c.id === 'guardian_consent_not_ready') }
+    }
+    // Unset, as on production: off, and nothing to report.
+    expect(consent()).toEqual({ on: false, invalid: [] })
+    vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
+    for (const [mode, mail] of [['off', 'false'], ['shadow', 'true'], ['enforce', 'false'], ['off', 'true']]) {
+      vi.stubEnv('LOADSCOPED_MODE', mode)
+      vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', mail)
+      const { on, invalid } = consent()
+      expect(on).toBe(false)
+      expect(invalid).toHaveLength(1)
+      expect(invalid[0].switches).toEqual(['TENANT_GUARDIAN_CONSENT_ENABLED', 'LOADSCOPED_MODE', 'TENANT_EVENT_MAIL_ENABLED'])
+    }
+    vi.stubEnv('LOADSCOPED_MODE', 'enforce')
+    vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+    expect(consent()).toEqual({ on: true, invalid: [] })
+    expect(SWITCHES.guardianConsent.dependsOn).toEqual(['LOADSCOPED_MODE', 'TENANT_EVENT_MAIL_ENABLED'])
   })
 
   // W7-27: the production zone guard, as the registry reports it.

@@ -141,6 +141,8 @@ beforeEach(() => {
   failOn = null
   vi.stubEnv('TENANT_GUARDIAN_CONSENT_ENABLED', 'true')
   vi.stubEnv('TENANT_EVENT_MAIL_ENABLED', 'true')
+  // The readiness guard's other precondition (s5-programme.20, W7-14).
+  vi.stubEnv('LOADSCOPED_MODE', 'enforce')
   vi.stubEnv('ESIGN_TOKEN_SECRET', 'x'.repeat(40))
   h.requestTenant.mockResolvedValue({ kind: 'tenant', tenantId: CANARY, tenantSlug: 'canary' })
   h.getEventBySlug.mockResolvedValue(EVENT)

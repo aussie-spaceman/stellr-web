@@ -104,6 +104,12 @@ export const tokens = {
     "cardLift": "0 18px 40px -30px rgba(20,26,61,0.4)",
     "featured": "0 18px 40px -28px rgba(60,109,246,0.6)",
     "panel": "0 18px 50px -40px rgba(20,26,61,0.4)"
+  },
+  "focusRing": {
+    "color": "#3562E4",
+    "halo": "#FFFFFF",
+    "width": "2px",
+    "offset": "2px"
   }
 } as const
 export default tokens

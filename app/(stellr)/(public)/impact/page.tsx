@@ -35,7 +35,7 @@ const FUNDING_BLOCKS = [
   },
   {
     title: 'What we do not do',
-    body: 'We do not sell services commercially, run advertising on this site, take affiliate revenue, or sell any supporter\u2019s data.',
+    body: 'We do not sell anyone\u2019s personal information or use the details you give us to target advertising, and this site carries no paid ads. We do advertise our own programs, and the tags that measure those campaigns stay off until you accept advertising cookies.',
   },
 ]
 

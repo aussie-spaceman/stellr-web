@@ -156,6 +156,7 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
     season?: string
     campaignYear?: number
     registrationOpen?: boolean
+    deadline?: string
   }
   for (const c of (allCampaigns ?? []) as CampaignDoc[]) {
     const slug = c.slug?.current

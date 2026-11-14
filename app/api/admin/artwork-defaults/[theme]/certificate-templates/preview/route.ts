@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { CertificateArtworkError, generateCertificatesPdf } from '@/lib/event-pdf'
 import { EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
 import { isArtworkTheme } from '@/lib/artwork-theme'
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 // A theme default with a sample name, shown inline — the event preview
 // (/api/admin/events/[slug]/certificate-templates/preview) for the defaults.
 export async function GET(req: Request, { params }: { params: Promise<{ theme: string }> }) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { theme } = await params
   if (!isArtworkTheme(theme)) return NextResponse.json({ error: 'Unknown theme' }, { status: 404 })
 

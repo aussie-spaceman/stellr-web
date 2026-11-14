@@ -37,13 +37,13 @@ function adminPages(): string[] {
 // they admit an event manager, which is the competitions and campaigns rule, not this
 // sweep's.
 const PAGE_GUARD =
-  /requireAdminPage\(|isAdminClaims\(|role\s*(!==|===)\s*['"]admin['"]|\.requireAdmin\(|requireStellrAdmin\(|isStellrAdmin\(|assertPlatformAdmin\(/
+  /requireAdminPage\(|isAdminClaims\(|role\s*(!==|===)\s*['"]admin['"]|\.requireAdmin\(|requireStellrAdmin\(|isStellrAdmin\(|assertPlatformAdmin\(|hasCapability\(|requireCapability\(/
 // A tenant check answers for one tenant, not for Stellr, so it counts only on a page
-// the manifest has moved to tenant_staff.
-const TENANT_PAGE_GUARD = /requireTenantAdmin\(|requireTenantStaff\(|assertTenantRole\(/
+// the manifest has moved to tenant_crew.
+const TENANT_PAGE_GUARD = /requireTenantAdmin\(|requireTenantCrew\(|assertTenantRole\(/
 
 const guardsPage = (cls: string | undefined, code: string) =>
-  PAGE_GUARD.test(code) || (cls === 'tenant_staff' && TENANT_PAGE_GUARD.test(code))
+  PAGE_GUARD.test(code) || (cls === 'tenant_crew' && TENANT_PAGE_GUARD.test(code))
 
 describe('admin page guards (static inventory)', () => {
   it('knows the lib/authz page guards, and not the event-section one', () => {
@@ -62,11 +62,11 @@ describe('admin page guards (static inventory)', () => {
     expect(guardsPage('stellr_only', 'await requireAdmin()')).toBe(false)
   })
 
-  it('takes a tenant check only on a page moved to tenant_staff', () => {
-    const tenant = ['await page.requireTenantAdmin()', "await requireTenantStaff(tenantId, ['tenant_admin'])", "await assertTenantRole(tenantId, ['tenant_admin'])"]
+  it('takes a tenant check only on a page moved to tenant_crew', () => {
+    const tenant = ['await page.requireTenantAdmin()', "await requireTenantCrew(tenantId, ['tenant_admin'])", "await assertTenantRole(tenantId, ['tenant_admin'])"]
     for (const code of tenant) {
       expect(guardsPage('stellr_only', code), code).toBe(false)
-      expect(guardsPage('tenant_staff', code), code).toBe(true)
+      expect(guardsPage('tenant_crew', code), code).toBe(true)
     }
   })
 

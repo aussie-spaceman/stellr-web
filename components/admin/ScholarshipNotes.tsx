@@ -24,7 +24,7 @@ export function ScholarshipNotes({ id, initial }: { id: string; initial: string 
 
   return (
     <div>
-      <label htmlFor="sch-notes" className="block text-sm text-content-body mb-1">Reviewer notes (staff only)</label>
+      <label htmlFor="sch-notes" className="block text-sm text-content-body mb-1">Reviewer notes (internal only)</label>
       <textarea
         id="sch-notes"
         rows={3}

@@ -97,6 +97,10 @@ export function DeleteEntityButton({
   const [confirmText, setConfirmText] = useState('')
   const [refund, setRefund] = useState<RefundPreview | null>(null)
   const [refundChoice, setRefundChoice] = useState<RefundChoice | null>(null)
+  // The refund preview could not be read (a 503 or 500, or no answer at all). The delete
+  // waits for a retry: without the preview, a paid participant would look unpaid and be
+  // removed with no refund choice.
+  const [refundUnavailable, setRefundUnavailable] = useState(false)
   const [refundNote, setRefundNote] = useState('')
   const [deletedWithIssues, setDeletedWithIssues] = useState(false)
   // What happened to a group's invoice after a participant was removed.
@@ -111,6 +115,7 @@ export function DeleteEntityButton({
     setMode(softDeletable ? 'soft' : 'hard')
     setConfirmText('')
     setRefund(null)
+    setRefundUnavailable(false)
     // Nothing is pre-selected: the admin chooses the refund or no refund.
     setRefundChoice(null)
     setRefundNote('')
@@ -127,17 +132,25 @@ export function DeleteEntityButton({
       if (refundable && entity === 'participant') {
         calls.push(
           fetch(`/api/admin/refunds/preview?participant=${encodeURIComponent(id)}`)
-            .then((r) => r.json())
-            .then((preview: RefundPreview) => {
+            .then(async (r) => {
+              // No such participant on Stellr's events: there is no refund to offer.
+              if (r.status === 404) return null
+              if (!r.ok) throw new Error(`refund preview answered ${r.status}`)
+              return (await r.json()) as RefundPreview
+            })
+            .then((preview) => {
               setRefund(preview)
               // Already refunded in full in Stripe: the only outcome is removal
               // with no further refund. Pre-fill the reason the audit row keeps.
-              if (preview.externalRefund?.full && !preview.alreadyRefunded) {
+              if (preview?.externalRefund?.full && !preview.alreadyRefunded) {
                 setRefundChoice('none')
                 setRefundNote('Refunded in full in Stripe')
               }
             })
-            .catch(() => setRefund(null))
+            .catch(() => {
+              setRefund(null)
+              setRefundUnavailable(true)
+            })
         )
       }
       await Promise.all(calls)
@@ -230,7 +243,8 @@ export function DeleteEntityButton({
         !refund.alreadyRefunded &&
         (externalFull || !!refund.options.cash)))
   const refundReady =
-    !needsRefundChoice || (refundChoice !== null && (refundChoice !== 'none' || refundNote.trim().length > 0))
+    !refundUnavailable &&
+    (!needsRefundChoice || (refundChoice !== null && (refundChoice !== 'none' || refundNote.trim().length > 0)))
 
   const reasonField = (
     <Field label="Reason (kept with the refund record)" labelSize="small">
@@ -309,6 +323,15 @@ export function DeleteEntityButton({
           <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
+        {refundUnavailable && !deletedWithIssues && (
+          <div role="alert" className="space-y-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p>We couldn&apos;t load the refund details, so you can&apos;t delete yet. Try again in a moment.</p>
+            <button type="button" onClick={openDialog} disabled={loading} className={SECONDARY_BUTTON}>
+              Try again
+            </button>
+          </div>
+        )}
+
         {notice && (
           <div role="status" className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink">{notice}</div>
         )}
@@ -360,7 +383,7 @@ export function DeleteEntityButton({
 
               {mode === 'hard' && entity === 'member' && (
                 <p className="text-sm text-brand-muted">
-                  Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Staff accounts are left in place.
+                  Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Crew accounts (admins and event managers) are left in place.
                 </p>
               )}
 

@@ -66,7 +66,7 @@ export type ClearanceNoticeSkip =
   /** The next step is Stellr's, not the member's: a license with its photo
    *  awaiting verification, a flagged check awaiting a decision, or a decision
    *  against them (which a license does not override). */
-  | 'staff_review'
+  | 'crew_review'
   | 'already_sent'
   | 'member_not_found'
   | 'error'
@@ -237,7 +237,7 @@ export async function notifyClearanceRequired(
     )
     if (isCleared(summary)) return { sent: false, reason: 'cleared' }
     if (summary.state === 'not_required') return { sent: false, reason: 'not_required' }
-    if (nextStepIsStellrs(summary, eventDate ? new Date(eventDate) : now)) return { sent: false, reason: 'staff_review' }
+    if (nextStepIsStellrs(summary, eventDate ? new Date(eventDate) : now)) return { sent: false, reason: 'crew_review' }
 
     if ((await sentNoticeKeys(db, [memberId])).has(noticeKey(memberId, eventSlug, reason))) {
       return { sent: false, reason: 'already_sent' }
@@ -310,7 +310,7 @@ export interface ReminderRunResult {
   eventsInWindow: number
   /** Adults in those events not cleared — one per member per event. */
   uncleared: number
-  /** Not cleared, but the next step is Stellr's (see 'staff_review'). */
+  /** Not cleared, but the next step is Stellr's (see 'crew_review'). */
   withStellr: number
   alreadySent: number
   /** Uncleared and not yet reminded: what this run sends, or would in a dry run. */

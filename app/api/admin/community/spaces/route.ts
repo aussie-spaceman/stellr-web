@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureSpaceContainer } from '@/lib/container-sync'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { slugify } from '@/lib/utils'
 import { assertSpaceDeletable, CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
 import { withAudit } from '@/lib/audit/route'
@@ -18,7 +18,7 @@ const ACCESS = new Set(['open', 'private', 'secret'])
 const THEME = new Set(['space', 'enviro', 'campaign', 'college'])
 
 export async function GET() {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/spaces' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   const { data } = await db
     .from('community_spaces')

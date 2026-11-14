@@ -43,7 +43,7 @@
     },
     "app/(stellr)/(admin)/admin/competitions/[slug]/page.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: container_contents, event_companies, event_manager_assignments, mentoring_cohorts, training_modules"
+      "reason": "auto: touches tenant or event-scoped tables; tables: container_contents, event_companies, event_manager_assignments, members, mentoring_cohorts, training_modules"
     },
     "app/(stellr)/(admin)/admin/competitions/check-in-banner/page.tsx": {
       "class": "convert",
@@ -64,6 +64,10 @@
     "app/(stellr)/(admin)/admin/docusigns/templates/page.tsx": {
       "class": "stellr_only",
       "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: esign_templates"
+    },
+    "app/(stellr)/(admin)/admin/duties/page.tsx": {
+      "class": "stellr_only",
+      "reason": "the Duties page (moved from admin/staff, 13 Nov 2026) lists admin_duties rows with member names for the admin who edits them; admin_duties is Stellr-only and service-role-only under RLS"
     },
     "app/(stellr)/(admin)/admin/email/page.tsx": {
       "class": "stellr_only",
@@ -121,10 +125,6 @@
       "class": "platform",
       "reason": "auto: no tenant or event-scoped table, classed by its platform tables; tables: schools"
     },
-    "app/(stellr)/(admin)/admin/staff/page.tsx": {
-      "class": "stellr_only",
-      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: staff_roles"
-    },
     "app/(stellr)/(admin)/admin/store/discounts/page.tsx": {
       "class": "stellr_only",
       "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: membership_tiers, store_products"
@@ -169,13 +169,13 @@
       "class": "convert",
       "reason": "The registration pay page's body, moved here from its page.tsx by S5 A7 so the tenant page can reuse it while Stellr's page refuses another tenant's registration. Reads the registration, its paid seats and scholarship offer for a payer who may not be signed in, by the pay token. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/survey/[token]/page.tsx": {
+    "app/(stellr)/(flow)/survey/[token]/survey-body.tsx": {
       "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
+      "reason": "The emailed survey link's page body, moved here from its page.tsx by S5 A10b so the tenant page can reuse it while Stellr's page refuses another tenant's link. Reads the invitation by its token hash, then its distribution, definition and response through lib/survey/access, for a respondent who may not be signed in. Same access as before the move, for the area conversion to decide."
     },
-    "app/(stellr)/(flow)/survey/event/[slug]/page.tsx": {
+    "app/(stellr)/(flow)/survey/event/[slug]/qr-body.tsx": {
       "class": "convert",
-      "reason": "auto: touches tenant or event-scoped tables; tables: survey_invitations"
+      "reason": "The event-day QR page's body, moved here from its page.tsx by S5 A10b so the tenant page can reuse it while Stellr's page refuses another tenant's survey. Reads the event's distribution and the signed-in member's own invitation (survey_invitations) to send them to it. Same access as before the move, for the area conversion to decide."
     },
     "app/(stellr)/(flow)/team-profile/[token]/page.tsx": {
       "class": "convert",
@@ -327,7 +327,7 @@
     },
     "app/api/admin/agreements/[id]/email-changes/[changeId]/route.ts": {
       "class": "convert",
-      "reason": "staff decide a student suggestion: requireEventStaff + loadEventRecord scope the agreement first; the decision writes agreement_email_changes and corrects the signer through the engine (lib/esign/email-changes.ts)"
+      "reason": "crew decide a student suggestion: requireEventCrew + loadEventRecord scope the agreement first; the decision writes agreement_email_changes and corrects the signer through the engine (lib/esign/email-changes.ts)"
     },
     "app/api/admin/artwork-defaults/[theme]/badge-templates/preview/route.ts": {
       "class": "convert",
@@ -452,6 +452,10 @@
     "app/api/admin/docusigns/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: agreements"
+    },
+    "app/api/admin/duties/route.ts": {
+      "class": "convert",
+      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: admin_duties, members"
     },
     "app/api/admin/email/campaigns/[id]/route.ts": {
       "class": "stellr_only",
@@ -649,6 +653,10 @@
       "class": "convert",
       "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting"
     },
+    "app/api/admin/health/integrations/route.ts": {
+      "class": "system",
+      "reason": "Admin-only health report (S5 wave 7, O1): one read of the tenancy_settings singleton for derivation_mode, which only service_role may select (owner yes, W7-8). Reads no tenant data."
+    },
     "app/api/admin/impersonation/route.ts": {
       "class": "identity",
       "reason": "auto: no tenant or event-scoped table, classed by its identity tables; tables: members"
@@ -712,6 +720,10 @@
     "app/api/admin/members/[id]/spaces/route.ts": {
       "class": "convert",
       "reason": "auto: touches tenant or event-scoped tables; tables: mentoring_cohorts, training_modules"
+    },
+    "app/api/admin/members/[id]/staff/route.ts": {
+      "class": "convert",
+      "reason": "the Staff role (lib/staff.ts, Stellr only, admin only): reads and writes staff_grants, the member, their clearance, Staff agreements and training progress; every table is Stellr-only or identity and service-role-only under RLS"
     },
     "app/api/admin/members/[id]/volunteer-agreement/route.ts": {
       "class": "convert",
@@ -805,9 +817,9 @@
       "class": "platform",
       "reason": "auto: no tenant or event-scoped table, classed by its platform tables; tables: schools"
     },
-    "app/api/admin/staff-roles/route.ts": {
+    "app/api/admin/staff-settings/route.ts": {
       "class": "convert",
-      "reason": "auto: reaches tables it does not name (dynamic .from, rpc, or a client passed to a helper); review before converting; tables: members, staff_roles"
+      "reason": "the Staff role's one setting (admin only): reads and writes staff_role_settings and lists training_modules to choose from; both Stellr-only and service-role-only under RLS"
     },
     "app/api/admin/store/discounts/route.ts": {
       "class": "stellr_only",
@@ -1371,7 +1383,7 @@
     },
     "lib/admin-auth.ts": {
       "class": "stellr_only",
-      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: members, staff_roles"
+      "reason": "auto: no tenant or event-scoped table, classed by its stellr_only tables; tables: admin_duties, members"
     },
     "lib/admin-digest.ts": {
       "class": "convert",
@@ -1529,6 +1541,10 @@
       "class": "system",
       "reason": "Calls rate_limit_take and rate_limit_gc, limiter counters that run before any user or tenant is resolved, with EXECUTE for service_role only, and writes its own rate-limit-gc row to cron_runs through the client the cron passes in. Reads no tenant data."
     },
+    "lib/record-access-log.ts": {
+      "class": "stellr_only",
+      "reason": "appends to record_access_log (Stellr-only, append-only: the service role may insert and read, never change or delete); called from admin pages and exports after their own guard"
+    },
     "lib/recording-offload.ts": {
       "class": "convert",
       "reason": "Webhook and retry jobs that copy a JaaS recording into private storage and record the outcome in recording_offloads, with no signed-in user. Converts with the community area."
@@ -1673,13 +1689,17 @@
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: agreements"
     },
+    "scripts/canary-tenant-flow.ts": {
+      "class": "script",
+      "reason": "Operator script, run by hand (S5 wave 7 K8, the dev canary runner): SELECTs only, reading back the evidence its HTTP requests left (registrations, participants, tenant_guardian_consents, agreements, event_email_sends, events, app_errors) across dev-canary and Stellr, which RLS would hide. Refuses any database but the dev project or loopback (K3 assertCanaryFlowTarget). No browser or request reaches it."
+    },
     "scripts/docusign-resend-outstanding.ts": {
       "class": "script",
       "reason": "auto: operator script, run by hand; tables: agreements"
     },
     "scripts/esign-dev-issue.ts": {
       "class": "script",
-      "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements"
+      "reason": "auto: operator script, run by hand; tables: agreement_recipients, agreements, esign_templates"
     },
     "scripts/esign-fallback-drill.ts": {
       "class": "script",
@@ -1723,7 +1743,7 @@
     },
     "scripts/seed-test-accounts.ts": {
       "class": "script",
-      "reason": "auto: operator script, run by hand; tables: member_memberships, member_schools, members, membership_tiers, schools, staff_roles"
+      "reason": "auto: operator script, run by hand; tables: admin_duties, member_memberships, member_schools, members, membership_tiers, schools"
     },
     "scripts/seed-two-tenants.ts": {
       "class": "script",

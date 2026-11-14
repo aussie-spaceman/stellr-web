@@ -31,10 +31,10 @@ export const POST = withAudit(
 
 async function sendReminders(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
   const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
   if (foreign) return foreign
@@ -49,7 +49,7 @@ async function sendReminders(req: Request, { params }: Ctx) {
   const event = (await getEventBySlug(slug)) as StellarEvent | null
   if (!event) return NextResponse.json({ error: 'Unknown event' }, { status: 404 })
 
-  const roster = await getEventRoster(slug, event.date, { tenant: enforcedTenantFilter(staff.scope, 'registrations') })
+  const roster = await getEventRoster(slug, event.date, { tenant: enforcedTenantFilter(crew.scope, 'registrations') })
 
   const db = supabaseServer()
   let sent = 0

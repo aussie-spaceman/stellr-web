@@ -1,5 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// A refused TENANT_DATABASE_URL writes one 'TENANTDB config' row (O3), through
+// these two. Stood in for, so a refusal here never reaches app_errors.
+vi.mock('@/lib/after-response', () => ({ runAfterResponse: () => {} }))
+vi.mock('@/lib/app-errors', () => ({ recordBuiltAppError: async () => true, routeLabel: () => '', errorDigest: () => '' }))
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, normalize } from 'node:path'
 import {
@@ -275,7 +280,7 @@ describe('tenantDb: caller SQL cannot change the role or the tenant', () => {
     'select 1',
     '  WITH x AS (SELECT 1) SELECT * FROM x',
     'INSERT INTO public.event_settings (event_slug) VALUES ($1)',
-    "UPDATE public.tenant_memberships SET role = 'staff' WHERE id = $1",
+    "UPDATE public.tenant_memberships SET role = 'duty_holder' WHERE id = $1",
     'DELETE FROM public.event_settings WHERE event_slug = $1;',
     'SELECT reset_token, password_reset_at FROM public.members_view',
   ])('allows %j', (sql) => {

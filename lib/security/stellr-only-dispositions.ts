@@ -14,7 +14,7 @@
 //     the owner has answered, and a row on the wrong chain cannot be corrected, so the
 //     answer comes before PLATFORM_AUDIT_ENABLED is on with a second tenant.
 //
-//   tenant_destined    moves to tenant_staff on loadScoped; MAX_TENANT_DESTINED_STELLR_ONLY
+//   tenant_destined    moves to tenant_crew on loadScoped; MAX_TENANT_DESTINED_STELLR_ONLY
 //                      in test/idor/stellr-only-dispositions.test.ts falls with each one
 //   platform_destined  a platform function by nature: classed platform_destined in the
 //                      manifest (C15), guard unchanged. Once the owner has chosen, a route
@@ -73,18 +73,18 @@ const GROUPS: readonly DispositionGroup[] = [
   },
   {
     disposition: 'platform_destined',
-    reason: 'acts across tenants by nature: the owner decides, route by route, owner-only or Stellr staff',
+    reason: 'acts across tenants by nature: the owner decides, route by route, owner-only or Stellr crew',
     routes: [
       'deletion', 'deletion-requests/[id]', 'deletion/preflight', 'events/slug-guard', 'impersonation', 'members/merge',
-      'privacy-requests/[id]', 'schools/[id]', 'staff-roles',
+      'privacy-requests/[id]', 'schools/[id]', 'duties',
     ],
   },
   {
     disposition: 'until_s7_identity',
-    reason: 'touches identity tables; tenant staff see the participant under their event until S7 tenant profiles',
+    reason: 'touches identity tables; tenant crew see the participant under their event until S7 tenant profiles',
     routes: [
       'members', 'members/[id]', 'members/[id]/access', 'members/[id]/activity', 'members/[id]/background-check',
-      'members/[id]/background-check/adjudicate', 'members/[id]/background-check/report', 'members/[id]/event-manager',
+      'members/[id]/background-check/adjudicate', 'members/[id]/background-check/report', 'members/[id]/event-manager', 'members/[id]/staff',
       'members/[id]/event-participations', 'members/[id]/external-check', 'members/[id]/invite', 'members/[id]/license', 'members/[id]/license/document', 'members/[id]/memberships',
       'members/[id]/memberships/[membershipId]', 'members/[id]/spaces', 'members/[id]/volunteer', 'members/[id]/volunteer-agreement',
     ],
@@ -113,6 +113,7 @@ const GROUPS: readonly DispositionGroup[] = [
       'esign/templates/[id]/preview', 'esign/templates/file', 'esign/templates/preview', 'membership/rules', 'pd-certificate',
       'pd-certificate/preview', 'store/discounts', 'store/products/[id]', 'store/products/[id]/sync', 'store/products/[id]/variants',
       'training/assignments', 'training/bulk-notify', 'training/cert-preview', 'training/live-room', 'training/tracking',
+      'staff-settings',
     ],
   },
 ]

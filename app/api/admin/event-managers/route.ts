@@ -1,7 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 import { actorFromAuth } from '@/lib/activity-log'
 import { assignEventManager, removeEventManager, expiryTimestampToDate, isAssignmentActive } from '@/lib/event-manager'
@@ -33,7 +33,7 @@ function eventFor(req: Request) {
 
 // GET /api/admin/event-managers?event_slug=... — list assignments (optionally per event)
 export async function GET(req: Request) {
-  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const eventSlug = new URL(req.url).searchParams.get('event_slug')
   const db = supabaseServer()
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
 export const POST = withAudit(({ args: [req] }: { args: [Request] }) => ({ action: 'event_manager.assignment.create', ...eventFor(req) }), assignManager)
 
 async function assignManager(req: Request) {
-  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('event_managers:assign', { route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 
   const body = await req.json().catch(() => null)
@@ -103,7 +103,7 @@ async function assignManager(req: Request) {
 export const DELETE = withAudit(({ args: [req] }: { args: [Request] }) => ({ action: 'event_manager.assignment.delete', ...eventFor(req) }), removeManager)
 
 async function removeManager(req: Request) {
-  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('event_managers:assign', { route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 
   const body = await req.json().catch(() => null)

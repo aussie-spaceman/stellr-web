@@ -67,12 +67,15 @@ export function MemberCompliancePanel({
   memberId,
   compliance,
   embedded = false,
+  canVerify = true,
 }: {
   memberId: string
   /** Null when the member doesn't require clearance (panel hidden). */
   compliance: MemberCompliance | null
   /** Inside a Collapsible that supplies the card and title. */
   embedded?: boolean
+  /** Verifying, unverifying, removing an uploaded check and recording a decision decide clearance: admins only (clearance:verify). Staff see the facts. */
+  canVerify?: boolean
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -263,7 +266,9 @@ export function MemberCompliancePanel({
               )}
             </div>
             <div className="flex flex-wrap gap-3 pt-2">
-              {external.verified_at ? (
+              {!canVerify ? (
+                <p className="text-xs text-content-muted">An admin verifies uploaded checks.</p>
+              ) : external.verified_at ? (
                 <button
                   onClick={() => post(`/api/admin/members/${memberId}/external-check`, { action: 'unverify' })}
                   disabled={busy}
@@ -287,6 +292,7 @@ export function MemberCompliancePanel({
                   {busy ? 'Saving…' : 'Mark verified'}
                 </button>
               )}
+              {canVerify && (
               <button
                 onClick={async () => {
                   if (!confirm('Delete this uploaded background check and its document? This cannot be undone.')) return
@@ -306,6 +312,7 @@ export function MemberCompliancePanel({
               >
                 Delete
               </button>
+              )}
             </div>
           </>
         ) : (
@@ -450,7 +457,9 @@ export function MemberCompliancePanel({
             )}
           </div>
           <div className="pt-2">
-            {verified ? (
+            {!canVerify ? (
+              <p className="text-xs text-content-muted">An admin verifies teaching licenses.</p>
+            ) : verified ? (
               <button
                 onClick={() => post(`/api/admin/members/${memberId}/license`, { action: 'unverify' })}
                 disabled={busy}
@@ -549,7 +558,9 @@ export function MemberCompliancePanel({
                     Records were found. Review the report in Checkr, then record the decision here. The
                     member is not cleared until you do.
                   </p>
-                  {adjudicating ? (
+                  {!canVerify ? (
+                    <p className="mt-2 text-xs text-red-700">An admin records the decision.</p>
+                  ) : adjudicating ? (
                     <div className="mt-2 space-y-2">
                       <textarea
                         value={notes}

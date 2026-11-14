@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { distributionForEvent, statusNow } from '@/lib/survey/distributions'
+import { distributionForEvent, distributionTenant, statusNow } from '@/lib/survey/distributions'
+import { surveySendsHeld } from '@/lib/survey/hold'
 import { surveyLink, surveyToken } from '@/lib/survey/tokens'
 
 // What a participant sees on their check-in page: the confirmation screen at the
@@ -58,6 +59,10 @@ export async function loadCheckInView(
 async function surveyStateFor(db: SupabaseClient, slug: string, participantId: string): Promise<SurveyState | null> {
   const d = await distributionForEvent(db, slug)
   if (!d) return null
+  // Another tenant's survey is held (lib/survey/hold.ts): its link would answer as
+  // nobody's, so the page says nothing about a survey at all. Decided from the
+  // distribution row in hand, no read. Stellr's (a NULL tenant included) shows as before.
+  if (surveySendsHeld(distributionTenant(d))) return null
   const status = statusNow(d)
   if (status === 'closed') return { state: 'closed' }
   // Paused by an admin: say nothing rather than a go-live date that has passed.

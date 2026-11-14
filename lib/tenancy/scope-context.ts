@@ -2,7 +2,7 @@
 // data they may see. lib/tenancy/load-scoped.ts reads it; lib/authz.ts (the
 // S5 authz lane) will produce it from the request.
 //
-// lib/authz.ts requireEventStaff builds one per request for a tenant_staff route,
+// lib/authz.ts requireEventCrew builds one per request for a tenant_crew route,
 // from the tenant its answer holds in.
 //
 //   tenantId    the tenant whose rows the caller may reach (a tenant uuid)
@@ -26,12 +26,12 @@ import { STELLR_TENANT_ID } from './constants'
 import { assertTenantId, TenantContextError } from './tenant-id'
 
 /** The kinds of caller a scope is built for. */
-export type ScopeActorKind = 'platform_admin' | 'tenant_admin' | 'staff' | 'event_manager' | 'system'
+export type ScopeActorKind = 'platform_admin' | 'tenant_admin' | 'crew' | 'event_manager' | 'system'
 
 export const SCOPE_ACTOR_KINDS: readonly ScopeActorKind[] = [
   'platform_admin',
   'tenant_admin',
-  'staff',
+  'crew',
   'event_manager',
   'system',
 ]
@@ -111,9 +111,9 @@ export function stellrScope(actor: ScopeActor, eventSlugs: readonly string[] | n
 
 /**
  * Every event in a tenant. For a route that has made its own event check: an event
- * manager passes `staff` here, because the event_manager kind must name its events.
+ * manager passes `crew` here, because the event_manager kind must name its events.
  */
-export function tenantWideScope(tenantId: unknown, kind: 'tenant_admin' | 'staff'): ScopeContext {
+export function tenantWideScope(tenantId: unknown, kind: 'tenant_admin' | 'crew'): ScopeContext {
   return makeScope({ tenantId, eventSlugs: null, actor: { kind, memberId: null } })
 }
 

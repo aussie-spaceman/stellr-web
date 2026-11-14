@@ -86,7 +86,8 @@ function rowsFor(o: RecordOwner): Record<string, Row[]> {
   return {
     events: [{ slug: o.eventSlug, tenant_id: o.tenantId }],
     survey_invitations: [
-      { id: `${o.participantId.slice(0, -2)}c1`, token_hash: sha256(o.surveyToken), distribution_id: distributionId, status: 'sent', member_id: null, participant_id: null },
+      // Its tenant, as the database stamps it from the distribution (via_parent).
+      { id: `${o.participantId.slice(0, -2)}c1`, token_hash: sha256(o.surveyToken), distribution_id: distributionId, status: 'sent', member_id: null, participant_id: null, tenant_id: o.tenantId },
     ],
     // Long closed, so the page says so with the title and needs no form.
     survey_distributions: [

@@ -108,7 +108,7 @@ vi.mock('@/lib/email', () => ({
 }))
 vi.mock('@/lib/scholarship-emails', () => ({
   scholarshipReceivedEmail: () => ({ subject: '', html: '', text: '' }),
-  scholarshipStaffAlertEmail: () => ({ subject: '', html: '', text: '' }),
+  scholarshipTeamInboxEmail: () => ({ subject: '', html: '', text: '' }),
 }))
 vi.mock('@/lib/campaign-registrations', () => ({ getMemberCampaignRegistration: async () => h.registration }))
 vi.mock('@/lib/uploads', () => ({ claimUpload: h.claimUpload }))

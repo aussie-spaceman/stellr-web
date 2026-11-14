@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { isStellrAdmin } from '@/lib/authz'
+import { hasCapability, type Capability } from '@/lib/authz'
 import { actorFromAuth } from '@/lib/activity-log'
 import { auditMutation, withAudit } from '@/lib/audit/route'
 import { LICENSE_DOCUMENT_URL_TTL_SECONDS } from '@/lib/teacher-license'
@@ -35,15 +35,17 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('unverify') }),
 ])
 
-async function guard(params: Promise<{ id: string }>): Promise<{ id: string } | NextResponse> {
-  if (!(await isStellrAdmin({ route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+// Staff may read and save a check on the member's behalf (portal:read, members:write).
+// Verifying, unverifying and removing it decide clearance: admins only (clearance:verify).
+async function guard(params: Promise<{ id: string }>, cap: Capability = 'clearance:verify'): Promise<{ id: string } | NextResponse> {
+  if (!(await hasCapability(cap, { route: ROUTE }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await params
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   return { id }
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guard(params)
+  const g = await guard(params, 'portal:read')
   if (g instanceof NextResponse) return g
   const db = supabaseServer()
   const { data } = await db.from(EXTERNAL_BC_TABLE).select('document_path').eq('member_id', g.id).maybeSingle()
@@ -70,7 +72,7 @@ const deleteAudit = ({ args: [req] }: { args: [Request, Ctx] }) => ({
 // Save and verify share POST, so each success records its own action
 // (auditMutation) once the body says which it was.
 export async function POST(req: Request, { params }: Ctx) {
-  const g = await guard(params)
+  const g = await guard(params, 'members:write')
   if (g instanceof NextResponse) return g
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
@@ -101,6 +103,7 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ ok: true, updatedAt: result.updatedAt, validUntil: result.validUntil })
   }
 
+  if (!(await hasCapability('clearance:verify', { route: ROUTE }))) return NextResponse.json({ error: 'Only an admin can verify or unverify a background check.' }, { status: 403 })
   const verify = parsed.data.action === 'verify'
   const result = await setExternalCheckVerified(db, {
     memberId: g.id,

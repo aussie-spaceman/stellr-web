@@ -162,7 +162,7 @@ afterEach(() => {
 describe('/api/admin/registrations/[id]/payment-method', () => {
   it('lets an admin change it, and logs it against the organizer', async () => {
     expect((await post()).status).toBe(200)
-    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, { method: 'individual' }, expect.objectContaining({ by: 'staff' }))
+    expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, { method: 'individual' }, expect.objectContaining({ by: 'crew' }))
     expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ memberId: 'm-t', action: 'group_payment_method_changed' }), expect.anything())
   })
 
@@ -245,7 +245,7 @@ describe('/api/admin/registrations/[id]/payment-method', () => {
     for (const body of [{ method: 'invoice' }, { method: 'card' }, { method: 'individual' }, { method: 'teacher_share', shareEstimate: 12 }]) {
       h.change.mockClear()
       expect((await post(body)).status).toBe(200)
-      expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, body, expect.objectContaining({ by: 'staff' }))
+      expect(h.change).toHaveBeenCalledWith(expect.anything(), expect.anything(), ID, body, expect.objectContaining({ by: 'crew' }))
     }
   })
 

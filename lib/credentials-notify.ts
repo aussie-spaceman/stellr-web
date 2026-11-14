@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@/lib/email'
-import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, type CredentialRow } from '@/lib/credentials'
+import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, isStellrCredential, type CredentialRow } from '@/lib/credentials'
 import { familyCredentialUrl } from '@/lib/credentials-link'
 import { relabelIssuedAward } from '@/lib/event-awards'
 
@@ -18,13 +18,37 @@ export interface CredentialRecipient {
   guardianEmail?: string | null
 }
 
-/** Non-fatal: a mail outage must never undo an issue. Returns whether it sent. */
+/**
+ * Is this Stellr's credential, so the email may go (S5 wave 7, A10a; decisions W7-9 and
+ * W7-10)? Another tenant's credential gets no email: Stellr is not that tenant's issuer,
+ * every link in the email leads to Stellr's credential page, which shows Stellr's
+ * credentials only, and a consent-pending minor of that tenant is never written to.
+ *
+ * The row's own tenant decides when the caller selected it (CREDENTIAL_TENANT_COLUMNS,
+ * which issueCredential and reinstateCredential do), and then nothing is read. A row
+ * without it reads the credential's tenant once. Nothing here reads guardian consent. A
+ * failed read throws, so the caller sends nothing.
+ */
+export async function credentialIsStellrs(db: SupabaseClient, row: Pick<CredentialRow, 'id' | 'tenant_id'>): Promise<boolean> {
+  if (row.tenant_id !== undefined) return isStellrCredential(row)
+  const { data, error } = await db.from('credentials').select('tenant_id').eq('id', row.id).maybeSingle()
+  if (error) throw new Error(`Reading the credential tenant failed: ${error.message}`)
+  if (!data) throw new Error('Reading the credential tenant failed: no row')
+  return isStellrCredential(data as { tenant_id: string | null })
+}
+
+/**
+ * Non-fatal: a mail outage must never undo an issue. Returns whether it sent. Nothing
+ * goes for another tenant's credential (credentialIsStellrs), and a failed check sends
+ * nothing.
+ */
 export async function sendCredentialIssuedEmail(
   db: SupabaseClient,
   row: CredentialRow,
   to: CredentialRecipient,
 ): Promise<boolean> {
   try {
+    if (!(await credentialIsStellrs(db, row))) return false
     const consent = await shareConsentFor(db, row)
     const share = canShare(row, consent)
     const isMinor = await holderIsMinor(db, row)

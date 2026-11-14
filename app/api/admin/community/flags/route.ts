@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
-import { isStellrAdmin } from '@/lib/authz'
+import { isStellrAdmin, hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 
 // What this request acted on, which withAudit's spec cannot read for itself: the body has gone.
@@ -12,7 +12,7 @@ const auditedOp = new WeakMap<Request, string>()
 
 // GET /api/admin/community/flags — list flags (default: pending only)
 export async function GET(req: Request) {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/flags' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/flags' }))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status') ?? 'pending'

@@ -4,12 +4,13 @@
  */
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { hasCapability, type Capability } from '@/lib/authz'
 
-export async function requireSurveyAdmin(): Promise<{ ok: true; userId: string } | { ok: false; response: Response }> {
-  const { userId, sessionClaims } = await auth()
+export async function requireSurveyAdmin(cap: Capability = 'competitions:write'): Promise<{ ok: true; userId: string } | { ok: false; response: Response }> {
+  // Surveys are part of Competitions: Staff runs and reads them; exports need 'export' (Staff has it).
+  const { userId } = await auth()
   if (!userId) return { ok: false, response: NextResponse.json({ error: 'Unauthorised' }, { status: 401 }) }
-  if (!isAdminClaims(sessionClaims)) return { ok: false, response: NextResponse.json({ error: 'Admins only' }, { status: 403 }) }
+  if (!(await hasCapability(cap))) return { ok: false, response: NextResponse.json({ error: 'Admins only' }, { status: 403 }) }
   return { ok: true, userId }
 }
 

@@ -7,13 +7,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // .eq('updated_at', …) guard, so a stale click 409s instead of certifying unseen
 // data. Unverify (the safe direction) stays unguarded.
 
-const { logActivity } = vi.hoisted(() => ({ logActivity: vi.fn(async () => {}) }))
+const { logActivity, h } = vi.hoisted(() => ({ logActivity: vi.fn(async () => {}), h: { caps: null as string[] | null } }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ sessionClaims: {} }) }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => true }))
+vi.mock('@/lib/authz', () => ({ hasCapability: async (cap: string) => h.caps === null || h.caps.includes(cap) }))
 vi.mock('@/lib/activity-log', () => ({
   logActivity,
-  actorFromAuth: async () => ({ actorMemberId: 'admin1', actorLabel: 'Admin', actorType: 'staff' }),
+  actorFromAuth: async () => ({ actorMemberId: 'admin1', actorLabel: 'Admin', actorType: 'admin' }),
 }))
 
 const CURRENT_VERSION = '2026-10-10T10:00:00Z'
@@ -46,7 +46,10 @@ const call = (body: unknown) =>
     params: Promise.resolve({ id: 'm1' }),
   })
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  h.caps = null
+})
 
 describe('POST /api/admin/members/[id]/license (BG-9)', () => {
   it('verifies when the pinned version matches what is on file', async () => {
@@ -73,3 +76,22 @@ describe('POST /api/admin/members/[id]/license (BG-9)', () => {
     expect(logActivity).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('Staff (13 Nov 2026): may not decide clearance', () => {
+  const STAFF = ['portal:read', 'members:write', 'competitions:write', 'event_managers:assign', 'refunds:write', 'schools:write', 'volunteers:write', 'export']
+  it('a verify by Staff is refused before anything is read or recorded', async () => {
+    h.caps = STAFF
+    const res = await call({ action: 'verify', licenseUpdatedAt: CURRENT_VERSION })
+    expect(res.status).toBe(403)
+    expect(logActivity).not.toHaveBeenCalled()
+  })
+  it('an unverify by Staff is refused too', async () => {
+    h.caps = STAFF
+    expect((await call({ action: 'unverify' })).status).toBe(403)
+  })
+  it('a caller with no capability at all is refused', async () => {
+    h.caps = []
+    expect((await call({ action: 'verify', licenseUpdatedAt: CURRENT_VERSION })).status).toBe(403)
+  })
+})
+

@@ -24,7 +24,7 @@ vi.mock('@/lib/sanity', () => ({ getAllEvents: async () => [] }))
 vi.mock('@/lib/community', () => ({ getCurrentMember: async () => null }))
 vi.mock('@/lib/scholarship-emails', () => ({
   scholarshipReceivedEmail: () => ({ subject: '', html: '', text: '' }),
-  scholarshipStaffAlertEmail: () => ({ subject: '', html: '', text: '' }),
+  scholarshipTeamInboxEmail: () => ({ subject: '', html: '', text: '' }),
 }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from: () => ({ insert: h.insert }) }) }))
 vi.mock('@/lib/impersonation', () => ({

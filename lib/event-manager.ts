@@ -268,6 +268,17 @@ export async function ensureEventManagerRole(clerkUserId: string, users?: ClerkU
   }
 }
 
+/** Whether the person holds an Event Manager assignment still in force. Throws on a read error. */
+export async function hasActiveAssignment(db: SupabaseClient, clerkUserId: string, now: Date = new Date()): Promise<boolean> {
+  const { count, error } = await db
+    .from(TABLE)
+    .select('id', { count: 'exact', head: true })
+    .eq('clerk_user_id', clerkUserId)
+    .or(activeAssignmentFilter(now))
+  if (error) throw error
+  return (count ?? 0) > 0
+}
+
 /** Clear the event_manager role once the person has no assignment still in force. Never touches any other role. */
 export async function clearEventManagerRoleIfUnused(db: SupabaseClient, clerkUserId: string, users?: ClerkUsers, now: Date = new Date()): Promise<RoleChange> {
   try {
@@ -505,6 +516,10 @@ export async function removeEventManager(
  * how many were removed.
  */
 export async function recheckEventManagerClearance(db: SupabaseClient, memberId: string, actor: Actor): Promise<number> {
+  // Clearance is also a Staff prerequisite: every caller of this is a clearance
+  // change, so Staff is re-checked here too (lib/staff.ts). Never throws.
+  const { nudgeStaff } = await import('@/lib/staff')
+  await nudgeStaff(db, { memberId }, 'clearance_changed')
   try {
     const m = await loadMember(db, { id: memberId })
     if (!m?.clerk_user_id) return 0

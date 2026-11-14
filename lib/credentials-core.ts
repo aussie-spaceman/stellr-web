@@ -1,5 +1,9 @@
 import { SITE_URL } from '@/lib/env'
 import { ageOn, isMinorOn } from '@/lib/age'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+
+// The bulk-issue skip labels live in a dependency-free module the admin panels import.
+export * from '@/lib/credentials-skip'
 
 // ── Verifiable credentials: pure helpers ─────────────────────────────────────
 // Edge-safe (no Node crypto, no DocuSign): imported by the OG image and badge
@@ -48,10 +52,23 @@ export interface CredentialRow {
   tombstoned_at: string | null
   visibility: CredentialVisibility
   is_minor: boolean
+  /**
+   * The owning tenant (S5), present where the select asked for it
+   * (CREDENTIAL_TENANT_COLUMNS). NULL is a Stellr row the backfill has not reached;
+   * absent (undefined) is unknown, which is never read as Stellr.
+   */
+  tenant_id?: string | null
 }
 
 export const CREDENTIAL_COLUMNS =
   'id, number, source, member_id, participant_id, module_id, event_slug, recipient_name, title, description, criteria, skills, issuer, role_label, award, award_type, theme, badge_path, pd_hours, standards, activity_title, activity_date, activity_location, issued_at, expires_at, status, revoked_at, revoked_reason, tombstoned_at, visibility, is_minor'
+
+/**
+ * The same columns and the row's tenant (S5 wave 7, A10a), so a check that the row is
+ * Stellr's costs no further read. Used where the row goes on to issuance or the
+ * credential email, never in a response a Stellr page already reads.
+ */
+export const CREDENTIAL_TENANT_COLUMNS = `${CREDENTIAL_COLUMNS}, tenant_id`
 
 /** What a verifier sees: the row's state collapsed to one word. */
 export type CredentialState = 'valid' | 'expired' | 'revoked' | 'withdrawn'
@@ -61,6 +78,17 @@ export function credentialState(c: Pick<CredentialRow, 'status' | 'expires_at' |
   if (c.status === 'revoked') return 'revoked'
   if (c.expires_at && new Date(c.expires_at) < now) return 'expired'
   return 'valid'
+}
+
+/**
+ * S5 wave 7 (A10a, decision W7-10): the public page, the badge, the share card and the
+ * member's wallet show Stellr's credentials only. Another tenant's credential answers
+ * as a number nobody holds. A NULL tenant is a Stellr row the backfill has not reached.
+ * Pure and edge-safe, for the edge routes; the API routes check the host instead
+ * (lib/tenancy/host-record.ts).
+ */
+export function isStellrCredential(row: { tenant_id?: string | null }): boolean {
+  return row.tenant_id === null || row.tenant_id === STELLR_TENANT_ID
 }
 
 export function credentialUrl(number: string): string {

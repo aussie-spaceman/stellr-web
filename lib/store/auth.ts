@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { hasCapability, type Capability } from '@/lib/authz'
 
 // Resolve the signed-in Clerk user to their members row (id + email), or null.
 export async function currentStoreMember(): Promise<{ id: string; email: string | null } | null> {
@@ -22,7 +22,7 @@ export async function currentStoreMember(): Promise<{ id: string; email: string 
 }
 
 // Catalog management = platform admin.
-export async function canManageStoreCatalog(): Promise<boolean> {
-  const { sessionClaims } = await auth()
-  return isAdminClaims(sessionClaims)
+// The catalog stays admin-only (no Staff capability writes it); Staff reads it with 'portal:read'.
+export async function canManageStoreCatalog(cap: Capability = 'store:write'): Promise<boolean> {
+  return hasCapability(cap)
 }

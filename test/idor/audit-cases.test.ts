@@ -10,7 +10,7 @@ import { auditMutation, withAudit } from '@/lib/audit/route'
 import { auditHandlers } from '@/lib/security/audit-coverage'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 import { AUDIT_CANARIES } from '../../scripts/idor-canary.mjs'
-import { auditCaseProblem, harness, installNetworkGuard, resetHarness, runIdorCase, runStaffTarget, type CaseResult } from './harness'
+import { auditCaseProblem, harness, installNetworkGuard, resetHarness, runIdorCase, runCrewTarget, type CaseResult } from './harness'
 
 installNetworkGuard()
 
@@ -38,27 +38,27 @@ describe('what a case records', () => {
   })
 })
 
-// What the generated suite runs for each tenant_staff and platform_admin route. No route
+// What the generated suite runs for each tenant_crew and platform_admin route. No route
 // has those classes yet (C15, C16), so this is the proof that the check is in that loop.
-describe('runStaffTarget', () => {
+describe('runCrewTarget', () => {
   const noId = { segments: [], query: [], body: [], urlPattern: '/api/fixture' }
-  const route = (source: string) => ({ file: 'app/api/fixture/route.ts', cls: 'tenant_staff' as const, methods: ['POST'], source })
+  const route = (source: string) => ({ file: 'app/api/fixture/route.ts', cls: 'tenant_crew' as const, methods: ['POST'], source })
   const AUDITED = "import { withAudit } from '@/lib/audit/route'\nexport const POST = withAudit(spec, impl)"
   const UNAUDITED = 'export async function POST() { return new Response() }'
 
   it('fails an audited route whose ok outcome wrote no event', async () => {
-    const cases = await runStaffTarget(route(AUDITED), { POST: async () => ok() }, noId)
+    const cases = await runCrewTarget(route(AUDITED), { POST: async () => ok() }, noId)
     expect(cases.length).toBeGreaterThan(0)
     for (const c of cases) expect(c.problem).toMatch(/wrote 0 events/)
   })
 
   it('passes one that wrote its event, and owes nothing for a route still on the baseline', async () => {
-    for (const c of await runStaffTarget(route(AUDITED), { POST: withAudit(SPEC, async () => ok()) }, noId)) expect(c.problem).toBeNull()
-    for (const c of await runStaffTarget(route(UNAUDITED), { POST: async () => ok() }, noId)) expect(c.problem).toBeNull()
+    for (const c of await runCrewTarget(route(AUDITED), { POST: withAudit(SPEC, async () => ok()) }, noId)) expect(c.problem).toBeNull()
+    for (const c of await runCrewTarget(route(UNAUDITED), { POST: async () => ok() }, noId)) expect(c.problem).toBeNull()
   })
 
   it('still reports a scope problem first', async () => {
-    const cases = await runStaffTarget(route(AUDITED), { POST: async () => ok() }, { ...noId, segments: ['id'], urlPattern: '/api/fixture/[id]' })
+    const cases = await runCrewTarget(route(AUDITED), { POST: async () => ok() }, { ...noId, segments: ['id'], urlPattern: '/api/fixture/[id]' })
     expect(cases.some((c) => /never reached the id/.test(c.problem ?? ''))).toBe(true)
   })
 

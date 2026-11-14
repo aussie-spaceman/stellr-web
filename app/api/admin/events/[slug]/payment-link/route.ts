@@ -7,7 +7,7 @@ import { withAudit } from '@/lib/audit/route'
 import { firstLinkedMemberId, stellrOnlyDb } from '@/lib/events/admin-records'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { isEmailLike, maskEmail } from '@/lib/utils'
-import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadEventRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // POST /api/admin/events/[slug]/payment-link — email the durable pay link for
 // a pending card registration (admins + assigned event managers). Goes to the
@@ -17,6 +17,8 @@ import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
 //   body: { registrationId: string, extraRecipients?: string[] }
 //
 // The pay page takes payment on Stellr's Stripe account: priced tenant events wait on S9.
+// Until then a tenant's event is refused for everyone, a Stellr admin included
+// (refuseUnlessStellrEvent), before the registration is read or anyone is emailed.
 
 const ROUTE = '/api/admin/events/[slug]/payment-link'
 
@@ -38,11 +40,13 @@ export const POST = withAudit(
 
 async function sendPayLink(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
+  const foreign = await refuseUnlessStellrEvent(supabaseServer(), slug, ROUTE)
+  if (foreign) return foreign
 
   const body = await req.json().catch(() => null)
   const registrationId = typeof body?.registrationId === 'string' ? body.registrationId : null
@@ -54,7 +58,7 @@ async function sendPayLink(req: Request, { params }: Ctx) {
   if (bad) return NextResponse.json({ error: `Not an email address: ${bad}` }, { status: 400 })
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<Registration>(staff, 'registrations', registrationId, {
+  const loaded = await loadEventRecord<Registration>(crew, 'registrations', registrationId, {
     db,
     select: 'id, event_slug, status, invoice_requested, member_pays_individually, teacher_member_id',
     notFound: () => NextResponse.json({ error: 'Registration not found for this event' }, { status: 404 }),
@@ -81,7 +85,7 @@ async function sendPayLink(req: Request, { params }: Ctx) {
   }
 
   const actor = await actorFromAuth()
-  const subjectMemberId = reg.teacher_member_id ?? (await firstLinkedMemberId(stellrOnlyDb(staff.scope, db), registrationId)) ?? actor.actorMemberId ?? null
+  const subjectMemberId = reg.teacher_member_id ?? (await firstLinkedMemberId(stellrOnlyDb(crew.scope, db), registrationId)) ?? actor.actorMemberId ?? null
   if (subjectMemberId) {
     await logActivity(
       {

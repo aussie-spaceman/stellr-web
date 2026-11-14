@@ -70,10 +70,10 @@ describe('a staff scope is Stellr\'s', () => {
     setup('admin', {
       tenant_memberships: [mem('tenant_admin')],
       platform_admins: [{ clerk_user_id: USER }],
-      staff_roles: [{ member_id: MEMBER, scopes: ['all'] }],
+      admin_duties: [{ member_id: MEMBER, scopes: ['all'] }],
     })
     expect(await authz.hasScope('events')).toBe(false)
-    expect(db.reads).not.toContain('staff_roles')
+    expect(db.reads).not.toContain('admin_duties')
   })
 })
 
@@ -121,7 +121,7 @@ describe('postgres: a platform admin on another tenant\'s host', () => {
     expect(await authz.hasPortalAccess()).toBe(false)
     expect(await authz.isStellrAdmin()).toBe(false)
     expect(await authz.isStellrAdminOrUnknown()).toBe(false)
-    expect((await authz.requireTenantStaff(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(false)
+    expect((await authz.requireTenantCrew(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(false)
     expect(await authz.requireEventAccess()).toEqual({ ok: false, status: 403 })
     expect(await authz.requireEventAccess('ev-c')).toEqual({ ok: false, status: 403 })
   })

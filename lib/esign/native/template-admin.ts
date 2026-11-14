@@ -4,6 +4,8 @@ import { parseFieldMap, type FieldMap } from '@/lib/esign/native/template'
 import { TEMPLATE_BUCKET } from '@/lib/esign/native/templates-store'
 import { DISCLOSURE_VERSION } from '@/lib/esign/disclosure'
 import type { TemplateKey } from '@/lib/esign/native/plan'
+import { devPlaceholderTargetRefusal, isDevPlaceholderTitle, pdfPlaceholderStatus } from '@/lib/esign/native/dev-placeholder'
+import { isRealProductionApp } from '@/lib/env-guards'
 
 // The field editor's server side (Admin → Consent forms → Agreement documents):
 // accept an uploaded PDF, save an edited field map as a new version, approve a
@@ -15,7 +17,7 @@ import type { TemplateKey } from '@/lib/esign/native/plan'
 // 'tenant_guardian_consent' (S5 wave 6) is the platform-locked guardian consent for
 // another organiser's event. Only platform staff publish it, here; no tenant can
 // edit it, and lib/esign/tenant-guardian-consent.ts issues it for every tenant.
-export const TEMPLATE_KEYS: TemplateKey[] = ['minor', 'adult', 'mentor', 'membership_adult', 'membership_minor', 'tenant_guardian_consent']
+export const TEMPLATE_KEYS: TemplateKey[] = ['minor', 'adult', 'mentor', 'membership_adult', 'membership_minor', 'tenant_guardian_consent', 'staff']
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 const MAX_PAGES = 30
 const DRAFT_PATH = /^drafts\/[0-9a-f]{64}\.pdf$/
@@ -53,7 +55,7 @@ export async function acceptUpload(db: SupabaseClient, bytes: Uint8Array): Promi
 
 /** A draft upload or a published version's file, by its storage path. Paths are checked, never trusted. */
 export async function loadTemplateFile(db: SupabaseClient, pdfPath: string): Promise<Uint8Array> {
-  const published = /^(minor|adult|mentor|membership_adult|membership_minor|tenant_guardian_consent)\/v\d+-[0-9a-f]{12}\.pdf$/
+  const published = /^(minor|adult|mentor|membership_adult|membership_minor|tenant_guardian_consent|staff)\/v\d+-[0-9a-f]{12}\.pdf$/
   if (!DRAFT_PATH.test(pdfPath) && !published.test(pdfPath)) throw new TemplateAdminError('Unknown document file.')
   const { data, error } = await db.storage.from(TEMPLATE_BUCKET).download(pdfPath)
   if (error || !data) throw new TemplateAdminError('The document file could not be read.')
@@ -73,6 +75,25 @@ export async function checkVersion(pdf: Uint8Array, map: FieldMap): Promise<stri
     issues.push({ check: 'placement', message: `The fields could not be printed on the document: ${err instanceof Error ? err.message : String(err)}` })
   }
   return issues.map((i) => i.message)
+}
+
+/**
+ * Refuses the dev placeholder for the guardian-consent document (S5 wave 7, K5)
+ * anywhere but dev: by its title, or by the "DEV PLACEHOLDER" mark on any page
+ * of its file, whatever the title. Allowed only where scripts/esign-template.ts
+ * would put it: not the real production app, and a database that is the dev
+ * project or a stack on this machine. The PDF is read only off dev, so dev and
+ * every real document elsewhere behave as before.
+ */
+async function refusePlaceholderOffDev(title: string, pdf: Uint8Array): Promise<void> {
+  const refusal = isRealProductionApp()
+    ? 'This is the production app.'
+    : devPlaceholderTargetRefusal({ supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL, appEnv: process.env.NEXT_PUBLIC_APP_ENV })
+  if (!refusal) return
+  const status = isDevPlaceholderTitle(title) ? null : await pdfPlaceholderStatus(pdf)
+  if (status && !status.marked.length) return
+  const where = status ? `Page(s) ${status.marked.join(', ')} say "DEV PLACEHOLDER".` : 'Its title says "DEV PLACEHOLDER".'
+  throw new TemplateAdminError(`This is the dev placeholder, not a consent form. It can be saved or approved only on dev. ${where}`, [refusal])
 }
 
 export interface NewVersionInput {
@@ -99,6 +120,7 @@ export async function createVersion(db: SupabaseClient, input: NewVersionInput):
   const pdf = await loadTemplateFile(db, input.pdfPath)
   const issues = await checkVersion(pdf, map)
   if (issues.length) throw new TemplateAdminError('The document did not pass its checks.', issues)
+  await refusePlaceholderOffDev(title, pdf)
 
   const sha = sha256Hex(pdf)
   const { data: latest } = await db.from('esign_templates').select('version').eq('key', input.key).order('version', { ascending: false }).limit(1).maybeSingle()
@@ -131,7 +153,7 @@ export async function createVersion(db: SupabaseClient, input: NewVersionInput):
  * nothing unchecked reaches a family.
  */
 export async function approveVersion(db: SupabaseClient, id: string, opts: { by: string; confirm: string }): Promise<{ key: string; version: number }> {
-  const { data: row } = await db.from('esign_templates').select('id, key, version, pdf_path, pdf_sha256, field_map, approved_at').eq('id', id).maybeSingle()
+  const { data: row } = await db.from('esign_templates').select('id, key, version, title, pdf_path, pdf_sha256, field_map, approved_at').eq('id', id).maybeSingle()
   if (!row) throw new TemplateAdminError('That version does not exist.')
   const expected = `${row.key} v${row.version}`
   if (opts.confirm.trim() !== expected) throw new TemplateAdminError(`Type "${expected}" to confirm.`)
@@ -139,6 +161,7 @@ export async function approveVersion(db: SupabaseClient, id: string, opts: { by:
   if (sha256Hex(pdf) !== row.pdf_sha256) throw new TemplateAdminError('The stored file does not match this version. It cannot be approved.')
   const issues = await checkVersion(pdf, parseFieldMap(row.field_map))
   if (issues.length) throw new TemplateAdminError('The document did not pass its checks.', issues)
+  await refusePlaceholderOffDev((row.title as string | null) ?? '', pdf)
 
   if (!row.approved_at) {
     const { error } = await db.from('esign_templates').update({ approved_by: opts.by, approved_at: new Date().toISOString() }).eq('id', id)

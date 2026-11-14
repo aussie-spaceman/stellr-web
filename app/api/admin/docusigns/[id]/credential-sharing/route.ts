@@ -1,7 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
+import { crewActorType } from '@/lib/activity-log'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentTenantId, requireTenantStaff } from '@/lib/authz'
+import { currentTenantId, requireTenantCrew } from '@/lib/authz'
 import { logActivity } from '@/lib/activity-log'
 import { applyGuardianOptOut } from '@/lib/credentials-notify'
 import { withAudit } from '@/lib/audit/route'
@@ -39,7 +40,7 @@ type Agreement = { id: string; envelope_type: string | null; status: string | nu
 // Opting out makes any page that is already public private and emails the
 // family (guardian, student Cc'd) — see applyGuardianOptOut.
 async function setCredentialSharing(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 
@@ -71,7 +72,7 @@ async function setCredentialSharing(req: NextRequest, { params }: { params: Prom
     await logActivity({
       memberId: env.member_id,
       category: 'docusign',
-      actorType: 'admin',
+      actorType: await crewActorType(),
       actorLabel: userId ?? null,
       action: body.optOut ? 'credential_sharing_opt_out' : 'credential_sharing_opt_in',
       summary: body.optOut

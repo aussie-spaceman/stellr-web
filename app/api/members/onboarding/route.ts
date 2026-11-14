@@ -8,7 +8,7 @@ import { logActivity } from '@/lib/activity-log'
 import { grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
 import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
-import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
+import { sendAccountConfirmation, notifyTeamOfRegistration } from '@/lib/registration-notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
 import { isKnownMinorOn, isMinorOn, isUnder13On, isValidDob } from '@/lib/age'
@@ -578,7 +578,7 @@ async function submitOnboarding(req: Request) {
 
     if (confirmed) {
       await sendAccountConfirmation(db, confirmed)
-      await notifyStaffOfRegistration(db, confirmed, { schoolName })
+      await notifyTeamOfRegistration(db, confirmed, { schoolName })
     }
   }
 

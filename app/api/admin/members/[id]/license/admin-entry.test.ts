@@ -14,7 +14,7 @@ const { isAdmin, logActivity, claimUpload, state } = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ sessionClaims: {} }) }))
-vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: () => isAdmin.value }))
+vi.mock('@/lib/authz', () => ({ hasCapability: async () => isAdmin.value }))
 vi.mock('@/lib/activity-log', () => ({
   logActivity,
   actorFromAuth: async () => ({ actorType: 'admin', actorMemberId: 'admin1', actorLabel: 'Staff Admin' }),

@@ -4,6 +4,7 @@ import { tokens } from '@/lib/tokens'
 import {
   ageBlock,
   credentialState,
+  isStellrCredential,
   normaliseCredentialNumber,
   type CredentialStatus,
   type CredentialTheme,
@@ -24,7 +25,8 @@ import { relabelIssuedAward } from '@/lib/event-awards'
  *
  * Private, revoked and withdrawn credentials get a generic card with no name:
  * the scraper is not the owner, and a stale preview must not out a page that
- * has since been turned off.
+ * has since been turned off. So does another tenant's credential (S5 A10a,
+ * decision W7-10): the card is Stellr's.
  */
 export const runtime = 'edge'
 
@@ -55,6 +57,8 @@ interface OgRow {
   visibility: CredentialVisibility
   /** The live DOB from the linked member/participant, for the age re-check. */
   date_of_birth: string | null
+  /** The owning tenant; NULL is a Stellr row the backfill has not reached. */
+  tenant_id: string | null
 }
 
 type OgCard = { recipient_name: string; title: string; issuer: string; theme: CredentialTheme | null; number: string }
@@ -72,6 +76,7 @@ type OgCard = { recipient_name: string; title: string; issuer: string; theme: Cr
  */
 export function ogCardFor(data: OgRow | null, now = new Date()): OgCard | null {
   if (!data) return null
+  if (!isStellrCredential(data)) return null
   if (data.visibility !== 'public') return null
   if (credentialState(data, now) === 'withdrawn') return null
   if (ageBlock(data.date_of_birth, now)) return null
@@ -93,7 +98,7 @@ export default async function Image({ params }: { params: Promise<{ number: stri
     const { data } = await supabaseServer()
       .from('credentials')
       .select(
-        'number, recipient_name, title, award, award_type, issuer, theme, status, expires_at, tombstoned_at, visibility, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)',
+        'number, recipient_name, title, award, award_type, issuer, theme, status, expires_at, tombstoned_at, visibility, tenant_id, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)',
       )
       .eq('number', n)
       .maybeSingle()
@@ -111,6 +116,8 @@ export default async function Image({ params }: { params: Promise<{ number: stri
         tombstoned_at: (row.tombstoned_at as string | null) ?? null,
         visibility: row.visibility as CredentialVisibility,
         date_of_birth: dobOf(row.members) ?? dobOf(row.participants),
+        // Undefined, were the select to lose the column, is not NULL: no card then.
+        tenant_id: row.tenant_id as string | null,
       })
     }
   }

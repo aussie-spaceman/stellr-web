@@ -2,7 +2,7 @@
  * Equivalence harness for lib/authz.ts (multi-tenancy plan S5, slice C1).
  *
  * For every Stellr role scenario (Clerk claim × assignments × member row ×
- * staff_roles scopes × the owner's platform flag), every legacy idiom is run
+ * admin_duties scopes × the owner's platform flag), every legacy idiom is run
  * against the real legacy helper and against its lib/authz replacement:
  *
  *   clerk source     must agree with legacy in EVERY scenario. This is the
@@ -56,7 +56,7 @@ import {
   hasAdminPortalAccess,
   isAdminClaims,
   isEventManagerClaims,
-  isStaffRole,
+  isCrewRole,
   requireAdminPage,
 } from '@/test/fixtures/authz-legacy'
 import { requireEventAccess as legacyEventAccess } from '@/lib/event-access'
@@ -95,7 +95,7 @@ async function legacy(s: Scenario): Promise<Record<string, unknown>> {
     isEventManagerClaims: isEventManagerClaims(claims),
     hasAdminPortalAccess: hasAdminPortalAccess(claims),
     requireAdminPage: await outcome(requireAdminPage),
-    isStaffRole: isStaffRole(s.signedIn ? s.claimsRole : undefined),
+    isCrewRole: isCrewRole(s.signedIn ? s.claimsRole : undefined),
     requireScholarshipAdmin: (await requireScholarshipAdmin()) !== null,
     requireSurveyAdmin: await requireSurveyAdmin().then((r) => (r.ok ? 'ok' : r.response.status)),
     canManageStoreCatalog: await canManageStoreCatalog(),
@@ -124,7 +124,7 @@ async function viaAuthz(s: Scenario): Promise<Record<string, unknown>> {
     isEventManagerClaims: section.ok && !section.isAdmin,
     hasAdminPortalAccess: await authz.hasPortalAccess(),
     requireAdminPage: await outcome(() => authz.page.requireAdmin()),
-    isStaffRole: await authz.isStaffTarget({ clerkUserId: s.signedIn ? USER : null, clerkRole: s.signedIn ? s.claimsRole : undefined }),
+    isCrewRole: await authz.isCrewTarget({ clerkUserId: s.signedIn ? USER : null, clerkRole: s.signedIn ? s.claimsRole : undefined }),
     requireScholarshipAdmin: admin,
     requireSurveyAdmin: adminDecision.ok ? 'ok' : adminDecision.status,
     canManageStoreCatalog: admin,
@@ -136,7 +136,7 @@ async function viaAuthz(s: Scenario): Promise<Record<string, unknown>> {
 }
 
 /** The idioms whose postgres answer may follow the tables when data is not synced. */
-const DRIFT_SENSITIVE = /^(isEventManagerClaims|hasAdminPortalAccess|requireAdminPage|isStaffRole|requireEventAccess)/
+const DRIFT_SENSITIVE = /^(isEventManagerClaims|hasAdminPortalAccess|requireAdminPage|isCrewRole|requireEventAccess)/
 
 const scenarios = allScenarios()
 
@@ -183,15 +183,15 @@ describe('authz equivalence with the legacy guard idioms', () => {
         if (JSON.stringify(want[key]) === JSON.stringify(got[key])) continue
         expect(key, s.name).toMatch(DRIFT_SENSITIVE)
         // The staff-target check protects, so drift may only add protection.
-        if (key === 'isStaffRole') expect([want[key], got[key]], s.name).toEqual([false, true])
+        if (key === 'isCrewRole') expect([want[key], got[key]], s.name).toEqual([false, true])
         moved.add(key)
       }
     }
     // The drift is real (so a role-sync check is needed before any flip) …
     expect([...moved].sort()).toEqual([
       'hasAdminPortalAccess',
+      'isCrewRole',
       'isEventManagerClaims',
-      'isStaffRole',
       'requireAdminPage',
       'requireEventAccess()',
       'requireEventAccess(ev-a)',
@@ -220,7 +220,7 @@ describe('authz equivalence with the legacy guard idioms', () => {
       await authz.requireStellrAdmin()
       await authz.hasPortalAccess()
       await outcome(() => authz.page.requireAdmin())
-      await authz.isStaffTarget({ clerkUserId: USER, clerkRole: s.claimsRole })
+      await authz.isCrewTarget({ clerkUserId: USER, clerkRole: s.claimsRole })
       expect(db.reads, s.name).toEqual([])
     }
   })
@@ -248,7 +248,7 @@ describe('lib/admin-auth, the shims, answer as the frozen legacy code did', () =
       isAdminClaims: m.isAdminClaims(claims),
       isEventManagerClaims: m.isEventManagerClaims(claims),
       hasAdminPortalAccess: m.hasAdminPortalAccess(claims),
-      isStaffRole: m.isStaffRole(s.claimsRole),
+      isCrewRole: m.isCrewRole(s.claimsRole),
       currentUserIsAdmin: await m.currentUserIsAdmin(),
       requireAdminPage: await outcome(m.requireAdminPage),
     }
@@ -276,18 +276,19 @@ describe('lib/admin-auth, the shims, answer as the frozen legacy code did', () =
     }
   })
 
-  it('isStaffRole takes any value the same way', async () => {
+  it('isCrewRole takes any value the same way', async () => {
     const shim = await load()
-    for (const v of [undefined, null, '', 'admin', 'event_manager', 'staff', 'Admin', 7, ['admin'], {}]) {
-      expect(shim.isStaffRole(v), String(v)).toBe(isStaffRole(v))
+    for (const v of [undefined, null, '', 'admin', 'event_manager', 'member', 'Admin', 7, ['admin'], {}]) {
+      expect(shim.isCrewRole(v), String(v)).toBe(isCrewRole(v))
     }
-    expect([...shim.STAFF_CLERK_ROLES]).toEqual(['admin', 'event_manager'])
+    // The Staff role (13 Nov 2026) is the one deliberate addition to the frozen list.
+    expect([...shim.CREW_CLERK_ROLES]).toEqual(['admin', 'staff', 'event_manager'])
   })
 })
 
 describe('the view-as refusal, against the rule the start route held before C14', () => {
   type Clerk = 'no_login' | 'not_found' | 'down' | { role: unknown }
-  const CLERK_STATES: Clerk[] = ['no_login', 'not_found', 'down', { role: undefined }, { role: 'admin' }, { role: 'event_manager' }, { role: 'student' }, { role: 'staff' }, { role: 7 }]
+  const CLERK_STATES: Clerk[] = ['no_login', 'not_found', 'down', { role: undefined }, { role: 'admin' }, { role: 'event_manager' }, { role: 'student' }, { role: 'member' }, { role: 7 }]
 
   /** Word for word what app/api/admin/impersonation/route.ts answered: 403, 503, or carry on. */
   function legacyRefusal(row: 'none' | 'held' | 'read_fails', clerk: Clerk): 403 | 503 | null {
@@ -295,7 +296,7 @@ describe('the view-as refusal, against the rule the start route held before C14'
     if (row === 'held') return 403
     if (clerk === 'no_login' || clerk === 'not_found') return null
     if (clerk === 'down') return 503
-    return isStaffRole(clerk.role) ? 403 : null
+    return isCrewRole(clerk.role) ? 403 : null
   }
 
   function target(row: 'none' | 'held' | 'read_fails', clerk: Clerk) {
@@ -305,15 +306,15 @@ describe('the view-as refusal, against the rule the start route held before C14'
       return { publicMetadata: { role: (clerk as { role: unknown }).role } }
     })
     vi.mocked(clerkClient).mockResolvedValue({ users: { getUser } } as never)
-    db = fakeDb({ staff_roles: row === 'held' ? [{ member_id: MEMBER, scopes: [] }] : [] })
-    if (row === 'read_fails') db.fail.add('staff_roles')
+    db = fakeDb({ admin_duties: row === 'held' ? [{ member_id: MEMBER, scopes: [] }] : [] })
+    if (row === 'read_fails') db.fail.add('admin_duties')
     vi.mocked(supabaseServer).mockReturnValue(db.client)
     return { getUser, args: { memberId: MEMBER, clerkUserId: clerk === 'no_login' ? null : USER } }
   }
 
   async function refusal(args: { memberId: string; clerkUserId: string | null }): Promise<403 | 503 | null> {
     try {
-      return (await authz.isViewAsTargetStaff(args)) ? 403 : null
+      return (await authz.isViewAsTargetCrew(args)) ? 403 : null
     } catch {
       return 503
     }
@@ -328,12 +329,12 @@ describe('the view-as refusal, against the rule the start route held before C14'
     // The row is read first, so a holder or a failed read never reaches Clerk, as before.
     if (row !== 'none' || clerk === 'no_login') expect(getUser).not.toHaveBeenCalled()
     // And no read beyond the row: the rest is the Clerk record.
-    expect(db.reads).toEqual(['staff_roles'])
+    expect(db.reads).toEqual(['admin_duties'])
   })
 
-  it('a staff_roles row with empty scopes refuses, though isStaffTarget alone would not count it', async () => {
+  it('an admin_duties row with empty scopes refuses, though isCrewTarget alone would not count it', async () => {
     const { args } = target('held', { role: 'student' })
-    expect(await authz.isStaffTarget({ clerkUserId: USER, clerkRole: 'student', memberId: MEMBER })).toBe(false)
+    expect(await authz.isCrewTarget({ clerkUserId: USER, clerkRole: 'student', memberId: MEMBER })).toBe(false)
     expect(await refusal(args)).toBe(403)
   })
 
@@ -349,11 +350,11 @@ describe('the view-as refusal, against the rule the start route held before C14'
     expect(await refusal(args)).toBe(503)
   })
 
-  it('under postgres a staff membership in any tenant refuses: another tenant has no staff_roles row', async () => {
+  it('under postgres a staff membership in any tenant refuses: another tenant has no admin_duties row', async () => {
     const { args } = target('none', { role: 'student' })
     vi.stubEnv('AUTHZ_SOURCE', 'postgres')
     db.tables.members = [{ id: MEMBER, clerk_user_id: USER }]
-    db.tables.tenant_memberships = [{ tenant_id: 'another-tenant', role: 'staff', member_id: MEMBER }]
+    db.tables.tenant_memberships = [{ tenant_id: 'another-tenant', role: 'duty_holder', member_id: MEMBER }]
     expect(await refusal(args)).toBe(403)
   })
 
@@ -361,7 +362,7 @@ describe('the view-as refusal, against the rule the start route held before C14'
     const { args } = target('none', { role: 'student' })
     vi.stubEnv('AUTHZ_SOURCE', source)
     db.tables.members = [{ id: MEMBER, clerk_user_id: USER }]
-    db.tables.tenant_memberships = [{ tenant_id: 'another-tenant', role: 'staff', member_id: MEMBER }]
+    db.tables.tenant_memberships = [{ tenant_id: 'another-tenant', role: 'duty_holder', member_id: MEMBER }]
     expect(await refusal(args)).toBe(null)
   })
 })

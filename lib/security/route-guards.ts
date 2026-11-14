@@ -102,27 +102,31 @@ export const DELEGATE_GUARDS: Record<string, { file: string; kinds: GuardKind[];
   adminName: { file: 'app/api/admin/esign/templates/guard.ts', kinds: ['admin'] },
   // lib/authz composites. requireStellrAdmin answers for Stellr only and the
   // portal check lets an event manager in, so neither is a `tenant` check.
-  // isStaffTarget (about someone else) and accessCoversEvent (about a row) do not
+  // isCrewTarget (about someone else) and accessCoversEvent (about a row) do not
   // decide whether the caller gets in, so they are deliberately not listed.
   getPrincipal: { file: 'lib/authz.ts', kinds: ['session'] },
   requireStellrAdmin: { file: 'lib/authz.ts', kinds: ['admin'] },
   isStellrAdmin: { file: 'lib/authz.ts', kinds: ['admin'] },
   hasPortalAccess: { file: 'lib/authz.ts', kinds: ['admin'] },
   hasScope: { file: 'lib/authz.ts', kinds: ['admin'] },
-  requireTenantStaff: { file: 'lib/authz.ts', kinds: ['tenant'] },
+  // The Staff role (13 Nov 2026): an admin, or Staff for a capability Staff holds. Stellr only by construction.
+  requireCapability: { file: 'lib/authz.ts', kinds: ['admin'] },
+  hasCapability: { file: 'lib/authz.ts', kinds: ['admin'] },
+  'requireCapability@page': { file: 'lib/authz.ts', kinds: ['admin'], call: 'requireCapability', export: 'page.requireCapability' },
+  requireTenantCrew: { file: 'lib/authz.ts', kinds: ['tenant'] },
   // Same name as the lib/event-access helper above, which C25 deletes. Codemod T5
   // re-points routes that stay stellr_only, so it is an admin check like the legacy
   // one. It is a `tenant` check only when it names the event: only then does the
   // answer hold in the event's own tenant and confine an event manager. Without a
   // slug it passes an event manager with any or no assignment (decide.ts), so a route
-  // moving to tenant_staff passes a slug, or also calls requireTenantStaff.
+  // moving to tenant_crew passes a slug, or also calls requireTenantCrew.
   'requireEventAccess@authz': { file: 'lib/authz.ts', kinds: ['admin'], call: 'requireEventAccess' },
   'requireEventAccess@authz#slug': { file: 'lib/authz.ts', kinds: ['tenant'], call: EVENT_NAMED, export: 'requireEventAccess' },
   // For a route that names a record, not an event: its answer carries the event check for
   // that record (`covers`). This list cannot see the check being made, as it cannot for
-  // requireTenantStaff, so the stellr_event_manager persona is what proves each route.
-  requireEventStaff: { file: 'lib/authz.ts', kinds: ['tenant'] },
-  // For a route under events/[slug]: requireEventStaff, the event check for that slug, and
+  // requireTenantCrew, so the stellr_event_manager persona is what proves each route.
+  requireEventCrew: { file: 'lib/authz.ts', kinds: ['tenant'] },
+  // For a route under events/[slug]: requireEventCrew, the event check for that slug, and
   // the event's own tenant. test/events-admin-paperwork-c17.test.ts holds its answers.
   requireEventRoute: { file: 'lib/authz.ts', kinds: ['tenant'] },
   // lib/authz page adapters. page.requireStellrAdmin and the api.* adapters are
@@ -158,10 +162,12 @@ export const AUTHZ_DECISIONS: Partial<Record<GuardKind, Record<string, readonly 
     decidePortalAccess: [AUTHZ_DECIDE],
     decideScope: [AUTHZ_DECIDE],
     decideEventAccess: [AUTHZ_DECIDE],
+    // The Staff role (13 Nov 2026): an admin, or Stellr Staff for a capability Staff holds.
+    decideCapability: ['lib/authz/capabilities'],
   },
   tenant: {
     decideTenantRole: [AUTHZ_DECIDE],
-    decideTenantStaff: [AUTHZ_DECIDE],
+    decideTenantCrew: [AUTHZ_DECIDE],
     decideEventAccess: [AUTHZ_DECIDE],
   },
   platform: { decidePlatformAdmin: [AUTHZ_DECIDE] },
@@ -173,7 +179,7 @@ export const CLASS_REQUIREMENTS: Record<RouteClass, { kinds: GuardKind[]; firstS
   // The stellr_only requirement, deliberately: the class moved and the guard did not
   // (C15). platform_admin above stays as strict as it was.
   platform_destined: { kinds: ['admin'] },
-  tenant_staff: { kinds: ['tenant'] },
+  tenant_crew: { kinds: ['tenant'] },
   stellr_only: { kinds: ['admin'] },
   participant: { kinds: ['session'] },
   webhook: { kinds: ['webhook'] },
@@ -208,7 +214,7 @@ export function withImplied(kinds: Set<GuardKind>): Set<GuardKind> {
 /** Exist only on lib/authz's `page`: they redirect or 404 themselves, and return nothing. */
 const AUTHZ_PAGE_ONLY = new Set(['requireAdmin', 'requireTenantAdmin', 'requireEventSection'])
 /** lib/authz checks whose first argument is the tenant being asked about. */
-const AUTHZ_TENANT_ARG = new Set(['assertTenantRole', 'requireTenantStaff'])
+const AUTHZ_TENANT_ARG = new Set(['assertTenantRole', 'requireTenantCrew'])
 
 /**
  * Does this lib/authz call decide anything? Every lib/authz check except the page
@@ -220,7 +226,7 @@ const AUTHZ_TENANT_ARG = new Set(['assertTenantRole', 'requireTenantStaff'])
  * handler then touches, a tenant that reaches a same-file helper as a parameter, and
  * a same-file helper that is itself never awaited. The tenant personas in the IDOR
  * suite (C6) are what test the first two; so none of this alone is enough to move a
- * route to tenant_staff.
+ * route to tenant_crew.
  */
 function enforces(name: string, use: CallUse): boolean {
   if (!use.awaited) return false

@@ -412,8 +412,8 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
       <IntegrationHealth />
 
       <p className="text-xs text-content-muted">
-        The weekly digest of this page is emailed every Friday at midday Mountain time to staff with the
-        &ldquo;all&rdquo; scope (<Link prefetch={false} href="/admin/staff" className="text-primary hover:underline">Staff roles</Link>).
+        The weekly digest of this page is emailed every Friday at midday Mountain time to everyone with the
+        &ldquo;all&rdquo; duty (<Link prefetch={false} href="/admin/duties" className="text-primary hover:underline">Duties</Link>).
         {' '}<Link prefetch={false} href="/home" className="text-primary hover:underline">Return to the web app</Link>
       </p>
     </div>

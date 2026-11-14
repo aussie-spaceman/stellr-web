@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { hasCapability } from '@/lib/authz'
 import { withAudit } from '@/lib/audit/route'
 
 // Editable school fields — name plus the address block surfaced in the admin
@@ -30,8 +30,8 @@ async function updateSchool(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { userId, sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) {
+  const { userId } = await auth()
+  if (!(await hasCapability('schools:write'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -29,9 +29,9 @@
 // when more cases are `unexercised` (request validation refused before the id
 // was used) than MAX_UNEXERCISED.
 //
-// Every tenant_staff, platform_admin and platform_destined route handler, with or without
+// Every tenant_crew, platform_admin and platform_destined route handler, with or without
 // an id, also runs the staff personas, strict, with no accepted reason possible:
-// test/idor/harness.ts STAFF_PERSONAS_FOR and staffCaseProblem.
+// test/idor/harness.ts CREW_PERSONAS_FOR and crewCaseProblem.
 // A refusal that changes with the row, or with a malformed id, fails there and is
 // only reported here for every other class: test/idor/reported-oracles.ts, pinned in the
 // snapshot's `reported4xxOracleCount` and `reported4xxOracleHash`.
@@ -44,10 +44,10 @@
 import './mocks'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { idorTargets, staffTargets, type IdorTarget } from '@/lib/security/idor-targets'
+import { idorTargets, crewTargets, type IdorTarget } from '@/lib/security/idor-targets'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
 import { applyEnv, CASE_FIXTURES, fixtureFor, HELD_BACK_FIXTURES } from './case-fixtures'
-import { FAILING_OUTCOMES, installNetworkGuard, routeAuditProblems, runIdorCase, runStaffTarget, targetInput, type CaseResult, type Outcome } from './harness'
+import { FAILING_OUTCOMES, installNetworkGuard, routeAuditProblems, runIdorCase, runCrewTarget, targetInput, type CaseResult, type Outcome } from './harness'
 import { printReportedOracles, sealReportedOracles, type ReportedOracles } from './reported-oracles'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.idor.invalid'
@@ -103,8 +103,8 @@ interface Snapshot {
   targets: Record<string, SnapshotTarget>
 }
 
-const STAFF_CLASSES = ['tenant_staff', 'platform_admin'] as const
-const isStaffClass = (c: string): c is (typeof STAFF_CLASSES)[number] => (STAFF_CLASSES as readonly string[]).includes(c)
+const CREW_CLASSES = ['tenant_crew', 'platform_admin'] as const
+const isCrewClass = (c: string): c is (typeof CREW_CLASSES)[number] => (CREW_CLASSES as readonly string[]).includes(c)
 // Same guard as stellr_only, so the same rules as stellr_only in the participant cases.
 const hasStellrOnlyGuard = (c: string) => c === 'stellr_only' || c === 'platform_destined'
 
@@ -130,8 +130,8 @@ const snapshot: Snapshot = existsSync(SNAPSHOT_FILE)
   : { _comment: '', count: 0, targets: {} }
 const observed = new Map<string, Record<string, CaseResult>>()
 // Staff cases that proved nothing under a named exception still count against the caps.
-const staffUnexercised: string[] = []
-const staffErrors: string[] = []
+const crewUnexercised: string[] = []
+const crewErrors: string[] = []
 let ran = 0
 
 installNetworkGuard()
@@ -151,24 +151,24 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
     for (const t of targets) expect(ROUTE_MANIFEST[t.file]).toBe(t.cls)
   })
 
-  // Every tenant_staff, platform_admin and platform_destined route handler, with or without
+  // Every tenant_crew, platform_admin and platform_destined route handler, with or without
   // an id. test/idor/fixtures.test.ts runs the same functions over handlers with known
   // guards, and the canary proves they can fail.
-  it('runs the staff personas on routes: the nine platform_destined at least', () => {
-    expect(staffTargets().filter((t) => t.cls === 'platform_destined')).toHaveLength(9)
+  it('runs the crew personas on routes: the nine platform_destined at least', () => {
+    expect(crewTargets().filter((t) => t.cls === 'platform_destined')).toHaveLength(9)
   })
 
-  for (const t of staffTargets()) {
+  for (const t of crewTargets()) {
     const cls = t.cls
-    if (!isStaffClass(cls) && cls !== 'platform_destined') continue
+    if (!isCrewClass(cls) && cls !== 'platform_destined') continue
     it(`${cls} ${t.urlPattern}: the staff personas are refused`, async () => {
       const fixture = CASE_FIXTURES[t.file]
       const restoreEnv = applyEnv(fixture?.env)
       const mod = (await (OVERRIDE?.file === t.file ? import(OVERRIDE.path) : import(`../../${t.file}`)).finally(restoreEnv)) as Record<string, unknown>
-      const cases = await runStaffTarget({ file: t.file, cls, methods: t.methods, source: sourceOf(t.file) }, mod, targetInput(t), fixture?.staffUnproven)
+      const cases = await runCrewTarget({ file: t.file, cls, methods: t.methods, source: sourceOf(t.file) }, mod, targetInput(t), fixture?.crewUnproven)
       for (const { method, persona, result, problem } of cases) {
-        if (result.outcome === 'unexercised') staffUnexercised.push(`${method} ${t.file} ${persona}`)
-        if (result.outcome === 'error') staffErrors.push(`${method} ${t.file} ${persona}`)
+        if (result.outcome === 'unexercised') crewUnexercised.push(`${method} ${t.file} ${persona}`)
+        if (result.outcome === 'error') crewErrors.push(`${method} ${t.file} ${persona}`)
         expect(problem, `${persona} ${t.file}\n${describeResult(result)}`).toBeNull()
       }
     })
@@ -232,7 +232,7 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
       Object.values(rs)
         .filter((r) => r.outcome === 'unexercised')
         .map((r) => `${r.method} ${file}`),
-    ).concat(staffUnexercised)
+    ).concat(crewUnexercised)
     expect(unexercised.length, unexercised.join('\n')).toBeLessThanOrEqual(MAX_UNEXERCISED)
   })
 
@@ -242,7 +242,7 @@ describe('cross-tenant / IDOR: tenant-A participant naming tenant-B honeytokens'
       Object.values(rs)
         .filter((r) => r.outcome === 'error')
         .map((r) => `${r.method} ${file}`),
-    ).concat(staffErrors)
+    ).concat(crewErrors)
     expect(errors.length, errors.join('\n')).toBeLessThanOrEqual(MAX_ERROR)
   })
 })
@@ -314,7 +314,7 @@ function checkTarget(t: IdorTarget, results: Record<string, CaseResult>) {
     const entry = snap.methods[m]
     const accepted = acceptedOf(entry)
     const detail = `${t.file}\n${describeResult(r)}`
-    if (isStaffClass(t.cls)) {
+    if (isCrewClass(t.cls)) {
       expect(accepted, `${detail}\n${t.cls} may not accept any outcome`).toBeUndefined()
       expect([401, 403, 404], `${detail}\na ${t.cls} route must refuse a participant`).toContain(r.status)
     }

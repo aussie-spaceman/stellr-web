@@ -106,6 +106,14 @@ export async function onEnvelopeCompleted(
     }
   }
 
+  // The Staff role (13 Nov 2026): a signed staff agreement is one of the four
+  // prerequisites, so the member's grant may now activate. Idempotent; non-fatal,
+  // because the daily sweep reconciles every live grant.
+  if (envelope.member_id && (envelope.envelope_type ?? '') === 'staff') {
+    const { onStaffAgreementSigned } = await import('@/lib/community/event-hooks')
+    await onStaffAgreementSigned({ isPlatformOwner: !isTenantRow(envelope.tenant_id) }, db, envelope.member_id)
+  }
+
   // A student's permission form is the gate for their team profile. Idempotent
   // (one profile per participant), so a replay is harmless; non-fatal, because
   // the daily team-profiles sweep sends anything this misses.
@@ -210,7 +218,7 @@ async function notifyNativeSigners(db: SupabaseClient, envelope: CompletedEnvelo
     const { token, expiresAt } = mintToken(r.id, 'download', r.token_version, DOWNLOAD_LINK_TTL_SECONDS)
     const content = agreementCompletedEmail({
       recipientName: r.name,
-      documentLabel: (envelope.envelope_type === 'tenant_guardian_consent' ? AGREEMENT_TITLE.tenantGuardianConsent : AGREEMENT_LABEL[type]) ?? 'Agreement',
+      documentLabel: (envelope.envelope_type === 'tenant_guardian_consent' ? AGREEMENT_TITLE.tenantGuardianConsent : envelope.envelope_type === 'staff' ? AGREEMENT_TITLE.staff : AGREEMENT_LABEL[type]) ?? 'Agreement',
       eventTitle: envelope.event_title,
       copyUrl: downloadUrl(SITE_URL, token),
       copyUntil: expiresAt.toISOString(),

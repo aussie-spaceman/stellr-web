@@ -1,10 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  CREDENTIAL_COLUMNS,
+  CREDENTIAL_TENANT_COLUMNS,
+  eventTenantOnce,
   issueCredential,
+  recordSkip,
   reinstateCredential,
   revokeCredential,
   type CredentialRow,
+  type CredentialSkip,
   type CredentialTheme,
 } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
@@ -15,13 +18,18 @@ import { listAssignments, listEventStudents, type AssignmentRow } from '@/lib/ev
 // Turns the draft in event_award_assignments into credentials, and reconciles
 // on every re-run: a new assignment is issued, one given back is reinstated,
 // one taken away is revoked. Idempotent — running it twice changes nothing.
+//
+// Another tenant's event gets no credential, new or reinstated (S5 A10a, decision W7-9):
+// each one is counted as skipped, with its reason, not as a failure (owner-approved
+// follow-up, 13 Nov 2026). The event's owner is read once per run, and the rows carry
+// their own tenant, so the credential email reads nothing more.
 
 export const AWARD_REVOKED_REASON = 'Award reassigned by the judges'
 
 async function awardCredentials(db: SupabaseClient, slug: string): Promise<CredentialRow[]> {
   const { data, error } = await db
     .from('credentials')
-    .select(CREDENTIAL_COLUMNS)
+    .select(CREDENTIAL_TENANT_COLUMNS)
     .eq('event_slug', slug)
     .eq('source', 'event')
     .in('award_type', ASSIGNED_AWARD_TYPES)
@@ -63,6 +71,9 @@ export interface IssueAwardsResult {
   revoked: number
   unchanged: number
   emailed: number
+  /** Awards issueCredential or reinstateCredential refused (S5 A10a): skips.length. */
+  skipped: number
+  skips: CredentialSkip[]
   failures: string[]
 }
 
@@ -80,10 +91,11 @@ export async function issueAwards(
   const held = new Map(credentials.map((c) => [key(c.participant_id, c.award_type), c]))
   const plan = planAwardIssue(assignments, credentials)
   const result: IssueAwardsResult = {
-    issued: 0, students: 0, reinstated: 0, revoked: 0, emailed: 0, failures: [],
+    issued: 0, students: 0, reinstated: 0, revoked: 0, emailed: 0, skipped: 0, skips: [], failures: [],
     unchanged: assignments.length - plan.toIssue.length,
   }
   const awarded = new Set<string>()
+  const eventTenant = eventTenantOnce(db, slug)
 
   for (const a of plan.toIssue) {
     const p = byId.get(a.participant_id)
@@ -97,7 +109,7 @@ export async function issueAwards(
       let row: CredentialRow | null
       const revoked = held.get(key(a.participant_id, a.award_type))
       if (revoked) {
-        row = await reinstateCredential(db, revoked.id)
+        row = await reinstateCredential(db, revoked)
         if (row) { result.reinstated++; awarded.add(p.id) }
       } else {
         const def = EVENT_AWARDS[a.award_type]
@@ -115,6 +127,7 @@ export async function issueAwards(
           roleLabel: 'Student',
           award: def.label,
           theme: opts.theme,
+          eventTenant,
         })
         row = out.row
         if (out.created) { result.issued++; awarded.add(p.id) }
@@ -130,7 +143,8 @@ export async function issueAwards(
         if (sent) result.emailed++
       }
     } catch (err) {
-      result.failures.push(`${p.first_name} ${p.last_name} (${label}): ${(err as Error).message}`)
+      const name = `${p.first_name} ${p.last_name} (${label})`
+      if (!recordSkip(err, name, result.skips)) result.failures.push(`${name}: ${(err as Error).message}`)
     }
   }
 
@@ -145,5 +159,6 @@ export async function issueAwards(
   if (error) result.failures.push(`Could not record the issue time: ${error.message}`)
 
   result.students = awarded.size
+  result.skipped = result.skips.length
   return result
 }

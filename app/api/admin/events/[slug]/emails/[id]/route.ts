@@ -29,12 +29,12 @@ export const PATCH = withAudit(
 
 async function updateEmail(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, { db, notFound, label: ROUTE })
+  const loaded = await loadEventRecord<EventEmailRow>(crew, 'event_emails', id, { db, notFound, label: ROUTE })
   if (!loaded.ok) return loaded.response
   const email = loaded.row
   if (!EDITABLE.includes(email.status)) {
@@ -61,7 +61,7 @@ async function updateEmail(req: Request, { params }: Ctx) {
   }
   // A scheduled email goes out on the event-emails cron, through Stellr's sender.
   if (b.status === 'scheduled') {
-    const refused = refuseOutsideStellr(staff.scope)
+    const refused = refuseOutsideStellr(crew.scope)
     if (refused) return refused
   }
   let removed: string[] = []
@@ -70,7 +70,7 @@ async function updateEmail(req: Request, { params }: Ctx) {
     // verifies them. Keep just the ones already on this email.
     const keep = new Set((b.attachments as EventEmailAttachment[]).map((a) => a?.path))
     const kept = email.attachments.filter((a) => keep.has(a.path))
-    removed = deletableObjectPaths(staff.tenantId, email.attachments.filter((a) => !keep.has(a.path)).map((a) => a.path))
+    removed = deletableObjectPaths(crew.tenantId, email.attachments.filter((a) => !keep.has(a.path)).map((a) => a.path))
     update.attachments = kept
   }
   if (b.status !== undefined) {
@@ -89,7 +89,7 @@ async function updateEmail(req: Request, { params }: Ctx) {
   }
 
   // The status guard in the WHERE stops an edit racing a send that just claimed the row.
-  const { data, error } = await scopedRowWrite(staff.scope, 'event_emails', id, { db })
+  const { data, error } = await scopedRowWrite(crew.scope, 'event_emails', id, { db })
     .update(update)
     .in('status', EDITABLE)
     .select('*')
@@ -108,20 +108,20 @@ export const DELETE = withAudit(
 
 async function deleteEmail(req: Request, { params }: Ctx) {
   const { slug, id } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug, id })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug, id })
 
   const db = supabaseServer()
-  const loaded = await loadEventRecord<EventEmailRow>(staff, 'event_emails', id, { db, notFound, label: ROUTE })
+  const loaded = await loadEventRecord<EventEmailRow>(crew, 'event_emails', id, { db, notFound, label: ROUTE })
   if (!loaded.ok) return loaded.response
   const email = loaded.row
   if (!EDITABLE.includes(email.status)) {
     return NextResponse.json({ error: 'Sent emails are kept for the history' }, { status: 409 })
   }
   // The row first: a send that has just claimed it keeps it, and keeps its files.
-  const { data: gone } = await scopedRowWrite(staff.scope, 'event_emails', id, { db }).delete().in('status', EDITABLE).select('id').maybeSingle()
-  const stored = gone ? deletableObjectPaths(staff.tenantId, email.attachments.map((a) => a.path)) : []
+  const { data: gone } = await scopedRowWrite(crew.scope, 'event_emails', id, { db }).delete().in('status', EDITABLE).select('id').maybeSingle()
+  const stored = gone ? deletableObjectPaths(crew.tenantId, email.attachments.map((a) => a.path)) : []
   if (stored.length) await db.storage.from(RESOURCES_BUCKET).remove(stored)
   return NextResponse.json({ ok: true })
 }

@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentTenantId, requireTenantStaff } from '@/lib/authz'
+import { currentTenantId, requireTenantCrew } from '@/lib/authz'
 import { remindEnvelopeRow } from '@/lib/esign/operations'
 import { withAudit } from '@/lib/audit/route'
 import { loadRecord, scopedRowWrite } from '@/lib/tenancy/load-scoped'
@@ -29,7 +29,7 @@ type Envelope = Parameters<typeof remindEnvelopeRow>[1] & { status: string | nul
 
 // POST /api/admin/docusigns/[id]/resend — admin can resend any envelope at any time
 async function resendEnvelope(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { userId } = await auth()
 

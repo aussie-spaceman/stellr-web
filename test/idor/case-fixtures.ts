@@ -71,10 +71,10 @@ export interface CaseFixture {
    */
   omitInputs?: readonly string[]
   /**
-   * For a staff persona on a tenant_staff route that really cannot get to the id: why.
-   * staffCaseProblem in test/idor/harness.ts refuses the case otherwise.
+   * For a staff persona on a tenant_crew route that really cannot get to the id: why.
+   * crewCaseProblem in test/idor/harness.ts refuses the case otherwise.
    */
-  staffUnproven?: Partial<Record<'stellr_staff' | 'canary_admin' | 'stellr_event_manager', string>>
+  crewUnproven?: Partial<Record<'stellr_crew' | 'canary_admin' | 'stellr_event_manager', string>>
 }
 
 const STRIPE_ENV = { STRIPE_SECRET_KEY: 'sk_test_x' }
@@ -136,6 +136,10 @@ export const CASE_FIXTURES: Record<string, CaseFixture> = {
     reason: 'only a group registration goes on to the event check',
     refusesWithoutQuery: 'the participant holds no role: the staff check answers before any read',
     honey: { type: 'group' },
+  },
+  'app/api/credentials/[number]/events/route.ts': {
+    reason: 'kind is an allow-list of share events',
+    body: { kind: 'copy_link' },
   },
   'app/api/credentials/[number]/visibility/route.ts': {
     reason: 'visibility must be public or private',
@@ -283,12 +287,6 @@ export const HELD_BACK_FIXTURES: Record<string, HeldBackFixture> = {
     writes: ['stripe.checkout.sessions.create'],
     refusedWhen: { lifecycle: 'archived' },
     fixture: { reason: 'Stripe unset answers 503 on the paid path, after the cohort is read', ...STRIPE_CHECKOUT },
-  },
-  'app/api/credentials/[number]/events/route.ts': {
-    method: 'POST',
-    ref: 'C4-F4',
-    writes: ['credential_events'],
-    fixture: { reason: 'kind is an allow-list of share events', body: { kind: 'copy_link' } },
   },
   // Still held. The route already orders only an active variant of an active product
   // (pinned in its route.test.ts). The honey row is both, and the catalogue has no

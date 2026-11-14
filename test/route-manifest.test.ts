@@ -119,19 +119,19 @@ function missingKinds(h: Checked, page: boolean): GuardKind[] {
 }
 
 /**
- * Functions a tenant_staff file may call directly. Empty: an rpc runs SQL this rule cannot
+ * Functions a tenant_crew file may call directly. Empty: an rpc runs SQL this rule cannot
  * see, so adding one here is a review of what it reads and how it is scoped.
  */
-const TENANT_STAFF_REVIEWED_RPCS: readonly string[] = []
+const TENANT_CREW_REVIEWED_RPCS: readonly string[] = []
 
-/** Direct reads the tenant_staff rule refuses. An unknown table or schema fails closed. */
+/** Direct reads the tenant_crew rule refuses. An unknown table or schema fails closed. */
 function unscopedTableReads(file: string, code: string): string[] {
   const tables = directTableReads(file, code).flatMap((key) => {
     if (key === null) return ['a table named at run time']
     const entry = TABLE_REGISTRY[key]
     return !entry || entry.tenantColumn !== 'none' ? [key] : []
   })
-  const rpcs = directRpcCalls(file, code).flatMap((fn) => (fn !== null && TENANT_STAFF_REVIEWED_RPCS.includes(fn) ? [] : [`rpc ${fn ?? 'named at run time'}`]))
+  const rpcs = directRpcCalls(file, code).flatMap((fn) => (fn !== null && TENANT_CREW_REVIEWED_RPCS.includes(fn) ? [] : [`rpc ${fn ?? 'named at run time'}`]))
   return [...tables, ...rpcs]
 }
 
@@ -174,11 +174,11 @@ describe('route manifest: 100% classification', () => {
       if (f.startsWith('app/(stellr)/(admin)/')) expect(cls, f).toBe('stellr_only')
       // Every admin API is stellr_only until S5 converts it, except the one Sanity
       // calls with a shared secret and the platform-destined ones (C15), which keep
-      // stellr_only's guard, and those a slice has converted to tenant_staff (C16 on),
-      // which the tenant_staff table rule below and the staff personas then hold.
+      // stellr_only's guard, and those a slice has converted to tenant_crew (C16 on),
+      // which the tenant_crew table rule below and the staff personas then hold.
       // test/idor/stellr-only-dispositions.test.ts pins the first list.
       if (f.startsWith('app/api/admin/') && f !== 'app/api/admin/sanity/event-sync/route.ts') {
-        expect(['stellr_only', 'platform_destined', 'tenant_staff'], f).toContain(cls)
+        expect(['stellr_only', 'platform_destined', 'tenant_crew'], f).toContain(cls)
       }
       if (cls === 'platform_destined') expect(f.startsWith('app/api/admin/'), f).toBe(true)
       if (cls === 'cron') expect(f.startsWith('app/api/cron/'), f).toBe(true)
@@ -187,16 +187,16 @@ describe('route manifest: 100% classification', () => {
     }
   })
 
-  // S5 C6: a file classed tenant_staff reaches a tenant-holding table only through
+  // S5 C6: a file classed tenant_crew reaches a tenant-holding table only through
   // loadScoped, scopedQuery or tenantDb, so a bare `.from('registrations')` cannot be
   // the way in. Direct calls in the file; what a lib helper does is the IDOR personas' job.
-  it('a tenant_staff file queries no own, derived or inherited table directly', () => {
-    const files = Object.entries(ROUTE_MANIFEST).filter(([, cls]) => cls === 'tenant_staff').map(([f]) => f)
+  it('a tenant_crew file queries no own, derived or inherited table directly', () => {
+    const files = Object.entries(ROUTE_MANIFEST).filter(([, cls]) => cls === 'tenant_crew').map(([f]) => f)
     const failures = files.flatMap((f) => unscopedTableReads(f, src(f)).map((t) => `${f}: ${t}`))
     expect(failures, 'use loadScoped, scopedQuery or tenantDb').toEqual([])
   })
 
-  it('the tenant_staff table rule sees a direct read, and only a tenant-holding one', () => {
+  it('the tenant_crew table rule sees a direct read, and only a tenant-holding one', () => {
     const f = 'app/api/admin/x/route.ts'
     expect(unscopedTableReads(f, "db.from('registrations').select('*')")).toEqual(['public.registrations'])
     expect(unscopedTableReads(f, "const T = 'participants'; db.from(T).select('*')")).toEqual(['public.participants'])
@@ -207,7 +207,7 @@ describe('route manifest: 100% classification', () => {
     expect(unscopedTableReads(f, "await loadScoped(s, 'registrations', id, o); scopedQuery(s, 'participants', o)")).toEqual([])
   })
 
-  it('the tenant_staff table rule resolves only a name that can hold one value', () => {
+  it('the tenant_crew table rule resolves only a name that can hold one value', () => {
     const f = 'app/api/admin/x/route.ts'
     const runTime = ['a table named at run time']
     expect(unscopedTableReads(f, "let T = 'schools'; T = 'registrations'; db.from(T).select('*')")).toEqual(runTime)
@@ -216,7 +216,7 @@ describe('route manifest: 100% classification', () => {
     expect(unscopedTableReads(f, "const T = 'schools'; const { T: U, ...rest } = o; const [V] = p; db.from(T)")).toEqual([])
   })
 
-  it('the tenant_staff table rule refuses an rpc that nobody has reviewed', () => {
+  it('the tenant_crew table rule refuses an rpc that nobody has reviewed', () => {
     const f = 'app/api/admin/x/route.ts'
     expect(unscopedTableReads(f, "await db.rpc('withdraw_registration', { p_id: id })")).toEqual(['rpc withdraw_registration'])
     expect(unscopedTableReads(f, 'await db.rpc(name, args)')).toEqual(['rpc named at run time'])
@@ -226,7 +226,7 @@ describe('route manifest: 100% classification', () => {
     const count = (c: RouteClass) => Object.values(ROUTE_MANIFEST).filter((v) => v === c).length
     // A floor against an emptied manifest. stellr_only falls as S5 converts routes, and
     // what it loses is counted here instead.
-    expect(count('stellr_only') + count('tenant_staff') + count('platform_destined')).toBeGreaterThan(180)
+    expect(count('stellr_only') + count('tenant_crew') + count('platform_destined')).toBeGreaterThan(180)
     expect(count('participant')).toBeGreaterThan(100)
     expect(count('public')).toBeGreaterThan(80)
     expect(count('webhook')).toBeGreaterThanOrEqual(12)
@@ -351,7 +351,7 @@ describe('route manifest: shared guard helpers really guard', () => {
     ['assertTenantRole', 'tenant'],
     ['assertPlatformAdmin', 'platform'],
     ['requireStellrAdmin', 'admin'],
-    ['requireTenantStaff', 'tenant'],
+    ['requireTenantCrew', 'tenant'],
     ['hasPortalAccess', 'admin'],
     ['hasScope', 'admin'],
     ['requireEventAccess', 'tenant'],
@@ -366,10 +366,10 @@ describe('route manifest: shared guard helpers really guard', () => {
   })
 
   it('a helper that stops deciding is no longer proved', () => {
-    const code = `import { decideTenantStaff } from '@/lib/authz/decide'
-      export async function requireTenantStaff() { return { ok: true } }
-      export async function other() { return decideTenantStaff() }`
-    expect(decisionKinds(analyzeNamedExport(AUTHZ_FILE, code, 'requireTenantStaff')!).size).toBe(0)
+    const code = `import { decideTenantCrew } from '@/lib/authz/decide'
+      export async function requireTenantCrew() { return { ok: true } }
+      export async function other() { return decideTenantCrew() }`
+    expect(decisionKinds(analyzeNamedExport(AUTHZ_FILE, code, 'requireTenantCrew')!).size).toBe(0)
     expect(decisionKinds(analyzeNamedExport(AUTHZ_FILE, code, 'other')!).has('tenant')).toBe(true)
   })
 })
@@ -387,7 +387,7 @@ describe('guard list: lib/authz', () => {
   const inGet = (imports: string, body: string) =>
     `import { ${imports} } from '@/lib/authz'\nexport async function GET(req, { params }) { ${body}; return new Response() }`
 
-  it('a tenant_staff or platform_admin handler with only a legacy admin check fails', () => {
+  it('a tenant_crew or platform_admin handler with only a legacy admin check fails', () => {
     const legacy = [
       calling('@/lib/admin-auth', 'isAdminClaims'),
       calling('@/lib/admin-auth', 'currentUserIsAdmin'),
@@ -401,25 +401,25 @@ describe('guard list: lib/authz', () => {
     ]
     for (const code of legacy) {
       expect(meets('stellr_only', code), code).toBe(true)
-      expect(meets('tenant_staff', code), code).toBe(false)
+      expect(meets('tenant_crew', code), code).toBe(false)
       expect(meets('platform_admin', code), code).toBe(false)
     }
   })
 
   it('each class accepts its own lib/authz check, and not the other', () => {
-    for (const name of ['assertTenantRole', 'requireTenantStaff', 'requireTenantAdmin']) {
-      expect(meets('tenant_staff', calling(AUTHZ, name)), name).toBe(true)
+    for (const name of ['assertTenantRole', 'requireTenantCrew', 'requireTenantAdmin']) {
+      expect(meets('tenant_crew', calling(AUTHZ, name)), name).toBe(true)
       expect(meets('platform_admin', calling(AUTHZ, name)), name).toBe(false)
     }
-    expect(meets('tenant_staff', calling(AUTHZ, 'requireEventAccess', "requireEventAccess('slug')"))).toBe(true)
+    expect(meets('tenant_crew', calling(AUTHZ, 'requireEventAccess', "requireEventAccess('slug')"))).toBe(true)
     expect(meets('platform_admin', calling(AUTHZ, 'assertPlatformAdmin'))).toBe(true)
-    expect(meets('tenant_staff', calling(AUTHZ, 'assertPlatformAdmin'))).toBe(false)
+    expect(meets('tenant_crew', calling(AUTHZ, 'assertPlatformAdmin'))).toBe(false)
   })
 
   it('a Stellr-wide check does not pass as a tenant check', () => {
     for (const name of ['requireStellrAdmin', 'isStellrAdmin', 'hasPortalAccess', 'hasScope', 'requireAdmin']) {
       expect(meets('stellr_only', calling(AUTHZ, name)), name).toBe(true)
-      expect(meets('tenant_staff', calling(AUTHZ, name)), name).toBe(false)
+      expect(meets('tenant_crew', calling(AUTHZ, name)), name).toBe(false)
       expect(meets('platform_admin', calling(AUTHZ, name)), name).toBe(false)
     }
   })
@@ -431,13 +431,13 @@ describe('guard list: lib/authz', () => {
     expect(meets('stellr_only', calling(AUTHZ, 'requireAdmin'))).toBe(true)
     expect(meets('stellr_only', calling(AUTHZ, 'requireEventAccess', "requireEventAccess('slug')"))).toBe(true)
     expect(meets('stellr_only', calling(AUTHZ, 'requireEventSection'))).toBe(true)
-    for (const name of ['assertTenantRole', 'assertPlatformAdmin', 'requireStellrAdmin', 'requireTenantStaff']) {
+    for (const name of ['assertTenantRole', 'assertPlatformAdmin', 'requireStellrAdmin', 'requireTenantCrew']) {
       expect(satisfies(handler(calling(AUTHZ, name))).has('session'), name).toBe(true)
     }
   })
 
   it('a tenant check does not meet stellr_only: holding a role in some tenant is not being a Stellr admin', () => {
-    for (const name of ['assertTenantRole', 'requireTenantStaff', 'requireTenantAdmin']) {
+    for (const name of ['assertTenantRole', 'requireTenantCrew', 'requireTenantAdmin']) {
       expect(meets('stellr_only', calling(AUTHZ, name)), name).toBe(false)
       expect([...satisfies(handler(calling(AUTHZ, name)))].sort(), name).toEqual(['session', 'tenant'])
     }
@@ -448,9 +448,9 @@ describe('guard list: lib/authz', () => {
   describe('a lib/authz answer has to be used', () => {
     it('a discarded or un-awaited answer is no guard', () => {
       const none = [
-        inGet('assertTenantRole', "await assertTenantRole('t', ['staff'])"),
-        inGet('assertTenantRole', "assertTenantRole('t', ['staff'])"),
-        inGet('requireTenantStaff', "void requireTenantStaff('t', ['staff'])"),
+        inGet('assertTenantRole', "await assertTenantRole('t', ['duty_holder'])"),
+        inGet('assertTenantRole', "assertTenantRole('t', ['duty_holder'])"),
+        inGet('requireTenantCrew', "void requireTenantCrew('t', ['duty_holder'])"),
         inGet('assertPlatformAdmin', 'await assertPlatformAdmin()'),
         inGet('requireStellrAdmin', 'const d = await requireStellrAdmin()'),
         inGet('requireStellrAdmin', '(await requireStellrAdmin()).ok'),
@@ -459,7 +459,7 @@ describe('guard list: lib/authz', () => {
         inGet('hasScope', "await hasScope('x')"),
         inGet('hasPortalAccess', 'req && (await hasPortalAccess())'),
         inGet('getPrincipal', 'await getPrincipal()'),
-        inGet('authz', "await authz.api.requireTenantStaff('t', ['staff'])"),
+        inGet('authz', "await authz.api.requireTenantCrew('t', ['duty_holder'])"),
         inGet('page', 'page.requireAdmin()'),
         inGet('authz', 'authz.page.requireStellrAdmin()'),
         `import { isStellrAdmin } from '@/lib/authz'
@@ -521,9 +521,9 @@ describe('guard list: lib/authz', () => {
         expect(got.has('tenant'), `${setup} ${tenant}`).toBe(false)
         expect(got.has('session'), `${setup} ${tenant}`).toBe(false)
       }
-      const staff = inGet('requireTenantStaff', "const b = await req.json(); if (!(await requireTenantStaff(b.tenantId, ['staff'])).ok) return 1")
-      expect(satisfies(handler(staff)).has('tenant')).toBe(false)
-      const adapter = inGet('authz', "const b = await req.json(); const r = await authz.api.requireTenantStaff(b.tenantId, ['staff']); if (!r.ok) return r.deny")
+      const crew = inGet('requireTenantCrew', "const b = await req.json(); if (!(await requireTenantCrew(b.tenantId, ['duty_holder'])).ok) return 1")
+      expect(satisfies(handler(crew)).has('tenant')).toBe(false)
+      const adapter = inGet('authz', "const b = await req.json(); const r = await authz.api.requireTenantCrew(b.tenantId, ['duty_holder']); if (!r.ok) return r.deny")
       expect(satisfies(handler(adapter)).has('tenant')).toBe(false)
     })
 
@@ -548,7 +548,7 @@ describe('guard list: lib/authz', () => {
     it('without an event it is an admin check, not a tenant check', () => {
       for (const code of [eventCall(''), eventCall('undefined'), eventCall('undefined, { route: "x" }'), inGet('page', 'await page.requireEventSection()')]) {
         expect(meets('stellr_only', code), code).toBe(true)
-        expect(meets('tenant_staff', code), code).toBe(false)
+        expect(meets('tenant_crew', code), code).toBe(false)
       }
       const onIdRoute = analyzeRoute('app/api/admin/x/[id]/route.ts', eventCall('')).handlers[0]
       expect(satisfies(onIdRoute).has('tenant')).toBe(false)
@@ -557,7 +557,7 @@ describe('guard list: lib/authz', () => {
 
     it('naming the event is a tenant check, and the request may name it', () => {
       for (const arg of ["'slug'", '(await params).slug', 'slug']) {
-        expect(meets('tenant_staff', eventCall(arg)), arg).toBe(true)
+        expect(meets('tenant_crew', eventCall(arg)), arg).toBe(true)
       }
       expect(satisfies(handler(inGet('authz', 'const r = await authz.api.requireEventAccess(slug); if (!r.ok) return r.deny'))).has('tenant')).toBe(true)
     })
@@ -566,18 +566,18 @@ describe('guard list: lib/authz', () => {
   it('accepts the authz object and the page and api adapters', () => {
     const viaObject = (call: string) =>
       `import { authz } from '@/lib/authz'\nexport async function GET() { const d = await authz.${call}; if (!d) return new Response(null, { status: 403 }); return new Response() }`
-    expect(meets('tenant_staff', viaObject("assertTenantRole('t', ['staff'])"))).toBe(true)
+    expect(meets('tenant_crew', viaObject("assertTenantRole('t', ['duty_holder'])"))).toBe(true)
     expect(meets('platform_admin', viaObject('assertPlatformAdmin()'))).toBe(true)
-    expect(meets('tenant_staff', viaObject("api.requireTenantStaff('t', ['staff'])"))).toBe(true)
-    expect(meets('tenant_staff', viaObject('page.requireTenantAdmin()'))).toBe(true)
+    expect(meets('tenant_crew', viaObject("api.requireTenantCrew('t', ['duty_holder'])"))).toBe(true)
+    expect(meets('tenant_crew', viaObject('page.requireTenantAdmin()'))).toBe(true)
     expect(meets('stellr_only', viaObject('page.requireAdmin()'))).toBe(true)
-    expect(meets('tenant_staff', viaObject('page.requireAdmin()'))).toBe(false)
+    expect(meets('tenant_crew', viaObject('page.requireAdmin()'))).toBe(false)
     expect(meets('stellr_only', `import { page } from '@/lib/authz'
       export async function GET() { await page.requireStellrAdmin(); return 1 }`)).toBe(true)
   })
 
   it('does not trust a look-alike', () => {
-    for (const name of ['assertTenantRole', 'assertPlatformAdmin', 'requireTenantStaff', 'requireAdmin']) {
+    for (const name of ['assertTenantRole', 'assertPlatformAdmin', 'requireTenantCrew', 'requireAdmin']) {
       expect([...satisfies(handler(calling('@/lib/not-authz', name)))], name).toEqual([])
       expect([...satisfies(handler(`function ${name}() { return true }
         export async function GET() { ${name}(); return 1 }`))], name).toEqual([])
@@ -589,7 +589,7 @@ describe('guard list: lib/authz', () => {
   it('a pure decision, or a helper about someone else, is not a guard', () => {
     expect([...satisfies(handler(calling('@/lib/authz/decide', 'decideTenantRole')))]).toEqual([])
     expect([...satisfies(handler(calling('@/lib/authz/decide', 'decideStellrAdmin')))]).toEqual([])
-    expect([...satisfies(handler(calling(AUTHZ, 'isStaffTarget')))]).toEqual([])
+    expect([...satisfies(handler(calling(AUTHZ, 'isCrewTarget')))]).toEqual([])
     expect([...satisfies(handler(calling(AUTHZ, 'accessCoversEvent')))]).toEqual([])
     expect([...satisfies(handler(calling(AUTHZ, 'assertWritable')))]).toEqual([])
     expect([...satisfies(handler(calling(AUTHZ, 'getPrincipal')))]).toEqual(['session'])

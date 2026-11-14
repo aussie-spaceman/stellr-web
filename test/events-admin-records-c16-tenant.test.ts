@@ -97,8 +97,8 @@ vi.mock('@/lib/authz', async (importOriginal) => {
   return {
     ...(await importOriginal<Record<string, unknown>>()),
     currentTenantId: () => TENANT,
-    requireTenantStaff: async () => ({ ok: true, tenantId: TENANT }),
-    requireEventStaff: async () => ({
+    requireTenantCrew: async () => ({ ok: true, tenantId: TENANT }),
+    requireEventCrew: async () => ({
       ok: true,
       userId: 'user_tenant_admin',
       isAdmin: true,

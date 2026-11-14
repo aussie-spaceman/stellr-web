@@ -1,8 +1,7 @@
 import Link from 'next/link'
-import { auth } from '@clerk/nextjs/server'
+import { hasCapability } from '@/lib/authz'
 import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { getAllEvents } from '@/lib/events/repo'
 import { type StellarEvent } from '@/lib/sanity'
 import { stripeClient } from '@/lib/stripe'
@@ -129,8 +128,7 @@ async function reviewEvents(app: ScholarshipApplication): Promise<ReviewEvent[]>
 }
 
 export default async function ScholarshipApplicationPage({ params }: { params: Promise<{ id: string }> }) {
-  const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) redirect('/admin')
+  if (!(await hasCapability('portal:read'))) redirect('/admin')
 
   const { id } = await params
   const db = supabaseServer()

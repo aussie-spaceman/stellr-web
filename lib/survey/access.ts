@@ -17,6 +17,7 @@ import { hashToken, looksLikeToken } from './tokens'
 import { ageIfKnown, isMinorPerPolicy } from './minor'
 import { defaultAllowQuotes, loadMinorConsents } from './consent'
 import { logActivity } from '@/lib/activity-log'
+import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 
 export type OpenedFrom = 'email' | 'dashboard' | 'qr'
 
@@ -94,6 +95,15 @@ export async function loadSession(db: SupabaseClient, inv: InvitationRow, now = 
   const status = statusNow(distribution, now)
   const state: SessionState = response?.submitted_at || inv.status === 'submitted' ? 'submitted' : status
   return { invitation: inv, distribution, definitionRow, def, response, state }
+}
+
+/**
+ * Is this survey row a page's own (S5 A10b)? A page knows its tenant (Stellr's, or the
+ * tenant tree's param) and reads no request, so this is the pages' form of the API's
+ * recordOnHost: NULL is Stellr's, and a row read without the column is nobody's.
+ */
+export function onPageTenant(row: { tenant_id: string | null }, tenantId: string): boolean {
+  return (row.tenant_id === null ? STELLR_TENANT_ID : row.tenant_id) === tenantId
 }
 
 /** True when a signed-in member is someone other than the invitation's owner. */

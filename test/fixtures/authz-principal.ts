@@ -99,8 +99,8 @@ export interface Scenario {
   claimsRole: string | undefined
   /** event_manager_assignments.event_slug rows for the user. */
   assignments: string[]
-  /** staff_roles.scopes for the member, or null for no staff_roles row. */
-  staffScopes: string[] | null
+  /** admin_duties.scopes for the member, or null for no admin_duties row. */
+  dutyScopes: string[] | null
   /** A members row exists for the Clerk user. */
   hasMember: boolean
   /** The owner's --platform-admins flag was passed to the S3 mapping. */
@@ -117,26 +117,26 @@ export function isSynced(s: Scenario): boolean {
   return (s.claimsRole === 'event_manager') === s.assignments.length > 0
 }
 
-export const CLAIM_ROLES: (string | undefined)[] = [undefined, 'admin', 'event_manager', 'student', 'staff']
+export const CLAIM_ROLES: (string | undefined)[] = [undefined, 'admin', 'event_manager', 'student', 'member']
 export const ASSIGNMENT_SETS: string[][] = [[], ['ev-a'], ['ev-a', 'ev-b']]
 export const SCOPE_SETS: (string[] | null)[] = [null, [], ['events'], ['all']]
 
 /** Every combination, plus the signed-out case. */
 export function allScenarios(): Scenario[] {
   const out: Scenario[] = [
-    { name: 'signed out', signedIn: false, claimsRole: undefined, assignments: [], staffScopes: null, hasMember: false, platformFlag: false },
+    { name: 'signed out', signedIn: false, claimsRole: undefined, assignments: [], dutyScopes: null, hasMember: false, platformFlag: false },
   ]
   for (const claimsRole of CLAIM_ROLES)
     for (const assignments of ASSIGNMENT_SETS)
       for (const hasMember of [true, false])
-        for (const staffScopes of hasMember ? SCOPE_SETS : [null])
+        for (const dutyScopes of hasMember ? SCOPE_SETS : [null])
           for (const platformFlag of [false, true])
             out.push({
-              name: `role=${claimsRole ?? '-'} assigned=${assignments.join('+') || '-'} member=${hasMember} scopes=${staffScopes === null ? '-' : staffScopes.join('+') || 'none'} platform=${platformFlag}`,
+              name: `role=${claimsRole ?? '-'} assigned=${assignments.join('+') || '-'} member=${hasMember} scopes=${dutyScopes === null ? '-' : dutyScopes.join('+') || 'none'} platform=${platformFlag}`,
               signedIn: true,
               claimsRole,
               assignments,
-              staffScopes,
+              dutyScopes,
               hasMember,
               platformFlag,
             })
@@ -144,7 +144,7 @@ export function allScenarios(): Scenario[] {
 }
 
 /**
- * The role tables for a scenario: today's (members, staff_roles,
+ * The role tables for a scenario: today's (members, admin_duties,
  * event_manager_assignments) plus the S3 mapping's output (tenant_memberships,
  * platform_admins), exactly as scripts/map-tenancy-roles.ts would write them.
  */
@@ -153,13 +153,13 @@ export function scenarioTables(s: Scenario): Tables {
   const plan = planRoleMapping({
     clerkAdminIds: s.claimsRole === 'admin' ? [USER] : [],
     eventManagers: s.assignments.map(() => ({ clerk_user_id: USER })),
-    staff: s.staffScopes !== null && s.hasMember ? [{ member_id: MEMBER, clerk_user_id: USER }] : [],
+    duties: s.dutyScopes !== null && s.hasMember ? [{ member_id: MEMBER, clerk_user_id: USER }] : [],
     existingMemberships: [],
     existingPlatformAdmins: [],
   })
   return {
     members: s.hasMember ? [{ id: MEMBER, clerk_user_id: USER }] : [],
-    staff_roles: s.staffScopes !== null && s.hasMember ? [{ member_id: MEMBER, scopes: s.staffScopes }] : [],
+    admin_duties: s.dutyScopes !== null && s.hasMember ? [{ member_id: MEMBER, scopes: s.dutyScopes }] : [],
     event_manager_assignments: s.assignments.map((slug) => ({ clerk_user_id: USER, event_slug: slug, tenant_id: STELLR_TENANT_ID })),
     platform_admins: s.platformFlag ? plan.platformAdmins.map((id) => ({ clerk_user_id: id, granted_by: 'owner' })) : [],
     tenant_memberships: plan.memberships.map((m) => ({ ...m })),

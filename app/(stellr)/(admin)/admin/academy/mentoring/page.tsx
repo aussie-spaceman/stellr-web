@@ -8,7 +8,7 @@ import { authz } from '@/lib/authz'
 export const metadata = { title: 'Admin · Mentoring cohorts' }
 
 export default async function AdminCohortsPage() {
-  await authz.page.requireStellrAdmin({ route: '/admin/academy/mentoring' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/academy/mentoring' })
   const [cohorts, stats] = await Promise.all([listAllCohorts(), getAdminCohortStats()])
 
   return (

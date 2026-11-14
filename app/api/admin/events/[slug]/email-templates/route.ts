@@ -19,12 +19,12 @@ type Ctx = { params: Promise<{ slug: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
 
-  const { data, error } = await loadScopedRows<EventEmailTemplateRow>(staff.scope, 'event_email_templates', {
+  const { data, error } = await loadScopedRows<EventEmailTemplateRow>(crew.scope, 'event_email_templates', {
     db: supabaseServer(),
-    match: { tenant_id: staff.tenantId },
+    match: { tenant_id: crew.tenantId },
     order: { column: 'name', ascending: true },
     label: ROUTE,
   })
@@ -39,9 +39,9 @@ export const POST = withAudit(
 
 async function createTemplate(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
 
   const body = await req.json().catch(() => ({}))
   const name = cleanTemplateName(body?.name)
@@ -49,7 +49,7 @@ async function createTemplate(req: Request, { params }: Ctx) {
   if (typeof body?.fromEmailId !== 'string') return NextResponse.json({ error: 'Which email should be saved?' }, { status: 400 })
 
   const db = supabaseServer()
-  const src = await loadEventRecord<EventEmailRow>(staff, 'event_emails', body.fromEmailId, {
+  const src = await loadEventRecord<EventEmailRow>(crew, 'event_emails', body.fromEmailId, {
     db,
     notFound: () => NextResponse.json({ error: 'Email not found' }, { status: 404 }),
     label: ROUTE,
@@ -57,7 +57,7 @@ async function createTemplate(req: Request, { params }: Ctx) {
   if (!src.ok) return src.response
 
   const actor = await actorFromAuth()
-  const template = await insertTemplate(db, staff.tenantId, name, src.row, actor.actorLabel ?? staff.userId)
+  const template = await insertTemplate(db, crew.tenantId, name, src.row, actor.actorLabel ?? crew.userId)
   if (!template) return NextResponse.json({ error: 'Could not save the template' }, { status: 500 })
   noteAuditSubject(req, { id: template.id })
   return NextResponse.json({ template }, { status: 201 })

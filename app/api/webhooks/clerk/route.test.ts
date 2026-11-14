@@ -12,6 +12,7 @@ const from = vi.fn()
 const syncRole = vi.fn()
 const claimInvites = vi.fn(async (..._a: unknown[]) => {})
 const logActivity = vi.fn(async (..._a: unknown[]) => {})
+const startRetentionClock = vi.fn(async (..._a: unknown[]) => {})
 
 vi.mock('next/headers', () => ({ headers: async () => ({ get: (k: string) => hdrs.get(k) ?? null }) }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from }) }))
@@ -20,7 +21,7 @@ vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from }) }))
 vi.mock('@/lib/member-enums', () => ({ normalizeEmail: (e: string) => e }))
 vi.mock('@/lib/spaces', () => ({ claimPendingSpaceInvites: (...a: unknown[]) => claimInvites(...a) }))
 vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: (...a: unknown[]) => syncRole(...a) }))
-vi.mock('@/lib/esign/retention', () => ({ startRetentionClock: vi.fn() }))
+vi.mock('@/lib/esign/retention', () => ({ startRetentionClock: (...a: unknown[]) => startRetentionClock(...a) }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: (...a: unknown[]) => logActivity(...a) }))
 
 const hdrs = new Map<string, string>()
@@ -53,6 +54,7 @@ afterEach(() => {
   syncRole.mockReset()
   claimInvites.mockClear()
   logActivity.mockClear()
+  startRetentionClock.mockClear()
   vi.unstubAllEnvs()
   vi.resetModules()
 })
@@ -344,5 +346,112 @@ describe('POST /api/webhooks/clerk — user.created linking', () => {
         table: 'members', op: 'update', payload: { email: 'kim@example.com' },
       })])
     }
+  })
+})
+
+// Owner decision 13 Nov 2026 (tracker attendee-email-cohort.4): event staff
+// check-ins leave with the account. user.deleted removes the login's
+// event-manager check-ins (m.<Clerk id>, member_id null, which nothing else
+// would remove) and the check-ins of the member it deactivates (the soft delete
+// keeps the members row, so the FK cascade never fires). Nobody else's go.
+describe('POST /api/webhooks/clerk — user.deleted removes event crew check-ins', () => {
+  type Member = { id: string; clerk_user_id: string | null; is_active: boolean }
+  type StaffRow = { id: string; crew_key: string; member_id: string | null }
+  const LEAVING = 'user_leaving_placeholder'
+  const LEAVING_MEMBER = '11111111-1111-4111-8111-111111111111'
+  const OTHER_MEMBER = '22222222-2222-4222-8222-222222222222'
+
+  let members: Member[]
+  let staff: StaffRow[]
+  let failTable: string | null
+
+  function fakeDb() {
+    failTable = null
+    members = [
+      { id: LEAVING_MEMBER, clerk_user_id: LEAVING, is_active: true },
+      { id: OTHER_MEMBER, clerk_user_id: 'user_other_placeholder', is_active: true },
+    ]
+    staff = [
+      { id: 's1', crew_key: `m.${LEAVING}`, member_id: null },
+      { id: 's2', crew_key: `v.${LEAVING_MEMBER}`, member_id: LEAVING_MEMBER },
+      { id: 's3', crew_key: 'm.user_other_placeholder', member_id: null },
+      { id: 's4', crew_key: `v.${OTHER_MEMBER}`, member_id: OTHER_MEMBER },
+    ]
+    from.mockImplementation((table: string) => {
+      let op: 'select' | 'update' | 'delete' = 'select'
+      let patch: Partial<Member> = {}
+      const filters: Array<[string, unknown]> = []
+      const run = () => {
+        if (failTable === table) return { data: null, error: { message: `${table} unavailable` } }
+        if (table === 'event_crew_check_ins' && op === 'delete') {
+          const gone = staff.filter((r) => filters.every(([c, v]) => (v as string[]).includes(r[c as keyof StaffRow] as string)))
+          staff = staff.filter((r) => !gone.includes(r))
+          return { data: gone.map((r) => ({ id: r.id })), error: null }
+        }
+        if (table === 'members') {
+          const hit = members.filter((m) => filters.every(([c, v]) => m[c as keyof Member] === v))
+          const ids = hit.map((m) => ({ id: m.id }))
+          if (op === 'update') for (const m of hit) Object.assign(m, patch)
+          return { data: ids, error: null }
+        }
+        throw new Error(`unexpected ${op} on ${table}`)
+      }
+      const chain: Record<string, unknown> = {
+        select: () => chain,
+        update: (p: Partial<Member>) => { op = 'update'; patch = p; return chain },
+        delete: () => { op = 'delete'; return chain },
+        eq: (c: string, v: unknown) => { filters.push([c, v]); return chain },
+        in: (c: string, v: unknown) => { filters.push([c, v]); return chain },
+        then: (f: (v: unknown) => unknown) => Promise.resolve(run()).then(f),
+      }
+      return chain
+    })
+  }
+
+  const deleted = (id = LEAVING) => JSON.stringify({ type: 'user.deleted', data: { id, deleted: true } })
+
+  async function deliver(payload: string) {
+    const { POST } = await load(SECRET)
+    sign(SECRET, payload)
+    return (await post(POST, payload)).status
+  }
+
+  it("removes the login's event-manager check-ins and its member's volunteer check-ins, and no one else's", async () => {
+    fakeDb()
+    expect(await deliver(deleted())).toBe(200)
+    expect(staff.map((r) => r.id).sort()).toEqual(['s3', 's4'])
+    // The soft delete still runs after: the member row is kept, deactivated.
+    expect(members[0]).toMatchObject({ id: LEAVING_MEMBER, is_active: false, clerk_user_id: null })
+    expect(members[1]).toMatchObject({ id: OTHER_MEMBER, is_active: true, clerk_user_id: 'user_other_placeholder' })
+    expect(startRetentionClock).toHaveBeenCalledWith(expect.anything(), LEAVING_MEMBER)
+  })
+
+  it('removes the check-ins of an event manager with no members row', async () => {
+    fakeDb()
+    members = members.filter((m) => m.id !== LEAVING_MEMBER)
+    expect(await deliver(deleted())).toBe(200)
+    expect(staff.map((r) => r.id).sort()).toEqual(['s2', 's3', 's4'])
+  })
+
+  it('a repeated delivery removes nothing more', async () => {
+    fakeDb()
+    await deliver(deleted())
+    expect(await deliver(deleted())).toBe(200)
+    expect(staff.map((r) => r.id).sort()).toEqual(['s3', 's4'])
+  })
+
+  it('answers 500 with nothing deactivated when the check-ins cannot be removed, so Clerk retries', async () => {
+    fakeDb()
+    failTable = 'event_crew_check_ins'
+    expect(await deliver(deleted())).toBe(500)
+    expect(members[0]).toMatchObject({ is_active: true, clerk_user_id: LEAVING })
+    expect(startRetentionClock).not.toHaveBeenCalled()
+  })
+
+  it('answers 500 and removes nothing when the linked member cannot be read', async () => {
+    fakeDb()
+    failTable = 'members'
+    expect(await deliver(deleted())).toBe(500)
+    expect(staff).toHaveLength(4)
   })
 })

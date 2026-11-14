@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isStellrAdmin } from '@/lib/authz'
+import { hasCapability } from '@/lib/authz'
 import { loadSpaceMembersPage } from '@/lib/space-admin'
 
 // The Space members roster, searched / filtered / paged.
@@ -16,7 +16,7 @@ import { loadSpaceMembersPage } from '@/lib/space-admin'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isStellrAdmin({ route: '/api/admin/community/spaces/[id]/members' }))) {
+  if (!(await hasCapability('portal:read', { route: '/api/admin/community/spaces/[id]/members' }))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

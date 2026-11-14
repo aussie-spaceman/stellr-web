@@ -6,8 +6,11 @@ import { guardCron } from '@/lib/cron'
 import { withCronAudit } from '@/lib/cron-audit'
 import { startCronRun } from '@/lib/cron-runs'
 import { sweepEventManagers, type SweepResult } from '@/lib/event-manager'
+import { sweepStaffGrants } from '@/lib/staff'
 import { tenantGuardianConsentEnabled } from '@/lib/registration/eligibility'
 import { sweepTenantGuardianConsents } from '@/lib/registration/tenant-guardian-consent'
+import { devCronOptInFor } from '@/lib/cron-dev-opt-in'
+import { appEnv, isProd } from '@/lib/env'
 
 // GET /api/cron/membership-expiry — runs daily (see vercel.json). Four steps
 // (the third, Event Manager expiry, and the fourth, tenant guardian consents
@@ -21,12 +24,65 @@ import { sweepTenantGuardianConsents } from '@/lib/registration/tenant-guardian-
 //      consented within 30 days (decision 24, lib/pending-consent). Chained
 //      here rather than given its own schedule: Vercel Hobby limits crons.
 //      Independent of step 1, so a failure in one never skips the other.
+//
+// S5 B26a: on the hosted dev deployment, CRON_NON_PROD_JOBS=membership-expiry:tenant-consent
+// lets a call through guardCron for step 4 ALONE (lib/cron-dev-opt-in). Steps 1 to 3
+// never run there: step 2 deletes self-registered minors and their logins. The route
+// holds that itself rather than trusting guardCron: any other opt-in value declines,
+// and the four-step path declines outside production. In production that variable
+// is never read, and the route is unchanged.
 
 export const maxDuration = 60
+
+type CronRunHandle = Awaited<ReturnType<typeof startCronRun>>
+
+// The same 200 answer guardCron gives when it declines outside production. Built
+// here because route tests replace lib/cron with a stub holding guardCron alone.
+function declineOffProd() {
+  return NextResponse.json({ skipped: true, reason: `APP_ENV=${appEnv()}` })
+}
+
+// 4. S5 wave 6: tenant guardian consents. A consent-pending registration whose
+//    window closed is removed (lib/registration/tenant-guardian-consent), and a
+//    removal that failed is retried. Only with TENANT_GUARDIAN_CONSENT_ENABLED,
+//    so with it off this step reads nothing and adds no result key.
+async function tenantGuardianConsentStep(db: ReturnType<typeof supabaseServer>, run: CronRunHandle): Promise<Record<string, unknown> | undefined> {
+  if (!tenantGuardianConsentEnabled()) return undefined
+  try {
+    const r = await sweepTenantGuardianConsents(db)
+    for (const e of r.errors) run.fail(`tenant-guardian-consent:${e.consentId}`, e.error)
+    return {
+      scanned: r.scanned, signed: r.signed.length, expired: r.expired.length,
+      removed: r.removed.length, held: r.held.length, voided: r.voided.length, errors: r.errors.length,
+    }
+  } catch (err) {
+    run.fail('tenant-guardian-consent', err)
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+}
 
 export const GET = withCronAudit('membership-expiry', async (req: NextRequest) => {
   const blocked = guardCron(req)
   if (blocked) return blocked
+
+  // S5 B26a: the dev opt-in runs step 4 and nothing else. Never set in production.
+  // Fails closed: any other membership-expiry opt-in declines here, and outside
+  // production the four-step path below never runs, whatever guardCron let through.
+  // In production both checks are env reads only, and neither is ever true.
+  const optIn = devCronOptInFor('membership-expiry')
+  if (optIn !== null && optIn !== 'membership-expiry:tenant-consent') return declineOffProd()
+  if (optIn === 'membership-expiry:tenant-consent') {
+    const db = supabaseServer()
+    const run = await startCronRun(db, 'membership-expiry')
+    const tenantGuardianConsent =
+      (await tenantGuardianConsentStep(db, run)) ?? { skipped: true, reason: 'TENANT_GUARDIAN_CONSENT_ENABLED is off' }
+    const body = { only: 'tenant-consent', tenantGuardianConsent }
+    await run.finish(body)
+    return NextResponse.json(body, { status: 'error' in tenantGuardianConsent ? 500 : 200 })
+  }
+
+  // Steps 1 to 3 delete and expire real records: production only, with no exception.
+  if (!isProd()) return declineOffProd()
 
   // deep review INT-9: record the run so a failing downgrade engine is visible.
   const db = supabaseServer()
@@ -65,27 +121,23 @@ export const GET = withCronAudit('membership-expiry', async (req: NextRequest) =
     eventManagers = { error: err instanceof Error ? err.message : String(err) }
   }
 
-  // 4. S5 wave 6: tenant guardian consents. A consent-pending registration whose
-  //    window closed is removed (lib/registration/tenant-guardian-consent), and a
-  //    removal that failed is retried. Only with TENANT_GUARDIAN_CONSENT_ENABLED,
-  //    so with it off this step reads nothing and adds no result key.
-  let tenantGuardianConsent: Record<string, unknown> | undefined
-  if (tenantGuardianConsentEnabled()) {
-    try {
-      const r = await sweepTenantGuardianConsents(db)
-      for (const e of r.errors) run.fail(`tenant-guardian-consent:${e.consentId}`, e.error)
-      tenantGuardianConsent = {
-        scanned: r.scanned, signed: r.signed.length, expired: r.expired.length,
-        removed: r.removed.length, held: r.held.length, voided: r.voided.length, errors: r.errors.length,
-      }
-    } catch (err) {
-      run.fail('tenant-guardian-consent', err)
-      tenantGuardianConsent = { error: err instanceof Error ? err.message : String(err) }
-    }
+  // 3b. Staff (lib/staff.ts): reconcile every live grant (a prerequisite that
+  //     lapsed on its own, a term that ended) and send 60- and 30-day renewal
+  //     reminders. The backstop for every hook that reconciles on the spot.
+  let staff: Awaited<ReturnType<typeof sweepStaffGrants>> | { error: string }
+  try {
+    staff = await sweepStaffGrants(db)
+    if (staff.failed) run.fail('staff', `${staff.failed} grant(s) could not be reconciled`)
+  } catch (err) {
+    run.fail('staff', err)
+    staff = { error: err instanceof Error ? err.message : String(err) }
   }
+
+  // 4. Tenant guardian consents (tenantGuardianConsentStep, above).
+  const tenantGuardianConsent = await tenantGuardianConsentStep(db, run)
   const consentKey = tenantGuardianConsent ? { tenantGuardianConsent } : {}
 
-  await run.finish({ expired, pendingConsentPurge: purge, eventManagers, ...consentKey })
-  if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge, eventManagers, ...consentKey }, { status: 500 })
-  return NextResponse.json({ expired, pendingConsentPurge: purge, eventManagers, ...consentKey })
+  await run.finish({ expired, pendingConsentPurge: purge, eventManagers, staff, ...consentKey })
+  if (expiryError) return NextResponse.json({ error: expiryError, pendingConsentPurge: purge, eventManagers, staff, ...consentKey }, { status: 500 })
+  return NextResponse.json({ expired, pendingConsentPurge: purge, eventManagers, staff, ...consentKey })
 })

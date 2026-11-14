@@ -8,6 +8,7 @@ import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 import { authPath } from '@/lib/auth-path'
 import { safeNext } from '@/lib/safe-next'
+import { isStaffHiddenAdminPath, portalRoleFromClaims } from '@/lib/authz/decide'
 import { CSP_HEADER, ENFORCING_CSP_HEADER, NONCE_HEADER, applyCsp, applyEnforcingCsp, createNonce, cspFor, tenantApiPolicy, tenantPagePolicy } from '@/lib/csp'
 import {
   TENANT_ID_HEADER,
@@ -354,13 +355,18 @@ const clerkHandler = clerkMiddleware(async (auth, req, event) => {
   // isAdminRoute (they live under /api).
   if (isAdminRoute(req)) {
     const { sessionClaims } = await auth()
-    const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-    if (role !== 'admin' && role !== 'event_manager') {
+    const role = portalRoleFromClaims(sessionClaims)
+    if (!role) {
       return NextResponse.redirect(new URL('/account', req.url))
     }
     // Event Managers may only enter the Events/Competitions section.
     if (role === 'event_manager' && !isAdminEventsRoute(req)) {
       return NextResponse.redirect(new URL('/admin/competitions', req.url))
+    }
+    // Staff read the whole portal except view-as and the role and privacy
+    // pages (lib/authz/decide.ts STAFF_HIDDEN_ADMIN_PATHS).
+    if (role === 'staff' && isStaffHiddenAdminPath(req.nextUrl.pathname)) {
+      return NextResponse.redirect(new URL('/admin', req.url))
     }
   }
 

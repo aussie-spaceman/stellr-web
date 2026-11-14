@@ -88,7 +88,7 @@ describe('who reaches the page', () => {
     await expect(page('teams')).rejects.toThrow('redirect /sign-in')
   })
 
-  it.each(['student', 'staff', null])('a signed-in %s gets a 404', async (role) => {
+  it.each(['student', 'member', null])('a signed-in %s gets a 404', async (role) => {
     h.viewer = { userId: 'clerk-other', role }
     await expect(page('teams')).rejects.toThrow('notFound')
   })
@@ -136,12 +136,12 @@ describe('admin account summary for a staff member', () => {
     h.db = fakeSupabase({ members: [{ ...TEACHER, clerk_user_id: 'clerk-teacher' }] })
     h.clerkUser = { publicMetadata: { role } }
     render(await page('teams'))
-    expect(screen.getByText(/View-as isn’t available for staff accounts, so Teams can’t be shown here/)).toBeInTheDocument()
+    expect(screen.getByText(/View-as isn’t available for crew accounts \(admins and event managers\), so Teams can’t be shown here/)).toBeInTheDocument()
     expect(screen.queryByTestId('start')).toBeNull()
   })
 
-  it('a staff_roles row: explains why on Billing too', async () => {
-    h.db = fakeSupabase({ members: [TEACHER], staff_roles: [{ member_id: TEACHER.id, scopes: ['events'] }] })
+  it('an admin_duties row: explains why on Billing too', async () => {
+    h.db = fakeSupabase({ members: [TEACHER], admin_duties: [{ member_id: TEACHER.id, scopes: ['events'] }] })
     render(await page('billing'))
     expect(screen.getByText(/so Billing details can’t be shown here/)).toBeInTheDocument()
     expect(screen.queryByTestId('start')).toBeNull()
@@ -154,8 +154,8 @@ describe('admin account summary for a staff member', () => {
     expect(screen.getByTestId('start')).toBeInTheDocument()
   })
 
-  it('when the staff_roles read fails, still offers the session: only a positive answer counts here', async () => {
-    h.db = fakeSupabase({ members: [TEACHER] }, { failOn: (t) => (t === 'staff_roles' ? 'boom' : null) })
+  it('when the admin_duties read fails, still offers the session: only a positive answer counts here', async () => {
+    h.db = fakeSupabase({ members: [TEACHER] }, { failOn: (t) => (t === 'admin_duties' ? 'boom' : null) })
     render(await page('teams'))
     expect(screen.getByTestId('start')).toBeInTheDocument()
   })
@@ -189,7 +189,7 @@ describe('admin account summary for a staff member', () => {
       h.clerkUser = new Error('Clerk is down')
       render(await page('teams'))
       expect(screen.getByTestId('start')).toBeInTheDocument()
-      expect(h.errorRows.filter((m) => m.includes('staff_target'))).toEqual([])
+      expect(h.errorRows.filter((m) => m.includes('crew_target'))).toEqual([])
     } finally {
       vi.unstubAllEnvs()
     }
@@ -205,7 +205,7 @@ describe('admin account summary for a staff member', () => {
       })
       h.clerkUser = { publicMetadata: { role: 'student' } }
       render(await page('teams'))
-      expect(h.errorRows.filter((m) => m.includes('staff_target'))).toHaveLength(1)
+      expect(h.errorRows.filter((m) => m.includes('crew_target'))).toHaveLength(1)
     } finally {
       vi.unstubAllEnvs()
     }

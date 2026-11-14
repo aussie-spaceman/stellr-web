@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { crewActorType } from '@/lib/activity-log'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventStaff } from '@/lib/authz'
+import { requireEventCrew } from '@/lib/authz'
 import { getSignedInMember } from '@/lib/community'
 import { revokeCredential, holderIsMinor, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
 import { logActivity } from '@/lib/activity-log'
@@ -33,14 +34,14 @@ export const POST = withAudit(
 // Admins revoke anything; event managers only credentials of their events.
 // The page keeps answering at its URL — as "Revoked" — which is the point.
 async function revoke(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
 
   const { id } = await params
-  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
+  audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
   const db = supabaseServer()
   // Course credentials have no event to be assigned to: admins only.
-  const loaded = await loadEventRecord<CredentialRow>(staff, 'credentials', id, {
+  const loaded = await loadEventRecord<CredentialRow>(crew, 'credentials', id, {
     db,
     select: CREDENTIAL_COLUMNS,
     notFound: () => NextResponse.json({ error: 'Not found' }, { status: 404 }),
@@ -60,11 +61,11 @@ async function revoke(req: Request, { params }: { params: Promise<{ id: string }
   if (!row) return NextResponse.json({ error: 'Already revoked' }, { status: 409 })
 
   // The member's activity log is global, and a tenant's records stay off it (owner decision B8).
-  if (row.member_id && isStellrScope(staff.scope)) {
+  if (row.member_id && isStellrScope(crew.scope)) {
     await logActivity({
       memberId: row.member_id,
       category: 'account',
-      actorType: 'admin',
+      actorType: await crewActorType(),
       actorMemberId: actor?.id ?? null,
       action: 'credential_revoked',
       summary: `Credential revoked: ${row.title} (${row.number}) — ${reason}`,

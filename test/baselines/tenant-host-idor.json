@@ -3,18 +3,17 @@
   "totals": {
     "routes": 27,
     "cases": 124,
-    "failing": 82,
+    "failing": 48,
     "unproven": 18,
     "byOutcome": {
-      "honey_write": 22,
-      "leak": 14,
-      "ok": 4,
+      "honey_write": 12,
+      "leak": 10,
+      "ok": 10,
       "ok_untouched": 12,
-      "oracle": 4,
-      "oracle_4xx": 42,
-      "refused": 20,
+      "oracle_4xx": 28,
+      "refused": 46,
       "refused_untouched": 6
     }
   },
-  "caseHash": "2e9d94ca743ccdd0852fa5a0ceb4594b957efba1b6eb85cb4a9e097906c8a5fc"
+  "caseHash": "e910265db04c0621b77ad0d3461d943ba8d039920f39480f05fdbc96b12b4622"
 }

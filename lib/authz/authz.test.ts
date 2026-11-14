@@ -75,23 +75,26 @@ describe('defaults and stubs', () => {
         'assertPlatformAdmin',
         'assertTenantRole',
         'assertWritable',
+        'currentCapabilities',
         'currentTenantId',
         'getAuthzSource',
         'getPrincipal',
+        'hasCapability',
         'hasPortalAccess',
         'hasScope',
-        'isStaffTarget',
-        'isStaffTargetOrUnknown',
+        'isCrewTarget',
+        'isCrewTargetOrUnknown',
         'isStellrAdmin',
         'isStellrAdminOrUnknown',
-        'isViewAsTargetStaff',
+        'isViewAsTargetCrew',
         'page',
+        'requireCapability',
         'requireEventAccess',
-        'requireEventStaff',
+        'requireEventCrew',
         'requireEventRoute',
         'requireStellrAdmin',
-        'requireTenantStaff',
-        'targetHoldsStaffRow',
+        'requireTenantCrew',
+        'targetHoldsDutyRow',
       ].sort(),
     )
   })
@@ -121,8 +124,8 @@ describe('getPrincipal', () => {
       platform_admins: [{ clerk_user_id: USER }],
       tenant_memberships: [
         mem('tenant_admin'),
-        { tenant_id: STELLR_TENANT_ID, role: 'staff', clerk_user_id: null, member_id: MEMBER },
-        { tenant_id: STELLR_TENANT_ID, role: 'staff', clerk_user_id: USER, member_id: MEMBER },
+        { tenant_id: STELLR_TENANT_ID, role: 'duty_holder', clerk_user_id: null, member_id: MEMBER },
+        { tenant_id: STELLR_TENANT_ID, role: 'duty_holder', clerk_user_id: USER, member_id: MEMBER },
         { tenant_id: STELLR_TENANT_ID, role: 'owner', clerk_user_id: USER, member_id: null },
       ],
     })
@@ -134,7 +137,7 @@ describe('getPrincipal', () => {
       platformAdmin: true,
       memberships: [
         { tenantId: STELLR_TENANT_ID, role: 'tenant_admin' },
-        { tenantId: STELLR_TENANT_ID, role: 'staff' },
+        { tenantId: STELLR_TENANT_ID, role: 'duty_holder' },
       ],
       mode: 'normal',
     })
@@ -164,25 +167,25 @@ describe('getPrincipal', () => {
     for (const status of ['suspended', 'archived']) {
       setup(undefined, {
         tenants: [{ id: CANARY_TENANT_ID, status }],
-        tenant_memberships: [mem('tenant_admin', CANARY_TENANT_ID), mem('staff')],
+        tenant_memberships: [mem('tenant_admin', CANARY_TENANT_ID), mem('duty_holder')],
       })
       source('postgres')
-      expect(await authz.getPrincipal()).toMatchObject({ memberships: [{ tenantId: STELLR_TENANT_ID, role: 'staff' }] })
-      expect((await authz.requireTenantStaff(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(false)
+      expect(await authz.getPrincipal()).toMatchObject({ memberships: [{ tenantId: STELLR_TENANT_ID, role: 'duty_holder' }] })
+      expect((await authz.requireTenantCrew(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(false)
     }
   })
   it('postgres: active and provisioning tenants keep their memberships', async () => {
     for (const status of ['active', 'provisioning']) {
       setup(undefined, { tenants: [{ id: CANARY_TENANT_ID, status }], tenant_memberships: [mem('tenant_admin', CANARY_TENANT_ID)] })
       source('postgres')
-      expect((await authz.requireTenantStaff(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
+      expect((await authz.requireTenantCrew(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
     }
   })
   it('postgres: a tenant status read error denies', async () => {
     setup(undefined, { tenant_memberships: [mem('tenant_admin', CANARY_TENANT_ID)] })
     db.fail.add('tenants')
     source('postgres')
-    expect(await authz.requireTenantStaff(CANARY_TENANT_ID, ['tenant_admin'])).toEqual({ ok: false, status: 403 })
+    expect(await authz.requireTenantCrew(CANARY_TENANT_ID, ['tenant_admin'])).toEqual({ ok: false, status: 403 })
   })
   it('postgres: a Stellr-only principal reads no tenant status', async () => {
     setup(undefined, { tenant_memberships: [mem('tenant_admin')] })
@@ -206,7 +209,7 @@ describe('postgres fails closed', () => {
     expect(await authz.requireStellrAdmin()).toEqual({ ok: false, status: 403 })
     expect(await authz.assertPlatformAdmin()).toEqual({ ok: false, status: 403 })
     expect(await authz.assertTenantRole(STELLR_TENANT_ID, ['tenant_admin'])).toEqual({ ok: false, status: 403 })
-    expect(await authz.requireTenantStaff(STELLR_TENANT_ID, ['tenant_admin'])).toEqual({ ok: false, status: 403 })
+    expect(await authz.requireTenantCrew(STELLR_TENANT_ID, ['tenant_admin'])).toEqual({ ok: false, status: 403 })
     expect(await authz.isStellrAdmin()).toBe(false)
     expect(await authz.hasPortalAccess()).toBe(false)
     expect(await authz.hasScope('events')).toBe(false)
@@ -241,11 +244,11 @@ describe('postgres fails closed', () => {
     setup(undefined, {})
     db.fail.add('tenant_memberships')
     source('postgres')
-    expect(await authz.isStaffTarget({ clerkUserId: 'user_other', clerkRole: undefined })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: 'user_other', clerkRole: undefined })).toBe(true)
   })
-  it('a staff_roles read error is no scope', async () => {
-    setup(undefined, { staff_roles: [{ member_id: MEMBER, scopes: ['all'] }] })
-    db.fail.add('staff_roles')
+  it('an admin_duties read error is no scope', async () => {
+    setup(undefined, { admin_duties: [{ member_id: MEMBER, scopes: ['all'] }] })
+    db.fail.add('admin_duties')
     source('postgres')
     expect(await authz.hasScope('events')).toBe(false)
   })
@@ -253,7 +256,7 @@ describe('postgres fails closed', () => {
     setup(undefined, {
       members: [],
       tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'tenant_admin', clerk_user_id: null, member_id: MEMBER }],
-      staff_roles: [{ member_id: MEMBER, scopes: ['all'] }],
+      admin_duties: [{ member_id: MEMBER, scopes: ['all'] }],
     })
     source('postgres')
     expect(await authz.isStellrAdmin()).toBe(false)
@@ -276,8 +279,8 @@ describe('postgres fails closed', () => {
   it('a staff target with no Clerk id cannot be looked up, and is judged without reading', async () => {
     setup(undefined, {})
     source('postgres')
-    expect(await authz.isStaffTarget({ clerkUserId: null, clerkRole: 'admin' })).toBe(true)
-    expect(await authz.isStaffTarget({ clerkUserId: null, clerkRole: undefined })).toBe(false)
+    expect(await authz.isCrewTarget({ clerkUserId: null, clerkRole: 'admin' })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: null, clerkRole: undefined })).toBe(false)
     expect(db.reads).toEqual([])
   })
 })
@@ -326,7 +329,7 @@ describe('tenant confinement through the real reads', () => {
     expect(db.reads).not.toContain('events')
   })
   it('a non-manager reads no assignments under postgres', async () => {
-    setup(undefined, { tenant_memberships: [mem('staff')], event_manager_assignments: rows })
+    setup(undefined, { tenant_memberships: [mem('duty_holder')], event_manager_assignments: rows })
     source('postgres')
     expect(await authz.requireEventAccess('ev-s')).toEqual({ ok: false, status: 403 })
     expect(db.reads).not.toContain('event_manager_assignments')
@@ -343,7 +346,7 @@ describe('tenant confinement through the real reads', () => {
     expect(await authz.requireEventAccess('ev-s')).toEqual({ ok: false, status: 403 })
     expect(await authz.isStellrAdmin()).toBe(false)
     expect((await authz.assertTenantRole(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
-    expect((await authz.requireTenantStaff(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
+    expect((await authz.requireTenantCrew(CANARY_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
   })
   it('a staff target is found through the member row too', async () => {
     setup(undefined, {
@@ -351,23 +354,23 @@ describe('tenant confinement through the real reads', () => {
       tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'event_manager', clerk_user_id: null, member_id: MEMBER }],
     })
     source('postgres')
-    expect(await authz.isStaffTarget({ clerkUserId: 'user_target', clerkRole: undefined })).toBe(true)
-    expect(await authz.isStaffTarget({ clerkUserId: 'user_nobody', clerkRole: undefined })).toBe(false)
+    expect(await authz.isCrewTarget({ clerkUserId: 'user_target', clerkRole: undefined })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: 'user_nobody', clerkRole: undefined })).toBe(false)
   })
   it('a Clerk admin with no mapped row stays protected from view-as and deletion', async () => {
     setup(undefined, {})
     source('postgres')
-    expect(await authz.isStaffTarget({ clerkUserId: 'user_nobody', clerkRole: 'admin' })).toBe(true)
-    expect(await authz.isStaffTarget({ clerkUserId: 'user_nobody', clerkRole: 'event_manager' })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: 'user_nobody', clerkRole: 'admin' })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: 'user_nobody', clerkRole: 'event_manager' })).toBe(true)
   })
   it('a target with no Clerk id is found through a member id', async () => {
     setup(undefined, {
       tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'tenant_admin', clerk_user_id: null, member_id: MEMBER }],
     })
     source('postgres')
-    expect(await authz.isStaffTarget({ clerkUserId: null, memberId: MEMBER, clerkRole: undefined })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: null, memberId: MEMBER, clerkRole: undefined })).toBe(true)
     expect(db.reads).not.toContain('platform_admins')
-    expect(await authz.isStaffTarget({ clerkUserId: null, memberId: '22222222-2222-4222-8222-222222222222', clerkRole: undefined })).toBe(false)
+    expect(await authz.isCrewTarget({ clerkUserId: null, memberId: '22222222-2222-4222-8222-222222222222', clerkRole: undefined })).toBe(false)
   })
   it('a suspended tenant\'s admin stays protected', async () => {
     setup(undefined, {
@@ -375,7 +378,7 @@ describe('tenant confinement through the real reads', () => {
       tenant_memberships: [mem('tenant_admin', CANARY_TENANT_ID)],
     })
     source('postgres')
-    expect(await authz.isStaffTarget({ clerkUserId: USER, clerkRole: undefined })).toBe(true)
+    expect(await authz.isCrewTarget({ clerkUserId: USER, clerkRole: undefined })).toBe(true)
   })
 })
 
@@ -501,15 +504,15 @@ describe('shadow', () => {
     source('shadow')
     expect((await authz.assertPlatformAdmin()).ok).toBe(true)
     expect((await authz.assertTenantRole(STELLR_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
-    expect((await authz.requireTenantStaff(STELLR_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
-    expect(mismatches().map((m) => m.split(' ')[1])).toEqual(['platform_admin', 'tenant_role', 'tenant_staff'])
+    expect((await authz.requireTenantCrew(STELLR_TENANT_ID, ['tenant_admin'])).ok).toBe(true)
+    expect(mismatches().map((m) => m.split(' ')[1])).toEqual(['platform_admin', 'tenant_role', 'tenant_crew'])
   })
   it('scope and staff target shadow too', async () => {
     setup('admin', { tenant_memberships: [mem('event_manager')] })
     source('shadow')
     expect(await authz.hasScope('events')).toBe(true)
-    expect(await authz.isStaffTarget({ clerkUserId: USER, clerkRole: undefined })).toBe(false)
-    expect(mismatches().map((m) => m.split(' ')[1])).toEqual(['scope', 'staff_target'])
+    expect(await authz.isCrewTarget({ clerkUserId: USER, clerkRole: undefined })).toBe(false)
+    expect(mismatches().map((m) => m.split(' ')[1])).toEqual(['scope', 'crew_target'])
   })
   it('a staff-target mismatch names the target, not the admin asking', async () => {
     const target = '22222222-2222-4222-8222-222222222222'
@@ -518,25 +521,25 @@ describe('shadow', () => {
       tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'event_manager', clerk_user_id: 'user_target', member_id: null }],
     })
     source('shadow')
-    await authz.isStaffTarget({ clerkUserId: 'user_target', clerkRole: undefined })
-    expect(mismatches()).toEqual([`authz_mismatch staff_target member=${target} clerk=false postgres=true`])
+    await authz.isCrewTarget({ clerkUserId: 'user_target', clerkRole: undefined })
+    expect(mismatches()).toEqual([`authz_mismatch crew_target member=${target} clerk=false postgres=true`])
     expect(mismatches().join(' ')).not.toContain(MEMBER)
   })
   it('a staff-target lookup failure in shadow does not throw, and names the target when it can', async () => {
     setup(undefined, {})
     db.fail.add('tenant_memberships')
     source('shadow')
-    expect(await authz.isStaffTarget({ clerkUserId: USER, clerkRole: undefined })).toBe(false)
-    expect(mismatches()).toEqual([`authz_mismatch staff_target member=${MEMBER} lookup_failed`])
+    expect(await authz.isCrewTarget({ clerkUserId: USER, clerkRole: undefined })).toBe(false)
+    expect(mismatches()).toEqual([`authz_mismatch crew_target member=${MEMBER} lookup_failed`])
   })
   it('two drifted members get a row each, so the role-sync check can list them', async () => {
     const other = '22222222-2222-4222-8222-222222222222'
     source('shadow')
     setup('admin', { tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'event_manager', clerk_user_id: null, member_id: MEMBER }] })
-    await authz.isStaffTarget({ clerkUserId: null, memberId: MEMBER, clerkRole: undefined })
+    await authz.isCrewTarget({ clerkUserId: null, memberId: MEMBER, clerkRole: undefined })
     const first = db.rpcs[0]
     setup('admin', { tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'event_manager', clerk_user_id: null, member_id: other }] })
-    await authz.isStaffTarget({ clerkUserId: null, memberId: other, clerkRole: undefined })
+    await authz.isCrewTarget({ clerkUserId: null, memberId: other, clerkRole: undefined })
     const second = db.rpcs[0]
     expect(first.args.p_message).toContain(MEMBER)
     expect(second.args.p_message).toContain(other)
@@ -617,17 +620,17 @@ describe('accessCoversEvent', () => {
 })
 
 describe('hasScope', () => {
-  it('clerk: staff_roles still decides for a non-admin, as today', async () => {
-    setup(undefined, { staff_roles: [{ member_id: MEMBER, scopes: ['events'] }] })
+  it('clerk: admin_duties still decides for a non-admin, as today', async () => {
+    setup(undefined, { admin_duties: [{ member_id: MEMBER, scopes: ['events'] }] })
     expect(await authz.hasScope('events')).toBe(true)
     expect(await authz.hasScope('community')).toBe(false)
   })
   it('clerk: read errors are no scope, as today', async () => {
-    setup(undefined, { staff_roles: [{ member_id: MEMBER, scopes: ['all'] }] })
+    setup(undefined, { admin_duties: [{ member_id: MEMBER, scopes: ['all'] }] })
     db.fail.add('members')
     expect(await authz.hasScope('events')).toBe(false)
-    setup(undefined, { staff_roles: [{ member_id: MEMBER, scopes: ['all'] }] })
-    db.fail.add('staff_roles')
+    setup(undefined, { admin_duties: [{ member_id: MEMBER, scopes: ['all'] }] })
+    db.fail.add('admin_duties')
     expect(await authz.hasScope('events')).toBe(false)
   })
   it('clerk: an admin needs no read', async () => {
@@ -664,19 +667,19 @@ describe('isStellrAdminOrUnknown', () => {
   })
 })
 
-describe('isStaffTargetOrUnknown', () => {
+describe('isCrewTargetOrUnknown', () => {
   const target = { clerkUserId: USER, clerkRole: 'student', memberId: MEMBER }
 
-  it('under postgres tells a failed read from a staff answer, where isStaffTarget cannot', async () => {
+  it('under postgres tells a failed read from a staff answer, where isCrewTarget cannot', async () => {
     vi.stubEnv('AUTHZ_SOURCE', 'postgres')
     db = fakeDb({ tenant_memberships: [{ tenant_id: STELLR_TENANT_ID, role: 'event_manager', member_id: MEMBER }] })
     vi.mocked(supabaseServer).mockReturnValue(db.client)
-    expect(await authz.isStaffTargetOrUnknown(target)).toBe(true)
+    expect(await authz.isCrewTargetOrUnknown(target)).toBe(true)
     db.tables.tenant_memberships = []
-    expect(await authz.isStaffTargetOrUnknown(target)).toBe(false)
+    expect(await authz.isCrewTargetOrUnknown(target)).toBe(false)
     db.fail.add('tenant_memberships')
-    expect(await authz.isStaffTargetOrUnknown(target)).toBeNull()
-    expect(await authz.isStaffTarget(target)).toBe(true)
+    expect(await authz.isCrewTargetOrUnknown(target)).toBeNull()
+    expect(await authz.isCrewTarget(target)).toBe(true)
   })
 
   it('under clerk and shadow is the Clerk answer, and never null', async () => {
@@ -685,8 +688,8 @@ describe('isStaffTargetOrUnknown', () => {
     db.fail.add('tenant_memberships')
     for (const source of ['', 'clerk', 'shadow']) {
       vi.stubEnv('AUTHZ_SOURCE', source)
-      expect(await authz.isStaffTargetOrUnknown(target), source).toBe(false)
-      expect(await authz.isStaffTargetOrUnknown({ ...target, clerkRole: 'admin' }), source).toBe(true)
+      expect(await authz.isCrewTargetOrUnknown(target), source).toBe(false)
+      expect(await authz.isCrewTargetOrUnknown({ ...target, clerkRole: 'admin' }), source).toBe(true)
     }
   })
 })
@@ -736,7 +739,7 @@ describe('page adapters', () => {
     await expect(authz.page.requireAdmin()).resolves.toBeUndefined()
   })
   it('postgres: a staff member gets notFound, and a read error gets notFound', async () => {
-    setup(undefined, { tenant_memberships: [mem('staff')] })
+    setup(undefined, { tenant_memberships: [mem('duty_holder')] })
     source('postgres')
     await expect(authz.page.requireAdmin()).rejects.toThrow('NOT_FOUND')
     setup('admin', { tenant_memberships: [mem('tenant_admin')] })
@@ -755,18 +758,18 @@ describe('api adapters', () => {
     setup(undefined, {}, null)
     expect(await body(await authz.api.requireStellrAdmin())).toEqual({ status: 401, json: { error: 'Unauthorised' } })
     expect(await body(await authz.api.requireEventAccess('ev-a'))).toEqual({ status: 401, json: { error: 'Unauthorised' } })
-    expect(await body(await authz.api.requireTenantStaff(STELLR_TENANT_ID, ['staff']))).toEqual({ status: 401, json: { error: 'Unauthorised' } })
+    expect(await body(await authz.api.requireTenantCrew(STELLR_TENANT_ID, ['duty_holder']))).toEqual({ status: 401, json: { error: 'Unauthorised' } })
   })
   it('signed in without access is 403 Forbidden', async () => {
     setup('student')
     expect(await body(await authz.api.requireStellrAdmin())).toEqual({ status: 403, json: { error: 'Forbidden' } })
     expect(await body(await authz.api.requireEventAccess('ev-a'))).toEqual({ status: 403, json: { error: 'Forbidden' } })
-    expect(await body(await authz.api.requireTenantStaff(STELLR_TENANT_ID, ['tenant_admin']))).toEqual({ status: 403, json: { error: 'Forbidden' } })
+    expect(await body(await authz.api.requireTenantCrew(STELLR_TENANT_ID, ['tenant_admin']))).toEqual({ status: 403, json: { error: 'Forbidden' } })
   })
   it('allowed returns the decision', async () => {
     setup('admin')
     expect(await authz.api.requireStellrAdmin()).toEqual({ ok: true, value: { ok: true, via: 'clerk', tenantId: STELLR_TENANT_ID } })
-    expect(await authz.api.requireTenantStaff(STELLR_TENANT_ID, ['tenant_admin'])).toEqual({ ok: true, value: { ok: true, via: 'clerk', tenantId: STELLR_TENANT_ID } })
+    expect(await authz.api.requireTenantCrew(STELLR_TENANT_ID, ['tenant_admin'])).toEqual({ ok: true, value: { ok: true, via: 'clerk', tenantId: STELLR_TENANT_ID } })
     expect(await authz.api.requireEventAccess('ev-a')).toEqual({ ok: true, value: { ok: true, userId: USER, isAdmin: true, assignedSlugs: null, tenantId: STELLR_TENANT_ID } })
   })
 })

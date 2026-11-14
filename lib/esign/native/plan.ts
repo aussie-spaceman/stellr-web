@@ -7,7 +7,7 @@ import type { Role } from '@/lib/esign/native/template'
 // list of signers on Stellr signing. The pre-fill keys are the DocuSign tab
 // labels, so a converted template fills exactly as it did in DocuSign.
 
-export type TemplateKey = 'minor' | 'adult' | 'mentor' | 'membership_adult' | 'membership_minor' | 'tenant_guardian_consent'
+export type TemplateKey = 'minor' | 'adult' | 'mentor' | 'membership_adult' | 'membership_minor' | 'tenant_guardian_consent' | 'staff'
 
 /** The documents' own titles (Participation Agreements V2.3, 2 Oct 2026). */
 export const AGREEMENT_TITLE = {
@@ -17,6 +17,8 @@ export const AGREEMENT_TITLE = {
   membership: 'Membership Agreement',
   /** S5 wave 6: a guardian's consent for another organiser's event. The title is a proposal for the owner. */
   tenantGuardianConsent: 'Parent or Guardian Consent',
+  /** The Staff role (13 Nov 2026). The wording is the owner's, drafted outside the repo. */
+  staff: 'Staff Agreement',
 } as const
 
 /** The version of each agreement now issued, recorded on every agreement row (agreement_version). */

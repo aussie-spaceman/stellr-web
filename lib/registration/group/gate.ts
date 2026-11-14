@@ -13,7 +13,8 @@ import {
   type RegistrationEventContext,
 } from '../event-context'
 import { answerDuplicates } from './duplicates'
-import { GROUP_SIZE_MAX, isValidCount, settleAddresses, type GroupBody, type ParticipantPayload, type TeacherPayload } from './parse'
+import { accountName } from '../account-name'
+import { GROUP_SIZE_MAX, isValidCount, settleAddresses, settleRegistrantName, type GroupBody, type ParticipantPayload, type TeacherPayload } from './parse'
 import { priceGroupRegistration, type GroupPrice } from './price'
 import { checkDatesOfBirth, refuseBadEmails, resolveLinkedSlots, type LinkedSlotNames } from './roster'
 
@@ -81,6 +82,9 @@ export async function gateGroupRegistration(body: GroupBody, deps: GateDeps): Pr
   const tenantHost = deps.requestTenantId !== STELLR_TENANT_ID
   const sessionMember = tenantHost ? null : await getCurrentMember().catch(() => null)
   settleAddresses(body, sessionMember?.email)
+  // A signed-in organiser's name is their account's, as their address is (owner
+  // decision, 13 Nov 2026). Not on a tenant's host, where no member is read.
+  settleRegistrantName(body, accountName(sessionMember))
 
   if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
     return refuse(NextResponse.json({ error: 'Missing required fields' }, { status: 400 }))

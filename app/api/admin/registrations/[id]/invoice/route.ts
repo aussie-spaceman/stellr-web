@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireEventStaff } from '@/lib/authz'
+import { requireEventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/stripe'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
@@ -12,7 +12,7 @@ import {
   setGroupDiscount,
 } from '@/lib/group-billing'
 import { withAudit } from '@/lib/audit/route'
-import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadEventRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // "Invoice & discount…" on a group in the event roster.
 //   GET  → the group's places, current invoice and invoice history.
@@ -39,10 +39,10 @@ type Args = [Request, { params: Promise<{ id: string }> }]
 const notFound = () => NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
 
 async function guard(db: Db, id: string, req: Request) {
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
-  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
-  const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(staff, 'registrations', id, {
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
+  audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
+  const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(crew, 'registrations', id, {
     db,
     select: 'event_slug, type, teacher_member_id',
     notFound,
@@ -51,9 +51,13 @@ async function guard(db: Db, id: string, req: Request) {
   if (!loaded.ok) return loaded.response
   if (loaded.row.type !== 'group') return notFound()
   // Every action here reads or changes Stellr's Stripe account, its coupons included.
-  const refused = refuseOutsideStellr(staff.scope)
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
-  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, actorLabel: staff.isAdmin ? 'admin' as const : 'event_manager' as const }
+  // So the group's event must be Stellr's, for a Stellr admin too. Another tenant's answers
+  // as a missing group; a failed read of the event's owner is a retryable 503.
+  const foreign = await refuseUnlessStellrEvent(db, loaded.row.event_slug, ROUTE)
+  if (foreign) return foreign.status === 404 ? notFound() : foreign
+  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, actorLabel: crew.isAdmin ? 'admin' as const : 'event_manager' as const }
 }
 
 // What this request acted on, which withAudit's spec cannot read for itself. A discount code

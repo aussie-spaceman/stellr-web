@@ -36,7 +36,7 @@
 //
 // Every refusal is run three ways: honey row present, absent, and the id malformed
 // (with the database failing a non-uuid on a uuid column, as Postgres does). A
-// difference is `oracle_4xx` in a strict case (tenant_staff, platform_admin and
+// difference is `oracle_4xx` in a strict case (tenant_crew, platform_admin and
 // platform_destined routes, and the tenant-host suite) and otherwise is only reported, in CaseResult.reportedOracle.
 // A strict case also counts an outbound request nobody answered: the send was made, and
 // a uniform response must not hide one that carries tenant B's data.
@@ -44,7 +44,7 @@
 // Personas and direction. `participant` and `anonymous` run in either direction: on
 // Stellr's host naming a Canary record (the default), or on Canary's host naming a
 // Stellr one. The staff personas each have one:
-//   stellr_staff          a Stellr tenant admin naming a Canary record
+//   stellr_crew          a Stellr tenant admin naming a Canary record
 //   canary_admin          a Canary tenant admin naming a Stellr record
 //   stellr_event_manager  assigned to one Stellr event, naming another event's record
 // Staff run with AUTHZ_SOURCE=postgres and LOADSCOPED_MODE=enforce: their roles are
@@ -61,7 +61,7 @@ import { auditHandlers } from '@/lib/security/audit-coverage'
 import { GUARD_EXCEPTIONS } from '@/lib/security/route-guards'
 import { CANARY_TENANT, HONEYTOKENS, honeytokenFor, isCanaryId, scanForHoneytokens, type HoneytokenHit } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
-import { TENANT_ID_HEADER } from '@/lib/tenancy/host'
+import { TENANT_ID_HEADER, TENANT_SLUG_HEADER } from '@/lib/tenancy/host'
 import type { IdorTarget } from '@/lib/security/idor-targets'
 import { applyEnv, CASE_FIXTURES, fixtureFor, type CaseFixture } from './case-fixtures'
 // Not lib/tenancy/area-switch: it loads next/server, which this file mocks (a cycle).
@@ -73,8 +73,8 @@ export type Outcome = 'leak' | 'honey_write' | 'oracle' | 'oracle_4xx' | 'refuse
 
 /** Outcomes that mean tenant B's data or rows were reached: they fail unless accepted. */
 export const FAILING_OUTCOMES: readonly Outcome[] = ['leak', 'honey_write', 'oracle', 'oracle_4xx']
-export type Persona = 'participant' | 'anonymous' | 'stellr_staff' | 'canary_admin' | 'stellr_event_manager'
-export type StaffPersona = Extract<Persona, 'stellr_staff' | 'canary_admin' | 'stellr_event_manager'>
+export type Persona = 'participant' | 'anonymous' | 'stellr_crew' | 'canary_admin' | 'stellr_event_manager'
+export type CrewPersona = Extract<Persona, 'stellr_crew' | 'canary_admin' | 'stellr_event_manager'>
 /** Which host the caller is on, and so whose record the foreign id names. */
 export type Direction = 'stellr_to_canary' | 'canary_to_stellr'
 /** Why a refusal differed: with the row there and gone, or between no row and a malformed id. */
@@ -97,8 +97,8 @@ export const DIRECTIONS: Record<Direction, CaseContext> = {
 /** The event a stellr_event_manager is assigned to. The honey row is always in another one. */
 export const ASSIGNED_EVENT_SLUG = 'idor-assigned-event-x'
 
-const STAFF: Record<StaffPersona, { role: string; membership: string; context: CaseContext }> = {
-  stellr_staff: { role: 'admin', membership: 'tenant_admin', context: DIRECTIONS.stellr_to_canary },
+const CREW: Record<CrewPersona, { role: string; membership: string; context: CaseContext }> = {
+  stellr_crew: { role: 'admin', membership: 'tenant_admin', context: DIRECTIONS.stellr_to_canary },
   // Clerk roles span subdomains, so this one holds no Clerk staff role: only a membership.
   canary_admin: { role: 'student', membership: 'tenant_admin', context: DIRECTIONS.canary_to_stellr },
   // The same tenant as the record: only the event filter can stop it.
@@ -109,13 +109,13 @@ const STAFF: Record<StaffPersona, { role: string; membership: string; context: C
   },
 }
 
-const isStaffPersona = (p: Persona): p is StaffPersona => p in STAFF
+const isCrewPersona = (p: Persona): p is CrewPersona => p in CREW
 
-export type StaffRouteClass = 'tenant_staff' | 'platform_admin' | 'platform_destined'
+export type CrewRouteClass = 'tenant_crew' | 'platform_admin' | 'platform_destined'
 
 /** What each staff-facing route class runs. A platform route must refuse the tenant admin. */
-export const STAFF_PERSONAS_FOR: Record<StaffRouteClass, readonly StaffPersona[]> = {
-  tenant_staff: ['stellr_staff', 'canary_admin', 'stellr_event_manager'],
+export const CREW_PERSONAS_FOR: Record<CrewRouteClass, readonly CrewPersona[]> = {
+  tenant_crew: ['stellr_crew', 'canary_admin', 'stellr_event_manager'],
   platform_admin: ['canary_admin'],
   platform_destined: ['canary_admin'],
 }
@@ -205,10 +205,10 @@ function scopingValues(): string[] {
 setTenantDbDriver(honeyTenantDriver(() => ({ db: harness.db, scopingValues: scopingValues() })))
 
 /** What a staff persona holds in the role tables: read by lib/authz under the postgres source. */
-function staffRows(persona: StaffPersona, tenantId: string): Record<string, Record<string, unknown>[]> {
+function crewRows(persona: CrewPersona, tenantId: string): Record<string, Record<string, unknown>[]> {
   const who = { clerk_user_id: TENANT_A_PARTICIPANT.clerkUserId, member_id: TENANT_A_PARTICIPANT.memberId }
   return {
-    tenant_memberships: [{ ...who, tenant_id: tenantId, role: STAFF[persona].membership }],
+    tenant_memberships: [{ ...who, tenant_id: tenantId, role: CREW[persona].membership }],
     tenants: [{ id: tenantId, status: 'active' }],
     event_manager_assignments:
       persona === 'stellr_event_manager' ? [{ clerk_user_id: who.clerk_user_id, event_slug: ASSIGNED_EVENT_SLUG, tenant_id: tenantId }] : [],
@@ -218,14 +218,14 @@ function staffRows(persona: StaffPersona, tenantId: string): Record<string, Reco
 export function resetHarness(persona: Persona = 'participant', opts: ResetOptions = {}) {
   harness.persona = persona
   harness.fixture = opts.fixture
-  harness.context = opts.context ?? (isStaffPersona(persona) ? STAFF[persona].context : DIRECTIONS.stellr_to_canary)
+  harness.context = opts.context ?? (isCrewPersona(persona) ? CREW[persona].context : DIRECTIONS.stellr_to_canary)
   const tenantId = harness.context.callerTenantId
   const callerRows =
     persona === 'anonymous'
       ? {}
       : {
           ...opts.fixture?.callerRows,
-          ...(isStaffPersona(persona) ? staffRows(persona, tenantId) : {}),
+          ...(isCrewPersona(persona) ? crewRows(persona, tenantId) : {}),
           members: [{ ...tenantAMemberRow(tenantId), ...opts.fixture?.member }],
         }
   harness.db = newHoneyDbState(callerRows, {
@@ -247,7 +247,7 @@ export function resetHarness(persona: Persona = 'participant', opts: ResetOption
 
 // ── module boundary mocks (registered by test/idor/mocks.ts) ─────────────────
 
-const clerkRole = () => (isStaffPersona(harness.persona) ? STAFF[harness.persona].role : 'student')
+const clerkRole = () => (isCrewPersona(harness.persona) ? CREW[harness.persona].role : 'student')
 
 function sessionClaims() {
   return { sub: TENANT_A_PARTICIPANT.clerkUserId, metadata: { role: clerkRole() }, email: TENANT_A_PARTICIPANT.email }
@@ -402,7 +402,10 @@ export function nextHeadersMock() {
       const { host, callerTenantId } = harness.context
       const h = new Headers({ 'x-forwarded-for': '203.0.113.9', host })
       // What the proxy will set on a tenant host. It sets nothing on Stellr's.
-      if (callerTenantId !== STELLR_TENANT_ID) h.set(TENANT_ID_HEADER, callerTenantId)
+      if (callerTenantId !== STELLR_TENANT_ID) {
+        h.set(TENANT_ID_HEADER, callerTenantId)
+        h.set(TENANT_SLUG_HEADER, CANARY_TENANT.slug)
+      }
       return h
     },
     draftMode: async () => ({ isEnabled: false, enable: () => {}, disable: () => {} }),
@@ -709,7 +712,10 @@ export async function buildRequest(input: CaseInput, method: string, opts: { mal
     ...extraHeaders,
   }
   if (!fixture?.omitOrigin) headers.origin = `http://${host}`
-  if (callerTenantId !== STELLR_TENANT_ID) headers[TENANT_ID_HEADER] = callerTenantId
+  if (callerTenantId !== STELLR_TENANT_ID) {
+    headers[TENANT_ID_HEADER] = callerTenantId
+    headers[TENANT_SLUG_HEADER] = CANARY_TENANT.slug
+  }
   const cookieHeader = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ')
   if (cookieHeader) headers.cookie = cookieHeader
   const req = new NextRequest(url, { method, headers, body: hasBody ? JSON.stringify(body) : undefined })
@@ -812,9 +818,9 @@ export async function runIdorCase(
   if (typeof handler !== 'function') throw new Error(`no ${method} export`)
 
   const fixture = fixtureFor(input.fixture, method)
-  const staffEnv = isStaffPersona(persona) ? { AUTHZ_SOURCE: 'postgres', LOADSCOPED_MODE: 'enforce' } : undefined
-  const restoreEnv = applyEnv({ ...staffEnv, ...fixture?.env })
-  const context = isStaffPersona(persona) ? STAFF[persona].context : DIRECTIONS[opts.direction ?? 'stellr_to_canary']
+  const crewEnv = isCrewPersona(persona) ? { AUTHZ_SOURCE: 'postgres', LOADSCOPED_MODE: 'enforce' } : undefined
+  const restoreEnv = applyEnv({ ...crewEnv, ...fixture?.env })
+  const context = isCrewPersona(persona) ? CREW[persona].context : DIRECTIONS[opts.direction ?? 'stellr_to_canary']
   try {
     return await classify(handler, input, method, persona, label, fixture, context, opts.strict === true)
   } finally {
@@ -823,35 +829,35 @@ export async function runIdorCase(
 }
 
 /**
- * The staff personas a route class runs, each strict. tenant_staff and platform_admin
+ * The staff personas a route class runs, each strict. tenant_crew and platform_admin
  * may not accept a failing outcome, so nothing here reads the snapshot.
  */
-export async function runStaffPersonaCases(
+export async function runCrewPersonaCases(
   mod: Record<string, unknown>,
   input: CaseInput,
   method: string,
-  cls: StaffRouteClass,
+  cls: CrewRouteClass,
   label = input.urlPattern,
-): Promise<{ persona: StaffPersona; result: CaseResult }[]> {
-  const out: { persona: StaffPersona; result: CaseResult }[] = []
-  for (const persona of STAFF_PERSONAS_FOR[cls]) {
+): Promise<{ persona: CrewPersona; result: CaseResult }[]> {
+  const out: { persona: CrewPersona; result: CaseResult }[] = []
+  for (const persona of CREW_PERSONAS_FOR[cls]) {
     out.push({ persona, result: await runIdorCase(mod, input, method, persona, label, { strict: true }) })
   }
   return out
 }
 
-/** The personas who hold the whole tenant: a route classed tenant_staff lets them in. */
-const TENANT_WIDE: readonly StaffPersona[] = ['stellr_staff', 'canary_admin']
+/** The personas who hold the whole tenant: a route classed tenant_crew lets them in. */
+const TENANT_WIDE: readonly CrewPersona[] = ['stellr_crew', 'canary_admin']
 
 /**
  * Why a staff case on a real route proves nothing or fails, or null when it holds. Not
- * failing is not enough: a tenant_staff route that stops on the generated request, or
+ * failing is not enough: a tenant_crew route that stops on the generated request, or
  * refuses a tenant admin before using the id, has shown nothing about its scope. A case
- * that really cannot get further names why in the route's fixture (`staffUnproven`).
+ * that really cannot get further names why in the route's fixture (`crewUnproven`).
  */
-export function staffCaseProblem(c: {
-  cls: StaffRouteClass
-  persona: StaffPersona
+export function crewCaseProblem(c: {
+  cls: CrewRouteClass
+  persona: CrewPersona
   result: CaseResult
   /** The route names a record. One with no id is judged on what it returns. */
   idBearing: boolean
@@ -864,7 +870,7 @@ export function staffCaseProblem(c: {
 }): string | null {
   const { cls, persona, result, idBearing, exception, guardExempt } = c
   if (FAILING_OUTCOMES.includes(result.outcome)) return `${persona}: ${result.outcome}`
-  if (cls !== 'tenant_staff') {
+  if (cls !== 'tenant_crew') {
     if (guardExempt) return null
     return [401, 403, 404].includes(result.status) ? null : `${persona}: a platform route answered a tenant admin with ${result.status}`
   }
@@ -875,22 +881,22 @@ export function staffCaseProblem(c: {
 }
 
 /**
- * Every staff persona over every method of one tenant_staff or platform_admin route, with
+ * Every staff persona over every method of one tenant_crew or platform_admin route, with
  * what is wrong with each case: its scope first, then its audit events, because an ok
  * mutating outcome owes an event on these routes as on any other.
  */
-export async function runStaffTarget(
-  t: { file: string; cls: StaffRouteClass; methods: readonly string[]; source: string },
+export async function runCrewTarget(
+  t: { file: string; cls: CrewRouteClass; methods: readonly string[]; source: string },
   mod: Record<string, unknown>,
   input: CaseInput,
-  staffUnproven?: Partial<Record<StaffPersona, string>>,
-): Promise<{ method: string; persona: StaffPersona; result: CaseResult; problem: string | null }[]> {
+  crewUnproven?: Partial<Record<CrewPersona, string>>,
+): Promise<{ method: string; persona: CrewPersona; result: CaseResult; problem: string | null }[]> {
   const idBearing = input.segments.length + input.query.length + input.body.length > 0
   const out = []
   for (const method of t.methods) {
-    for (const { persona, result } of await runStaffPersonaCases(mod, input, method, t.cls, t.file)) {
+    for (const { persona, result } of await runCrewPersonaCases(mod, input, method, t.cls, t.file)) {
       const problem =
-        staffCaseProblem({ cls: t.cls, persona, result, idBearing, exception: staffUnproven?.[persona], guardExempt: `${t.file}#${method}` in GUARD_EXCEPTIONS }) ??
+        crewCaseProblem({ cls: t.cls, persona, result, idBearing, exception: crewUnproven?.[persona], guardExempt: `${t.file}#${method}` in GUARD_EXCEPTIONS }) ??
         routeAuditProblems(t.file, t.source, [result])[0] ??
         null
       out.push({ method, persona, result, problem })

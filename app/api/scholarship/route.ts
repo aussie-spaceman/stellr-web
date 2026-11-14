@@ -7,7 +7,7 @@ import { getAllEvents } from '@/lib/events/repo'
 import { type StellarEvent } from '@/lib/sanity'
 import { getCurrentMember } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { scholarshipReceivedEmail, scholarshipStaffAlertEmail } from '@/lib/scholarship-emails'
+import { scholarshipReceivedEmail, scholarshipTeamInboxEmail } from '@/lib/scholarship-emails'
 import { auditMutation } from '@/lib/audit/route'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
@@ -102,8 +102,8 @@ async function fileApplication(input: z.infer<typeof schema>): Promise<{ respons
     applicationId = row?.id ?? null
 
     const reviewUrl = row ? `${APP_URL}/admin/scholarships/${row.id}` : `${APP_URL}/admin/scholarships`
-    const staff = scholarshipStaffAlertEmail({ name, email, phone, activity, school, brief, reviewUrl })
-    await sendEmail({ to: CONTACT_EMAIL, replyTo: email, ...staff })
+    const crew = scholarshipTeamInboxEmail({ name, email, phone, activity, school, brief, reviewUrl })
+    await sendEmail({ to: CONTACT_EMAIL, replyTo: email, ...crew })
 
     // The applicant's acknowledgement. Non-fatal.
     try {

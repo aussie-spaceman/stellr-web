@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireEventStaff, type EventStaff } from '@/lib/authz'
+import { requireEventCrew, type EventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { correctAgreementRecipient } from '@/lib/agreement-correction'
@@ -20,27 +20,27 @@ const ROUTE = '/api/admin/agreements/[id]/correct-recipient'
 
 type Db = ReturnType<typeof supabaseServer>
 type Agreement = { event_slug: string | null; envelope_id: string; provider: string | null; status: string | null }
-type Staff = Extract<EventStaff, { ok: true }>
+type Crew = Extract<EventCrew, { ok: true }>
 
 const notFound = () => NextResponse.json({ error: 'Agreement not found' }, { status: 404 })
 
 /** The agreement when the caller may act on it, otherwise the response to send. */
-async function guard(db: Db, id: string, req: Request): Promise<{ staff: Staff; row: Agreement } | { denied: Response }> {
+async function guard(db: Db, id: string, req: Request): Promise<{ crew: Crew; row: Agreement } | { denied: Response }> {
   // Who is asking comes first: a signed-out caller gets 401 before any
   // lookup, so the route never says whether an agreement id exists.
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return { denied: NextResponse.json({ error: 'Forbidden' }, { status: staff.status }) }
-  audited.set(req, { id, userId: staff.userId, tenantId: staff.tenantId })
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return { denied: NextResponse.json({ error: 'Forbidden' }, { status: crew.status }) }
+  audited.set(req, { id, userId: crew.userId, tenantId: crew.tenantId })
 
   // An event manager reaches only their own events. An agreement with no event (a
   // membership agreement) is admins only.
-  const loaded = await loadEventRecord<Agreement>(staff, 'agreements', id, {
+  const loaded = await loadEventRecord<Agreement>(crew, 'agreements', id, {
     db,
     select: 'event_slug, envelope_id, provider, status',
     notFound,
     label: ROUTE,
   })
-  return loaded.ok ? { staff, row: loaded.row } : { denied: loaded.response }
+  return loaded.ok ? { crew, row: loaded.row } : { denied: loaded.response }
 }
 
 // What this request acted on, which withAudit's spec cannot read for itself.
@@ -82,7 +82,7 @@ async function listRecipients(req: Request, { params }: { params: Promise<{ id: 
     email: string | null
     status: string | null
     routing_order: number | null
-  }>(g.staff.scope, 'agreement_recipients', {
+  }>(g.crew.scope, 'agreement_recipients', {
     db,
     select: 'recipient_id, role_name, name, email, status, routing_order',
     match: { envelope_row: id },
@@ -142,7 +142,7 @@ async function correctRecipient(req: Request, { params }: { params: Promise<{ id
   const actor = await actorFromAuth()
   const memberId = result.memberId ?? actor.actorMemberId ?? null
   // The member's activity log is global, and a tenant's records stay off it (owner decision B8).
-  if (memberId && isStellrScope(g.staff.scope)) {
+  if (memberId && isStellrScope(g.crew.scope)) {
     await logActivity(
       {
         memberId,

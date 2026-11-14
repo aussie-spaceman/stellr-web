@@ -6,12 +6,13 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { CANARY_TENANT, HONEYTOKENS, HONEYTOKEN_VALUES, honeyColumnId, honeytokenFor, isCanaryId, scanForHoneytokens } from '@/lib/testing/honeytokens'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { isIdLikeName, requestIdInputs } from '@/lib/security/route-ast'
 import { ROUTE_MANIFEST } from '@/lib/security/route-manifest'
-import { idorTargetFor, segmentsOf, staffTargets, urlPatternOf } from '@/lib/security/idor-targets'
+import { idorTargetFor, segmentsOf, crewTargets, urlPatternOf } from '@/lib/security/idor-targets'
 import { CREDENTIAL_NUMBER_RE } from '@/lib/credentials-core'
 import { honeyClient, newHoneyDbState } from './honey-db'
 import { printReportedOracles, sealReportedOracles } from './reported-oracles'
@@ -561,21 +562,21 @@ describe('tenant-host cap', () => {
 
   it('finds a staff route with no id, and no staff route is left out', () => {
     const manifest = {
-      'app/api/admin/list/route.ts': 'tenant_staff',
+      'app/api/admin/list/route.ts': 'tenant_crew',
       'app/api/admin/[id]/route.ts': 'platform_admin',
       'app/api/members/route.ts': 'participant',
-      'app/(stellr)/(admin)/x/page.tsx': 'tenant_staff',
+      'app/(stellr)/(admin)/x/page.tsx': 'tenant_crew',
     } as const
     const read = (f: string) => (f.includes('list') ? 'export async function GET() {}' : 'export async function PATCH(req, { params }) {}')
-    const found = staffTargets(read, manifest)
+    const found = crewTargets(read, manifest)
     expect(found.map((t) => [t.file, t.cls, t.methods])).toEqual([
       ['app/api/admin/[id]/route.ts', 'platform_admin', ['PATCH']],
-      ['app/api/admin/list/route.ts', 'tenant_staff', ['GET']],
+      ['app/api/admin/list/route.ts', 'tenant_crew', ['GET']],
     ])
-    expect(idorTargetFor('app/api/admin/list/route.ts', 'tenant_staff', read('app/api/admin/list/route.ts'))).toBeNull()
-    expect(() => staffTargets(() => 'export const x = 1', { 'app/api/admin/none/route.ts': 'tenant_staff' })).toThrow('no handler')
-    expect(staffTargets().map((t) => t.file)).toEqual(
-      Object.entries(ROUTE_MANIFEST).filter(([f, c]) => /route\.tsx?$/.test(f) && (c === 'tenant_staff' || c === 'platform_admin' || c === 'platform_destined')).map(([f]) => f).sort(),
+    expect(idorTargetFor('app/api/admin/list/route.ts', 'tenant_crew', read('app/api/admin/list/route.ts'))).toBeNull()
+    expect(() => crewTargets(() => 'export const x = 1', { 'app/api/admin/none/route.ts': 'tenant_crew' })).toThrow('no handler')
+    expect(crewTargets().map((t) => t.file)).toEqual(
+      Object.entries(ROUTE_MANIFEST).filter(([f, c]) => /route\.tsx?$/.test(f) && (c === 'tenant_crew' || c === 'platform_admin' || c === 'platform_destined')).map(([f]) => f).sort(),
     )
   })
 
@@ -585,8 +586,22 @@ describe('tenant-host cap', () => {
     expect(() => tenantHostTargets(read)).toThrow('app/api/check-in/route.ts')
   })
 
-  it('accepted register starts empty: approval is the owner’s', () => {
-    expect(TENANT_HOST_ACCEPTED).toEqual({})
+  it('accepted register holds only what the owner approved, each citing its recorded decision', () => {
+    // Approval is the owner's: a new key here needs a decision answered in the register.
+    expect(Object.keys(TENANT_HOST_ACCEPTED).sort()).toEqual([
+      'app/api/email/unsubscribe/route.ts POST anonymous stellr_to_canary',
+      'app/api/email/unsubscribe/route.ts POST participant stellr_to_canary',
+    ])
+    const register = readFileSync('docs/S5-DECISION-REGISTER.md', 'utf8')
+    for (const [key, a] of Object.entries(TENANT_HOST_ACCEPTED)) {
+      const id = a.reason.match(/\bW\d+-\d+\b/)?.[0]
+      expect(id, `${key} names no decision`).toBeTruthy()
+      expect(a.approvedBy, key).toContain(id)
+      const row = register.split('\n').find((l) => l.startsWith(`| ${id} |`))
+      expect(row, `${id} is not in the register`).toBeTruthy()
+      expect(row, `${id} is not recorded as approved`).toMatch(/\| Approved/)
+      expect(row, `${id} does not name the case`).toContain(key.split(' ')[0])
+    }
   })
 
   it('CI compares the baseline with the merge base', () => {
@@ -595,11 +610,15 @@ describe('tenant-host cap', () => {
 })
 
 describe('canary', () => {
-  it('mutate() removes exactly the marked guard line', () => {
+  it('mutate() removes exactly the marked guard lines, and the copy still parses', () => {
     const src = readFileSync('test/idor/fixtures/handlers.ts', 'utf8')
-    for (const m of MUTATIONS as { kind: string; file: string; line: RegExp }[]) {
-      const { removed } = mutate(readFileSync(m.file, 'utf8'), m.line)
-      expect(removed, `${m.file} ${m.line}`).toBe(1)
+    for (const m of MUTATIONS as { kind: string; file: string; line: RegExp; removes?: number }[]) {
+      const { text, removed } = mutate(readFileSync(m.file, 'utf8'), m.line)
+      expect(removed, `${m.file} ${m.line}`).toBe(m.removes ?? 1)
+      // A copy that no longer compiles fails the suite for the wrong reason, and the canary
+      // then counts the mutation as survived (wave 7 A10a, PR #655).
+      const { diagnostics } = ts.transpileModule(text, { fileName: m.file, reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.Preserve } })
+      expect(diagnostics?.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')), `${m.file} after the mutation`).toEqual([])
     }
     expect(mutate(src, /CANARY:nope/).removed).toBe(0)
   })

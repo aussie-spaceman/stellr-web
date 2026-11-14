@@ -26,11 +26,47 @@
  *
  * Prerequisites (.env.local): NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY,
  * the five S3 migrations applied; CLERK_SECRET_KEY (sk_test_) for --clerk.
+ *
+ * --profile flow (S5 wave 7, K3): the dev canary tenant, 'dev-canary', which is
+ * meant to be served (lib/testing/canary-flow-seed.ts says what it writes). The
+ * default profile above is `--profile honeytoken`, unchanged.
+ *
+ *   npx tsx scripts/seed-two-tenants.ts --profile flow --zone <zone>                  # dry run
+ *   npx tsx scripts/seed-two-tenants.ts --profile flow --zone <zone> --apply --clerk  # writes it (K7a, owner's yes)
+ *   npx tsx scripts/seed-two-tenants.ts --profile flow --zone <zone> --check          # readiness reasons; exit 1 if not ready
+ *   npx tsx scripts/seed-two-tenants.ts --profile flow --remove                       # dry run of the teardown
+ *   npx tsx scripts/seed-two-tenants.ts --profile flow --remove --apply --clerk       # teardown (K7a rollback)
+ *
+ * --remove refuses while the canary event's document is published in the
+ * Sanity dataset this env reads (unpublish and delete it first), and when
+ * Sanity cannot be read.
+ *
+ * The flow profile also refuses a live Clerk key without --clerk, APP_ENV or
+ * NEXT_PUBLIC_APP_ENV prod or preview, VERCEL_ENV preview, and any database but
+ * the dev project or a stack on this machine. It prints hosts, slugs and handles,
+ * never emails.
  */
 import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
 import { assertSeedTarget, clerkCreateUserBody, membershipRow, planTwoTenantSeed, type SeedUser } from '../lib/testing/two-tenant-seed'
+import {
+  applyCanaryFlowSeed,
+  assertCanaryFlowTarget,
+  canaryClerkCreateUserBody,
+  canaryClerkMetadata,
+  canaryEventInSanity,
+  canaryReadiness,
+  CANARY_REMOVAL_STEPS,
+  describeCanaryFlowPlan,
+  flowTargetEnvFrom,
+  formatReadiness,
+  planCanaryFlowSeed,
+  readCanaryFacts,
+  removeCanaryFlow,
+  sanityProjectConfigured,
+  type CanaryPersona,
+} from '../lib/testing/canary-flow-seed'
 import { STELLR_TENANT_ID } from '../lib/tenancy/constants'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -39,6 +75,21 @@ dotenv.config(fs.existsSync(envPath) ? { path: envPath } : {})
 const APPLY = process.argv.includes('--apply')
 const CLERK = process.argv.includes('--clerk')
 const CLERK_API = 'https://api.clerk.com/v1'
+const PROFILE = flagValue('--profile') ?? 'honeytoken'
+const ZONE = flagValue('--zone')
+const CHECK = process.argv.includes('--check')
+const REMOVE = process.argv.includes('--remove')
+
+/** `--name value` or `--name=value`; '' when the flag has no value, undefined when absent. */
+function flagValue(name: string): string | undefined {
+  const args = process.argv.slice(2)
+  const eq = args.find((a) => a.startsWith(`${name}=`))
+  if (eq !== undefined) return eq.slice(name.length + 1)
+  const at = args.indexOf(name)
+  if (at === -1) return undefined
+  const next = args[at + 1]
+  return next !== undefined && !next.startsWith('--') ? next : ''
+}
 
 async function clerk<T>(method: string, route: string, body?: unknown): Promise<T> {
   const res = await fetch(`${CLERK_API}${route}`, {
@@ -58,6 +109,9 @@ async function ensureClerkUser(user: SeedUser): Promise<string> {
 }
 
 async function main() {
+  if (PROFILE === 'flow') return mainFlow()
+  if (PROFILE !== 'honeytoken') throw new Error(`unknown --profile ${PROFILE}: use honeytoken (the default) or flow`)
+  if (CHECK || REMOVE || ZONE !== undefined) throw new Error('--check, --remove and --zone belong to --profile flow')
   assertSeedTarget({ supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL, clerkSecretKey: process.env.CLERK_SECRET_KEY, useClerk: CLERK })
   const plan = planTwoTenantSeed()
 
@@ -112,6 +166,94 @@ async function main() {
     }
   }
   console.log('\nDone.')
+}
+
+// ── --profile flow ──────────────────────────────────────────────────────────
+
+/** The persona's Clerk user, created if missing; its role set either way (a merge, so other keys stay). */
+async function ensureFlowClerkUser(persona: CanaryPersona): Promise<string> {
+  const found = await clerk<{ id: string }[]>('GET', `/users?email_address=${encodeURIComponent(persona.email)}`)
+  const id = found.length ? found[0].id : (await clerk<{ id: string }>('POST', '/users', canaryClerkCreateUserBody(persona))).id
+  await clerk('PATCH', `/users/${id}/metadata`, { public_metadata: canaryClerkMetadata(persona) })
+  return id
+}
+
+async function deleteFlowClerkUser(persona: CanaryPersona): Promise<'deleted' | 'absent'> {
+  const found = await clerk<{ id: string }[]>('GET', `/users?email_address=${encodeURIComponent(persona.email)}`)
+  if (!found.length) return 'absent'
+  await clerk('DELETE', `/users/${found[0].id}`)
+  return 'deleted'
+}
+
+async function mainFlow() {
+  assertCanaryFlowTarget(flowTargetEnvFrom(process.env, CLERK))
+  if (CHECK && (APPLY || REMOVE)) throw new Error('--check is read-only; it cannot be combined with --apply or --remove')
+  const target = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL as string).host
+
+  if (REMOVE) {
+    console.log(`Canary flow teardown — ${APPLY ? 'APPLY' : 'dry run'}${CLERK ? ' with Clerk users' : ''}`)
+    console.log(`  target: ${target}`)
+    for (const step of CANARY_REMOVAL_STEPS) console.log(`  - ${step}`)
+    if (!APPLY) {
+      console.log('\nDry run: nothing removed. Re-run with --apply.')
+      return
+    }
+    // Imported only now, after dotenv and the target guard.
+    // lib/deletion/execute.ts loads only inside the app (server-only), so the
+    // teardown follows the registry's 'event' entity itself (canary-flow-seed.ts).
+    const { supabaseServer } = await import('../lib/supabase')
+    const { getEntityDef } = await import('../lib/deletion/registry')
+    const { deletionPreflight } = await import('../lib/deletion/preflight')
+    const { archiveEntity } = await import('../lib/deletion/archive')
+    const { syncEventManagerUnassigned } = await import('../lib/authz/role-sync')
+    const { fetchSanityEvent } = await import('../lib/events/sync')
+    const eventEntity = getEntityDef('event')
+    if (!eventEntity) throw new Error("the deletion registry has no 'event' entity")
+    // The dataset this env reads, which is the one its webhook and backfill sync from.
+    console.log(`  sanity dataset: ${process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'}`)
+    const result = await removeCanaryFlow({
+      db: supabaseServer(),
+      sanityEventPublished: () => canaryEventInSanity(fetchSanityEvent, sanityProjectConfigured(process.env.NEXT_PUBLIC_SANITY_PROJECT_ID)),
+      eventEntity,
+      deletionPreflight,
+      archive: (_def, id, deletedBy) => archiveEntity(eventEntity, id, deletedBy),
+      syncEventManagerUnassigned,
+      deleteClerkUser: CLERK ? deleteFlowClerkUser : undefined,
+      log: (line) => console.log(line),
+    })
+    console.log(`\nDone. Tenant ${result.tenant}.`)
+    return
+  }
+
+  const plan = planCanaryFlowSeed({ zone: ZONE ?? '' })
+  if (CHECK) {
+    const { supabaseServer } = await import('../lib/supabase')
+    const { tenantEventSender } = await import('../lib/event-emails/tenant-mail')
+    const facts = await readCanaryFacts(supabaseServer(), plan)
+    const lines = canaryReadiness(plan, facts, { senderOf: tenantEventSender })
+    console.log(`Canary flow readiness (${target})`)
+    for (const line of formatReadiness(lines)) console.log(line)
+    if (lines.some((l) => !l.ok)) process.exitCode = 1
+    return
+  }
+
+  console.log(`Canary flow seed — ${APPLY ? 'APPLY' : 'dry run'}${CLERK ? ' with Clerk users' : ''}`)
+  console.log(`  target: ${target}`)
+  for (const line of describeCanaryFlowPlan(plan)) console.log(line)
+  if (!APPLY) {
+    console.log('\nDry run: nothing written. Re-run with --apply.')
+    return
+  }
+  const { supabaseServer } = await import('../lib/supabase')
+  const { syncEventManagerAssigned, syncTenantAdminGranted } = await import('../lib/authz/role-sync')
+  await applyCanaryFlowSeed(plan, {
+    db: supabaseServer(),
+    ensureClerkUser: CLERK ? ensureFlowClerkUser : undefined,
+    syncEventManagerAssigned,
+    syncTenantAdminGranted,
+    log: (line) => console.log(line),
+  })
+  console.log('\nDone. Check it with --check.')
 }
 
 main().catch((e) => {

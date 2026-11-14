@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail, staffAlertEmail } from '@/lib/email'
+import { sendEmail, teamInboxEmail } from '@/lib/email'
 import { emailLayout, escapeHtml as esc } from '@/lib/email-layout'
 import { startCronRun } from '@/lib/cron-runs'
 
@@ -300,7 +300,7 @@ export async function sendDailyErrorDigest(db: SupabaseClient, now = new Date())
       return { errors: 0, alerted: false }
     }
     const email = renderErrorDigest(rows)
-    await sendEmail({ to: staffAlertEmail(), subject: email.subject, html: email.html, text: email.text })
+    await sendEmail({ to: teamInboxEmail(), subject: email.subject, html: email.html, text: email.text })
     await run.finish({ errors: rows.length, alerted: true })
     return { errors: rows.length, alerted: true }
   } catch (err) {

@@ -3,7 +3,7 @@ import {
   scholarshipDetailsEmail,
   scholarshipOfferEmail,
   scholarshipPaymentEmail,
-  scholarshipStaffAlertEmail,
+  scholarshipTeamInboxEmail,
   type OfferEmailInput,
 } from '@/lib/scholarship-emails'
 
@@ -83,9 +83,9 @@ describe('already registered and paid (retrospective)', () => {
   })
 })
 
-describe('scholarshipStaffAlertEmail', () => {
+describe('scholarshipTeamInboxEmail', () => {
   it('escapes the brief and carries the review link', () => {
-    const { html, text } = scholarshipStaffAlertEmail({
+    const { html, text } = scholarshipTeamInboxEmail({
       name: 'A B', email: 'a@b.com', phone: null, activity: 'Nevada', school: null,
       brief: '<img src=x onerror=alert(1)>', reviewUrl: 'https://app.stellreducation.org/admin/scholarships/1',
     })

@@ -286,11 +286,11 @@ export async function alertExternalCheckReview(db: SupabaseClient, memberId: str
       },
     })
     await logActivity(
-      { memberId, category: 'compliance', action: 'external_bc_review_alert_sent', summary: 'Staff alerted to verify an uploaded background check', actorType: 'system' },
+      { memberId, category: 'compliance', action: 'external_bc_review_alert_sent', summary: 'Team alerted to verify an uploaded background check', actorType: 'system' },
       db,
     )
   } catch (err) {
-    console.error('[external-bc] staff alert failed:', err)
+    console.error('[external-bc] team alert failed:', err)
   }
 }
 

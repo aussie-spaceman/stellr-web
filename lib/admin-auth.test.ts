@@ -4,9 +4,9 @@ import { afterEach, describe, it, expect, vi } from 'vitest'
 // Clerk publicMetadata.role === 'admin'. These pin the helper so the 37
 // routes that now share it cannot drift.
 const authMock = vi.fn()
-// deep review TEST-2: currentUserHasScope was untested, so the staff_roles
+// deep review TEST-2: currentUserHasScope was untested, so the admin_duties
 // fallback (a non-admin member holding a granted scope) had no coverage. A
-// table-keyed fake drives the members → staff_roles lookup it performs.
+// table-keyed fake drives the members → admin_duties lookup it performs.
 const dbState: { member: { id: string } | null; scopes: string[] | null } = { member: null, scopes: null }
 vi.mock('@clerk/nextjs/server', () => ({ auth: () => authMock() }))
 vi.mock('@/lib/supabase', () => ({
@@ -67,7 +67,7 @@ describe('currentUserHasScope', () => {
     expect(await currentUserHasScope('events')).toBe(false)
   })
 
-  it('grants every scope to a platform admin without reading staff_roles', async () => {
+  it('grants every scope to a platform admin without reading admin_duties', async () => {
     authMock.mockResolvedValue({ userId: 'u-admin', sessionClaims: { metadata: { role: 'admin' } } })
     expect(await currentUserHasScope('graduations')).toBe(true)
   })
@@ -78,7 +78,7 @@ describe('currentUserHasScope', () => {
     expect(await currentUserHasScope('events')).toBe(false)
   })
 
-  it('refuses a member whose staff_roles row lacks the scope', async () => {
+  it('refuses a member whose admin_duties row lacks the scope', async () => {
     authMock.mockResolvedValue({ userId: 'u-staff', sessionClaims: { metadata: { role: 'member' } } })
     dbState.member = { id: 'm-1' }
     dbState.scopes = ['community']
@@ -94,7 +94,7 @@ describe('currentUserHasScope', () => {
     expect(await currentUserHasScope('graduations')).toBe(true)
   })
 
-  it('refuses a member with no staff_roles row at all', async () => {
+  it('refuses a member with no admin_duties row at all', async () => {
     authMock.mockResolvedValue({ userId: 'u-staff', sessionClaims: { metadata: { role: 'member' } } })
     dbState.member = { id: 'm-1' }
     dbState.scopes = null

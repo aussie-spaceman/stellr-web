@@ -162,7 +162,7 @@ export async function executeRefund(
       ? 'No Stripe payment reference (for example, an invoice paid by cheque) — check the payment date and refund by hand if within the guarantee'
       : 'Could not read the payment from Stripe — check its date and refund in Stripe if within the guarantee'
     await audit(db, p, eventSlug, { type: 'manual_required', refundCents: refundBasis, detail }, actorMemberId, paidCents, 100)
-    await alertStaffIfUnattended(actorType, p, reg.event_title as string, detail)
+    await alertTeamIfUnattended(actorType, p, reg.event_title as string, detail)
     return { type: 'manual_required', refundCents: refundBasis, detail }
   }
 
@@ -223,15 +223,16 @@ export async function executeRefund(
   } catch (e) {
     const detail = e instanceof Error ? e.message : 'Stripe refund failed'
     await audit(db, p, eventSlug, { type: 'manual_required', refundCents: option.cents, detail }, actorMemberId, paidCents, option.pct)
-    await alertStaffIfUnattended(actorType, p, reg.event_title as string, detail)
+    await alertTeamIfUnattended(actorType, p, reg.event_title as string, detail)
     return { type: 'manual_required', refundCents: option.cents, detail }
   }
 }
 
 // An admin sees a refund that needs a hand in the delete dialog; a member or
 // organiser withdrawing on their own does not, so staff are told.
-async function alertStaffIfUnattended(actorType: 'admin' | 'member', p: ParticipantRow, eventTitle: string, detail: string) {
-  if (actorType === 'admin') return
+async function alertTeamIfUnattended(actorType: 'admin' | 'staff' | 'member', p: ParticipantRow, eventTitle: string, detail: string) {
+  // Someone in the portal (an admin or Staff) is already looking at it.
+  if (actorType !== 'member') return
   await notifyCommunityAdmins({
     type: 'action',
     body: `A refund for ${p.first_name} ${p.last_name} (${eventTitle}) needs to be made by hand: ${detail}. See event_refunds for participant ${p.id}.`,

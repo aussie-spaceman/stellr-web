@@ -60,44 +60,44 @@ export interface DeskContact {
 // ── Mentors and event managers ───────────────────────────────────────────────
 //
 // Nov 2026: volunteer mentors and event managers are not on the roster, so the
-// desk lists them on a Mentors tab and checks them in to event_staff_check_ins
-// (lib/check-in-staff.ts). The "All attendees" email group reads both.
+// desk lists them on a Mentors tab and checks them in to event_crew_check_ins
+// (lib/check-in-crew.ts). The "All attendees" email group reads both.
 
-export type StaffRole = 'volunteer' | 'event_manager'
+export type CrewRole = 'volunteer' | 'event_manager'
 
 /** How the desk names a mentor or event manager: v.<members.id> or m.<Clerk user id>. */
-export function staffKey(role: StaffRole, id: string): string {
+export function crewKey(role: CrewRole, id: string): string {
   return `${role === 'volunteer' ? 'v' : 'm'}.${id}`
 }
 
-/** The shape of a staff key; the server also checks the person is on this event. */
-export const STAFF_KEY = /^[vm]\.[A-Za-z0-9_-]{1,64}$/
+/** The shape of a crew key; the server also checks the person is on this event. */
+export const CREW_KEY = /^[vm]\.[A-Za-z0-9_-]{1,64}$/
 
 /** Who is on the Mentors tab. Names change rarely, so they come with the details. */
-export interface DeskStaffPerson {
-  /** The staff key. */
+export interface DeskCrewPerson {
+  /** The crew key. */
   id: string
   firstName: string
   lastName: string
-  role: StaffRole
+  role: CrewRole
 }
 
-export interface DeskStaffCheckIn {
+export interface DeskCrewCheckIn {
   checkedInAt: string | null
   checkInMethod: string | null
 }
 
-export type DeskStaff = DeskStaffPerson & DeskStaffCheckIn
+export type DeskCrew = DeskCrewPerson & DeskCrewCheckIn
 
-export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
+export const CREW_ROLE_LABEL: Record<CrewRole, string> = {
   volunteer: 'Mentor',
   event_manager: 'Event manager',
 }
 
 /** A Mentors tab search: the person's name, or their role. */
-export function staffSearchMatches(s: DeskStaffPerson, query: string): boolean {
+export function crewSearchMatches(s: DeskCrewPerson, query: string): boolean {
   const q = fold(query).trim()
-  return !q || [`${s.firstName} ${s.lastName}`, STAFF_ROLE_LABEL[s.role]].some((v) => fold(v).includes(q))
+  return !q || [`${s.firstName} ${s.lastName}`, CREW_ROLE_LABEL[s.role]].some((v) => fold(v).includes(q))
 }
 
 /** Loaded once and every few minutes, not on every poll: these rarely change. */
@@ -105,7 +105,7 @@ export interface DeskDetails {
   flags: Record<string, DeskFlags>
   contacts: Record<string, DeskContact>
   /** Volunteer mentors and event managers, for the Mentors tab. */
-  staff?: DeskStaffPerson[]
+  crew?: DeskCrewPerson[]
 }
 
 export type ArrivalFilter = 'all' | 'waiting' | 'arrived'
@@ -285,13 +285,38 @@ export interface QueuedAction {
   action: string
   participantId?: string
   participantIds?: string[]
-  /** A mentor or event manager (staff_check_in / staff_undo). */
-  staffKey?: string
+  /** A mentor or event manager (crew_check_in / crew_undo). */
+  crewKey?: string
   code?: string
   /** When the tap happened (ISO). */
   at?: string
   /** Who it was for, for the error line. */
   label: string
+}
+
+/**
+ * Before 13 Nov 2026 the desk called mentors and event managers "staff". A tap
+ * queued offline, or details cached, before that deploy still carry the old
+ * names for up to a day; read them as crew. Drop after the next event season.
+ */
+const LEGACY_CREW_ACTIONS: Record<string, string> = {
+  staff_check_in: 'crew_check_in', // staff-word-ok: legacy queued tap name
+  staff_undo: 'crew_undo', // staff-word-ok: legacy queued tap name
+}
+
+export function fromLegacyQueued(item: QueuedAction & { staffKey?: string }): QueuedAction { // staff-word-ok: legacy queued tap field
+  const { staffKey, ...rest } = item // staff-word-ok: legacy queued tap field
+  return { ...rest, action: LEGACY_CREW_ACTIONS[item.action] ?? item.action, crewKey: item.crewKey ?? staffKey } // staff-word-ok: legacy queued tap field
+}
+
+export function fromLegacyDetails(d: DeskDetails & { staff?: DeskCrewPerson[] }): DeskDetails { // staff-word-ok: legacy cached details field
+  const { staff, ...rest } = d // staff-word-ok: legacy cached details field
+  return { ...rest, crew: d.crew ?? staff } // staff-word-ok: legacy cached details field
+}
+
+/** The server's reading of an action name, accepting the pre-rename one. */
+export function crewActionName(action: unknown): unknown {
+  return typeof action === 'string' ? (LEGACY_CREW_ACTIONS[action] ?? action) : action
 }
 
 export const deskSnapshotKey = (slug: string) => `stellr_checkin_snapshot:${slug}`
@@ -302,13 +327,13 @@ export const deskQueueKey = (slug: string) => `stellr_checkin_queue:${slug}`
 export function queuedIds(item: QueuedAction): string[] {
   if (item.participantIds) return item.participantIds
   if (item.participantId) return [item.participantId]
-  if (item.staffKey) return [item.staffKey]
+  if (item.crewKey) return [item.crewKey]
   const code = parseCheckInCode(item.code)
   return code?.kind === 'p' ? [code.id] : []
 }
 
-const CHECK_INS = new Set(['manual', 'scan', 'group_check_in', 'staff_check_in'])
-const UNDOS = new Set(['undo', 'group_undo', 'staff_undo'])
+const CHECK_INS = new Set(['manual', 'scan', 'group_check_in', 'crew_check_in'])
+const UNDOS = new Set(['undo', 'group_undo', 'crew_undo'])
 
 /**
  * What the rows should show for taps still waiting to send, so a reloaded desk
@@ -357,5 +382,5 @@ export function flagsForStorage(details: DeskDetails): DeskDetails {
   for (const [id, f] of Object.entries(details.flags)) {
     flags[id] = { ...f, medical: f.medical ? 'See the roster' : null, dietary: f.dietary.length ? ['See the roster'] : [] }
   }
-  return { flags, contacts: details.contacts, staff: details.staff }
+  return { flags, contacts: details.contacts, crew: details.crew }
 }

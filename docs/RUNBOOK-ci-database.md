@@ -14,7 +14,9 @@ reviewing machine had Docker or a Postgres server, so the baseline load, the
 migration replay and the pgTAP file have not been executed anywhere. The job is
 report-only (below), so the CI workflow can be green while `db` is red. Until the
 first run is read step by step, a green badge says nothing about this job. See
-"First run" below.
+"First run" below. Since then it has run and passed, on #625 (11 Nov 2026)
+among others, and `dev` names it as a required check; which jobs block a merge,
+and how, is in the [enforcement ledger](#enforcement-ledger) below.
 
 ## What it does
 
@@ -115,6 +117,25 @@ not fail the workflow, so the workflow badge is no evidence either way.
 If the first run fails at the baseline or a migration, that is the finding this
 job exists for: the repository cannot rebuild production. Fix the baseline or
 the migration (never edit an applied migration; add a new one) before step 3.
+
+## Enforcement ledger
+
+Which CI jobs can block a merge, how, and since when. Read on 12 Nov 2026 (S5
+wave 7, B10r): `dev`'s required checks are `verify`, `e2e`, `db` and `tenant-db`;
+`main`'s are `verify` and `e2e`. No repository variable is set, so every
+`*_ENFORCE` switch below is off. Re-read both after the GitHub organisation move,
+and add a row here whenever a job's enforcement changes.
+
+| Job | Workflow | Blocks a merge? | How it is enforced | Since, and the proof |
+|---|---|---|---|---|
+| `verify` | `ci.yml` | Yes, on `dev` and `main` | A required check | Before S5 |
+| `e2e` | `ci.yml` | Yes, on `dev` and `main` | A required check. It is a gate job: it fails unless `e2e-tests`, `storybook` and `tenant-host-routing` succeeded, after its early exits (a docs-only change; a tree that already passed; `verify` failed, which fails it) | Before S5; `tenant-host-routing` joined it in B10r |
+| `tenant-host-routing` | `ci.yml` | Yes, through `e2e` | No `continue-on-error`. `e2e` needs it and fails unless its result is `success` (cancelled, failed and skipped all fail). The "tree already passed" marker is written only when it succeeded, and the `changes` job's shortcut needs `e2e-tests`, `storybook` and this job green on that tree. Branch protection does not name it. `test/ci-tenant-host-routing-required.test.ts` pins the wiring | B10r, #656 (`79a58c96`), 12 Nov 2026, owner decision `W7-8(c)`, after it passed by step outcome on every code PR that day. **Proven** by the throwaway PR #657, closed unmerged with its branch deleted: one deliberately failing test in `e2e/tenancy/flag-parity.spec.ts` made `tenant-host-routing` fail (1 failed, 200 passed), every other job passed, and `e2e` went red naming `tenant-host-routing: failure`. Protection was unchanged afterwards |
+| `tenant-db` | `ci.yml` | Yes, on `dev` | No `continue-on-error` on the job or any step since C18 (#624), and a required check on `dev`. Not required on `main`. A PR its scope step skips finishes green without running the tests. `test/ci-tenant-db-required.test.ts` pins the wiring | Required in the workflow since #624; passed on #624 and #625; a required check on `dev` (branch protection read 12 Nov 2026) |
+| `db` | `ci.yml` | Named in `dev`'s required checks | The job still has `continue-on-error` while `DB_CI_ENFORCE` is not `true` (it is unset), so read its step outcomes, not its badge. Not required on `main` | Passed on #625, A16's first pgTAP run |
+| `e2e-local` | `ci.yml` | No | `continue-on-error: true`; not a required check | Report-only. The lock-removal steps above |
+| `semgrep`, `osv-scanner`, `gitleaks` | `security.yml` | No | `continue-on-error` until `SEMGREP_ENFORCE`, `OSV_ENFORCE` or `GITLEAKS_ENFORCE` is `true`; none is set | Report-only. `docs/RUNBOOK-security-scans.md` |
+| IDOR canary | `idor-canary.yml` | No | `continue-on-error` until `CANARY_ENFORCE` is `true`; it is unset | Report-only. `docs/SECURITY-route-manifest.md` |
 
 ## The e2e-local job
 

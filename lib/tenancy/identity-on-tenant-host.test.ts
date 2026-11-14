@@ -98,14 +98,15 @@ describe('on a tenant host, with the proxy tenant headers present', () => {
   })
 
   it("refuses someone else's survey link", async () => {
-    h.invitationByToken.mockResolvedValue({ id: 'inv-1', member_id: 'member-someone-else', participant_id: null })
+    // This host's own survey (S5 A10b: another host's answers 404 before the member is compared).
+    h.invitationByToken.mockResolvedValue({ id: 'inv-1', member_id: 'member-someone-else', participant_id: null, tenant_id: CANARY })
     const out = await resolveSession(surveyRequest(), { token: 'tok_1' }, { write: false })
     expect('error' in out && out.error.status).toBe(403)
     expect(h.loadSession).not.toHaveBeenCalled()
   })
 
   it('opens the signed-in member their own survey link', async () => {
-    h.invitationByToken.mockResolvedValue({ id: 'inv-1', member_id: MEMBER.id, participant_id: null })
+    h.invitationByToken.mockResolvedValue({ id: 'inv-1', member_id: MEMBER.id, participant_id: null, tenant_id: CANARY })
     const out = await resolveSession(surveyRequest(), { token: 'tok_1' }, { write: false })
     expect('error' in out).toBe(false)
     expect(h.loadSession).toHaveBeenCalledOnce()

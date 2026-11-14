@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireEventStaff } from '@/lib/authz'
+import { requireEventCrew } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { finishGroupSetup, previewGroupSetup, SETUP_STEPS, type SetupStep } from '@/lib/group-registration-setup'
 import { withAudit } from '@/lib/audit/route'
-import { loadEventRecord, refuseOutsideStellr } from '@/lib/tenancy/load-scoped'
+import { loadEventRecord, refuseOutsideStellr, refuseUnlessStellrEvent } from '@/lib/tenancy/load-scoped'
 
 // "Finish registration setup" for a group (admins + the event's managers).
 //   GET  → { items: [{ step, needed, summary }] } — what is missing, nothing sent.
@@ -23,9 +23,9 @@ type Db = ReturnType<typeof supabaseServer>
 const notFound = () => NextResponse.json({ error: 'Group registration not found' }, { status: 404 })
 
 async function guard(db: Db, id: string): Promise<{ slug: string; teacherMemberId: string | null; userId: string; tenantId: string } | Response> {
-  const staff = await requireEventStaff({ route: ROUTE })
-  if (!staff.ok) return NextResponse.json({ error: 'Forbidden' }, { status: staff.status })
-  const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(staff, 'registrations', id, {
+  const crew = await requireEventCrew({ route: ROUTE })
+  if (!crew.ok) return NextResponse.json({ error: 'Forbidden' }, { status: crew.status })
+  const loaded = await loadEventRecord<{ event_slug: string; type: string | null; teacher_member_id: string | null }>(crew, 'registrations', id, {
     db,
     select: 'event_slug, type, teacher_member_id',
     notFound,
@@ -34,9 +34,14 @@ async function guard(db: Db, id: string): Promise<{ slug: string; teacherMemberI
   if (!loaded.ok) return loaded.response
   if (loaded.row.type !== 'group') return notFound()
   // Both the preview and the run look for the group's invoice on Stellr's Stripe account.
-  const refused = refuseOutsideStellr(staff.scope)
+  // The run also sends Stellr's confirmation and follow-up mail to the group's teacher.
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
-  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, userId: staff.userId, tenantId: staff.tenantId }
+  // So the group's event must be Stellr's, for a Stellr admin too (C20c). Another tenant's
+  // answers as a missing group; a failed read of the event's owner is a retryable 503.
+  const foreign = await refuseUnlessStellrEvent(db, loaded.row.event_slug, ROUTE)
+  if (foreign) return foreign.status === 404 ? notFound() : foreign
+  return { slug: loaded.row.event_slug, teacherMemberId: loaded.row.teacher_member_id ?? null, userId: crew.userId, tenantId: crew.tenantId }
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {

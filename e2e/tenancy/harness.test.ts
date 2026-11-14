@@ -304,9 +304,11 @@ describe('the CI job', () => {
   const ci = readFileSync('.github/workflows/ci.yml', 'utf8')
   const job = (name: string) => new RegExp(`^  ${name}:\\n[\\s\\S]*?(?=^  [\\w-]+:\\n|(?![\\s\\S]))`, 'm').exec(ci)?.[0] ?? ''
 
-  it('reports only, until the owner makes it required', () => {
-    expect(job('tenant-host-routing')).toMatch(/^ {4}continue-on-error: true$/m)
-    expect(job('e2e')).toMatch(/needs: \[changes, verify, e2e-tests, storybook\]/)
+  // Required through the e2e gate since S5 B10r (owner decision W7-8(c)); the gate's
+  // behaviour is pinned in test/ci-tenant-host-routing-required.test.ts.
+  it('is required through the e2e gate, not through verify', () => {
+    expect(job('tenant-host-routing')).not.toMatch(/continue-on-error/)
+    expect(job('e2e')).toMatch(/needs: \[changes, verify, e2e-tests, storybook, tenant-host-routing\]/)
     expect(job('verify')).not.toContain('tenant-host-routing')
   })
 

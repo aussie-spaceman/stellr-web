@@ -8,12 +8,17 @@
  * Two sources of authority, chosen by AUTHZ_SOURCE (see authzSource()):
  *
  *   clerk     TODAY'S RULES, the default. The Clerk session claim
- *             metadata.role decides: 'admin' is a Stellr admin, 'event_manager'
- *             is a Stellr event manager confined to event_manager_assignments.
- *             staff_roles grants scopes only, never the portal.
+ *             metadata.role decides: 'admin' is a Stellr admin, 'staff' is
+ *             Stellr Staff (every event; what else it may do is
+ *             lib/authz/capabilities.ts), 'event_manager' is a Stellr event
+ *             manager confined to event_manager_assignments. admin_duties
+ *             grants duties only, never the portal.
  *   postgres  The S3 tables decide: platform_admins, and tenant_memberships
- *             (tenant_admin | event_manager | staff) per tenant. Clerk is used
- *             for identity (the user id) only.
+ *             (tenant_admin | staff | event_manager | duty_holder) per tenant.
+ *             Clerk is used for identity (the user id) only.
+ *
+ * Staff is Stellr's alone (13 Nov 2026): a 'staff' claim or membership counts
+ * only in the Stellr tenant, in either source, until the owner extends it.
  *
  * 'shadow' decides by clerk and compares with postgres; it is handled in
  * lib/authz.ts, so the functions here only ever see 'clerk' or 'postgres'.
@@ -112,16 +117,18 @@ export function roleFromClaims(claims: Claims): string | undefined {
   return typeof role === 'string' ? role : undefined
 }
 
+export type PortalRole = 'admin' | 'staff' | 'event_manager'
+
 /**
- * The portal role a session claim carries: 'admin', 'event_manager' or null.
- * Pure and DB-free, for proxy.ts (it runs on every request and must not query).
+ * The portal role a session claim carries: 'admin', 'staff', 'event_manager' or
+ * null. Pure and DB-free, for proxy.ts (it runs on every request and must not query).
  */
-export function portalRoleFromClaims(claims: Claims): 'admin' | 'event_manager' | null {
+export function portalRoleFromClaims(claims: Claims): PortalRole | null {
   const role = roleFromClaims(claims)
-  return role === 'admin' || role === 'event_manager' ? role : null
+  return role === 'admin' || role === 'staff' || role === 'event_manager' ? role : null
 }
 
-/** The role on a Clerk user record: what isStaffTarget takes as `clerkRole`. Not a string check: the decision makes that. */
+/** The role on a Clerk user record: what isCrewTarget takes as `clerkRole`. Not a string check: the decision makes that. */
 export function roleFromClerkUser(user: { publicMetadata?: unknown } | null | undefined): unknown {
   return (user?.publicMetadata as { role?: unknown } | null | undefined)?.role
 }
@@ -135,18 +142,19 @@ function hasMembership(p: Principal, tenantId: string, roles: readonly TenantRol
 
 /**
  * The roles a principal holds in a tenant. Under clerk only Stellr has roles,
- * read from the claim (admin -> tenant_admin, event_manager -> event_manager);
- * 'staff' is not in the claim, so clerk never reports it.
+ * read from the claim (admin -> tenant_admin, staff -> staff, event_manager ->
+ * event_manager); 'duty_holder' is not in the claim, so clerk never reports it.
  */
 export function tenantRoles(p: Principal, tenantId: string, source: DecisionSource): TenantRole[] {
   if (!p.userId) return []
   if (source === 'clerk') {
     if (tenantId !== STELLR_TENANT_ID) return []
     if (p.claimsRole === 'admin') return ['tenant_admin']
+    if (p.claimsRole === 'staff') return ['staff']
     if (p.claimsRole === 'event_manager') return ['event_manager']
     return []
   }
-  return [...new Set(p.memberships.filter((m) => m.tenantId === tenantId).map((m) => m.role))]
+  return [...new Set(p.memberships.filter((m) => m.tenantId === tenantId && (m.role !== 'staff' || tenantId === STELLR_TENANT_ID)).map((m) => m.role))]
 }
 
 /**
@@ -180,7 +188,13 @@ export function decideTenantRole(p: Principal, tenantId: string, roles: readonly
   if (source === 'clerk') {
     return tenantRoles(p, tenantId, 'clerk').some((r) => roles.includes(r)) ? { ok: true, via: 'clerk', tenantId } : DENY_403
   }
-  return hasMembership(p, tenantId, roles) ? { ok: true, via: 'membership', tenantId } : DENY_403
+  const held = hasMembership(p, tenantId, roles)
+  // Staff is Stellr's alone: a 'staff' row in another tenant grants nothing.
+  if (held === 'staff' && tenantId !== STELLR_TENANT_ID) {
+    const other = hasMembership(p, tenantId, roles.filter((r) => r !== 'staff'))
+    return other ? { ok: true, via: 'membership', tenantId } : DENY_403
+  }
+  return held ? { ok: true, via: 'membership', tenantId } : DENY_403
 }
 
 // ── Composites ──────────────────────────────────────────────────────────────
@@ -204,16 +218,18 @@ export function decideStellrAdmin(p: Principal, source: DecisionSource, contextT
  * another tenant in support mode only (postgres); under clerk a Stellr admin
  * passes Stellr.
  */
-export function decideTenantStaff(p: Principal, tenantId: string, roles: readonly TenantRole[], source: DecisionSource): Decision {
+export function decideTenantCrew(p: Principal, tenantId: string, roles: readonly TenantRole[], source: DecisionSource): Decision {
   if (!p.userId) return DENY_401
   if (source === 'postgres' && platformReaches(p, tenantId)) return { ok: true, via: 'platform', tenantId }
   return decideTenantRole(p, tenantId, roles, source)
 }
 
 /**
- * May enter the admin portal shell: an admin or an event manager. 'staff'
- * NEVER grants the portal: today a staff_roles holder without the Clerk admin
- * claim cannot enter /admin, and Stellr stays that way.
+ * May enter the admin portal shell: an admin, Staff (Stellr only) or an event
+ * manager. 'duty_holder' NEVER grants the portal: an admin_duties holder
+ * without a portal role cannot enter /admin. What Staff may do inside is
+ * lib/authz/capabilities.ts; which pages proxy.ts keeps from Staff is
+ * STAFF_HIDDEN_ADMIN_PATHS.
  */
 export function decidePortalAccess(p: Principal, source: DecisionSource, tenantId: string = STELLR_TENANT_ID): Decision {
   if (!p.userId) return DENY_401
@@ -222,7 +238,13 @@ export function decidePortalAccess(p: Principal, source: DecisionSource, tenantI
       ? { ok: true, via: 'clerk', tenantId: STELLR_TENANT_ID }
       : DENY_403
   }
-  return decideTenantStaff(p, tenantId, ['tenant_admin', 'event_manager'], 'postgres')
+  return decideTenantCrew(p, tenantId, ['tenant_admin', 'staff', 'event_manager'], 'postgres')
+}
+
+/** Stellr Staff: the 'staff' claim (clerk) or a Stellr 'staff' membership (postgres). Never on another tenant. Not an admin. */
+export function isStellrStaff(p: Principal, source: DecisionSource, contextTenantId: string = STELLR_TENANT_ID): boolean {
+  if (!p.userId || contextTenantId !== STELLR_TENANT_ID) return false
+  return tenantRoles(p, STELLR_TENANT_ID, source).includes('staff')
 }
 
 /** An event manager in `tenantId` (not an admin). */
@@ -270,8 +292,10 @@ export interface EventAccessInput {
 
 /**
  * Per-event access. An admin of the event's tenant (or a platform admin the
- * bypass reaches) sees every event; an event manager sees only their
- * assignments in that tenant; anyone else is refused.
+ * bypass reaches) sees every event; Stellr Staff sees every Stellr event but
+ * is not an admin (isAdmin false, so an admin-only branch still refuses it);
+ * an event manager sees only their assignments in that tenant; anyone else is
+ * refused.
  */
 export function decideEventAccess(p: Principal, input: EventAccessInput, source: DecisionSource): EventAccess {
   if (!p.userId) return DENY_401
@@ -280,6 +304,7 @@ export function decideEventAccess(p: Principal, input: EventAccessInput, source:
       ? input.tenantId === STELLR_TENANT_ID && p.claimsRole === 'admin'
       : platformReaches(p, input.tenantId) || hasMembership(p, input.tenantId, ['tenant_admin']) !== null
   if (admin) return { ok: true, userId: p.userId, isAdmin: true, assignedSlugs: null, tenantId: input.tenantId }
+  if (isStellrStaff(p, source, input.tenantId)) return { ok: true, userId: p.userId, isAdmin: false, assignedSlugs: null, tenantId: input.tenantId }
   if (!isEventManager(p, input.tenantId, source)) return DENY_403
   const assignedSlugs = assignedSlugsInTenant(input.assignments, input.tenantId)
   if (input.eventSlug && !assignedSlugs.includes(input.eventSlug)) return DENY_403
@@ -294,9 +319,9 @@ export function eventAccessCovers(access: EventAccess, event: { eventSlug: strin
 
 /**
  * Holds a staff scope. A Stellr admin holds every scope; otherwise the
- * member's staff_roles.scopes must include the scope or 'all'. staff_roles is
+ * member's admin_duties.scopes must include the scope or 'all'. admin_duties is
  * Stellr-only: tenants get no scopes in release 1, and the S3 mapping does not
- * carry scopes, so both sources read them from staff_roles. On any other
+ * carry scopes, so both sources read them from admin_duties. On any other
  * tenant's host (`contextTenantId`) no scope holds, in either source.
  */
 export function decideScope(
@@ -313,10 +338,27 @@ export function decideScope(
   return held.includes('all') || held.includes(scope)
 }
 
-/** Every Clerk role that opens the admin portal (legacy STAFF_CLERK_ROLES). */
-export const PORTAL_CLERK_ROLES: readonly string[] = ['admin', 'event_manager']
+/** Every Clerk role that opens the admin portal (legacy CREW_CLERK_ROLES). */
+export const PORTAL_CLERK_ROLES: readonly string[] = ['admin', 'staff', 'event_manager']
 
-export interface StaffTarget {
+/**
+ * Admin pages Staff may not open, even read-only (owner decision, 13 Nov 2026):
+ * view-as, the role and privilege pages (Duties, the access console) and
+ * privacy requests. proxy.ts sends Staff from these to /admin; each page's own
+ * admin check is the second line.
+ */
+export const STAFF_HIDDEN_ADMIN_PATHS: readonly RegExp[] = [
+  /^\/admin\/duties(\/|$)/,
+  /^\/admin\/members\/access(\/|$)/,
+  /^\/admin\/privacy-requests(\/|$)/,
+  /^\/admin\/members\/[^/]+\/view-as(\/|$)/,
+]
+
+export function isStaffHiddenAdminPath(pathname: string): boolean {
+  return STAFF_HIDDEN_ADMIN_PATHS.some((re) => re.test(pathname))
+}
+
+export interface CrewTarget {
   /** The target Clerk user's publicMetadata.role (the clerk source). */
   clerkRole: unknown
   /** The target's platform flag and memberships (the postgres source). */
@@ -325,16 +367,16 @@ export interface StaffTarget {
 }
 
 /**
- * Is the TARGET of an action (view-as, deletion) staff? Protects staff from
+ * Is the TARGET of an action (view-as, deletion) crew? Protects crew from
  * being impersonated or deleted. Clerk: the target's role opens the portal.
- * Postgres: that, or a platform admin, or a tenant_admin / event_manager
- * anywhere. This check protects, so postgres takes the union: drift between
- * Clerk and the tables can only add protection, never remove it. 'staff' alone
+ * Postgres: that, or a platform admin, or a tenant_admin / staff /
+ * event_manager anywhere. This check protects, so postgres takes the union: drift between
+ * Clerk and the tables can only add protection, never remove it. 'duty_holder' alone
  * does not count, as today.
  */
-export function decideStaffTarget(target: StaffTarget, source: DecisionSource): boolean {
+export function decideCrewTarget(target: CrewTarget, source: DecisionSource): boolean {
   if (typeof target.clerkRole === 'string' && PORTAL_CLERK_ROLES.includes(target.clerkRole)) return true
   if (source === 'clerk') return false
   if (target.platformAdmin) return true
-  return (target.memberships ?? []).some((m) => m.role === 'tenant_admin' || m.role === 'event_manager')
+  return (target.memberships ?? []).some((m) => m.role === 'tenant_admin' || m.role === 'staff' || m.role === 'event_manager')
 }

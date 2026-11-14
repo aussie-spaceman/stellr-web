@@ -1,17 +1,30 @@
 # S5: crons, rate limiter and SMMA guardrail
 
-What is built, what it does for Stellr today, and what has to happen before it does more. Plan of record: `docs/TENANCY-S5.md`. Checked against the code on 6 Nov 2026, with wave 3's Lanes A, B and C merged to `dev` (#562, #563, #564), updated on 8 Nov 2026 for wave 4's A9, B9, B10 and B13, read on their lane branches before merge, on 9 Nov 2026 for wave 5's B14 (#588) and A7 (#594), read on `dev` at `b620a113` after merge, and on 11 Nov 2026 for wave 6's B14b (#610) and A16 (#625), read on `dev` at `b8c1fba3`. Wave 3 is on production (#561, `.claude/releases/promote-2026-11-06.md`), and so is wave 4 (#587, `.claude/releases/promote-2026-11-09.md`). **Since promoted:** wave 5 (#600, 9 Nov 2026) and B14b (#612, 10 Nov 2026). A16 is on `dev` and not promoted.
+What is built, what it does for Stellr today, and what has to happen before it does more. Plan of record: `docs/TENANCY-S5.md`. Checked against the code on 6 Nov 2026, with wave 3's Lanes A, B and C merged to `dev` (#562, #563, #564), updated on 8 Nov 2026 for wave 4's A9, B9, B10 and B13, read on their lane branches before merge, on 9 Nov 2026 for wave 5's B14 (#588) and A7 (#594), read on `dev` at `b620a113` after merge, and on 11 Nov 2026 for wave 6's B14b (#610) and A16 (#625), read on `dev` at `b8c1fba3`. Wave 3 is on production (#561, `.claude/releases/promote-2026-11-06.md`), and so is wave 4 (#587, `.claude/releases/promote-2026-11-09.md`). **Since promoted:** wave 5 (#600, 9 Nov 2026), B14b (#612, 10 Nov 2026), and wave 6's Lanes A and C, A16 among them (#643, `5d18d321`, 12 Nov 2026), with A16's migration applied to production first. Updated on 12 Nov 2026 for wave 7's O2 (#650), B26a (#651), A10a (#655), B10r (#656) and A10b (#660), read on `dev` at `82472e0d`. Wave 7 is on `dev` only, not promoted.
 
 **In one line each:**
 
-- **Crons:** Stellr-only crons are limited to Stellr's rows, every cron declares `maxDuration` and audits each finished run. **Five crons run per tenant:** `surveys`, `team-profiles` and `survey-retention` (B13), and `event-emails` and `docusign-reminders` (B14). `group-invoice-sync` has no slice.
+- **Crons:** Stellr-only crons are limited to Stellr's rows, every cron declares `maxDuration` and audits each finished run. **Five crons run per tenant:** `surveys`, `team-profiles` and `survey-retention` (B13), and `event-emails` and `docusign-reminders` (B14). `group-invoice-sync` has no slice. Since wave 7 (B26a), the hosted `dev` deployment can opt in to exactly two cron steps, for the consent expiry proof.
 - **Email:** one shared daily pool for every sender, tenants included, by the owner's decision of 9 Nov 2026. A tenant's event mail is held unless `TENANT_EVENT_MAIL_ENABLED` is on (B14), and since B14b so is its signing mail.
-- **Limiter:** the Postgres store is built and its migration is on production. **Lane A's participant routes call it (A9)**, so a shadow flip now has real traffic to compare. B15 is not built, so flip only after it.
-- **SMMA:** the allow-list and the lint are built. The 4-table CHECK (B9) is applied on `dev` and production (9 Nov 2026). The browser test (B10(d)) is built and runs report-only. The self-assessment is held privately pending the owner's decision.
+- **Limiter:** the Postgres store is built and its migration is on production. **Lane A's participant routes call it (A9)**, so a shadow flip now has real traffic to compare. Since wave 7 (O2), a shadow disagreement or a store problem leaves a `RATELIMIT` row in `app_errors`. B15 is not built, so production flips only after it.
+- **SMMA:** the allow-list and the lint are built. The 4-table CHECK (B9) is applied on `dev` and production (9 Nov 2026). The browser test (B10(d)) is built and runs in `tenant-host-routing`, required through the `e2e` gate since B10r (#656, 12 Nov 2026). The self-assessment is held privately pending the owner's decision.
 
 ## Crons
 
-**There are 23, not the plan's 22.** `group-invoice-sync` arrived after the plan was written. Routes, the distinct `vercel.json` paths (28 schedule entries) and `lib/cron-scope.ts` all agree, and `test/cron-scope.test.ts` keeps them the same set. `guardCron` declines outside production, so **no cron does any work on `dev`, and proof comes only from production's `cron_runs`.**
+**There are 23, not the plan's 22.** `group-invoice-sync` arrived after the plan was written. Routes, the distinct `vercel.json` paths (28 schedule entries) and `lib/cron-scope.ts` all agree, and `test/cron-scope.test.ts` keeps them the same set. `guardCron` declines outside production, so **no cron does any work on `dev`, and proof comes only from production's `cron_runs`,** with one narrow exception for the hosted `dev` deployment (below).
+
+### The dev opt-in (B26a, wave 7)
+
+`CRON_NON_PROD_JOBS` (`lib/cron-dev-opt-in.ts`, #651, on `dev`) lets named cron steps run on the hosted `dev` deployment, so the tenant consent expiry sweep can be proven there (owner decision `W7-6`). **Unset, nothing changes anywhere.**
+
+- **Read only on the hosted `dev` deployment:** `NEXT_PUBLIC_APP_ENV` exactly `dev` and `VERCEL_ENV` `production` (the dev project's tracked branch). Never on a preview or a local run. In production it is never read: `guardCron` returns before it gets there.
+- **Two values only, comma-separated:** `email-outbox` (drains the outbox; on `dev` its mail already goes to the safelist inbox) and `membership-expiry:tenant-consent` (step 4 alone, the tenant consent sweep, and still only with `TENANT_GUARDIAN_CONSENT_ENABLED` on). Any other value is ignored, so that cron declines as before: every integration cron, the per-tenant crons and `membership-expiry` as a whole.
+- **The minor-account purge never runs off production.** `membership-expiry`'s four-step path, whose step 2 deletes self-registered minors and their logins, returns before running anywhere outside production, whatever `guardCron` let through, and any other `membership-expiry:*` value fails closed.
+- **The value is the selector.** No query parameter picks a step, so a request cannot choose its own. The consent-only run writes its `cron_runs` row under `membership-expiry`, with `{ only: 'tenant-consent', ... }` in its result.
+- **Scheduled calls run too.** Vercel's own cron calls carry the real `CRON_SECRET`, so while the variable names a job its schedule runs it: the consent sweep at 06:00 UTC daily, the outbox at 00:05, 06:05, 12:05 and 18:05 UTC. An expiry proof ages a row and calls the sweep between two 06:00 runs, or reads the scheduled run's `cron_runs` row.
+- **Mail on `dev`.** An unset `DEV_EMAIL_SAFELIST` routes every send to the role inbox (the code default); an explicitly blank one suppresses mail.
+
+Claude sets it with the Vercel CLI, after the owner's yes for that change (`W7-18`), just before P12, and clears it after P12 (`docs/TENANCY-S5.md`, wave 7). After each redeploy, confirm the `dev` deployment is READY for the expected commit (`W7-19`). The health endpoint does not report this variable, so the proof that it took is the consent-only run's `cron_runs` row, `{ only: 'tenant-consent', ... }`, and the consent flag's own health value.
 
 ### Scope classes
 
@@ -50,6 +63,11 @@ No flag: with only Stellr's work, each is the runner's plain call, so the order,
 | `team-profiles` (`lib/team-profile/store.ts`) | The daily sweep reads each student's tenant from their registration (`registrations!inner(… tenant_id)`), because `participants.tenant_id` comes with C0b, which is not on production | Calls for some participants or one event (agreement completion, registration) keep the plain path. The 550 ms gap and the 45 s budget are unchanged, and the gap is shared across tenants, since Resend's rate is one account's. If only Stellr has work and a write fails, the error is thrown again after the runner, so the route still answers 500 as today |
 | `survey-retention` (`lib/survey/retention.ts`) | Planning stays one read and now also selects `tenant_id` on `survey_distributions` and `survey_responses`. Deletions run per tenant with `includeInactive` | Still report-only unless `SURVEY_RETENTION_APPLY` is true. A person whose rows span tenants is one purge, in Stellr's slot. With apply on, deletions stop starting 45 s after the route starts (the plan read counts); anyone left is recorded as a `not_applied` failure and `notApplied` in the result. Before, such a run was cut off at `maxDuration` and recorded nothing |
 
+**Tenant invitations held (wave 7, on `dev`).** `team-profiles` sends no non-Stellr invitation. `surveys` leaves out consent-pending tenant minors and their guardians, and, since the survey-hold slice (#661), holds every other non-Stellr survey send (`W7-16`):
+
+- **`team-profiles` (A10a, #655).** Every non-Stellr invitation is held, consent-pending or not: the row is made and marked held (`last_send_error` holds `HELD_FOR_TENANT`), and no later sweep sends it, because the link would be built on Stellr's host, where the save route refuses another tenant's record. No held invitation can be released today: the staff resend answers 409 for another tenant's row. Once links are built on the tenant's host, a staff resend releases it; nothing is sent automatically (decision `W7-11`). Team profiles make no consent read, for Stellr or anyone.
+- **`surveys` (A10b, #660).** `loadEventPeople` and `buildRecipientPlan` leave out a consent-pending tenant minor and their guardian, and every send path checks again at send time (`sendQueued`, `sendReminders`, `resendInvitation`, `sendLinkEmail`); such an invitation is never sent for that event (`W7-13`). Stellr's plan and sends make no consent read and were compared byte for byte. The owner also decided to hold every non-Stellr survey send until tenant-host survey links exist (`W7-16`), built in the survey-hold slice (#661).
+
 **What changes for Stellr:** nothing in what runs. As built in wave 4, a cron with only Stellr's work read `tenants` once and could record a `tenants` failure; since wave 5 that run skips the read, so a `tenants` error in `cron_runs` can only come from a run where another tenant had work. Read it as a ledger signal, not a send failure.
 
 **Preconditions it leaves:**
@@ -74,7 +92,7 @@ From #588 (wave 5), **since promoted** in #600. A run with only Stellr's work is
 
 **The signing engine's tenant sender (B14b, wave 6).** On production since #612 (10 Nov 2026). `lib/esign/outbox.ts` sends another tenant's invitations and reminders only from that tenant's sender, as critical mail on the shared `esign_claim_email` daily allowance, or holds them. `lib/esign/completion.ts` sends a tenant envelope's completion emails from that tenant's sender; with no usable sender, or with `TENANT_EVENT_MAIL_ENABLED` off, it does not send them and does not retry. Either way nothing is sent as Stellr. One email has one sender, so a unit splits by its envelopes' tenant. `drainOutbox` reads Stellr's waiting signers first, on a read of their own (batch of 50 by default), so another tenant's held signers cannot fill the batch and Stellr keeps first call on the day's budget. Other tenants' signers are read only with the flag on, and only for tenants with a usable sender. `outboxDepth` counts Stellr's signers alone. A reminder through the provider on a tenant envelope with no sender throws `TenantSenderRequiredError` (the approved `TENANT_SENDER_REQUIRED` text) before it renews links. `sendTenantSigningInvitation` (`lib/event-emails/tenant-signing.ts`) is the checked call for a new tenant envelope; the guardian-consent flow (A16) uses it.
 
-**Tenant mail and guardian consent (A16, on `dev`).** A tenant's event emails and catch-ups leave out participants whose guardian has not signed (`unconsentedParticipantIds`, read whatever `TENANT_GUARDIAN_CONSENT_ENABLED` says); Stellr's rows make no extra read. A failed read fails the send, which retries. So A16's migration must reach a database before Lane A's code sends a tenant's mail there.
+**Tenant mail and guardian consent (A16, on production since #643, 12 Nov 2026).** A tenant's event emails and catch-ups leave out participants whose guardian has not signed (`unconsentedParticipantIds`, read whatever `TENANT_GUARDIAN_CONSENT_ENABLED` says); Stellr's rows make no extra read. A failed read fails the send, which retries. So A16's migration must reach a database before Lane A's code sends a tenant's mail there.
 
 **Before the flag is set anywhere:** the tenant's Reply-To is set, and the tenant's events resolve through the events facade (until C8 and C25 give it a Postgres path, that means the CMS, which holds no tenant event).
 
@@ -96,7 +114,7 @@ From #588 (wave 5), **since promoted** in #600. A run with only Stellr's work is
 
 **Not limited, on purpose:**
 
-- **`membership-expiry`.** Its participants and agreements reads only hold an account back from deletion. Limiting them would delete a person another tenant still holds records for. **A16 (#625, on `dev`)** adds a fourth step, only with `TENANT_GUARDIAN_CONSENT_ENABLED` on: `sweepTenantGuardianConsents`, at most 25 rows for each of its steps, which retries failed removals, expires pending consents past their window and removes their registration through the deletion registry, for a pending consent past its window, settles it signed if its envelope completed without its hook, and voids consent envelopes no longer needed. It works on other tenants' rows by design. With the flag off it reads nothing and the run's result keys are unchanged; with it on the result gains `tenantGuardianConsent`, and failures are recorded as `tenant-guardian-consent:<id>`. Its retries have no cap yet (tracker `s5-programme.26`).
+- **`membership-expiry`.** Its participants and agreements reads only hold an account back from deletion. Limiting them would delete a person another tenant still holds records for. **A16 (#625, on production since #643, 12 Nov 2026)** adds a fourth step, only with `TENANT_GUARDIAN_CONSENT_ENABLED` on: `sweepTenantGuardianConsents`, at most 25 rows for each of its steps, which retries failed removals, expires pending consents past their window and removes their registration through the deletion registry, for a pending consent past its window, settles it signed if its envelope completed without its hook, and voids consent envelopes no longer needed. It works on other tenants' rows by design. With the flag off it reads nothing and the run's result keys are unchanged; with it on the result gains `tenantGuardianConsent`, and failures are recorded as `tenant-guardian-consent:<id>`. Its retries have no cap yet (tracker `s5-programme.26`).
 - **`alumni-upgrades`, `campaigns`, `campaign-drip`, `campaign-events`.** They pick their audience from shared `members`, with no tenant column to filter on. Who counts as a Stellr member is the open B3 decision, and `test/cron-scope.test.ts` pins the list. **Settle it before the first non-owner event**, or tenant registrants could get Stellr marketing or Alumni grants.
 - **`weekly-digest`, member sections.** New and departed members, new mentors, the verification queue and reactions read shared data. Same decision.
 
@@ -152,12 +170,20 @@ ORDER BY r.job;
 | Mode | The decision comes from | Postgres |
 |---|---|---|
 | `memory` (default) | The in-memory limiter | Never called. The gc does nothing |
-| `shadow` | The in-memory limiter | Also counted. A disagreement logs `[rate-limit] shadow disagreement` |
+| `shadow` | The in-memory limiter | Also counted. A disagreement logs `[rate-limit] shadow disagreement` and, since O2, leaves a `RATELIMIT <label>` row in `app_errors` |
 | `postgres` | Postgres, or memory if the store cannot answer | Counted and decides |
 
 Every mode counts in memory first. **A request memory has already denied stops there, with no database call.** So shadow can only ever log "memory allowed, store denied", which is exactly the question it is there to answer: would the shared count refuse someone today's limiter lets through?
 
-**Failure is never allow-all.** The store gets 300 ms, enforced by the app and by `lock_timeout` in the function. A timeout, an error, an odd answer or a missing secret means the caller keeps its in-memory decision. Problems go to `console.error` at most once a minute per instance, not to `app_errors` as scoping proposed, so they vanish with Hobby's short log retention.
+**Failure is never allow-all.** The store gets 300 ms, enforced by the app and by `lock_timeout` in the function. A timeout, an error, an odd answer or a missing secret means the caller keeps its in-memory decision. Problems go to `console.error` at most once a minute per instance.
+
+**`RATELIMIT` rows in `app_errors` (O2, wave 7, #650, on `dev`; owner decision `W7-8`).** So a `dev` soak has something to read after Vercel's short log retention:
+
+- **A shadow disagreement** writes `RATELIMIT <label>` with the text `shadow_disagreement memory=allow|deny store=allow|deny`. The label is the route name from the code, never the key. A memory denial stops before the store, so in practice only `memory=allow store=deny` appears. `postgres` mode, and a store that does not answer in time, write no disagreement row.
+- **A store problem** writes `RATELIMIT store` with `store_timeout`, `store_failed code=<SQLSTATE, PGRSTnnn, unknown, threw or unexpected_shape>` or `store_skipped_no_secret`, each at most once a minute per instance. The code is kept only when it has a SQLSTATE or PostgREST shape; an error message is never written.
+- **Never a key, an IP, an HMAC, a secret or an error message** (a test scans every row's payload).
+- **Its own cap:** each distinct row at most once a minute, and at most 5 `RATELIMIT` rows a minute per instance in all, so the limiter cannot use up `app_errors`' shared 30 writes a minute and hide `AUTHZ`, `TENANTDB` or `LOADSCOPED` rows during an overlapping flip.
+- **Nothing new in `memory` mode,** today's default everywhere: `lib/app-errors` loads by dynamic import only when there is a row to write, so the proxy bundle is unchanged.
 
 **Store budget (A9).** Every new key is a new row, and a `rateLimit()` key suffix holds what the client sent (a slug, a token). So in `shadow` and `postgres` each route gives an IP 2,000 store calls an hour for suffixed keys, per instance, kept in a bounded map of its own so a spray of keys cannot evict it. Past that the IP keeps its in-memory decision on that route, as in `memory` mode. It slows the rows one client can write and adds no limit, and it is not a firm bound: a client rotating addresses, IPv6 within a prefix included, is not held by it. `limit()` has no budget, because its keys need not hold the IP: check-in's by-name count therefore always reaches the store, and an IP spraying names and slugs before the token check writes about one row per request. Watch `rate_limit_hits` during shadow. Whether that path gets an unsuffixed per-IP cap first is an owner decision (wave 4), since a venue's shared IP would feel it.
 
@@ -176,9 +202,9 @@ One row per active key, one RPC per limited request, no WAL. One take in 100 als
 
 ### Flip procedure
 
-**Not yet: B15 comes first.** A9 is built; without B15, shadow covers Lane A's routes only.
+**Not yet on production: B15 comes first.** A9 is built; without B15, shadow covers Lane A's routes only. On `dev`, wave 7's P5 runs shadow on A9's routes alone, as a watch-only flip with the owner's yes (`W7-2`), after `RATE_LIMIT_KEY_SECRET` is created there; its signals are `rate_limit_hits` growing, `rateLimitStore.secretUsable` true on the health route, and 0 `RATELIMIT` rows.
 
-1. **Adopt.** A9 (built) and B15 move routes to the async API with the same limits, keys and 429 body. Every call is awaited (`test/rate-limit-await.test.ts`), because a Promise is truthy and an un-awaited guard blocks every request. A9's store and budget paths have run only against a mocked store, so the first shadow flip on `dev` is their first real run. `RATE_LIMIT_STORE`'s value on `dev` was not read for this record.
+1. **Adopt.** A9 (built) and B15 move routes to the async API with the same limits, keys and 429 body. Every call is awaited (`test/rate-limit-await.test.ts`), because a Promise is truthy and an un-awaited guard blocks every request. A9's store and budget paths have run only against a mocked store, so the first shadow flip on `dev` is their first real run. On 12 Nov 2026 (P0) no S5 switch was set on `stellr-web-dev`, so `RATE_LIMIT_STORE` is unset there (`memory`), and `rate_limit_hits` on the `dev` database was empty.
 2. **Secret.** The owner creates `RATE_LIMIT_KEY_SECRET` per project. It is never pasted in chat or the repo.
 3. **`dev` first**, then a redeploy of the newest READY deployment. Read a fresh list: a stored deployment id goes stale.
 4. **Production `shadow`**, outside event hours, for at least 7 days, with a real event in the window if one is coming. Hobby's logs are short, so read them during the event.
@@ -252,7 +278,7 @@ Migration `20261106234759_community_stellr_only_check.sql`, built in wave 4, app
 
 ### The browser gate (B10(d), B9)
 
-Built in wave 4, on a harness production build with Chromium, and run by `tenant-host-routing`, which stays report-only:
+Built in wave 4, on a harness production build with Chromium, and run by `tenant-host-routing`. Since B10r (#656, 12 Nov 2026) that job is required through the `e2e` gate: it has no `continue-on-error`, and `e2e` fails unless it succeeded. Branch protection still names `e2e`, not the job:
 
 - `e2e/tenancy/no-trackers.spec.ts`: for both canary tenants, no third-party or `/_vercel` request, no CSP violation, no `window.dataLayer` or `gtag`, no banner, no tracker cookie and no hydration error. Every third-party request is aborted in the browser. The localhost control on the same build shows GTM, HubSpot, Vercel Analytics, Speed Insights, `dataLayer` and the banner loading.
 - `e2e/tenancy/community-unreachable.spec.ts`: all 80 community and home entries answer 404 on a tenant host and on an unknown zone host, with a Stellr-host control.
@@ -264,8 +290,8 @@ The harness has no CMS, so the register form and check-in page have not been ope
 | Control | Slice |
 |---|---|
 | The two community `TODO(S5)` IDOR snapshot entries: the check now holds those tables to Stellr or NULL, and Lane C changes the text | Lane C, after B9 |
-| Team-leader add and edit and the roster sheet import | **Built in A8** (#625, on `dev`): on another tenant's group they write participant rows only, with no member row, school link, event history, agreement or payment link |
+| Team-leader add and edit and the roster sheet import | **Built in A8** (#625, on production since #643, 12 Nov 2026): on another tenant's group they write participant rows only, with no member row, school link, event history, agreement or payment link |
 | A tenant sender for the signing engine, so `docusign-reminders` can chase a tenant's envelopes | **Built in B14b** (#610, on production), behind `TENANT_EVENT_MAIL_ENABLED` |
-| `tenant-host-routing` as a required check | Owner decision |
+| `tenant-host-routing` as a required check | **Built in B10r** (#656, on `dev`): required through the `e2e` gate (owner decision `W7-8`), proven by a deliberately red throwaway PR (#657, closed unmerged) |
 
 Until then, keep `TENANT_ROUTING_ENABLED` off on any deployment with a zone attached (see `docs/TENANCY-S5.md`, Real tenant hosts).

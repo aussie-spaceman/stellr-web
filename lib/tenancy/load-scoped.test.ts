@@ -36,7 +36,7 @@ type Row = Record<string, unknown>
 type Pred = (row: Row, embed: Row | null) => boolean
 
 const CANARY = '00000000-0000-4000-8000-0000000000c1'
-const STAFF = { kind: 'staff' as const, memberId: 'm-staff' }
+const CREW = { kind: 'crew' as const, memberId: 'm-crew' }
 
 /** child table -> parent table -> FK column on the child. */
 const FKS: Record<string, Record<string, string>> = {
@@ -162,7 +162,7 @@ async function bytes(res: Response) {
   return { status: res.status, headers: [...res.headers.entries()], body: await res.text() }
 }
 
-const stellr = stellrScope(STAFF, null)
+const stellr = stellrScope(CREW, null)
 const canary = makeScope({ tenantId: CANARY, eventSlugs: null, actor: { kind: 'tenant_admin', memberId: 'm-canary' } })
 const nevadaManager = stellrScope({ kind: 'event_manager', memberId: 'm-em' }, ['nevada'])
 
@@ -207,7 +207,7 @@ describe('ScopeContext', () => {
     expect(isStellrScope(canary)).toBe(false)
   })
   it('lower-cases the tenant id and de-duplicates event slugs', () => {
-    const s = makeScope({ tenantId: CANARY.toUpperCase(), eventSlugs: ['a', 'a', 'b'], actor: { kind: 'staff' } })
+    const s = makeScope({ tenantId: CANARY.toUpperCase(), eventSlugs: ['a', 'a', 'b'], actor: { kind: 'crew' } })
     expect(s.tenantId).toBe(CANARY)
     expect(s.eventSlugs).toEqual(['a', 'b'])
     expect(Object.isFrozen(s.eventSlugs)).toBe(true)
@@ -215,15 +215,15 @@ describe('ScopeContext', () => {
     expect(isEventScoped(s)).toBe(true)
   })
   it('refuses a bad tenant, actor or event list', () => {
-    expect(() => makeScope({ tenantId: 'nope', eventSlugs: null, actor: { kind: 'staff' } })).toThrow(TenantContextError)
-    expect(() => makeScope({ tenantId: undefined, eventSlugs: null, actor: { kind: 'staff' } })).toThrow(TenantContextError)
+    expect(() => makeScope({ tenantId: 'nope', eventSlugs: null, actor: { kind: 'crew' } })).toThrow(TenantContextError)
+    expect(() => makeScope({ tenantId: undefined, eventSlugs: null, actor: { kind: 'crew' } })).toThrow(TenantContextError)
     expect(() => makeScope({ tenantId: CANARY, eventSlugs: null, actor: { kind: 'root' } })).toThrow(/actor kind/)
-    expect(() => makeScope({ tenantId: CANARY, eventSlugs: null, actor: { kind: 'staff', memberId: '' } })).toThrow(/memberId/)
-    expect(() => makeScope({ tenantId: CANARY, eventSlugs: null, actor: { kind: 'staff', memberId: 7 } })).toThrow(/memberId/)
-    expect(() => makeScope({ tenantId: CANARY, eventSlugs: [''], actor: { kind: 'staff' } })).toThrow(/eventSlugs/)
-    expect(() => makeScope({ tenantId: CANARY, eventSlugs: [3], actor: { kind: 'staff' } })).toThrow(/eventSlugs/)
+    expect(() => makeScope({ tenantId: CANARY, eventSlugs: null, actor: { kind: 'crew', memberId: '' } })).toThrow(/memberId/)
+    expect(() => makeScope({ tenantId: CANARY, eventSlugs: null, actor: { kind: 'crew', memberId: 7 } })).toThrow(/memberId/)
+    expect(() => makeScope({ tenantId: CANARY, eventSlugs: [''], actor: { kind: 'crew' } })).toThrow(/eventSlugs/)
+    expect(() => makeScope({ tenantId: CANARY, eventSlugs: [3], actor: { kind: 'crew' } })).toThrow(/eventSlugs/)
     expect(() =>
-      makeScope({ tenantId: CANARY, eventSlugs: 'nevada' as unknown as string[], actor: { kind: 'staff' } }),
+      makeScope({ tenantId: CANARY, eventSlugs: 'nevada' as unknown as string[], actor: { kind: 'crew' } }),
     ).toThrow(/array/)
   })
   it('an event manager must list their events; an empty list stays empty', () => {
@@ -232,21 +232,21 @@ describe('ScopeContext', () => {
     expect(none.eventSlugs).toEqual([])
   })
   it('an omitted event list is refused, never read as every event', () => {
-    const noList = { tenantId: CANARY, actor: { kind: 'staff' } } as unknown as Parameters<typeof makeScope>[0]
+    const noList = { tenantId: CANARY, actor: { kind: 'crew' } } as unknown as Parameters<typeof makeScope>[0]
     expect(() => makeScope(noList)).toThrow(/must be listed/)
-    expect(() => stellrScope(STAFF, undefined as unknown as null)).toThrow(/must be listed/)
-    expect(stellrScope(STAFF, null).eventSlugs).toBeNull()
+    expect(() => stellrScope(CREW, undefined as unknown as null)).toThrow(/must be listed/)
+    expect(stellrScope(CREW, null).eventSlugs).toBeNull()
   })
   it('an event slug cannot carry PostgREST list syntax', () => {
     for (const bad of ['x",other-event,"y', 'a,b', 'a b', '(a)', 'x'.repeat(201)]) {
-      expect(() => makeScope({ tenantId: CANARY, eventSlugs: [bad], actor: { kind: 'staff' } })).toThrow(/event slugs/)
+      expect(() => makeScope({ tenantId: CANARY, eventSlugs: [bad], actor: { kind: 'crew' } })).toThrow(/event slugs/)
     }
-    expect(makeScope({ tenantId: CANARY, eventSlugs: ['nevada-2026.a_b:c'], actor: { kind: 'staff' } }).eventSlugs).toEqual([
+    expect(makeScope({ tenantId: CANARY, eventSlugs: ['nevada-2026.a_b:c'], actor: { kind: 'crew' } }).eventSlugs).toEqual([
       'nevada-2026.a_b:c',
     ])
   })
   it('a look-alike object is refused, in every mode', async () => {
-    const forged = { tenantId: STELLR_TENANT_ID, eventSlugs: null, actor: STAFF } as ScopeContext
+    const forged = { tenantId: STELLR_TENANT_ID, eventSlugs: null, actor: CREW } as ScopeContext
     const { db, calls } = fakeDb(seed())
     const legacy = vi.fn(async () => ({ data: { id: ID.member }, error: null }))
     expect(() => planScope(forged, 'registrations')).toThrow(/makeScope/)
@@ -328,14 +328,14 @@ describe('planScope', () => {
     expect(planScope(nevadaManager, 'registrations').reachesNothing).toBe(false)
   })
   it('wrapped data keys are never planned, for any actor or tenant', () => {
-    for (const kind of ['staff', 'tenant_admin', 'platform_admin', 'system'] as const) {
+    for (const kind of ['crew', 'tenant_admin', 'platform_admin', 'system'] as const) {
       expect(() => planScope(stellrScope({ kind, memberId: null }, null), 'tenant_data_keys')).toThrow(/never read/)
     }
     expect(() => planScope(canary, 'tenant_data_keys')).toThrow(/never read/)
   })
   it('the platform audit and admin tables need a platform actor in Stellr scope', () => {
     for (const t of ['platform_admins', 'platform_audit_events']) {
-      for (const kind of ['staff', 'tenant_admin'] as const) {
+      for (const kind of ['crew', 'tenant_admin'] as const) {
         expect(() => planScope(stellrScope({ kind, memberId: null }, null), t)).toThrow(/platform actor/)
       }
       for (const kind of ['platform_admin', 'system'] as const) {
@@ -765,7 +765,7 @@ describe('loadScoped (shadow)', () => {
         reason: 'presence',
         legacyFound: true,
         scopedFound: false,
-        actorKind: 'staff',
+        actorKind: 'crew',
       },
     ])
   })
@@ -877,7 +877,7 @@ describe('loadScoped (shadow)', () => {
     expect(captureRequestError).toHaveBeenCalledTimes(1)
     const [err, req, ctx] = captureRequestError.mock.calls[0] as [Error, { method: string; path: string }, { routePath: string }]
     expect(err.message).toBe(
-      'loadScoped shadow mismatch: public.registrations presence (legacy found, scoped missing, actor staff)',
+      'loadScoped shadow mismatch: public.registrations presence (legacy found, scoped missing, actor crew)',
     )
     expect(err.message).not.toContain(ID.canaryReg)
     expect(req).toEqual({ method: 'LOADSCOPED', path: 'public.registrations' })

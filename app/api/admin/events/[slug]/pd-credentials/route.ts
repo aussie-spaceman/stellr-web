@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
+import { crewActorType } from '@/lib/activity-log'
 import { supabaseServer } from '@/lib/supabase'
-import { requireEventRoute } from '@/lib/authz'
+import { hasCapability, requireEventRoute } from '@/lib/authz'
 import { getEventBySlug } from '@/lib/events/repo'
 import { eventTitleFromRegistrations, stellrOnlyDb } from '@/lib/events/admin-records'
 import { getSignedInMember } from '@/lib/community'
-import { issueCredential, CREDENTIAL_COLUMNS } from '@/lib/credentials'
+import { issueCredential, CredentialNotIssuedError, CREDENTIAL_COLUMNS } from '@/lib/credentials'
 import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 import { logActivity } from '@/lib/activity-log'
 import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
@@ -33,10 +34,10 @@ type Ctx = { params: Promise<{ slug: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
 
-  const { data, error } = await loadScopedRows(staff.scope, 'credentials', {
+  const { data, error } = await loadScopedRows(crew.scope, 'credentials', {
     db: supabaseServer(),
     select: CREDENTIAL_COLUMNS,
     match: { event_slug: slug, source: 'pd' },
@@ -44,7 +45,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     label: ROUTE,
   })
   if (error) return NextResponse.json({ error: (error as { message?: string }).message }, { status: 500 })
-  return NextResponse.json({ credentials: data ?? [], canIssue: staff.isAdmin && isStellrScope(staff.scope) })
+  return NextResponse.json({ credentials: data ?? [], canIssue: (crew.isAdmin || (await hasCapability('competitions:write', { route: ROUTE }))) && isStellrScope(crew.scope) })
 }
 
 export const POST = withAudit(
@@ -57,11 +58,11 @@ export const POST = withAudit(
 // sent; a correction is revoke + issue again.
 async function issuePdCredential(req: Request, { params }: Ctx) {
   const { slug } = await params
-  const staff = await requireEventRoute(slug, { route: ROUTE })
-  if (!staff.ok) return staff.response
-  if (!staff.isAdmin) return NextResponse.json({ error: 'Only admins can record PD hours' }, { status: 403 })
-  noteAuditSubject(req, { userId: staff.userId, tenantId: staff.tenantId, eventSlug: slug })
-  const refused = refuseOutsideStellr(staff.scope)
+  const crew = await requireEventRoute(slug, { route: ROUTE })
+  if (!crew.ok) return crew.response
+  if (!crew.isAdmin && !(await hasCapability('competitions:write', { route: ROUTE }))) return NextResponse.json({ error: 'Only admins and Staff can record PD hours' }, { status: 403 })
+  noteAuditSubject(req, { userId: crew.userId, tenantId: crew.tenantId, eventSlug: slug })
+  const refused = refuseOutsideStellr(crew.scope)
   if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as { memberId?: unknown; hours?: unknown }
@@ -76,7 +77,7 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
       .select('id, first_name, last_name, email, date_of_birth, is_active')
       .eq('id', memberId)
       .maybeSingle(),
-    eventFor(staff.scope, slug),
+    eventFor(crew.scope, slug),
   ])
   if (!member || member.is_active === false) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
@@ -107,6 +108,12 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
       activityLocation: location,
     })
   } catch (err) {
+    // A refusal (S5 A10a: another organisation's event) is a conflict with the event's
+    // owner, not a server fault, so it answers 409 with the reason (owner-approved
+    // follow-up, 13 Nov 2026). Anything else is still a 500.
+    if (err instanceof CredentialNotIssuedError) {
+      return NextResponse.json({ error: err.message, reason: err.reason }, { status: 409 })
+    }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
   noteAuditSubject(req, { id: (result.row as { id?: string }).id ?? null, detail: { created: result.created } })
@@ -120,14 +127,16 @@ async function issuePdCredential(req: Request, { params }: Ctx) {
     await logActivity({
       memberId: member.id,
       category: 'account',
-      actorType: 'admin',
+      actorType: await crewActorType(),
       actorMemberId: actor?.id ?? null,
       action: 'pd_credential_issued',
       summary: `PD credential issued: ${formatPdHours(hours)} hours at ${eventTitle} (${result.row.number})`,
     })
   }
 
-  return NextResponse.json({ ok: true, created: result.created, emailed, credential: result.row })
+  // The row carries its tenant for the email's check (S5 A10a); the response stays as it was.
+  const { tenant_id: _tenantId, ...credential } = result.row
+  return NextResponse.json({ ok: true, created: result.created, emailed, credential })
 }
 
 type EventFacts = { title?: string; type?: string; date?: string | null; venue?: string | null; city?: string | null; state?: string | null }

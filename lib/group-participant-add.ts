@@ -85,8 +85,8 @@ export async function addParticipantToGroup(
   actor: Actor,
 ): Promise<AddParticipantResult> {
   const registrationId = registration.id
-  const isStaff = actor.label === 'admin'
-  const logTag = isStaff ? '[admin/registrations/participants]' : '[teams/participants]'
+  const isCrew = actor.label === 'admin'
+  const logTag = isCrew ? '[admin/registrations/participants]' : '[teams/participants]'
 
   // S5 A8: whose rules apply. Stellr's group makes no read here.
   const roster = await resolveRosterContext(db, registration, logTag)
@@ -120,7 +120,7 @@ export async function addParticipantToGroup(
     // unknown one does: an organiser is refused, and staff carry on with what they typed.
     const onFile = tenantGroup ? null : await getMemberOnFileByMembershipId(db, membershipId)
     if (
-      !isStaff &&
+      !isCrew &&
       (!onFile ||
         !confirmsMemberLastName(body.last_name, onFile) ||
         !checkRegistrationAge(onFile.date_of_birth).ok)
@@ -303,7 +303,7 @@ export async function addParticipantToGroup(
   })
 
   // The answer names the slot as submitted.
-  const answered = linkedMemberId && !isStaff
+  const answered = linkedMemberId && !isCrew
     ? { id: participant.id, first_name: text(body.first_name), last_name: text(body.last_name) }
     : withoutTenantId(participant as Record<string, unknown>)
 

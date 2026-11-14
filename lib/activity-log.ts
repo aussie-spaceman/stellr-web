@@ -9,6 +9,7 @@
 // webhook or a profile save can't break the originating action if logging fails.
 // The exception is logActivityOrThrow, for the rows an action must not run without.
 
+import { roleFromClaims } from '@/lib/authz/decide'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
@@ -26,7 +27,7 @@ export type ActivityCategory =
   | 'compliance'
   | 'survey'
 
-export type ActorType = 'admin' | 'member' | 'system' | 'stripe' | 'docusign'
+export type ActorType = 'admin' | 'staff' | 'member' | 'system' | 'stripe' | 'docusign'
 
 export interface Actor {
   actorType: ActorType
@@ -113,19 +114,33 @@ function toRow(input: LogActivityInput) {
 
 /**
  * Resolve the acting party from the current Clerk session. Returns actorType
- * 'admin' when the session carries the admin role claim, otherwise 'member'.
+ * 'admin' for the admin role claim, 'staff' for Staff (13 Nov 2026), otherwise
+ * 'member'.
  * actorMemberId is the linked members.id when one exists (admins may not have a
  * member row); actorLabel is a denormalised display name/email snapshot.
  *
  * Safe to call best-effort: on any failure it falls back to a 'system' actor.
  */
+/**
+ * For a write from the admin portal: 'staff' when Staff made it, else 'admin'.
+ * Routes that used to record every portal write as 'admin' call this, so a Staff
+ * change is never written down as an admin's.
+ */
+export async function crewActorType(): Promise<'admin' | 'staff'> {
+  try {
+    const { sessionClaims } = await auth()
+    return roleFromClaims(sessionClaims) === 'staff' ? 'staff' : 'admin'
+  } catch {
+    return 'admin'
+  }
+}
+
 export async function actorFromAuth(): Promise<Actor> {
   try {
     const { userId, sessionClaims } = await auth()
     if (!userId) return { actorType: 'system' }
 
-    const isAdmin =
-      (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
+    const role = roleFromClaims(sessionClaims)
     const actorMemberId = await memberIdForClerkUser(userId)
 
     let actorLabel: string | null = null
@@ -142,7 +157,7 @@ export async function actorFromAuth(): Promise<Actor> {
     }
 
     return {
-      actorType: isAdmin ? 'admin' : 'member',
+      actorType: role === 'admin' ? 'admin' : role === 'staff' ? 'staff' : 'member',
       actorMemberId,
       actorLabel,
     }

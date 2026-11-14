@@ -48,7 +48,7 @@ export function isAdultByRole(m: { age_bracket?: string | null; event_role?: str
 export async function sendAccountInvite(
   db: SupabaseClient,
   memberId: string,
-  { actorMemberId, force = false }: { actorMemberId?: string | null; force?: boolean } = {},
+  { actorMemberId, actorType = 'admin', force = false }: { actorMemberId?: string | null; actorType?: 'admin' | 'staff'; force?: boolean } = {},
 ): Promise<AccountInviteResult> {
   const { data: member } = await db
     .from('members')
@@ -95,7 +95,7 @@ export async function sendAccountInvite(
         await logActivity({
           memberId: member.id,
           category: 'account',
-          actorType: 'admin',
+          actorType,
           actorMemberId: actorMemberId ?? null,
           action: 'account_login_adult_by_role',
           summary: `Login created with no date of birth on file: recorded as an adult (${member.event_role}, ${member.age_bracket}) by an admin`,
@@ -123,7 +123,7 @@ export async function sendAccountInvite(
   await logActivity({
     memberId: member.id,
     category: 'account',
-    actorType: 'admin',
+    actorType,
     actorMemberId: actorMemberId ?? null,
     action: 'account_invite_sent',
     summary: `Account invite emailed to ${member.email}`,

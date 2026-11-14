@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentTenantId, requireTenantStaff } from '@/lib/authz'
+import { currentTenantId, requireTenantCrew } from '@/lib/authz'
 import { withdrawQuote } from '@/lib/survey/withdraw'
 import { actorFromAuth } from '@/lib/activity-log'
 import { withAudit } from '@/lib/audit/route'
@@ -31,7 +31,7 @@ const notFound = () => NextResponse.json({ error: 'Not found, not submitted, or 
 // POST /api/admin/surveys/responses/[id]/withdraw-quote — an admin withdraws a
 // response's quote (e.g. on a parent's request). Permanent; logged.
 async function withdraw(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: admin.status === 401 ? 'Unauthorised' : 'Admins only' }, { status: admin.status })
   const { userId } = await auth()
   const { id } = await params

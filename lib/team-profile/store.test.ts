@@ -137,7 +137,7 @@ describe('the daily sweep with two tenants', () => {
   })
 
   it('stops a tenant that overran its slice from sending to its next student', async () => {
-    const { db } = setup([student('s1', 'a-event', null), student('s2', 'a-event', null), student('b1', 'b-event', TENANT_B)])
+    const { db, calls } = setup([student('s1', 'a-event', null), student('s2', 'a-event', null), student('b1', 'b-event', TENANT_B)])
     sendEmail.mockImplementation(async (msg: Row) => {
       if (msg.to === 's1@example.test') await new Promise((r) => setTimeout(r, 1_000))
     })
@@ -150,9 +150,14 @@ describe('the daily sweep with two tenants', () => {
     const result = await dispatchTeamProfiles(db, { budgetMs: 1_400, run, slice: { floorMs: 10, overrunMs: 10 } })
     await new Promise((r) => setTimeout(r, 1_200))
 
-    expect(recipients()).toEqual(['s1@example.test', 'b1@example.test'])
+    // s2 is never sent: Stellr's slice ran out. Tenant B's job still runs and reaches
+    // b1, whose invitation is held rather than sent (another tenant's link, S5 A10a).
+    expect(recipients()).toEqual(['s1@example.test'])
     expect(fails.map((f) => f.where)).toEqual([`t:${STELLR}:slice`])
-    expect((result as unknown as { tenants: Record<string, Row> }).tenants[STELLR]).toMatchObject({ ok: false })
+    const tenants = (result as unknown as { tenants: Record<string, Row> }).tenants
+    expect(tenants[STELLR]).toMatchObject({ ok: false })
+    expect(tenants[TENANT_B]).toMatchObject({ ok: true, sent: 0, waiting: 1 })
+    expect(calls.some((c) => c.table === 'team_profiles' && c.op === 'insert' && (c.payload as Row).participant_id === 'b1')).toBe(true)
   }, 15_000)
 })
 

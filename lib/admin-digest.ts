@@ -10,6 +10,7 @@
 //
 // Report only. Nothing here writes.
 
+import { EMPTY_STAFF_DIGEST, loadStaffDigest, type StaffDigest } from '@/lib/staff-digest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventsBySlugs } from '@/lib/events/repo'
@@ -144,6 +145,8 @@ export interface MemberDigest {
       deletions: QueueItem[]
     }
   }
+  /** The Staff role (phase 4): grants, exports, unusual minor-record viewing, quarterly review. */
+  staff?: StaffDigest
   /** Sections that failed to load, so a partial digest says so instead of showing zeros. */
   errors: string[]
 }
@@ -557,8 +560,9 @@ export async function loadMemberDigest(days: number, opts: { now?: Date; db?: Su
 
     loadOutstanding(db, section),
   ])
+  const staff = await section('staff', EMPTY_STAFF_DIGEST, () => loadStaffDigest(db, { start: w.start, end: w.end }, opts.now))
 
-  return { window: w, generatedAt: new Date().toISOString(), growth, left, engagement, mentoring, outstanding, errors }
+  return { window: w, generatedAt: new Date().toISOString(), growth, left, engagement, mentoring, outstanding, staff, errors }
 }
 
 type Section = <T>(name: string, fallback: T, load: () => Promise<T>) => Promise<T>

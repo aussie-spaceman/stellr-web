@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { hasCapability } from '@/lib/authz'
 import { supabaseServer } from '@/lib/supabase'
-import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { claimUpload, discardUpload } from '@/lib/uploads'
 import { contentTypeFor } from '@/lib/file-sniff'
@@ -40,7 +40,7 @@ function scopeOf(theme: unknown, event: unknown): PdScope | null {
 }
 
 export async function GET(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('portal:read'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const search = new URL(req.url).searchParams
   const scope = scopeOf(search.get('theme'), search.get('event'))
   if (!scope) return NextResponse.json({ error: 'Unknown event' }, { status: 400 })
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('competitions:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = (await req.json().catch(() => ({}))) as {
     theme?: unknown; event?: unknown; page?: unknown; storagePath?: unknown; layout?: unknown
   }
@@ -108,7 +108,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('competitions:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const search = new URL(req.url).searchParams
   const scope = scopeOf(search.get('theme'), search.get('event'))
   const page = search.get('page')

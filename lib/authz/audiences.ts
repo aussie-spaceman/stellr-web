@@ -3,9 +3,9 @@
  * Nothing imports this yet; B17 moves lib/notify.ts, the weekly digest and the
  * event-email audiences onto it.
  *
- * Stellr keeps today's sources exactly, whatever AUTHZ_SOURCE says: staff_roles
+ * Stellr keeps today's sources exactly, whatever AUTHZ_SOURCE says: admin_duties
  * scopes for staff, event_manager_assignments for managers. Those rows are read
- * even if the role mapping has not run. Another tenant has no staff_roles, so
+ * even if the role mapping has not run. Another tenant has no admin_duties, so
  * its staff audience is its tenant_admin memberships, and its managers need an
  * assignment and a membership in that tenant. One tenant's audience never
  * includes another's people, and a platform admin is not implied.
@@ -24,11 +24,11 @@ import { AuthzLookupError } from './principal'
 import { activeAssignmentFilter } from '@/lib/event-manager-active'
 
 /** Member ids of a tenant's staff. For Stellr, holders of any of `scopes`; another tenant's admins carry no scopes. */
-export async function staffAudienceMemberIds(db: SupabaseClient, tenantId: string, scopes: readonly string[]): Promise<string[]> {
+export async function dutyAudienceMemberIds(db: SupabaseClient, tenantId: string, scopes: readonly string[]): Promise<string[]> {
   if (tenantId === STELLR_TENANT_ID) {
     if (scopes.length === 0) return []
-    const { data, error } = await db.from('staff_roles').select('member_id').overlaps('scopes', [...scopes])
-    if (error) throw new AuthzLookupError('staff_roles')
+    const { data, error } = await db.from('admin_duties').select('member_id').overlaps('scopes', [...scopes])
+    if (error) throw new AuthzLookupError('admin_duties')
     return unique(((data ?? []) as { member_id: string | null }[]).map((r) => r.member_id))
   }
   const { data, error } = await db.from('tenant_memberships').select('member_id, clerk_user_id').eq('tenant_id', tenantId).eq('role', 'tenant_admin')
@@ -46,8 +46,8 @@ export async function staffAudienceMemberIds(db: SupabaseClient, tenantId: strin
 }
 
 /** Emails of a tenant's active staff, trimmed, lower-cased and unique, as the weekly digest builds them today. */
-export async function staffAudienceEmails(db: SupabaseClient, tenantId: string, scopes: readonly string[]): Promise<string[]> {
-  const ids = await staffAudienceMemberIds(db, tenantId, scopes)
+export async function dutyAudienceEmails(db: SupabaseClient, tenantId: string, scopes: readonly string[]): Promise<string[]> {
+  const ids = await dutyAudienceMemberIds(db, tenantId, scopes)
   if (ids.length === 0) return []
   const { data, error } = await db.from('members').select('email').in('id', ids).eq('is_active', true)
   if (error) throw new AuthzLookupError('members')

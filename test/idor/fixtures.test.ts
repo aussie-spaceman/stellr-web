@@ -14,7 +14,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { TENANT_ID_HEADER } from '@/lib/tenancy/host'
 import { CANARY_TENANT, HONEYTOKENS, scanForHoneytokens } from '@/lib/testing/honeytokens'
-import { harness, installNetworkGuard, runIdorCase, runStaffPersonaCases, STAFF_PERSONAS_FOR, STELLR_HOST, staffCaseProblem, type CaseResult, type Direction, type Persona, type StaffPersona } from './harness'
+import { harness, installNetworkGuard, runIdorCase, runCrewPersonaCases, CREW_PERSONAS_FOR, STELLR_HOST, crewCaseProblem, type CaseResult, type Direction, type Persona, type CrewPersona } from './harness'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.idor.invalid'
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_idorharness'
@@ -47,23 +47,23 @@ const load = async () => ((await import(path.join(dir, 'handlers.ts'))) as { FIX
 
 // Staff personas. A staff case must get as far as the database: a refusal with nothing
 // touched would mean the persona was never let in, and proves nothing about the scope.
-const STAFF_CASES: [name: string, cls: 'tenant_staff' | 'platform_admin', reachesDb: boolean][] = [
-  ['loadScopedRead', 'tenant_staff', true],
-  ['staffFiltered', 'tenant_staff', true],
-  ['staffUniform', 'tenant_staff', true],
+const CREW_CASES: [name: string, cls: 'tenant_crew' | 'platform_admin', reachesDb: boolean][] = [
+  ['loadScopedRead', 'tenant_crew', true],
+  ['crewFiltered', 'tenant_crew', true],
+  ['crewUniform', 'tenant_crew', true],
   ['platformGuarded', 'platform_admin', false],
 ]
 
-// Written out, not read from STAFF_PERSONAS_FOR: this is what the class must run.
+// Written out, not read from CREW_PERSONAS_FOR: this is what the class must run.
 const PERSONAS_FOR_CLASS = {
-  tenant_staff: ['stellr_staff', 'canary_admin', 'stellr_event_manager'],
+  tenant_crew: ['stellr_crew', 'canary_admin', 'stellr_event_manager'],
   platform_admin: ['canary_admin'],
 } as const
 
 describe(`IDOR fixtures: staff personas (${process.env.IDOR_FIXTURE_DIR ? 'canary copy' : 'intact'})`, () => {
-  for (const [name, cls, reachesDb] of STAFF_CASES) {
+  for (const [name, cls, reachesDb] of CREW_CASES) {
     it(`${name} (${cls}) refuses every persona the class runs, uniformly`, async () => {
-      const results = await runStaffPersonaCases((await load())[name], input, 'GET', cls, name)
+      const results = await runCrewPersonaCases((await load())[name], input, 'GET', cls, name)
       expect(results.map((r) => r.persona)).toEqual(PERSONAS_FOR_CLASS[cls])
       for (const { persona, result } of results) {
         expect(result.outcome, `${persona}\n${explain(result)}`).toBe('refused')
@@ -72,21 +72,21 @@ describe(`IDOR fixtures: staff personas (${process.env.IDOR_FIXTURE_DIR ? 'canar
     })
   }
 
-  it('staffList (no id) returns none of the other tenant’s or event’s rows to any persona', async () => {
+  it('crewList (no id) returns none of the other tenant’s or event’s rows to any persona', async () => {
     const noId = { segments: [], query: [], body: [], urlPattern: '/api/fixture/list' }
-    for (const { persona, result } of await runStaffPersonaCases((await load()).staffList, noId, 'GET', 'tenant_staff', 'staffList')) {
+    for (const { persona, result } of await runCrewPersonaCases((await load()).crewList, noId, 'GET', 'tenant_crew', 'crewList')) {
       expect(result.outcome, `${persona}\n${explain(result)}`).toBe('ok')
-      expect(staffCaseProblem({ cls: 'tenant_staff', persona, result, idBearing: false })).toBeNull()
+      expect(crewCaseProblem({ cls: 'tenant_crew', persona, result, idBearing: false })).toBeNull()
     }
   })
 })
 
 describe('a staff case has to prove something', () => {
   const result = (over: Partial<CaseResult>): CaseResult => ({ method: 'GET', status: 200, outcome: 'ok', leaks: [], writes: [], touched: true, audits: [], ...over })
-  const on = (over: Partial<CaseResult>, persona: StaffPersona = 'stellr_staff', cls: 'tenant_staff' | 'platform_admin' = 'tenant_staff') =>
-    staffCaseProblem({ cls, persona, result: result(over), idBearing: true })
+  const on = (over: Partial<CaseResult>, persona: CrewPersona = 'stellr_crew', cls: 'tenant_crew' | 'platform_admin' = 'tenant_crew') =>
+    crewCaseProblem({ cls, persona, result: result(over), idBearing: true })
 
-  it('a tenant_staff route that errors, stops on the request, or never uses the id does not pass', () => {
+  it('a tenant_crew route that errors, stops on the request, or never uses the id does not pass', () => {
     expect(on({ status: 500, outcome: 'error' })).toContain('error')
     expect(on({ status: 400, outcome: 'unexercised', touched: false })).toContain('unexercised')
     expect(on({ status: 403, outcome: 'refused', touched: false })).toContain('never reached')
@@ -96,15 +96,15 @@ describe('a staff case has to prove something', () => {
 
   it('a failing outcome never passes, even with an exception', () => {
     for (const outcome of ['leak', 'honey_write', 'oracle', 'oracle_4xx'] as const) {
-      expect(staffCaseProblem({ cls: 'tenant_staff', persona: 'stellr_staff', result: result({ outcome }), idBearing: true, exception: 'a named reason' })).toContain(outcome)
+      expect(crewCaseProblem({ cls: 'tenant_crew', persona: 'stellr_crew', result: result({ outcome }), idBearing: true, exception: 'a named reason' })).toContain(outcome)
     }
   })
 
   it('what may pass: a refusal after the id, an event manager refused at the guard, a named exception, and no id to use', () => {
     expect(on({ status: 404, outcome: 'refused' })).toBeNull()
     expect(on({ status: 403, outcome: 'refused', touched: false }, 'stellr_event_manager')).toBeNull()
-    expect(staffCaseProblem({ cls: 'tenant_staff', persona: 'stellr_staff', result: result({ status: 400, outcome: 'unexercised' }), idBearing: true, exception: 'a named reason' })).toBeNull()
-    expect(staffCaseProblem({ cls: 'tenant_staff', persona: 'stellr_staff', result: result({ touched: false }), idBearing: false })).toBeNull()
+    expect(crewCaseProblem({ cls: 'tenant_crew', persona: 'stellr_crew', result: result({ status: 400, outcome: 'unexercised' }), idBearing: true, exception: 'a named reason' })).toBeNull()
+    expect(crewCaseProblem({ cls: 'tenant_crew', persona: 'stellr_crew', result: result({ touched: false }), idBearing: false })).toBeNull()
   })
 
   it('a platform route must refuse the tenant admin, by status', () => {
@@ -115,20 +115,20 @@ describe('a staff case has to prove something', () => {
 
   it('a platform_destined route is held to the same refusal as a platform route', () => {
     const destined = (over: Partial<CaseResult>, guardExempt?: boolean) =>
-      staffCaseProblem({ cls: 'platform_destined', persona: 'canary_admin', result: result(over), idBearing: true, guardExempt })
+      crewCaseProblem({ cls: 'platform_destined', persona: 'canary_admin', result: result(over), idBearing: true, guardExempt })
     expect(destined({ status: 200, outcome: 'ok' })).toContain('200')
     expect(destined({ status: 400, outcome: 'unexercised', touched: false })).toContain('400')
     expect(destined({ status: 403, outcome: 'refused', touched: false })).toBeNull()
-    expect(STAFF_PERSONAS_FOR.platform_destined).toEqual(['canary_admin'])
+    expect(CREW_PERSONAS_FOR.platform_destined).toEqual(['canary_admin'])
   })
 
   it('a guard exception excuses the status and nothing else', () => {
     const exempt = (over: Partial<CaseResult>) =>
-      staffCaseProblem({ cls: 'platform_destined', persona: 'canary_admin', result: result(over), idBearing: true, guardExempt: true })
+      crewCaseProblem({ cls: 'platform_destined', persona: 'canary_admin', result: result(over), idBearing: true, guardExempt: true })
     expect(exempt({ status: 200, outcome: 'ok' })).toBeNull()
     for (const outcome of ['leak', 'honey_write', 'oracle', 'oracle_4xx'] as const) expect(exempt({ outcome })).toContain(outcome)
-    // It has no bearing on a tenant_staff route, which has to prove its scope.
-    expect(staffCaseProblem({ cls: 'tenant_staff', persona: 'stellr_staff', result: result({ status: 403, outcome: 'refused', touched: false }), idBearing: true, guardExempt: true })).toContain('never reached')
+    // It has no bearing on a tenant_crew route, which has to prove its scope.
+    expect(crewCaseProblem({ cls: 'tenant_crew', persona: 'stellr_crew', result: result({ status: 403, outcome: 'refused', touched: false }), idBearing: true, guardExempt: true })).toContain('never reached')
   })
 })
 
@@ -189,7 +189,7 @@ describe('a case runs in the direction it asks for', () => {
 
   it('canary_admin is on Canary’s host, and its scope is Canary’s', async () => {
     expect(await seen(undefined, 'canary_admin')).toEqual(onCanary)
-    expect(await seen(undefined, 'stellr_staff')).toEqual(onStellr)
+    expect(await seen(undefined, 'stellr_crew')).toEqual(onStellr)
     let tenantId: string | undefined
     const scoped = {
       async GET() {

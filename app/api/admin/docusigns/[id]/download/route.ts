@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { currentTenantId, requireTenantStaff } from '@/lib/authz'
+import { currentTenantId, requireTenantCrew } from '@/lib/authz'
 import {
   STORED_RECORD_COLUMNS,
   loadSignedRecord,
@@ -36,7 +36,7 @@ export const GET = withAudit(
 // The signed agreement, or the signing engine's certificate for it. Every
 // download is recorded in esign_access_log against the admin who made it.
 async function download(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireTenantStaff(currentTenantId(), ['tenant_admin'], { route: ROUTE })
+  const admin = await requireTenantCrew(currentTenantId(), ['tenant_admin', 'staff'], { route: ROUTE })
   if (!admin.ok) return NextResponse.json({ error: 'Unauthorised' }, { status: 403 })
   const { userId } = await auth()
 

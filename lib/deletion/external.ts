@@ -3,6 +3,7 @@ import { clerkClient } from '@clerk/nextjs/server'
 import { loadTargetClerkRole } from '@/lib/authz/principal'
 import { supabaseServer } from '@/lib/supabase'
 import { voidEnvelopeRow } from '@/lib/esign/operations'
+import { purgeCrewCheckIns } from './crew-check-ins'
 import type { DeleteMode, EntityDef, ExternalCleanupKind, ExternalResult } from './types'
 import { stripeClient } from '@/lib/stripe'
 
@@ -58,7 +59,7 @@ export async function cleanupClerkForMember(memberId: string): Promise<ExternalR
 }
 
 // Deletes a Clerk login unless another member row (other than `exceptMemberId`)
-// is linked to it, or it is a staff account. Shared with the member merge,
+// is linked to it, or it is a crew account. Shared with the member merge,
 // which calls it after the dropped row is already gone.
 export async function deleteUnsharedClerkLogin(
   clerkUserId: string | null,
@@ -81,26 +82,43 @@ export async function deleteUnsharedClerkLogin(
 
     const client = await clerkClient()
     const { exists, role } = await loadTargetClerkRole(client, clerkUserId)
-    if (!exists) return { kind: 'clerk', ok: true, detail: 'Clerk login already removed' }
+    if (!exists) return withCrewCheckInsRemoved(db, clerkUserId, 'Clerk login already removed')
     // A staff login is someone's working account, so a member purge never removes
     // one: that is a decision to make in Clerk. If the role tables can't be read the login
     // stays too, and the admin is told that, so they know to come back to it. (lib/authz is
     // `server-only`, and scripts load this file under plain tsx, so it loads here.)
-    const { isStaffTargetOrUnknown } = await import('@/lib/authz')
-    const staff = await isStaffTargetOrUnknown({ clerkUserId, clerkRole: role, memberId: exceptMemberId ?? null }, { route: 'deletion/clerk-login' })
-    if (staff === null) {
-      return { kind: 'clerk', ok: false, detail: `Could not confirm Clerk login ${clerkUserId} is not a staff account; left in place` }
+    const { isCrewTargetOrUnknown } = await import('@/lib/authz')
+    const crew = await isCrewTargetOrUnknown({ clerkUserId, clerkRole: role, memberId: exceptMemberId ?? null }, { route: 'deletion/clerk-login' })
+    if (crew === null) {
+      return { kind: 'clerk', ok: false, detail: `Could not confirm Clerk login ${clerkUserId} is not a crew account; left in place` }
     }
-    if (staff) {
+    if (crew) {
       const named = typeof role === 'string' ? ` (${role})` : ''
-      return { kind: 'clerk', ok: false, detail: `Clerk login ${clerkUserId} is a staff account${named}; left in place` }
+      return { kind: 'clerk', ok: false, detail: `Clerk login ${clerkUserId} is a crew account${named}; left in place` }
     }
 
     await client.users.deleteUser(clerkUserId)
-    return { kind: 'clerk', ok: true, detail: `Deleted Clerk login ${clerkUserId}` }
+    return withCrewCheckInsRemoved(db, clerkUserId, `Deleted Clerk login ${clerkUserId}`)
   } catch (e) {
     return { kind: 'clerk', ok: false, detail: e instanceof Error ? e.message : 'Clerk cleanup failed' }
   }
+}
+
+// Owner decision 13 Nov 2026: event crew check-ins leave with the account. Once
+// the login is gone, so are the event-manager check-ins keyed by it
+// (lib/deletion/crew-check-ins.ts). Never while the login stays (shared or
+// staff): that person still holds the account. A failure is reported, not thrown,
+// so the admin sees it; Clerk's user.deleted webhook also retries the same purge.
+async function withCrewCheckInsRemoved(
+  db: ReturnType<typeof supabaseServer>,
+  clerkUserId: string,
+  detail: string,
+): Promise<ExternalResult> {
+  const purged = await purgeCrewCheckIns(db, { clerkUserId })
+  if (!purged.ok) {
+    return { kind: 'clerk', ok: false, detail: `${detail}, but its event check-ins were not removed (${purged.error})` }
+  }
+  return { kind: 'clerk', ok: true, detail }
 }
 
 async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalResult> {

@@ -2,9 +2,33 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { vercelTarget } from '@/lib/env'
 import { integrationEnvironments, isRealProductionApp } from '@/lib/env-guards'
+import { supabaseServer } from '@/lib/supabase'
 import { supabaseKeySlots } from '@/lib/supabase-keys'
+import { resolveDerivationMode, tenancyReport, type DerivationModeReport } from '@/lib/tenancy/flags'
 import { tenantRoutingConfig } from '@/lib/tenancy/host'
 import { loadScopedMode } from '@/lib/tenancy/load-scoped'
+import { isTenantDbEnabled } from '@/lib/tenancy/tenant-db-config'
+
+/** The derivation-mode read gives up after this, and reports 'unavailable'. */
+const DERIVATION_READ_TIMEOUT_MS = 2_000
+
+/**
+ * tenancy_settings.derivation_mode: one service-role read of the singleton row
+ * (owner yes, wave 7 W7-8). Never throws; any failure is 'unavailable'.
+ */
+async function readDerivationMode(): Promise<DerivationModeReport> {
+  try {
+    const { data, error } = await supabaseServer()
+      .from('tenancy_settings')
+      .select('derivation_mode')
+      .eq('id', true)
+      .abortSignal(AbortSignal.timeout(DERIVATION_READ_TIMEOUT_MS))
+      .maybeSingle()
+    return resolveDerivationMode({ failed: !!error, value: (data as { derivation_mode?: unknown } | null)?.derivation_mode })
+  } catch {
+    return resolveDerivationMode({ failed: true, value: undefined })
+  }
+}
 
 // GET /api/admin/health/integrations
 //
@@ -30,6 +54,18 @@ import { loadScopedMode } from '@/lib/tenancy/load-scoped'
 //
 // `loadScopedMode` (S5, C16) is the mode converted routes are in: an unrecognised value
 // reads as off, so this is how to see what a flip really did. Informational.
+//
+// `tenancy` (S5 wave 7, O1) is every S5 switch as it RESOLVED, from the registry in
+// lib/tenancy/flags.ts: modes, booleans, counts and fixed labels, never a raw
+// value, secret, URL or zone. `unrecognised` names the variables whose value fell
+// back to the default; `invalidCombinations` lists switches set without what they
+// need. The derivation mode costs one service-role read. Informational: it does not
+// feed `ok`. Each dev flip checks it after the redeploy (docs/TENANCY-S5.md).
+//
+// `tenancy.tenantDb.config` (S5 wave 7, O3) appears only when TENANT_DB_ENABLED is
+// 'true': whether TENANT_DATABASE_URL and its CA pass the driver's checks, each 'ok'
+// or a fixed reason, never a value. The driver module is loaded for it by dynamic
+// import, so with the flag off nothing more is imported and the response is unchanged.
 export async function GET() {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -52,6 +88,10 @@ export async function GET() {
     : []
 
   const routing = tenantRoutingConfig()
+  const report = tenancyReport(await readDerivationMode())
+  const tenancy = isTenantDbEnabled()
+    ? { ...report, tenantDb: { ...report.tenantDb, config: (await import('@/lib/tenancy/driver')).tenantDbConfigStatus() } }
+    : report
 
   return NextResponse.json({
     deployment,
@@ -59,6 +99,7 @@ export async function GET() {
     supabaseKeys: supabaseKeySlots(),
     tenantRouting: { enabled: routing.enabled, suffixError: routing.suffixError },
     loadScopedMode: loadScopedMode(),
+    tenancy,
     problems,
     ok: problems.length === 0,
   })

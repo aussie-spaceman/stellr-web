@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { parseFieldMap, type FieldMap } from '@/lib/esign/native/template'
 import { sha256Hex } from '@/lib/esign/native/render'
 import { isRealProductionApp } from '@/lib/env-guards'
+import { isDevPlaceholderTitle } from '@/lib/esign/native/dev-placeholder'
 
 // Loads the published versions of agreement documents. A version's PDF is
 // identified by its hash and never changes, so it is cached per instance by
@@ -43,7 +44,9 @@ export class TemplateUnavailableError extends Error {}
 
 /**
  * The version new agreements of this kind use. In production only an approved
- * version may be used: an unchecked document must never reach a family.
+ * version may be used: an unchecked document must never reach a family. Nor may
+ * the dev placeholder for the guardian-consent document (S5 wave 7, K5), which
+ * says on its face that it is not a consent form.
  */
 export async function loadActiveTemplate(db: SupabaseClient, key: string): Promise<TemplateVersion> {
   const { data, error } = await db.from('esign_templates').select(COLUMNS).eq('key', key).eq('active', true).maybeSingle()
@@ -52,6 +55,9 @@ export async function loadActiveTemplate(db: SupabaseClient, key: string): Promi
   const t = fromRow(data as Record<string, unknown>)
   if (!t.approvedAt && isRealProductionApp()) {
     throw new TemplateUnavailableError(`The active "${key}" document has not been approved`)
+  }
+  if (isDevPlaceholderTitle(t.title) && isRealProductionApp()) {
+    throw new TemplateUnavailableError(`The active "${key}" document is the dev placeholder, not a consent form`)
   }
   return t
 }

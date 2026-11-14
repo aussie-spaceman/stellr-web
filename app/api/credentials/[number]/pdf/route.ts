@@ -5,6 +5,9 @@ import { getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
 import { renderCredentialPdf } from '@/lib/credential-pdf'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { runAfterResponse } from '@/lib/after-response'
+import { recordOnHost, recordTenant } from '@/lib/tenancy/host-record'
+import { withAudit } from '@/lib/audit/route'
+import { auditSubject, noteAuditSubject } from '@/lib/audit/route-subject'
 
 // GET /api/credentials/[number]/pdf
 // Streams the owner's certificate for a credential (lib/credential-pdf.ts
@@ -16,16 +19,26 @@ import { runAfterResponse } from '@/lib/after-response'
 // is open and the holder has an unsubmitted invitation, the event certificate
 // waits for the survey. A browser is sent back to Credentials, which explains
 // and links to the survey; anything else gets 403 with the survey link.
-export async function GET(req: Request, { params }: { params: Promise<{ number: string }> }) {
+//
+// Another host's credential answers as one the caller does not hold, before the owner
+// check (S5 A10a). A download records a 'pdf' credential event, so it is audited as the
+// signed-in user, on the credential's tenant's chain.
+export const GET = withAudit(
+  ({ args: [req] }) => ({ action: 'credential.pdf.read', ...auditSubject(req, 'credentials'), actor: { session: true } }),
+  downloadCredentialPdf,
+)
+
+async function downloadCredentialPdf(req: Request, { params }: { params: Promise<{ number: string }> }) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { number } = await params
   const db = supabaseServer()
   const cred = await getCredentialByNumber(db, number)
-  if (!cred || cred.owner_member_id !== member.id || cred.tombstoned_at) {
+  if (!cred || !(await recordOnHost(cred)) || cred.owner_member_id !== member.id || cred.tombstoned_at) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
+  noteAuditSubject(req, { tenantId: recordTenant(cred.tenant_id), id: cred.id })
   // An award the judges took back leaves no certificate to print.
   if (cred.status === 'revoked') {
     return NextResponse.json({ error: 'This credential has been revoked.' }, { status: 410 })

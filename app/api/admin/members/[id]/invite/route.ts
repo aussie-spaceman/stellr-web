@@ -1,7 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
+import { crewActorType } from '@/lib/activity-log'
+import { hasCapability } from '@/lib/authz'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
 import { getSignedInMember } from '@/lib/community'
 import { sendAccountInvite } from '@/lib/member-invite'
 
@@ -9,11 +10,11 @@ import { sendAccountInvite } from '@/lib/member-invite'
 // email to a member whose profile is still missing DOB or gender.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await hasCapability('members:write'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const actor = await getSignedInMember()
-  const result = await sendAccountInvite(supabaseServer(), id, { actorMemberId: actor?.id ?? null })
+  const result = await sendAccountInvite(supabaseServer(), id, { actorMemberId: actor?.id ?? null, actorType: await crewActorType() })
 
   if (result.sent) return NextResponse.json({ ok: true })
   switch (result.reason) {

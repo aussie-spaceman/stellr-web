@@ -1,6 +1,7 @@
 import { normalizeEventRole, normalizeEmail } from '@/lib/member-enums'
 import { resolveEmailPair, schoolEmailToStore } from '@/lib/member-email'
 import { registrationInvoiceSeats } from '@/lib/group-payer'
+import type { AccountName } from '../account-name'
 
 // POST /api/register/group, the shape of what comes in. The route names each field
 // itself (see the note there); nothing here validates: these are the types the
@@ -142,4 +143,19 @@ export function settleAddresses(body: GroupBody, sessionEmail: string | null | u
   for (const p of [teacher, ...(additional_adults ?? []), ...(students ?? [])]) {
     if (p) delete p._linked_member_id
   }
+}
+
+/**
+ * The registrant's name, settled the way settleAddresses settles their address: a
+ * signed-in organiser's account name is authoritative (owner decision, 13 Nov 2026,
+ * tracker row promote-s5-wave3.17), so whatever was typed, or sent by a crafted
+ * request, is replaced before anything reads it. The registration, the organiser's
+ * participant row, the sheet and the agreements all read `teacher`, so they all
+ * carry the account's name. Null (signed out, a tenant's host, or an account with no
+ * full name on file) leaves the typed name standing. Edits the body.
+ */
+export function settleRegistrantName(body: GroupBody, account: AccountName | null): void {
+  if (!account || !body.teacher) return
+  body.teacher.first_name = account.first_name
+  body.teacher.last_name = account.last_name
 }

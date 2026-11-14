@@ -1,0 +1,129 @@
+{
+  "roles": [
+    {
+      "role": "guardian",
+      "order": 1
+    }
+  ],
+  "fields": [
+    {
+      "name": "OrganiserName",
+      "label": "Event organiser",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "OrganiserName",
+      "page": 1,
+      "x": 220,
+      "y": 200,
+      "w": 320,
+      "required": true,
+      "locked": true
+    },
+    {
+      "name": "EventTitle",
+      "label": "Event",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "EventTitle",
+      "page": 1,
+      "x": 220,
+      "y": 230,
+      "w": 320,
+      "required": true,
+      "locked": true
+    },
+    {
+      "name": "MinorName",
+      "label": "Child's full name",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorName",
+      "page": 1,
+      "x": 220,
+      "y": 290,
+      "w": 320,
+      "required": true,
+      "locked": true
+    },
+    {
+      "name": "MinorDateOfBirth",
+      "label": "Child's date of birth (DD-MMM-YYYY)",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorDateOfBirth",
+      "page": 1,
+      "x": 220,
+      "y": 320,
+      "w": 160,
+      "required": true,
+      "locked": true
+    },
+    {
+      "name": "GuardianName",
+      "label": "Parent or guardian full name",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "GuardianName",
+      "page": 2,
+      "x": 220,
+      "y": 200,
+      "w": 320,
+      "required": true
+    },
+    {
+      "name": "MinorRelationship",
+      "label": "Relationship to the child",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorRelationship",
+      "page": 2,
+      "x": 220,
+      "y": 230,
+      "w": 160,
+      "required": true,
+      "locked": true
+    },
+    {
+      "name": "GuardianEmail",
+      "label": "Parent or guardian email",
+      "role": "guardian",
+      "type": "email",
+      "source": "prefill",
+      "prefillKey": "GuardianEmail",
+      "page": 2,
+      "x": 220,
+      "y": 260,
+      "w": 320,
+      "required": true
+    },
+    {
+      "name": "guardian_signature",
+      "label": "Parent or guardian signature",
+      "role": "guardian",
+      "type": "signature",
+      "source": "signer",
+      "page": 2,
+      "x": 220,
+      "y": 330,
+      "w": 230,
+      "h": 22,
+      "required": true
+    },
+    {
+      "name": "guardian_date_signed",
+      "label": "Date signed",
+      "role": "guardian",
+      "type": "date_signed",
+      "source": "system",
+      "page": 2,
+      "x": 220,
+      "y": 380
+    }
+  ]
+}

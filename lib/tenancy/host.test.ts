@@ -19,7 +19,9 @@ import {
   TENANT_ID_HEADER,
   TENANT_SLUG_HEADER,
   type TenantHostMap,
+  PRODUCTION_TENANT_ZONE,
 } from './host'
+import { isInProductionTenantZone, PRODUCTION_TENANT_ZONE as PRODUCTION_ZONE_FROM_PURE } from './host-pure'
 import { STELLR_TENANT_ID } from './constants'
 
 const CANARY = 'c0ffee00-0000-4000-8000-0000000000b2'
@@ -30,6 +32,16 @@ const SECRET_PLACEHOLDER = 'sb_secret_placeholder_for_tests'
 
 const PROD_ZONE = { TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: '.events.stellreducation.org' }
 const TEST_ZONE = { TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: '.localhost' }
+
+/**
+ * The real production app (env-guards isRealProductionApp). Since W7-27 the
+ * production zone is accepted only there, so a test that routes under PROD_ZONE
+ * runs as production.
+ */
+function onProduction() {
+  vi.stubEnv('VERCEL_ENV', 'production')
+  vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
+}
 
 /** The rows PostgREST returns for HOST_MAP_QUERY against the two-tenant seed. */
 const SEED_ROWS = [
@@ -212,6 +224,132 @@ describe('tenantRoutingConfig', () => {
     // The dev project's own production target declares itself and may use one.
     vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'dev')
     expect(tenantRoutingConfig(env).suffix).toBe('.localhost')
+  })
+
+  // W7-27: the production zone guard.
+  it('holds the production tenant zone in one constant, in canonical form', () => {
+    expect(PRODUCTION_TENANT_ZONE).toBe('.events.stellreducation.org')
+    expect(normaliseZoneSuffix(PRODUCTION_TENANT_ZONE)).toBe(PRODUCTION_TENANT_ZONE)
+    expect(PRODUCTION_ZONE_FROM_PURE).toBe(PRODUCTION_TENANT_ZONE)
+  })
+
+  it('on the real production app, accepts only the production tenant zone', () => {
+    onProduction()
+    const ok = tenantRoutingConfig(PROD_ZONE)
+    expect(ok).toEqual({ enabled: true, suffix: '.events.stellreducation.org', suffixError: null })
+    // Any spelling that normalises to it.
+    for (const raw of ['events.stellreducation.org', 'EVENTS.stellreducation.org.', ' .events.stellreducation.org ']) {
+      expect(tenantRoutingConfig({ TENANT_HOST_SUFFIX: raw }).suffix, raw).toBe(PRODUCTION_TENANT_ZONE)
+    }
+    for (const raw of [
+      '.devzone.stellreducation.org',
+      '.x.events.stellreducation.org',
+      '.events.stellreducation.org.evil.example',
+      '.events.example.org',
+      '.events.school.example',
+    ]) {
+      const c = tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: raw })
+      expect(c.suffix, raw).toBeNull()
+      expect(c.suffixError, raw).toBe(
+        'TENANT_HOST_SUFFIX is not the production tenant zone; known Stellr hosts keep working and every other host answers unavailable.',
+      )
+      expect(c.suffixError, raw).not.toContain('stellreducation')
+    }
+    // The flag off does not hide it: health reads the reason either way.
+    expect(tenantRoutingConfig({ TENANT_HOST_SUFFIX: '.devzone.stellreducation.org' }).suffixError).toMatch(/not the production tenant zone/)
+  })
+
+  it('on the real production app, keeps the earlier reasons for a dev zone, an unsafe suffix and none at all', () => {
+    onProduction()
+    for (const raw of ['.localhost', '.canary.localhost', '.example.test']) {
+      const c = tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: raw })
+      expect(c.suffix, raw).toBeNull()
+      expect(c.suffixError, raw).toMatch(/development zone on production/)
+    }
+    for (const raw of ['.org', '.stellreducation.org', 'x.vercel.app']) {
+      expect(tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: raw }).suffixError, raw).toMatch(/not a safe tenant zone suffix/)
+    }
+    expect(tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true' }).suffixError).toMatch(/not set/)
+    expect(tenantRoutingConfig({})).toEqual({ enabled: false, suffix: null, suffixError: null })
+  })
+
+  it('off production, refuses the production tenant zone and any zone under it', () => {
+    const offProduction: Array<() => void> = [
+      () => {}, // local and test runs: no VERCEL_ENV
+      () => vi.stubEnv('VERCEL_ENV', 'preview'),
+      () => {
+        // stellr-web-dev's own production target declares itself dev.
+        vi.stubEnv('VERCEL_ENV', 'production')
+        vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'dev')
+      },
+    ]
+    for (const set of offProduction) {
+      vi.unstubAllEnvs()
+      set()
+      for (const raw of ['.events.stellreducation.org', 'events.stellreducation.org.', '.EVENTS.stellreducation.org', '.x.events.stellreducation.org']) {
+        const c = tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: raw })
+        expect(c.suffix, raw).toBeNull()
+        expect(c.suffixError, raw).toBe(
+          'TENANT_HOST_SUFFIX is the production tenant zone, which is refused off production; known Stellr hosts keep working and every other host answers unavailable.',
+        )
+      }
+      // Everything else off production is as before.
+      for (const raw of ['.devzone.stellreducation.org', '.localhost', '.example.test', '.events.example.org', '.notevents.stellreducation.org']) {
+        const c = tenantRoutingConfig({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: raw })
+        expect(c.suffixError, raw).toBeNull()
+        expect(c.suffix, raw).toBe(normaliseZoneSuffix(raw))
+      }
+    }
+  })
+
+  it('fails closed for tenant hosts when the zone is refused either way, and keeps Stellr up', async () => {
+    const f = fetchSpy()
+    const check = async (env: Record<string, string>, tenantHost: string) => {
+      const r = createTenantHostResolver({ fetch: f, env })
+      expect(await r.resolve(tenantHost)).toEqual({ kind: 'unavailable', reason: 'zone-misconfigured', host: tenantHost })
+      for (const host of ['www.stellreducation.org', 'app.stellreducation.org', 'stellreducation.org']) {
+        expect(await r.resolve(host), host).toMatchObject({ kind: 'stellr', reason: 'outside-zone' })
+      }
+    }
+    // The production zone on stellr-web-dev.
+    await check(PROD_ZONE, 'canary.events.stellreducation.org')
+    // The dev zone on production.
+    onProduction()
+    await check({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: '.devzone.stellreducation.org' }, 'canary.devzone.stellreducation.org')
+    await check({ TENANT_ROUTING_ENABLED: 'true', TENANT_HOST_SUFFIX: '.devzone.stellreducation.org' }, 'canary.events.stellreducation.org')
+    expect(f).not.toHaveBeenCalled()
+  })
+})
+
+describe('isInProductionTenantZone', () => {
+  it('is true for the zone apex and every host under it, in any spelling', () => {
+    for (const h of [
+      'events.stellreducation.org',
+      'canary.events.stellreducation.org',
+      'CANARY.Events.StellrEducation.org.',
+      'canary.events.stellreducation.org:443',
+      'a.b.events.stellreducation.org',
+    ]) {
+      expect(isInProductionTenantZone(h), h).toBe(true)
+    }
+  })
+
+  it('is false for everything else', () => {
+    for (const h of [
+      'www.stellreducation.org',
+      'app.stellreducation.org',
+      'stellreducation.org',
+      'notevents.stellreducation.org',
+      'canary.devzone.stellreducation.org',
+      'events.stellreducation.org.evil.example',
+      'canary.localhost',
+      '',
+      null,
+      undefined,
+      'evil_host',
+    ]) {
+      expect(isInProductionTenantZone(h), String(h)).toBe(false)
+    }
   })
 })
 
@@ -397,6 +535,7 @@ describe('resolver: outside the zone', () => {
     '[::1]:3000',
     'events.stellreducation.org',
   ])('%s is Stellr with 0 fetches under the production zone', async (host) => {
+    onProduction()
     const f = fetchSpy()
     const r = createTenantHostResolver({ fetch: f, env: PROD_ZONE })
     const res = await r.resolve(host)
@@ -446,6 +585,7 @@ describe('resolver: outside the zone', () => {
 
   it('a mapped host outside the zone is not consulted: custom domains are unsupported', async () => {
     const rows = [...SEED_ROWS, { host: 'events.school.example', tenant_id: CANARY, tenants: { slug: 'canary-academy', status: 'active' } }]
+    onProduction()
     const f = fetchSpy(rows)
     const r = createTenantHostResolver({ fetch: f, env: PROD_ZONE })
     expect(await r.resolve('events.school.example')).toMatchObject({ kind: 'stellr', reason: 'outside-zone' })
@@ -455,6 +595,7 @@ describe('resolver: outside the zone', () => {
   })
 
   it('answers invalid (never Stellr) for a malformed Host when routing is on', async () => {
+    onProduction()
     const f = fetchSpy()
     const r = createTenantHostResolver({ fetch: f, env: PROD_ZONE })
     for (const host of ['', null, 'evil_host', 'evil.org/x', 'a..b']) {

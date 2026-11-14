@@ -9,7 +9,7 @@ export const metadata = { title: 'Admin — Manage Spaces' }
 export const dynamic = 'force-dynamic'
 
 export default async function AdminSpacesPage() {
-  await authz.page.requireStellrAdmin({ route: '/admin/community/spaces' })
+  await authz.page.requireCapability('portal:read', { route: '/admin/community/spaces' })
   const db = supabaseServer()
   const [{ data: spaces }, { data: tierRows }, memberCounts, tierMap] = await Promise.all([
     db

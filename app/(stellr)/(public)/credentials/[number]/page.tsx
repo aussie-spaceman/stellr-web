@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import {
   getCredentialByNumber,
+  isStellrCredential,
   credentialState,
   shareConsentFor,
   canShare,
@@ -46,10 +47,19 @@ type Params = {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
+/**
+ * The credential this page may show: Stellr's only (S5 A10a, decision W7-10). Another
+ * tenant's credential answers as a number nobody holds, in the metadata as on the page.
+ */
+async function stellrCredential(db: ReturnType<typeof supabaseServer>, number: string) {
+  const cred = await getCredentialByNumber(db, number)
+  return cred && isStellrCredential(cred) ? cred : null
+}
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { number } = await params
   const db = supabaseServer()
-  const cred = await getCredentialByNumber(db, number)
+  const cred = await stellrCredential(db, number)
   // deep review MP-4: the <title>/OG meta carry the holder's name, so gate them
   // on the live consent/age too — not only on the stored visibility flag.
   const consent = cred ? await shareConsentFor(db, cred) : 'none'
@@ -79,7 +89,7 @@ export default async function CredentialPage({ params, searchParams }: Params) {
   const { number } = await params
   const key = (await searchParams)[FAMILY_LINK_PARAM]
   const db = supabaseServer()
-  const cred = await getCredentialByNumber(db, number)
+  const cred = await stellrCredential(db, number)
   if (!cred) notFound()
 
   const member = await getCurrentMember()

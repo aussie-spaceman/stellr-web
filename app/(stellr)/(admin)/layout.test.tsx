@@ -32,7 +32,7 @@ vi.mock('@/lib/clerk-appearance', () => ({ clerkAppearance: {} }))
 vi.mock('@/components/admin/AdminUserButton', () => ({ AdminUserButton: () => null }))
 vi.mock('@/components/layout/SiteFooter', () => ({ SiteFooter: () => null }))
 vi.mock('@/components/admin/AdminSidebar', () => ({
-  AdminSidebar: ({ isAdmin }: { isAdmin: boolean }) => <div data-testid="sidebar">{String(isAdmin)}</div>,
+  AdminSidebar: ({ role }: { role: string }) => <div data-testid="sidebar">{role}</div>,
 }))
 
 const { default: AdminLayout } = await import('./layout')
@@ -49,7 +49,7 @@ describe('the admin shell', () => {
     await expect(shell()).rejects.toThrow('redirect /sign-in')
   })
 
-  it.each(['student', 'staff', 'Admin', 7, undefined])('a signed-in role of %s goes to the account page', async (role) => {
+  it.each(['student', 'member', 'Admin', 7, undefined])('a signed-in role of %s goes to the account page', async (role) => {
     h.session = { userId: 'u1', role }
     await expect(shell()).rejects.toThrow('redirect /account')
   })
@@ -57,7 +57,7 @@ describe('the admin shell', () => {
   it('an admin gets the full nav and the Admin badge', async () => {
     h.session = { userId: 'u1', role: 'admin' }
     render(await shell())
-    expect(screen.getByTestId('sidebar')).toHaveTextContent('true')
+    expect(screen.getByTestId('sidebar')).toHaveTextContent('admin')
     expect(screen.getByText('Admin')).toBeInTheDocument()
     expect(screen.getByText('content')).toBeInTheDocument()
   })
@@ -65,8 +65,17 @@ describe('the admin shell', () => {
   it('an event manager gets the shell, the short nav and the Event Manager badge, with no assignment read', async () => {
     h.session = { userId: 'u1', role: 'event_manager' }
     render(await shell())
-    expect(screen.getByTestId('sidebar')).toHaveTextContent('false')
+    expect(screen.getByTestId('sidebar')).toHaveTextContent('event_manager')
     expect(screen.getByText('Event Manager')).toBeInTheDocument()
     expect(h.reads).toBe(0)
+  })
+
+  it('Staff get the Staff nav and badge, and the note on where they can make changes', async () => {
+    h.session = { userId: 'u1', role: 'staff' }
+    render(await shell())
+    expect(screen.getByTestId('sidebar')).toHaveTextContent('staff')
+    expect(screen.getByText('Staff')).toBeInTheDocument()
+    expect(screen.getByText(/Changes are open in Competitions and Members/)).toBeInTheDocument()
+    expect(screen.getByText('content')).toBeInTheDocument()
   })
 })

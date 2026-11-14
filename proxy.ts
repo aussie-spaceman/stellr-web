@@ -21,8 +21,11 @@ import { TENANT_HOST_ROBOTS_TXT, isInternalTenantTreePath, tenantHostRoute } fro
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
-// Competitions admin (formerly /admin/events — the old path 307s in next.config).
-const isAdminEventsRoute = createRouteMatcher(['/admin/competitions(.*)', '/admin/events(.*)'])
+// Competitions admin (formerly /admin/events — the old path 307s in next.config),
+// plus a campaign's own page, which the competition page links to. That page
+// checks the Event Manager's assignment for its slug (requireEventAccess). The
+// campaigns index stays admin and Staff only: it is not a page today.
+const isAdminEventsRoute = createRouteMatcher(['/admin/competitions(.*)', '/admin/events(.*)', '/admin/campaigns/(.*)'])
 // Member-only app surfaces that require a signed-in user (Home dashboard + the
 // community portal). Unauthenticated hits are bounced to sign-in, whose card
 // links on to sign-up: anyone can create an account (decision 24).

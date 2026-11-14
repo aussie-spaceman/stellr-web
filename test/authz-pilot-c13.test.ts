@@ -251,7 +251,7 @@ describe('the pages', () => {
   it('an event manager never reaches them today: proxy.ts confines them to the Events section', () => {
     const allowed = proxy.match(/isAdminEventsRoute = createRouteMatcher\(\[([^\]]+)\]\)/)?.[1] as string
     const prefixes = [...allowed.matchAll(/'(\/[^'(]+)\(\.\*\)'/g)].map((m) => m[1])
-    expect(prefixes).toEqual(['/admin/competitions', '/admin/events'])
+    expect(prefixes).toEqual(['/admin/competitions', '/admin/events', '/admin/campaigns/'])
     expect(proxy).toMatch(/role === 'event_manager' && !isAdminEventsRoute\(req\)/)
     for (const f of PAGES) {
       const url = routeOf(f) as string

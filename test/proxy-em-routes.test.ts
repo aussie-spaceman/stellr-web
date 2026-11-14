@@ -6,12 +6,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Competitions section of the admin portal (proxy.ts isAdminEventsRoute). Clerk
 // is stubbed as in proxy.test.ts, with the session's role claim set per test.
 //
-// staff-role.P3.em-campaign-redirect is still open: a campaign's competition
-// page links to /admin/campaigns/<slug>, which this gate sends back to
-// Competitions. The fix adds that path to isAdminEventsRoute, and also needs
-// test/authz-pilot-c13.test.ts's pinned list of those paths updated, so it is
-// left to a change that owns that file. When it lands, move
-// '/admin/campaigns/sample-campaign' from the second list below to the first.
+// staff-role.P3.em-campaign-redirect: a campaign's competition page links to
+// /admin/campaigns/<slug>, so that page is in isAdminEventsRoute too. The page
+// itself refuses an Event Manager who is not assigned to the slug
+// (requireEventAccess). The campaigns index is not, and stays redirected.
 
 const state = vi.hoisted(() => ({ userId: 'user_placeholder' as string | null, role: 'event_manager' as string | null }))
 
@@ -53,6 +51,7 @@ describe('proxy: an Event Manager in the admin portal', () => {
     '/admin/competitions/sample-event',
     '/admin/competitions/sample-event/check-in',
     '/admin/events/sample-event',
+    '/admin/campaigns/sample-campaign',
   ])('reaches %s', async (path) => {
     expect(await redirectedTo(path)).toBeNull()
   })
@@ -60,7 +59,7 @@ describe('proxy: an Event Manager in the admin portal', () => {
   it.each([
     '/admin',
     '/admin/campaigns',
-    '/admin/campaigns/sample-campaign',
+    '/admin/campaignsfoo',
     '/admin/schools',
     '/admin/members',
     '/admin/view-as',

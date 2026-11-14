@@ -16,6 +16,10 @@ import {
 } from '@/lib/check-in'
 import { loadCheckInView } from '@/lib/check-in-view'
 import { GUARDIAN_CONSENT_PENDING_CHECK_IN, isConsentPendingRefusal } from '@/lib/check-in-consent'
+import { reportError } from '@/lib/app-errors'
+
+/** The app_errors label for this handler's own 500s: a fixed pattern, never a slug. */
+const ERROR_ROUTE = 'POST /api/check-in'
 
 // POST /api/check-in — public, token-gated participant check-in (PRD 6.7).
 // Body: { slug, token, firstName, lastName, dob } or { slug, token, email }.
@@ -140,12 +144,16 @@ export async function POST(req: Request) {
     }
     if (error) {
       console.error('[check-in] update error:', error)
+      await reportError(new Error(`check-in update failed: ${error.message}`), { route: ERROR_ROUTE })
       return NextResponse.json({ error: 'Something went wrong. Please see the registration desk.' }, { status: 500 })
     }
   }
 
   const view = await loadCheckInView(db, slug, found.id)
-  if (!view) return NextResponse.json({ error: 'Something went wrong. Please see the registration desk.' }, { status: 500 })
+  if (!view) {
+    await reportError(new Error('Check-in view did not load after a match'), { route: ERROR_ROUTE })
+    return NextResponse.json({ error: 'Something went wrong. Please see the registration desk.' }, { status: 500 })
+  }
 
   const res = NextResponse.json({ view, alreadyCheckedIn })
   const signed = signCheckIn(slug, found.id)

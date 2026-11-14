@@ -8,7 +8,10 @@ import { describe, expect, it } from 'vitest'
 // security depends on (policy in lib/email/suppressions.ts). Those senders pass
 // `critical: true` to sendEmail. Most have a behaviour test beside them
 // (lib/esign/outbox.test.ts, lib/member-invite.test.ts,
-// lib/privacy-requests.test.ts); this pins the call sites that have none, and
+// lib/privacy-requests.test.ts, lib/notify.critical.test.ts,
+// lib/compliance-notify.critical.test.ts, lib/app-errors.test.ts); this pins
+// the call sites that have none, and the ones in lib/notify.ts and
+// lib/compliance-notify.ts again by source, and
 // keeps the whole list in one place so a refactor cannot quietly drop one.
 
 const root = join(__dirname, '..')
@@ -34,6 +37,9 @@ const CRITICAL_SENDS: { what: string; file: string; marker: string; fn: string }
   { what: 'admin account invite (sign-in)', file: 'lib/member-invite.ts', marker: 'accountInviteEmail({', fn: 'sendEmail' },
   { what: 'group account invite (sign-in)', file: 'lib/member-invite.ts', marker: 'groupAccountCreatedEmail({', fn: 'sendEmail' },
   { what: 'privacy request confirmation link', file: 'lib/privacy-requests.ts', marker: 'mintToken(data.id', fn: 'sendEmail' },
+  { what: 'safeguarding clearance notice', file: 'lib/compliance-notify.ts', marker: 'if (member.email) {', fn: 'sendEmail' },
+  { what: 'staff alert to the team inbox (no holder, or every holder opted out)', file: 'lib/notify.ts', marker: 'async function alertTeamInbox(', fn: 'sendEmail' },
+  { what: 'daily error digest', file: 'lib/app-errors.ts', marker: 'const email = renderErrorDigest(rows)', fn: 'sendEmail' },
 ]
 
 describe('critical mail passes critical: true', () => {
@@ -51,6 +57,13 @@ describe('critical mail passes critical: true', () => {
     const call = callAfter('app/api/cron/docusign-reminders/route.ts', src.slice(src.lastIndexOf('await sendEmail(', at), at), 'sendEmail')
     expect(call).toContain('to: guardian.email')
     expect(call).toMatch(/critical:\s*true/)
+  })
+
+  it('notifyMember passes the NotifyInput critical flag through, and notifyCommunityAdmins always sets it', () => {
+    expect(callAfter('lib/notify.ts', 'if (email && member?.email) {', 'sendEmail')).toMatch(/critical:\s*input\.critical === true/)
+    const src = readFileSync(join(root, 'lib/notify.ts'), 'utf8')
+    const body = src.slice(src.indexOf('export async function notifyCommunityAdmins('))
+    expect(body).toMatch(/\{\s*\.\.\.notice,\s*critical:\s*true\s*\}/)
   })
 
   it('safeEmail in lib/docusign-agreements passes critical through', () => {

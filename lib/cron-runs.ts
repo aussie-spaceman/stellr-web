@@ -89,6 +89,31 @@ async function openRun(db: SupabaseClient, job: string, row: Record<string, unkn
   return ledgerHandle(db, job, id)
 }
 
+/** Distinct failures per run reported to app_errors; the rest stay in cron_runs. */
+export const REPORTED_FAILURES_PER_RUN = 5
+
+/**
+ * S1 monitoring: a cron's recorded failures also go to app_errors (lib/app-errors
+ * reportError), so they appear in the daily "Errors in the last day" email.
+ * Crons catch their own errors, so Next's onRequestError never sees them. Up to
+ * REPORTED_FAILURES_PER_RUN distinct (where, message) pairs, under the fixed
+ * label "CRON <job>". Written with reportError's own service-role client, as
+ * captureRequestError does, not the job's: app_errors is a platform table.
+ * Imported lazily, because lib/app-errors imports this module. Never throws.
+ */
+async function reportCronFailures(job: string, errors: { where: string; message: string }[]): Promise<void> {
+  try {
+    const distinct = [...new Map(errors.map((e) => [`${e.where}\n${e.message}`, e])).values()].slice(0, REPORTED_FAILURES_PER_RUN)
+    if (distinct.length === 0) return
+    const { reportError } = await import('@/lib/app-errors')
+    for (const e of distinct) {
+      await reportError(new Error(`${e.where}: ${e.message}`), { route: `CRON ${job}` })
+    }
+  } catch (err) {
+    console.error(`[cron-runs] reporting ${job} failures threw:`, err instanceof Error ? err.message : err)
+  }
+}
+
 function ledgerHandle(db: SupabaseClient, job: string, id: string | null): CronRun {
   const errors: { where: string; message: string }[] = []
   return {
@@ -97,6 +122,8 @@ function ledgerHandle(db: SupabaseClient, job: string, id: string | null): CronR
       if (errors.length < 50) errors.push({ where, message: err instanceof Error ? err.message : String(err) })
     },
     async finish(result) {
+      // Reported even when the ledger row could not be written.
+      if (errors.length) await reportCronFailures(job, errors)
       if (!id) return
       try {
         await db

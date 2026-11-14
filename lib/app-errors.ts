@@ -7,7 +7,11 @@ import { startCronRun } from '@/lib/cron-runs'
 
 // S1 error capture. instrumentation.ts hands every server error Next reports
 // (onRequestError) to captureRequestError(), which writes one row per distinct
-// error to app_errors (migration 20261103234624) and bumps its count. Once a
+// error to app_errors (migration 20261103234624) and bumps its count. Errors a
+// route catches itself never reach Next, so the catch paths that matter call
+// reportError() directly: registration, check-in, the Stripe webhook, and every
+// cron through lib/cron-runs. A route that catches and returns its own 500
+// without calling reportError is still invisible here. Once a
 // day sendDailyErrorDigest() emails staff "Errors in the last day" — only when
 // there were any: an all-clear nobody reads trains people to ignore the alarm.
 //
@@ -164,22 +168,66 @@ export async function captureRequestError(
 ): Promise<void> {
   try {
     if (isControlFlow(err)) return
-    const route = routeLabel(request?.method, context?.routePath, request?.path)
-    const message = scrubMessage(errorText(err)) || 'Unknown error'
-    const digest = errorDigest(route, message)
-    const count = takeWrite(digest, opts.now ?? Date.now())
-    if (count === 0) return
-    const db = opts.db ?? supabaseServer()
-    const { error } = await db.rpc('record_app_error', {
-      p_digest: digest,
-      p_route: route,
-      p_message: message,
-      p_count: count,
-    })
-    if (error) console.error('[app-errors] record failed:', error.message)
+    await record(routeLabel(request?.method, context?.routePath, request?.path), err, opts)
   } catch (e) {
     console.error('[app-errors] capture failed:', e instanceof Error ? e.message : e)
   }
+}
+
+/**
+ * Record an error a route or job caught and handled itself. onRequestError
+ * only sees errors that reach Next, and most routes catch theirs and return
+ * their own 500, so call this from those catch paths (registration, check-in,
+ * the Stripe webhook; cron failures go through lib/cron-runs).
+ *
+ * `route` is a fixed label such as "POST /api/register/individual" or
+ * "CRON entitlements": a pattern, never a concrete path with ids. Any query
+ * string is dropped. Same scrub, digest and rate limit as captureRequestError.
+ * Never throws.
+ */
+export async function reportError(
+  err: unknown,
+  { route, db, now }: { route: string; db?: SupabaseClient; now?: number },
+): Promise<void> {
+  try {
+    if (isControlFlow(err)) return
+    await record(scrubMessage(String(route ?? '').split('?')[0]).slice(0, 300) || 'unknown', err, { db, now })
+  } catch (e) {
+    console.error('[app-errors] report failed:', e instanceof Error ? e.message : e)
+  }
+}
+
+/**
+ * An Error describing a 5xx response a route built itself (a refusal from a
+ * lib/registration persist step), for reportError. The message is the status
+ * and the response's JSON `error` field, which those steps write from fixed
+ * strings. Reads a clone, so the response is still sent as it was. Never throws.
+ */
+export async function responseError(res: Response): Promise<Error> {
+  let detail = ''
+  try {
+    const body = (await res.clone().json()) as { error?: unknown } | null
+    if (typeof body?.error === 'string') detail = body.error
+  } catch {
+    // Not JSON: the status alone.
+  }
+  return new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ''}`)
+}
+
+/** Scrub, digest, rate-limit and write one error. Throws; callers catch. */
+async function record(route: string, err: unknown, opts: { db?: SupabaseClient; now?: number }): Promise<void> {
+  const message = scrubMessage(errorText(err)) || 'Unknown error'
+  const digest = errorDigest(route, message)
+  const count = takeWrite(digest, opts.now ?? Date.now())
+  if (count === 0) return
+  const db = opts.db ?? supabaseServer()
+  const { error } = await db.rpc('record_app_error', {
+    p_digest: digest,
+    p_route: route,
+    p_message: message,
+    p_count: count,
+  })
+  if (error) console.error('[app-errors] record failed:', error.message)
 }
 
 /**
@@ -300,9 +348,15 @@ export async function sendDailyErrorDigest(db: SupabaseClient, now = new Date())
       return { errors: 0, alerted: false }
     }
     const email = renderErrorDigest(rows)
-    await sendEmail({ to: teamInboxEmail(), subject: email.subject, html: email.html, text: email.text })
-    await run.finish({ errors: rows.length, alerted: true })
-    return { errors: rows.length, alerted: true }
+    // critical: the staff inbox is never suppressed (sendEmail enforces that
+    // too); said here so the intent survives a change of recipient.
+    const sent = await sendEmail({ to: teamInboxEmail(), subject: email.subject, html: email.html, text: email.text, critical: true })
+    // Only a send the provider accepted counts: a skipped send (no API key,
+    // blank dev safelist, suppression) or one parked in the outbox must not
+    // satisfy tomorrow's duplicate check and hide the errors.
+    const alerted = !sent?.suppressed && !!sent?.id
+    await run.finish({ errors: rows.length, alerted })
+    return { errors: rows.length, alerted }
   } catch (err) {
     console.error('[app-errors] daily digest failed:', err)
     run.fail('digest', err)

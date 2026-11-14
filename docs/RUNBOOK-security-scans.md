@@ -87,6 +87,14 @@ nightly job. The Score step still writes the per-file table to the job summary.
 If the score drops, kill the surviving mutants with better tests; do not lower
 the threshold.
 
+Stryker runs in place (`inPlace: true`), not in a `.stryker-tmp` sandbox: in
+the sandbox `node_modules` is a symlink, and a test that imports a module by a
+relative path into `node_modules` failed the initial test run. In place, it
+backs up every file it rewrites under `.stryker-tmp/backup-*` and puts them
+back at the end. If a local run is killed, the next run restores them first;
+check `git status` before committing. `vitest.config.mts` excludes
+`.stryker-tmp/**` so the backed-up test files never run.
+
 Reports land in `reports/mutation/` (gitignored). `mutate` in
 `stryker.config.mjs` covers authorisation, impersonation, the tenancy loader
 and tenant client (`lib/tenancy/db.ts`), field crypto (`lib/field-crypto*.ts`,

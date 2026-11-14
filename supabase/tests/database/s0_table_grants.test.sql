@@ -169,7 +169,7 @@ SELECT is(current_setting('s0.service_role_cron_runs', true), 'read',
 -- Default privileges belong to the creating role, and app migrations run as
 -- postgres, so the probes are created as postgres. All of this rolls back.
 SELECT is_empty($q$
-  SELECT d.defaclobjtype || ' in ' || COALESCE(n.nspname, '(every schema)') || ' to '
+  SELECT d.defaclobjtype::text || ' in ' || COALESCE(n.nspname, '(every schema)') || ' to '
          || pg_get_userbyid(x.grantee)
   FROM pg_default_acl d
   LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace

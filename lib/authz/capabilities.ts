@@ -85,29 +85,21 @@ export function decideCapability(
   return { ok: false, status: 403 }
 }
 
-/**
- * Every capability this principal holds, for the admin layout to hide what it
- * cannot use. `staffSecondFactor: false` drops what Staff alone would give
- * (gateStaffOnSecondFactor); lib/authz.ts passes the session's answer.
- */
-export function capabilitiesOf(
-  p: Principal,
-  source: DecisionSource,
-  contextTenantId: string = STELLR_TENANT_ID,
-  opts: { staffSecondFactor?: boolean } = {},
-): Capability[] {
-  const secondFactor = opts.staffSecondFactor ?? true
-  return CAPABILITIES.filter((c) => gateStaffOnSecondFactor(decideCapability(p, c, source, contextTenantId), secondFactor).ok)
+/** Every capability this principal holds, for the admin layout to hide what it cannot use. */
+export function capabilitiesOf(p: Principal, source: DecisionSource, contextTenantId: string = STELLR_TENANT_ID): Capability[] {
+  return CAPABILITIES.filter((c) => decideCapability(p, c, source, contextTenantId).ok)
 }
 
 // ── Staff needs a second factor on the session (staff-role.8) ───────────────
 //
 // MFA is a Staff prerequisite (lib/staff.ts). The grant pauses when it lapses,
-// but only once something reconciles it. So every request that would be allowed
-// BECAUSE the caller is Staff also checks this session: with no second factor
-// the caller holds no Staff capability. An admin decision is never gated here.
-// The check can also ask for a reconcile (onMissing); lib/authz.ts does not wire
-// that yet (see the note there).
+// but only once something reconciles it. So lib/authz.ts resolves the Staff role
+// itself only on a session with a second factor: without one, the principal every
+// decision sees has no Staff claim and no Stellr 'staff' membership
+// (withoutStaff), so capabilities, the portal, event access and tenant crew all
+// treat the caller as not Staff. An admin is never gated here. The check can also
+// ask for a reconcile (onMissing); lib/authz.ts does not wire that yet (see the
+// note there).
 
 /** What the session says about a second factor. 'unknown' when the token does not carry it. */
 export type SessionSecondFactor = 'verified' | 'absent' | 'unknown'
@@ -123,9 +115,29 @@ export function secondFactorFromSession(factorVerificationAge: unknown): Session
   return typeof second === 'number' && Number.isFinite(second) && second >= 0 ? 'verified' : 'absent'
 }
 
-/** Pure: a decision that passed only because the caller is Staff stands only with a second factor. */
-export function gateStaffOnSecondFactor(d: CapabilityDecision, hasSecondFactor: boolean): CapabilityDecision {
-  return d.ok && d.via === 'staff' && !hasSecondFactor ? { ok: false, status: 403 } : d
+/**
+ * Pure: does this principal carry the Stellr Staff role in either source's
+ * field (the 'staff' claim, or a Stellr 'staff' membership)? Read off both
+ * fields so the gate needs no source; a principal without it is never checked.
+ */
+export function holdsStaffRole(p: Principal): boolean {
+  return !!p.userId && (p.claimsRole === 'staff' || p.memberships.some((m) => m.tenantId === STELLR_TENANT_ID && m.role === 'staff'))
+}
+
+/**
+ * Pure: the principal with the Stellr Staff role taken away, for a session with
+ * no second factor. The 'staff' claim becomes no claim (the clerk source has one
+ * role, so nothing else is left); the Stellr 'staff' membership goes, and every
+ * other membership (an event_manager row, another tenant's) stays. An admin claim,
+ * platform_admins and tenant_admin are untouched.
+ */
+export function withoutStaff(p: Principal): Principal {
+  if (!holdsStaffRole(p)) return p
+  return {
+    ...p,
+    claimsRole: p.claimsRole === 'staff' ? undefined : p.claimsRole,
+    memberships: p.memberships.filter((m) => !(m.tenantId === STELLR_TENANT_ID && m.role === 'staff')),
+  }
 }
 
 /** How long an account's two-step setting read from Clerk is reused. */

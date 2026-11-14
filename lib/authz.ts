@@ -39,7 +39,8 @@ import {
   capabilitiesOf,
   createStaffSecondFactorCheck,
   decideCapability,
-  gateStaffOnSecondFactor,
+  holdsStaffRole,
+  withoutStaff,
   type Capability,
   type CapabilityDecision,
 } from '@/lib/authz/capabilities'
@@ -114,8 +115,8 @@ const postgresPrincipal = cache(async (): Promise<Principal> => {
   return loadPostgresPrincipal(supabaseServer(), session.userId, session.claimsRole)
 })
 
-// staff-role.8: Staff capabilities need a second factor on this session; the
-// account read is reused for a minute. No onMissing here yet: reconciling the
+// staff-role.8: the Staff role counts only on a session with a second factor;
+// the account read is reused for a minute. No onMissing here yet: reconciling the
 // grant from this path makes the audit gate (lib/security/audit-coverage.ts)
 // count every capability-guarded GET as a write, which needs the owner's
 // decision first. Until then the Clerk user.updated webhook and the daily sweep
@@ -131,8 +132,22 @@ const sessionHasStaffSecondFactor = cache(async (): Promise<boolean> => {
   return userId ? staffSecondFactorCheck(userId, factorVerificationAge) : false
 })
 
+/**
+ * The principal as decisions see it: a Staff principal on a session with no
+ * second factor loses the Staff role (withoutStaff), so every decision below,
+ * capability, portal, event access and tenant crew alike, treats it as not
+ * Staff. Anyone not holding the Staff role costs no read.
+ */
+async function staffGated(p: Principal): Promise<Principal> {
+  if (!holdsStaffRole(p)) return p
+  return (await sessionHasStaffSecondFactor()) ? p : withoutStaff(p)
+}
+
+const clerkActor = cache(async (): Promise<Principal> => staffGated(await clerkSession()))
+const postgresActor = cache(async (): Promise<Principal> => staffGated(await postgresPrincipal()))
+
 function principalFor(source: DecisionSource): Promise<Principal> {
-  return source === 'clerk' ? clerkSession() : postgresPrincipal()
+  return source === 'clerk' ? clerkActor() : postgresActor()
 }
 
 /**
@@ -142,9 +157,9 @@ function principalFor(source: DecisionSource): Promise<Principal> {
  * caller that only reads it fails closed.
  */
 export async function getPrincipal(): Promise<Principal> {
-  if (getAuthzSource() !== 'postgres') return clerkSession()
+  if (getAuthzSource() !== 'postgres') return clerkActor()
   try {
-    return await postgresPrincipal()
+    return await postgresActor()
   } catch {
     return anonymousPrincipal()
   }
@@ -291,15 +306,13 @@ export async function assertTenantRole(tenantId: string, roles: readonly TenantR
  * capability, Stellr Staff its named set, anyone else none. Deny by default.
  */
 export async function requireCapability(cap: Capability, opts: AuthzOptions = {}): Promise<CapabilityDecision> {
-  const d = await decide(
+  return decide(
     `capability:${cap}`,
     opts,
     async (s) => decideCapability(await principalFor(s), cap, s, currentTenantId()),
     sameOk,
     DENY_403,
   )
-  // A Staff decision stands only on a session with a second factor (staff-role.8).
-  return d.ok && d.via === 'staff' ? gateStaffOnSecondFactor(d, await sessionHasStaffSecondFactor()) : d
 }
 
 export async function hasCapability(cap: Capability, opts: AuthzOptions = {}): Promise<boolean> {
@@ -309,11 +322,7 @@ export async function hasCapability(cap: Capability, opts: AuthzOptions = {}): P
 /** Every capability the caller holds, by the configured source. For the admin layout to hide controls; never a guard. */
 export async function currentCapabilities(): Promise<Capability[]> {
   const s: DecisionSource = getAuthzSource() === 'postgres' ? 'postgres' : 'clerk'
-  const p = await getPrincipal()
-  const tenantId = currentTenantId()
-  const read = decideCapability(p, 'portal:read', s, tenantId)
-  const staffSecondFactor = read.ok && read.via === 'staff' ? await sessionHasStaffSecondFactor() : true
-  return capabilitiesOf(p, s, tenantId, { staffSecondFactor })
+  return capabilitiesOf(await getPrincipal(), s, currentTenantId())
 }
 
 /** Replaces isAdminClaims / currentUserIsAdmin and the admin-only wrappers. */

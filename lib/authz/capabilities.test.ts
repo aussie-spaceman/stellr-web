@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
 import { CANARY_TENANT_ID, membership, principal } from '@/test/fixtures/authz-principal'
-import { anonymousPrincipal, decideEventAccess, decidePortalAccess, decideCrewTarget, decideTenantRole, isStaffHiddenAdminPath, isStellrStaff, portalRoleFromClaims, tenantRoles } from './decide'
+import { anonymousPrincipal, decideEventAccess, decidePortalAccess, decideCrewTarget, decideTenantCrew, decideTenantRole, isStaffHiddenAdminPath, isStellrStaff, portalRoleFromClaims, tenantRoles } from './decide'
 import {
   CAPABILITIES,
   STAFF_CAPABILITIES,
@@ -9,8 +9,9 @@ import {
   capabilitiesOf,
   createStaffSecondFactorCheck,
   decideCapability,
-  gateStaffOnSecondFactor,
+  holdsStaffRole,
   secondFactorFromSession,
+  withoutStaff,
 } from './capabilities'
 
 const ADMIN_ONLY = CAPABILITIES.filter((c) => !STAFF_CAPABILITIES.includes(c))
@@ -110,16 +111,41 @@ describe('Staff needs a second factor on the session (staff-role.8)', () => {
     expect(secondFactorFromSession(null)).toBe('unknown')
     expect(secondFactorFromSession(undefined)).toBe('unknown')
   })
-  it('gates a Staff decision only, never an admin’s or a denial', () => {
-    expect(gateStaffOnSecondFactor({ ok: true, via: 'staff' }, false)).toEqual({ ok: false, status: 403 })
-    expect(gateStaffOnSecondFactor({ ok: true, via: 'staff' }, true)).toEqual({ ok: true, via: 'staff' })
-    expect(gateStaffOnSecondFactor({ ok: true, via: 'admin' }, false)).toEqual({ ok: true, via: 'admin' })
-    expect(gateStaffOnSecondFactor({ ok: false, status: 401 }, false)).toEqual({ ok: false, status: 401 })
+  it('holdsStaffRole reads the claim or a Stellr staff membership, never another tenant’s row or a signed-out principal', () => {
+    expect(holdsStaffRole(clerkStaff)).toBe(true)
+    expect(holdsStaffRole(pgStaff)).toBe(true)
+    expect(holdsStaffRole(principal({ claimsRole: 'admin' }))).toBe(false)
+    expect(holdsStaffRole(principal({ claimsRole: 'event_manager', memberships: [membership('event_manager')] }))).toBe(false)
+    expect(holdsStaffRole(principal({ memberships: [membership('staff', CANARY_TENANT_ID)] }))).toBe(false)
+    expect(holdsStaffRole({ ...anonymousPrincipal(), claimsRole: 'staff' })).toBe(false)
   })
-  it.each([['clerk', clerkStaff], ['postgres', pgStaff]] as const)('%s: capabilitiesOf drops every Staff capability without one, and keeps an admin’s', (source, staff) => {
-    expect(capabilitiesOf(staff, source, STELLR_TENANT_ID, { staffSecondFactor: false })).toEqual([])
-    expect(capabilitiesOf(staff, source, STELLR_TENANT_ID, { staffSecondFactor: true }).sort()).toEqual([...STAFF_CAPABILITIES].sort())
-    expect(capabilitiesOf(principal({ claimsRole: 'admin' }), 'clerk', STELLR_TENANT_ID, { staffSecondFactor: false })).toEqual([...CAPABILITIES])
+  it('withoutStaff drops the claim and the Stellr staff row only', () => {
+    expect(withoutStaff(clerkStaff).claimsRole).toBeUndefined()
+    const mixed = principal({ memberships: [membership('staff'), membership('event_manager'), membership('tenant_admin', CANARY_TENANT_ID)] })
+    expect(withoutStaff(mixed).memberships).toEqual([membership('event_manager'), membership('tenant_admin', CANARY_TENANT_ID)])
+    const admin = principal({ claimsRole: 'admin', platformAdmin: true, memberships: [membership('tenant_admin')] })
+    expect(withoutStaff(admin)).toBe(admin)
+  })
+  it.each([['clerk', clerkStaff], ['postgres', pgStaff]] as const)('%s: without Staff, no capability, no portal, no event, no tenant crew', (source, staff) => {
+    // With the role, as today.
+    expect(capabilitiesOf(staff, source).sort()).toEqual([...STAFF_CAPABILITIES].sort())
+    expect(decidePortalAccess(staff, source).ok).toBe(true)
+    expect(decideEventAccess(staff, { tenantId: STELLR_TENANT_ID, assignments: [] }, source)).toMatchObject({ ok: true, assignedSlugs: null })
+    expect(decideTenantCrew(staff, STELLR_TENANT_ID, ['tenant_admin', 'staff'], source).ok).toBe(true)
+    // Without it: nothing Staff gave.
+    const gated = withoutStaff(staff)
+    expect(capabilitiesOf(gated, source)).toEqual([])
+    expect(decidePortalAccess(gated, source)).toEqual({ ok: false, status: 403 })
+    expect(decideEventAccess(gated, { tenantId: STELLR_TENANT_ID, assignments: [] }, source)).toEqual({ ok: false, status: 403 })
+    expect(decideEventAccess(gated, { eventSlug: 'ev-1', tenantId: STELLR_TENANT_ID, assignments: [] }, source)).toEqual({ ok: false, status: 403 })
+    expect(decideTenantCrew(gated, STELLR_TENANT_ID, ['tenant_admin', 'staff'], source)).toEqual({ ok: false, status: 403 })
+  })
+  it('postgres: a Staff member who also manages events keeps those events, and only those', () => {
+    const gated = withoutStaff(principal({ memberships: [membership('staff'), membership('event_manager')] }))
+    const assignments = [{ eventSlug: 'ev-1', tenantId: STELLR_TENANT_ID }]
+    expect(decideEventAccess(gated, { tenantId: STELLR_TENANT_ID, assignments }, 'postgres')).toMatchObject({ ok: true, isAdmin: false, assignedSlugs: ['ev-1'] })
+    expect(decideEventAccess(gated, { eventSlug: 'ev-2', tenantId: STELLR_TENANT_ID, assignments }, 'postgres')).toEqual({ ok: false, status: 403 })
+    expect(capabilitiesOf(gated, 'postgres')).toEqual([])
   })
 })
 

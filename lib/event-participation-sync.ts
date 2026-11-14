@@ -4,6 +4,7 @@ import { applyGrantTrigger } from '@/lib/membership-grants'
 import { ensureRosterMembership } from '@/lib/container-sync'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { STELLR_TENANT_ID } from '@/lib/tenancy/constants'
+import { schoolYearFor } from '@/lib/hubspot-fields'
 
 // Records a member's event registration into event_participations so the event
 // surfaces in the "Event Activity" lists on the member portal, the admin member
@@ -80,7 +81,10 @@ async function insertParticipationRow(
     member_id: p.memberId,
     event_slug: p.eventSlug,
     event_title: p.eventTitle || null,
-    event_year: p.eventYear ?? new Date().getFullYear(),
+    // No year given: the school year registration falls in, which rolls over in
+    // August (schoolYearFor). The calendar year filed an autumn event under the
+    // year before the one HubSpot and the rest of the app use (hubspot-event-options.8).
+    event_year: p.eventYear ?? schoolYearFor(new Date()),
     status: 'approved',
   })
   if (error) {

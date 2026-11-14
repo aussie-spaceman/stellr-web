@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { Collapsible } from '@stellr/web-ui'
 import { MemberLink, SchoolLink } from '@/components/admin/RecordLinks'
+import { displayGrade } from '@/lib/member-enums'
+import { SCHOOL_GRADES } from '@/lib/registration-constants'
 import type { CompanyPlan, PlanningStudent, ProfileStatus } from '@/lib/team-profile/assign'
 import {
   FOCUS_AREAS,
@@ -21,6 +23,14 @@ import {
 // suggestions for unplaced students, the send / resend buttons, and the
 // override that lets Auto-Assign place a student without a team profile.
 // Admins and this event's event managers.
+
+// "Grade 10" for a school grade, the form label for a college one ("College
+// Freshman"). displayGrade reads both stored shapes ("10" and "grade_10").
+function gradeLabel(raw: string | null | undefined): string | undefined {
+  const g = displayGrade(raw)
+  if (!g) return undefined
+  return SCHOOL_GRADES.includes(g) ? `Grade ${g}` : g
+}
 
 const STATUS: Record<ProfileStatus | 'overridden', { label: string; cls: string }> = {
   submitted: { label: 'Submitted', cls: 'bg-green-100 text-green-800' },
@@ -228,8 +238,8 @@ export default function EventTeamProfiles({ eventSlug, plan }: { eventSlug: stri
                     </div>
                     <div className="text-xs text-brand-muted-soft">
                       {s.school && <SchoolLink schoolId={s.schoolId}>{s.school}</SchoolLink>}
-                      {s.school && s.grade && ' · '}
-                      {s.grade && (/^(?:grade_)?(\d+)$/.exec(s.grade) ? `Grade ${/(\d+)/.exec(s.grade)![1]}` : s.grade)}
+                      {s.school && gradeLabel(s.grade) && ' · '}
+                      {gradeLabel(s.grade)}
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-brand-muted whitespace-nowrap">

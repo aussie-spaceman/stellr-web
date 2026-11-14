@@ -8,6 +8,7 @@ import { drive as driveApi } from '@googleapis/drive'
 import { JWT } from 'google-auth-library'
 import { impersonatedMemberId } from '@/lib/impersonation'
 import { GRADES, GENDERS, T_SHIRT_SIZES, DIETARY, EMERGENCY_RELATIONSHIPS } from '@/lib/registration-constants'
+import { displayGrade } from '@/lib/member-enums'
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
@@ -158,7 +159,9 @@ export async function GET(
         p.first_name ?? '', p.last_name ?? '',
         p.email ?? '', p.phone ?? '',
         p.date_of_birth ?? '', p.gender ?? '', p.t_shirt_size ?? '',
-        p.grade ?? '', dietary, p.health_conditions ?? '',
+        // participants.grade holds both "10" and the member enum "grade_10";
+        // show one shape, the one the Grade dropdown offers (roster-grade-display.4).
+        displayGrade(p.grade) ?? '', dietary, p.health_conditions ?? '',
         p.emergency_contact_first_name ?? '', p.emergency_contact_last_name ?? '',
         p.emergency_contact_email ?? '', p.emergency_contact_phone ?? '',
         p.emergency_contact_relationship ?? '',

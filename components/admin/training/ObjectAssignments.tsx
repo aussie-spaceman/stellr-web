@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, X, Check } from 'lucide-react'
+import { Plus, X, Check, AlertCircle } from 'lucide-react'
 import { ObjectPicker } from './ObjectPicker'
 import type { TrainableObject, ObjectType } from '@/lib/training-admin'
 import { objectUsesAudience, type Audience } from '@/lib/training-audience'
@@ -256,6 +256,13 @@ function AssignmentCard({
   )
 }
 
+// The API's own reason when it gives one; otherwise a plain fallback.
+async function refusalMessage(res: Response, label: string): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: unknown } | null
+  if (typeof body?.error === 'string' && body.error.trim()) return body.error
+  return `Couldn’t assign this course to ${label}. Try again.`
+}
+
 export function ObjectAssignments({
   moduleId,
   assignments: initial,
@@ -272,6 +279,10 @@ export function ObjectAssignments({
   const [busy, setBusy] = useState(false)
   const [dirty, setDirty] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState<Set<string>>(new Set())
+  // Why the last attach was refused, from the API (e.g. the relationship matrix
+  // closing course → cohort). Before this the picker just closed and nothing
+  // happened (training-audience.6).
+  const [attachError, setAttachError] = useState<string | null>(null)
 
   const assignedRefs = new Set(assignments.map((a) => a.object_ref))
   const available = objects.filter((o) => !assignedRefs.has(o.ref))
@@ -280,6 +291,7 @@ export function ObjectAssignments({
     const obj = objects.find((o) => o.ref === ref)
     if (!obj) return
     setBusy(true)
+    setAttachError(null)
     try {
       const res = await fetch('/api/admin/training/assignments', {
         method: 'POST',
@@ -300,7 +312,11 @@ export function ObjectAssignments({
           { id, object_type: obj.type, object_ref: obj.ref, object_label: obj.label, default_requirement: 'optional', tier_requirements: {}, due_at: null, audience: 'all' },
         ])
         setAdding(false)
+      } else {
+        setAttachError(await refusalMessage(res, obj.label))
       }
+    } catch {
+      setAttachError(`Couldn’t assign this course to ${obj.label}. Check your connection and try again.`)
     } finally {
       setBusy(false)
     }
@@ -363,10 +379,16 @@ export function ObjectAssignments({
       </div>
 
       <div className="mt-3">
+        {attachError && (
+          <p role="alert" className="mb-2 flex items-start gap-1.5 text-sm text-danger">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{attachError}</span>
+          </p>
+        )}
         {adding ? (
           <div className="flex items-center gap-2">
             <ObjectPicker objects={available} value={null} onChange={addObject} />
-            <button onClick={() => setAdding(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted">Cancel</button>
+            <button onClick={() => { setAdding(false); setAttachError(null) }} className="text-sm text-brand-muted-soft hover:text-brand-muted">Cancel</button>
           </div>
         ) : (
           <button

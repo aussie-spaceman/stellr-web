@@ -113,3 +113,39 @@ describe('EventTeamProfiles — override', () => {
     expect(confirm).toHaveBeenCalledWith('Send the team profile to 2 students who haven’t submitted one yet?')
   })
 })
+
+// roster-grade-display.4: the grade goes through displayGrade, so both stored
+// shapes ("10" and "grade_10") read "Grade 10" and a college enum reads as its
+// form label, not the raw value.
+describe('EventTeamProfiles — grade', () => {
+  const withGrades: CompanyPlan = {
+    companies: [],
+    students: [
+      student('g1', 'Eli', { grade: '10' }),
+      student('g2', 'Fay', { grade: 'grade_11' }),
+      student('g3', 'Gus', { grade: 'college_freshman' }),
+      student('g4', 'Hal', { grade: 'Grade 9' }),
+      student('g5', 'Ivy', { grade: null }),
+    ],
+  }
+
+  it.each([
+    [/Eli Test/, 'Grade 10'],
+    [/Fay Test/, 'Grade 11'],
+    [/Gus Test/, 'College Freshman'],
+    [/Hal Test/, 'Grade 9'],
+  ])('%s shows %s', (name, label) => {
+    render(<EventTeamProfiles eventSlug="nevada" plan={withGrades} />)
+    expect(within(row(name)).getByText(label)).toBeInTheDocument()
+  })
+
+  it('shows no grade, and no separator, when there is none', () => {
+    render(<EventTeamProfiles eventSlug="nevada" plan={withGrades} />)
+    expect(within(row(/Ivy Test/)).queryByText(/Grade|·/)).toBeNull()
+  })
+
+  it('keeps an unrecognised value as it is', () => {
+    render(<EventTeamProfiles eventSlug="nevada" plan={{ companies: [], students: [student('g6', 'Jo', { grade: 'Homeschool' })] }} />)
+    expect(within(row(/Jo Test/)).getByText('Homeschool')).toBeInTheDocument()
+  })
+})

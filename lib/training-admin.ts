@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getAllEvents, getEventsBySlugs, getAllCampaigns } from '@/lib/events/repo'
-import type { ObjectType } from '@/lib/training-portal'
+import type { ObjectType, Requirement } from '@/lib/training-portal'
 import { audienceIncludes, eventVolunteers, normalizeAudience, type Audience, type RosterKind } from '@/lib/training-audience'
 import { stellrRows } from '@/lib/tenancy/stellr-scope'
 export type { ObjectType }
@@ -88,8 +88,41 @@ export interface EventTracking {
   summary: { complete: number; in_progress: number; not_started: number; overdue: number }
 }
 
+// The per-tier requirement on a Course↔Object join (course_object_assignments).
+type TierGrid = { default_requirement: string; tier_requirements: Record<string, string> | null }
+
 // audience: who on an event roster the course is for ('all' outside events).
-type TrackCourse = { moduleId: string; title: string; dueAt: string | null; audience: Audience }
+// grid: the tier grid when the course came from course_object_assignments.
+// Legacy training_assignments and cohort_training_links rows carry no grid and
+// are mandatory for everyone in the audience.
+type TrackCourse = { moduleId: string; title: string; dueAt: string | null; audience: Audience; grid?: TierGrid }
+
+/**
+ * The requirement that applies to someone holding these active tiers: the
+ * strongest tier setting wins, all-N/A means N/A, and with no tier setting the
+ * default applies. The same rule the member portal uses to list a member's
+ * courses (lib/training-portal.ts, effectiveRequirement), so tracking and the
+ * portal agree on who a course is mandatory for.
+ */
+export function effectiveRequirement(a: TierGrid, tierIds: string[]): Requirement {
+  const reqs = tierIds
+    .map((id) => a.tier_requirements?.[id])
+    .filter((r): r is Requirement => r === 'mandatory' || r === 'optional' || r === 'na')
+  if (reqs.includes('mandatory')) return 'mandatory'
+  if (reqs.includes('optional')) return 'optional'
+  if (reqs.length > 0 && reqs.every((r) => r === 'na')) return 'na'
+  return (a.default_requirement as Requirement) ?? 'optional'
+}
+
+/** Whether a tracked course is mandatory for someone holding these tiers. */
+function mandatoryFor(c: TrackCourse, tierIds: string[]): boolean {
+  return !c.grid || effectiveRequirement(c.grid, tierIds) === 'mandatory'
+}
+
+const gridOf = (a: { default_requirement?: unknown; tier_requirements?: unknown }): TierGrid => ({
+  default_requirement: (a.default_requirement as string) ?? 'optional',
+  tier_requirements: (a.tier_requirements as Record<string, string> | null) ?? {},
+})
 interface Participant {
   memberId: string
   name: string
@@ -119,7 +152,7 @@ async function mandatoryCoursesForEvent(refs: string[]): Promise<TrackCourse[]> 
   for (const a of rich ?? []) {
     const tr = (a.tier_requirements as Record<string, string> | null) ?? {}
     if (a.default_requirement !== 'mandatory' && !Object.values(tr).includes('mandatory')) continue
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: normalizeAudience(a.audience) })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: normalizeAudience(a.audience), grid: gridOf(a) })
   }
   return [...cols.values()]
 }
@@ -135,7 +168,7 @@ async function mandatoryCoursesForCohort(cohortId: string): Promise<TrackCourse[
   for (const a of rich ?? []) {
     const tr = (a.tier_requirements as Record<string, string> | null) ?? {}
     if (a.default_requirement !== 'mandatory' && !Object.values(tr).includes('mandatory')) continue
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: 'all' })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: 'all', grid: gridOf(a) })
   }
   for (const a of links ?? [])
     cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null, audience: 'all' })
@@ -291,11 +324,35 @@ async function computeTracking(
     }
   }
 
+  // Active tiers per person, read the way the member session reads them
+  // (lib/member-session.ts): active and not past expiry. Only needed when a
+  // course carries a tier grid.
+  const tiersByMember = new Map<string, string[]>()
+  if (memberIds.length > 0 && courses.some((c) => c.grid)) {
+    const today = new Date().toISOString().split('T')[0]
+    const { data: memberships } = await db
+      .from('member_memberships')
+      .select('member_id, tier_id, expires_at')
+      .in('member_id', memberIds)
+      .eq('renewal_status', 'active')
+    for (const m of memberships ?? []) {
+      if (!m.tier_id || (m.expires_at && (m.expires_at as string) < today)) continue
+      const arr = tiersByMember.get(m.member_id as string) ?? []
+      arr.push(m.tier_id as string)
+      tiersByMember.set(m.member_id as string, arr)
+    }
+  }
+
   const now = Date.now()
-  // Each person is scored only on the courses whose audience includes them; a
-  // person with none (a student beside a volunteers-only course) is not listed.
+  // Each person is scored only on the courses whose audience includes them AND
+  // that are mandatory for their tiers (training-audience.13: a tier set to N/A
+  // or Optional is not counted as "not started"). A person with none is not listed.
   const scored = participants
-    .map((p) => ({ p, mine: courses.filter((c) => audienceIncludes(c.audience, p.kind ? [p.kind] : [])) }))
+    .map((p) => {
+      const tierIds = tiersByMember.get(p.memberId) ?? []
+      const mine = courses.filter((c) => audienceIncludes(c.audience, p.kind ? [p.kind] : []) && mandatoryFor(c, tierIds))
+      return { p, mine }
+    })
     .filter((x) => x.mine.length > 0)
   let rows: TrackingRow[] = scored.map(({ p, mine }) => {
     const completed = completedByMember.get(p.memberId) ?? new Set<string>()
